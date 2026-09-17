@@ -1,0 +1,4 @@
+# Zura nodes requirements (installed into ComfyUI's Python environment)
+requests>=2.32.2
+yt-dlp[default]>=2026.8.19
+ultralytics>=8.4.66

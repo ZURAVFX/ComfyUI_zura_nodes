@@ -1,0 +1,10 @@
+import assert from 'node:assert/strict';
+import {readControl} from '../web/media_picker_controls.js';
+const inner={widgets:[{name:'youtube_mode',value:'Any YouTube video'},{name:'video_backend',value:'Wan 2.2 Animate'},{name:'auto_clip',value:true}]};
+const host={widgets:[{name:'youtube_mode',value:'YouTube Shorts only (vertical)'},{name:'clip_seconds',value:7},{name:'auto_clip',value:false},{name:'clip_start',value:0}]};
+assert.equal(readControl(host,inner,'youtube_mode'),'YouTube Shorts only (vertical)');
+assert.equal(readControl(host,inner,'clip_seconds',10),7);
+assert.equal(readControl(host,inner,'auto_clip',true),false);
+assert.equal(readControl(host,inner,'clip_start',122),0);
+assert.equal(readControl(host,inner,'video_backend'),'Wan 2.2 Animate');
+console.log('Picker reads promoted artist controls, preserves false/zero, and falls back to inner settings.');

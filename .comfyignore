@@ -1,0 +1,47 @@
+# Do not include credentials, caches, downloaded models, or local media in a
+# Comfy Registry package.
+.env
+.env.*
+*.env
+*.pem
+*.key
+*.p12
+*.pfx
+credentials*
+secrets*
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.cache/
+node_modules/
+tests/
+.github/
+RELEASING.md
+pyproject.toml.template
+models/
+input/
+output/
+temp/
+cache/
+media/
+tmp*/
+tests/tmp*/
+*.mp4
+*.mkv
+*.mov
+*.webm
+*.avi
+*.wav
+*.mp3
+*.flac
+*.png
+*.jpg
+*.jpeg
+
+# The package UI and example workflows are part of the release.
+!web/
+!web/**
+!workflows/
+!workflows/**

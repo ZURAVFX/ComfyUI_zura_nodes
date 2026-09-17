@@ -1,0 +1,883 @@
+{
+  "id": "zura-wan22-example",
+  "revision": 0,
+  "last_node_id": 14,
+  "last_link_id": 16,
+  "nodes": [
+    {
+      "id": 1,
+      "type": "TrendStudioV2DrivingClip",
+      "pos": [
+        0,
+        0
+      ],
+      "size": [
+        430,
+        230
+      ],
+      "flags": {},
+      "order": 5,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "video",
+          "type": "VIDEO",
+          "links": [
+            1,
+            2
+          ]
+        },
+        {
+          "name": "frames",
+          "type": "IMAGE",
+          "links": null
+        }
+      ],
+      "title": "1 · Zura Load Video",
+      "properties": {
+        "Node name for S&R": "TrendStudioV2DrivingClip",
+        "cnr_id": "comfyui-zura-nodes",
+        "ver": "1.0.0"
+      },
+      "widgets_values": [
+        "example_clip.mp4",
+        "",
+        0,
+        2,
+        true,
+        512
+      ],
+      "color": "#323",
+      "bgcolor": "#535"
+    },
+    {
+      "id": 2,
+      "type": "LoadImage",
+      "pos": [
+        0,
+        660
+      ],
+      "size": [
+        400,
+        414
+      ],
+      "flags": {},
+      "order": 6,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "IMAGE",
+          "type": "IMAGE",
+          "links": [
+            4
+          ]
+        },
+        {
+          "name": "MASK",
+          "type": "MASK",
+          "links": null
+        }
+      ],
+      "title": "2 · Replacement character",
+      "properties": {
+        "Node name for S&R": "LoadImage",
+        "output_node": true
+      },
+      "widgets_values": [
+        "example_character.png",
+        "image"
+      ],
+      "color": "#323",
+      "bgcolor": "#535"
+    },
+    {
+      "id": 3,
+      "type": "UNETLoader",
+      "pos": [
+        1120,
+        560
+      ],
+      "size": [
+        520,
+        90
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "MODEL",
+          "type": "MODEL",
+          "links": [
+            5
+          ]
+        }
+      ],
+      "title": "Wan 2.2 Animate 14B",
+      "properties": {
+        "Node name for S&R": "UNETLoader"
+      },
+      "widgets_values": [
+        "Wan2_2-Animate-14B_fp8_scaled_e4m3fn_KJ_v2.safetensors",
+        "default"
+      ],
+      "color": "#432",
+      "bgcolor": "#653"
+    },
+    {
+      "id": 4,
+      "type": "CLIPLoader",
+      "pos": [
+        1120,
+        690
+      ],
+      "size": [
+        520,
+        130
+      ],
+      "flags": {},
+      "order": 1,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "CLIP",
+          "type": "CLIP",
+          "links": [
+            8
+          ]
+        }
+      ],
+      "title": "UMT5-XXL text encoder",
+      "properties": {
+        "Node name for S&R": "CLIPLoader"
+      },
+      "widgets_values": [
+        "umt5_xxl_fp8_e4m3fn_scaled.safetensors",
+        "wan",
+        "default"
+      ],
+      "color": "#432",
+      "bgcolor": "#653"
+    },
+    {
+      "id": 5,
+      "type": "VAELoader",
+      "pos": [
+        1120,
+        860
+      ],
+      "size": [
+        520,
+        60
+      ],
+      "flags": {},
+      "order": 2,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "VAE",
+          "type": "VAE",
+          "links": [
+            9
+          ]
+        }
+      ],
+      "title": "Wan 2.1 VAE",
+      "properties": {
+        "Node name for S&R": "VAELoader"
+      },
+      "widgets_values": [
+        "Wan2_1_VAE_bf16.safetensors"
+      ],
+      "color": "#432",
+      "bgcolor": "#653"
+    },
+    {
+      "id": 6,
+      "type": "CLIPVisionLoader",
+      "pos": [
+        1120,
+        960
+      ],
+      "size": [
+        520,
+        60
+      ],
+      "flags": {},
+      "order": 3,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "CLIP_VISION",
+          "type": "CLIP_VISION",
+          "links": [
+            10
+          ]
+        }
+      ],
+      "title": "CLIP Vision H (reference encoder)",
+      "properties": {
+        "Node name for S&R": "CLIPVisionLoader"
+      },
+      "widgets_values": [
+        "clip_vision_h.safetensors"
+      ],
+      "color": "#432",
+      "bgcolor": "#653"
+    },
+    {
+      "id": 7,
+      "type": "Power Lora Loader (rgthree)",
+      "pos": [
+        560,
+        660
+      ],
+      "size": [
+        560,
+        210
+      ],
+      "flags": {},
+      "order": 7,
+      "mode": 0,
+      "inputs": [
+        {
+          "dir": 3,
+          "name": "model",
+          "type": "MODEL",
+          "link": 5
+        },
+        {
+          "dir": 3,
+          "name": "clip",
+          "shape": 7,
+          "type": "CLIP",
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "dir": 4,
+          "name": "MODEL",
+          "type": "MODEL",
+          "links": [
+            6
+          ]
+        },
+        {
+          "dir": 4,
+          "name": "CLIP",
+          "type": "CLIP",
+          "links": null
+        }
+      ],
+      "title": "Turbo (LightX2V) + official bf16 relight",
+      "properties": {
+        "Show Strengths": "Single Strength",
+        "Match": "",
+        "Node name for S&R": "Power Lora Loader (rgthree)"
+      },
+      "widgets_values": [
+        {},
+        {
+          "type": "PowerLoraLoaderHeaderWidget"
+        },
+        {
+          "on": true,
+          "lora": "wan2.2_i2v_lightx2v_4steps_lora_v1_high_noise.safetensors",
+          "strength": 0.7,
+          "strengthTwo": null
+        },
+        {
+          "on": true,
+          "lora": "lightx2v_I2V_14B_480p_cfg_step_distill_rank64_bf16.safetensors",
+          "strength": 0.6,
+          "strengthTwo": null
+        },
+        {
+          "on": true,
+          "lora": "wan2.2_animate_14B_relight_lora_bf16.safetensors",
+          "strength": 1.0,
+          "strengthTwo": null
+        },
+        {},
+        ""
+      ],
+      "color": "#432",
+      "bgcolor": "#653"
+    },
+    {
+      "id": 8,
+      "type": "TrendStudioV2Speed",
+      "pos": [
+        560,
+        920
+      ],
+      "size": [
+        440,
+        170
+      ],
+      "flags": {},
+      "order": 8,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "base_model",
+          "type": "MODEL",
+          "link": 5
+        },
+        {
+          "name": "accelerated_model",
+          "type": "MODEL",
+          "link": 6
+        }
+      ],
+      "outputs": [
+        {
+          "dir": 4,
+          "name": "model",
+          "type": "MODEL",
+          "links": [
+            7
+          ]
+        },
+        {
+          "dir": 4,
+          "name": "steps",
+          "type": "INT",
+          "links": [
+            11
+          ]
+        },
+        {
+          "dir": 4,
+          "name": "cfg",
+          "type": "FLOAT",
+          "links": [
+            12
+          ]
+        }
+      ],
+      "title": "3 · Zura Wan 2.2 Turbo Switch (6 steps, cfg 1.0)",
+      "properties": {
+        "Node name for S&R": "TrendStudioV2Speed",
+        "cnr_id": "comfyui-zura-nodes",
+        "ver": "1.0.0"
+      },
+      "widgets_values": [
+        true,
+        6
+      ],
+      "color": "#432",
+      "bgcolor": "#653"
+    },
+    {
+      "id": 9,
+      "type": "TrendStudioV2MaskPerformer",
+      "pos": [
+        560,
+        0
+      ],
+      "size": [
+        460,
+        250
+      ],
+      "flags": {},
+      "order": 9,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "video",
+          "type": "VIDEO",
+          "link": 2
+        }
+      ],
+      "outputs": [
+        {
+          "name": "mask_preview",
+          "type": "VIDEO",
+          "links": [
+            15
+          ]
+        },
+        {
+          "name": "masked_footage",
+          "type": "ZURA_FOOTAGE",
+          "links": [
+            13
+          ]
+        },
+        {
+          "name": "mask",
+          "type": "MASK",
+          "links": [
+            16
+          ]
+        }
+      ],
+      "title": "4 · Zura Mask",
+      "properties": {
+        "Node name for S&R": "TrendStudioV2MaskPerformer",
+        "cnr_id": "comfyui-zura-nodes",
+        "ver": "1.0.0"
+      },
+      "widgets_values": [
+        "Whole head",
+        12,
+        true,
+        32
+      ],
+      "color": "#323",
+      "bgcolor": "#535"
+    },
+    {
+      "id": 10,
+      "type": "TrendStudioV2Render",
+      "pos": [
+        1120,
+        0
+      ],
+      "size": [
+        520,
+        480
+      ],
+      "flags": {},
+      "order": 10,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "model",
+          "type": "MODEL",
+          "link": 7
+        },
+        {
+          "name": "clip",
+          "type": "CLIP",
+          "link": 8
+        },
+        {
+          "name": "vae",
+          "type": "VAE",
+          "link": 9
+        },
+        {
+          "name": "clip_vision",
+          "type": "CLIP_VISION",
+          "link": 10
+        },
+        {
+          "name": "reference_image",
+          "type": "IMAGE",
+          "link": 4
+        },
+        {
+          "name": "footage",
+          "type": "ZURA_FOOTAGE",
+          "link": 13
+        },
+        {
+          "name": "steps",
+          "type": "INT",
+          "widget": {
+            "name": "steps"
+          },
+          "link": 11
+        },
+        {
+          "name": "cfg",
+          "type": "FLOAT",
+          "widget": {
+            "name": "cfg"
+          },
+          "link": 12
+        }
+      ],
+      "outputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "links": null
+        },
+        {
+          "name": "video",
+          "type": "VIDEO",
+          "links": [
+            14
+          ]
+        },
+        {
+          "name": "receipt",
+          "type": "STRING",
+          "links": null
+        }
+      ],
+      "title": "5 · Zura Wan 2.2 Looped Chunks Sampler",
+      "properties": {
+        "Node name for S&R": "TrendStudioV2Render",
+        "cnr_id": "comfyui-zura-nodes",
+        "ver": "1.0.0",
+        "ue_properties": {
+          "widget_ue_connectable": {
+            "steps": true,
+            "cfg": true
+          },
+          "version": "7.8",
+          "input_ue_unconnectable": {}
+        }
+      },
+      "widgets_values": [
+        "The selected performer matches the reference character within the chosen replacement area. Keep the driving video action, camera angle, framing and scene. Natural motion and consistent identity. Do not reproduce a reference sheet, collage or multiple views.",
+        "flicker, warped hands, extra limbs, identity drift",
+        6,
+        1.0,
+        7,
+        41,
+        5,
+        512,
+        "Detect cuts",
+        0.2,
+        ""
+      ],
+      "color": "#a13030",
+      "bgcolor": "#502020"
+    },
+    {
+      "id": 11,
+      "type": "SaveVideo",
+      "pos": [
+        1740,
+        0
+      ],
+      "size": [
+        420,
+        600
+      ],
+      "flags": {},
+      "order": 11,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "video",
+          "type": "VIDEO",
+          "link": 14
+        }
+      ],
+      "outputs": [
+        {
+          "name": "video",
+          "type": "VIDEO",
+          "links": null
+        }
+      ],
+      "title": "6 · Finished video",
+      "properties": {
+        "Node name for S&R": "SaveVideo",
+        "output_node": true
+      },
+      "widgets_values": [
+        "video/Zura_example",
+        "auto",
+        "auto",
+        "auto"
+      ],
+      "color": "#a13030",
+      "bgcolor": "#502020"
+    },
+    {
+      "id": 12,
+      "type": "SaveVideo",
+      "pos": [
+        0,
+        300
+      ],
+      "size": [
+        380,
+        300
+      ],
+      "flags": {},
+      "order": 12,
+      "mode": 2,
+      "inputs": [
+        {
+          "name": "video",
+          "type": "VIDEO",
+          "link": 1
+        }
+      ],
+      "outputs": [
+        {
+          "name": "video",
+          "type": "VIDEO",
+          "links": null
+        }
+      ],
+      "title": "Preview · driving clip",
+      "properties": {
+        "Node name for S&R": "SaveVideo",
+        "output_node": true
+      },
+      "widgets_values": [
+        "video/Zura_preview_driving",
+        "auto",
+        "auto",
+        "auto"
+      ],
+      "color": "#323",
+      "bgcolor": "#535"
+    },
+    {
+      "id": 13,
+      "type": "SaveVideo",
+      "pos": [
+        560,
+        300
+      ],
+      "size": [
+        380,
+        300
+      ],
+      "flags": {},
+      "order": 13,
+      "mode": 2,
+      "inputs": [
+        {
+          "name": "video",
+          "type": "VIDEO",
+          "link": 15
+        }
+      ],
+      "outputs": [
+        {
+          "name": "video",
+          "type": "VIDEO",
+          "links": null
+        }
+      ],
+      "title": "Preview · mask check",
+      "properties": {
+        "Node name for S&R": "SaveVideo",
+        "output_node": true
+      },
+      "widgets_values": [
+        "video/Zura_preview_mask",
+        "auto",
+        "auto",
+        "auto"
+      ],
+      "color": "#323",
+      "bgcolor": "#535"
+    },
+    {
+      "id": 14,
+      "type": "MaskPreview",
+      "pos": [
+        560,
+        1150
+      ],
+      "size": [
+        380,
+        300
+      ],
+      "flags": {},
+      "order": 14,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "mask",
+          "type": "MASK",
+          "link": 16
+        }
+      ],
+      "outputs": [
+        {
+          "name": "mask",
+          "type": "MASK",
+          "links": null
+        }
+      ],
+      "title": "Preview · raw mask",
+      "properties": {
+        "Node name for S&R": "MaskPreview"
+      },
+      "widgets_values": []
+    }
+  ],
+  "links": [
+    [
+      1,
+      1,
+      0,
+      12,
+      0,
+      "VIDEO"
+    ],
+    [
+      2,
+      1,
+      0,
+      9,
+      0,
+      "VIDEO"
+    ],
+    [
+      4,
+      2,
+      0,
+      10,
+      4,
+      "IMAGE"
+    ],
+    [
+      5,
+      3,
+      0,
+      8,
+      0,
+      "MODEL"
+    ],
+    [
+      6,
+      7,
+      0,
+      8,
+      1,
+      "MODEL"
+    ],
+    [
+      7,
+      8,
+      0,
+      10,
+      0,
+      "MODEL"
+    ],
+    [
+      8,
+      4,
+      0,
+      10,
+      1,
+      "CLIP"
+    ],
+    [
+      9,
+      5,
+      0,
+      10,
+      2,
+      "VAE"
+    ],
+    [
+      10,
+      6,
+      0,
+      10,
+      3,
+      "CLIP_VISION"
+    ],
+    [
+      11,
+      8,
+      1,
+      10,
+      6,
+      "INT"
+    ],
+    [
+      12,
+      8,
+      2,
+      10,
+      7,
+      "FLOAT"
+    ],
+    [
+      13,
+      9,
+      1,
+      10,
+      5,
+      "ZURA_FOOTAGE"
+    ],
+    [
+      14,
+      10,
+      1,
+      11,
+      0,
+      "VIDEO"
+    ],
+    [
+      15,
+      9,
+      0,
+      13,
+      0,
+      "VIDEO"
+    ],
+    [
+      16,
+      9,
+      2,
+      14,
+      0,
+      "MASK"
+    ]
+  ],
+  "groups": [
+    {
+      "id": 1,
+      "title": "1 · DRIVING CLIP + CHARACTER",
+      "bounding": [
+        -40,
+        -40,
+        1050,
+        1160
+      ],
+      "color": "#315c69",
+      "flags": {}
+    },
+    {
+      "id": 2,
+      "title": "2 · WAN 2.2 ANIMATE + LORAS",
+      "bounding": [
+        520,
+        600,
+        1170,
+        540
+      ],
+      "color": "#556642",
+      "flags": {}
+    },
+    {
+      "id": 3,
+      "title": "3 · MASK → RENDER → SAVE",
+      "bounding": [
+        520,
+        -40,
+        1690,
+        640
+      ],
+      "color": "#a13030",
+      "flags": {}
+    }
+  ],
+  "config": {},
+  "extra": {
+    "ds": {
+      "scale": 0.6,
+      "offset": [
+        80,
+        80
+      ]
+    },
+    "links_added_by_ue": [],
+    "frontendVersion": "1.51.10"
+  },
+  "version": 0.4
+}

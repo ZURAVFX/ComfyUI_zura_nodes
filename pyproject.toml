@@ -1,0 +1,20 @@
+[project]
+name = "comfyui-zura-nodes"
+version = "1.0.0"
+description = "Four ComfyUI nodes for video loading, performer masking, Wan 2.2 Animate rendering in looped chunks with audio, and turbo model selection."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { file = "LICENSE" }
+dependencies = [
+    "requests>=2.32.2",
+    "yt-dlp[default]>=2026.8.19",
+    "ultralytics>=8.4.66",
+]
+
+[project.urls]
+Repository = "https://github.com/ZURAVFX/ComfyUI_zura_nodes"
+Issues = "https://github.com/ZURAVFX/ComfyUI_zura_nodes/issues"
+
+[tool.comfy]
+PublisherId = "zuravfx"
+DisplayName = "Zura Nodes"

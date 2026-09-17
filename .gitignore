@@ -1,0 +1,50 @@
+# Credentials and local configuration
+.env
+.env.*
+*.env
+*.pem
+*.key
+*.p12
+*.pfx
+node.zip
+credentials*
+secrets*
+
+# Python and tool caches
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.cache/
+node_modules/
+.coverage
+coverage.xml
+
+# Local ComfyUI data and downloaded model/media files
+models/
+input/
+output/
+temp/
+cache/
+media/
+tmp*/
+tests/tmp*/
+*.mp4
+*.mkv
+*.mov
+*.webm
+*.avi
+*.wav
+*.mp3
+*.flac
+*.png
+*.jpg
+*.jpeg
+
+# Keep the distributable frontend and example workflows visible if a broader
+# ignore rule is added by a consuming repository.
+!web/
+!web/**
+!workflows/
+!workflows/**

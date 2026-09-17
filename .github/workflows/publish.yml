@@ -1,0 +1,67 @@
+name: Publish to Comfy Registry
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: comfy-registry-publish
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    if: github.repository == 'ZURAVFX/ComfyUI_zura_nodes'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Check release version and package assets
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          python - <<'PY'
+          import ast
+          import json
+          import os
+          from pathlib import Path
+          import tomllib
+          metadata = tomllib.loads(Path('pyproject.toml').read_text())
+          version = metadata['project']['version']
+          tag = os.environ.get('RELEASE_TAG', '')
+          if tag and tag != f'v{version}':
+              raise SystemExit(f'Release tag {tag} must match v{version} in pyproject.toml')
+          assert metadata['tool']['comfy']['PublisherId'] == 'zuravfx'
+          assert metadata['project']['name'] == 'comfyui-zura-nodes'
+          tree = ast.parse(Path('__init__.py').read_text(encoding='utf-8'))
+          module_version = next(ast.literal_eval(n.value) for n in tree.body if isinstance(n, ast.Assign) and any(isinstance(t, ast.Name) and t.id == '__version__' for t in n.targets))
+          assert version == module_version, 'Update __version__ as well as pyproject.toml'
+          assert Path('LICENSE').is_file()
+          assert Path('THIRD_PARTY_NOTICES.md').is_file()
+          assert Path('web/v2_media_picker.js').is_file()
+          workflow = json.loads(Path('workflows/Zura_Example.json').read_text())
+          expected = {'TrendStudioV2DrivingClip', 'TrendStudioV2MaskPerformer', 'TrendStudioV2Render', 'TrendStudioV2Speed'}
+          assert expected <= {n['type'] for n in workflow['nodes']}
+          print(f'Publishing Zura Nodes {version}')
+          PY
+      - name: Install test dependencies
+        run: |
+          python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install numpy pillow requests
+      - name: Run regression checks
+        run: |
+          python -m unittest discover -s tests -p 'test_v2_*.py'
+          node tests/test_chunk_progress_helpers.mjs
+          node tests/test_media_picker_controls.mjs
+          node tests/test_media_picker_requests.mjs
+      - name: Publish reviewed version
+        uses: Comfy-Org/publish-node-action@d2366e7abb6ab16f3bb03e3520ae25c8cf749bc9
+        with:
+          skip_checkout: 'true'
+          personal_access_token: ${{ secrets.REGISTRY_ACCESS_TOKEN }}
