@@ -185,3 +185,11 @@ Zura Nodes' original code is released under AGPL-3.0-only. See [LICENSE](LICENSE
 and [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for the KJNodes-derived
 component and other upstream dependencies. Model weights are downloaded
 separately and retain their own licences.
+
+## Additional workflow
+
+`workflows/Zura_Gemma_4_Prompt_Enhancer.json` is a compact Gemma 4 prompt
+enhancement workflow for everyday use. Its optional image input is the
+placeholder `example_reference.png`; no reference image is included in the
+node pack. It expects the matching Gemma model and the ComfyUI installation
+that provides the prompt-enhancer subgraph used by the workflow.

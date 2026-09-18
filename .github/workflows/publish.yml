@@ -48,6 +48,11 @@ jobs:
           workflow = json.loads(Path('workflows/Zura_Wan_2.2_Character_Replacement_Workflow.json').read_text())
           expected = {'TrendStudioV2DrivingClip', 'TrendStudioV2MaskPerformer', 'TrendStudioV2Render', 'TrendStudioV2Speed'}
           assert expected <= {n['type'] for n in workflow['nodes']}
+          prompt_workflow = json.loads(Path('workflows/Zura_Gemma_4_Prompt_Enhancer.json').read_text())
+          prompt_text = json.dumps(prompt_workflow)
+          assert 'example_reference.png' in prompt_text
+          assert '00.png' not in prompt_text
+          assert not any(ext in prompt_text.lower() for ext in ('data:image/', 'data:video/', 'base64,'))
           print(f'Publishing Zura Nodes {version}')
           PY
       - name: Install test dependencies
