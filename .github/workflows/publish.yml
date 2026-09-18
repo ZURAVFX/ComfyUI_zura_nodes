@@ -45,7 +45,7 @@ jobs:
           assert Path('LICENSE').is_file()
           assert Path('THIRD_PARTY_NOTICES.md').is_file()
           assert Path('web/v2_media_picker.js').is_file()
-          workflow = json.loads(Path('workflows/Zura_Example.json').read_text())
+          workflow = json.loads(Path('workflows/Zura_Wan_2.2_Character_Replacement_Workflow.json').read_text())
           expected = {'TrendStudioV2DrivingClip', 'TrendStudioV2MaskPerformer', 'TrendStudioV2Render', 'TrendStudioV2Speed'}
           assert expected <= {n['type'] for n in workflow['nodes']}
           print(f'Publishing Zura Nodes {version}')

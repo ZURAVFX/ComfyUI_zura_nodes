@@ -1,0 +1,24 @@
+# Copy this file to pyproject.toml only after replacing every <...> value.
+# This template is not publishable metadata.
+
+[project]
+name = "comfyui-zura-nodes"
+version = "1.0.0"
+description = "Minimal four-node Wan 2.2 Animate pack: Zura Load Video, Zura Mask, Zura Wan 2.2 Looped Chunks Sampler (with audio) and Zura Wan 2.2 Turbo Switch."
+# Optional: add a chosen licence file before public distribution.
+# license = { file = "<LICENCE_FILENAME>" }
+dependencies = [
+    "requests>=2.32.2",
+    "yt-dlp[default]>=2026.8.19",
+    "ultralytics>=8.4.66",
+]
+
+[project.urls]
+Repository = "<CANONICAL_REPOSITORY_URL>"
+
+[tool.comfy]
+PublisherId = "<COMFY_REGISTRY_PUBLISHER_ID>"
+DisplayName = "Zura Nodes"
+# Optional, if publicly hosted assets are prepared:
+# Icon = "<SQUARE_ICON_URL>"
+# Banner = "<21_9_BANNER_URL>"

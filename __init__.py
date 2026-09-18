@@ -37,7 +37,7 @@ NODE_DISPLAY_NAME_MAPPINGS.update(SPEED_NAMES)
 
 WEB_DIRECTORY = "./web"
 PACKAGE_ROOT = Path(__file__).resolve().parent
-__version__ = "1.0.0"
+__version__ = "1.0.1"
 
 
 def _register_routes():

@@ -22,7 +22,9 @@ input from any LoadImage node.
 
 ## Example workflow
 
-`workflows/Zura_Example.json` is an example graph showing all four nodes wired
+`workflows/Zura_Wan_2.2_Character_Replacement_Workflow.json` is the example
+graph titled **Zura Wan 2.2 Character Replacement Workflow (Face, Head, Body or
+Full Character Replacement)**, showing all four nodes wired
 together, including driving-clip, mask-check and raw-mask preview nodes. The
 mask leaves on a native `MASK` slot wired to ComfyUI's own **Preview Mask**.
 The graph is a starting point: replace the `example_clip.mp4` and
