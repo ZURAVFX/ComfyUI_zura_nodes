@@ -53,6 +53,15 @@ jobs:
           assert 'example_reference.png' in prompt_text
           assert '00.png' not in prompt_text
           assert not any(ext in prompt_text.lower() for ext in ('data:image/', 'data:video/', 'base64,'))
+          for filename, placeholders in {
+              'Zura_SAM3_Text_Prompt_Masking_Roto.json': ('example_source.mp4',),
+              'Zura_MiniMax_H3_Head_Face_Swap.json': ('example_driving_video.mp4', 'example_character.png'),
+              'Zura_MiniMax_H3_Ref2Vid_Speedboosts.json': ('example_reference.png',),
+          }.items():
+              text = Path('workflows', filename).read_text(encoding='utf-8')
+              assert all(item in text for item in placeholders)
+              assert not any(item in text for item in ('ComfyUI-Shared', 'Gurkhas', 'Scouser Starter', 'Codex Image'))
+              assert not any(ext in text.lower() for ext in ('data:image/', 'data:video/', 'base64,'))
           print(f'Publishing Zura Nodes {version}')
           PY
       - name: Install test dependencies

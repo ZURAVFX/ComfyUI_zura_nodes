@@ -193,3 +193,20 @@ enhancement workflow for everyday use. Its optional image input is the
 placeholder `example_reference.png`; no reference image is included in the
 node pack. It expects the matching Gemma model and the ComfyUI installation
 that provides the prompt-enhancer subgraph used by the workflow.
+
+## Additional workflow examples
+
+The pack also includes three reference workflows with their original graph
+layouts preserved:
+
+- `workflows/Zura_SAM3_Text_Prompt_Masking_Roto.json` — SAM 3 text-prompt
+  masking and roto preview.
+- `workflows/Zura_MiniMax_H3_Head_Face_Swap.json` — MiniMax H3 head and face
+  replacement with SAM 3 masking.
+- `workflows/Zura_MiniMax_H3_Ref2Vid_Speedboosts.json` — MiniMax H3 reference
+  to video with the supplied speed-boost and LoRA branches.
+
+These files contain placeholder media names only. The source images and videos
+used to create them are not bundled or shared. They depend on the ComfyUI and
+custom-node packs represented by their node classes, plus the model files named
+inside each graph.

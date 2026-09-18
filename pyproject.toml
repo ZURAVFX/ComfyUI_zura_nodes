@@ -1,6 +1,6 @@
 [project]
 name = "comfyui-zura-nodes"
-version = "1.0.3"
+version = "1.0.4"
 description = "Four ComfyUI nodes for video loading, performer masking, Wan 2.2 Animate rendering in looped chunks with audio, and turbo model selection."
 readme = "README.md"
 requires-python = ">=3.10"
