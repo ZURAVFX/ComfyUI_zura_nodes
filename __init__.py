@@ -1,4 +1,4 @@
-"""Zura nodes (ComfyUI_zura_nodes) · a minimal four-node Wan 2.2 Animate pack.
+"""Zura nodes (ComfyUI_zura_nodes) · artist controls for ComfyUI workflows.
 
 Nodes:
 - Zura Load Video: local file or URL -> trimmed 24 fps VIDEO + decoded frames.
@@ -8,6 +8,8 @@ Nodes:
 - Zura Wan 2.2 Looped Chunks Sampler: native WanAnimateToVideo loop with cut
   handling and built-in original-audio assembly.
 - Zura Wan 2.2 Turbo Switch: lazy base/accelerated model selector.
+- Zura Klein Look Presets and Optional Image Edit: scene and lighting controls.
+- Zura multicam: camera planning, H3 takes, and optional Klein/Wan relight.
 """
 from __future__ import annotations
 
@@ -22,22 +24,34 @@ from .driving_clip import NODE_CLASS_MAPPINGS as DRIVING_NODES, NODE_DISPLAY_NAM
 from .mask_performer import NODE_CLASS_MAPPINGS as MASK_NODES, NODE_DISPLAY_NAME_MAPPINGS as MASK_NAMES
 from .render import NODE_CLASS_MAPPINGS as RENDER_NODES, NODE_DISPLAY_NAME_MAPPINGS as RENDER_NAMES
 from .speed import NODE_CLASS_MAPPINGS as SPEED_NODES, NODE_DISPLAY_NAME_MAPPINGS as SPEED_NAMES
+from .klein_look import NODE_CLASS_MAPPINGS as KLEIN_NODES, NODE_DISPLAY_NAME_MAPPINGS as KLEIN_NAMES
+from .multicam_v3 import NODE_CLASS_MAPPINGS as MULTICAM_NODES, NODE_DISPLAY_NAME_MAPPINGS as MULTICAM_NAMES
+from .multicam_v4_clean import NODE_CLASS_MAPPINGS as CLEAN_NODES, NODE_DISPLAY_NAME_MAPPINGS as CLEAN_NAMES
+from .idv2v_control import NODE_CLASS_MAPPINGS as CONTROL_NODES, NODE_DISPLAY_NAME_MAPPINGS as CONTROL_NAMES
 
 NODE_CLASS_MAPPINGS = {}
 NODE_CLASS_MAPPINGS.update(DRIVING_NODES)
 NODE_CLASS_MAPPINGS.update(MASK_NODES)
 NODE_CLASS_MAPPINGS.update(RENDER_NODES)
 NODE_CLASS_MAPPINGS.update(SPEED_NODES)
+NODE_CLASS_MAPPINGS.update(KLEIN_NODES)
+NODE_CLASS_MAPPINGS.update(MULTICAM_NODES)
+NODE_CLASS_MAPPINGS.update(CLEAN_NODES)
+NODE_CLASS_MAPPINGS.update(CONTROL_NODES)
 
 NODE_DISPLAY_NAME_MAPPINGS = {}
 NODE_DISPLAY_NAME_MAPPINGS.update(DRIVING_NAMES)
 NODE_DISPLAY_NAME_MAPPINGS.update(MASK_NAMES)
 NODE_DISPLAY_NAME_MAPPINGS.update(RENDER_NAMES)
 NODE_DISPLAY_NAME_MAPPINGS.update(SPEED_NAMES)
+NODE_DISPLAY_NAME_MAPPINGS.update(KLEIN_NAMES)
+NODE_DISPLAY_NAME_MAPPINGS.update(MULTICAM_NAMES)
+NODE_DISPLAY_NAME_MAPPINGS.update(CLEAN_NAMES)
+NODE_DISPLAY_NAME_MAPPINGS.update(CONTROL_NAMES)
 
 WEB_DIRECTORY = "./web"
 PACKAGE_ROOT = Path(__file__).resolve().parent
-__version__ = "1.0.4"
+__version__ = "1.0.5"
 
 
 def _register_routes():

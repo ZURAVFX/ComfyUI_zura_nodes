@@ -45,6 +45,9 @@ jobs:
           assert Path('LICENSE').is_file()
           assert Path('THIRD_PARTY_NOTICES.md').is_file()
           assert Path('web/v2_media_picker.js').is_file()
+          for asset in ('web/multicam_angle_gallery.js', 'multicam_v3.py',
+                        'multicam_v4_clean.py', 'idv2v_control.py', 'klein_look.py'):
+              assert Path(asset).is_file(), f'Missing multicam release asset: {asset}'
           workflow = json.loads(Path('workflows/Zura_Wan_2.2_Character_Replacement_Workflow.json').read_text())
           expected = {'TrendStudioV2DrivingClip', 'TrendStudioV2MaskPerformer', 'TrendStudioV2Render', 'TrendStudioV2Speed'}
           assert expected <= {n['type'] for n in workflow['nodes']}
@@ -72,7 +75,11 @@ jobs:
           python -m pip install numpy pillow requests
       - name: Run regression checks
         run: |
+          python -m compileall -q __init__.py klein_look.py multicam_v3.py multicam_v4_clean.py idv2v_control.py
           python -m unittest discover -s tests -p 'test_v2_*.py'
+          python -m unittest discover -s tests -p 'test_klein_look.py'
+          python -m unittest discover -s tests -p 'test_multicam_v3.py'
+          python -m unittest discover -s tests -p 'test_multicam_v4.py'
           node tests/test_chunk_progress_helpers.mjs
           node tests/test_media_picker_controls.mjs
           node tests/test_media_picker_requests.mjs

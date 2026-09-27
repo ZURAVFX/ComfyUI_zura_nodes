@@ -1,7 +1,8 @@
 # Zura nodes (ComfyUI_zura_nodes)
 
-A minimal four-node Wan 2.2 Animate pack: drive a source clip, mask the
-performer, render it in looped chunks, and pick the model branch. It coexists
+A set of artist-facing ComfyUI video and image controls: load a source clip,
+mask or replace a performer, plan multicam shots, and optionally relight a
+generated take. It coexists
 with the original `comfyui_trend_studio` pack — class names, wire types and
 server routes are separate, so both can stay installed.
 
@@ -13,6 +14,26 @@ server routes are separate, so both can stay installed.
 | **Zura Mask** | Takes **any** `VIDEO` wire, so it works outside the Wan pipeline too. One dropdown for the replacement area — **Whole character**, **Whole head** (hair, forehead and ears, cut at the neck), or **Face only** — plus mask expansion and a **Blockify mask** switch with a free **block size** integer (8–512 px, step 1, KJNodes `BlockifyMask` parity; it delegates to the installed KJNodes node and reproduces its bbox block-grid algorithm exactly as fallback). Inputs: `video`. Outputs: `mask_preview` (red-tinted control video), `masked_footage` (the payload the sampler consumes) and `mask` (the replacement mask itself, as a native `MASK`). |
 | **Zura Wan 2.2 Looped Chunks Sampler** | The looped `WanAnimateToVideo` renderer: native `continue_motion` continuation between chunks, hard reset at detected or manual cuts. `steps` and `cfg` are plain widgets the Turbo Switch node can override. Outputs generated frames **and** a finished `VIDEO` with the original audio and exact timing — no separate finish node. |
 | **Zura Wan 2.2 Turbo Switch** | Lazy base/accelerated model selector emitting model/steps/cfg. Wan 2.2 specific: turbo runs the accelerated branch at 4–8 steps with cfg 1.0, quality runs the base branch at 40 steps with cfg 5.0. LoRA branches stay visible in the graph (Power LoRA Loaders or similar). |
+
+### Multicam and scene controls (v1.0.5)
+
+| Node | Purpose |
+| --- | --- |
+| **Zura Klein Look Presets** and **Zura Optional Image Edit** | Simple lighting, background, and environment prompts with a lazy on/off switch. |
+| **Zura V3 · Pick camera angles** | Nine visual camera previews, a per-shot timeline, angle choices, optional segment prompts, and a visible Plan/Render switch. |
+| **Zura H3 multicam V3** | Generates only selected non-source camera intervals from the original video and reassembles them at the source timing. Other V3 planning and prompt nodes support this workflow. |
+| **Clean relight · multicam V4** | Optional Klein start-frame relight and Wan IDV2V motion-guided render, passing through the original source audio. When Look is off, it returns the H3 result without loading the image/video models. |
+| **Zura · Match Mouth Motion** and **Zura · Person Motion Control** | Pre-generation control helpers for the V4 relight path. They are not a post-render performer composite. |
+
+The V3/V4 workflow needs a 24 fps source clip, suitable local MiniMax H3,
+FLUX.2 Klein, and Wan models and LoRAs, plus its other visible custom-node
+dependencies (including CrossViewWarp, VideoHelperSuite, and KJNodes). The
+scene-control node uses a person-segmentation YOLO weight in
+`models/ultralytics/segm/`; the mouth-control node uses `face-alignment==1.4.1`
+and downloads its landmark weights on first use. Model weights and the
+user-specific artist workflow are not bundled in this node package. A
+structurally valid graph does not guarantee visual identity or perfect lip
+sync; review a short Plan/Render test before processing a full clip.
 
 Every wire is a standard ComfyUI type except one: `masked_footage` from Zura Mask
 into the sampler, which has to carry the pose, face and mask tensors a video

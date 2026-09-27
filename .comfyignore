@@ -21,6 +21,7 @@ tests/
 RELEASING.md
 pyproject.toml.template
 models/
+model_cache/
 input/
 output/
 temp/

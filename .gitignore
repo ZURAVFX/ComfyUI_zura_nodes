@@ -23,6 +23,7 @@ coverage.xml
 
 # Local ComfyUI data and downloaded model/media files
 models/
+model_cache/
 input/
 output/
 temp/
