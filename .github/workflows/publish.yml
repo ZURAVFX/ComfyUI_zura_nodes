@@ -65,6 +65,11 @@ jobs:
               assert all(item in text for item in placeholders)
               assert not any(item in text for item in ('ComfyUI-Shared', 'Gurkhas', 'Scouser Starter', 'Codex Image'))
               assert not any(ext in text.lower() for ext in ('data:image/', 'data:video/', 'base64,'))
+          for asset in ('longcat.py', 'setup_longcat.py', 'Setup_LongCat_Windows.cmd',
+                        'LONGCAT.md', 'longcat_runtime/worker.py',
+                        'longcat_runtime/text.py', 'longcat_runtime/requirements.txt'):
+              assert Path(asset).is_file(), f'Missing LongCat release asset: {asset}'
+          assert not list(Path('.').rglob('longcat.local.json*'))
           print(f'Publishing Zura Nodes {version}')
           PY
       - name: Install test dependencies
@@ -72,7 +77,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y ffmpeg
           python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
-          python -m pip install numpy pillow requests
+          python -m pip install numpy pillow requests soundfile
       - name: Run regression checks
         run: |
           python -m compileall -q __init__.py klein_look.py multicam_v3.py multicam_v4_clean.py idv2v_control.py
@@ -80,6 +85,8 @@ jobs:
           python -m unittest discover -s tests -p 'test_klein_look.py'
           python -m unittest discover -s tests -p 'test_multicam_v3.py'
           python -m unittest discover -s tests -p 'test_multicam_v4.py'
+          python -m compileall -q longcat.py setup_longcat.py longcat_runtime
+          python -m unittest discover -s tests -p 'test_longcat_*.py'
           node tests/test_chunk_progress_helpers.mjs
           node tests/test_media_picker_controls.mjs
           node tests/test_media_picker_requests.mjs

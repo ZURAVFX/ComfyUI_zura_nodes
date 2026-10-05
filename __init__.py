@@ -10,6 +10,7 @@ Nodes:
 - Zura Wan 2.2 Turbo Switch: lazy base/accelerated model selector.
 - Zura Klein Look Presets and Optional Image Edit: scene and lighting controls.
 - Zura multicam: camera planning, H3 takes, and optional Klein/Wan relight.
+- Zura LongCat Voice: local voice cloning and text-to-speech with WAV export.
 """
 from __future__ import annotations
 
@@ -20,6 +21,7 @@ import folder_paths
 from aiohttp import web
 from server import PromptServer
 
+from .longcat import NODE_CLASS_MAPPINGS as LONGCAT_NODES, NODE_DISPLAY_NAME_MAPPINGS as LONGCAT_NAMES
 from .driving_clip import NODE_CLASS_MAPPINGS as DRIVING_NODES, NODE_DISPLAY_NAME_MAPPINGS as DRIVING_NAMES
 from .mask_performer import NODE_CLASS_MAPPINGS as MASK_NODES, NODE_DISPLAY_NAME_MAPPINGS as MASK_NAMES
 from .render import NODE_CLASS_MAPPINGS as RENDER_NODES, NODE_DISPLAY_NAME_MAPPINGS as RENDER_NAMES
@@ -38,6 +40,7 @@ NODE_CLASS_MAPPINGS.update(KLEIN_NODES)
 NODE_CLASS_MAPPINGS.update(MULTICAM_NODES)
 NODE_CLASS_MAPPINGS.update(CLEAN_NODES)
 NODE_CLASS_MAPPINGS.update(CONTROL_NODES)
+NODE_CLASS_MAPPINGS.update(LONGCAT_NODES)
 
 NODE_DISPLAY_NAME_MAPPINGS = {}
 NODE_DISPLAY_NAME_MAPPINGS.update(DRIVING_NAMES)
@@ -48,10 +51,11 @@ NODE_DISPLAY_NAME_MAPPINGS.update(KLEIN_NAMES)
 NODE_DISPLAY_NAME_MAPPINGS.update(MULTICAM_NAMES)
 NODE_DISPLAY_NAME_MAPPINGS.update(CLEAN_NAMES)
 NODE_DISPLAY_NAME_MAPPINGS.update(CONTROL_NAMES)
+NODE_DISPLAY_NAME_MAPPINGS.update(LONGCAT_NAMES)
 
 WEB_DIRECTORY = "./web"
 PACKAGE_ROOT = Path(__file__).resolve().parent
-__version__ = "1.0.5"
+__version__ = "1.1.0"
 
 
 def _register_routes():

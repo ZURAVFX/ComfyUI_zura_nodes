@@ -1,0 +1,8 @@
+# Isolated LongCat interpreter only. Do not install this into ComfyUI.
+transformers==5.18.0
+huggingface-hub==1.33.0
+safetensors==0.8.0
+librosa==0.11.0
+soundfile==0.14.0
+numpy==2.4.6
+einops==0.8.2

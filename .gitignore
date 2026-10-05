@@ -49,3 +49,7 @@ tests/tmp*/
 !web/**
 !workflows/
 !workflows/**
+
+# LongCat machine configuration is never distributed.
+longcat.local.json*
+.venv/

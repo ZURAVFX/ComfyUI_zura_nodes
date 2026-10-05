@@ -1,10 +1,27 @@
 # Zura nodes (ComfyUI_zura_nodes)
 
-A set of artist-facing ComfyUI video and image controls: load a source clip,
+A set of artist-facing ComfyUI video, image and audio controls: load a source clip,
 mask or replace a performer, plan multicam shots, and optionally relight a
 generated take. It coexists
 with the original `comfyui_trend_studio` pack — class names, wire types and
 server routes are separate, so both can stay installed.
+
+## Local speech (v1.1.0)
+
+**Zura LongCat Voice** adds local LongCat-AudioDiT 3.5B voice cloning and text-to-speech.
+Open `workflows/Zura_LongCat_Voice_Clone.json`: **Load Audio -> Zura LongCat Voice -> Preview Audio**.
+Supply one authorised speaker recording, its exact transcript, and the new script.
+The separate `Zura_LongCat_Text_to_Speech.json` needs no reference recording.
+
+Pace and seed are the artist controls. Every run saves a 24-bit WAV, float master,
+script, settings and individual long-script chunks under `output/zura_voice`.
+Text-to-speech does not support a natural-language speaker-description prompt.
+
+Run **Setup_LongCat_Windows.cmd** once after installing/updating the package.
+It explicitly downloads the model into a separate Python environment; generation
+is local and offline. The model is not bundled with the Registry package and is
+not downloaded merely by importing the node. Tested on an RTX 4080 16 GB.
+See **[LONGCAT.md](LONGCAT.md)** for setup, limitations and team usage.
 
 ## Nodes
 

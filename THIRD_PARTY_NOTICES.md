@@ -33,3 +33,11 @@ endorsement is implied.
 
 All downloaded model weights and third-party packages retain their respective
 licences. No model weights or example source media are included in this release.
+
+## LongCat speech runtime
+
+[LongCat-AudioDiT](https://github.com/meituan-longcat/LongCat-AudioDiT) code and
+[LongCat-AudioDiT-3.5B](https://huggingface.co/meituan-longcat/LongCat-AudioDiT-3.5B)
+weights are provided separately by Meituan under MIT licences. They are downloaded
+only by the explicit setup command; upstream notices are retained. Model dependencies
+run in an isolated interpreter. This does not change the Zura Nodes licence.

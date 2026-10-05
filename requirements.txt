@@ -3,3 +3,4 @@ requests>=2.32.2
 yt-dlp[default]>=2026.8.19
 ultralytics>=8.4.66
 face-alignment==1.4.1
+soundfile>=0.12.0

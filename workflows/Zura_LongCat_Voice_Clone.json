@@ -1,0 +1,473 @@
+{
+  "id": "6cb8485f-83cf-4ebb-af4f-ef2b2ff6c8ea",
+  "revision": 0,
+  "last_node_id": 5,
+  "last_link_id": 2,
+  "nodes": [
+    {
+      "id": 1,
+      "type": "LoadAudio",
+      "pos": [
+        40,
+        160
+      ],
+      "size": [
+        370,
+        230
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "showAdvanced": null,
+      "inputs": [
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "audio",
+          "locked": null,
+          "name": "audio",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "COMBO",
+          "widget": {
+            "name": "audio"
+          },
+          "link": null
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "audioUI",
+          "locked": null,
+          "name": "audioUI",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "AUDIO_UI",
+          "widget": {
+            "name": "audioUI"
+          },
+          "link": null
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "choose file to upload",
+          "locked": null,
+          "name": "upload",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "AUDIOUPLOAD",
+          "widget": {
+            "name": "upload"
+          },
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "AUDIO",
+          "locked": null,
+          "name": "AUDIO",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "AUDIO",
+          "pos": null,
+          "slot_index": null,
+          "links": [
+            1
+          ]
+        }
+      ],
+      "title": "01 | Upload a clean voice reference",
+      "properties": {
+        "Node name for S&R": "LoadAudio"
+      },
+      "widgets_values": [
+        "",
+        ""
+      ],
+      "widgets_values_named": {
+        "audio": "",
+        "upload": ""
+      },
+      "color": "#273849",
+      "bgcolor": "#19232e"
+    },
+    {
+      "id": 2,
+      "type": "ZuraLongCatVoice",
+      "pos": [
+        470,
+        160
+      ],
+      "size": [
+        510,
+        660
+      ],
+      "flags": {},
+      "order": 3,
+      "mode": 0,
+      "showAdvanced": null,
+      "inputs": [
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "reference_audio",
+          "locked": null,
+          "name": "reference_audio",
+          "nameLocked": null,
+          "removable": null,
+          "shape": 7,
+          "type": "AUDIO",
+          "pos": null,
+          "link": 1
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "mode",
+          "locked": null,
+          "name": "mode",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "COMBO",
+          "widget": {
+            "name": "mode"
+          },
+          "link": null
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "script",
+          "locked": null,
+          "name": "script",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "STRING",
+          "widget": {
+            "name": "script"
+          },
+          "link": null
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "reference_transcript",
+          "locked": null,
+          "name": "reference_transcript",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "STRING",
+          "widget": {
+            "name": "reference_transcript"
+          },
+          "link": null
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "pace",
+          "locked": null,
+          "name": "pace",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "FLOAT",
+          "widget": {
+            "name": "pace"
+          },
+          "link": null
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "seed",
+          "locked": null,
+          "name": "seed",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "INT",
+          "widget": {
+            "name": "seed"
+          },
+          "link": null
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "project",
+          "locked": null,
+          "name": "project",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "STRING",
+          "widget": {
+            "name": "project"
+          },
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "audio",
+          "locked": null,
+          "name": "audio",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "AUDIO",
+          "pos": null,
+          "slot_index": null,
+          "links": [
+            2
+          ]
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "run_report",
+          "locked": null,
+          "name": "run_report",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "STRING",
+          "pos": null,
+          "slot_index": null,
+          "links": null
+        }
+      ],
+      "title": "02 | LongCat - Generate + save WAV",
+      "properties": {
+        "Node name for S&R": "ZuraLongCatVoice",
+        "cnr_id": "comfyui-zura-nodes",
+        "ver": "1.1.0"
+      },
+      "widgets_values": [
+        "Clone a voice",
+        "Before we begin, let us take a moment to check the details. Everything is ready, and I will guide you through the next steps.",
+        "",
+        1,
+        8923,
+        "fixed",
+        "Client_Project_EN"
+      ],
+      "widgets_values_named": {
+        "mode": "Clone a voice",
+        "script": "Before we begin, let us take a moment to check the details. Everything is ready, and I will guide you through the next steps.",
+        "reference_transcript": "",
+        "pace": 1,
+        "seed": 8923,
+        "control_after_generate": "fixed",
+        "project": "Client_Project_EN"
+      },
+      "color": "#263f39",
+      "bgcolor": "#172a26"
+    },
+    {
+      "id": 3,
+      "type": "PreviewAudio",
+      "pos": [
+        1040,
+        160
+      ],
+      "size": [
+        460,
+        240
+      ],
+      "flags": {},
+      "order": 4,
+      "mode": 0,
+      "showAdvanced": null,
+      "inputs": [
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "audio",
+          "locked": null,
+          "name": "audio",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "AUDIO",
+          "pos": null,
+          "link": 2
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "audioUI",
+          "locked": null,
+          "name": "audioUI",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "AUDIO_UI",
+          "widget": {
+            "name": "audioUI"
+          },
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "audio",
+          "locked": null,
+          "name": "audio",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "AUDIO",
+          "pos": null,
+          "slot_index": null,
+          "links": null
+        }
+      ],
+      "title": "03 | Listen - master WAV is already saved",
+      "properties": {
+        "Node name for S&R": "PreviewAudio"
+      },
+      "widgets_values": [],
+      "widgets_values_named": {},
+      "color": "#363242",
+      "bgcolor": "#24202c"
+    },
+    {
+      "id": 4,
+      "type": "Note",
+      "pos": [
+        40,
+        450
+      ],
+      "size": [
+        370,
+        380
+      ],
+      "flags": {},
+      "order": 1,
+      "mode": 0,
+      "showAdvanced": null,
+      "inputs": [],
+      "outputs": [],
+      "title": "START HERE",
+      "properties": {},
+      "widgets_values": [
+        "1. Upload a clean clip of one approved speaker. Start with 8-20 seconds, without music.\n\n2. Paste its EXACT spoken words in reference_transcript. This is not the new script.\n\n3. Put the new words in script. Name the project and click Run.\n\nUse a prepared excerpt, or add the core Trim Audio Duration node for a longer source. Update the transcript to match the trimmed clip.\n\nNo client voice or personal recording is included in this template."
+      ],
+      "widgets_values_named": {
+        "text": "1. Upload a clean clip of one approved speaker. Start with 8-20 seconds, without music.\n\n2. Paste its EXACT spoken words in reference_transcript. This is not the new script.\n\n3. Put the new words in script. Name the project and click Run.\n\nUse a prepared excerpt, or add the core Trim Audio Duration node for a longer source. Update the transcript to match the trimmed clip.\n\nNo client voice or personal recording is included in this template."
+      },
+      "color": "#313131",
+      "bgcolor": "#202020"
+    },
+    {
+      "id": 5,
+      "type": "Note",
+      "pos": [
+        1040,
+        450
+      ],
+      "size": [
+        460,
+        380
+      ],
+      "flags": {},
+      "order": 2,
+      "mode": 0,
+      "showAdvanced": null,
+      "inputs": [],
+      "outputs": [],
+      "title": "TAKES + FILES",
+      "properties": {},
+      "widgets_values": [
+        "PACE\n1.0 = tested default. Above 1 is faster; below 1 is slower. This adjusts generation duration, not playback pitch.\n\nSEED\nKeep fixed to repeat a take. Randomise for a different performance.\n\nSAVED AUTOMATICALLY\noutput/zura_voice/Project_Date_ID/\nvoice.wav = 24-bit WAV\nmaster_float32.wav = untouched float master\nchunk_*.wav = individual long-script clips\nreport.json + script.txt = settings and text\n\nLongCat 3.5B | Local CUDA | APG 4 | 16 steps\nEnglish + Chinese. Use authorised voices."
+      ],
+      "widgets_values_named": {
+        "text": "PACE\n1.0 = tested default. Above 1 is faster; below 1 is slower. This adjusts generation duration, not playback pitch.\n\nSEED\nKeep fixed to repeat a take. Randomise for a different performance.\n\nSAVED AUTOMATICALLY\noutput/zura_voice/Project_Date_ID/\nvoice.wav = 24-bit WAV\nmaster_float32.wav = untouched float master\nchunk_*.wav = individual long-script clips\nreport.json + script.txt = settings and text\n\nLongCat 3.5B | Local CUDA | APG 4 | 16 steps\nEnglish + Chinese. Use authorised voices."
+      },
+      "color": "#313131",
+      "bgcolor": "#202020"
+    }
+  ],
+  "links": [
+    [
+      1,
+      1,
+      0,
+      2,
+      0,
+      "AUDIO"
+    ],
+    [
+      2,
+      2,
+      0,
+      3,
+      0,
+      "AUDIO"
+    ]
+  ],
+  "floatingLinks": null,
+  "groups": [],
+  "definitions": null,
+  "config": {},
+  "extra": {
+    "ds": {
+      "scale": 0.83,
+      "offset": [
+        20,
+        20
+      ]
+    },
+    "reroutes": null
+  },
+  "version": 0.4
+}
