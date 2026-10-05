@@ -16,7 +16,7 @@ jobs:
   publish:
     if: github.repository == 'ZURAVFX/ComfyUI_zura_nodes'
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -74,8 +74,10 @@ jobs:
           PY
       - name: Install test dependencies
         run: |
-          sudo apt-get update
-          sudo apt-get install -y ffmpeg
+          if ! command -v ffmpeg >/dev/null || ! command -v ffprobe >/dev/null; then
+            sudo apt-get update
+            sudo apt-get install -y --no-install-recommends ffmpeg
+          fi
           python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
           python -m pip install numpy pillow requests soundfile
       - name: Run regression checks
