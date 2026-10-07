@@ -1,7 +1,7 @@
 [project]
 name = "comfyui-zura-nodes"
-version = "1.1.0"
-description = "Artist controls for video loading, performer masking, multicam planning, H3 rendering, Klein scene edits, Wan IDV2V relighting, and local LongCat speech."
+version = "1.2.0"
+description = "Artist controls for video loading, performer masking, multicam planning, H3 rendering, Klein scene edits, Wan IDV2V relighting, local LongCat speech, and prompt-driven Qwen VoiceDesign."
 readme = "README.md"
 requires-python = ">=3.10"
 license = { file = "LICENSE" }

@@ -41,3 +41,13 @@ licences. No model weights or example source media are included in this release.
 weights are provided separately by Meituan under MIT licences. They are downloaded
 only by the explicit setup command; upstream notices are retained. Model dependencies
 run in an isolated interpreter. This does not change the Zura Nodes licence.
+
+## Qwen VoiceDesign
+
+Qwen3-TTS source and the Qwen3-TTS-12Hz-1.7B-VoiceDesign weights are separately
+installed under Apache-2.0. Neither is bundled in Zura Nodes. The explicit installer
+pins qwen-tts 0.1.1 and model revision 5ecdb67327fd37bb2e042aab12ff7391903235d3.
+Retain upstream notices when redistributing those separate components.
+Sources: https://github.com/QwenLM/Qwen3-TTS and
+https://huggingface.co/Qwen/Qwen3-TTS-12Hz-1.7B-VoiceDesign
+The existing Zura Nodes licence is unchanged.

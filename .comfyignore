@@ -50,3 +50,6 @@ tests/tmp*/
 # LongCat machine configuration is never distributed.
 longcat.local.json*
 .venv/
+
+# Workstation-only VoiceDesign settings.
+qwen_voice_design.local.json*

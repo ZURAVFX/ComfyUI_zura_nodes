@@ -23,6 +23,21 @@ is local and offline. The model is not bundled with the Registry package and is
 not downloaded merely by importing the node. Tested on an RTX 4080 16 GB.
 See **[LONGCAT.md](LONGCAT.md)** for setup, limitations and team usage.
 
+## Voice workflows (v1.2.0)
+
+Both designed-TTS routes are included. Choose by the result, not a forced model ranking.
+
+| Workflow | Use |
+| --- | --- |
+| [Qwen Direct](workflows/Zura_Voice_Design_Qwen_Direct.json) | Describe a voice and its delivery, enter a script; Qwen makes the finished speech. |
+| [Qwen to LongCat](workflows/Zura_Voice_Design_Qwen_to_LongCat.json) | Design a short reference with Qwen, then have LongCat speak a different final script. |
+| [LongCat Voice Clone](workflows/Zura_LongCat_Voice_Clone.json) | Reuse an approved real or designed voice recording with its exact transcript. |
+
+Run `Setup_Voice_Design_Windows.cmd` once for Qwen, and `Setup_LongCat_Windows.cmd`
+for the LongCat routes. Environments are isolated; generation uses local weights
+without hosted speech requests. No voice recordings or weights are in this repository.
+See [VOICE_DESIGN.md](VOICE_DESIGN.md) for the team guide, reference reuse and limits.
+
 ## Nodes
 
 | Node | Purpose |

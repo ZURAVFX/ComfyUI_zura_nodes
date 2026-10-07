@@ -15,7 +15,7 @@ concurrency:
 jobs:
   publish:
     if: github.repository == 'ZURAVFX/ComfyUI_zura_nodes'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
@@ -70,6 +70,11 @@ jobs:
                         'longcat_runtime/text.py', 'longcat_runtime/requirements.txt'):
               assert Path(asset).is_file(), f'Missing LongCat release asset: {asset}'
           assert not list(Path('.').rglob('longcat.local.json*'))
+          for asset in ('qwen_voice_design.py', 'setup_voice_design.py', 'VOICE_DESIGN.md',
+                        'Setup_Voice_Design_Windows.cmd', 'voice_design_runtime/qwen_voice_worker.py',
+                        'voice_design_runtime/requirements.txt'):
+              assert Path(asset).is_file(), f'Missing VoiceDesign release asset: {asset}'
+          assert not list(Path('.').rglob('qwen_voice_design.local.json*'))
           print(f'Publishing Zura Nodes {version}')
           PY
       - name: Install test dependencies
@@ -89,6 +94,8 @@ jobs:
           python -m unittest discover -s tests -p 'test_multicam_v4.py'
           python -m compileall -q longcat.py setup_longcat.py longcat_runtime
           python -m unittest discover -s tests -p 'test_longcat_*.py'
+          python -m compileall -q qwen_voice_design.py setup_voice_design.py voice_design_runtime
+          python -m unittest discover -s tests -p 'test_voice_design_*.py'
           node tests/test_chunk_progress_helpers.mjs
           node tests/test_media_picker_controls.mjs
           node tests/test_media_picker_requests.mjs
