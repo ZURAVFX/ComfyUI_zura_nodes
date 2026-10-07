@@ -46,8 +46,18 @@ jobs:
           assert Path('THIRD_PARTY_NOTICES.md').is_file()
           assert Path('web/v2_media_picker.js').is_file()
           for asset in ('web/multicam_angle_gallery.js', 'multicam_v3.py',
-                        'multicam_v4_clean.py', 'idv2v_control.py', 'klein_look.py'):
+                        'multicam_v4_clean.py', 'h3_single_angle.py',
+                        'idv2v_control.py', 'klein_look.py'):
               assert Path(asset).is_file(), f'Missing multicam release asset: {asset}'
+          for filename in ('Zura_H3_AnyAngle_Single_Camera.json',
+                           'Zura_H3_Multicam_Advanced.json'):
+              text = Path('workflows', filename).read_text(encoding='utf-8')
+              workflow = json.loads(text)
+              assert workflow.get('nodes') and workflow.get('definitions', {}).get('subgraphs')
+              assert 'example_performance.mp4' in text
+              assert '2026-09-18' not in text
+              assert not any(item in text for item in ('ComfyUI-Shared', 'C:\\\\Users', 'ellio'))
+              assert not any(ext in text.lower() for ext in ('data:image/', 'data:video/', 'base64,'))
           workflow = json.loads(Path('workflows/Zura_Wan_2.2_Character_Replacement_Workflow.json').read_text())
           expected = {'TrendStudioV2DrivingClip', 'TrendStudioV2MaskPerformer', 'TrendStudioV2Render', 'TrendStudioV2Speed'}
           assert expected <= {n['type'] for n in workflow['nodes']}
@@ -87,11 +97,14 @@ jobs:
           python -m pip install numpy pillow requests soundfile
       - name: Run regression checks
         run: |
-          python -m compileall -q __init__.py klein_look.py multicam_v3.py multicam_v4_clean.py idv2v_control.py
+          python -m compileall -q __init__.py klein_look.py multicam_v3.py multicam_v4_clean.py h3_single_angle.py idv2v_control.py
           python -m unittest discover -s tests -p 'test_v2_*.py'
           python -m unittest discover -s tests -p 'test_klein_look.py'
           python -m unittest discover -s tests -p 'test_multicam_v3.py'
           python -m unittest discover -s tests -p 'test_multicam_v4.py'
+          python -m unittest discover -s tests -p 'test_multicam_v4_clean.py'
+          python -m unittest discover -s tests -p 'test_h3_single_angle.py'
+          python -m unittest discover -s tests -p 'test_camera_workflow_examples.py'
           python -m compileall -q longcat.py setup_longcat.py longcat_runtime
           python -m unittest discover -s tests -p 'test_longcat_*.py'
           python -m compileall -q qwen_voice_design.py setup_voice_design.py voice_design_runtime
@@ -99,6 +112,7 @@ jobs:
           node tests/test_chunk_progress_helpers.mjs
           node tests/test_media_picker_controls.mjs
           node tests/test_media_picker_requests.mjs
+          node tests/test_multicam_widget_migration.mjs
       - name: Publish reviewed version
         uses: Comfy-Org/publish-node-action@d2366e7abb6ab16f3bb03e3520ae25c8cf749bc9
         with:

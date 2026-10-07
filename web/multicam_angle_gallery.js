@@ -32,10 +32,68 @@ function make(tag, text, parent, styles = {}) {
 
 function widget(node, name) { return node.widgets?.find(w => w.name === name); }
 
-function supportsSourceMotion(node) {
-  if (node.properties?.zura_source_motion_supported === true) return true;
-  return [node.graph, app.graph].some(graph => (graph?._nodes || graph?.nodes || [])
-    .some(n => n.type === 'ZuraCleanMulticamV4' || n.comfyClass === 'ZuraCleanMulticamV4'));
+const seedControls = new Set(['fixed', 'increment', 'decrement', 'randomize']);
+
+function widgetDefinitions(nodeData) {
+  return Object.entries({ ...nodeData.input?.required, ...nodeData.input?.optional })
+    .filter(([, [kind, options]]) => !options?.forceInput &&
+      (Array.isArray(kind) || ['STRING', 'INT', 'FLOAT', 'BOOLEAN'].includes(kind)));
+}
+
+function validWidgetValue(value, [kind, options = {}]) {
+  if (Array.isArray(kind)) return kind.includes(value);
+  if (kind === 'STRING') return typeof value === 'string';
+  if (kind === 'BOOLEAN') return typeof value === 'boolean';
+  if (typeof value !== 'number' || !Number.isFinite(value)) return false;
+  if (kind === 'INT' && !Number.isInteger(value)) return false;
+  return (options.min === undefined || value >= options.min) &&
+    (options.max === undefined || value <= options.max);
+}
+
+// Older workflows omitted the frontend's automatically inserted seed control.
+// Decode by the actual input schema rather than shifting values blindly. Both
+// old arrays (with/without controls) remain readable after disabling that extra
+// seed widget. A named snapshot protects subsequent saves from future changes.
+export function decodeSavedWidgetValues(definitions, values) {
+  if (!Array.isArray(values)) return null;
+  const result = {};
+  let index = 0;
+  for (const [name, definition] of definitions) {
+    const value = values[index++];
+    if (!validWidgetValue(value, definition)) return null;
+    result[name] = value;
+    if (['seed', 'noise_seed', 'klein_seed'].includes(name) && seedControls.has(values[index])) index++;
+  }
+  // The first gallery version serialized its otherwise non-serializing DOM
+  // widget as an empty trailing value. No other unmatched data is accepted.
+  return index === values.length || (index === values.length - 1 && values[index] === '') ? result : null;
+}
+
+function installWidgetPersistence(nodeType, nodeData) {
+  const definitions = widgetDefinitions(nodeData);
+  const configure = nodeType.prototype.onConfigure;
+  nodeType.prototype.onConfigure = function (data) {
+    const result = configure?.call(this, data);
+    const saved = data?.properties?.zura_widget_values ||
+      decodeSavedWidgetValues(definitions, data?.widgets_values);
+    if (saved) {
+      for (const [name, definition] of definitions) {
+        const target = widget(this, name);
+        if (target && Object.hasOwn(saved, name) && validWidgetValue(saved[name], definition)) {
+          target.value = saved[name];
+        }
+      }
+    }
+    return result;
+  };
+  const serialize = nodeType.prototype.onSerialize;
+  nodeType.prototype.onSerialize = function (data) {
+    serialize?.call(this, data);
+    data.properties ||= {};
+    data.properties.zura_widget_values = Object.fromEntries(definitions
+      .map(([name]) => [name, widget(this, name)?.value])
+      .filter(([, value]) => value !== undefined));
+  };
 }
 
 function workflowStage(node) {
@@ -126,6 +184,19 @@ function draw(node, root) {
     node.setDirtyCanvas?.(true, true);
     paint();
   };
+  const applyAll = action('Use this camera for all shots', () => {
+    choices.fill(choices[selectedShot]);
+    if (choicesWidget) { choicesWidget.value = choices.join(','); choicesWidget.callback?.(choicesWidget.value); }
+    node.setDirtyCanvas?.(true, true);
+    paint();
+  });
+  applyAll.title = 'Copies the selected camera to every shot. Your shot directions are retained.';
+  const nextShot = action('Next shot →', () => {
+    selectedShot = (selectedShot + 1) % data.shot_count;
+    node.zuraSelectedShot = selectedShot;
+    paint();
+  });
+  nextShot.style.display = data.shot_count > 1 ? '' : 'none';
   const source = action(null, () => setChoice(0));
   source.style.display = 'flex';
   source.style.alignItems = 'center';
@@ -144,7 +215,7 @@ function draw(node, root) {
   const sourceTick = make('span', '✓', source, { marginLeft: 'auto', color: '#65dfca', fontSize: '20px' });
   sourceTick.setAttribute('aria-hidden', 'true');
   const grid = make('div', null, root, css.grid);
-  make('div', 'Left wide is tested on the approved clip. Other cameras are available to try, but previews do not guarantee the rendered framing or likeness.', root,
+  make('div', 'The preview guides the camera and framing. Review a short render before processing a longer clip.', root,
     { color: '#b6c4d3', fontSize: '11px', marginTop: '7px', lineHeight: '1.45' });
   const motionBox = make('details', null, root, { margin: '12px 0', padding: '9px', background: '#273442', borderRadius: '6px' });
   motionBox.open = Boolean(node.zuraMotionOpen || prompts[selectedShot]);
@@ -188,12 +259,15 @@ function draw(node, root) {
     const end = Math.min(start + data.frames_per_shot, data.frame_count);
     selected.textContent = `Shot ${selectedShot + 1} · ${seconds(start)}–${seconds(end)}s · ${label(choices[selectedShot])}`;
     motion.value = prompts[selectedShot] || '';
-    const sourceUnsupported = choices[selectedShot] === 0 && !supportsSourceMotion(node);
+    const sourceUnsupported = choices[selectedShot] === 0;
     motion.disabled = sourceUnsupported;
-    motion.placeholder = sourceUnsupported ? 'Source-camera prompts need the V4 clean renderer.' : 'Add direction for this shot, or leave blank to follow the performance.';
-    suggestions.querySelectorAll('button').forEach(button => { button.disabled = sourceUnsupported; button.style.opacity = sourceUnsupported ? '0.5' : '1'; });
+    motion.placeholder = sourceUnsupported ? 'Choose a generated camera to add a shot direction.' : 'Add direction for this shot, or leave blank to follow the performance.';
+    suggestions.querySelectorAll('button').forEach(button => {
+      button.disabled = sourceUnsupported && button.textContent !== 'Clear prompt';
+      button.style.opacity = button.disabled ? '0.5' : '1';
+    });
     motionNote.textContent = sourceUnsupported
-      ? 'This V3 renderer keeps the source camera untouched. Source-camera motion is available in V4. Any saved prompt is retained.'
+      ? 'Source camera keeps the original performance. Choose another camera to add direction, or clear an existing prompt here.'
       : 'Keep moves subtle. Strong movements can change the framing or performance. Leave blank for the tested default.';
     source.style.borderColor = choices[selectedShot] === 0 ? '#50d3bd' : '#69788c';
     source.setAttribute('aria-pressed', String(choices[selectedShot] === 0));
@@ -206,7 +280,11 @@ function draw(node, root) {
       el.querySelector('[data-tick]').style.display = active ? 'block' : 'none';
     });
     const cuts = choices.slice(1).filter((id, i) => id !== choices[i]).length;
-    ready.textContent = `${data.shot_count} shots · ${cuts} camera ${cuts === 1 ? 'change' : 'changes'} planned. Choosing cameras never starts generation.`;
+    const sourcePromptShot = choices.findIndex((id, index) => id === 0 && prompts[index]);
+    ready.textContent = sourcePromptShot >= 0
+      ? `Shot ${sourcePromptShot + 1} has a direction but uses Source camera. Choose a generated camera or clear its prompt before rendering.`
+      : `${data.shot_count} shots · ${cuts} camera ${cuts === 1 ? 'change' : 'changes'} planned. Choosing cameras never starts generation.`;
+    ready.style.borderColor = sourcePromptShot >= 0 ? '#d4a75c' : '#405064';
     const currentStage = workflowStage(node);
     const rendering = String(currentStage?.stageWidget.value || '').startsWith('2');
     stageLabel.textContent = currentStage
@@ -222,6 +300,8 @@ function draw(node, root) {
     stageButton.style.display = currentStage ? 'block' : 'none';
     stageButton.textContent = rendering ? '← Back to angle planning' : 'Continue to Render →';
     stageButton.style.background = rendering ? '#344756' : '#1d675c';
+    stageButton.disabled = !rendering && sourcePromptShot >= 0;
+    stageButton.style.opacity = stageButton.disabled ? '0.5' : '1';
     stageButton.setAttribute('aria-label', rendering ? 'Switch workflow stage back to Plan angles'
       : 'Switch workflow stage to Render multicam');
     paintTimeline();
@@ -271,8 +351,6 @@ function draw(node, root) {
     else missing();
     img.loading = 'lazy';
     make('div', card.label, tile, { padding: '5px 6px 2px', fontWeight: '700' });
-    make('div', id === 1 ? 'Tested on approved clip' : 'Experimental · preview only', tile,
-      { padding: '0 6px 6px', color: id === 1 ? '#9be4d6' : '#d3c4a7', fontSize: '10px' });
     tile.onclick = () => setChoice(card.id);
   }
   paint();
@@ -282,6 +360,10 @@ function draw(node, root) {
 app.registerExtension({
   name: 'Zura.MulticamAngleGalleryV3',
   beforeRegisterNodeDef(nodeType, nodeData) {
+    if (['ZuraMulticamStageV3', 'ZuraAngleGalleryV3', 'ZuraH3MulticamV3',
+         'ZuraH3MulticamV4', 'ZuraCleanMulticamV4'].includes(nodeData.name)) {
+      installWidgetPersistence(nodeType, nodeData);
+    }
     if (nodeData.name !== 'ZuraAngleGalleryV3') return;
     const created = nodeType.prototype.onNodeCreated;
     nodeType.prototype.onNodeCreated = function (...args) {

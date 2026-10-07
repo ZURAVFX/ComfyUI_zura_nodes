@@ -6,13 +6,12 @@ import json
 import sys
 import unittest
 from pathlib import Path
-from unittest.mock import patch
 
 import torch
-import v2_bootstrap  # noqa: F401
-from test_multicam_v4 import graph_stubs
+from multicam_test_support import prepare_comfy_imports
 
 
+prepare_comfy_imports()
 MODULE = Path(__file__).resolve().parents[1] / "multicam_v3.py"
 spec = importlib.util.spec_from_file_location("multicam_v3_tested", MODULE)
 mod = importlib.util.module_from_spec(spec)
@@ -21,9 +20,6 @@ spec.loader.exec_module(mod)
 
 class MulticamV3Tests(unittest.TestCase):
     def setUp(self):
-        graph_patch = patch.dict(sys.modules, graph_stubs())
-        graph_patch.start()
-        self.addCleanup(graph_patch.stop)
         self.frames = torch.zeros((96, 32, 48, 3), dtype=torch.float32)
         self.frames[48] = 0.25
         self.frames[-1] = 0.75
@@ -79,6 +75,18 @@ class MulticamV3Tests(unittest.TestCase):
         self.assertIn("medium close-up", prompt)
         self.assertIn("entire head and hair", prompt)
         self.assertNotIn("shot close-up", prompt)
+
+    def test_repeatable_seed_has_no_positional_frontend_control(self):
+        schema = mod.ZuraH3MulticamV3.INPUT_TYPES()
+        self.assertIs(schema["required"]["seed"][1]["control_after_generate"], False)
+        plan = mod._plan("show", self.frames, 24, "0,1,0,1")
+        expanded = mod.ZuraH3MulticamV3().render(
+            self.frames, {}, json.dumps(plan), "2 · Render multicam", (1 << 64) - 1, 8, "test",
+            reference_video=self.frames, moge_geometry=object(), model=object(),
+            clip=object(), video_vae=object(), audio_vae=object())
+        noise = next(v["inputs"]["noise_seed"] for v in expanded["expand"].values()
+                     if v["class_type"] == "RandomNoise")
+        self.assertEqual(noise, 0)
 
     def test_close_angle_uses_safe_native_crop(self):
         plan = mod._plan("show", self.frames, 24, "8,8,8,8")

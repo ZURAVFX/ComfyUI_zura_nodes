@@ -175,9 +175,11 @@ class ZuraMulticamStageV3:
     CATEGORY = "Zura/video"
     FUNCTION = "select"
     RETURN_TYPES = ("ZURA_MULTICAM_STAGE",)
+    DESCRIPTION = "Plan camera previews first, then choose Render multicam and run again to generate the selected shots."
     @classmethod
     def INPUT_TYPES(cls):
-        return {"required": {"stage": (["1 · Plan angles", "2 · Render multicam"],)}}
+        return {"required": {"stage": (["1 · Plan angles", "2 · Render multicam"], {
+            "tooltip": "Plan angles saves still previews without H3 generation. Render multicam uses the saved camera selections."})}}
     def select(self, stage):
         return (stage,)
 
@@ -210,14 +212,16 @@ class ZuraAngleGalleryV3:
     RETURN_TYPES = ("STRING", "IMAGE", "ZURA_MULTICAM_STAGE")
     RETURN_NAMES = ("shot_plan", "contact_sheet", "stage")
     OUTPUT_NODE = True
+    DESCRIPTION = "Choose a shot on the timeline, then click its camera preview. Camera choices and per-shot directions are saved with the workflow."
 
     @classmethod
     def INPUT_TYPES(cls):
         return {"required": {
             "source_frames": ("IMAGE",),
             "stage": ("ZURA_MULTICAM_STAGE",),
-            "project_name": ("STRING", {"default": "performance-v3"}),
-            "frames_per_shot": ("INT", {"default": 24, "min": 12, "max": 3600, "step": 1}),
+            "project_name": ("STRING", {"default": "performance-v3", "tooltip": "A short name for this clip's saved camera previews."}),
+            "frames_per_shot": ("INT", {"default": 24, "min": 12, "max": 3600, "step": 1,
+                "tooltip": "Shot length at 24 fps. 24 frames = 1 second; 48 frames = 2 seconds. The final shot ends with your clip."}),
             "shot_choices": ("STRING", {"default": "0,6,0,4", "multiline": False}),
             "shot_prompts": ("STRING", {"default": "[]", "multiline": False}),
         }, "optional": {
@@ -277,6 +281,7 @@ class ZuraAngleGalleryV3:
             "project": plan["project"], "signature": plan["signature"],
             "frame_count": plan["frame_count"], "frames_per_shot": plan["frames_per_shot"],
             "shot_count": plan["shot_count"], "choices": plan["choices"],
+            "fps": 24,
             "shot_prompts": plan["shot_prompts"],
             "look_enabled": look_enabled,
             "source": {"filename": "source.png", "subfolder": subfolder},
@@ -365,6 +370,7 @@ class ZuraH3MulticamV3:
     FUNCTION = "render"
     RETURN_TYPES = ("IMAGE", "AUDIO")
     RETURN_NAMES = ("multicam_frames", "original_audio")
+    DESCRIPTION = "Render selected cameras from the saved shot plan while conditioning H3 on the original performance and speech. Planning mode skips video generation."
 
     @classmethod
     def INPUT_TYPES(cls):
@@ -375,8 +381,11 @@ class ZuraH3MulticamV3:
         return {"required": {"source_frames": ("IMAGE",), "source_audio": ("AUDIO",),
                              "shot_plan": ("STRING",),
                              "stage": ("ZURA_MULTICAM_STAGE",),
-                             "seed": ("INT", {"default": 42, "min": 0, "max": 0xffffffffffffffff}),
-                             "steps": ("INT", {"default": 8, "min": 1, "max": 60}),
+                             "seed": ("INT", {"default": 42, "min": 0, "max": 0xffffffffffffffff,
+                                 "control_after_generate": False,
+                                 "tooltip": "Fixed for repeatable shots. Change this number to try another result."}),
+                             "steps": ("INT", {"default": 8, "min": 1, "max": 60,
+                                 "tooltip": "Sampling steps for the prepared H3 model. Use the workflow's tested model and LoRA settings."}),
                              "prompt": ("STRING", {"multiline": True, "default":
                                  "crossview. <Picture 1> defines only the selected camera angle. "
                                  "Keep the exact performer, face, clothes, gestures and speaking performance "
@@ -554,8 +563,8 @@ class ZuraH3MulticamV3:
                     end_percent=float(pose_end_percent),
                     control_video=shot_pose).out(0)
             guider = graph.node("BasicGuider", model=take_model, conditioning=guided).out(0)
-            noise = graph.node("RandomNoise", noise_seed=int(seed) + angle_id +
-                               (shot_index or 0) * 1009).out(0)
+            noise = graph.node("RandomNoise", noise_seed=(int(seed) + angle_id +
+                               (shot_index or 0) * 1009) % (1 << 64)).out(0)
             scheduler = graph.node("BasicScheduler", model=take_model, scheduler="simple",
                                    steps=steps, denoise=1.0).out(0)
             sampler = graph.node("KSamplerSelect", sampler_name="res_multistep").out(0)

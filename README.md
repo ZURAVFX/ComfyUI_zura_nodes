@@ -47,25 +47,43 @@ See [VOICE_DESIGN.md](VOICE_DESIGN.md) for the team guide, reference reuse and l
 | **Zura Wan 2.2 Looped Chunks Sampler** | The looped `WanAnimateToVideo` renderer: native `continue_motion` continuation between chunks, hard reset at detected or manual cuts. `steps` and `cfg` are plain widgets the Turbo Switch node can override. Outputs generated frames **and** a finished `VIDEO` with the original audio and exact timing — no separate finish node. |
 | **Zura Wan 2.2 Turbo Switch** | Lazy base/accelerated model selector emitting model/steps/cfg. Wan 2.2 specific: turbo runs the accelerated branch at 4–8 steps with cfg 1.0, quality runs the base branch at 40 steps with cfg 5.0. LoRA branches stay visible in the graph (Power LoRA Loaders or similar). |
 
-### Multicam and scene controls (v1.0.5)
+### Camera and scene controls (v1.2.1)
 
 | Node | Purpose |
 | --- | --- |
 | **Zura Klein Look Presets** and **Zura Optional Image Edit** | Simple lighting, background, and environment prompts with a lazy on/off switch. |
 | **Zura V3 · Pick camera angles** | Nine visual camera previews, a per-shot timeline, angle choices, optional segment prompts, and a visible Plan/Render switch. |
 | **Zura H3 multicam V3** | Generates only selected non-source camera intervals from the original video and reassembles them at the source timing. Other V3 planning and prompt nodes support this workflow. |
+| **H3 · Render selected camera angle** | Renders one selected camera still against the original 24 fps performance and speech, and sends the unmodified source audio to the video export. |
 | **Clean relight · multicam V4** | Optional Klein start-frame relight and Wan IDV2V motion-guided render, passing through the original source audio. When Look is off, it returns the H3 result without loading the image/video models. |
 | **Zura · Match Mouth Motion** and **Zura · Person Motion Control** | Pre-generation control helpers for the V4 relight path. They are not a post-render performer composite. |
 
-The V3/V4 workflow needs a 24 fps source clip, suitable local MiniMax H3,
+Start with [the single-camera example](workflows/Zura_H3_AnyAngle_Single_Camera.json)
+if you want one new angle. Load a video, open **AnyAngle Studio**, read the
+upstream frame, reconstruct it, rotate the camera and apply that view. Then
+run the graph. The Gaussian-splat preview is a camera-position guide;
+Qwen Image Edit makes the actual target still, and H3 renders the original
+performance from that view. The workflow loads the source video only once.
+AnyAngle Studio and its reconstruction weights are a separate third-party
+installation; see the [upstream instructions](https://github.com/T8mars/Comfyui-Qwen-Image-2.1-MultiAngle-T8).
+The package does not install or download those weights automatically.
+
+For several cuts, use [the advanced multicam example](workflows/Zura_H3_Multicam_Advanced.json).
+Choose angles and timing in the planning section before enabling the H3
+render. Its stage subgraphs keep model setup apart from artist controls.
+The examples use `example_performance.mp4` as a placeholder; select your own
+input clip after loading either workflow.
+
+The advanced V3/V4 workflow needs a 24 fps source clip, suitable local MiniMax H3,
 FLUX.2 Klein, and Wan models and LoRAs, plus its other visible custom-node
 dependencies (including CrossViewWarp, VideoHelperSuite, and KJNodes). The
 scene-control node uses a person-segmentation YOLO weight in
 `models/ultralytics/segm/`; the mouth-control node uses `face-alignment==1.4.1`
 and downloads its landmark weights on first use. Model weights and the
-user-specific artist workflow are not bundled in this node package. A
+example workflows are bundled, but model weights are not. A
 structurally valid graph does not guarantee visual identity or perfect lip
-sync; review a short Plan/Render test before processing a full clip.
+sync; review a short test before processing a full clip. The new-angle still
+can drift from the source face; use a modest camera change for the first pass.
 
 Every wire is a standard ComfyUI type except one: `masked_footage` from Zura Mask
 into the sampler, which has to carry the pose, face and mask tensors a video

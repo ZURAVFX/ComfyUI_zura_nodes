@@ -1,0 +1,3001 @@
+{
+  "id": "7b5d89a8-151a-49fb-883c-3356cc228828",
+  "revision": 1,
+  "last_node_id": 53,
+  "last_link_id": 52,
+  "nodes": [
+    {
+      "id": 1,
+      "type": "AnyAngleStudioT8",
+      "pos": [
+        840,
+        100
+      ],
+      "size": [
+        440,
+        210
+      ],
+      "flags": {},
+      "order": 7,
+      "mode": 0,
+      "inputs": [
+        {
+          "localized_name": "reference_image",
+          "name": "reference_image",
+          "shape": 7,
+          "type": "IMAGE",
+          "link": 3
+        },
+        {
+          "localized_name": "structure_image",
+          "name": "structure_image",
+          "shape": 7,
+          "type": "IMAGE",
+          "link": null
+        },
+        {
+          "localized_name": "actor_reference_1",
+          "name": "actor_references.actor_reference_1",
+          "shape": 7,
+          "type": "IMAGE",
+          "link": null
+        },
+        {
+          "localized_name": "pose_keypoints",
+          "name": "pose_keypoints",
+          "shape": 7,
+          "type": "POSE_KEYPOINT",
+          "link": null
+        },
+        {
+          "localized_name": "snapshot",
+          "name": "snapshot",
+          "type": "STRING",
+          "widget": {
+            "name": "snapshot"
+          },
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "localized_name": "guide_image_2",
+          "name": "guide_image_2",
+          "type": "IMAGE",
+          "links": [
+            6,
+            43
+          ]
+        },
+        {
+          "localized_name": "prompt",
+          "name": "prompt",
+          "type": "STRING",
+          "links": [
+            45
+          ]
+        },
+        {
+          "localized_name": "scene_json",
+          "name": "scene_json",
+          "type": "STRING",
+          "links": []
+        },
+        {
+          "localized_name": "anyangle_lora_strength",
+          "name": "anyangle_lora_strength",
+          "type": "FLOAT",
+          "links": [
+            32
+          ]
+        }
+      ],
+      "title": "2 · Open Studio, rotate camera, Apply",
+      "properties": {
+        "Node name for S&R": "AnyAngleStudioT8",
+        "ue_properties": {
+          "widget_ue_connectable": {},
+          "version": "7.8",
+          "input_ue_unconnectable": {}
+        }
+      },
+      "widgets_values": [
+        "",
+        null
+      ],
+      "widgets_values_named": {
+        "snapshot": "",
+        "打开 AnyAngle Studio": null
+      },
+      "color": "#173847",
+      "bgcolor": "#111e28"
+    },
+    {
+      "id": 10,
+      "type": "SaveImage",
+      "pos": [
+        1770,
+        100
+      ],
+      "size": [
+        380,
+        430
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [
+        {
+          "localized_name": "images",
+          "name": "images",
+          "type": "IMAGE",
+          "link": 47
+        },
+        {
+          "localized_name": "filename_prefix",
+          "name": "filename_prefix",
+          "type": "STRING",
+          "widget": {
+            "name": "filename_prefix"
+          },
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "localized_name": "images",
+          "name": "images",
+          "type": "IMAGE",
+          "links": null
+        }
+      ],
+      "title": "Preview and save new-angle frame",
+      "properties": {
+        "Node name for S&R": "SaveImage",
+        "ue_properties": {
+          "widget_ue_connectable": {},
+          "version": "7.8",
+          "input_ue_unconnectable": {}
+        }
+      },
+      "widgets_values": [
+        "AnyAngle-Studio"
+      ],
+      "widgets_values_named": {
+        "filename_prefix": "AnyAngle-Studio"
+      }
+    },
+    {
+      "id": 11,
+      "type": "PreviewImage",
+      "pos": [
+        840,
+        450
+      ],
+      "size": [
+        300,
+        290
+      ],
+      "flags": {},
+      "order": 9,
+      "mode": 0,
+      "inputs": [
+        {
+          "localized_name": "images",
+          "name": "images",
+          "type": "IMAGE",
+          "link": 6
+        }
+      ],
+      "outputs": [
+        {
+          "localized_name": "images",
+          "name": "images",
+          "type": "IMAGE",
+          "links": null
+        }
+      ],
+      "title": "3D guide preview",
+      "properties": {
+        "Node name for S&R": "PreviewImage",
+        "ue_properties": {
+          "widget_ue_connectable": {},
+          "version": "7.8",
+          "input_ue_unconnectable": {}
+        }
+      }
+    },
+    {
+      "id": 12,
+      "type": "Note",
+      "pos": [
+        0,
+        -390
+      ],
+      "size": [
+        710,
+        290
+      ],
+      "flags": {},
+      "order": 1,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [],
+      "title": "START HERE · three clicks",
+      "properties": {
+        "Node name for S&R": "Note",
+        "ue_properties": {
+          "widget_ue_connectable": {},
+          "version": "7.8",
+          "input_ue_unconnectable": {}
+        }
+      },
+      "widgets_values": [
+        "1. Choose one performance video below (first 4 seconds by default).\n2. Open AnyAngle Studio. Click Read upstream image, then Reconstruct 3D; orbit to a new camera, Preview guide, and Apply to node.\n3. Queue. Qwen makes the new-angle still, then H3 animates the ORIGINAL video and speech. The saved MP4 keeps the source audio.\nA single photo cannot reveal unseen sides perfectly. Check the guide and Qwen preview before relying on a large camera rotation."
+      ],
+      "widgets_values_named": {
+        "text": "1. Choose one performance video below (first 4 seconds by default).\n2. Open AnyAngle Studio. Click Read upstream image, then Reconstruct 3D; orbit to a new camera, Preview guide, and Apply to node.\n3. Queue. Qwen makes the new-angle still, then H3 animates the ORIGINAL video and speech. The saved MP4 keeps the source audio.\nA single photo cannot reveal unseen sides perfectly. Check the guide and Qwen preview before relying on a large camera rotation."
+      },
+      "color": "#432",
+      "bgcolor": "#653"
+    },
+    {
+      "id": 20,
+      "type": "VHS_LoadVideo",
+      "pos": [
+        0,
+        100
+      ],
+      "size": [
+        323.7099609375,
+        495.1182975957578
+      ],
+      "flags": {},
+      "order": 2,
+      "mode": 0,
+      "inputs": [
+        {
+          "localized_name": "meta_batch",
+          "name": "meta_batch",
+          "shape": 7,
+          "type": "VHS_BatchManager",
+          "link": null
+        },
+        {
+          "localized_name": "vae",
+          "name": "vae",
+          "shape": 7,
+          "type": "VAE",
+          "link": null
+        },
+        {
+          "localized_name": "video",
+          "name": "video",
+          "type": "COMBO",
+          "widget": {
+            "name": "video"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "force_rate",
+          "name": "force_rate",
+          "type": "FLOAT",
+          "widget": {
+            "name": "force_rate"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "custom_width",
+          "name": "custom_width",
+          "type": "INT",
+          "widget": {
+            "name": "custom_width"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "custom_height",
+          "name": "custom_height",
+          "type": "INT",
+          "widget": {
+            "name": "custom_height"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "frame_load_cap",
+          "name": "frame_load_cap",
+          "type": "INT",
+          "widget": {
+            "name": "frame_load_cap"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "skip_first_frames",
+          "name": "skip_first_frames",
+          "type": "INT",
+          "widget": {
+            "name": "skip_first_frames"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "select_every_nth",
+          "name": "select_every_nth",
+          "type": "INT",
+          "widget": {
+            "name": "select_every_nth"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "format",
+          "name": "format",
+          "shape": 7,
+          "type": "COMBO",
+          "widget": {
+            "name": "format"
+          },
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "localized_name": "IMAGE",
+          "name": "IMAGE",
+          "type": "IMAGE",
+          "links": [
+            1,
+            2
+          ]
+        },
+        {
+          "localized_name": "frame_count",
+          "name": "frame_count",
+          "type": "INT",
+          "links": []
+        },
+        {
+          "localized_name": "audio",
+          "name": "audio",
+          "type": "AUDIO",
+          "links": [
+            21
+          ]
+        },
+        {
+          "localized_name": "video_info",
+          "name": "video_info",
+          "type": "VHS_VIDEOINFO",
+          "links": []
+        }
+      ],
+      "title": "1 · Choose performance video · 24 fps",
+      "properties": {
+        "Node name for S&R": "VHS_LoadVideo",
+        "ue_properties": {
+          "widget_ue_connectable": {},
+          "version": "7.8",
+          "input_ue_unconnectable": {}
+        }
+      },
+      "widgets_values": {
+        "video": "example_performance.mp4",
+        "force_rate": 24,
+        "custom_width": 1280,
+        "custom_height": 720,
+        "frame_load_cap": 96,
+        "skip_first_frames": 0,
+        "select_every_nth": 1,
+        "format": "AnimateDiff",
+        "choose video to upload": "image",
+        "videopreview": {
+          "hidden": false,
+          "paused": false,
+          "params": {
+            "filename": "example_performance.mp4",
+            "type": "input",
+            "format": "video/mp4",
+            "force_rate": 24,
+            "custom_width": 1280,
+            "custom_height": 720,
+            "frame_load_cap": 96,
+            "skip_first_frames": 0,
+            "select_every_nth": 1
+          }
+        }
+      },
+      "widgets_values_named": {
+        "video": "example_performance.mp4",
+        "force_rate": 24,
+        "custom_width": 1280,
+        "custom_height": 720,
+        "frame_load_cap": 96,
+        "skip_first_frames": 0,
+        "select_every_nth": 1,
+        "format": "AnimateDiff",
+        "choose video to upload": "image",
+        "videopreview": {
+          "hidden": false,
+          "paused": false,
+          "params": {
+            "filename": "example_performance.mp4",
+            "type": "input",
+            "format": "video/mp4",
+            "force_rate": 24,
+            "custom_width": 1280,
+            "custom_height": 720,
+            "frame_load_cap": 96,
+            "skip_first_frames": 0,
+            "select_every_nth": 1
+          }
+        }
+      }
+    },
+    {
+      "id": 21,
+      "type": "ImageFromBatch",
+      "pos": [
+        450,
+        100
+      ],
+      "size": [
+        280,
+        114
+      ],
+      "flags": {},
+      "order": 5,
+      "mode": 0,
+      "inputs": [
+        {
+          "localized_name": "image",
+          "name": "image",
+          "type": "IMAGE",
+          "link": 1
+        },
+        {
+          "localized_name": "batch_index",
+          "name": "batch_index",
+          "type": "INT",
+          "widget": {
+            "name": "batch_index"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "length",
+          "name": "length",
+          "type": "INT",
+          "widget": {
+            "name": "length"
+          },
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "localized_name": "IMAGE",
+          "name": "IMAGE",
+          "type": "IMAGE",
+          "links": [
+            3,
+            42
+          ]
+        }
+      ],
+      "title": "Pick camera reference still · 0.5 s",
+      "properties": {
+        "Node name for S&R": "ImageFromBatch",
+        "cnr_id": "comfy-core",
+        "ue_properties": {
+          "widget_ue_connectable": {},
+          "version": "7.8",
+          "input_ue_unconnectable": {}
+        }
+      },
+      "widgets_values": [
+        12,
+        1
+      ],
+      "widgets_values_named": {
+        "batch_index": 12,
+        "length": 1
+      }
+    },
+    {
+      "id": 30,
+      "type": "ImageScale",
+      "pos": [
+        450,
+        610
+      ],
+      "size": [
+        388.859375,
+        260
+      ],
+      "flags": {},
+      "order": 6,
+      "mode": 0,
+      "inputs": [
+        {
+          "localized_name": "image",
+          "name": "image",
+          "type": "IMAGE",
+          "link": 2
+        },
+        {
+          "localized_name": "upscale_method",
+          "name": "upscale_method",
+          "type": "COMBO",
+          "widget": {
+            "name": "upscale_method"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "width",
+          "name": "width",
+          "type": "INT",
+          "widget": {
+            "name": "width"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "height",
+          "name": "height",
+          "type": "INT",
+          "widget": {
+            "name": "height"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "crop",
+          "name": "crop",
+          "type": "COMBO",
+          "widget": {
+            "name": "crop"
+          },
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "localized_name": "IMAGE",
+          "name": "IMAGE",
+          "type": "IMAGE",
+          "links": [
+            20
+          ]
+        }
+      ],
+      "title": "Resize source for H3 · 640 × 352",
+      "properties": {
+        "Node name for S&R": "ImageScale",
+        "ue_properties": {
+          "widget_ue_connectable": {
+            "width": true,
+            "height": true
+          },
+          "version": "7.8",
+          "input_ue_unconnectable": {}
+        }
+      },
+      "widgets_values": [
+        "lanczos",
+        640,
+        352,
+        "center"
+      ],
+      "widgets_values_named": {
+        "upscale_method": "lanczos",
+        "width": 640,
+        "height": 352,
+        "crop": "center"
+      }
+    },
+    {
+      "id": 50,
+      "type": "VHS_VideoCombine",
+      "pos": [
+        2750,
+        100
+      ],
+      "size": [
+        660,
+        530
+      ],
+      "flags": {},
+      "order": 11,
+      "mode": 0,
+      "inputs": [
+        {
+          "localized_name": "images",
+          "name": "images",
+          "type": "IMAGE",
+          "link": 30
+        },
+        {
+          "localized_name": "audio",
+          "name": "audio",
+          "shape": 7,
+          "type": "AUDIO",
+          "link": 31
+        },
+        {
+          "localized_name": "meta_batch",
+          "name": "meta_batch",
+          "shape": 7,
+          "type": "VHS_BatchManager",
+          "link": null
+        },
+        {
+          "localized_name": "vae",
+          "name": "vae",
+          "shape": 7,
+          "type": "VAE",
+          "link": null
+        },
+        {
+          "localized_name": "frame_rate",
+          "name": "frame_rate",
+          "type": "FLOAT",
+          "widget": {
+            "name": "frame_rate"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "loop_count",
+          "name": "loop_count",
+          "type": "INT",
+          "widget": {
+            "name": "loop_count"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "filename_prefix",
+          "name": "filename_prefix",
+          "type": "STRING",
+          "widget": {
+            "name": "filename_prefix"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "format",
+          "name": "format",
+          "type": "COMBO",
+          "widget": {
+            "name": "format"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "pingpong",
+          "name": "pingpong",
+          "type": "BOOLEAN",
+          "widget": {
+            "name": "pingpong"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "save_output",
+          "name": "save_output",
+          "type": "BOOLEAN",
+          "widget": {
+            "name": "save_output"
+          },
+          "link": null
+        },
+        {
+          "name": "pix_fmt",
+          "type": [
+            "yuv420p",
+            "yuv420p10le"
+          ],
+          "widget": {
+            "name": "pix_fmt"
+          },
+          "link": null
+        },
+        {
+          "name": "crf",
+          "type": "INT",
+          "widget": {
+            "name": "crf"
+          },
+          "link": null
+        },
+        {
+          "name": "save_metadata",
+          "type": "BOOLEAN",
+          "widget": {
+            "name": "save_metadata"
+          },
+          "link": null
+        },
+        {
+          "name": "trim_to_audio",
+          "type": "BOOLEAN",
+          "widget": {
+            "name": "trim_to_audio"
+          },
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "localized_name": "Filenames",
+          "name": "Filenames",
+          "type": "VHS_FILENAMES",
+          "links": []
+        }
+      ],
+      "title": "FINAL · New camera with original audio",
+      "properties": {
+        "Node name for S&R": "VHS_VideoCombine",
+        "ue_properties": {
+          "widget_ue_connectable": {},
+          "version": "7.8",
+          "input_ue_unconnectable": {}
+        }
+      },
+      "widgets_values": {
+        "frame_rate": 24,
+        "loop_count": 0,
+        "filename_prefix": "zura_anyangle_h3/single_camera",
+        "format": "video/h264-mp4",
+        "pix_fmt": "yuv420p",
+        "crf": 19,
+        "save_metadata": true,
+        "trim_to_audio": false,
+        "pingpong": false,
+        "save_output": true,
+        "videopreview": ""
+      },
+      "widgets_values_named": {
+        "frame_rate": 24,
+        "loop_count": 0,
+        "filename_prefix": "zura_anyangle_h3/single_camera",
+        "format": "video/h264-mp4",
+        "pix_fmt": "yuv420p",
+        "crf": 19,
+        "save_metadata": true,
+        "trim_to_audio": false,
+        "pingpong": false,
+        "save_output": true,
+        "videopreview": ""
+      }
+    },
+    {
+      "id": 40,
+      "type": "ZuraH3SingleAngle",
+      "pos": [
+        2220,
+        100
+      ],
+      "size": [
+        410,
+        550
+      ],
+      "flags": {},
+      "order": 8,
+      "mode": 0,
+      "inputs": [
+        {
+          "localized_name": "source_frames",
+          "name": "source_frames",
+          "type": "IMAGE",
+          "link": 20
+        },
+        {
+          "localized_name": "source_audio",
+          "name": "source_audio",
+          "type": "AUDIO",
+          "link": 21
+        },
+        {
+          "localized_name": "angle_frame",
+          "name": "angle_frame",
+          "type": "IMAGE",
+          "link": 48
+        },
+        {
+          "localized_name": "model",
+          "name": "model",
+          "type": "MODEL",
+          "link": 37
+        },
+        {
+          "localized_name": "clip",
+          "name": "clip",
+          "type": "CLIP",
+          "link": 38
+        },
+        {
+          "localized_name": "video_vae",
+          "name": "video_vae",
+          "type": "VAE",
+          "link": 39
+        },
+        {
+          "localized_name": "audio_vae",
+          "name": "audio_vae",
+          "type": "VAE",
+          "link": 40
+        },
+        {
+          "localized_name": "seed",
+          "name": "seed",
+          "type": "INT",
+          "widget": {
+            "name": "seed"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "steps",
+          "name": "steps",
+          "type": "INT",
+          "widget": {
+            "name": "steps"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "prompt",
+          "name": "prompt",
+          "type": "STRING",
+          "widget": {
+            "name": "prompt"
+          },
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "localized_name": "new_angle_frames",
+          "name": "new_angle_frames",
+          "type": "IMAGE",
+          "links": [
+            30
+          ]
+        },
+        {
+          "localized_name": "original_audio",
+          "name": "original_audio",
+          "type": "AUDIO",
+          "links": [
+            31
+          ]
+        }
+      ],
+      "title": "4 · Render original performance at new angle",
+      "properties": {
+        "Node name for S&R": "ZuraH3SingleAngle",
+        "ue_properties": {
+          "widget_ue_connectable": {
+            "seed": true,
+            "steps": true,
+            "prompt": true
+          },
+          "version": "7.8",
+          "input_ue_unconnectable": {}
+        }
+      },
+      "widgets_values": [
+        42,
+        "fixed",
+        16,
+        "crossview. <Picture 1> defines the selected camera position and framing. <Video 1> defines the exact same performer's identity, face, clothes, gestures, expression, and speech timing. Recreate the performance from the new angle without changing the person or dialogue. Keep the full head in frame and lips faithful to the original speech."
+      ],
+      "widgets_values_named": {
+        "seed": 42,
+        "control_after_generate": "fixed",
+        "steps": 16,
+        "prompt": "crossview. <Picture 1> defines the selected camera position and framing. <Video 1> defines the exact same performer's identity, face, clothes, gestures, expression, and speech timing. Recreate the performance from the new angle without changing the person or dialogue. Keep the full head in frame and lips faithful to the original speech."
+      }
+    },
+    {
+      "id": 51,
+      "type": "c2f94c88-8086-450b-898a-498695511abb",
+      "pos": [
+        1370,
+        630
+      ],
+      "size": [
+        320,
+        180
+      ],
+      "flags": {},
+      "order": 10,
+      "mode": 0,
+      "inputs": [
+        {
+          "localized_name": "strength_model",
+          "name": "strength_model",
+          "type": "FLOAT",
+          "widget": {
+            "name": "strength_model"
+          },
+          "link": 32
+        }
+      ],
+      "outputs": [
+        {
+          "localized_name": "MODEL",
+          "name": "MODEL",
+          "type": "MODEL",
+          "links": [
+            46
+          ]
+        },
+        {
+          "localized_name": "CLIP",
+          "name": "CLIP",
+          "type": "CLIP",
+          "links": [
+            41
+          ]
+        },
+        {
+          "localized_name": "VAE",
+          "name": "VAE",
+          "type": "VAE",
+          "links": [
+            44
+          ]
+        }
+      ],
+      "title": "Qwen camera-frame models",
+      "properties": {
+        "ue_properties": {
+          "widget_ue_connectable": {
+            "strength_model": true
+          },
+          "input_ue_unconnectable": {},
+          "version": "7.8"
+        },
+        "previewExposures": []
+      },
+      "widgets_values": [
+        1
+      ],
+      "widgets_values_named": {
+        "strength_model": 1
+      },
+      "color": "#303b43",
+      "bgcolor": "#242c31"
+    },
+    {
+      "id": 52,
+      "type": "9025e9e5-e3e7-4dc8-9476-eb28bcecc12f",
+      "pos": [
+        2220,
+        780
+      ],
+      "size": [
+        320,
+        180
+      ],
+      "flags": {},
+      "order": 3,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "localized_name": "MODEL",
+          "name": "MODEL",
+          "type": "MODEL",
+          "links": [
+            37
+          ]
+        },
+        {
+          "localized_name": "CLIP",
+          "name": "CLIP",
+          "type": "CLIP",
+          "links": [
+            38
+          ]
+        },
+        {
+          "localized_name": "VAE",
+          "name": "VAE",
+          "type": "VAE",
+          "links": [
+            39
+          ]
+        },
+        {
+          "localized_name": "VAE_1",
+          "name": "VAE_1",
+          "type": "VAE",
+          "links": [
+            40
+          ]
+        }
+      ],
+      "title": "H3 camera-render models",
+      "properties": {
+        "ue_properties": {
+          "widget_ue_connectable": {},
+          "input_ue_unconnectable": {},
+          "version": "7.8"
+        },
+        "previewExposures": []
+      },
+      "color": "#303b43",
+      "bgcolor": "#242c31"
+    },
+    {
+      "id": 53,
+      "type": "63880eb7-c21c-4e17-b872-e6f16020a4e4",
+      "pos": [
+        1370,
+        100
+      ],
+      "size": [
+        330,
+        330
+      ],
+      "flags": {},
+      "order": 4,
+      "mode": 0,
+      "inputs": [
+        {
+          "localized_name": "clip",
+          "name": "clip",
+          "type": "CLIP",
+          "link": 41
+        },
+        {
+          "localized_name": "image_1",
+          "name": "images.image_1",
+          "shape": 7,
+          "type": "IMAGE",
+          "link": 42
+        },
+        {
+          "localized_name": "image_2",
+          "name": "images.image_2",
+          "shape": 7,
+          "type": "IMAGE",
+          "link": 43
+        },
+        {
+          "localized_name": "vae",
+          "name": "vae",
+          "type": "VAE",
+          "link": 44
+        },
+        {
+          "localized_name": "prompt",
+          "name": "prompt",
+          "type": "STRING",
+          "widget": {
+            "name": "prompt"
+          },
+          "link": 45
+        },
+        {
+          "localized_name": "model",
+          "name": "model",
+          "type": "MODEL",
+          "link": 46
+        },
+        {
+          "name": "seed",
+          "type": "INT",
+          "widget": {
+            "name": "seed"
+          },
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "localized_name": "IMAGE",
+          "name": "IMAGE",
+          "type": "IMAGE",
+          "links": [
+            47,
+            48
+          ]
+        }
+      ],
+      "title": "Prepare camera target",
+      "properties": {
+        "ue_properties": {
+          "widget_ue_connectable": {},
+          "input_ue_unconnectable": {}
+        },
+        "previewExposures": [
+          {
+            "name": "$$canvas-image-preview",
+            "sourceNodeId": "8",
+            "sourcePreviewName": "$$canvas-image-preview"
+          }
+        ]
+      },
+      "widgets_values": [
+        "",
+        42
+      ],
+      "widgets_values_named": {
+        "prompt": "",
+        "seed": 42
+      }
+    }
+  ],
+  "links": [
+    [
+      1,
+      20,
+      0,
+      21,
+      0,
+      "IMAGE"
+    ],
+    [
+      2,
+      20,
+      0,
+      30,
+      0,
+      "IMAGE"
+    ],
+    [
+      3,
+      21,
+      0,
+      1,
+      0,
+      "IMAGE"
+    ],
+    [
+      6,
+      1,
+      0,
+      11,
+      0,
+      "IMAGE"
+    ],
+    [
+      20,
+      30,
+      0,
+      40,
+      0,
+      "IMAGE"
+    ],
+    [
+      21,
+      20,
+      2,
+      40,
+      1,
+      "AUDIO"
+    ],
+    [
+      30,
+      40,
+      0,
+      50,
+      0,
+      "IMAGE"
+    ],
+    [
+      31,
+      40,
+      1,
+      50,
+      1,
+      "AUDIO"
+    ],
+    [
+      32,
+      1,
+      3,
+      51,
+      0,
+      "FLOAT"
+    ],
+    [
+      37,
+      52,
+      0,
+      40,
+      3,
+      "MODEL"
+    ],
+    [
+      38,
+      52,
+      1,
+      40,
+      4,
+      "CLIP"
+    ],
+    [
+      39,
+      52,
+      2,
+      40,
+      5,
+      "VAE"
+    ],
+    [
+      40,
+      52,
+      3,
+      40,
+      6,
+      "VAE"
+    ],
+    [
+      41,
+      51,
+      1,
+      53,
+      0,
+      "CLIP"
+    ],
+    [
+      42,
+      21,
+      0,
+      53,
+      1,
+      "IMAGE"
+    ],
+    [
+      43,
+      1,
+      0,
+      53,
+      2,
+      "IMAGE"
+    ],
+    [
+      44,
+      51,
+      2,
+      53,
+      3,
+      "VAE"
+    ],
+    [
+      45,
+      1,
+      1,
+      53,
+      4,
+      "STRING"
+    ],
+    [
+      46,
+      51,
+      0,
+      53,
+      5,
+      "MODEL"
+    ],
+    [
+      47,
+      53,
+      0,
+      10,
+      0,
+      "IMAGE"
+    ],
+    [
+      48,
+      53,
+      0,
+      40,
+      2,
+      "IMAGE"
+    ]
+  ],
+  "groups": [
+    {
+      "id": 1,
+      "title": "01 · PERFORMANCE",
+      "bounding": [
+        -50,
+        0,
+        840,
+        1030
+      ],
+      "color": "#355f78",
+      "flags": {}
+    },
+    {
+      "id": 2,
+      "title": "02 · CHOOSE CAMERA",
+      "bounding": [
+        800,
+        0,
+        520,
+        1030
+      ],
+      "color": "#446d68",
+      "flags": {}
+    },
+    {
+      "id": 3,
+      "title": "03 · CAMERA FRAME",
+      "bounding": [
+        1330,
+        0,
+        820,
+        1030
+      ],
+      "color": "#765d36",
+      "flags": {}
+    },
+    {
+      "id": 4,
+      "title": "04 · H3 PERFORMANCE",
+      "bounding": [
+        2170,
+        0,
+        520,
+        1030
+      ],
+      "color": "#536a80",
+      "flags": {}
+    },
+    {
+      "id": 5,
+      "title": "05 · DELIVERY",
+      "bounding": [
+        2710,
+        0,
+        760,
+        1030
+      ],
+      "color": "#466e58",
+      "flags": {}
+    }
+  ],
+  "definitions": {
+    "subgraphs": [
+      {
+        "id": "c2f94c88-8086-450b-898a-498695511abb",
+        "version": 1,
+        "state": {
+          "lastGroupId": 6,
+          "lastNodeId": 53,
+          "lastLinkId": 52,
+          "lastRerouteId": 0
+        },
+        "revision": 0,
+        "config": {},
+        "name": "Qwen camera-frame models",
+        "inputNode": {
+          "id": -10,
+          "bounding": [
+            634.12109375,
+            966,
+            135.87890625,
+            68
+          ]
+        },
+        "outputNode": {
+          "id": -20,
+          "bounding": [
+            1510,
+            946,
+            128,
+            108
+          ]
+        },
+        "inputs": [
+          {
+            "id": "406b9899-a5c3-4e6a-ad85-e26d9efe1b94",
+            "name": "strength_model",
+            "type": "FLOAT",
+            "linkIds": [
+              8
+            ],
+            "localized_name": "strength_model",
+            "pos": [
+              746,
+              990
+            ]
+          }
+        ],
+        "outputs": [
+          {
+            "id": "988be4f9-909d-4dbc-af20-ff82c277342c",
+            "name": "MODEL",
+            "type": "MODEL",
+            "linkIds": [
+              10
+            ],
+            "localized_name": "MODEL",
+            "pos": [
+              1534,
+              970
+            ]
+          },
+          {
+            "id": "9f231ec5-bdd3-402c-a897-d607c55653bf",
+            "name": "CLIP",
+            "type": "CLIP",
+            "linkIds": [
+              11
+            ],
+            "localized_name": "CLIP",
+            "pos": [
+              1534,
+              990
+            ]
+          },
+          {
+            "id": "1b656be0-8941-46aa-af54-a63a3edf991c",
+            "name": "VAE",
+            "type": "VAE",
+            "linkIds": [
+              12
+            ],
+            "localized_name": "VAE",
+            "pos": [
+              1534,
+              1010
+            ]
+          }
+        ],
+        "widgets": [],
+        "nodes": [
+          {
+            "id": 3,
+            "type": "UNETLoader",
+            "pos": [
+              830,
+              760
+            ],
+            "size": [
+              280,
+              140
+            ],
+            "flags": {},
+            "order": 0,
+            "mode": 0,
+            "inputs": [
+              {
+                "localized_name": "unet_name",
+                "name": "unet_name",
+                "type": "COMBO",
+                "widget": {
+                  "name": "unet_name"
+                },
+                "link": null
+              },
+              {
+                "localized_name": "weight_dtype",
+                "name": "weight_dtype",
+                "type": "COMBO",
+                "widget": {
+                  "name": "weight_dtype"
+                },
+                "link": null
+              }
+            ],
+            "outputs": [
+              {
+                "localized_name": "MODEL",
+                "name": "MODEL",
+                "type": "MODEL",
+                "links": [
+                  9
+                ]
+              }
+            ],
+            "title": "Qwen 2.1 image model",
+            "properties": {
+              "Node name for S&R": "UNETLoader",
+              "ue_properties": {
+                "widget_ue_connectable": {},
+                "version": "7.8",
+                "input_ue_unconnectable": {}
+              }
+            },
+            "widgets_values": [
+              "qwen_image_2.1_int8_convrot.safetensors",
+              "default"
+            ],
+            "widgets_values_named": {
+              "unet_name": "qwen_image_2.1_int8_convrot.safetensors",
+              "weight_dtype": "default"
+            }
+          },
+          {
+            "id": 4,
+            "type": "AnyAngleOptionalLoRAT8",
+            "pos": [
+              1170,
+              760
+            ],
+            "size": [
+              280,
+              140
+            ],
+            "flags": {},
+            "order": 3,
+            "mode": 0,
+            "inputs": [
+              {
+                "localized_name": "model",
+                "name": "model",
+                "type": "MODEL",
+                "link": 9
+              },
+              {
+                "localized_name": "lora_name",
+                "name": "lora_name",
+                "type": "STRING",
+                "widget": {
+                  "name": "lora_name"
+                },
+                "link": null
+              },
+              {
+                "localized_name": "strength_model",
+                "name": "strength_model",
+                "type": "FLOAT",
+                "widget": {
+                  "name": "strength_model"
+                },
+                "link": 8
+              }
+            ],
+            "outputs": [
+              {
+                "localized_name": "MODEL",
+                "name": "MODEL",
+                "type": "MODEL",
+                "links": [
+                  10
+                ]
+              }
+            ],
+            "title": "AnyAngle camera LoRA",
+            "properties": {
+              "Node name for S&R": "AnyAngleOptionalLoRAT8",
+              "ue_properties": {
+                "widget_ue_connectable": {
+                  "strength_model": true
+                },
+                "version": "7.8",
+                "input_ue_unconnectable": {}
+              }
+            },
+            "widgets_values": [
+              "QI2.1_AnyAngle.safetensors",
+              1
+            ],
+            "widgets_values_named": {
+              "lora_name": "QI2.1_AnyAngle.safetensors",
+              "strength_model": 1
+            }
+          },
+          {
+            "id": 5,
+            "type": "CLIPLoader",
+            "pos": [
+              830,
+              950
+            ],
+            "size": [
+              280,
+              140
+            ],
+            "flags": {},
+            "order": 1,
+            "mode": 0,
+            "inputs": [
+              {
+                "localized_name": "clip_name",
+                "name": "clip_name",
+                "type": "COMBO",
+                "widget": {
+                  "name": "clip_name"
+                },
+                "link": null
+              },
+              {
+                "localized_name": "type",
+                "name": "type",
+                "type": "COMBO",
+                "widget": {
+                  "name": "type"
+                },
+                "link": null
+              },
+              {
+                "localized_name": "device",
+                "name": "device",
+                "shape": 7,
+                "type": "COMBO",
+                "widget": {
+                  "name": "device"
+                },
+                "link": null
+              }
+            ],
+            "outputs": [
+              {
+                "localized_name": "CLIP",
+                "name": "CLIP",
+                "type": "CLIP",
+                "links": [
+                  11
+                ]
+              }
+            ],
+            "title": "Qwen text encoder",
+            "properties": {
+              "Node name for S&R": "CLIPLoader",
+              "ue_properties": {
+                "widget_ue_connectable": {},
+                "version": "7.8",
+                "input_ue_unconnectable": {}
+              }
+            },
+            "widgets_values": [
+              "qwen3vl_8b_int8_convrot.safetensors",
+              "qwen_image",
+              "default"
+            ],
+            "widgets_values_named": {
+              "clip_name": "qwen3vl_8b_int8_convrot.safetensors",
+              "type": "qwen_image",
+              "device": "default"
+            }
+          },
+          {
+            "id": 6,
+            "type": "VAELoader",
+            "pos": [
+              830,
+              1130
+            ],
+            "size": [
+              280,
+              140
+            ],
+            "flags": {},
+            "order": 2,
+            "mode": 0,
+            "inputs": [
+              {
+                "localized_name": "vae_name",
+                "name": "vae_name",
+                "type": "COMBO",
+                "widget": {
+                  "name": "vae_name"
+                },
+                "link": null
+              }
+            ],
+            "outputs": [
+              {
+                "localized_name": "VAE",
+                "name": "VAE",
+                "type": "VAE",
+                "links": [
+                  12
+                ]
+              }
+            ],
+            "title": "Qwen image VAE",
+            "properties": {
+              "Node name for S&R": "VAELoader",
+              "ue_properties": {
+                "widget_ue_connectable": {},
+                "version": "7.8",
+                "input_ue_unconnectable": {}
+              }
+            },
+            "widgets_values": [
+              "qwen_image_2.1_vae_bf16.safetensors"
+            ],
+            "widgets_values_named": {
+              "vae_name": "qwen_image_2.1_vae_bf16.safetensors"
+            }
+          }
+        ],
+        "groups": [],
+        "links": [
+          {
+            "id": 9,
+            "origin_id": 3,
+            "origin_slot": 0,
+            "target_id": 4,
+            "target_slot": 0,
+            "type": "MODEL"
+          },
+          {
+            "id": 8,
+            "origin_id": -10,
+            "origin_slot": 0,
+            "target_id": 4,
+            "target_slot": 2,
+            "type": "FLOAT"
+          },
+          {
+            "id": 10,
+            "origin_id": 4,
+            "origin_slot": 0,
+            "target_id": -20,
+            "target_slot": 0,
+            "type": "MODEL"
+          },
+          {
+            "id": 11,
+            "origin_id": 5,
+            "origin_slot": 0,
+            "target_id": -20,
+            "target_slot": 1,
+            "type": "CLIP"
+          },
+          {
+            "id": 12,
+            "origin_id": 6,
+            "origin_slot": 0,
+            "target_id": -20,
+            "target_slot": 2,
+            "type": "VAE"
+          }
+        ],
+        "extra": {
+          "pixaromaGroups": [],
+          "ue_links": []
+        }
+      },
+      {
+        "id": "9025e9e5-e3e7-4dc8-9476-eb28bcecc12f",
+        "version": 1,
+        "state": {
+          "lastGroupId": 6,
+          "lastNodeId": 53,
+          "lastLinkId": 52,
+          "lastRerouteId": 0
+        },
+        "revision": 0,
+        "config": {},
+        "name": "H3 camera-render models",
+        "inputNode": {
+          "id": -10,
+          "bounding": [
+            1912,
+            1218,
+            128,
+            48
+          ]
+        },
+        "outputNode": {
+          "id": -20,
+          "bounding": [
+            2949.984375,
+            1178,
+            128,
+            128
+          ]
+        },
+        "inputs": [],
+        "outputs": [
+          {
+            "id": "70e19712-1e42-4441-9cc8-709441524b78",
+            "name": "MODEL",
+            "type": "MODEL",
+            "linkIds": [
+              26
+            ],
+            "localized_name": "MODEL",
+            "pos": [
+              2973.984375,
+              1202
+            ]
+          },
+          {
+            "id": "d1b36cdd-4943-43b3-9c2e-29418eccf351",
+            "name": "CLIP",
+            "type": "CLIP",
+            "linkIds": [
+              27
+            ],
+            "localized_name": "CLIP",
+            "pos": [
+              2973.984375,
+              1222
+            ]
+          },
+          {
+            "id": "7fa43ab4-e46b-4139-9847-811137cfcae9",
+            "name": "VAE",
+            "type": "VAE",
+            "linkIds": [
+              28
+            ],
+            "localized_name": "VAE",
+            "pos": [
+              2973.984375,
+              1242
+            ]
+          },
+          {
+            "id": "c4563bea-751a-4e6d-b5fb-8e6a8a134dea",
+            "name": "VAE_1",
+            "type": "VAE",
+            "linkIds": [
+              29
+            ],
+            "localized_name": "VAE_1",
+            "pos": [
+              2973.984375,
+              1262
+            ]
+          }
+        ],
+        "widgets": [],
+        "nodes": [
+          {
+            "id": 41,
+            "type": "UNETLoader",
+            "pos": [
+              2100,
+              850
+            ],
+            "size": [
+              559.53125,
+              110
+            ],
+            "flags": {},
+            "order": 0,
+            "mode": 0,
+            "inputs": [
+              {
+                "localized_name": "unet_name",
+                "name": "unet_name",
+                "type": "COMBO",
+                "widget": {
+                  "name": "unet_name"
+                },
+                "link": null
+              },
+              {
+                "localized_name": "weight_dtype",
+                "name": "weight_dtype",
+                "type": "COMBO",
+                "widget": {
+                  "name": "weight_dtype"
+                },
+                "link": null
+              }
+            ],
+            "outputs": [
+              {
+                "localized_name": "MODEL",
+                "name": "MODEL",
+                "type": "MODEL",
+                "links": [
+                  22
+                ]
+              }
+            ],
+            "title": "H3 model",
+            "properties": {
+              "Node name for S&R": "UNETLoader",
+              "ue_properties": {
+                "widget_ue_connectable": {},
+                "version": "7.8",
+                "input_ue_unconnectable": {}
+              }
+            },
+            "widgets_values": [
+              "minimax_h3_ref2va_pruned_int8_convrot.safetensors",
+              "default"
+            ],
+            "widgets_values_named": {
+              "unet_name": "minimax_h3_ref2va_pruned_int8_convrot.safetensors",
+              "weight_dtype": "default"
+            }
+          },
+          {
+            "id": 42,
+            "type": "LoraLoaderModelOnly",
+            "pos": [
+              2100,
+              1020
+            ],
+            "size": [
+              439.78125,
+              114
+            ],
+            "flags": {},
+            "order": 4,
+            "mode": 0,
+            "inputs": [
+              {
+                "localized_name": "model",
+                "name": "model",
+                "type": "MODEL",
+                "link": 22
+              },
+              {
+                "localized_name": "lora_name",
+                "name": "lora_name",
+                "type": "COMBO",
+                "widget": {
+                  "name": "lora_name"
+                },
+                "link": null
+              },
+              {
+                "localized_name": "strength_model",
+                "name": "strength_model",
+                "type": "FLOAT",
+                "widget": {
+                  "name": "strength_model"
+                },
+                "link": null
+              }
+            ],
+            "outputs": [
+              {
+                "localized_name": "MODEL",
+                "name": "MODEL",
+                "type": "MODEL",
+                "links": [
+                  23
+                ]
+              }
+            ],
+            "title": "H3 8-step acceleration",
+            "properties": {
+              "Node name for S&R": "LoraLoaderModelOnly",
+              "ue_properties": {
+                "widget_ue_connectable": {},
+                "version": "7.8",
+                "input_ue_unconnectable": {}
+              }
+            },
+            "widgets_values": [
+              "minimax_h3_dmd_ref2va_8step_turbo_pruned.safetensors",
+              1
+            ],
+            "widgets_values_named": {
+              "lora_name": "minimax_h3_dmd_ref2va_8step_turbo_pruned.safetensors",
+              "strength_model": 1
+            }
+          },
+          {
+            "id": 43,
+            "type": "MiniMaxH3SigmaShift",
+            "pos": [
+              2100,
+              1200
+            ],
+            "size": [
+              277.28125,
+              114
+            ],
+            "flags": {},
+            "order": 5,
+            "mode": 0,
+            "inputs": [
+              {
+                "localized_name": "model",
+                "name": "model",
+                "type": "MODEL",
+                "link": 23
+              },
+              {
+                "localized_name": "shift_video",
+                "name": "shift_video",
+                "type": "FLOAT",
+                "widget": {
+                  "name": "shift_video"
+                },
+                "link": null
+              },
+              {
+                "localized_name": "shift_audio",
+                "name": "shift_audio",
+                "type": "FLOAT",
+                "widget": {
+                  "name": "shift_audio"
+                },
+                "link": null
+              }
+            ],
+            "outputs": [
+              {
+                "localized_name": "MODEL",
+                "name": "MODEL",
+                "type": "MODEL",
+                "links": [
+                  24
+                ]
+              }
+            ],
+            "title": "Video/audio sampling shift",
+            "properties": {
+              "Node name for S&R": "MiniMaxH3SigmaShift",
+              "ue_properties": {
+                "widget_ue_connectable": {},
+                "version": "7.8",
+                "input_ue_unconnectable": {}
+              }
+            },
+            "widgets_values": [
+              12,
+              3
+            ],
+            "widgets_values_named": {
+              "shift_video": 12,
+              "shift_audio": 3
+            }
+          },
+          {
+            "id": 44,
+            "type": "ModelAttentionBackend",
+            "pos": [
+              2100,
+              1380
+            ],
+            "size": [
+              270,
+              86
+            ],
+            "flags": {},
+            "order": 6,
+            "mode": 0,
+            "inputs": [
+              {
+                "localized_name": "model",
+                "name": "model",
+                "type": "MODEL",
+                "link": 24
+              },
+              {
+                "localized_name": "backend",
+                "name": "attention",
+                "type": "COMBO",
+                "widget": {
+                  "name": "attention"
+                },
+                "link": null
+              }
+            ],
+            "outputs": [
+              {
+                "localized_name": "model",
+                "name": "model",
+                "type": "MODEL",
+                "links": [
+                  25
+                ]
+              }
+            ],
+            "title": "Attention backend",
+            "properties": {
+              "Node name for S&R": "ModelAttentionBackend",
+              "ue_properties": {
+                "widget_ue_connectable": {},
+                "version": "7.8",
+                "input_ue_unconnectable": {}
+              }
+            },
+            "widgets_values": [
+              "comfy kitchen attention"
+            ],
+            "widgets_values_named": {
+              "attention": "comfy kitchen attention"
+            }
+          },
+          {
+            "id": 45,
+            "type": "LoraLoaderModelOnly",
+            "pos": [
+              2100,
+              1550
+            ],
+            "size": [
+              509.5625,
+              114
+            ],
+            "flags": {},
+            "order": 7,
+            "mode": 0,
+            "inputs": [
+              {
+                "localized_name": "model",
+                "name": "model",
+                "type": "MODEL",
+                "link": 25
+              },
+              {
+                "localized_name": "lora_name",
+                "name": "lora_name",
+                "type": "COMBO",
+                "widget": {
+                  "name": "lora_name"
+                },
+                "link": null
+              },
+              {
+                "localized_name": "strength_model",
+                "name": "strength_model",
+                "type": "FLOAT",
+                "widget": {
+                  "name": "strength_model"
+                },
+                "link": null
+              }
+            ],
+            "outputs": [
+              {
+                "localized_name": "MODEL",
+                "name": "MODEL",
+                "type": "MODEL",
+                "links": [
+                  26
+                ]
+              }
+            ],
+            "title": "CrossView camera LoRA",
+            "properties": {
+              "Node name for S&R": "LoraLoaderModelOnly",
+              "ue_properties": {
+                "widget_ue_connectable": {},
+                "version": "7.8",
+                "input_ue_unconnectable": {}
+              }
+            },
+            "widgets_values": [
+              "MiniMax-H3_Ref2VA-LoRA-CrossView-Warp_v1_3500.safetensors",
+              0.8
+            ],
+            "widgets_values_named": {
+              "lora_name": "MiniMax-H3_Ref2VA-LoRA-CrossView-Warp_v1_3500.safetensors",
+              "strength_model": 0.8
+            }
+          },
+          {
+            "id": 46,
+            "type": "CLIPLoader",
+            "pos": [
+              2480,
+              850
+            ],
+            "size": [
+              377.140625,
+              138
+            ],
+            "flags": {},
+            "order": 1,
+            "mode": 0,
+            "inputs": [
+              {
+                "localized_name": "clip_name",
+                "name": "clip_name",
+                "type": "COMBO",
+                "widget": {
+                  "name": "clip_name"
+                },
+                "link": null
+              },
+              {
+                "localized_name": "type",
+                "name": "type",
+                "type": "COMBO",
+                "widget": {
+                  "name": "type"
+                },
+                "link": null
+              },
+              {
+                "localized_name": "device",
+                "name": "device",
+                "shape": 7,
+                "type": "COMBO",
+                "widget": {
+                  "name": "device"
+                },
+                "link": null
+              }
+            ],
+            "outputs": [
+              {
+                "localized_name": "CLIP",
+                "name": "CLIP",
+                "type": "CLIP",
+                "links": [
+                  27
+                ]
+              }
+            ],
+            "title": "H3 text encoder",
+            "properties": {
+              "Node name for S&R": "CLIPLoader",
+              "ue_properties": {
+                "widget_ue_connectable": {},
+                "version": "7.8",
+                "input_ue_unconnectable": {}
+              }
+            },
+            "widgets_values": [
+              "qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors",
+              "minimax",
+              "default"
+            ],
+            "widgets_values_named": {
+              "clip_name": "qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors",
+              "type": "minimax",
+              "device": "default"
+            }
+          },
+          {
+            "id": 47,
+            "type": "VAELoader",
+            "pos": [
+              2480,
+              1030
+            ],
+            "size": [
+              409.984375,
+              86
+            ],
+            "flags": {},
+            "order": 2,
+            "mode": 0,
+            "inputs": [
+              {
+                "localized_name": "vae_name",
+                "name": "vae_name",
+                "type": "COMBO",
+                "widget": {
+                  "name": "vae_name"
+                },
+                "link": null
+              }
+            ],
+            "outputs": [
+              {
+                "localized_name": "VAE",
+                "name": "VAE",
+                "type": "VAE",
+                "links": [
+                  28
+                ]
+              }
+            ],
+            "title": "H3 video VAE",
+            "properties": {
+              "Node name for S&R": "VAELoader",
+              "ue_properties": {
+                "widget_ue_connectable": {},
+                "version": "7.8",
+                "input_ue_unconnectable": {}
+              }
+            },
+            "widgets_values": [
+              "minimax_h3_video_vae_int8_convrot.safetensors"
+            ],
+            "widgets_values_named": {
+              "vae_name": "minimax_h3_video_vae_int8_convrot.safetensors"
+            }
+          },
+          {
+            "id": 48,
+            "type": "VAELoader",
+            "pos": [
+              2480,
+              1200
+            ],
+            "size": [
+              385.703125,
+              86
+            ],
+            "flags": {},
+            "order": 3,
+            "mode": 0,
+            "inputs": [
+              {
+                "localized_name": "vae_name",
+                "name": "vae_name",
+                "type": "COMBO",
+                "widget": {
+                  "name": "vae_name"
+                },
+                "link": null
+              }
+            ],
+            "outputs": [
+              {
+                "localized_name": "VAE",
+                "name": "VAE",
+                "type": "VAE",
+                "links": [
+                  29
+                ]
+              }
+            ],
+            "title": "H3 audio VAE",
+            "properties": {
+              "Node name for S&R": "VAELoader",
+              "ue_properties": {
+                "widget_ue_connectable": {},
+                "version": "7.8",
+                "input_ue_unconnectable": {}
+              }
+            },
+            "widgets_values": [
+              "minimax_h3_audio_vae_fp32.safetensors"
+            ],
+            "widgets_values_named": {
+              "vae_name": "minimax_h3_audio_vae_fp32.safetensors"
+            }
+          }
+        ],
+        "groups": [],
+        "links": [
+          {
+            "id": 22,
+            "origin_id": 41,
+            "origin_slot": 0,
+            "target_id": 42,
+            "target_slot": 0,
+            "type": "MODEL"
+          },
+          {
+            "id": 23,
+            "origin_id": 42,
+            "origin_slot": 0,
+            "target_id": 43,
+            "target_slot": 0,
+            "type": "MODEL"
+          },
+          {
+            "id": 24,
+            "origin_id": 43,
+            "origin_slot": 0,
+            "target_id": 44,
+            "target_slot": 0,
+            "type": "MODEL"
+          },
+          {
+            "id": 25,
+            "origin_id": 44,
+            "origin_slot": 0,
+            "target_id": 45,
+            "target_slot": 0,
+            "type": "MODEL"
+          },
+          {
+            "id": 26,
+            "origin_id": 45,
+            "origin_slot": 0,
+            "target_id": -20,
+            "target_slot": 0,
+            "type": "MODEL"
+          },
+          {
+            "id": 27,
+            "origin_id": 46,
+            "origin_slot": 0,
+            "target_id": -20,
+            "target_slot": 1,
+            "type": "CLIP"
+          },
+          {
+            "id": 28,
+            "origin_id": 47,
+            "origin_slot": 0,
+            "target_id": -20,
+            "target_slot": 2,
+            "type": "VAE"
+          },
+          {
+            "id": 29,
+            "origin_id": 48,
+            "origin_slot": 0,
+            "target_id": -20,
+            "target_slot": 3,
+            "type": "VAE"
+          }
+        ],
+        "extra": {
+          "pixaromaGroups": [],
+          "ue_links": []
+        }
+      },
+      {
+        "id": "63880eb7-c21c-4e17-b872-e6f16020a4e4",
+        "version": 1,
+        "state": {
+          "lastGroupId": 6,
+          "lastNodeId": 53,
+          "lastLinkId": 52,
+          "lastRerouteId": 0
+        },
+        "revision": 0,
+        "config": {},
+        "name": "Prepare camera target",
+        "inputNode": {
+          "id": -10,
+          "bounding": [
+            1342,
+            136,
+            128,
+            188
+          ]
+        },
+        "outputNode": {
+          "id": -20,
+          "bounding": [
+            2590,
+            186,
+            128,
+            68
+          ]
+        },
+        "inputs": [
+          {
+            "id": "953dd729-2085-43c8-a936-a23582e408dc",
+            "name": "clip",
+            "type": "CLIP",
+            "linkIds": [
+              34
+            ],
+            "localized_name": "clip",
+            "pos": [
+              1446,
+              160
+            ]
+          },
+          {
+            "id": "af0fb97f-b97e-4161-afa5-9b9b5e0d7d48",
+            "name": "images.image_1",
+            "type": "IMAGE",
+            "linkIds": [
+              4
+            ],
+            "localized_name": "image_1",
+            "shape": 7,
+            "pos": [
+              1446,
+              180
+            ]
+          },
+          {
+            "id": "baa70628-2ff0-4449-92f8-f7f3979a3094",
+            "name": "images.image_2",
+            "type": "IMAGE",
+            "linkIds": [
+              51
+            ],
+            "localized_name": "image_2",
+            "shape": 7,
+            "pos": [
+              1446,
+              200
+            ]
+          },
+          {
+            "id": "dd350f98-0188-4ba3-8555-b3636b71d386",
+            "name": "vae",
+            "type": "VAE",
+            "linkIds": [
+              36,
+              50
+            ],
+            "localized_name": "vae",
+            "shape": 7,
+            "pos": [
+              1446,
+              220
+            ]
+          },
+          {
+            "id": "cf316631-6474-4f91-8e5d-5a749c66a653",
+            "name": "prompt",
+            "type": "STRING",
+            "linkIds": [
+              52
+            ],
+            "localized_name": "prompt",
+            "pos": [
+              1446,
+              240
+            ]
+          },
+          {
+            "id": "83f3fac8-492b-4602-8cc0-181e29b0e1da",
+            "name": "model",
+            "type": "MODEL",
+            "linkIds": [
+              33
+            ],
+            "localized_name": "model",
+            "pos": [
+              1446,
+              260
+            ]
+          },
+          {
+            "id": "5aaccc4e-dd39-4deb-8a95-c454f952fa25",
+            "name": "seed",
+            "type": "INT",
+            "linkIds": [
+              49
+            ],
+            "pos": [
+              1446,
+              280
+            ]
+          }
+        ],
+        "outputs": [
+          {
+            "id": "3a77eab7-0589-4fd3-bfdd-1ba57ef9ad50",
+            "name": "IMAGE",
+            "type": "IMAGE",
+            "linkIds": [
+              18
+            ],
+            "localized_name": "IMAGE",
+            "pos": [
+              2614,
+              210
+            ]
+          }
+        ],
+        "widgets": [],
+        "nodes": [
+          {
+            "id": 7,
+            "type": "TextEncodeQwenImage21",
+            "pos": [
+              1530,
+              0
+            ],
+            "size": [
+              350,
+              360
+            ],
+            "flags": {},
+            "order": 0,
+            "mode": 0,
+            "inputs": [
+              {
+                "localized_name": "clip",
+                "name": "clip",
+                "type": "CLIP",
+                "link": 34
+              },
+              {
+                "localized_name": "image_1",
+                "name": "images.image_1",
+                "shape": 7,
+                "type": "IMAGE",
+                "link": 4
+              },
+              {
+                "localized_name": "vae",
+                "name": "vae",
+                "shape": 7,
+                "type": "VAE",
+                "link": 50
+              },
+              {
+                "localized_name": "prompt",
+                "name": "prompt",
+                "type": "STRING",
+                "widget": {
+                  "name": "prompt"
+                },
+                "link": 52
+              },
+              {
+                "localized_name": "negative_prompt",
+                "name": "negative_prompt",
+                "type": "STRING",
+                "widget": {
+                  "name": "negative_prompt"
+                },
+                "link": null
+              },
+              {
+                "localized_name": "resolution",
+                "name": "resolution",
+                "type": "INT",
+                "widget": {
+                  "name": "resolution"
+                },
+                "link": null
+              },
+              {
+                "localized_name": "image_2",
+                "name": "images.image_2",
+                "shape": 7,
+                "type": "IMAGE",
+                "link": 51
+              },
+              {
+                "localized_name": "image_3",
+                "name": "images.image_3",
+                "shape": 7,
+                "type": "IMAGE",
+                "link": null
+              },
+              {
+                "localized_name": "image_4",
+                "name": "images.image_4",
+                "shape": 7,
+                "type": "IMAGE",
+                "link": null
+              }
+            ],
+            "outputs": [
+              {
+                "localized_name": "positive",
+                "name": "positive",
+                "type": "CONDITIONING",
+                "links": [
+                  14
+                ]
+              },
+              {
+                "localized_name": "negative",
+                "name": "negative",
+                "type": "CONDITIONING",
+                "links": [
+                  15
+                ]
+              },
+              {
+                "localized_name": "latent",
+                "name": "latent",
+                "type": "LATENT",
+                "links": [
+                  16
+                ]
+              }
+            ],
+            "title": "3 · Match photo to the selected camera",
+            "properties": {
+              "ue_properties": {
+                "widget_ue_connectable": {
+                  "prompt": true
+                },
+                "version": "7.8",
+                "input_ue_unconnectable": {}
+              },
+              "Node name for S&R": "TextEncodeQwenImage21"
+            },
+            "widgets_values": [
+              "",
+              "",
+              1024
+            ],
+            "widgets_values_named": {
+              "prompt": "",
+              "negative_prompt": "",
+              "resolution": 1024
+            }
+          },
+          {
+            "id": 8,
+            "type": "KSampler",
+            "pos": [
+              1900,
+              0
+            ],
+            "size": [
+              302.933203125,
+              470
+            ],
+            "flags": {},
+            "order": 1,
+            "mode": 0,
+            "inputs": [
+              {
+                "localized_name": "model",
+                "name": "model",
+                "type": "MODEL",
+                "link": 33
+              },
+              {
+                "localized_name": "positive",
+                "name": "positive",
+                "type": "CONDITIONING",
+                "link": 14
+              },
+              {
+                "localized_name": "negative",
+                "name": "negative",
+                "type": "CONDITIONING",
+                "link": 15
+              },
+              {
+                "localized_name": "latent_image",
+                "name": "latent_image",
+                "type": "LATENT",
+                "link": 16
+              },
+              {
+                "localized_name": "seed",
+                "name": "seed",
+                "type": "INT",
+                "widget": {
+                  "name": "seed"
+                },
+                "link": 49
+              },
+              {
+                "localized_name": "steps",
+                "name": "steps",
+                "type": "INT",
+                "widget": {
+                  "name": "steps"
+                },
+                "link": null
+              },
+              {
+                "localized_name": "cfg",
+                "name": "cfg",
+                "type": "FLOAT",
+                "widget": {
+                  "name": "cfg"
+                },
+                "link": null
+              },
+              {
+                "localized_name": "sampler_name",
+                "name": "sampler_name",
+                "type": "COMBO",
+                "widget": {
+                  "name": "sampler_name"
+                },
+                "link": null
+              },
+              {
+                "localized_name": "scheduler",
+                "name": "scheduler",
+                "type": "COMBO",
+                "widget": {
+                  "name": "scheduler"
+                },
+                "link": null
+              },
+              {
+                "localized_name": "denoise",
+                "name": "denoise",
+                "type": "FLOAT",
+                "widget": {
+                  "name": "denoise"
+                },
+                "link": null
+              }
+            ],
+            "outputs": [
+              {
+                "localized_name": "LATENT",
+                "name": "LATENT",
+                "type": "LATENT",
+                "links": [
+                  17
+                ]
+              }
+            ],
+            "title": "Qwen camera-frame sampler · 20 steps",
+            "properties": {
+              "ue_properties": {
+                "widget_ue_connectable": {},
+                "version": "7.8",
+                "input_ue_unconnectable": {}
+              },
+              "Node name for S&R": "KSampler"
+            },
+            "widgets_values": [
+              42,
+              "fixed",
+              20,
+              3,
+              "euler",
+              "simple",
+              1
+            ],
+            "widgets_values_named": {
+              "seed": 42,
+              "control_after_generate": "fixed",
+              "steps": 20,
+              "cfg": 3,
+              "sampler_name": "euler",
+              "scheduler": "simple",
+              "denoise": 1
+            }
+          },
+          {
+            "id": 9,
+            "type": "VAEDecode",
+            "pos": [
+              2250,
+              0
+            ],
+            "size": [
+              280,
+              140
+            ],
+            "flags": {},
+            "order": 2,
+            "mode": 0,
+            "inputs": [
+              {
+                "localized_name": "samples",
+                "name": "samples",
+                "type": "LATENT",
+                "link": 17
+              },
+              {
+                "localized_name": "vae",
+                "name": "vae",
+                "type": "VAE",
+                "link": 36
+              }
+            ],
+            "outputs": [
+              {
+                "localized_name": "IMAGE",
+                "name": "IMAGE",
+                "type": "IMAGE",
+                "links": [
+                  18
+                ]
+              }
+            ],
+            "title": "New-angle frame",
+            "properties": {
+              "ue_properties": {
+                "widget_ue_connectable": {},
+                "version": "7.8",
+                "input_ue_unconnectable": {}
+              },
+              "Node name for S&R": "VAEDecode"
+            }
+          }
+        ],
+        "groups": [],
+        "links": [
+          {
+            "id": 14,
+            "origin_id": 7,
+            "origin_slot": 0,
+            "target_id": 8,
+            "target_slot": 1,
+            "type": "CONDITIONING"
+          },
+          {
+            "id": 15,
+            "origin_id": 7,
+            "origin_slot": 1,
+            "target_id": 8,
+            "target_slot": 2,
+            "type": "CONDITIONING"
+          },
+          {
+            "id": 16,
+            "origin_id": 7,
+            "origin_slot": 2,
+            "target_id": 8,
+            "target_slot": 3,
+            "type": "LATENT"
+          },
+          {
+            "id": 17,
+            "origin_id": 8,
+            "origin_slot": 0,
+            "target_id": 9,
+            "target_slot": 0,
+            "type": "LATENT"
+          },
+          {
+            "id": 34,
+            "origin_id": -10,
+            "origin_slot": 0,
+            "target_id": 7,
+            "target_slot": 0,
+            "type": "CLIP"
+          },
+          {
+            "id": 4,
+            "origin_id": -10,
+            "origin_slot": 1,
+            "target_id": 7,
+            "target_slot": 1,
+            "type": "IMAGE"
+          },
+          {
+            "id": 36,
+            "origin_id": -10,
+            "origin_slot": 3,
+            "target_id": 9,
+            "target_slot": 1,
+            "type": "VAE"
+          },
+          {
+            "id": 33,
+            "origin_id": -10,
+            "origin_slot": 5,
+            "target_id": 8,
+            "target_slot": 0,
+            "type": "MODEL"
+          },
+          {
+            "id": 18,
+            "origin_id": 9,
+            "origin_slot": 0,
+            "target_id": -20,
+            "target_slot": 0,
+            "type": "IMAGE"
+          },
+          {
+            "id": 49,
+            "origin_id": -10,
+            "origin_slot": 6,
+            "target_id": 8,
+            "target_slot": 4,
+            "type": "INT"
+          },
+          {
+            "id": 50,
+            "origin_id": -10,
+            "origin_slot": 3,
+            "target_id": 7,
+            "target_slot": 2,
+            "type": "VAE"
+          },
+          {
+            "id": 51,
+            "origin_id": -10,
+            "origin_slot": 2,
+            "target_id": 7,
+            "target_slot": 6,
+            "type": "IMAGE"
+          },
+          {
+            "id": 52,
+            "origin_id": -10,
+            "origin_slot": 4,
+            "target_id": 7,
+            "target_slot": 3,
+            "type": "STRING"
+          }
+        ],
+        "extra": {
+          "pixaromaGroups": [],
+          "ue_links": []
+        }
+      }
+    ]
+  },
+  "config": {},
+  "extra": {
+    "zura_notes": "Choose one source video; open AnyAngle Studio to reconstruct and rotate its reference still, then Apply to node and Queue. H3 uses the original performance and speech; the exported MP4 carries the original audio. The selected frame is a camera target, not a guarantee of pixel-exact identity or pose. First 96 frames (4 seconds) by default at 24 fps.",
+    "ue_links": []
+  },
+  "version": 0.4
+}

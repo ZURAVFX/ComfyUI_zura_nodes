@@ -123,14 +123,17 @@ class ZuraCleanMulticamV4:
         return {"required": {
             "source_frames": ("IMAGE",), "source_audio": ("AUDIO",),
             "h3_frames": ("IMAGE", {"lazy": True}), "shot_plan": ("STRING",),
-            "look_enabled": ("BOOLEAN", {"default": False}),
+            "look_enabled": ("BOOLEAN", {"default": False,
+                "tooltip": "Off: deliver the H3 camera result. On: AI relight or replace the scene using your Look prompt."}),
             "look_prompt": ("STRING", {"multiline": True, "default":
                 "A clean neutral-grey photography studio with a seamless cyclorama and floor, "
                 "soft large key light from camera left and subtle rim light."}),
             "width": ("INT", {"default": 832, "min": 128, "max": 2048, "step": 16}),
             "height": ("INT", {"default": 480, "min": 128, "max": 2048, "step": 16}),
-            "seed": ("INT", {"default": 314159, "min": 0, "max": 0xffffffffffffffff}),
-            "klein_seed": ("INT", {"default": 33874211, "min": 0, "max": 0xffffffffffffffff}),
+            "seed": ("INT", {"default": 314159, "min": 0, "max": 0xffffffffffffffff,
+                "control_after_generate": False, "tooltip": "Fixed video seed for repeatable results."}),
+            "klein_seed": ("INT", {"default": 33874211, "min": 0, "max": 0xffffffffffffffff,
+                "control_after_generate": False, "tooltip": "Fixed seed for the edited start-frame image."}),
             "wan_steps": ("INT", {"default": 4, "min": 1, "max": 60}),
             "klein_steps": ("INT", {"default": 4, "min": 1, "max": 60}),
         }, "optional": {
