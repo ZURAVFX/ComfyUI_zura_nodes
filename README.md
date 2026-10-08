@@ -47,19 +47,37 @@ See [VOICE_DESIGN.md](VOICE_DESIGN.md) for the team guide, reference reuse and l
 | **Zura Wan 2.2 Looped Chunks Sampler** | The looped `WanAnimateToVideo` renderer: native `continue_motion` continuation between chunks, hard reset at detected or manual cuts. `steps` and `cfg` are plain widgets the Turbo Switch node can override. Outputs generated frames **and** a finished `VIDEO` with the original audio and exact timing — no separate finish node. |
 | **Zura Wan 2.2 Turbo Switch** | Lazy base/accelerated model selector emitting model/steps/cfg. Wan 2.2 specific: turbo runs the accelerated branch at 4–8 steps with cfg 1.0, quality runs the base branch at 40 steps with cfg 5.0. LoRA branches stay visible in the graph (Power LoRA Loaders or similar). |
 
-### Camera and scene controls (v1.2.2)
+### Camera and scene controls
 
 | Node | Purpose |
 | --- | --- |
 | **Zura Klein Look Presets** and **Zura Optional Image Edit** | Simple lighting, background, and environment prompts with a lazy on/off switch. |
 | **Zura V3 · Pick camera angles** | Nine visual camera previews, a per-shot timeline, angle choices, optional segment prompts, and a visible Plan/Render switch. |
+| **Zura · Clip duration (24 fps)** | A frame-exact short take from 0.5 to 5 seconds, with a four-second default. The simple camera workflow links the decoded frame count to the picker so one camera covers the whole take. |
 | **Zura H3 multicam V3** | Generates only selected non-source camera intervals from the original video and reassembles them at the source timing. Other V3 planning and prompt nodes support this workflow. |
 | **H3 · Render selected camera angle** | Renders one selected camera still against the original 24 fps performance and speech, and sends the unmodified source audio to the video export. |
 | **Clean relight · multicam V4** | Optional Klein start-frame relight and Wan IDV2V motion-guided render, passing through the original source audio. When Look is off, it returns the H3 result without loading the image/video models. |
 | **Zura · Match Mouth Motion** and **Zura · Person Motion Control** | Pre-generation control helpers for the V4 relight path. They are not a post-render performer composite. |
 
-Start with [the single-camera example](workflows/Zura_H3_AnyAngle_Single_Camera.json)
-if you want one new angle. Load a video, open **AnyAngle Studio**, read the
+Start with [the simple single-camera example](workflows/Zura_H3_Single_Camera.json)
+to change the camera on a short performance. It uses the same local Qwen Edit
+2511 four-step camera previews and H3 CrossView-Warp path as the advanced
+multicam workflow. The source loads once, is decoded at 24 fps, and supplies
+both the performance guide and original speech. Clip duration is 0.5–5 seconds,
+with four seconds selected by default.
+
+1. Select your video and clip duration. Leave the picker in **Plan previews** and click ComfyUI **Run** to make the nine previews.
+2. Choose one camera in the visual picker. Add an optional movement prompt if needed.
+3. Choose **Render video** in the picker, then click ComfyUI **Run** again. H3 renders the selected view and exports it with the original audio.
+
+Both passes run with local model weights and use no Comfy credits. The picker
+caches its camera stills, so the render pass reuses them. There is no Gaussian
+reconstruction or Qwen Image 2.1 stage in this example. **Delivery shape and size**
+crops/resizes the finished frames; it does not change the H3 generation resolution.
+
+[The AnyAngle single-camera example](workflows/Zura_H3_AnyAngle_Single_Camera.json)
+is a separate experimental option for manual 3D camera positioning. Load a video,
+open **AnyAngle Studio**, read the
 upstream frame, reconstruct it, rotate the camera and apply that view. Then
 run the graph. The Gaussian-splat preview is a camera-position guide;
 Qwen Image Edit makes the actual target still, and H3 renders the original

@@ -170,6 +170,32 @@ class ZuraSceneAnglePromptV4(ZuraSafeAnglePromptV3):
         return (base,)
 
 
+class ZuraShortTakeDuration:
+    """Bound short H3 takes and align their duration to the source's 24 fps."""
+
+    CATEGORY = "Zura/video"
+    FUNCTION = "duration"
+    RETURN_TYPES = ("FLOAT", "INT")
+    RETURN_NAMES = ("seconds", "frames")
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {"required": {"seconds": ("FLOAT", {
+            "default": 4.0, "min": 0.5, "max": 5.0, "step": 0.1,
+            "tooltip": "Use the first 0.5–5 seconds of the source. Rounded to whole frames at 24 fps.",
+        })}}
+
+    def duration(self, seconds):
+        try:
+            seconds = float(seconds)
+        except (TypeError, ValueError, OverflowError) as exc:
+            raise ValueError("Clip duration must be a number from 0.5 to 5 seconds.") from exc
+        if not math.isfinite(seconds) or not 0.5 <= seconds <= 5.0:
+            raise ValueError("Clip duration must be a finite number from 0.5 to 5 seconds.")
+        frames = round(seconds * 24)
+        return (frames / 24.0, frames)
+
+
 class ZuraMulticamStageV3:
     """One artist-facing switch shared by planning and render branches."""
     CATEGORY = "Zura/video"
@@ -620,6 +646,7 @@ class ZuraH3MulticamV4(ZuraH3MulticamV3):
 
 
 NODE_CLASS_MAPPINGS = {
+    "ZuraShortTakeDuration": ZuraShortTakeDuration,
     "ZuraMulticamStageV3": ZuraMulticamStageV3,
     "ZuraPlanOnlyImageV3": ZuraPlanOnlyImageV3,
     "ZuraSafeAnglePromptV3": ZuraSafeAnglePromptV3,
@@ -631,6 +658,7 @@ NODE_CLASS_MAPPINGS = {
     "ZuraH3MulticamV4": ZuraH3MulticamV4,
 }
 NODE_DISPLAY_NAME_MAPPINGS = {
+    "ZuraShortTakeDuration": "Zura · Clip duration (24 fps)",
     "ZuraMulticamStageV3": "Zura V3 · Choose pass",
     "ZuraPlanOnlyImageV3": "Zura V3 · Plan-only images",
     "ZuraSafeAnglePromptV3": "Zura V3 · Safe camera framing",

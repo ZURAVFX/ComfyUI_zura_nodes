@@ -116,12 +116,24 @@ function draw(node, root) {
   const oldScroll = root.scrollTop;
   root.replaceChildren();
   const data = node.zuraGallery;
+  const singleCameraRequested = node.properties?.zura_single_camera === true;
   if (!data || !Number.isInteger(data.shot_count) || data.shot_count < 1) {
-    make('div', 'Build your camera plan', root, { fontSize: '18px', fontWeight: '700', marginBottom: '8px' });
-    make('div', '1. Choose the clip length and frames per shot.\n2. Set the stage to “1 · Plan angles” and run.\n3. Pick a shot, then click its camera preview here.', root,
+    make('div', singleCameraRequested ? 'Choose one camera' : 'Build your camera plan', root, { fontSize: '18px', fontWeight: '700', marginBottom: '8px' });
+    make('div', singleCameraRequested
+      ? '1. Set the stage to “1 · Plan angles” and run.\n2. Choose one camera for the whole clip here.\n3. Switch to Render video, then run.'
+      : '1. Choose the clip length and frames per shot.\n2. Set the stage to “1 · Plan angles” and run.\n3. Pick a shot, then click its camera preview here.', root,
       { whiteSpace: 'pre-line', lineHeight: '1.8' });
     make('div', 'Clicking a camera saves your selection. It does not start a render.', root, { marginTop: '9px', color: '#b6c4d3' });
     return;
+  }
+  // Only an explicit workflow property enables this presentation. A stale
+  // multi-shot plan keeps its timeline visible and cannot advance to Render.
+  const singleCamera = singleCameraRequested && data.shot_count === 1;
+  const needsSingleCameraPlan = singleCameraRequested && !singleCamera;
+  if (needsSingleCameraPlan) {
+    const warning = make('div', 'This plan contains multiple shots. Single-camera mode needs one shot covering the whole clip. Check the frames per shot connection, then run “1 · Plan angles” again before rendering.', root,
+      { color: '#f2cf89', padding: '9px', border: '1px solid #d4a75c', borderRadius: '6px', marginBottom: '9px', lineHeight: '1.5' });
+    warning.setAttribute('role', 'alert');
   }
   const choicesWidget = widget(node, 'shot_choices');
   const promptsWidget = widget(node, 'shot_prompts');
@@ -143,7 +155,7 @@ function draw(node, root) {
   const label = id => id === 0 ? 'Source camera' : angles.find(a => a.id === id)?.label || `Angle ${id}`;
   const fps = Number(data.fps || data.frame_rate) > 0 ? Number(data.fps || data.frame_rate) : 24;
   const seconds = frames => (frames / fps).toFixed(2).replace(/\.00$/, '');
-  make('div', 'Plan your shots', root, { fontSize: '18px', fontWeight: '750' });
+  make('div', singleCamera ? 'Choose one camera' : 'Plan your shots', root, { fontSize: '18px', fontWeight: '750' });
   make('div', data.look_enabled ? 'Scene / relight is on. Source camera keeps its original viewpoint.' : 'Original scene and lighting.', root,
     { color: data.look_enabled ? '#f2cf89' : '#aab8c9', marginTop: '3px', fontSize: '11px' });
   const summary = make('div', `${data.shot_count} shots · ${data.shot_count - 1} cuts · ${data.frame_count} frames`, root,
@@ -155,7 +167,9 @@ function draw(node, root) {
   const stageRibbon = make('div', null, stageControls, { display: 'flex', gap: '6px', margin: '7px 0' });
   const planStep = make('div', '1 · PLAN ANGLES', stageRibbon, { flex: '1', textAlign: 'center',
     padding: '7px 4px', borderRadius: '5px', fontSize: '11px', fontWeight: '800' });
-  const renderStep = make('div', '2 · RENDER VIDEO', stageRibbon, { flex: '1', textAlign: 'center',
+  const chooseStep = singleCamera ? make('div', '2 · CHOOSE CAMERA', stageRibbon, { flex: '1', textAlign: 'center',
+    padding: '7px 4px', borderRadius: '5px', fontSize: '11px', fontWeight: '800' }) : null;
+  const renderStep = make('div', singleCamera ? '3 · RENDER VIDEO' : '2 · RENDER VIDEO', stageRibbon, { flex: '1', textAlign: 'center',
     padding: '7px 4px', borderRadius: '5px', fontSize: '11px', fontWeight: '800' });
   const stageLabel = make('div', '', stageControls, { color: '#d8e9ef', fontSize: '11px', lineHeight: '1.45' });
   const stageButton = make('button', '', stageControls, { ...css.shot, display: 'block', width: '100%',
@@ -164,6 +178,7 @@ function draw(node, root) {
   stageButton.onclick = () => {
     const current = workflowStage(node);
     if (!current) return;
+    if (needsSingleCameraPlan && !String(current.stageWidget.value).startsWith('2')) return;
     const next = String(current.stageWidget.value).startsWith('1') ? '2 · Render multicam' : '1 · Plan angles';
     current.stageWidget.value = next;
     current.stageWidget.callback?.(next);
@@ -171,12 +186,12 @@ function draw(node, root) {
     node.setDirtyCanvas?.(true, true);
     paint();
   };
-  make('div', '1 · Pick the shot to edit', root, { color: '#65dfca', fontWeight: '700', marginTop: '10px' });
-  const timeline = make('div', null, root, css.timeline);
-  timeline.setAttribute('aria-label', 'Shot timeline');
+  if (!singleCamera) make('div', '1 · Pick the shot to edit', root, { color: '#65dfca', fontWeight: '700', marginTop: '10px' });
+  const timeline = singleCamera ? null : make('div', null, root, css.timeline);
+  timeline?.setAttribute('aria-label', 'Shot timeline');
   const selected = make('div', '', root, { color: '#d8e9ef', margin: '10px 0 6px', fontWeight: '700' });
-  make('div', '2 · Click one camera for this shot', root, { color: '#65dfca', fontWeight: '700', marginTop: '8px' });
-  make('div', 'The tick belongs to the selected shot. Reuse a camera in as many shots as you like.', root,
+  if (!singleCamera) make('div', '2 · Click one camera for this shot', root, { color: '#65dfca', fontWeight: '700', marginTop: '8px' });
+  make('div', singleCamera ? 'The selected camera applies to the whole clip.' : 'The tick belongs to the selected shot. Reuse a camera in as many shots as you like.', root,
     { color: '#b6c4d3', fontSize: '11px', marginTop: '4px' });
   const tools = make('div', null, root, { display: 'flex', gap: '6px', margin: '7px 0', flexWrap: 'wrap' });
   const action = (text, click) => {
@@ -192,25 +207,27 @@ function draw(node, root) {
     node.setDirtyCanvas?.(true, true);
     paint();
   };
-  const applyAll = action('Use this camera for all shots', () => {
-    choices.fill(choices[selectedShot]);
-    if (choicesWidget) { choicesWidget.value = choices.join(','); choicesWidget.callback?.(choicesWidget.value); }
-    node.setDirtyCanvas?.(true, true);
-    paint();
-  });
-  applyAll.title = 'Copies the selected camera to every shot. Your shot directions are retained.';
-  const nextShot = action('Next shot →', () => {
-    selectedShot = (selectedShot + 1) % data.shot_count;
-    node.zuraSelectedShot = selectedShot;
-    paint();
-  });
-  nextShot.style.display = data.shot_count > 1 ? '' : 'none';
+  if (!singleCamera) {
+    const applyAll = action('Use this camera for all shots', () => {
+      choices.fill(choices[selectedShot]);
+      if (choicesWidget) { choicesWidget.value = choices.join(','); choicesWidget.callback?.(choicesWidget.value); }
+      node.setDirtyCanvas?.(true, true);
+      paint();
+    });
+    applyAll.title = 'Copies the selected camera to every shot. Your shot directions are retained.';
+    const nextShot = action('Next shot →', () => {
+      selectedShot = (selectedShot + 1) % data.shot_count;
+      node.zuraSelectedShot = selectedShot;
+      paint();
+    });
+    nextShot.style.display = data.shot_count > 1 ? '' : 'none';
+  }
   const source = action(null, () => setChoice(0));
   source.style.display = 'flex';
   source.style.alignItems = 'center';
   source.style.width = '100%';
   source.style.gap = '10px';
-  source.setAttribute('aria-label', 'Use source camera for the selected shot');
+  source.setAttribute('aria-label', singleCamera ? 'Use source camera for the whole clip' : 'Use source camera for the selected shot');
   if (data.source?.filename) {
     const img = make('img', null, source, { width: '100px', height: '60px', objectFit: 'contain', background: '#111820' });
     img.alt = 'Source camera preview';
@@ -228,14 +245,14 @@ function draw(node, root) {
   const motionBox = make('details', null, root, { margin: '12px 0', padding: '9px', background: '#273442', borderRadius: '6px' });
   motionBox.open = Boolean(node.zuraMotionOpen || prompts[selectedShot]);
   motionBox.ontoggle = () => { node.zuraMotionOpen = motionBox.open; };
-  const motionSummary = make('summary', 'Optional · prompt / camera movement for this shot', motionBox,
+  const motionSummary = make('summary', singleCamera ? 'Optional · prompt / camera movement' : 'Optional · prompt / camera movement for this shot', motionBox,
     { color: '#d8e9ef', fontWeight: '700', cursor: 'pointer' });
   motionSummary.onpointerdown = event => event.stopPropagation();
   const motion = make('textarea', null, motionBox, {
     boxSizing: 'border-box', width: '100%', height: '68px', marginTop: '8px', padding: '7px',
     borderRadius: '5px', border: '1px solid #677f91', background: '#111b25', color: '#fff',
     resize: 'none', font: '12px system-ui,sans-serif' });
-  motion.setAttribute('aria-label', 'Additional prompt for the selected shot');
+  motion.setAttribute('aria-label', singleCamera ? 'Additional prompt for the whole clip' : 'Additional prompt for the selected shot');
   motion.placeholder = 'e.g. A quick, subtle handheld zoom towards the face';
   motion.onpointerdown = event => event.stopPropagation();
   motion.onkeydown = event => event.stopPropagation();
@@ -243,7 +260,8 @@ function draw(node, root) {
     prompts[selectedShot] = motion.value;
     if (promptsWidget) { promptsWidget.value = JSON.stringify(prompts); promptsWidget.callback?.(promptsWidget.value); }
     node.setDirtyCanvas?.(true, true);
-    paintTimeline();
+    if (singleCamera) paint(false);
+    else paintTimeline();
   };
   const suggestions = make('div', null, motionBox, { display: 'flex', flexWrap: 'wrap', gap: '4px', marginTop: '5px' });
   for (const [name, phrase] of [
@@ -259,17 +277,22 @@ function draw(node, root) {
     { color: '#aab8c9', marginTop: '5px', fontSize: '11px' });
   const ready = make('div', '', root, { border: '1px solid #405064', borderRadius: '6px', padding: '9px', lineHeight: '1.5' });
   ready.setAttribute('aria-live', 'polite');
-  make('div', 'Changed the source, shot length or look? Run “1 · Plan angles” again before rendering.', root,
+  make('div', singleCamera ? 'Changed the source or look? Run “1 · Plan angles” again before rendering.' : 'Changed the source, shot length or look? Run “1 · Plan angles” again before rendering.', root,
     { color: '#aab8c9', fontSize: '11px', marginTop: '6px' });
-  const paint = () => {
-    summary.textContent = `${seconds(data.frame_count)} seconds · ${data.shot_count} shots · ${fps} fps`;
+  const paint = (syncMotion = true) => {
+    summary.textContent = singleCamera
+      ? `${seconds(data.frame_count)} seconds · ${data.frame_count} frames · ${fps} fps`
+      : `${seconds(data.frame_count)} seconds · ${data.shot_count} shots · ${fps} fps`;
     const start = selectedShot * data.frames_per_shot;
     const end = Math.min(start + data.frames_per_shot, data.frame_count);
-    selected.textContent = `Shot ${selectedShot + 1} · ${seconds(start)}–${seconds(end)}s · ${label(choices[selectedShot])}`;
-    motion.value = prompts[selectedShot] || '';
+    selected.textContent = singleCamera ? `Whole clip · ${label(choices[selectedShot])}`
+      : `Shot ${selectedShot + 1} · ${seconds(start)}–${seconds(end)}s · ${label(choices[selectedShot])}`;
+    if (syncMotion) motion.value = prompts[selectedShot] || '';
     const sourceUnsupported = choices[selectedShot] === 0;
     motion.disabled = sourceUnsupported;
-    motion.placeholder = sourceUnsupported ? 'Choose a generated camera to add a shot direction.' : 'Add direction for this shot, or leave blank to follow the performance.';
+    motion.placeholder = singleCamera
+      ? sourceUnsupported ? 'Choose a generated camera to add direction.' : 'Add direction for the whole clip, or leave blank to follow the performance.'
+      : sourceUnsupported ? 'Choose a generated camera to add a shot direction.' : 'Add direction for this shot, or leave blank to follow the performance.';
     suggestions.querySelectorAll('button').forEach(button => {
       button.disabled = sourceUnsupported && button.textContent !== 'Clear prompt';
       button.style.opacity = button.disabled ? '0.5' : '1';
@@ -290,31 +313,37 @@ function draw(node, root) {
     const cuts = choices.slice(1).filter((id, i) => id !== choices[i]).length;
     const sourcePromptShot = choices.findIndex((id, index) => id === 0 && prompts[index]);
     ready.textContent = sourcePromptShot >= 0
-      ? `Shot ${sourcePromptShot + 1} has a direction but uses Source camera. Choose a generated camera or clear its prompt before rendering.`
-      : `${data.shot_count} shots · ${cuts} camera ${cuts === 1 ? 'change' : 'changes'} planned. Choosing cameras never starts generation.`;
+      ? singleCamera ? 'The clip has a direction but uses Source camera. Choose a generated camera or clear the prompt before rendering.'
+        : `Shot ${sourcePromptShot + 1} has a direction but uses Source camera. Choose a generated camera or clear its prompt before rendering.`
+      : singleCamera ? `${label(choices[0])} selected for the whole clip. Choosing a camera never starts generation.`
+        : `${data.shot_count} shots · ${cuts} camera ${cuts === 1 ? 'change' : 'changes'} planned. Choosing cameras never starts generation.`;
     ready.style.borderColor = sourcePromptShot >= 0 ? '#d4a75c' : '#405064';
     const currentStage = workflowStage(node);
     const rendering = String(currentStage?.stageWidget.value || '').startsWith('2');
     stageLabel.textContent = currentStage
-      ? rendering ? 'Selected cameras are ready. Press ComfyUI Run to start H3 generation.'
-        : 'Pick and review cameras here. H3 generation is off in this stage.'
+      ? needsSingleCameraPlan ? 'Run Plan angles again to create one shot for the whole clip before rendering.'
+        : rendering ? singleCamera ? 'Your camera is ready. Press ComfyUI Run to render the video.' : 'Selected cameras are ready. Press ComfyUI Run to start H3 generation.'
+          : singleCamera ? 'Choose and review one camera, then switch to Render video.' : 'Pick and review cameras here. H3 generation is off in this stage.'
       : 'Use the START HERE stage switch to choose Plan or Render.';
-    for (const [step, active] of [[planStep, !rendering], [renderStep, rendering]]) {
+    const steps = chooseStep ? [[planStep, false], [chooseStep, !rendering], [renderStep, rendering]]
+      : [[planStep, !rendering], [renderStep, rendering]];
+    for (const [step, active] of steps) {
       step.style.background = active ? '#26685e' : '#303e49';
       step.style.color = active ? '#fff' : '#9caebd';
       step.style.border = active ? '1px solid #65dfca' : '1px solid #506477';
     }
     stageControls.style.borderColor = rendering ? '#65dfca' : '#496675';
     stageButton.style.display = currentStage ? 'block' : 'none';
-    stageButton.textContent = rendering ? '← Back to angle planning' : 'Continue to Render →';
+    stageButton.textContent = rendering ? '← Back to angle planning' : singleCamera ? 'Render video →' : 'Continue to Render →';
     stageButton.style.background = rendering ? '#344756' : '#1d675c';
-    stageButton.disabled = !rendering && sourcePromptShot >= 0;
+    stageButton.disabled = !rendering && (sourcePromptShot >= 0 || needsSingleCameraPlan);
     stageButton.style.opacity = stageButton.disabled ? '0.5' : '1';
     stageButton.setAttribute('aria-label', rendering ? 'Switch workflow stage back to Plan angles'
-      : 'Switch workflow stage to Render multicam');
+      : singleCamera ? 'Switch workflow stage to Render video' : 'Switch workflow stage to Render multicam');
     paintTimeline();
   };
   function paintTimeline() {
+    if (!timeline) return;
     timeline.replaceChildren();
     choices.forEach((id, i) => {
       const start = i * data.frames_per_shot;
@@ -341,7 +370,7 @@ function draw(node, root) {
     const tile = make('button', null, grid, css.tile);
     tile.onpointerdown = event => event.stopPropagation();
     tile.dataset.angle = String(card.id);
-    tile.setAttribute('aria-label', `Use ${card.label} for the selected shot`);
+    tile.setAttribute('aria-label', `Use ${card.label} for ${singleCamera ? 'the whole clip' : 'the selected shot'}`);
     const tick = make('span', '✓', tile, { position: 'absolute', top: '5px', right: '5px', borderRadius: '50%',
       padding: '1px 5px', color: '#11251f', background: '#65dfca', fontWeight: '800' });
     tick.dataset.tick = 'true';
