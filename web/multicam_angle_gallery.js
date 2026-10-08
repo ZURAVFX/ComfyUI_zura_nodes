@@ -74,8 +74,16 @@ function installWidgetPersistence(nodeType, nodeData) {
   const configure = nodeType.prototype.onConfigure;
   nodeType.prototype.onConfigure = function (data) {
     const result = configure?.call(this, data);
-    const saved = data?.properties?.zura_widget_values ||
-      decodeSavedWidgetValues(definitions, data?.widgets_values);
+    const saved = { ...decodeSavedWidgetValues(definitions, data?.widgets_values) };
+    // A browser may have saved already-shifted widgets before this extension
+    // was updated. Invalid or partial named data must not block recovery from
+    // a valid positional array. Valid artist overrides still take precedence.
+    const named = data?.properties?.zura_widget_values;
+    for (const [name, definition] of definitions) {
+      if (named && Object.hasOwn(named, name) && validWidgetValue(named[name], definition)) {
+        saved[name] = named[name];
+      }
+    }
     if (saved) {
       for (const [name, definition] of definitions) {
         const target = widget(this, name);
@@ -361,7 +369,7 @@ app.registerExtension({
   name: 'Zura.MulticamAngleGalleryV3',
   beforeRegisterNodeDef(nodeType, nodeData) {
     if (['ZuraMulticamStageV3', 'ZuraAngleGalleryV3', 'ZuraH3MulticamV3',
-         'ZuraH3MulticamV4', 'ZuraCleanMulticamV4'].includes(nodeData.name)) {
+         'ZuraH3MulticamV4', 'ZuraCleanMulticamV4', 'ZuraH3SingleAngle'].includes(nodeData.name)) {
       installWidgetPersistence(nodeType, nodeData);
     }
     if (nodeData.name !== 'ZuraAngleGalleryV3') return;

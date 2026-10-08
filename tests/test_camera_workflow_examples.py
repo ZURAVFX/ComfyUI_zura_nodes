@@ -12,6 +12,24 @@ def workflow(name):
 
 
 class TestCameraWorkflows(unittest.TestCase):
+    def test_single_angle_render_controls_survive_frontend_reload(self):
+        graph = workflow("Zura_H3_AnyAngle_Single_Camera.json")
+        render = next(node for node in graph["nodes"]
+                      if node["type"] == "ZuraH3SingleAngle")
+        # The seed schema explicitly disables the extra seed-control widget.
+        # ComfyUI reloads positional values before preparing an API prompt;
+        # stale "fixed" here shifts steps into a string and prompt into an int.
+        expected_names = ("seed", "steps", "prompt")
+        positional = render["widgets_values"]
+        self.assertEqual(len(positional), len(expected_names))
+        self.assertEqual(dict(zip(expected_names, positional)),
+                         render["widgets_values_named"])
+        self.assertIs(type(positional[0]), int)
+        self.assertIs(type(positional[1]), int)
+        self.assertGreaterEqual(positional[1], 1)
+        self.assertLessEqual(positional[1], 60)
+        self.assertIsInstance(positional[2], str)
+
     def test_single_angle_has_one_source_and_correct_qwen_sockets(self):
         graph = workflow("Zura_H3_AnyAngle_Single_Camera.json")
         root_types = [node["type"] for node in graph["nodes"]]

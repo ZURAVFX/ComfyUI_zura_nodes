@@ -90,7 +90,7 @@
           ]
         }
       ],
-      "title": "2 · Open Studio, rotate camera, Apply",
+      "title": "2 · Prepare camera · Open Studio and Apply",
       "properties": {
         "Node name for S&R": "AnyAngleStudioT8",
         "ue_properties": {
@@ -221,7 +221,7 @@
       "mode": 0,
       "inputs": [],
       "outputs": [],
-      "title": "START HERE · three clicks",
+      "title": "START HERE · prepare camera, then render",
       "properties": {
         "Node name for S&R": "Note",
         "ue_properties": {
@@ -231,10 +231,10 @@
         }
       },
       "widgets_values": [
-        "1. Choose one performance video below (first 4 seconds by default).\n2. Open AnyAngle Studio. Click Read upstream image, then Reconstruct 3D; orbit to a new camera, Preview guide, and Apply to node.\n3. Queue. Qwen makes the new-angle still, then H3 animates the ORIGINAL video and speech. The saved MP4 keeps the source audio.\nA single photo cannot reveal unseen sides perfectly. Check the guide and Qwen preview before relying on a large camera rotation."
+        "1. Choose your performance video (first 4 seconds by default).\n2. Open AnyAngle Studio: Read connected image, Reconstruct 3D, adjust the camera, then Apply to node.\n3. Run. Qwen creates the new-angle still; H3 follows the original performance and speech.\nPrepare the camera before your first render. An empty snapshot means Apply to node has not been completed. After changing the source clip, read and reconstruct the new image, then Apply again. Start with a modest camera rotation."
       ],
       "widgets_values_named": {
-        "text": "1. Choose one performance video below (first 4 seconds by default).\n2. Open AnyAngle Studio. Click Read upstream image, then Reconstruct 3D; orbit to a new camera, Preview guide, and Apply to node.\n3. Queue. Qwen makes the new-angle still, then H3 animates the ORIGINAL video and speech. The saved MP4 keeps the source audio.\nA single photo cannot reveal unseen sides perfectly. Check the guide and Qwen preview before relying on a large camera rotation."
+        "text": "1. Choose your performance video (first 4 seconds by default).\n2. Open AnyAngle Studio: Read connected image, Reconstruct 3D, adjust the camera, then Apply to node.\n3. Run. Qwen creates the new-angle still; H3 follows the original performance and speech.\nPrepare the camera before your first render. An empty snapshot means Apply to node has not been completed. After changing the source clip, read and reconstruct the new image, then Apply again. Start with a modest camera rotation."
       },
       "color": "#432",
       "bgcolor": "#653"
@@ -892,13 +892,11 @@
       },
       "widgets_values": [
         42,
-        "fixed",
         16,
         "crossview. <Picture 1> defines the selected camera position and framing. <Video 1> defines the exact same performer's identity, face, clothes, gestures, expression, and speech timing. Recreate the performance from the new angle without changing the person or dialogue. Keep the full head in frame and lips faithful to the original speech."
       ],
       "widgets_values_named": {
         "seed": 42,
-        "control_after_generate": "fixed",
         "steps": 16,
         "prompt": "crossview. <Picture 1> defines the selected camera position and framing. <Video 1> defines the exact same performer's identity, face, clothes, gestures, expression, and speech timing. Recreate the performance from the new angle without changing the person or dialogue. Keep the full head in frame and lips faithful to the original speech."
       }

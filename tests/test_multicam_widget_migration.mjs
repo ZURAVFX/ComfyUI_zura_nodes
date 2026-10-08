@@ -54,4 +54,37 @@ const second = new Node();
 second.onConfigure({ widgets_values: controlled, properties: { zura_widget_values: { ...canonical, wan_steps: 16 } } });
 assert.equal(second.widgets.find(widget => widget.name === 'wan_steps').value, 16,
   'the current named snapshot must win over historical widget order');
+const singleDefinitions = [
+  ['seed', ['INT', { min: 0, max: 0xffffffffffffffff, control_after_generate: false }]],
+  ['steps', ['INT', { min: 1, max: 60 }]],
+  ['prompt', ['STRING', {}]],
+];
+class SingleAngleNode {
+  constructor() { this.widgets = singleDefinitions.map(([name]) => ({ name, value: 'shifted' })); }
+}
+extensions[0].beforeRegisterNodeDef(SingleAngleNode, {
+  name: 'ZuraH3SingleAngle', input: { required: Object.fromEntries(singleDefinitions) },
+});
+const oldSingle = new SingleAngleNode();
+oldSingle.onConfigure({ widgets_values: [42, 'fixed', 16, 'Keep original performance.'] });
+assert.deepEqual(oldSingle.widgets.map(w => w.value), [42, 16, 'Keep original performance.'],
+  'v1.2.1 single-camera workflows must recover steps and prompt after removing the seed control');
+const staleSingle = new SingleAngleNode();
+staleSingle.onConfigure({
+  widgets_values: [42, 'fixed', 16, 'Keep original performance.'],
+  properties: { zura_widget_values: { seed: 99, steps: 'fixed', prompt: 16 } },
+});
+assert.deepEqual(staleSingle.widgets.map(w => w.value), [99, 16, 'Keep original performance.'],
+  'invalid named values must not suppress positional recovery; valid named values still win');
+const partialSingle = new SingleAngleNode();
+partialSingle.onConfigure({
+  widgets_values: [42, 'fixed', 16, 'Keep original performance.'],
+  properties: { zura_widget_values: { steps: 20 } },
+});
+assert.deepEqual(partialSingle.widgets.map(w => w.value), [42, 20, 'Keep original performance.']);
+const savedSingle = {};
+oldSingle.onSerialize(savedSingle);
+const reloadedSingle = new SingleAngleNode();
+reloadedSingle.onConfigure({ properties: savedSingle.properties });
+assert.deepEqual(reloadedSingle.widgets.map(w => w.value), [42, 16, 'Keep original performance.']);
 console.log('Multicam widgets reload without seed-control drift; named values survive, stale metadata and invalid arrays do not override them.');

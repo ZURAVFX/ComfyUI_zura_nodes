@@ -47,7 +47,7 @@ See [VOICE_DESIGN.md](VOICE_DESIGN.md) for the team guide, reference reuse and l
 | **Zura Wan 2.2 Looped Chunks Sampler** | The looped `WanAnimateToVideo` renderer: native `continue_motion` continuation between chunks, hard reset at detected or manual cuts. `steps` and `cfg` are plain widgets the Turbo Switch node can override. Outputs generated frames **and** a finished `VIDEO` with the original audio and exact timing — no separate finish node. |
 | **Zura Wan 2.2 Turbo Switch** | Lazy base/accelerated model selector emitting model/steps/cfg. Wan 2.2 specific: turbo runs the accelerated branch at 4–8 steps with cfg 1.0, quality runs the base branch at 40 steps with cfg 5.0. LoRA branches stay visible in the graph (Power LoRA Loaders or similar). |
 
-### Camera and scene controls (v1.2.1)
+### Camera and scene controls (v1.2.2)
 
 | Node | Purpose |
 | --- | --- |
@@ -68,6 +68,21 @@ AnyAngle Studio and its reconstruction weights are a separate third-party
 installation; see the [upstream instructions](https://github.com/T8mars/Comfyui-Qwen-Image-2.1-MultiAngle-T8).
 The package does not install or download those weights automatically.
 
+Zura adds an English interface to the installed **T8 AnyAngle Studio v1.5.7**
+editor. Its launch button reminds you when no camera has been applied. In Studio,
+choose **Read connected image → Reconstruct 3D**, adjust the camera, then click
+**Apply to node** before running the workflow. Closing Studio without applying
+does not save the new camera. This is a presentation layer, not a bundled fork:
+T8 remains a separate dependency, and prompts, saved names, model paths and
+camera snapshots are left unchanged. Unrecognised diagnostics from newer T8
+versions remain in their original language rather than being guessed at.
+
+After updating, refresh ComfyUI and reopen the corrected example. Version 1.2.2
+fixes an obsolete seed-control field that could load `fixed` into H3's `steps`.
+Intact older saves migrate automatically. If a graph was saved after its prompt
+was truncated by that mismatch, reopen the corrected example or restore the
+original prompt and numeric steps; the missing text cannot be recovered.
+
 For several cuts, use [the advanced multicam example](workflows/Zura_H3_Multicam_Advanced.json).
 Choose angles and timing in the planning section before enabling the H3
 render. Its stage subgraphs keep model setup apart from artist controls.
@@ -79,7 +94,7 @@ FLUX.2 Klein, and Wan models and LoRAs, plus its other visible custom-node
 dependencies (including CrossViewWarp, VideoHelperSuite, and KJNodes). The
 scene-control node uses a person-segmentation YOLO weight in
 `models/ultralytics/segm/`; the mouth-control node uses `face-alignment==1.4.1`
-and downloads its landmark weights on first use. Model weights and the
+and downloads its landmark weights on first use. Model-loading nodes and the
 example workflows are bundled, but model weights are not. A
 structurally valid graph does not guarantee visual identity or perfect lip
 sync; review a short test before processing a full clip. The new-angle still
