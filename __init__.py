@@ -62,7 +62,7 @@ NODE_DISPLAY_NAME_MAPPINGS.update(QWEN_DESIGN_NAMES)
 
 WEB_DIRECTORY = "./web"
 PACKAGE_ROOT = Path(__file__).resolve().parent
-__version__ = "1.2.3"
+__version__ = "1.3.0"
 
 
 def _register_routes():
@@ -106,3 +106,13 @@ def _register_routes():
 _register_routes()
 
 __all__ = ["NODE_CLASS_MAPPINGS", "NODE_DISPLAY_NAME_MAPPINGS", "WEB_DIRECTORY"]
+
+# Shared character-replacement interface and native Wan preparation adapters.
+from .wan_artist import NODE_CLASS_MAPPINGS as WAN_ARTIST_NODES, NODE_DISPLAY_NAME_MAPPINGS as WAN_ARTIST_NAMES
+from .artist_studio import NODE_CLASS_MAPPINGS as STUDIO_NODES, NODE_DISPLAY_NAME_MAPPINGS as STUDIO_NAMES
+NODE_CLASS_MAPPINGS.update(WAN_ARTIST_NODES)
+NODE_CLASS_MAPPINGS.update(STUDIO_NODES)
+NODE_DISPLAY_NAME_MAPPINGS.update(WAN_ARTIST_NAMES)
+NODE_DISPLAY_NAME_MAPPINGS.update(STUDIO_NAMES)
+for _name in STUDIO_NODES:
+    NODE_DISPLAY_NAME_MAPPINGS[_name] = "Zura · " + NODE_DISPLAY_NAME_MAPPINGS.get(_name, _name)

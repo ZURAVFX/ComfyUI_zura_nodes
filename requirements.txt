@@ -4,3 +4,7 @@ yt-dlp[default]>=2026.8.19
 ultralytics>=8.4.66
 face-alignment==1.4.1
 soundfile>=0.12.0
+
+av>=14.0
+aiohttp>=3.11
+Pillow>=10.0

@@ -49,6 +49,12 @@ jobs:
                         'multicam_v4_clean.py', 'h3_single_angle.py',
                         'idv2v_control.py', 'klein_look.py'):
               assert Path(asset).is_file(), f'Missing multicam release asset: {asset}'
+          for asset in ('wan_artist.py', 'web/studio.js', 'web/studio.css',
+                        'artist_studio/__init__.py', 'artist_studio/studio.py',
+                        'artist_studio/h3.py', 'artist_studio/wan.py', 'ARTIST_STUDIO.md', 'ARTIST_STUDIO_VALIDATION.md'):
+              assert Path(asset).is_file(), f'Missing artist studio asset: {asset}'
+          for graph in Path('artist_studio/graphs').glob('*.json'):
+              assert json.loads(graph.read_text()), f'Invalid native graph: {graph}'
           for filename in ('Zura_H3_Single_Camera.json',
                            'Zura_H3_AnyAngle_Single_Camera.json',
                            'Zura_H3_Multicam_Advanced.json'):
@@ -95,11 +101,13 @@ jobs:
             sudo apt-get install -y --no-install-recommends ffmpeg
           fi
           python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
-          python -m pip install numpy pillow requests soundfile
+          python -m pip install numpy pillow requests soundfile av aiohttp
       - name: Run regression checks
         run: |
           python -m compileall -q __init__.py klein_look.py multicam_v3.py multicam_v4_clean.py h3_single_angle.py idv2v_control.py
           python -m unittest discover -s tests -p 'test_v2_*.py'
+          python -m compileall -q artist_studio wan_artist.py
+          python -m unittest discover -s tests -p 'test_artist_studio.py'
           python -m unittest discover -s tests -p 'test_klein_look.py'
           python -m unittest discover -s tests -p 'test_multicam_v3.py'
           python -m unittest discover -s tests -p 'test_short_take_duration.py'

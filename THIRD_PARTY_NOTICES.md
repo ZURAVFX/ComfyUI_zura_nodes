@@ -51,3 +51,7 @@ Retain upstream notices when redistributing those separate components.
 Sources: https://github.com/QwenLM/Qwen3-TTS and
 https://huggingface.co/Qwen/Qwen3-TTS-12Hz-1.7B-VoiceDesign
 The existing Zura Nodes licence is unchanged.
+
+## Artist Studio
+
+The character-replacement sequence is inspired by [Genjustsu Open Source Workflow](https://github.com/sirioberati/Genjustsu-Open-Source-Workflow) and uses ComfyUI native inference nodes. Artist Studio orchestration and Zura data adapters are distributed as part of Zura Nodes under its existing licence. ComfyUI-LTXVideo, ComfyUI-KJNodes, WanAnimatePreprocess, controlnet_aux and MelBandRoFormer remain separately installed dependencies. Native workflows and model weights retain their upstream terms; weights, source media and credentials are not bundled.

@@ -1,5 +1,7 @@
 # Zura nodes (ComfyUI_zura_nodes)
 
+**Zura Studio:** a shared artist interface for LTX 2.5, MiniMax H3, Wan 2.2 Animate and optional paid Seedance. Upload once, approve the mask and look, then switch models without copying job IDs. One resolution selector and one clip-length control govern the output. See [Artist Studio](ARTIST_STUDIO.md). H3 replacement remains experimental because the current motion transfer failed quality review.
+
 A set of artist-facing ComfyUI video, image and audio controls: load a source clip,
 mask or replace a performer, plan multicam shots, and optionally relight a
 generated take. It coexists

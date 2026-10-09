@@ -91,7 +91,8 @@ class ZuraWan22LoopedChunksSampler:
                                         "tooltip": "Lower values detect more cuts. Raise this if flashes or fast movements are mistaken for edits."}),
             "cut_frames": ("STRING", {"default": "", "multiline": False,
                                       "tooltip": "Manual cuts: comma-separated frame numbers where a new shot begins. At 24 fps, frame 96 is 4 seconds."}),
-        }, "hidden": {"unique_id": "UNIQUE_ID"}}
+        }, "optional": {"vision_reference": ("IMAGE", {"tooltip": "Optional separate character view for CLIP Vision; the main reference still guides the scene latent."})},
+            "hidden": {"unique_id": "UNIQUE_ID"}}
 
     @staticmethod
     def _size(frames, max_side):
@@ -101,7 +102,8 @@ class ZuraWan22LoopedChunksSampler:
 
     def render(self, model, clip, vae, clip_vision, reference_image, footage, prompt,
                negative_prompt, steps=6, cfg=1.0, seed=0, chunk_frames=41, overlap_frames=5,
-               max_side=1280, shot_mode="Detect cuts", cut_threshold=.2, cut_frames="", unique_id=None):
+               max_side=1280, shot_mode="Detect cuts", cut_threshold=.2, cut_frames="", unique_id=None,
+               vision_reference=None):
         # Fail fast on missing conditioning before importing ComfyUI internals.
         media = footage
         if not isinstance(media, dict):
@@ -190,7 +192,8 @@ class ZuraWan22LoopedChunksSampler:
             logging.info("Wan 2.2 text encoder device: %s", device)
             positive = prepare("Encoding prompt", lambda: nodes.CLIPTextEncode().encode(clip, prompt)[0])
             negative = prepare("Encoding negative prompt", lambda: nodes.CLIPTextEncode().encode(clip, negative_prompt)[0])
-            clip_out = prepare("Encoding character reference", lambda: nodes.CLIPVisionEncode().encode(clip_vision, reference_image[:1], "none")[0])
+            vision_image = reference_image if vision_reference is None else vision_reference
+            clip_out = prepare("Encoding character reference", lambda: nodes.CLIPVisionEncode().encode(clip_vision, vision_image[:1], "none")[0])
             try:
                 progress = __import__("comfy.utils", fromlist=["ProgressBar"]).ProgressBar(total_chunks)
             except Exception:
@@ -354,3 +357,5 @@ class ZuraWan22LoopedChunksSampler:
 # previous name so graphs saved before the Zura rename still load.
 NODE_CLASS_MAPPINGS = {"TrendStudioV2Render": ZuraWan22LoopedChunksSampler}
 NODE_DISPLAY_NAME_MAPPINGS = {"TrendStudioV2Render": "Zura Wan 2.2 Looped Chunks Sampler"}
+NODE_CLASS_MAPPINGS["ZuraWan22LoopedChunksSampler"] = ZuraWan22LoopedChunksSampler
+NODE_DISPLAY_NAME_MAPPINGS["ZuraWan22LoopedChunksSampler"] = "Zura Wan 2.2 Looped Chunks Sampler"

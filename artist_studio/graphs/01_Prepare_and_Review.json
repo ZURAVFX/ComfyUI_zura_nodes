@@ -1,0 +1,320 @@
+{
+  "2": {
+    "inputs": {
+      "file": ""
+    },
+    "class_type": "LoadVideo",
+    "_meta": {
+      "title": "Source video"
+    }
+  },
+  "3": {
+    "inputs": {
+      "start_seconds": 0.0,
+      "duration_seconds": 4.0,
+      "long_edge": 768,
+      "video": [
+        "2",
+        0
+      ]
+    },
+    "class_type": "GenjSelectClip",
+    "_meta": {
+      "title": "Clip length and working size"
+    }
+  },
+  "4": {
+    "inputs": {
+      "video": [
+        "3",
+        0
+      ]
+    },
+    "class_type": "GetVideoComponents",
+    "_meta": {
+      "title": "Read selected frames and audio"
+    }
+  },
+  "5": {
+    "inputs": {
+      "batch_index": 0,
+      "length": 1,
+      "image": [
+        "4",
+        0
+      ]
+    },
+    "class_type": "ImageFromBatch",
+    "_meta": {
+      "title": "Opening frame"
+    }
+  },
+  "6": {
+    "inputs": {
+      "ckpt_name": "sam3.1_multiplex_fp16.safetensors"
+    },
+    "class_type": "CheckpointLoaderSimple",
+    "_meta": {
+      "title": "SAM 3.1"
+    }
+  },
+  "7": {
+    "inputs": {
+      "text": "person",
+      "clip": [
+        "6",
+        1
+      ]
+    },
+    "class_type": "CLIPTextEncode",
+    "_meta": {
+      "title": "Mask scope: person or head"
+    }
+  },
+  "8": {
+    "inputs": {
+      "threshold": 0.5,
+      "refine_iterations": 2,
+      "individual_masks": true,
+      "bboxes": {
+        "x": 0,
+        "y": 0,
+        "width": 512,
+        "height": 512
+      },
+      "model": [
+        "6",
+        0
+      ],
+      "image": [
+        "5",
+        0
+      ],
+      "conditioning": [
+        "7",
+        0
+      ]
+    },
+    "class_type": "SAM3_Detect",
+    "_meta": {
+      "title": "Find performers"
+    }
+  },
+  "9": {
+    "inputs": {
+      "performer": -1,
+      "masks": [
+        "8",
+        0
+      ]
+    },
+    "class_type": "GenjChoosePerformer",
+    "_meta": {
+      "title": "Performer: -1 = largest central"
+    }
+  },
+  "10": {
+    "inputs": {
+      "detection_threshold": 0.5,
+      "max_objects": 1,
+      "detect_interval": 1,
+      "images": [
+        "4",
+        0
+      ],
+      "model": [
+        "6",
+        0
+      ],
+      "initial_mask": [
+        "9",
+        0
+      ]
+    },
+    "class_type": "SAM3_VideoTrack",
+    "_meta": {
+      "title": "Track only the chosen performer"
+    }
+  },
+  "11": {
+    "inputs": {
+      "object_indices": "0",
+      "track_data": [
+        "10",
+        0
+      ]
+    },
+    "class_type": "SAM3_TrackToMask",
+    "_meta": {
+      "title": "Tracked performer mask"
+    }
+  },
+  "12": {
+    "inputs": {
+      "expand": 8,
+      "tapered_corners": true,
+      "mask": [
+        "11",
+        0
+      ]
+    },
+    "class_type": "GrowMask",
+    "_meta": {
+      "title": "Extra mask margin (pixels)"
+    }
+  },
+  "13": {
+    "inputs": {
+      "ckpt_name": "depth_anything_v2_vitl.pth",
+      "resolution": 512,
+      "image": [
+        "4",
+        0
+      ]
+    },
+    "class_type": "DepthAnythingV2Preprocessor",
+    "_meta": {
+      "title": "Depth guide"
+    }
+  },
+  "14": {
+    "inputs": {
+      "image": [
+        "4",
+        0
+      ]
+    },
+    "class_type": "GetImageSize",
+    "_meta": {
+      "title": "Source dimensions"
+    }
+  },
+  "15": {
+    "inputs": {
+      "upscale_method": "bilinear",
+      "crop": "disabled",
+      "image": [
+        "13",
+        0
+      ],
+      "width": [
+        "14",
+        0
+      ],
+      "height": [
+        "14",
+        1
+      ]
+    },
+    "class_type": "ImageScale",
+    "_meta": {
+      "title": "Match depth to source"
+    }
+  },
+  "16": {
+    "inputs": {
+      "depth": [
+        "15",
+        0
+      ]
+    },
+    "class_type": "GenjColourDepth",
+    "_meta": {
+      "title": "Colour depth for Seedance"
+    }
+  },
+  "17": {
+    "inputs": {
+      "x": 0,
+      "y": 0,
+      "resize_source": false,
+      "destination": [
+        "4",
+        0
+      ],
+      "source": [
+        "16",
+        0
+      ],
+      "mask": [
+        "12",
+        0
+      ]
+    },
+    "class_type": "ImageCompositeMasked",
+    "_meta": {
+      "title": "Depth performer over original background"
+    }
+  },
+  "18": {
+    "inputs": {
+      "pitch_vocals": false,
+      "semitones": 3.0,
+      "original_audio": [
+        "4",
+        1
+      ],
+      "isolated_vocals": [
+        "22",
+        0
+      ]
+    },
+    "class_type": "GenjVoiceGuidance",
+    "_meta": {
+      "title": "Optional: isolate vocals and shift +3 semitones"
+    }
+  },
+  "20": {
+    "inputs": {
+      "clip_details": [
+        "3",
+        1
+      ],
+      "source_frames": [
+        "4",
+        0
+      ],
+      "mask": [
+        "12",
+        0
+      ],
+      "guide_frames": [
+        "17",
+        0
+      ],
+      "guidance_audio": [
+        "18",
+        0
+      ]
+    },
+    "class_type": "GenjSaveReview",
+    "_meta": {
+      "title": "Save and watch the whole review"
+    }
+  },
+  "21": {
+    "inputs": {
+      "model_name": "MelBandRoformer_fp16.safetensors"
+    },
+    "class_type": "MelBandRoFormerModelLoader",
+    "_meta": {
+      "title": "Local vocal separation model"
+    }
+  },
+  "22": {
+    "inputs": {
+      "model": [
+        "21",
+        0
+      ],
+      "audio": [
+        "4",
+        1
+      ]
+    },
+    "class_type": "MelBandRoFormerSampler",
+    "_meta": {
+      "title": "Separate vocals from music"
+    }
+  }
+}

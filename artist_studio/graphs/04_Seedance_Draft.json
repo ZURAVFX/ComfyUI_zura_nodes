@@ -1,0 +1,82 @@
+{
+  "1": {
+    "inputs": {
+      "shot_id": "",
+      "approved_shot_id": ""
+    },
+    "class_type": "GenjLoadReviewedShot",
+    "_meta": {
+      "title": "Approved preparation"
+    }
+  },
+  "2": {
+    "inputs": {
+      "image": ""
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "Character identity image"
+    }
+  },
+  "100": {
+    "inputs": {
+      "model": "Seedance 2.5 Draft",
+      "seed": 42,
+      "watermark": false,
+      "model.prompt": "Replace the entire selected subject in @Video1 with the character from @Image1. Follow the coloured depth performer for movement and expression. Keep the original RGB background, framing, camera movement, action timing and mouth movements. Follow the audio embedded in @Video1. Do not add cuts, alter the duration or change the background.",
+      "model.resolution": "480p",
+      "model.ratio": "adaptive",
+      "model.duration": 4,
+      "model.generate_audio": true,
+      "model.task_type": "edit",
+      "model.output_format": "mp4",
+      "model.auto_downscale": true,
+      "model.auto_upscale": false,
+      "model.reference_images.image_1": [
+        "2",
+        0
+      ],
+      "model.reference_videos.video_1": [
+        "1",
+        2
+      ]
+    },
+    "class_type": "ByteDance2ReferenceNodeV2",
+    "_meta": {
+      "title": "Seedance 2.5 draft (paid)"
+    }
+  },
+  "101": {
+    "inputs": {
+      "take_name": "seedance_draft",
+      "video": [
+        "100",
+        0
+      ],
+      "clip_details": [
+        "1",
+        3
+      ]
+    },
+    "class_type": "GenjRestoreSoundtrack",
+    "_meta": {
+      "title": "Draft preview with original soundtrack"
+    }
+  },
+  "102": {
+    "inputs": {
+      "draft_task_id": [
+        "100",
+        1
+      ],
+      "clip_details": [
+        "1",
+        3
+      ]
+    },
+    "class_type": "GenjRecordDraft",
+    "_meta": {
+      "title": "Record draft task ID and source shot"
+    }
+  }
+}

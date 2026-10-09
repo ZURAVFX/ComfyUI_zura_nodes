@@ -37,8 +37,11 @@ class NamingTests(unittest.TestCase):
     def test_display_names_are_exact(self):
         for module_name, (class_id, display) in EXPECTED.items():
             module = node_module(module_name)
-            self.assertEqual(list(module.NODE_CLASS_MAPPINGS), [class_id],
-                             f"{module_name} must register exactly one node id")
+            expected_ids = [class_id] + (["ZuraWan22LoopedChunksSampler"] if module_name == "render" else [])
+            self.assertEqual(list(module.NODE_CLASS_MAPPINGS), expected_ids)
+            if module_name == "render":
+                self.assertIs(module.NODE_CLASS_MAPPINGS[class_id], module.NODE_CLASS_MAPPINGS[expected_ids[1]],
+                              "The legacy renderer ID must remain the same class")
             self.assertEqual(module.NODE_DISPLAY_NAME_MAPPINGS[class_id], display,
                              f"{module_name} display name drifted")
             self.assertTrue(display.startswith("Zura "), f"{display} must be a Zura node")

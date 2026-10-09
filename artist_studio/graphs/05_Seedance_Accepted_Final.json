@@ -1,0 +1,56 @@
+{
+  "1": {
+    "inputs": {
+      "shot_id": "",
+      "approved_shot_id": ""
+    },
+    "class_type": "GenjLoadReviewedShot",
+    "_meta": {
+      "title": "The same reviewed source shot"
+    }
+  },
+  "2": {
+    "inputs": {
+      "draft_task_id": "",
+      "accepted_draft_id": "",
+      "clip_details": [
+        "1",
+        3
+      ]
+    },
+    "class_type": "GenjApproveDraft",
+    "_meta": {
+      "title": "Paste the accepted draft task ID twice"
+    }
+  },
+  "3": {
+    "inputs": {
+      "watermark": false,
+      "draft_task_id": [
+        "2",
+        0
+      ]
+    },
+    "class_type": "ByteDance2DraftToFinalVideoNode",
+    "_meta": {
+      "title": "Render approved draft at 1080p (paid)"
+    }
+  },
+  "4": {
+    "inputs": {
+      "take_name": "seedance_final",
+      "video": [
+        "3",
+        0
+      ],
+      "clip_details": [
+        "1",
+        3
+      ]
+    },
+    "class_type": "GenjRestoreSoundtrack",
+    "_meta": {
+      "title": "1080p final with original soundtrack"
+    }
+  }
+}
