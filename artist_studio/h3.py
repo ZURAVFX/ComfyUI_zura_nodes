@@ -187,7 +187,7 @@ class GenjH3FramePad:
         return (images, mask, audio, width, height, length, count)
 
 
-def build_h3_graph(project):
+def build_h3_graph(project, use_cache=True):
     """Two separate picture references, AV performance, native masked conditioning."""
     from . import verify_review
     from .studio import assert_approved, check_asset
@@ -280,7 +280,7 @@ def build_h3_graph(project):
     node("h3_export", "GenjRestoreSoundtrack", video=video, clip_details=["h3_shot", 3],
          take_name="studio_" + project["id"][:8] + "_h3")
     key = cache_key(project)
-    if cache_path(key).exists():
+    if use_cache and cache_path(key).exists():
         node("h3_cached", "GenjLoadH3Conditioning", cache_key=key)
         graph["h3_guider"]["inputs"]["conditioning"] = ["h3_cached", 0]
         graph["h3_sample"]["inputs"]["latent_image"] = ["h3_cached", 1]

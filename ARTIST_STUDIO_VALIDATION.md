@@ -1,5 +1,31 @@
 # Zura Studio validation
 
+## 1.3.2 audio, graph view and original clip length
+
+Checked on 10 October 2026. Eight additional Python regressions exercise
+silent audio on both LTX padding cases, reference audio offset and padding,
+original-length selection, review invalidation, full native Wan graph export,
+editable H3 conditioning and the added read-only graph route. Exporting a graph
+does not modify project approval or queue jobs. Adding defaults to older saved
+projects preserves their finished state. All 145 Python tests and six JavaScript
+suites pass. The DOM/mock interaction test
+also exercises the native graph hand-off, optional audio removal, audio offset,
+original/custom length controls and the Wan audio limitation.
+
+A separate local execution test uses real native Comfy video objects, PyAV and
+FFmpeg. A silent 4-second source retains all 96 frames when Original clip length
+is selected despite a 2-second custom value. Its high-resolution reread contains
+valid silence audio. A separate reference track retains its 0.5-second offset,
+is padded to 4 seconds and survives the high-resolution reread and final export
+with zero-lag audio correlation 0.999998. The LTX padding node supplies valid
+audio even when the input already has a valid 1+8n frame count.
+
+No new diffusion generation, paid calls or successful lip-sync quality result
+is implied by these audio plumbing checks. Native editable graph imports use
+the installed frontend's loadApiJson and new workflow tab handling. Actual
+browser visual testing remains unavailable; graph export and native input
+validation are checked separately.
+
 Checked on 9 October 2026 with ComfyUI 0.39.2, frontend 1.53.10, a 16 GB
 RTX 4080 and 64 GB system RAM. Successful execution is recorded separately
 from visual quality. No paid provider generations were submitted.

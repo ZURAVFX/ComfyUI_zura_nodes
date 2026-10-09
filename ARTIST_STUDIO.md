@@ -7,11 +7,58 @@ default local installation. The direct studio link is
 `http://127.0.0.1:8188/?zura=1`.
 
 Open **Zura Studio** in ComfyUI, upload the performance video and a character
-image, then choose a model, **Resolution** and **Clip length**. Prepare the shot,
+image, optionally add **Reference audio**, then choose a model, **Resolution**
+and **Clip length** (original video or a custom length). Prepare the shot,
 check the mask, create the character preview, then animate the approved look.
 Job IDs, reference copies, model preparation and cache hand-offs are automatic.
 Existing saved projects and media remain readable on the same computer. Legacy
 storage paths and node IDs remain compatible; public names use Zura branding.
+
+## Studio and graph view
+
+Click **Graph view** at the top to open the current stage as an editable native
+ComfyUI workflow in a new tab. Preparation, character preview and animation
+follow the current project state. Animation uses the character look you can see
+in Studio. **More controls > Open in graph view** lets you select a different
+stage. Opening a graph does not queue a render or spend credits. With no shot
+uploaded, Graph view simply returns to the current ComfyUI canvas.
+
+Click **Zura Studio** at the bottom left to return. Studio retains its saved
+project; graph edits stay in the new workflow and are not imported back into
+Studio. Save that workflow normally in ComfyUI to retain your edits. Closing
+Studio with the cross also returns directly to your existing canvas.
+
+Wan's exported animation graph contains native pose detection, SAM character
+segmentation, reference cropping and the selected sampler together. H3 and LTX
+exports contain editable prompts and conditioning rather than frozen Studio
+conditioning caches. Native ComfyUI arranges the imported nodes; they can be
+regrouped and edited normally.
+
+## Optional reference audio
+
+**Reference audio** accepts WAV, MP3, M4A, FLAC, OGG, AAC and AIFF. It replaces
+the source soundtrack for both guidance and the finished video. By default it
+starts at zero at the beginning of your selected video interval. Adjust its
+own **Reference audio start** in More controls if needed. It is trimmed to the
+selected clip length; shorter tracks are padded with silence. Remove it with
+**Use video's audio instead**. Changing audio requires a fresh guidance review.
+
+Silent source videos receive valid silence for audio encoders, including the
+full-resolution reread and LTX temporal padding. The final video stays quiet
+when there is no source audio and no reference track.
+
+LTX and H3 receive this audio before sampling. Their speech timing remains
+experimental; the new upload does not establish successful lip sync. Seedance
+receives it in the guidance clip and restores it in the result. Wan 2.2 Animate
+follows facial motion from the driving video and uses the track as a soundtrack;
+it does not lip sync to a new speech track. In local animation graph exports,
+the optional Reference Audio adapter accepts a native LoadAudio connection and
+keeps that selection connected to the model input and final export.
+
+**Original clip length** selects the entire source from the beginning at 24 fps,
+rounded down to a whole frame. **Custom length** enables Seconds and the video
+Start control. Model duration limits still apply (H3 supports up to 5 seconds).
+The original-length option never silently substitutes the custom duration.
 
 ## One project, several models
 

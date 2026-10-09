@@ -93,6 +93,28 @@ class ZuraWanSavePreparation:
         return {"ui": {"text": ["Wan motion, face and approved mask ready."]}, "result": (cache_key,)}
 
 
+class ZuraWanPackPreparation:
+    """Connect visible native preprocessing directly to the sampler in graph view."""
+    CATEGORY = "Zura/Artist Studio"
+    FUNCTION = "pack"
+    RETURN_TYPES = ("ZURA_FOOTAGE", "IMAGE", "INT", "INT")
+    RETURN_NAMES = ("footage", "character_view", "width", "height")
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        required = dict(ZuraWanSavePreparation.INPUT_TYPES()["required"])
+        required.pop("cache_key")
+        return {"required": required}
+
+    def pack(self, frames, mask, pose, face, reference, scope):
+        footage = {"frames": frames.detach().cpu(), "character_mask": mask.detach().cpu(),
+            "pose_video": pose.detach().cpu(), "face_video": face.detach().cpu(),
+            "replacement_area": "Whole head" if scope == "head" else "Whole character",
+            "video_info": {"fps": 24}, "keep_audio": False}
+        validate_footage(footage)
+        return footage, reference, int(frames.shape[2]), int(frames.shape[1])
+
+
 class ZuraWanLoadPreparation:
     CATEGORY = "Zura/Artist Studio"
     FUNCTION = "load"
@@ -117,7 +139,8 @@ class ZuraWanLoadPreparation:
         return data["footage"], data["reference"], int(frames.shape[2]), int(frames.shape[1])
 
 
-NODE_CLASS_MAPPINGS = {c.__name__: c for c in (ZuraWanReviewedFrames, ZuraWanSavePreparation, ZuraWanLoadPreparation)}
+NODE_CLASS_MAPPINGS = {c.__name__: c for c in (ZuraWanReviewedFrames, ZuraWanSavePreparation, ZuraWanLoadPreparation, ZuraWanPackPreparation)}
 NODE_DISPLAY_NAME_MAPPINGS = {"ZuraWanReviewedFrames": "Zura · Read Approved Frames and Mask",
     "ZuraWanSavePreparation": "Zura · Cache Wan Motion and Character",
-    "ZuraWanLoadPreparation": "Zura · Load Wan Motion and Character"}
+    "ZuraWanLoadPreparation": "Zura · Load Wan Motion and Character",
+    "ZuraWanPackPreparation": "Zura · Connect Wan Motion and Character"}

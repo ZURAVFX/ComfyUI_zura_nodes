@@ -42,7 +42,7 @@ def cache_key(project):
     return hashlib.sha256(canonical(data).encode()).hexdigest()
 
 
-def build_wan_graph(project):
+def build_wan_graph(project, use_cache=True):
     from .studio import assert_approved, check_asset
     assert_approved(project)
     c = project["config"]
@@ -61,7 +61,7 @@ def build_wan_graph(project):
     shot = node("wan_shot", "GenjLoadReviewedShot", shot_id=project["review"],
         approved_shot_id=project["review"], render_long_edge=c["resolution"], output_scale=1, preview_seconds=0)
     key = cache_key(project)
-    if not cache_path(key).exists():
+    if not use_cache or not cache_path(key).exists():
         frames = node("wan_frames", "ZuraWanReviewedFrames", source=shot, mask_video=["wan_shot", 1])
         mask = node("wan_block_mask", "BlockifyMask", masks=["wan_frames", 1], block_size=32, device="cpu")
         detector = node("wan_pose_model", "OnnxDetectionModelLoader", vitpose_model=WAN_MODELS["wan_pose"][1],
@@ -86,10 +86,14 @@ def build_wan_graph(project):
             batch_size=1, color=0x808080)
         reference = node("wan_character_isolated", "ImageCompositeMasked", destination=neutral, source=reference,
             x=0, y=0, resize_source=False, mask=["wan_character_crop", 1])
-        node("wan_save", "ZuraWanSavePreparation", frames=frames, mask=mask, pose=pose,
-            face=["wan_pose_detect", 1], reference=reference, cache_key=key, scope=c["scope"])
-        return graph
-    footage = node("wan_cached", "ZuraWanLoadPreparation", cache_key=key)
+        inputs = dict(frames=frames, mask=mask, pose=pose,
+            face=["wan_pose_detect", 1], reference=reference, scope=c["scope"])
+        if use_cache:
+            node("wan_save", "ZuraWanSavePreparation", **inputs, cache_key=key)
+            return graph
+        footage = node("wan_cached", "ZuraWanPackPreparation", **inputs)
+    else:
+        footage = node("wan_cached", "ZuraWanLoadPreparation", cache_key=key)
     opening = node("wan_opening", "LoadImage", image=project["opening_input"]["file"])
     opening = node("wan_opening_size", "ImageScale", image=opening, upscale_method="lanczos",
         width=["wan_cached", 2], height=["wan_cached", 3], crop="disabled")

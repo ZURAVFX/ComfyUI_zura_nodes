@@ -70,6 +70,63 @@ def encode_frames(path, frames, fps=24):
             container.mux(packet)
 
 
+def fit_audio(audio, seconds):
+    """Native AUDIO, including a valid silence tensor for silent source videos."""
+    if audio is None:
+        audio = {"sample_rate": 48000, "waveform": torch.zeros(1, 2, round(seconds * 48000))}
+    rate = int(audio["sample_rate"])
+    waveform = audio["waveform"].detach().cpu().float()
+    if rate <= 0 or waveform.ndim != 3 or waveform.shape[0] != 1 or not torch.isfinite(waveform).all():
+        raise ValueError("Choose one valid reference audio track.")
+    samples = round(seconds * rate)
+    return {"sample_rate": rate, "waveform": F.pad(waveform[..., :samples],
+            (0, max(0, samples - waveform.shape[-1])))}
+
+
+def reference_audio(details, audio, start):
+    rate = int(audio["sample_rate"])
+    if not np.isfinite(start) or start < 0 or start * rate >= audio["waveform"].shape[-1]:
+        raise ValueError("The audio start must be within the reference track.")
+    selected = fit_audio({**audio, "waveform": audio["waveform"][..., round(start * rate):]}, details["duration"])
+    key = hashlib.sha256(selected["waveform"].numpy().tobytes() + str(rate).encode()).hexdigest()
+    path = root() / "reference_audio" / (key + ".wav")
+    path.parent.mkdir(exist_ok=True)
+    if not path.exists():
+        raw = path.with_suffix(".f32")
+        selected["waveform"][0].numpy().T.copy().tofile(raw)
+        try:
+            ffmpeg("-f", "f32le", "-ar", rate, "-ac", selected["waveform"].shape[1], "-i", raw,
+                   "-c:a", "pcm_f32le", path)
+        finally:
+            raw.unlink(missing_ok=True)
+    return selected, {**details, "audio_source": str(path), "audio_hash": digest_file(path),
+                      "audio_mode": "reference", "has_audio": True}
+
+
+class GenjApplyReferenceAudio:
+    """Thin adapter; native LoadAudio stays visible and editable in graph view."""
+    CATEGORY = CATEGORY
+    FUNCTION = "apply"
+    RETURN_TYPES = ("VIDEO", "GENJ_CLIP")
+    RETURN_NAMES = ("video_with_reference_audio", "clip_details")
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {"required": {"video": ("VIDEO",), "clip_details": ("GENJ_CLIP",),
+                "audio_start_seconds": ("FLOAT", {"default": 0, "min": 0, "max": 86400, "step": .1})},
+                "optional": {"audio": ("AUDIO",)}}
+
+    def apply(self, video, clip_details, audio_start_seconds=0, audio=None):
+        components = video.get_components()
+        details = dict(clip_details)
+        if audio is not None:
+            audio, details = reference_audio(details, audio, audio_start_seconds)
+        else:
+            audio = fit_audio(components.audio, details["duration"])
+        return InputImpl.VideoFromComponents(Types.VideoComponents(images=components.images,
+            audio=audio, frame_rate=components.frame_rate)), details
+
+
 def verify_review(review_id):
     if not re.fullmatch(r"shot_[a-f0-9]{16}", review_id):
         raise ValueError("Prepare and review the shot in Zura Studio before generating.")
@@ -80,6 +137,8 @@ def verify_review(review_id):
             raise ValueError("This review has changed. Prepare the shot and inspect the new review.")
     if digest_file(manifest["clip"]["source"]) != manifest["clip"]["source_hash"]:
         raise ValueError("The original source changed. Prepare and review the shot again before generation.")
+    if manifest["clip"].get("audio_source") and digest_file(manifest["clip"]["audio_source"]) != manifest["clip"]["audio_hash"]:
+        raise ValueError("The reference audio changed. Prepare the shot again.")
     return directory, manifest
 
 
@@ -91,20 +150,23 @@ class GenjSelectClip:
             "start_seconds": ("FLOAT", {"default": 0.0, "min": 0.0, "max": 86400.0, "step": 0.1}),
             "duration_seconds": ("FLOAT", {"default": 4.0, "min": 0.1, "max": 30.0, "step": 0.1}),
             "long_edge": ("INT", {"default": 768, "min": 256, "max": 1920, "step": 64}),
-        }}
+        }, "optional": {"audio": ("AUDIO",), "audio_start_seconds": ("FLOAT", {"default": 0, "min": 0, "max": 86400, "step": .1}),
+                        "use_original_length": ("BOOLEAN", {"default": False, "tooltip": "Use the whole source video from the beginning."})}}
 
     RETURN_TYPES = ("VIDEO", "GENJ_CLIP", "STRING")
     RETURN_NAMES = ("selected_clip", "clip_details", "clip_summary")
     FUNCTION = "select"
     CATEGORY = CATEGORY
 
-    def select(self, video, start_seconds, duration_seconds, long_edge):
+    def select(self, video, start_seconds, duration_seconds, long_edge, audio=None, audio_start_seconds=0, use_original_length=False):
         source = source_path(video)
         with av.open(str(source)) as c:
             stream = c.streams.video[0]
             available = float(stream.duration * stream.time_base) if stream.duration else float(c.duration / av.time_base)
             width, height = video.get_dimensions()
             has_audio = bool(c.streams.audio)
+        if use_original_length:
+            start_seconds, duration_seconds = 0.0, available
         if start_seconds >= available:
             raise ValueError("The start time is beyond the end of this video.")
         frames = max(1, int(min(duration_seconds, available - start_seconds) * 24 + 1e-6))
@@ -114,15 +176,18 @@ class GenjSelectClip:
         details = {"source": str(source), "source_hash": digest_file(source), "start": start_seconds,
                    "duration": duration, "frames": frames, "fps": 24, "width": w, "height": h,
                    "full_source": start_seconds == 0 and abs(duration - available) <= 1 / 24, "has_audio": has_audio}
+        if audio is not None:
+            _, details = reference_audio(details, audio, audio_start_seconds)
         key = hashlib.sha256(json.dumps(details, sort_keys=True).encode()).hexdigest()[:16]
         path = root() / "clips" / (key + ".mp4")
         path.parent.mkdir(exist_ok=True)
         if not path.exists():
-            audio = ["-c:a", "copy"] if details["full_source"] and has_audio else ["-c:a", "aac", "-b:a", "256k"]
-            silence = [] if has_audio else ["-f", "lavfi", "-i", "anullsrc=r=48000:cl=stereo"]
-            ffmpeg("-ss", start_seconds, "-i", source, *silence, "-t", duration, "-map", "0:v:0", "-map", "0:a:0" if has_audio else "1:a:0",
+            audio_codec = ["-c:a", "copy"] if details["full_source"] and has_audio and audio is None else ["-c:a", "aac", "-b:a", "256k"]
+            second = (["-i", details["audio_source"]] if audio is not None else
+                      [] if has_audio else ["-f", "lavfi", "-i", "anullsrc=r=48000:cl=stereo"])
+            ffmpeg("-ss", start_seconds, "-i", source, *second, "-t", duration, "-map", "0:v:0", "-map", "1:a:0" if second else "0:a:0",
                    "-vf", f"fps=24,scale={w}:{h}:flags=lanczos", "-frames:v", frames,
-                   "-c:v", "libx264", "-crf", 16, "-pix_fmt", "yuv420p", *audio, "-movflags", "+faststart", path)
+                   "-c:v", "libx264", "-crf", 16, "-pix_fmt", "yuv420p", *audio_codec, "-movflags", "+faststart", path)
         details["selected_path"] = str(path)
         return (InputImpl.VideoFromFile(str(path)), details, f"{duration:.3f}s from {start_seconds:.3f}s | {frames} frames | {w} x {h} | 24 fps")
 
@@ -265,7 +330,7 @@ class GenjLoadReviewedShot:
     def INPUT_TYPES(cls):
         return {"required": {"shot_id": ("STRING", {"default": "", "multiline": False}),
                              "approved_shot_id": ("STRING", {"default": "", "multiline": False,
-                             "tooltip": "After reviewing the whole clip, paste the same shot ID here."})},
+                             "tooltip": "Studio fills this automatically after review. Standalone graphs must use matching reviewed and approved IDs."})},
                 "optional": {"render_long_edge": ("INT", {"default": 0, "min": 0, "max": 1920,
                     "tooltip": "0 uses the reviewed preview. Higher values reread the original footage and resize the approved mask."}),
                     "output_scale": ("INT", {"default": 1, "min": 1, "max": 2}),
@@ -307,11 +372,14 @@ class GenjLoadReviewedShot:
                 details["frames"] = min(details["frames"], max(1, int(preview_seconds * 24)))
                 details["duration"] = details["frames"] / 24
                 details["full_source"] = False
-            cache = directory / f"render_{render_long_edge}_x{output_scale}_{details['frames']}f"
+            cache = directory / f"render_audio_v2_{render_long_edge}_x{output_scale}_{details['frames']}f"
             cache.mkdir(exist_ok=True)
             high_source, high_mask = cache / "source.mp4", cache / "mask.mp4"
             if not high_source.exists():
-                ffmpeg("-ss", details["start"], "-i", source, "-t", details["duration"], "-map", "0:v:0", "-map", "0:a:0?",
+                # The reviewed clip already contains the selected reference or silence.
+                # Reread full-resolution RGB, but preserve that exact audio selection.
+                ffmpeg("-ss", details["start"], "-i", source, "-i", directory / "source.mp4",
+                       "-t", details["duration"], "-map", "0:v:0", "-map", "1:a:0",
                        "-vf", f"fps=24,scale={w}:{h}:flags=lanczos", "-frames:v", details["frames"],
                        "-c:v", "libx264", "-crf", 16, "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "256k", high_source)
             if not high_mask.exists():
@@ -343,15 +411,11 @@ class GenjLTXFramePad:
         components = video.get_components()
         images = components.images
         extra = (1 - len(images)) % 8
-        if not extra:
+        if not extra and components.audio is not None:
             return (video,)
-        images = torch.cat((images, images[-1:].expand(extra, -1, -1, -1)), dim=0)
-        audio = components.audio
-        if audio is not None:
-            samples = round(len(images) / float(components.frame_rate) * audio["sample_rate"])
-            waveform = audio["waveform"]
-            audio = {"waveform": F.pad(waveform, (0, max(0, samples - waveform.shape[-1])))[..., :samples],
-                     "sample_rate": audio["sample_rate"]}
+        if extra:
+            images = torch.cat((images, images[-1:].expand(extra, -1, -1, -1)), dim=0)
+        audio = fit_audio(components.audio, len(images) / float(components.frame_rate))
         return (InputImpl.VideoFromComponents(Types.VideoComponents(images=images, audio=audio, frame_rate=components.frame_rate)),)
 
 
@@ -476,25 +540,30 @@ class GenjRestoreSoundtrack:
         existing = list(destination.glob(take_name + "_*.mp4"))
         number = max([int(p.stem.rsplit("_", 1)[1]) for p in existing if p.stem.rsplit("_", 1)[1].isdigit()], default=0) + 1
         path = destination / f"{take_name}_{number:05d}.mp4"
-        audio = ["-c:a", "copy"] if clip_details["full_source"] else ["-c:a", "aac", "-b:a", "256k"]
+        external = clip_details.get("audio_source")
+        if external and digest_file(external) != clip_details["audio_hash"]:
+            raise ValueError("The reference audio changed after review.")
+        soundtrack = external or source
+        offset = 0 if external else clip_details["start"]
+        audio = ["-c:a", "copy"] if clip_details["full_source"] and not external else ["-c:a", "aac", "-b:a", "256k"]
         vf = "fps=24"
         if clip_details.get("export_width") and clip_details.get("export_height"):
             vf += f",scale={clip_details['export_width']}:{clip_details['export_height']}:flags=lanczos"
-        ffmpeg("-i", generated, "-ss", clip_details["start"], "-i", source, "-map", "0:v:0", "-map", "1:a:0?",
+        ffmpeg("-i", generated, "-ss", offset, "-i", soundtrack, "-map", "0:v:0", "-map", "1:a:0?",
                "-t", target_duration, "-vf", vf, "-frames:v", clip_details["frames"],
                "-c:v", "libx264", "-crf", 16, "-pix_fmt", "yuv420p", *audio, "-movflags", "+faststart", path)
         preview = {"filename": path.name, "subfolder": "genj/final", "type": "output", "format": "video/mp4"}
-        return {"ui": {"gifs": [preview], "text": [f"Saved {path.name} with the original selected soundtrack."]},
+        return {"ui": {"gifs": [preview], "text": [f"Saved {path.name} with the selected soundtrack."]},
                 "result": (InputImpl.VideoFromFile(str(path)),)}
 
 
 NODE_CLASS_MAPPINGS = {cls.__name__: cls for cls in [GenjSelectClip, GenjChoosePerformer, GenjColourDepth,
     GenjVoiceGuidance, GenjSaveReview, GenjLoadReviewedShot, GenjLTXFramePad, GenjApproveDraft, GenjRecordDraft,
-    GenjRestoreSoundtrack, GenjSaveTextConditioning, GenjLoadTextConditioning]}
+    GenjRestoreSoundtrack, GenjSaveTextConditioning, GenjLoadTextConditioning, GenjApplyReferenceAudio]}
 NODE_DISPLAY_NAME_MAPPINGS = {"GenjSelectClip": "Choose Clip", "GenjChoosePerformer": "Choose Performer",
     "GenjColourDepth": "Colour Depth for Seedance", "GenjVoiceGuidance": "Voice Guidance",
     "GenjSaveReview": "Save Guidance Review", "GenjLoadReviewedShot": "Load Reviewed Shot",
-    "GenjRestoreSoundtrack": "Restore Original Soundtrack", "GenjLTXFramePad": "LTX Frame Padding",
+    "GenjRestoreSoundtrack": "Zura · Save with Selected Audio", "GenjApplyReferenceAudio": "Zura · Reference Audio (Optional)", "GenjLTXFramePad": "LTX Frame Padding",
     "GenjApproveDraft": "Accept Draft for Final"}
 NODE_DISPLAY_NAME_MAPPINGS["GenjRecordDraft"] = "Record Draft and Source Shot"
 NODE_DISPLAY_NAME_MAPPINGS.update({"GenjSaveTextConditioning": "Cache Video Prompt",

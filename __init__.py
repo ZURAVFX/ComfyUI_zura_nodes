@@ -62,7 +62,7 @@ NODE_DISPLAY_NAME_MAPPINGS.update(QWEN_DESIGN_NAMES)
 
 WEB_DIRECTORY = "./web"
 PACKAGE_ROOT = Path(__file__).resolve().parent
-__version__ = "1.3.1"
+__version__ = "1.3.2"
 
 
 def _register_routes():
@@ -115,4 +115,5 @@ NODE_CLASS_MAPPINGS.update(STUDIO_NODES)
 NODE_DISPLAY_NAME_MAPPINGS.update(WAN_ARTIST_NAMES)
 NODE_DISPLAY_NAME_MAPPINGS.update(STUDIO_NAMES)
 for _name in STUDIO_NODES:
-    NODE_DISPLAY_NAME_MAPPINGS[_name] = "Zura · " + NODE_DISPLAY_NAME_MAPPINGS.get(_name, _name)
+    _display_name = NODE_DISPLAY_NAME_MAPPINGS.get(_name, _name)
+    NODE_DISPLAY_NAME_MAPPINGS[_name] = _display_name if _display_name.startswith("Zura · ") else "Zura · " + _display_name

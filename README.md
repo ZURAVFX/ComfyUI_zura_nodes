@@ -4,6 +4,13 @@
 
 To open the complete studio, start ComfyUI and click **Zura Studio**. On a default local installation, use `Open_Zura_Studio.url` or open `http://127.0.0.1:8188/?zura=1`. All four models share the same project and review flow. The standalone Wan test graph is only a diagnostic example.
 
+Choose **Original clip length** or **Custom length**, and optionally upload a
+separate **Reference audio** track. Silent videos work with the audio encoders.
+**Graph view** opens the current stage as an editable ComfyUI workflow in a new
+tab; the **Zura Studio** button returns to the artist interface. Graph edits
+remain in that workflow. LTX/H3 receive reference audio before sampling; Wan
+follows the driving video's facial motion and uses the audio as a soundtrack.
+
 A set of artist-facing ComfyUI video, image and audio controls: load a source clip,
 mask or replace a performer, plan multicam shots, and optionally relight a
 generated take. It coexists

@@ -6,6 +6,7 @@ import sys
 import tempfile
 import types
 import unittest
+from fractions import Fraction
 from pathlib import Path
 from unittest.mock import patch
 
@@ -25,7 +26,7 @@ adapters = importlib.import_module('ComfyUI_zura_nodes.wan_artist')
 class SharedEngineTests(unittest.TestCase):
     def project(self):
         config = studio.clean_config({'engine': 'wan', 'duration': 3, 'resolution': 1280})
-        return {'id': 'a' * 32, 'source': {'sha': 'source'}, 'character': {'sha': 'character', 'file': 'character.png'},
+        return {'id': 'a' * 32, 'source': {'sha': 'source', 'file': 'source.mp4'}, 'character': {'sha': 'character', 'file': 'character.png'},
             'config': config, 'review': 'shot_' + 'a' * 16, 'opening_key': 'look', 'opening_approval': 'look',
             'opening_input': {'sha': 'look', 'file': 'opening.png'}, 'phase': 'opening', 'actions': []}
 
@@ -49,6 +50,18 @@ class SharedEngineTests(unittest.TestCase):
         self.assertEqual(studio.clean_config({'render_size': 1920})['resolution'], 1920)
         self.assertEqual(studio.clean_config({'size': 768})['resolution'], 768)
         self.assertEqual(studio.clean_config({'size': 512, 'resolution': 1280})['size'], 512)
+
+    def test_new_optional_defaults_do_not_reset_finished_legacy_shot(self):
+        p = self.project()
+        p['phase'] = 'done'
+        for key in ('audio_id', 'audio_start', 'length_mode'):
+            p['config'].pop(key)
+        with tempfile.TemporaryDirectory() as tmp:
+            controller = studio.Studio.__new__(studio.Studio)
+            controller.store = studio.Store(tmp)
+            controller.collect = lambda p: p
+            controller.configure(p, dict(p['config']))
+        self.assertEqual(p['phase'], 'done')
 
     def test_h3_uses_selected_resolution_and_full_interval(self):
         p = self.project()
@@ -181,10 +194,130 @@ class SharedEngineTests(unittest.TestCase):
                 for method, path in routes if path.startswith('/zura/studio')}
             legacy = {(method, path) for method, path in routes if path.startswith('/genj/studio')}
             self.assertEqual(branded, legacy)
-            self.assertEqual(len(branded), 8)
+            self.assertEqual(len(branded), 9)
             self.assertIn(('GET', '/zura/studio/status'), routes)
             studio.register()
-            self.assertEqual(len(server.routes), 16, 'Reloading must not register duplicate routes')
+            self.assertEqual(len(server.routes), 18, 'Reloading must not register duplicate routes')
+
+    def test_reference_audio_reaches_preparation_and_invalidates_old_approval(self):
+        p = self.project()
+        before = studio.prep_key(p)
+        p['audio'] = {'file': 'reference.wav', 'sha': 'speech'}
+        p['config']['audio_start'] = 1.25
+        self.assertNotEqual(studio.prep_key(p), before)
+        with patch.object(studio, 'check_asset'):
+            graph = studio.build_graph(p, 'prepare')
+        self.assertEqual(graph['zura_reference_audio']['class_type'], 'LoadAudio')
+        self.assertEqual(graph['3']['inputs']['audio'], ['zura_reference_audio', 0])
+        self.assertEqual(graph['3']['inputs']['audio_start_seconds'], 1.25)
+        for value in (float('nan'), -1, 86401):
+            with self.assertRaises(ValueError):
+                studio.clean_config({'audio_start': value})
+
+    def test_graph_export_keeps_native_wan_preparation_editable(self):
+        p = self.project()
+        p['approval'] = studio.prep_key(p)
+        p['opening_approval'] = None
+        original = copy.deepcopy(p)
+        with patch.object(studio, 'assert_approved'), patch.object(studio, 'check_asset'), \
+                patch.object(wan, 'cache_key', return_value='a' * 64):
+            graph, stage = studio.editable_graph(p, 'animate')
+        self.assertEqual(stage, 'wan')
+        self.assertEqual(p, original, 'Export must not approve or queue the saved project')
+        self.assertIn('wan_pose_detect', graph)
+        self.assertIn('wan_character_detect', graph)
+        self.assertIn('wan_render', graph)
+        self.assertNotIn('wan_save', graph)
+        self.assertEqual(graph['wan_cached']['class_type'], 'ZuraWanPackPreparation')
+        self.assertEqual(graph['wan_frames']['inputs']['source'], ['zura_audio_selection', 0])
+        self.assertEqual(graph['wan_export']['inputs']['clip_details'], ['zura_audio_selection', 1])
+        self.assertEqual(graph['zura_audio_selection']['inputs']['video'], ['wan_shot', 0])
+
+    def test_graph_export_does_not_freeze_h3_prompt_in_cache(self):
+        p = self.project()
+        p['config']['engine'] = 'h3'
+        p['approval'] = studio.prep_key(p)
+        p['audio'] = {'file': 'speech.wav', 'sha': 'speech'}
+        package.verify_review = lambda value: (None, {'clip': {'frames': 72}})
+        with patch.object(studio, 'assert_approved'), patch.object(studio, 'check_asset'), \
+                patch.object(h3, 'cache_key', return_value='b' * 64), \
+                patch.object(h3, 'cache_path', return_value=Path(__file__)):
+            graph, stage = studio.editable_graph(p, 'animate')
+        self.assertEqual(stage, 'h3')
+        self.assertIn('h3_references', graph)
+        self.assertNotIn('h3_cached', graph)
+        self.assertEqual(graph['h3_pad']['inputs']['source'], ['zura_audio_selection', 0])
+        self.assertEqual(graph['zura_audio_selection']['inputs']['audio'], ['zura_reference_audio', 0])
+
+    def test_original_clip_length_uses_native_full_source_selection(self):
+        p = self.project()
+        previous = studio.prep_key(p)
+        p['config'] = studio.clean_config({**p['config'], 'start': 1, 'length_mode': 'original'})
+        self.assertEqual(p['config']['start'], 0)
+        self.assertNotEqual(previous, studio.prep_key(p))
+        with patch.object(studio, 'check_asset'):
+            graph = studio.build_graph(p, 'prepare')
+        self.assertTrue(graph['3']['inputs']['use_original_length'])
+        self.assertEqual(graph['3']['inputs']['start_seconds'], 0)
+
+
+class AudioAdapterTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        latest = types.ModuleType('comfy_api.latest')
+        class FileVideo:
+            def __init__(self, path):
+                self.path = path
+            def get_stream_source(self):
+                return self.path
+            def get_dimensions(self):
+                return 64, 64
+        latest.InputImpl = types.SimpleNamespace(VideoFromFile=FileVideo,
+            VideoFromComponents=lambda c: types.SimpleNamespace(get_components=lambda: c))
+        latest.Types = types.SimpleNamespace(VideoComponents=lambda **kwargs: types.SimpleNamespace(**kwargs))
+        cls.ns = {'__name__': 'zura_audio_unit'}
+        source = (v2_bootstrap.ROOT / 'artist_studio/__init__.py').read_text(encoding='utf8')
+        with patch.dict(sys.modules, {'comfy_api.latest': latest}):
+            exec(compile(source.split('NODE_CLASS_MAPPINGS =')[0], 'artist_studio/__init__.py', 'exec'), cls.ns)
+
+    def test_silent_audio_survives_both_ltx_padding_cases(self):
+        for count, expected in ((9, 9), (48, 49)):
+            components = types.SimpleNamespace(images=torch.zeros(count, 4, 4, 3), audio=None,
+                frame_rate=Fraction(24))
+            video = types.SimpleNamespace(get_components=lambda: components)
+            result = self.ns['GenjLTXFramePad']().pad(video)[0].get_components()
+            self.assertEqual(len(result.images), expected)
+            self.assertEqual(result.audio['waveform'].shape, (1, 2, round(expected/24*48000)))
+            self.assertEqual(float(result.audio['waveform'].abs().max()), 0)
+
+    def test_reference_offset_padding_and_invalid_offset(self):
+        import folder_paths
+        with tempfile.TemporaryDirectory() as tmp, patch.object(folder_paths, 'get_output_directory', return_value=tmp, create=True):
+            audio = {'sample_rate': 8000, 'waveform': torch.ones(1, 1, 8000)*.2}
+            selected, details = self.ns['reference_audio']({'duration': 2}, audio, .5)
+            self.assertEqual(selected['waveform'].shape[-1], 16000)
+            self.assertEqual(float(selected['waveform'][..., 4000:].abs().max()), 0)
+            self.assertEqual(details['audio_mode'], 'reference')
+            self.assertTrue(Path(details['audio_source']).exists())
+            self.assertEqual(self.ns['digest_file'](details['audio_source']), details['audio_hash'])
+            for offset in (-1, 1, float('nan')):
+                with self.assertRaises(ValueError):
+                    self.ns['reference_audio']({'duration': 2}, audio, offset)
+
+    def test_original_length_selects_all_frames_and_adds_silence_track(self):
+        import av
+        import folder_paths
+        with tempfile.TemporaryDirectory() as tmp, patch.object(folder_paths, 'get_output_directory', return_value=tmp, create=True):
+            source = Path(tmp) / 'silent.mp4'
+            self.ns['encode_frames'](source, torch.zeros(36, 64, 64, 3))
+            video = self.ns['InputImpl'].VideoFromFile(str(source))
+            selected, details, _ = self.ns['GenjSelectClip']().select(video, .5, .25, 256, use_original_length=True)
+            self.assertEqual(details['duration'], 1.5)
+            self.assertEqual(details['frames'], 36)
+            self.assertEqual(details['start'], 0)
+            with av.open(selected.path) as media:
+                self.assertEqual(len(media.streams.audio), 1)
+                self.assertEqual(sum(1 for _ in media.decode(video=0)), 36)
 
 
 if __name__ == '__main__':

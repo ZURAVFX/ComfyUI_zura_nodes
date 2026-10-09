@@ -33,7 +33,7 @@ STAGES = {
 DEFAULTS = {"engine": "local", "background": "keep", "scope": "person", "prompt": "",
             "start": 0.0, "duration": 2.0, "size": 512, "performer": -1,
             "margin": 8, "pitch": False, "seed": 42, "render_size": 0, "h3_preset": "preview_quality", "remove_text": False,
-            "resolution": 1280, "quality": "fast"}
+            "resolution": 1280, "quality": "fast", "audio_id": "", "audio_start": 0.0, "length_mode": "custom"}
 PREP_KEYS = ("start", "duration", "size", "scope", "performer", "margin", "pitch")
 
 
@@ -60,16 +60,24 @@ def clean_config(value):
     from .h3 import H3_PRESETS
     for key, options in [("engine", ("local", "h3", "wan", "seedance")), ("background", ("keep", "restyle")),
                          ("quality", ("fast", "detailed")),
+                         ("length_mode", ("custom", "original")),
                          ("h3_preset", H3_PRESETS),
                          ("scope", ("person", "head"))]:
         if c[key] not in options:
             raise ValueError(f"Choose a valid {key} option.")
-    for key in ("start", "duration"):
+    for key in ("start", "duration", "audio_start"):
         c[key] = float(c[key])
         if not math.isfinite(c[key]):
             raise ValueError("Clip times must be finite numbers.")
     if not 0 <= c["start"] <= 86400 or not 0.1 <= c["duration"] <= 30:
         raise ValueError("Choose a start time and a duration between 0.1 and 30 seconds.")
+    if not 0 <= c["audio_start"] <= 86400:
+        raise ValueError("Choose an audio start between 0 and 86400 seconds.")
+    c["audio_id"] = str(c["audio_id"] or "")
+    if c["audio_id"] and not re.fullmatch(r"[a-f0-9]{32}", c["audio_id"]):
+        raise ValueError("Choose an uploaded reference audio track.")
+    if c["length_mode"] == "original":
+        c["start"] = 0.0
     for key, low, high in [("size", 256, 960), ("performer", -1, 63), ("margin", 0, 128), ("seed", 0, 2**53 - 1)]:
         c[key] = int(c[key])
         if not low <= c[key] <= high:
@@ -127,6 +135,10 @@ def prep_key(project):
     settings = {"source": project["source"]["sha"], **{k: project["config"][k] for k in PREP_KEYS}}
     if project["config"].get("remove_text"):
         settings["remove_text"] = 1
+    if project["config"].get("length_mode") == "original":
+        settings["length_mode"] = "original"
+    if project.get("audio"):
+        settings.update(audio=project["audio"]["sha"], audio_start=project["config"].get("audio_start", 0))
     return hashlib.sha256(canonical(settings).encode()).hexdigest()
 
 
@@ -135,6 +147,8 @@ def assert_approved(project):
     if not project.get("review") or project.get("approval") != prep_key(project):
         raise ValueError("Check the mask preview and choose Use this mask first.")
     check_asset(project["source"])
+    if project.get("audio"):
+        check_asset(project["audio"])
     verify_review(project["review"])
 
 
@@ -160,14 +174,14 @@ def text_graph(info, cache_key):
     }
 
 
-def build_graph(project, stage):
+def build_graph(project, stage, use_cache=True):
     """Fill known native node inputs; no new subgraph interfaces are fabricated."""
     if stage == "h3":
         from .h3 import build_h3_graph
-        return build_h3_graph(project)
+        return build_h3_graph(project, use_cache=use_cache)
     if stage == "wan":
         from .wan import build_wan_graph
-        return build_wan_graph(project)
+        return build_wan_graph(project, use_cache=use_cache)
     graph = json.loads((HERE / "graphs" / (STAGES[stage] + ".json")).read_text(encoding="utf8"))
     c = project["config"]
     if stage != "prepare":
@@ -184,7 +198,13 @@ def build_graph(project, stage):
     if stage == "prepare":
         check_asset(project["source"])
         graph["2"]["inputs"]["file"] = project["source"]["file"]
-        graph["3"]["inputs"].update(start_seconds=c["start"], duration_seconds=c["duration"], long_edge=c["size"])
+        graph["3"]["inputs"].update(start_seconds=c["start"], duration_seconds=c["duration"], long_edge=c["size"],
+                                     use_original_length=c["length_mode"] == "original")
+        if project.get("audio"):
+            check_asset(project["audio"])
+            graph["zura_reference_audio"] = {"class_type": "LoadAudio", "inputs": {"audio": project["audio"]["file"]},
+                "_meta": {"title": "Reference audio · optional"}}
+            graph["3"]["inputs"].update(audio=["zura_reference_audio", 0], audio_start_seconds=c["audio_start"])
         graph["7"]["inputs"]["text"] = c["scope"]
         graph["8"]["inputs"].pop("bboxes", None)  # Text detection over the entire source, at any aspect ratio.
         graph["9"]["inputs"]["performer"] = c["performer"]
@@ -286,7 +306,7 @@ def build_graph(project, stage):
             graph[key]["inputs"]["value"] += " Remove the masked captions, subtitles and title banners completely. Fill those areas with clean background or character clothing. No overlaid text or lettering."
         from . import text_cache_path
         cache_key, _ = text_cache_info(graph, stage)
-        if text_cache_path(cache_key).exists():
+        if use_cache and text_cache_path(cache_key).exists():
             prefix = "5408" if stage == "background" else "5014"
             replacements = {prefix + ":2483": 0, prefix + ":2612": 1}
             for node in graph.values():
@@ -324,13 +344,50 @@ def build_graph(project, stage):
     return graph
 
 
+def editable_graph(project, stage="auto"):
+    """Export a snapshot without queuing, spending credits or changing approvals."""
+    p = copy.deepcopy(project)
+    p["config"] = clean_config(p["config"])
+    if stage == "auto":
+        stage = ("prepare" if not p.get("approval") or p["approval"] != prep_key(p) else
+                 "animate" if p.get("opening_input") and p["config"]["engine"] != "seedance" else
+                 "design" if p["config"]["engine"] != "seedance" else "draft")
+    if stage == "animate":
+        # Opening the animation stage accepts the visible
+        # opening for this exported snapshot. The saved Studio state is untouched.
+        if not p.get("opening_input"):
+            raise ValueError("Create the character preview before opening its animation graph.")
+        p["opening_approval"] = p["opening_key"]
+        stage = (p["config"]["engine"] if p["config"]["engine"] in ("h3", "wan") else
+                 "background" if p["config"]["background"] == "keep" else "restyle")
+    if stage not in ("prepare", "design", "background", "restyle", "h3", "wan", "draft", "final"):
+        raise ValueError("Choose preparation, character preview or animation.")
+    graph = build_graph(p, stage, use_cache=False)
+    if stage in ("background", "restyle", "h3", "wan"):
+        shot = next(k for k, n in graph.items() if n["class_type"] == "GenjLoadReviewedShot")
+        for n in graph.values():
+            for name, value in list(n["inputs"].items()):
+                if value == [shot, 0]:
+                    n["inputs"][name] = ["zura_audio_selection", 0]
+                elif value == [shot, 3]:
+                    n["inputs"][name] = ["zura_audio_selection", 1]
+        inputs = {"video": [shot, 0], "clip_details": [shot, 3],
+                  "audio_start_seconds": p["config"]["audio_start"]}
+        if p.get("audio"):
+            graph["zura_reference_audio"] = {"class_type": "LoadAudio",
+                "inputs": {"audio": p["audio"]["file"]}, "_meta": {"title": "Reference audio · optional"}}
+            inputs["audio"] = ["zura_reference_audio", 0]
+        graph["zura_audio_selection"] = {"class_type": "GenjApplyReferenceAudio", "inputs": inputs}
+    return graph, stage
+
+
 def media_url(asset):
     return "/view?" + urlencode({k: asset[k] for k in ("filename", "subfolder", "type") if k in asset})
 
 
 def public_project(project):
     p = copy.deepcopy(project)
-    for key in ("source", "character", "opening_input"):
+    for key in ("source", "character", "opening_input", "audio"):
         if p.get(key):
             a = p[key]
             a["url"] = media_url({"filename": Path(a["file"]).name, "subfolder": str(Path(a["file"]).parent).replace("\\", "/"), "type": "input"})
@@ -494,8 +551,14 @@ class Studio:
         self.collect(p)
         if p["phase"] == "working":
             raise ValueError("Wait for the current job before changing its settings.")
-        old_key, prior = prep_key(p), p["config"]
-        p["config"] = clean_config(value)
+        old_key, prior = prep_key(p), clean_config(p["config"])
+        config = clean_config(value)
+        audio = self.store.load(config["audio_id"]) if config["audio_id"] else None
+        if audio:
+            if audio.get("asset_kind") != "audio":
+                raise ValueError("Choose an audio file for the reference soundtrack.")
+            check_asset(audio)
+        p["config"], p["audio"] = config, audio
         if old_key != prep_key(p):
             p.update(phase="new", review=None, approval=None, opening_input=None,
                      opening_key=None, opening_url=None, opening_approval=None,
@@ -567,7 +630,9 @@ class Studio:
         action = {"id": prompt_id, "stage": stage, "state": "submitting", "created": time.time(),
                   "request_key": request_key, "paid": stage in ("draft", "final"),
                   "render_size": p["config"].get("render_size", 0), "server_address": self.server_address,
-                  "resolution": 1920 if stage == "final" else p["config"].get("resolution"), "duration": p["config"]["duration"], "quality": p["config"]["quality"]}
+                  "resolution": 1920 if stage == "final" else p["config"].get("resolution"),
+                  "duration": (p["source"].get("duration") if p["config"].get("length_mode") == "original" else p["config"]["duration"]),
+                  "quality": p["config"]["quality"]}
         if stage in ("h3", "h3_references"):
             action["render_size"] = 0
             action["h3_preset"] = p["config"]["h3_preset"]
@@ -665,9 +730,10 @@ def register():
             raise ValueError("Choose a video or a character image.")
         kind = request.query.get("kind", "")
         suffix = Path(part.filename).suffix.lower()
-        supported = {"video": (".mp4", ".mov", ".mkv", ".webm"), "image": (".png", ".jpg", ".jpeg", ".webp")}
+        supported = {"video": (".mp4", ".mov", ".mkv", ".webm"), "image": (".png", ".jpg", ".jpeg", ".webp"),
+                     "audio": (".wav", ".mp3", ".m4a", ".flac", ".ogg", ".aac", ".aiff")}
         if kind not in supported or suffix not in supported[kind]:
-            raise ValueError("Use an MP4/MOV video or a PNG/JPG/WebP character image.")
+            raise ValueError("Choose a supported video, character image or audio file (WAV, MP3, M4A, FLAC).")
         identity = uuid.uuid4().hex
         relative = "genj_studio/" + identity + "/reference" + suffix
         path = Path(folder_paths.get_input_directory()) / relative
@@ -689,6 +755,15 @@ def register():
                 if not math.isfinite(duration) or duration <= 0:
                     raise ValueError("The clip length could not be read. Export an MP4 and upload it again.")
                 details = {"duration": duration, "width": stream.width, "height": stream.height}
+        elif kind == "audio":
+            with av.open(str(path)) as media:
+                if not media.streams.audio:
+                    raise ValueError("This file has no audio track.")
+                stream = media.streams.audio[0]
+                duration = float(stream.duration * stream.time_base) if stream.duration else float((media.duration or 0) / av.time_base)
+                if not math.isfinite(duration) or duration <= 0:
+                    raise ValueError("The audio length could not be read. Export a WAV and try again.")
+                details = {"duration": duration}
         else:
             with Image.open(path) as image:
                 image.verify()
@@ -715,7 +790,7 @@ def register():
         p = {"id": uuid.uuid4().hex, "kind": "project", "name": source["name"], "source": source,
              "character": character, "config": clean_config(body.get("config", {})), "phase": "new",
              "actions": [], "results": [], "created": time.time()}
-        studio.store.save(p)
+        studio.configure(p, p["config"])
         return web.json_response(public_project(p))
 
     @routes.get("/zura/studio/projects/{identity}")
@@ -724,6 +799,16 @@ def register():
     async def get_project(request):
         async with studio.lock:
             return web.json_response(public_project(studio.collect(studio.store.load(request.match_info["identity"]))))
+
+    @routes.get("/zura/studio/projects/{identity}/graph")
+    @routes.get("/genj/studio/projects/{identity}/graph")
+    @response
+    async def export_project_graph(request):
+        async with studio.lock:
+            p = studio.store.load(request.match_info["identity"])
+            graph, stage = editable_graph(p, request.query.get("stage", "auto"))
+            return web.json_response({"graph": graph, "stage": stage,
+                "name": "Zura Studio · " + stage + " · " + p["id"][:8]})
 
     @routes.post("/zura/studio/projects/{identity}/config")
     @routes.post("/genj/studio/projects/{identity}/config")
