@@ -111,7 +111,7 @@ class Store:
                 if p.get("kind") == "project":
                     result.append(p)
             except (ValueError, OSError):
-                logging.warning("Genj: could not read a saved project record")
+                logging.warning("Zura Studio: could not read a saved project record")
         return sorted(result, key=lambda p: p["updated"], reverse=True)
 
 
@@ -230,6 +230,18 @@ def build_graph(project, stage):
                 "scale_method": "lanczos", "resize_type.match": ["5408:5371", 0], "resize_type.crop": "disabled"}
             for mask_resize in ("5408:5373", "5408:5381"):
                 graph[mask_resize]["inputs"]["resize_type.crop"] = "disabled"
+            # Native square max-pooling is extremely slow on HD CPU masks.
+            # Mask Fix uses the equivalent rectangular maximum filter; keep
+            # the exact radius and >0.5 threshold with no blur or hole filling.
+            for identity in ("5408:5379", "5408:5382"):
+                inputs = graph[identity]["inputs"]
+                kernel, grow = identity + "_kernel", identity + "_grow"
+                graph[kernel] = {"class_type": "ComfyMathExpression", "inputs": {
+                    "expression": "2*a+1", "values.a": inputs["spatial_radius"]}}
+                graph[grow] = {"class_type": "MaskFix+", "inputs": {"mask": inputs["mask"],
+                    "erode_dilate": [kernel, 1], "fill_holes": 0, "remove_isolated_pixels": 0,
+                    "smooth": 0, "blur": 0}}
+                graph[identity] = {"class_type": "ThresholdMask", "inputs": {"mask": [grow, 0], "value": 0.5}}
         # Replacement always uses the approved scene image. The CLI exporter can
         # ignore promoted native widgets and retain the inner T2V default instead.
         image_switch = "5408:9018" if stage == "background" else "5014:5506"
@@ -237,6 +249,36 @@ def build_graph(project, stage):
         for node in graph.values():
             if node["class_type"] == "LTXVImgToVideoInplace":
                 node["inputs"]["bypass"] = False
+        # Use the LTX-2.5 A2V template's zero-noise source-audio path.
+        # Speaker-reference tokens are identity context, not timed speech.
+        graph["zura_fixed_audio_mask"] = {"class_type": "SolidMask", "inputs": {
+            "value": 0.0, "width": 1024, "height": 1024}}
+        if stage == "background":
+            first_cond, second_cond = "5409:5114", "5410:5013"
+            guiders, concats = ("5410:4828", "5414:5209"), ("5409:5391", "5413:5396")
+            audio_latents = (["5409:5389", 0], ["5410:5394", 1])
+            graph["5410:5013"]["inputs"].update(positive=[first_cond, 0], negative=[first_cond, 1])
+            graph.pop("5409:5390")
+            graph.pop("5413:5395")
+            audio_model = ["5407:5607", 0]
+        else:
+            graph["9002:3980"] = {"class_type": "VAEEncodeAudio", "inputs": {
+                "audio": ["9006", 1], "vae": ["5004:5600", 0]}}
+            first_cond, second_cond = "9002:5012", "5549"
+            guiders, concats = ("5516:4828", "5517:4964"), ("9002:4528", "5517:4969")
+            audio_latents = (["9002:3980", 0], ["5516:4845", 1])
+            graph["5549"]["inputs"].update(positive=[first_cond, 0], negative=[first_cond, 1])
+            audio_model = ["5004:5607", 0]
+        graph["zura_av_coupling"] = {"class_type": "LTXVModalityGuidance", "inputs": {
+            "model": audio_model, "modality_scale": 3.0, "start_percent": 0.0, "end_percent": 1.0}}
+        for index, (guider, concat, cond, audio) in enumerate(zip(
+                guiders, concats, (first_cond, second_cond), audio_latents)):
+            frozen = "zura_frozen_audio_" + str(index)
+            graph[frozen] = {"class_type": "SetLatentNoiseMask", "inputs": {
+                "samples": audio, "mask": ["zura_fixed_audio_mask", 0]}}
+            graph[concat]["inputs"]["audio_latent"] = [frozen, 0]
+            graph[guider]["inputs"].update(model=["zura_av_coupling", 0],
+                positive=[cond, 0], negative=[cond, 1])
         key = "5404" if stage == "background" else "5508"
         if c["prompt"]:
             graph[key]["inputs"]["value"] += " Appearance direction: " + c["prompt"]
@@ -318,7 +360,7 @@ class Studio:
                     try:
                         self.collect(p)
                     except Exception:
-                        logging.exception("Genj: could not collect a project result")
+                        logging.exception("Zura Studio: could not collect a project result")
 
     async def resume_text(self, identity, action_id):
         async with self.lock:
@@ -494,7 +536,7 @@ class Studio:
         # Prevent replay of a completed request caused by duplicate network delivery.
         request_key = str(body.get("request_key", ""))
         if not re.fullmatch(r"[a-f0-9-]{36}", request_key):
-            raise ValueError("Reload Genj Studio before continuing.")
+            raise ValueError("Reload Zura Studio before continuing.")
         if any(a.get("request_key") == request_key for a in p.get("actions", [])):
             return p
         auth = {k: body.get(k) for k in ("auth_token_comfy_org", "api_key_comfy_org") if body.get(k)}
@@ -536,7 +578,7 @@ class Studio:
         p["error"] = None
         self.store.save(p)  # Persist BEFORE queueing; ambiguity is never retried automatically.
         extra = {"client_id": data.get("client_id", "genj-studio"), "create_time": int(time.time() * 1000),
-                 "comfy_usage_source": "genj-studio"}
+                 "comfy_usage_source": "zura-studio"}
         number = self.server.number
         self.server.number += 1
         self.server.prompt_queue.put((number, prompt_id, graph, extra, valid[2], auth))
@@ -560,7 +602,7 @@ def register():
     def same_origin(request):
         origin = request.headers.get("Origin")
         if origin and urlparse(origin).netloc != request.host:
-            raise web.HTTPForbidden(text="Open Genj Studio inside this ComfyUI instance.")
+            raise web.HTTPForbidden(text="Open Zura Studio inside this ComfyUI instance.")
 
     def response(fn):
         async def wrapped(request):
@@ -572,6 +614,7 @@ def register():
                 return web.json_response({"error": str(e)}, status=400)
         return wrapped
 
+    @routes.get("/zura/studio/status")
     @routes.get("/genj/studio/status")
     @response
     async def status(request):
@@ -595,17 +638,24 @@ def register():
         h3_models = {key: bool(folder_paths.get_full_path(folder, name)) for key, (folder, name) in H3_MODELS.items()}
         missing_h3_nodes = [name for name in H3_NATIVE_NODES if name not in nodes.NODE_CLASS_MAPPINGS]
         from .wan import WAN_MODELS, WAN_NATIVE_NODES
+        missing_ltx_nodes = [name for name in ("LTXVModalityGuidance", "SolidMask", "SetLatentNoiseMask",
+                                              "MaskFix+", "ThresholdMask", "ComfyMathExpression")
+                             if name not in nodes.NODE_CLASS_MAPPINGS]
         wan_models = {key: bool(folder_paths.get_full_path(folder, name)) for key, (folder, name) in WAN_MODELS.items()}
         missing_wan_nodes = [name for name in WAN_NATIVE_NODES if name not in nodes.NODE_CLASS_MAPPINGS]
         return web.json_response({"models": models, "h3_models": h3_models, "wan_models": wan_models,
-            "engine_ready": {"local": all(models.values()), "h3": all(h3_models.values()) and not missing_h3_nodes,
+            "engine_ready": {"local": all(models.values()) and not missing_ltx_nodes, "h3": all(h3_models.values()) and not missing_h3_nodes,
                              "wan": all(wan_models.values()) and not missing_wan_nodes},
-            "engine_quality": {"h3": "experimental: current motion transfer failed user review", "wan": "720p two-second single-performer test passed; review each take"},
+            "engine_quality": {"local": "experimental speech timing: current talking test failed lip-sync review",
+                               "h3": "experimental: current motion transfer failed user review",
+                               "wan": "Native continuation without decoded-frame cross-fades; review each take"},
+            "missing_ltx_nodes": missing_ltx_nodes,
             "missing_wan_nodes": missing_wan_nodes,
-            "missing_h3_nodes": missing_h3_nodes, "ready": all(models.values()), "version": 5,
+            "missing_h3_nodes": missing_h3_nodes, "ready": all(models.values()) and not missing_ltx_nodes, "version": 5, "brand": "Zura Studio", "package": "comfyui-zura-nodes",
             "runtime": {"source": str(HERE), "prompt_id": getattr(server, "last_prompt_id", None),
                         "running": [item[1] for item in server.prompt_queue.get_current_queue_volatile()[0]]}})
 
+    @routes.post("/zura/studio/upload")
     @routes.post("/genj/studio/upload")
     @response
     async def upload(request):
@@ -647,12 +697,14 @@ def register():
         studio.store.save(asset)
         return web.json_response(public_project(asset))
 
+    @routes.get("/zura/studio/projects")
     @routes.get("/genj/studio/projects")
     @response
     async def list_projects(request):
         async with studio.lock:
             return web.json_response([public_project(studio.collect(p)) for p in studio.store.list()])
 
+    @routes.post("/zura/studio/projects")
     @routes.post("/genj/studio/projects")
     @response
     async def create_project(request):
@@ -666,12 +718,14 @@ def register():
         studio.store.save(p)
         return web.json_response(public_project(p))
 
+    @routes.get("/zura/studio/projects/{identity}")
     @routes.get("/genj/studio/projects/{identity}")
     @response
     async def get_project(request):
         async with studio.lock:
             return web.json_response(public_project(studio.collect(studio.store.load(request.match_info["identity"]))))
 
+    @routes.post("/zura/studio/projects/{identity}/config")
     @routes.post("/genj/studio/projects/{identity}/config")
     @response
     async def configure(request):
@@ -681,6 +735,7 @@ def register():
             p = studio.configure(p, body.get("config", {}))
             return web.json_response(public_project(p))
 
+    @routes.post("/zura/studio/projects/{identity}/action")
     @routes.post("/genj/studio/projects/{identity}/action")
     @response
     async def action(request):
@@ -690,6 +745,7 @@ def register():
             p = await studio.action(p, body.get("action"), body)
             return web.json_response(public_project(p))
 
+    @routes.post("/zura/studio/projects/{identity}/cancel")
     @routes.post("/genj/studio/projects/{identity}/cancel")
     @response
     async def cancel(request):

@@ -17,8 +17,9 @@ class ShotChunk(NamedTuple):
     real output tail.  Those frames are handed to the native node as
     ``continue_motion`` so the model continues from real pixels rather than
     re-inventing them, and its own rendition of those frames is the
-    ``blend_frames`` head of the window, cross-faded against the predecessor's
-    real pixels so the join has no step at either edge.
+    repeated context at the head of the window. Native assembly discards this
+    context and keeps the predecessor's original pixels. Optional soft blending
+    mixes the two renditions in the reserved overlap zone.
     """
 
     index: int
@@ -29,9 +30,8 @@ class ShotChunk(NamedTuple):
     # Frames of the predecessor's output used as continue_motion (0 for the
     # first chunk of a shot: continuation never crosses a cut).
     anchor_frames: int
-    # Head of the window cross-faded with the predecessor's tail.  A chunk with
-    # an in-shot successor leaves it to be both the successor's anchor and its
-    # blend zone, so the two passes meet on identical pixels.
+    # Repeated head context shared with the predecessor's tail. A chunk with
+    # an in-shot successor reserves it as the next anchor and optional blend zone.
     blend_frames: int
     window_start: int = 0
     window_count: int = 0

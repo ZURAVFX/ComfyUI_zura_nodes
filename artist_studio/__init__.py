@@ -72,7 +72,7 @@ def encode_frames(path, frames, fps=24):
 
 def verify_review(review_id):
     if not re.fullmatch(r"shot_[a-f0-9]{16}", review_id):
-        raise ValueError("Copy the shot ID shown by Save Guidance Review.")
+        raise ValueError("Prepare and review the shot in Zura Studio before generating.")
     directory = root() / "reviews" / review_id
     manifest = json.loads((directory / "review.json").read_text(encoding="utf-8"))
     for name, expected in manifest["files"].items():
@@ -254,7 +254,7 @@ class GenjSaveReview:
                  ["source.mp4", "mask.mp4", "guide.mp4", "mask_review.mp4", "opening_frame.png"]}
         manifest = {"shot_id": shot_id, "clip": clip_details, "files": files}
         (directory / "review.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
-        text = f"{shot_id}\nWatch all of mask_review.mp4 and guide.mp4. Paste this shot ID into both fields of Load Reviewed Shot to approve these exact files."
+        text = f"{shot_id}\nMask ready. Review the full mask and guidance previews in Zura Studio, then choose Use this mask. Zura Studio links this shot automatically."
         previews = [{"filename": name, "subfolder": f"genj/reviews/{shot_id}", "type": "output", "format": "video/mp4"}
                     for name in ["mask_review.mp4", "guide.mp4"]]
         return {"ui": {"text": [text], "gifs": previews}, "result": (shot_id,)}
@@ -286,7 +286,7 @@ class GenjLoadReviewedShot:
 
     def load(self, shot_id, approved_shot_id, render_long_edge=0, output_scale=1, preview_seconds=0):
         if not shot_id or shot_id != approved_shot_id:
-            raise ValueError("Review the whole mask and guidance clip, then paste its shot ID into both fields.")
+            raise ValueError("Approve the reviewed mask in Zura Studio before generation. Standalone graphs require matching reviewed and approved shot IDs.")
         directory, manifest = verify_review(shot_id)
         details = {**manifest["clip"], "review_shot_id": shot_id}
         if render_long_edge:
@@ -497,6 +497,8 @@ NODE_DISPLAY_NAME_MAPPINGS = {"GenjSelectClip": "Choose Clip", "GenjChoosePerfor
     "GenjRestoreSoundtrack": "Restore Original Soundtrack", "GenjLTXFramePad": "LTX Frame Padding",
     "GenjApproveDraft": "Accept Draft for Final"}
 NODE_DISPLAY_NAME_MAPPINGS["GenjRecordDraft"] = "Record Draft and Source Shot"
+NODE_DISPLAY_NAME_MAPPINGS.update({"GenjSaveTextConditioning": "Cache Video Prompt",
+    "GenjLoadTextConditioning": "Load Video Prompt"})
 
 from .h3 import NODE_CLASS_MAPPINGS as H3_NODES, NODE_DISPLAY_NAME_MAPPINGS as H3_NAMES
 NODE_CLASS_MAPPINGS.update(H3_NODES)

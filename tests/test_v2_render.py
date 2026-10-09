@@ -194,6 +194,30 @@ class RenderTests(unittest.TestCase):
             render_module.ZuraWan22LoopedChunksSampler().render(
                 "m", "c", "v", "cv", media["frames"][:1], media, "p", "n", shot_mode="Continuous")
 
+    def test_bounded_window_has_no_internal_vae_temporal_join(self):
+        calls, crops, decodes = [], [], []
+        old_modules, _ = install_fake_native(calls, crops)
+        nodes = sys.modules['nodes']
+        original = nodes.VAEDecodeTiled
+        class Decode(original):
+            def decode(self, vae, value, **kwargs):
+                decodes.append((int(value['samples'].shape[2]), kwargs))
+                return super().decode(vae, value, **kwargs)
+        nodes.VAEDecodeTiled = Decode
+        try:
+            media = self.make_media(total=100)
+            render_module.ZuraWan22LoopedChunksSampler().render(
+                'm', 'c', 'v', 'cv', media['frames'][:1], media, 'p', 'n',
+                chunk_frames=81, overlap_frames=5, max_side=16, shot_mode='Continuous')
+            self.assertEqual(len(calls), 2)
+            for latent_frames, kwargs in decodes:
+                self.assertGreaterEqual(kwargs['temporal_size'] // 4, latent_frames)
+            self.assertEqual(decodes[0][1]['tile_size'], 512)
+        finally:
+            for k, v in old_modules.items():
+                if v is None: sys.modules.pop(k, None)
+                else: sys.modules[k] = v
+
     def test_face_video_512_crops_pass_when_clip_is_smaller(self):
         """WanAnimatePreprocess always returns 512x512 face crops; the native
         node upscales pose/face conditioning itself, so a size mismatch must
@@ -314,7 +338,7 @@ def install_value_native(calls):
 
 
 class BlendAssemblyTests(unittest.TestCase):
-    def render_two_chunks(self):
+    def render_two_chunks(self, join_mode="Soft blend"):
         calls, events = [], []
         old_send = render_module._send_wan22_progress
         render_module._send_wan22_progress = lambda **data: events.append(data)
@@ -328,7 +352,7 @@ class BlendAssemblyTests(unittest.TestCase):
                      "replacement_area": "Whole character"}
             images, _, receipt = render_module.ZuraWan22LoopedChunksSampler().render(
                 "m", "c", "v", "cv", frames[:1], media, "p", "n", chunk_frames=41,
-                max_side=16, overlap_frames=5, shot_mode="Continuous", unique_id="9:9")
+                max_side=16, overlap_frames=5, shot_mode="Continuous", unique_id="9:9", join_mode=join_mode)
             return images, calls
         finally:
             render_module._send_wan22_progress = old_send
@@ -409,6 +433,13 @@ class BlendAssemblyTests(unittest.TestCase):
         # Outside the zone: pure chunk renditions, no blending residue.
         self.assertEqual(float(images[35, 0, 0, 0]), 35.0)
         self.assertEqual(float(images[41, 0, 0, 0]), 3605.0)
+
+    def test_native_join_preserves_frames_without_ghosting_or_repetition(self):
+        images, calls = self.render_two_chunks("Native continuation")
+        self.assertTrue(torch.equal(images[:41, 0, 0, 0], torch.arange(41.0)))
+        self.assertTrue(torch.equal(images[41:, 0, 0, 0], 3600 + torch.arange(5.0, 14.0)))
+        self.assertEqual(len(images), 50)
+        self.assertEqual(len(calls[1]["continue"]), 5)
 
     def test_blend_weights_are_flat_ended_and_monotonic(self):
         w = render_module._blend_weights(9)

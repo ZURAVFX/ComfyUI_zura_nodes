@@ -89,6 +89,56 @@ class SharedEngineTests(unittest.TestCase):
                 self.assertEqual(fast['wan_render']['inputs']['reference_image'], ['wan_opening_size', 0])
                 self.assertEqual(fast['wan_opening_size']['inputs']['crop'], 'disabled')
                 self.assertEqual(fast['wan_render']['inputs']['vision_reference'], ['wan_cached', 1])
+                self.assertEqual(fast['wan_render']['inputs']['chunk_frames'], 81)
+                self.assertEqual(fast['wan_render']['inputs']['join_mode'], 'Native continuation')
+
+    def test_ltx_speech_reaches_both_sampling_passes(self):
+        p = self.project()
+        p['config']['engine'] = 'local'
+        package.text_cache_path = lambda key: Path('/nonexistent-zura-cache')
+        with patch.object(studio, 'assert_approved'), patch.object(studio, 'check_asset'), \
+                patch.object(studio, 'text_cache_info', return_value=('cache', {})):
+            for stage, guiders, refs, concats in (
+                    ('background', ('5410:4828', '5414:5209'), ('5409:5114', '5410:5013'), ('5409:5391', '5413:5396')),
+                    ('restyle', ('5516:4828', '5517:4964'), ('9002:5012', '5549'), ('9002:4528', '5517:4969'))):
+                graph = studio.build_graph(p, stage)
+                self.assertEqual(graph['zura_av_coupling']['class_type'], 'LTXVModalityGuidance')
+                self.assertEqual(graph['zura_fixed_audio_mask']['inputs']['value'], 0.0)
+                self.assertFalse(any(node['class_type'] == 'LTXVSetAudioRefTokens' for node in graph.values()))
+                for index, (guider, ref, concat) in enumerate(zip(guiders, refs, concats)):
+                    self.assertEqual(graph[guider]['inputs']['positive'], [ref, 0])
+                    self.assertEqual(graph[guider]['inputs']['negative'], [ref, 1])
+                    self.assertEqual(graph[guider]['inputs']['model'], ['zura_av_coupling', 0])
+                    frozen = 'zura_frozen_audio_' + str(index)
+                    self.assertEqual(graph[concat]['inputs']['audio_latent'], [frozen, 0])
+                    self.assertEqual(graph[frozen]['class_type'], 'SetLatentNoiseMask')
+                    self.assertEqual(graph[frozen]['inputs']['mask'], ['zura_fixed_audio_mask', 0])
+                first_audio = ['5409:5389', 0] if stage == 'background' else ['9002:3980', 0]
+                self.assertEqual(graph['zura_frozen_audio_0']['inputs']['samples'], first_audio)
+                if stage == 'restyle':
+                    self.assertEqual(graph['9002:3980']['class_type'], 'VAEEncodeAudio')
+                    self.assertEqual(graph['9002:3980']['inputs']['audio'], ['9006', 1])
+                else:
+                    for identity in ('5408:5379', '5408:5382'):
+                        self.assertEqual(graph[identity]['class_type'], 'ThresholdMask')
+                        self.assertEqual(graph[identity + '_grow']['class_type'], 'MaskFix+')
+                        self.assertEqual(graph[identity + '_grow']['inputs']['blur'], 0)
+                        self.assertEqual(graph[identity + '_kernel']['inputs']['expression'], '2*a+1')
+
+    def test_fast_rectangular_mask_growth_matches_original_pooling(self):
+        import numpy as np
+        from scipy.ndimage import grey_dilation
+        from torch.nn.functional import max_pool2d
+        rng = np.random.default_rng(7)
+        mask = rng.random((3, 13, 17)).astype('float32')
+        mask[0] = 0
+        mask[0, 0, 0] = 1
+        mask[1, -1, -1] = .5
+        for radius in (0, 1, 3, 15):
+            expected = max_pool2d(torch.from_numpy(mask[:, None]), 2*radius+1,
+                stride=1, padding=radius)[:, 0] > .5
+            fast = np.stack([grey_dilation(frame, size=(2*radius+1, 2*radius+1)) for frame in mask]) > .5
+            self.assertTrue(np.array_equal(fast, expected.numpy()))
 
     def test_review_frames_masks_and_safe_cache(self):
         images = torch.rand(48, 32, 16, 3)
@@ -119,6 +169,22 @@ class SharedEngineTests(unittest.TestCase):
         self.assertNotIn('first 2 seconds', text)
         for engine in ('local', 'h3', 'wan', 'seedance'):
             self.assertIn(f'value="{engine}"', text)
+
+    def test_zura_routes_keep_legacy_projects_accessible(self):
+        server = types.SimpleNamespace(routes=studio.web.RouteTableDef())
+        module = types.ModuleType('server')
+        module.PromptServer = types.SimpleNamespace(instance=server)
+        with patch.dict(sys.modules, {'server': module}), patch.object(studio, 'Studio'):
+            studio.register()
+            routes = {(r.method, r.path) for r in server.routes}
+            branded = {(method, path.replace('/zura/studio', '/genj/studio'))
+                for method, path in routes if path.startswith('/zura/studio')}
+            legacy = {(method, path) for method, path in routes if path.startswith('/genj/studio')}
+            self.assertEqual(branded, legacy)
+            self.assertEqual(len(branded), 8)
+            self.assertIn(('GET', '/zura/studio/status'), routes)
+            studio.register()
+            self.assertEqual(len(server.routes), 16, 'Reloading must not register duplicate routes')
 
 
 if __name__ == '__main__':

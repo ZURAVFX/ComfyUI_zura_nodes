@@ -2,10 +2,10 @@
 
 Renders the prepared driving clip in 4n+1-frame windows using the native
 ``WanAnimateToVideo`` continuation mechanism: every chunk after a shot's first
-is handed the predecessor's real output frames as ``continue_motion``, samples a
-window that starts on those frames, and cross-fades its own rendition of them
-against the predecessor's pixels.  The model therefore continues real motion
-instead of inventing a fresh take that has to be faded in.  Continuation resets
+is handed the predecessor's real output frames as ``continue_motion`` and samples
+a window that starts on those frames. Native joins keep the earlier decoded
+frames and discard the repeated context. An optional soft blend mixes the two
+decoded versions, which can soften moving faces. Continuation resets
 at detected or manual cuts, so a new shot begins unconditioned and the cut stays
 a cut.  Original audio and exact clip timing are assembled into a real
 ``VIDEO`` output, so no separate finish node is needed.
@@ -41,11 +41,9 @@ def _blend_weights(count: int, device="cpu"):
     generated with those very pixels given as ``continue_motion`` (weight 1).
     The cosine's derivative vanishes at both ends, so the transition into and
     out of the zone is flat: the zone's first frame is exactly the neighbour's
-    frame and its last frame is exactly this chunk's own continuation, which
-    the next frame continues in the same pass.  Nothing steps anywhere; any
-    residual difference is spread across the whole zone instead.  A
-    half-sample-offset ramp would leave a small snap at the zone edges; this
-    form does not.
+    frame and its last frame is exactly this chunk's own continuation. The
+    ramp spreads their difference across the zone; it cannot correct motion
+    or appearance disagreement between renders. Native joins avoid this mix.
     """
     import torch
     if count <= 1:
@@ -91,7 +89,9 @@ class ZuraWan22LoopedChunksSampler:
                                         "tooltip": "Lower values detect more cuts. Raise this if flashes or fast movements are mistaken for edits."}),
             "cut_frames": ("STRING", {"default": "", "multiline": False,
                                       "tooltip": "Manual cuts: comma-separated frame numbers where a new shot begins. At 24 fps, frame 96 is 4 seconds."}),
-        }, "optional": {"vision_reference": ("IMAGE", {"tooltip": "Optional separate character view for CLIP Vision; the main reference still guides the scene latent."})},
+        }, "optional": {"vision_reference": ("IMAGE", {"tooltip": "Optional separate character view for CLIP Vision; the main reference still guides the scene latent."}),
+                       "join_mode": (["Native continuation", "Soft blend"], {"default": "Native continuation",
+                           "tooltip": "Native continuation keeps the previous frames intact and discards the repeated context. Soft blend fades between two decoded versions and can soften moving faces."})},
             "hidden": {"unique_id": "UNIQUE_ID"}}
 
     @staticmethod
@@ -103,9 +103,11 @@ class ZuraWan22LoopedChunksSampler:
     def render(self, model, clip, vae, clip_vision, reference_image, footage, prompt,
                negative_prompt, steps=6, cfg=1.0, seed=0, chunk_frames=41, overlap_frames=5,
                max_side=1280, shot_mode="Detect cuts", cut_threshold=.2, cut_frames="", unique_id=None,
-               vision_reference=None):
+               vision_reference=None, join_mode="Native continuation"):
         # Fail fast on missing conditioning before importing ComfyUI internals.
         media = footage
+        if join_mode not in ("Native continuation", "Soft blend"):
+            raise ValueError("Choose a supported Wan join mode")
         if not isinstance(media, dict):
             raise ValueError("Wan 2.2 requires the prepared footage payload from the Zura Mask node")
         frames = media.get("frames")
@@ -252,14 +254,14 @@ class ZuraWan22LoopedChunksSampler:
                 sampled_at = time.monotonic()
                 sampled = dict(sampled)
                 sampled["samples"] = sampled["samples"][:, :, int(trim_latent):]
-                window = nodes.VAEDecodeTiled().decode(vae, sampled, tile_size=512, overlap=64, temporal_size=64, temporal_overlap=8)[0]
-                # A ComfyUI graph loop drops the frames the native node reports
-                # as trim_image, because in a loop they merely repeat output it
-                # already emitted.  Here they are kept on purpose: they are the
-                # model's own rendition of the continuation frames, and the
-                # assembly below cross-fades them against the real pixels the
-                # predecessor emitted, which is what removes the step at the
-                # join instead of just relocating it.
+                # Spatial tiles bound decode memory. Keep this bounded sampling
+                # window in one temporal tile so VAE tile blending cannot add
+                # another transition inside a generated chunk.
+                temporal_size = max(64, int(sampled["samples"].shape[2]) * 4)
+                window = nodes.VAEDecodeTiled().decode(vae, sampled, tile_size=512, overlap=64,
+                    temporal_size=temporal_size, temporal_overlap=8)[0]
+                # Keep the repeated prefix temporarily to measure continuation
+                # agreement. Native assembly discards it; Soft blend uses it.
                 # Pad a tail-window to the planned count so the blend zone
                 # always exists even when the source runs out mid-window.
                 if int(window.shape[0]) < part.window_count:
@@ -271,6 +273,7 @@ class ZuraWan22LoopedChunksSampler:
                     raise RuntimeError("native returned an incorrect visible frame count")
                 timing = {"loop": part.index + 1, "sampling_frames": length,
                           "continue_frames": int(part.anchor_frames),
+                          "decode_temporal_frames": temporal_size,
                           "prepare_seconds": round(prepared - started, 3),
                           "sample_seconds": round(sampled_at - prepared, 3),
                           "decode_seconds": round(time.monotonic() - sampled_at, 3)}
@@ -289,17 +292,18 @@ class ZuraWan22LoopedChunksSampler:
                              timing['loop'], timing['prepare_seconds'], timing['sample_seconds'], timing['decode_seconds'])
                 completed_frames += part.output_count
 
-                # ---- cross-faded continuation assembly ----
-                # The window's first ``overlap`` frames are this chunk's own
-                # rendition of the continuum it was handed: the same absolute
-                # frames the predecessor emitted.  Both renditions therefore
-                # agree closely by construction, and a flat-ended ramp spreads
-                # whatever difference is left over the whole zone instead of
-                # stepping at one frame boundary.
+                # Assemble each timestamp once. Native joins retain the earlier
+                # pixels; optional blending weights the two decoded versions.
                 if pending_blend is not None and pending_blend["frames"] > 0:
                     blend = pending_blend["frames"]
-                    weights = _blend_weights(blend, device=window.device)
-                    zone = pending_blend["tail"].to(window.device) * (1.0 - weights) + window[:blend] * weights
+                    if join_mode == "Soft blend":
+                        weights = _blend_weights(blend, device=window.device)
+                        zone = pending_blend["tail"].to(window.device) * (1.0 - weights) + window[:blend] * weights
+                    else:
+                        # The native loop trims the repeated context. Preserve
+                        # the original decoded tail instead of mixing faces
+                        # from separate VAE passes at the same timestamp.
+                        zone = pending_blend["tail"]
                     decoded.append(zone.cpu())
                     pending_blend = None
                 # Emit only this chunk's own output span: skip the context
@@ -321,6 +325,7 @@ class ZuraWan22LoopedChunksSampler:
             if int(output.shape[0]) != total:
                 raise RuntimeError(f"continuation assembly produced {int(output.shape[0])} frames for a {total}-frame clip")
             receipt = {"model": "Wan 2.2 Animate", "chunks": len(plan), "cuts": cuts, "shot_mode": shot_mode,
+                       "join_mode": join_mode,
                        "shots": [[lo, hi] for lo, hi in shot_bounds],
                        "continuation": {"frames": int(overlap_frames),
                                         "max_delta": max([t.get("continuation_delta", 0.0)

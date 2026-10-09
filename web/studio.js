@@ -1,7 +1,7 @@
 import { app } from "../../scripts/app.js";
 import { api } from "../../scripts/api.js";
 
-const ROOT = "/genj/studio";
+const ROOT = "/zura/studio";
 const defaults = {engine:"local", background:"keep", scope:"person", prompt:"", start:0, duration:2, size:512, performer:-1, margin:8, pitch:false, seed:42, render_size:0, h3_preset:"take_fast", remove_text:false, resolution:1280, quality:"fast"};
 const icon = (name) => {
   const paths = {
@@ -58,6 +58,7 @@ class ArtistStudio {
         <p class="gs-note" id="gs-output-note">Keeps your video's shape. Renders the length you choose from the original footage.</p>
         <label id="gs-sampling-setting" hidden><span class="gs-label">Detail level</span><select id="gs-quality"><option value="fast">Fast · accelerated model</option><option value="detailed">Detailed · full sampling</option></select><small>Changes sampling effort, while resolution and clip length stay as selected.</small></label>
         <p id="gs-h3-setting" class="gs-note" hidden>H3 is experimental: the current method retains clothing but transfers motion poorly. Clips support up to 5 seconds.</p>
+        <p id="gs-ltx-setting" class="gs-note">LTX speech timing is still experimental. Wan transferred the talking performance better in our current tests.</p>
         <div class="gs-two"><label><span class="gs-label">Replace</span><select id="gs-scope"><option value="person">Head and body</option><option value="head">Head only</option></select></label>
           <label><span class="gs-label">Background</span><select id="gs-background"><option value="keep">Keep original</option><option value="restyle">Restyle scene</option></select></label></div>
         <label class="gs-prompt"><span class="gs-label">Describe the look <small>Optional</small></span><textarea id="gs-prompt" rows="3" placeholder="For example, a red jacket with natural cinematic lighting"></textarea></label>
@@ -179,6 +180,13 @@ class ArtistStudio {
     });
   }
   syncForm() {
+    const resolution=String(this.config.resolution ?? defaults.resolution);
+    for(const option of this.$("resolution").querySelectorAll("option[data-saved]"))option.remove();
+    if(!Array.from(this.$("resolution").options).some(option=>option.value===resolution)){
+      const option=document.createElement("option");option.value=resolution;
+      option.textContent=resolution+" px · saved setting";option.dataset.saved="true";
+      this.$("resolution").append(option);
+    }
     for(const key of ["scope","background","prompt","start","duration","resolution","performer","margin","seed","quality"])this.$(key).value=this.config[key] ?? defaults[key];
     this.container.querySelector(`input[name="gs-engine"][value="${this.config.engine}"]`).checked=true;
     this.$("pitch").checked=this.config.pitch;
@@ -208,6 +216,7 @@ class ArtistStudio {
   render() {
     this.$("sampling-setting").hidden=!["h3","wan"].includes(this.config.engine);
     this.$("h3-setting").hidden=this.config.engine!=="h3";
+    this.$("ltx-setting").hidden=this.config.engine!=="local";
     if(["h3","wan"].includes(this.config.engine))this.$("background").value="keep";
     this.$("output-note").textContent=this.config.engine==="seedance"?"The draft uses your selected resolution and clip length. Finishing an accepted draft is a separate paid 1080p step.":"Keeps your video's shape. Renders the length you choose from the original footage.";
     for(const option of this.$("resolution").options){
@@ -269,7 +278,7 @@ class ArtistStudio {
     const fingerprint=JSON.stringify(results);
     if(this.resultFingerprint!==fingerprint){
       this.resultFingerprint=fingerprint;
-      this.$("takes").innerHTML=results.slice().reverse().map((item,i)=>`<article class="gs-take"><video src="${escape(item.url)}" controls playsinline preload="metadata"></video><div><span>${escape((({wan:"Wan 2.2",h3:"MiniMax H3",draft:"Seedance draft",final:"Seedance final",background:"LTX · original background",restyle:"LTX · scene restyle"})[item.stage] || "Take")+(item.resolution?` · ${item.resolution} px` : "")+(item.duration?` · ${item.duration}s` : ""))}</span><a href="${escape(item.url)}" download="genj-take-${results.length-i}.mp4">${icon("download")} Download</a></div></article>`).join("");
+      this.$("takes").innerHTML=results.slice().reverse().map((item,i)=>`<article class="gs-take"><video src="${escape(item.url)}" controls playsinline preload="metadata"></video><div><span>${escape((({wan:"Wan 2.2",h3:"MiniMax H3",draft:"Seedance draft",final:"Seedance final",background:"LTX · original background",restyle:"LTX · scene restyle"})[item.stage] || "Take")+(item.resolution?` · ${item.resolution} px` : "")+(item.duration?` · ${item.duration}s` : ""))}</span><a href="${escape(item.url)}" download="zura-take-${results.length-i}.mp4">${icon("download")} Download</a></div></article>`).join("");
     }
   }
   async open() {
@@ -310,6 +319,7 @@ app.registerExtension({
     const studio=new ArtistStudio();
     const button=document.createElement("button");button.id="genj-studio-launch";button.innerHTML=icon("frames")+"Zura Studio";
     button.onclick=()=>studio.open();document.body.appendChild(button);
-    if(new URLSearchParams(location.search).get("genj")==="1")await studio.open();
+    const studioQuery=new URLSearchParams(location.search);
+    if(studioQuery.get("zura")==="1" || studioQuery.get("genj")==="1")await studio.open();
   },
 });

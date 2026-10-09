@@ -113,8 +113,9 @@ def build_wan_graph(project):
     node("wan_render", "ZuraWan22LoopedChunksSampler", model=model, clip=clip, vae=vae, clip_vision=vision,
         reference_image=opening, vision_reference=["wan_cached", 1], footage=footage,
         prompt=prompt, negative_prompt="flicker, warped hands, extra limbs, identity drift, text overlays, collage",
-        steps=6 if fast else 40, cfg=1.0 if fast else 5.0, seed=c["seed"], chunk_frames=41,
-        overlap_frames=5, max_side=c["resolution"], shot_mode="Detect cuts", cut_threshold=.2, cut_frames="")
+        steps=6 if fast else 40, cfg=1.0 if fast else 5.0, seed=c["seed"], chunk_frames=81,
+        overlap_frames=5, max_side=c["resolution"], shot_mode="Detect cuts", cut_threshold=.2, cut_frames="",
+        join_mode="Native continuation")
     node("wan_export", "GenjRestoreSoundtrack", video=["wan_render", 1], clip_details=["wan_shot", 3],
         take_name="studio_" + project["id"][:8] + "_wan")
     return graph

@@ -1,16 +1,23 @@
 # Zura Studio
 
+Zura Studio is included in the official **Zura Nodes** pack, published by
+**ZURAVFX** at https://github.com/ZURAVFX/ComfyUI_zura_nodes.
+Start ComfyUI and click **Zura Studio**, or use `Open_Zura_Studio.url` on a
+default local installation. The direct studio link is
+`http://127.0.0.1:8188/?zura=1`.
+
 Open **Zura Studio** in ComfyUI, upload the performance video and a character
 image, then choose a model, **Resolution** and **Clip length**. Prepare the shot,
 check the mask, create the character preview, then animate the approved look.
 Job IDs, reference copies, model preparation and cache hand-offs are automatic.
-Existing Genj Studio projects and media remain readable on the same computer.
+Existing saved projects and media remain readable on the same computer. Legacy
+storage paths and node IDs remain compatible; public names use Zura branding.
 
 ## One project, several models
 
 | Model | Current behaviour |
 | --- | --- |
-| LTX 2.5 | Local masked replacement; original background or depth-guided scene restyling. Uses the approved opening scene. |
+| LTX 2.5 | Local masked replacement; original background or depth-guided scene restyling. Uses the approved opening scene. Speech timing remains experimental after failed talking tests. |
 | MiniMax H3 | Experimental local replacement with separate opening and character references, depth control and source audio. The earlier 512 px test failed user quality review: motion transfer remains weak. |
 | Wan 2.2 Animate | Local pose and face-driven replacement with the approved background mask. Uses the approved opening scene for the latent reference and an isolated character view for CLIP Vision. |
 | Seedance | Paid draft and accepted-final route through Comfy. Requires explicit paid action and Comfy sign-in. No paid calls were used during this update. |
@@ -33,8 +40,11 @@ light, while rendering rereads the original footage at the selected resolution.
 **Clip length** governs the selected source interval and delivered audio/video.
 There is no hidden two-second preview limit. Native temporal padding is trimmed.
 H3 currently supports 0.21–5 seconds; use one continuous shot with H3 or LTX.
-Wan uses bounded 41-frame windows, real-frame continuation and automatic cut
-detection. Continuation resets at cuts. Review joins and facial motion visually.
+Wan uses bounded 81-frame windows, real-frame continuation and automatic cut
+detection. Two-second previews render in one pass. Native joins retain the
+previous frames and discard repeated context instead of cross-fading faces.
+Each chunk decodes in one temporal tile, retaining spatial tiles for memory.
+Continuation resets at cuts. Review joins and facial motion visually.
 The tested Wan source contains one central performer. Explicit pose targeting
 in multi-person shots has not been validated.
 Seedance supports model-specific output sizes; its final paid step is 1080p.
@@ -47,7 +57,15 @@ Detailed removes those two acceleration LoRAs and uses 40 steps with CFG 5.
 The native loader explicitly uses `fp8_e4m3fn_fast` for the supplied KJ-scaled
 Wan checkpoint; current core otherwise expands it to FP16 and renders much slower.
 H3 has its own compatible 8-step acceleration / 40-step route. LTX keeps its
-existing distilled sampling path. LoRAs are never transferred between families.
+existing distilled schedule and adds native audio/video modality guidance.
+Both LTX passes receive frozen source audio with the zero-noise mask used in
+the official LTX-2.5 Audio-to-Video workflow;
+the restyle route no longer generates silent audio and merely restores the
+soundtrack afterwards. Earlier LTX previews failed the user's lip-sync review.
+Review mouth timing on new takes; speech conditioning does not guarantee exact
+phoneme matching. LoRAs are never transferred between families.
+Speaker-reference tokens are identity context and are not used as the speech
+timing signal. See the [official workflow compatibility guide](https://docs.ltx.io/open-source-model/reference/workflow-asset-compatibility).
 
 ## Preparation and masking
 
@@ -72,13 +90,16 @@ for the user's selected, uploaded source.
 
 Update the official `ComfyUI_zura_nodes` pack, install its declared requirements,
 then restart ComfyUI and refresh the page. The interface reports missing models.
+ComfyUI Desktop can assign a different port. Its Zura Studio button uses the
+active instance automatically; the default-port launcher may need that port.
 The local installation preserves the former standalone Genj extension in the
 disabled backup folder to avoid duplicate interfaces; keep only one active
 Studio extension. Existing Zura nodes and workflows continue using their old IDs.
 
 Native dependencies: current ComfyUI (including H3/Union 2.0 and SAM 3 support),
 ComfyUI-KJNodes, ComfyUI-WanAnimatePreprocess, comfyui_controlnet_aux,
-ComfyUI-MelBandRoFormer and the LTX native nodes used by the bundled graphs.
+ComfyUI-MelBandRoFormer, ComfyUI-essentials (Mask Fix) and the LTX native nodes
+used by the bundled graphs.
 FFmpeg must be available on PATH. The interface doesn't download weights silently.
 
 Model filenames are defined in `artist_studio/wan.py`, `artist_studio/h3.py` and
