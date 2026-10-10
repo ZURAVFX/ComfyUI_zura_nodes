@@ -121,7 +121,7 @@ jobs:
             sudo apt-get install -y --no-install-recommends ffmpeg
           fi
           python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
-          python -m pip install numpy scipy pillow requests soundfile av aiohttp
+          python -m pip install numpy scipy pillow requests soundfile av aiohttp opencv-python-headless
       - name: Run regression checks
         run: |
           python -m compileall -q __init__.py klein_look.py multicam_v3.py multicam_v4_clean.py h3_single_angle.py idv2v_control.py
