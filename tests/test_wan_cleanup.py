@@ -159,7 +159,8 @@ class WanCleanupTests(unittest.IsolatedAsyncioTestCase):
             built.append(stage)
             return {'ack': {'class_type': 'PreviewAny', 'inputs': {'source': stage}}}
         with patch.dict(sys.modules, {NAME + '.wan_speech': module, 'execution': executor}), \
-                patch.object(studio, 'build_graph', side_effect=graph):
+                patch.object(studio, 'build_graph', side_effect=graph), \
+                patch.object(studio, 'validate_selection'):
             await self.obj.action(self.p, 'animate', {'request_key': key})
         return module, built
 

@@ -389,7 +389,7 @@ class ZuraSpeechComposeVideo:
         return (video_output(result, audio, fps),)
 
 
-def add_finish(graph, project, *, native_speech=False):
+def add_finish(graph, project, *, native_speech=False, reference_video=None):
     """Common optional speech finish; no remote spending or engine substitution."""
     if not project.get("audio") or not project["config"].get("lip_sync"):
         return graph
@@ -399,12 +399,13 @@ def add_finish(graph, project, *, native_speech=False):
     if not exports:
         return graph
     shot = next(key for key, n in graph.items() if n["class_type"] == "GenjLoadReviewedShot")
+    reference_video = reference_video or [shot, 0]
     from .wan import WAN_MODELS
     def node(key, typ, **inputs):
         graph[key] = {"class_type": typ, "inputs": inputs}
         return [key, 0]
     model = node("zura_speech_model", "ZuraSpeechModelLoader", model="Automatic")
-    reference = node("zura_speech_reference", "GetVideoComponents", video=[shot, 0])
+    reference = node("zura_speech_reference", "GetVideoComponents", video=reference_video)
     detector = node("zura_speech_detector", "OnnxDetectionModelLoader", vitpose_model=WAN_MODELS["wan_pose"][1],
                     yolo_model=WAN_MODELS["wan_detector"][1], onnx_device="CPUExecutionProvider")
     for index, (_, export) in enumerate(exports):
@@ -419,7 +420,7 @@ def add_finish(graph, project, *, native_speech=False):
                      pose_data=[prefix + "detect", 0], face_boxes=[prefix + "detect", 4])
         video = node(prefix + "video", "ZuraSpeechComposeVideo", images=images, speech_faces=faces,
                      face_boxes=[prefix + "detect", 4], pose_data=[prefix + "detect", 0],
-                     reference_video=[shot, 0], fps=[prefix + "frames", 2], mouth_detail=.35)
+                     reference_video=reference_video, fps=[prefix + "frames", 2], mouth_detail=.35)
         export["inputs"]["video"] = video
     return graph
 

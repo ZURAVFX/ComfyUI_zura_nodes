@@ -16,7 +16,8 @@ containing your voice. **Create a new facial performance** enables the engine's
 speech route automatically.
 Untick it for music or sound design. **Create a voice track** can also clone a
 voice or generate speech with local Zura LongCat and select the result
-automatically. Run `Setup_Wan_Speech_Windows.cmd` once for Wan's native
+automatically. Studio checks supported clip lengths before preparation.
+Run `Setup_Wan_Speech_Windows.cmd` once for Wan's native
 InfiniteTalk guide. `Setup_Speech_Windows.cmd` installs the optional LatentSync
 1.6 mouth finish; MuseTalk 1.5 remains available in Graph view.
 The speech finish needs a visible human face; review timing and face detail on
@@ -27,7 +28,9 @@ the optional mouth-only finish if needed. Original face tracking preserves the
 old mouth performance in Original mode. Reference mode instead uses the new
 speech guide.
 The native guide uses an automatically checked portrait of the approved look.
-Studio caches successful guides and handles the model-memory hand-off. Original
+Studio caches successful guides and handles the model-memory hand-off. Exported
+graphs verify that the guide matches their audio, timing, approved look and seed
+before rendering. Original
 mode uses the source face directly, without creating a replacement performance.
 
 A set of artist-facing ComfyUI video, image and audio controls: load a source clip,

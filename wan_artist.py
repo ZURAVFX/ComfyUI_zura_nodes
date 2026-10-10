@@ -7,6 +7,7 @@ the diffusion model is loaded. No post-generation performer composite is used.
 from __future__ import annotations
 
 import json
+import hashlib
 import math
 import re
 from pathlib import Path
@@ -78,14 +79,16 @@ class ZuraWanSavePreparation:
         return {"required": {"frames": ("IMAGE",), "mask": ("MASK",),
             "pose": ("IMAGE",), "face": ("IMAGE",), "reference": ("IMAGE",),
             "cache_key": ("STRING", {"default": ""}),
-            "scope": (["person", "head"],)}}
+            "scope": (["person", "head"],)}, "optional": {
+            "speech_guide_key": ("STRING", {"default": ""}), "speech_guide_sha": ("STRING", {"default": ""})}}
 
-    def save(self, frames, mask, pose, face, reference, cache_key, scope):
+    def save(self, frames, mask, pose, face, reference, cache_key, scope, speech_guide_key="", speech_guide_sha=""):
         footage = {"frames": frames.detach().cpu(), "character_mask": mask.detach().cpu(),
             "pose_video": pose.detach().cpu(), "face_video": face.detach().cpu(),
             "replacement_area": "Whole head" if scope == "head" else "Whole character",
             "video_info": {"fps": 24}, "keep_audio": False}
         validate_footage(footage)
+        _attach_speech_provenance(footage, speech_guide_key, speech_guide_sha)
         if reference.ndim != 4 or reference.shape[0] != 1 or reference.shape[-1] != 3:
             raise ValueError("Wan requires one isolated character view.")
         path = cache_path(cache_key)
@@ -106,14 +109,15 @@ class ZuraWanPackPreparation:
     def INPUT_TYPES(cls):
         required = dict(ZuraWanSavePreparation.INPUT_TYPES()["required"])
         required.pop("cache_key")
-        return {"required": required}
+        return {"required": required, "optional": ZuraWanSavePreparation.INPUT_TYPES()["optional"]}
 
-    def pack(self, frames, mask, pose, face, reference, scope):
+    def pack(self, frames, mask, pose, face, reference, scope, speech_guide_key="", speech_guide_sha=""):
         footage = {"frames": frames.detach().cpu(), "character_mask": mask.detach().cpu(),
             "pose_video": pose.detach().cpu(), "face_video": face.detach().cpu(),
             "replacement_area": "Whole head" if scope == "head" else "Whole character",
             "video_info": {"fps": 24}, "keep_audio": False}
         validate_footage(footage)
+        _attach_speech_provenance(footage, speech_guide_key, speech_guide_sha)
         return footage, reference, int(frames.shape[2]), int(frames.shape[1])
 
 
@@ -139,6 +143,99 @@ class ZuraWanLoadPreparation:
         validate_footage(data["footage"])
         frames = data["footage"]["frames"]
         return data["footage"], data["reference"], int(frames.shape[2]), int(frames.shape[1])
+
+
+def _attach_speech_provenance(footage, key, sha):
+    if key or sha:
+        if not re.fullmatch(r"[a-f0-9]{64}", key) or not re.fullmatch(r"[a-f0-9]{64}", sha):
+            raise ValueError("Prepare a verified native speech guide before caching its face motion.")
+        footage["speech_provenance"] = {"guide_key": key, "guide_sha": sha}
+
+
+class ZuraWanSpeechGuard:
+    """CPU provenance gate. Returns the same native inputs without inference."""
+    CATEGORY = "Zura/Artist Studio"
+    FUNCTION = "verify"
+    RETURN_TYPES = ("ZURA_FOOTAGE", "IMAGE", "INT")
+    RETURN_NAMES = ("verified_footage", "approved_opening", "performance_seed")
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {"required": {"footage": ("ZURA_FOOTAGE",), "selected_video": ("VIDEO",),
+            "clip_details": ("GENJ_CLIP",), "opening": ("IMAGE",),
+            "approved_opening_file": ("STRING", {"default": ""}),
+            "seed": ("INT", {"default": 0, "min": 0, "max": 0xffffffffffffffff}),
+            "guide_key": ("STRING", {"default": ""})}}
+
+    @classmethod
+    def IS_CHANGED(cls, **kwargs):
+        # Cached RGB/face tensors do not prove that the guide or source files
+        # still exist unchanged. Recheck at the actual sampling boundary.
+        return float("nan")
+
+    def verify(self, footage, selected_video, clip_details, opening, approved_opening_file, seed, guide_key):
+        from .artist_studio import wan_speech, verify_review
+        import folder_paths
+        import nodes
+        advice = (" Change audio, character look or seed in Studio and regenerate the facial performance, then reopen the animation graph. "
+                  "Advanced graph users can intentionally replace the face-motion path with their own native guide.")
+        def require(condition, reason):
+            if not condition:
+                raise ValueError(reason + advice)
+        try:
+            record = json.loads(wan_speech._manifest_path(guide_key).read_text(encoding="utf-8"))
+            data = record["key_data"]
+            require(record.get("state") == "complete" and record.get("guide_key") == guide_key,
+                    "The facial performance has not completed verification.")
+            require(hashlib.sha256(wan_speech.canonical(data).encode()).hexdigest() == guide_key,
+                    "The saved facial-performance recipe changed.")
+            wan_speech._validate_crop(record["crop"], guide_key)
+            actual = wan_speech._verified_artifact(record["path"], data)
+            require(actual["sha"] == record["sha"], "The facial-performance video changed.")
+            require(footage.get("speech_provenance") == {"guide_key": guide_key, "guide_sha": actual["sha"]},
+                    "The prepared face motion belongs to a different facial performance.")
+            validate_footage(footage)
+            source = data["source"]
+            require(clip_details.get("review_shot_id") == source["review"] and
+                    clip_details.get("source_hash") == source["source_sha"] and
+                    float(clip_details.get("start", -1)) == source["source_start"] and
+                    int(clip_details.get("frames", -1)) == source["frames"] and
+                    float(clip_details.get("fps", 0)) == source["fps"] and
+                    abs(float(clip_details.get("duration", 0)) - source["duration"]) < 1e-9,
+                    "The selected shot or timing no longer matches its facial performance.")
+            require(wan_speech.digest(clip_details["source"]) == source["source_sha"],
+                    "The source footage changed after review.")
+            _, manifest = verify_review(source["review"])
+            require(manifest["files"]["mask.mp4"] == source["mask_sha"], "The reviewed performer mask changed.")
+            images, audio, fps = video_components(selected_video)
+            require(fps == source["fps"] and len(images) == source["frames"] and
+                    float(footage.get("video_info", {}).get("fps", 0)) == source["fps"],
+                    "The actual selected video no longer matches the facial-performance timeline.")
+            require(torch.equal(footage["frames"].detach().cpu().float(), images.detach().cpu().float()),
+                    "The actual selected frames differ from the prepared motion.")
+            require(audio is not None and wan_speech.audio_signature(audio) == data["selected_audio"],
+                    "The selected audio or its start time changed after the facial performance was created.")
+            require(clip_details.get("audio_mode") == "reference" and clip_details.get("audio_source"),
+                    "The final soundtrack no longer uses the selected reference audio.")
+            require(wan_speech.digest(clip_details["audio_source"]) == clip_details.get("audio_hash"),
+                    "The selected reference soundtrack changed on disk.")
+            from comfy_extras.nodes_audio import load as load_audio
+            soundtrack, soundtrack_rate = load_audio(clip_details["audio_source"])
+            require(wan_speech.audio_signature({"waveform": soundtrack[None], "sample_rate": soundtrack_rate}) == data["selected_audio"],
+                    "The final soundtrack differs from the facial-performance audio.")
+            require(int(seed) == data["seed"], "The performance seed changed after its facial performance was created.")
+            approved_path = folder_paths.get_annotated_filepath(approved_opening_file)
+            require(wan_speech.digest(approved_path) == data["opening_sha"], "The approved character opening changed.")
+            approved_rgb = nodes.LoadImage().load_image(approved_opening_file)[0]
+            require(torch.equal(opening.detach().cpu(), approved_rgb.detach().cpu()),
+                    "The connected character opening differs from the approved facial-performance look.")
+        except (KeyError, OSError, TypeError, json.JSONDecodeError) as error:
+            raise ValueError("The facial-performance provenance is missing or invalid." + advice) from error
+        except ValueError as error:
+            if advice in str(error):
+                raise
+            raise ValueError(str(error) + advice) from error
+        return footage, opening, int(seed)
 
 
 def _detected_face(pose, boxes, width, height, label):
@@ -267,10 +364,11 @@ class ZuraWanSpeechSaveGuide:
 
 
 NODE_CLASS_MAPPINGS = {c.__name__: c for c in (ZuraWanReviewedFrames, ZuraWanSavePreparation, ZuraWanLoadPreparation,
-    ZuraWanPackPreparation, ZuraWanSpeechReferenceCrop, ZuraWanSpeechSaveGuide)}
+    ZuraWanPackPreparation, ZuraWanSpeechReferenceCrop, ZuraWanSpeechSaveGuide, ZuraWanSpeechGuard)}
 NODE_DISPLAY_NAME_MAPPINGS = {"ZuraWanReviewedFrames": "Zura · Read Approved Frames and Mask",
     "ZuraWanSavePreparation": "Zura · Cache Wan Motion and Character",
     "ZuraWanLoadPreparation": "Zura · Load Wan Motion and Character",
     "ZuraWanPackPreparation": "Zura · Connect Wan Motion and Character",
     "ZuraWanSpeechReferenceCrop": "Zura · Crop Approved Speech Portrait",
     "ZuraWanSpeechSaveGuide": "Zura · Save Native Wan Speech Guide"}
+NODE_DISPLAY_NAME_MAPPINGS["ZuraWanSpeechGuard"] = "Zura · Verify Matching Speech Performance"

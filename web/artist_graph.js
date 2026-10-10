@@ -78,12 +78,14 @@ function acyclicBuckets(graph,buckets) {
 function promote(host,names) {
   for(const n of host.subgraph.nodes||[])for(const w of n.widgets||[]){
     if(!names.has(w.name))continue;
+    const nativeControl=w.name==="value" ? ({PrimitiveInt:{"Performance seed":"seed","Sampling steps":"steps"},PrimitiveFloat:{"Guidance strength":"cfg"},PrimitiveStringMultiline:{"Animation direction":"prompt"}}[n.type]?.[n.title]) : null;
     if(w.name==="text"&&!(n.type==="CLIPTextEncode"&&String(n.id)==="7"))continue;
-    if(w.name==="value"&&!n.type.startsWith("PrimitiveString"))continue;
+    if(w.name==="value"&&!n.type.startsWith("PrimitiveString")&&!nativeControl)continue;
     let slot=n.getSlotFromWidget?.(w);
     if(!slot && n.convertWidgetToInput){n.convertWidgetToInput(w);slot=n.getSlotFromWidget?.(w);}
     if(!slot || slot.link!=null)continue;
-    const name=[...host.subgraph.inputs].some(i=>i.name===w.name)?`${n.title} · ${w.name}`:w.name;
+    const controlName=nativeControl||w.name;
+    const name=[...host.subgraph.inputs].some(i=>i.name===controlName)?`${n.title} · ${controlName}`:controlName;
     const input=host.subgraph.addInput(name,String(slot.type??w.type??"*"));
     if(!input.connect(slot,n)){host.subgraph.removeInput(input);continue;}
   }

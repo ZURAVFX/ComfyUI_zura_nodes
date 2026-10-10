@@ -159,6 +159,7 @@ class AudioModeTests(unittest.TestCase):
                 patch.object(wan, 'cache_key', return_value='c' * 64), \
                 patch.object(wan_speech, 'guide_ready', return_value=True), \
                 patch.object(wan_speech, 'load_guide', return_value={'path': '/synthetic-guide.mp4',
+                    'guide_key': 'b'*64, 'sha': 'c'*64,
                     'key_data': {'source': {'frames': 72}}}), \
                 patch.object(h3, 'cache_key', return_value='d' * 64):
             if engine == 'seedance':
@@ -188,7 +189,11 @@ class AudioModeTests(unittest.TestCase):
         for engine in ('local', 'h3', 'wan', 'seedance'):
             with self.subTest(engine=engine):
                 graph = self.graph(engine, reference=True)
-                if engine != 'seedance':
+                if engine == 'wan':
+                    self.assertEqual(graph['wan_audio_selection']['inputs']['audio'], ['wan_reference_audio', 0])
+                    self.assertEqual(graph['wan_reference_audio']['inputs']['audio'], 'reference.wav')
+                    self.assertNotIn('zura_audio_selection', graph)
+                elif engine != 'seedance':
                     self.assertEqual(graph['zura_audio_selection']['inputs']['audio'], ['zura_reference_audio', 0])
                     self.assertEqual(graph['zura_reference_audio']['inputs']['audio'], 'reference.wav')
                 if engine == 'wan':

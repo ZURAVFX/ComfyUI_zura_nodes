@@ -102,6 +102,12 @@ that unmodified graph can save a guide for Studio to reuse after successful
 completion. Edited sampling or reference inputs are not silently adopted as
 the original Studio recipe. Opening a graph alone does not generate anything.
 
+The Wan animation graph verifies that its connected audio, timing, look and seed
+still match the saved facial performance before sampling. If you change them,
+update the shot in Studio, regenerate the facial performance and reopen the
+animation graph. Studio handles that regeneration automatically. Advanced graph
+users can instead connect their own native face-motion guide deliberately.
+
 **More controls > Refine lips after generation** is off by default for Wan,
 H3 and LTX. It optionally adds a second pass if articulation needs help. That
 pass blends only around the detected mouth, with a mild bounded detail filter,
@@ -143,6 +149,8 @@ when you explicitly queue a paid action.
 rounded down to a whole frame. **Custom length** enables Seconds and the video
 Start control. Model duration limits still apply (H3 supports up to 5 seconds).
 The original-length option never silently substitutes the custom duration.
+Unsupported H3 and Wan speech lengths are reported before preparation, so you
+can change the length or model without spending time tracking an unusable clip.
 
 ## One project, several models
 

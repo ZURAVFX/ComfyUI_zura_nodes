@@ -122,7 +122,16 @@ class SharedEngineTests(unittest.TestCase):
                 self.assertEqual(graph['h3_locked_audio']['inputs']['audio'], ['h3_pad',2])
                 self.assertEqual(graph['h3_locked_audio']['inputs']['latent'], ['h3_preserve_background',0])
                 self.assertEqual(graph['h3_preserve_background']['inputs']['latent'], ['h3_references',1])
-                path.touch()
+                picture = torch.zeros(1, 24, 1, 2, 2)
+                track = torch.zeros(1, 32, 2, 8)
+                torch.save({'version': 1,
+                    'positive': [[torch.zeros(1, 2, 5120), {
+                        'minimax_refs': [
+                            {'kind': 'image', 'latent': picture},
+                            {'kind': 'audio', 'audio_latent': track}],
+                        'minimax_keyframes': [{'resolved_frame_index': 0, 'latent': picture}]}]],
+                    'latent': {'samples': {'genj_h3_nested_tensors': [
+                        torch.zeros(1, 24, 37, 2, 2), torch.zeros(1, 32, 2, 207)]}}}, path)
                 graph = h3.build_h3_graph(p)
                 self.assertEqual(graph['h3_sample']['inputs']['latent_image'], ['h3_locked_audio',0])
                 self.assertEqual(graph['h3_locked_audio']['inputs']['latent'], ['h3_preserve_background',0])
@@ -204,6 +213,7 @@ class SharedEngineTests(unittest.TestCase):
         with patch.object(studio, 'assert_approved'), patch.object(studio, 'check_asset'), \
                 patch.object(wan, 'cache_key', return_value='a'*64), \
                 patch.object(wan_speech, 'load_guide', return_value={'path': '/synthetic-guide.mp4',
+                    'guide_key': 'b'*64, 'sha': 'c'*64,
                     'key_data': {'source': {'frames': 72}}}):
             graph = wan.build_wan_graph(p, use_cache=False)
             self.assertEqual(graph['wan_speech_video']['class_type'], 'VHS_LoadVideoFFmpegPath')
@@ -214,8 +224,9 @@ class SharedEngineTests(unittest.TestCase):
             self.assertEqual(graph['wan_cached']['inputs']['pose'], ['wan_pose_draw',0])
             self.assertFalse(any(n['class_type']=='ZuraSpeechFaceGuide' for n in graph.values()))
             self.assertNotIn('zura_speech_0video', graph)
-            self.assertIn('resting closed mouth during silence', graph['wan_render']['inputs']['prompt'])
-            self.assertNotIn('action, expressions', graph['wan_render']['inputs']['prompt'])
+            self.assertEqual(graph['wan_render']['inputs']['prompt'], ['wan_direction',0])
+            self.assertIn('resting closed mouth during silence', graph['wan_direction']['inputs']['value'])
+            self.assertNotIn('action, expressions', graph['wan_direction']['inputs']['value'])
             p['config']['refine_lips'] = True
             refined = wan.build_wan_graph(p, use_cache=False)
             self.assertEqual(refined['wan_export']['inputs']['video'], ['zura_speech_0video',0])
@@ -346,9 +357,9 @@ class SharedEngineTests(unittest.TestCase):
         self.assertIn('wan_render', graph)
         self.assertNotIn('wan_save', graph)
         self.assertEqual(graph['wan_cached']['class_type'], 'ZuraWanPackPreparation')
-        self.assertEqual(graph['wan_frames']['inputs']['source'], ['zura_audio_selection', 0])
-        self.assertEqual(graph['wan_export']['inputs']['clip_details'], ['zura_audio_selection', 1])
-        self.assertEqual(graph['zura_audio_selection']['inputs']['video'], ['wan_shot', 0])
+        self.assertEqual(graph['wan_frames']['inputs']['source'], ['wan_shot', 0])
+        self.assertEqual(graph['wan_export']['inputs']['clip_details'], ['wan_shot', 3])
+        self.assertNotIn('zura_audio_selection', graph)
 
     def test_graph_export_does_not_freeze_h3_prompt_in_cache(self):
         p = self.project()

@@ -135,6 +135,31 @@ def check_asset(asset):
     return path
 
 
+def validate_selection(project):
+    """Reject unsupported timelines before mask tracking or reference encoding."""
+    c = project["config"]
+    h3 = c["engine"] == "h3"
+    wan_speech = c["engine"] == "wan" and bool(project.get("audio")) and c.get("lip_sync")
+    if not (h3 or wan_speech):
+        return
+    path = check_asset(project["source"])
+    with av.open(str(path)) as container:
+        stream = container.streams.video[0]
+        available = (float(stream.duration * stream.time_base) if stream.duration is not None
+                     else float((container.duration or 0) / av.time_base))
+    if not math.isfinite(available) or available <= 0:
+        raise ValueError("The source video has no valid duration. Upload it again.")
+    start = 0 if c.get("length_mode") == "original" else c["start"]
+    seconds = available if c.get("length_mode") == "original" else min(c["duration"], available - start)
+    if seconds <= 0:
+        raise ValueError("The start time is beyond the end of this video.")
+    frames = max(1, int(seconds * 24 + 1e-6))
+    if h3 and not 5 <= frames <= 120:
+        raise ValueError("H3 currently supports 0.21 to 5 seconds. Choose a shorter custom clip, or use Wan or LTX for this length.")
+    if wan_speech and frames > 720:
+        raise ValueError("Wan replacement speech currently supports up to 30 seconds. Choose a shorter custom clip.")
+
+
 def prep_key(project):
     settings = {"source": project["source"]["sha"], **{k: project["config"][k] for k in PREP_KEYS}}
     if project["config"].get("remove_text"):
@@ -404,7 +429,7 @@ def editable_graph(project, stage="auto"):
     if stage not in ("prepare", "design", "background", "restyle", "h3", "wan", "wan_speech", "draft", "final"):
         raise ValueError("Choose preparation, character preview or animation.")
     graph = build_graph(p, stage, use_cache=False)
-    if stage in ("background", "restyle", "h3", "wan"):
+    if stage in ("background", "restyle", "h3"):
         shot = next(k for k, n in graph.items() if n["class_type"] == "GenjLoadReviewedShot")
         for n in graph.values():
             for name, value in list(n["inputs"].items()):
@@ -685,6 +710,7 @@ class Studio:
 
     async def action(self, p, stage, body):
         self.collect(p)
+        approve_opening = stage == "animate"
         if p.get("actions") and p["actions"][-1]["state"] in ("waiting", "submitting", "queued", "running"):
             return p  # A double-click/reconnect never queues another job.
         if stage == "approve":
@@ -700,7 +726,6 @@ class Studio:
         if stage == "animate":
             if not p.get("opening_input"):
                 raise ValueError("Create the character preview first.")
-            p["opening_approval"] = p["opening_key"]
             stage = (p["config"]["engine"] if p["config"]["engine"] in ("h3", "wan")
                      else "background" if p["config"]["background"] == "keep" else "restyle")
         if stage == "final":
@@ -713,6 +738,10 @@ class Studio:
             raise ValueError("Reload Zura Studio before continuing.")
         if any(a.get("request_key") == request_key for a in p.get("actions", [])):
             return p
+        if stage in ("prepare", "design", "h3", "wan", "wan_speech"):
+            validate_selection(p)
+        if approve_opening:
+            p["opening_approval"] = p["opening_key"]
         auth = {k: body.get(k) for k in ("auth_token_comfy_org", "api_key_comfy_org") if body.get(k)}
         if stage in ("draft", "final") and not auth:
             raise ValueError("Sign in to your Comfy account in ComfyUI before using Seedance. Local generation needs no sign-in.")

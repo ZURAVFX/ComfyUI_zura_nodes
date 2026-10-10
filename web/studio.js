@@ -372,7 +372,14 @@ class ArtistStudio {
     if(working){label="Working on your shot";note="You can close this view and return later. The job is saved.";}
     if(reference && !this.audio && !working){label="Choose reference audio";note="Upload a track or create a voice below Audio and performance.";}
     if(this.busy && !working)label="Please wait";
-    btn.innerHTML=escape(label)+icon(working?"frames":"arrow");btn.disabled=!hasAssets || (reference && !this.audio) || working || this.busy;
+    const sourceSeconds=Number(this.source?.duration), start=this.config.length_mode==="original"?0:Number(this.config.start);
+    const selectedSeconds=this.config.length_mode==="original"?sourceSeconds:Math.min(Number(this.config.duration),sourceSeconds-start);
+    const selectedFrames=Math.max(1,Math.floor(selectedSeconds*24+1e-6));
+    const invalidH3Length=this.config.engine==="h3" && Number.isFinite(sourceSeconds) && sourceSeconds>0 && (selectedFrames<5 || selectedFrames>120);
+    const invalidWanSpeechLength=this.config.engine==="wan" && activeReference && this.config.lip_sync && selectedFrames>720;
+    const invalidLength=invalidH3Length || invalidWanSpeechLength;
+    if(invalidLength && !working && !this.busy){label="Choose clip length";note=invalidH3Length?"H3 currently supports 0.21 to 5 seconds. Choose a custom length, or switch to Wan or LTX.":"Wan replacement speech currently supports up to 30 seconds. Choose a custom length.";}
+    btn.innerHTML=escape(label)+icon(working?"frames":"arrow");btn.disabled=!hasAssets || (reference && !this.audio) || invalidLength || working || this.busy;
     this.$("action-note").textContent=note;this.$("cancel").hidden=!working;this.$("cancel").disabled=this.busy;
     this.$("redesign").hidden=working || this.config.engine==="seedance" || !p?.opening_input;
     this.$("redesign").disabled=this.busy;

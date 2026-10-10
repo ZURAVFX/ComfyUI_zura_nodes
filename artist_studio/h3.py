@@ -3,6 +3,7 @@ from math import ceil
 import math
 import hashlib
 import json
+import pickle
 import re
 from pathlib import Path
 
@@ -76,6 +77,131 @@ def native_values(value):
     return value
 
 
+def _cache_file_digest(stream):
+    stream.seek(0)
+    digest = hashlib.sha256()
+    for block in iter(lambda: stream.read(8 * 1024 * 1024), b""):
+        digest.update(block)
+    stream.seek(0)
+    return digest.hexdigest()
+
+
+def _cache_tensor(value, shape, *, floating=True):
+    if (not isinstance(value, torch.Tensor) or value.device.type != "cpu"
+            or value.layout != torch.strided or value.ndim != len(shape)
+            or any(size <= 0 or (expected is not None and size != expected)
+                   for size, expected in zip(value.shape, shape))
+            or (floating and not value.is_floating_point())
+            or not bool(torch.isfinite(value).all())):
+        raise ValueError("Invalid H3 conditioning tensor.")
+
+
+def _validate_cache_values(value):
+    if isinstance(value, torch.Tensor):
+        if value.device.type != "cpu" or value.layout != torch.strided or not bool(torch.isfinite(value).all()):
+            raise ValueError("Invalid H3 conditioning metadata tensor.")
+    elif isinstance(value, dict):
+        if not all(isinstance(key, str) for key in value):
+            raise ValueError("Invalid H3 conditioning metadata keys.")
+        for child in value.values():
+            _validate_cache_values(child)
+    elif isinstance(value, (list, tuple)):
+        for child in value:
+            _validate_cache_values(child)
+    elif isinstance(value, float):
+        if not math.isfinite(value):
+            raise ValueError("Invalid H3 conditioning metadata number.")
+    elif value is not None and not isinstance(value, (str, int, bool)):
+        raise ValueError("Unsupported H3 conditioning metadata.")
+
+
+def _validate_conditioning_cache(data):
+    if not isinstance(data, dict) or type(data.get("version")) is not int or data["version"] != 1:
+        raise ValueError("Unsupported H3 conditioning cache version.")
+    positive = data.get("positive")
+    if not isinstance(positive, (list, tuple)) or not positive:
+        raise ValueError("Missing H3 positive conditioning.")
+    for entry in positive:
+        if not isinstance(entry, (list, tuple)) or len(entry) != 2 or not isinstance(entry[1], dict):
+            raise ValueError("Invalid H3 positive conditioning.")
+        _cache_tensor(entry[0], (1, None, 5120))
+        _validate_cache_values(entry[1])
+        for name in ("minimax_refs", "minimax_keyframes"):
+            blocks = entry[1].get(name, [])
+            if not isinstance(blocks, (list, tuple)):
+                raise ValueError("Invalid H3 reference conditioning.")
+            for block in blocks:
+                if not isinstance(block, dict):
+                    raise ValueError("Invalid H3 reference block.")
+                if name == "minimax_refs":
+                    kind = block.get("kind")
+                    if kind not in ("image", "video", "audio", "video_audio"):
+                        raise ValueError("Invalid H3 reference kind.")
+                    if kind != "audio":
+                        _cache_tensor(block.get("latent"), (1, 24, None, None, None))
+                    if kind in ("audio", "video_audio"):
+                        _cache_tensor(block.get("audio_latent"), (1, 32, 2, None))
+                else:
+                    frame = block.get("resolved_frame_index")
+                    if type(frame) is not int or frame < 0 or not any(k in block for k in ("latent", "audio_latent")):
+                        raise ValueError("Invalid H3 timeline guide.")
+                    if "latent" in block:
+                        _cache_tensor(block["latent"], (1, 24, None, None, None))
+                    if "audio_latent" in block:
+                        _cache_tensor(block["audio_latent"], (1, 32, 2, None))
+    latent = data.get("latent")
+    packed = latent.get("samples") if isinstance(latent, dict) else None
+    if not isinstance(packed, dict) or set(packed) != {"genj_h3_nested_tensors"}:
+        raise ValueError("Missing H3 paired video/audio latent.")
+    streams = packed["genj_h3_nested_tensors"]
+    if not isinstance(streams, (list, tuple)) or len(streams) != 2:
+        raise ValueError("Invalid H3 paired video/audio latent.")
+    video, audio = streams
+    _cache_tensor(video, (1, 24, None, None, None))
+    _cache_tensor(audio, (1, 32, 2, None))
+    if video.shape[-1] % 2 or video.shape[-2] % 2:
+        raise ValueError("Invalid H3 video canvas.")
+    if video.shape[2] < 2 or (video.shape[2] - 2) % 5:
+        raise ValueError("Invalid H3 video timeline.")
+    frames = 5 + 17 * ((video.shape[2] - 2) // 5)
+    if audio.shape[-1] != round(frames / 24 * 40):
+        raise ValueError("H3 video and audio timelines do not match.")
+    _validate_cache_values(latent)
+
+
+def _read_conditioning_cache(key, expected_digest=""):
+    with cache_path(key).open("rb") as stream:
+        digest = _cache_file_digest(stream)
+        if expected_digest and digest != expected_digest:
+            raise ValueError("H3 character references changed after this take was prepared.")
+        data = torch.load(stream, map_location="cpu", weights_only=True)
+        _validate_conditioning_cache(data)
+        if _cache_file_digest(stream) != digest:
+            raise ValueError("H3 character references changed while being read.")
+    return data
+
+
+_CACHE_READ_ERRORS = (OSError, EOFError, pickle.UnpicklingError, ValueError, TypeError, RuntimeError, KeyError, IndexError)
+_CACHE_REBUILD_MESSAGE = (
+    "H3's saved character references are damaged, incompatible or changed. "
+    "Generate this take again in Zura Studio to rebuild them. Your approved shot and character look are kept."
+)
+
+
+def cache_valid(key, expected_frames=None):
+    """Read only CPU tensor data; invalid caches use Studio's native rebuild stage."""
+    try:
+        data = _read_conditioning_cache(key)
+        if expected_frames is not None:
+            video = data["latent"]["samples"]["genj_h3_nested_tensors"][0]
+            frames = 5 + 17 * ((video.shape[2] - 2) // 5)
+            if frames != expected_frames:
+                return False
+    except _CACHE_READ_ERRORS:
+        return False
+    return True
+
+
 class GenjSaveH3Conditioning:
     @classmethod
     def INPUT_TYPES(cls):
@@ -97,20 +223,25 @@ class GenjSaveH3Conditioning:
 class GenjLoadH3Conditioning:
     @classmethod
     def INPUT_TYPES(cls):
-        return {"required": {"cache_key": ("STRING", {"default": ""})}}
+        return {"required": {"cache_key": ("STRING", {"default": ""})},
+                "optional": {"cache_digest": ("STRING", {"default": ""})}}
     RETURN_TYPES = ("CONDITIONING", "LATENT")
     FUNCTION = "load"
     CATEGORY = "Zura/Artist Studio"
 
     @classmethod
-    def IS_CHANGED(cls, cache_key):
+    def IS_CHANGED(cls, cache_key, cache_digest=""):
         from . import digest_file
-        return digest_file(cache_path(cache_key))
+        try:
+            return digest_file(cache_path(cache_key))
+        except OSError:
+            return float("nan")  # Let load() report the actionable recovery message.
 
-    def load(self, cache_key):
-        data = torch.load(cache_path(cache_key), map_location="cpu", weights_only=True)
-        if data.get("version") != 1:
-            raise ValueError("This H3 reference cache must be prepared again.")
+    def load(self, cache_key, cache_digest=""):
+        try:
+            data = _read_conditioning_cache(cache_key, cache_digest)
+        except _CACHE_READ_ERRORS as error:
+            raise ValueError(_CACHE_REBUILD_MESSAGE) from error
         return native_values(data["positive"]), native_values(data["latent"])
 
 
@@ -442,8 +573,15 @@ def build_h3_graph(project, use_cache=True, preserve_background=True):
     node("h3_export", "GenjRestoreSoundtrack", video=video, clip_details=["h3_shot", 3],
          take_name="studio_" + project["id"][:8] + "_h3")
     key = cache_key(project)
-    if use_cache and cache_path(key).exists():
-        node("h3_cached", "GenjLoadH3Conditioning", cache_key=key)
+    cached_digest = None
+    if use_cache and cache_valid(key, expected_frames=max(124, valid_length(count))):
+        try:
+            with cache_path(key).open("rb") as stream:
+                cached_digest = _cache_file_digest(stream)
+        except OSError:
+            pass  # A disappearing file also needs the native reference rebuild.
+    if cached_digest:
+        node("h3_cached", "GenjLoadH3Conditioning", cache_key=key, cache_digest=cached_digest)
         graph["h3_guider"]["inputs"]["conditioning"] = ["h3_cached", 0]
         if "h3_preserve_background" in graph:
             graph["h3_preserve_background"]["inputs"]["latent"] = ["h3_cached", 1]

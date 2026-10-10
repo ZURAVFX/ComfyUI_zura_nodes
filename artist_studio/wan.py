@@ -38,7 +38,7 @@ def cache_key(project):
         stamps[identity] = [name, stat.st_size, stat.st_mtime_ns]
     c = project["config"]
     from . import wan_speech
-    data = {"version": 5, "review": project["review"], "character": project["character"]["sha"],
+    data = {"version": 6 if wan_speech.enabled(project) else 5, "review": project["review"], "character": project["character"]["sha"],
         "resolution": c["resolution"], "scope": c["scope"], "models": stamps,
         "performance_mode": "reference" if wan_speech.enabled(project) else "original"}
     if wan_speech.enabled(project):
@@ -66,6 +66,12 @@ def build_wan_graph(project, use_cache=True):
 
     shot = node("wan_shot", "GenjLoadReviewedShot", shot_id=project["review"],
         approved_shot_id=project["review"], render_long_edge=c["resolution"], output_scale=1, preview_seconds=0)
+    details = ["wan_shot", 3]
+    if project.get("audio"):
+        audio = node("wan_reference_audio", "LoadAudio", audio=project["audio"]["file"])
+        shot = node("wan_audio_selection", "GenjApplyReferenceAudio", video=shot, clip_details=details,
+            audio=audio, audio_start_seconds=c["audio_start"])
+        details = ["wan_audio_selection", 1]
     key = cache_key(project)
     if not use_cache or not cache_path(key).exists():
         frames = node("wan_frames", "ZuraWanReviewedFrames", source=shot, mask_video=["wan_shot", 1])
@@ -106,6 +112,8 @@ def build_wan_graph(project, use_cache=True):
                 width=["wan_speech_size", 1], height=["wan_speech_size", 2], face_padding=0)
             face = ["wan_speech_face_detect", 1]
         inputs = dict(frames=frames, mask=mask, pose=pose, face=face, reference=reference, scope=c["scope"])
+        if wan_speech.enabled(project):
+            inputs.update(speech_guide_key=guide["guide_key"], speech_guide_sha=guide["sha"])
         if use_cache:
             node("wan_save", "ZuraWanSavePreparation", **inputs, cache_key=key)
             return graph
@@ -113,6 +121,16 @@ def build_wan_graph(project, use_cache=True):
     else:
         footage = node("wan_cached", "ZuraWanLoadPreparation", cache_key=key)
     opening = node("wan_opening", "LoadImage", image=project["opening_input"]["file"])
+    seed = c["seed"]
+    from . import wan_speech
+    if wan_speech.enabled(project):
+        guide = wan_speech.load_guide(project)
+        seed = node("wan_performance_seed", "PrimitiveInt", value=c["seed"])
+        graph["wan_performance_seed"]["_meta"] = {"title": "Performance seed"}
+        footage = node("wan_speech_guard", "ZuraWanSpeechGuard", footage=footage,
+            selected_video=shot, clip_details=details, opening=opening, seed=seed,
+            approved_opening_file=project["opening_input"]["file"], guide_key=guide["guide_key"])
+        opening, seed = ["wan_speech_guard", 1], ["wan_speech_guard", 2]
     opening = node("wan_opening_size", "ImageScale", image=opening, upscale_method="lanczos",
         width=["wan_cached", 2], height=["wan_cached", 3], crop="disabled")
     # Current core expands this older KJ scaled checkpoint to fp16 on default.
@@ -135,16 +153,26 @@ def build_wan_graph(project, use_cache=True):
     if project.get("audio") and c.get("lip_sync"):
         prompt = prompt.replace("action, expressions, hand gestures", "action, head direction, eye expressions, hand gestures")
         prompt += " Follow the speech-driven face guide precisely for mouth movements. The performer speaks only when the replacement audio contains speech, with a resting closed mouth during silence. Ignore the original dialogue and its mouth movements."
+    steps, cfg = (6, 1.0) if fast else (40, 5.0)
+    if wan_speech.enabled(project):
+        # Keep all editable sampler controls on the same native stage bus as
+        # the verified seed, avoiding interleaved boundary wires in graph view.
+        prompt = node("wan_direction", "PrimitiveStringMultiline", value=prompt)
+        graph["wan_direction"]["_meta"] = {"title": "Animation direction"}
+        steps = node("wan_steps", "PrimitiveInt", value=steps)
+        graph["wan_steps"]["_meta"] = {"title": "Sampling steps"}
+        cfg = node("wan_cfg", "PrimitiveFloat", value=cfg)
+        graph["wan_cfg"]["_meta"] = {"title": "Guidance strength"}
     node("wan_render", "ZuraWan22LoopedChunksSampler", model=model, clip=clip, vae=vae, clip_vision=vision,
         reference_image=opening, vision_reference=["wan_cached", 1], footage=footage,
         prompt=prompt, negative_prompt="flicker, warped hands, extra limbs, identity drift, text overlays, collage",
-        steps=6 if fast else 40, cfg=1.0 if fast else 5.0, seed=c["seed"], chunk_frames=81,
+        steps=steps, cfg=cfg, seed=seed, chunk_frames=81,
         overlap_frames=5, max_side=c["resolution"], shot_mode="Detect cuts", cut_threshold=.2, cut_frames="",
         join_mode="Native continuation")
-    node("wan_export", "GenjRestoreSoundtrack", video=["wan_render", 1], clip_details=["wan_shot", 3],
+    node("wan_export", "GenjRestoreSoundtrack", video=["wan_render", 1], clip_details=details,
         take_name="studio_" + project["id"][:8] + "_wan")
     # Wan renders facial detail from the audio-driven guide. A second mouth
     # pass is an explicit option because its small face decoder can soften detail.
     from .speech import add_finish
-    add_finish(graph, project, native_speech=True)
+    add_finish(graph, project, native_speech=True, reference_video=shot)
     return graph

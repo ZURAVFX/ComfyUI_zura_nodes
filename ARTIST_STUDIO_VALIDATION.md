@@ -1,5 +1,46 @@
 # Zura Studio validation
 
+## 1.3.7 editable speech checks, 10 October 2026
+
+Original audio + performance remains the default for all engines. Reference
+speech is separate, and inactive uploaded or cloned audio stays out of Original
+generation. Wan's graph now selects the reference audio once and verifies the
+actual waveform, interval, source frames, reviewed mask, character opening,
+guide file and performance seed before sampling. Its final soundtrack and
+optional mouth finish use that same selected track. Studio rebuilds mismatched
+guides automatically; an edited standalone graph reports what needs rebuilding.
+
+Unsupported H3 and Wan speech intervals are rejected before tracking or
+reference encoding. H3 remains limited to 0.21–5 seconds in the current Studio
+route, and Wan replacement speech to 30 seconds. Original-length selection still
+uses the actual source duration, with these limits explained before preparation.
+
+H3 conditioning caches are read as safe CPU tensor data, checked for compatible
+paired streams, matched to the take's required context and pinned by file digest.
+Healthy historical caches with shorter contexts rebuild for the current take.
+Missing or damaged caches select the
+existing native reference-rebuild stage without deleting other caches or saved
+projects. All four existing healthy native caches pass the new validator.
+
+Eight offline tests of frontend 1.53.10 pass conversion, export, reload and
+changes to the exposed seed. They include the new Wan reference-speech graph.
+Both root and internal layouts have zero measured wire crossings. Browser and
+physical phone testing remain unavailable.
+
+A new original-performance Wan render completed with two native continuation
+windows: 48 delivered frames at 24 fps, 1280 × 720 and one original audio track.
+Inspected frames retained the replacement character through the source body
+motion. This mannequin-source test does not establish human mouth accuracy or
+long-clip quality.
+
+Two matched H3 original-performance tests completed but failed visual review:
+the replacement character was lost after the opening frame. Removing the source
+latent initialisation did not resolve this. Those diagnostic changes are not
+shipped. The previously accepted H3 reference-speech sample remains separate
+evidence, and LTX speech remains experimental. Seedance was not submitted.
+Private test recordings, scripts, workflows and render evidence are excluded
+from publication.
+
 ## 1.3.6 automatic Wan speech, 10 October 2026
 
 The shared selector provides Original audio + performance and Reference audio +
