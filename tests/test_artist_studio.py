@@ -20,6 +20,7 @@ sys.modules[NAME] = package
 studio = importlib.import_module(NAME + '.studio')
 wan = importlib.import_module(NAME + '.wan')
 h3 = importlib.import_module(NAME + '.h3')
+wan_speech = importlib.import_module(NAME + '.wan_speech')
 adapters = importlib.import_module('ComfyUI_zura_nodes.wan_artist')
 
 
@@ -196,18 +197,22 @@ class SharedEngineTests(unittest.TestCase):
                 self.assertEqual(fast['wan_render']['inputs']['chunk_frames'], 81)
                 self.assertEqual(fast['wan_render']['inputs']['join_mode'], 'Native continuation')
 
-    def test_wan_synthesises_mouth_guide_before_rendering(self):
+    def test_wan_loads_native_speech_performance_before_rendering(self):
         p = self.project()
         p['audio'] = {'file':'speech.wav', 'sha':'speech'}
         p['config'].update(audio_id='b'*32, lip_sync=True)
         with patch.object(studio, 'assert_approved'), patch.object(studio, 'check_asset'), \
-                patch.object(wan, 'cache_key', return_value='a'*64):
+                patch.object(wan, 'cache_key', return_value='a'*64), \
+                patch.object(wan_speech, 'load_guide', return_value={'path': '/synthetic-guide.mp4',
+                    'key_data': {'source': {'frames': 72}}}):
             graph = wan.build_wan_graph(p, use_cache=False)
-            self.assertEqual(graph['wan_speech_faces']['inputs']['face_images'], ['wan_pose_detect',1])
-            self.assertEqual(graph['wan_speech_faces']['inputs']['pose_data'], ['wan_pose_detect',0])
-            self.assertEqual(graph['wan_speech_faces']['inputs']['face_boxes'], ['wan_pose_detect',4])
-            self.assertEqual(graph['wan_cached']['inputs']['face'], ['wan_speech_faces',0])
+            self.assertEqual(graph['wan_speech_video']['class_type'], 'VHS_LoadVideoFFmpegPath')
+            self.assertEqual(graph['wan_speech_video']['inputs']['frame_load_cap'], 72)
+            self.assertEqual(graph['wan_speech_video']['inputs']['format'], 'None')
+            self.assertEqual(graph['wan_speech_face_detect']['inputs']['images'], ['wan_speech_video',0])
+            self.assertEqual(graph['wan_cached']['inputs']['face'], ['wan_speech_face_detect',1])
             self.assertEqual(graph['wan_cached']['inputs']['pose'], ['wan_pose_draw',0])
+            self.assertFalse(any(n['class_type']=='ZuraSpeechFaceGuide' for n in graph.values()))
             self.assertNotIn('zura_speech_0video', graph)
             self.assertIn('resting closed mouth during silence', graph['wan_render']['inputs']['prompt'])
             self.assertNotIn('action, expressions', graph['wan_render']['inputs']['prompt'])

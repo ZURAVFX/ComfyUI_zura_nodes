@@ -37,16 +37,14 @@ def cache_key(project):
         stat = Path(filename).stat()
         stamps[identity] = [name, stat.st_size, stat.st_mtime_ns]
     c = project["config"]
-    data = {"version": 4, "review": project["review"], "character": project["character"]["sha"],
-        "resolution": c["resolution"], "scope": c["scope"], "models": stamps}
-    if project.get("audio") and c.get("lip_sync"):
-        from .speech import bundle_path, model_files, readiness
-        state = readiness()
-        if not state["ready"]:
-            raise ValueError("Install the local speech models with Setup_Speech_Windows.cmd, or untick Create a new facial performance to use this track as a soundtrack.")
-        base = bundle_path(state["model"])
-        data["speech"] = {"version": 3, "model": state["model"], "audio": project["audio"]["sha"], "start": c["audio_start"], "seed": c["seed"],
-            "models": [[name, (base / name).stat().st_size, (base / name).stat().st_mtime_ns] for name in model_files(state["model"])]}
+    from . import wan_speech
+    data = {"version": 5, "review": project["review"], "character": project["character"]["sha"],
+        "resolution": c["resolution"], "scope": c["scope"], "models": stamps,
+        "performance_mode": "reference" if wan_speech.enabled(project) else "original"}
+    if wan_speech.enabled(project):
+        guide = wan_speech.load_guide(project)
+        data["speech"] = {"guide_key": guide["guide_key"], "guide_sha": guide["sha"],
+                          "opening_sha": project["opening_input"]["sha"]}
     return hashlib.sha256(canonical(data).encode()).hexdigest()
 
 
@@ -95,12 +93,18 @@ def build_wan_graph(project, use_cache=True):
         reference = node("wan_character_isolated", "ImageCompositeMasked", destination=neutral, source=reference,
             x=0, y=0, resize_source=False, mask=["wan_character_crop", 1])
         face = ["wan_pose_detect", 1]
-        if project.get("audio") and c.get("lip_sync"):
-            speech_model = node("wan_speech_model", "ZuraSpeechModelLoader", model="Automatic")
-            node("wan_speech_audio", "GetVideoComponents", video=shot)
-            face = node("wan_speech_faces", "ZuraSpeechFaceGuide", model=speech_model,
-                face_images=face, audio=["wan_speech_audio", 1], fps=24.0, seed=c["seed"], batch_size=4,
-                pose_data=pose_data, face_boxes=["wan_pose_detect", 4])
+        from . import wan_speech
+        if wan_speech.enabled(project):
+            guide = wan_speech.load_guide(project)
+            # Decode the native25fps guide onto the exact24fps source timeline.
+            # VHS's Wan preset would change it to16fps and trim4n+1 frames.
+            speech_frames = node("wan_speech_video", "VHS_LoadVideoFFmpegPath", video=guide["path"],
+                force_rate=24.0, custom_width=0, custom_height=0,
+                frame_load_cap=guide["key_data"]["source"]["frames"], start_time=0.0, format="None")
+            node("wan_speech_size", "GetImageSizeAndCount", image=speech_frames)
+            node("wan_speech_face_detect", "PoseAndFaceDetection", model=detector, images=speech_frames,
+                width=["wan_speech_size", 1], height=["wan_speech_size", 2], face_padding=0)
+            face = ["wan_speech_face_detect", 1]
         inputs = dict(frames=frames, mask=mask, pose=pose, face=face, reference=reference, scope=c["scope"])
         if use_cache:
             node("wan_save", "ZuraWanSavePreparation", **inputs, cache_key=key)

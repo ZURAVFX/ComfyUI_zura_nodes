@@ -1,6 +1,6 @@
 # Zura nodes (ComfyUI_zura_nodes)
 
-**Zura Studio:** the integrated character-replacement interface shipped inside the official Zura Nodes pack. It includes LTX 2.5, MiniMax H3, Wan 2.2 Animate and optional paid Seedance. Upload once, approve the mask and look, then switch models without copying job IDs. One resolution selector and one clip-length control govern the output. See [Zura Studio](ARTIST_STUDIO.md). LTX speech timing and H3 motion transfer remain experimental after failed quality reviews; Wan is the better tested route for the current talking source.
+**Zura Studio:** the integrated character-replacement interface shipped inside the official Zura Nodes pack. It includes LTX 2.5, MiniMax H3, Wan 2.2 Animate and optional paid Seedance. Upload once, approve the mask and look, then switch models without copying job IDs. One resolution selector and one clip-length control govern the output. See [Zura Studio](ARTIST_STUDIO.md). H3 uses native audio conditioning; Wan can create a new performance with InfiniteTalk before Animate. LTX speech and motion quality remain experimental.
 
 To open the complete studio, start ComfyUI and click **Zura Studio**. On a default local installation, use `Open_Zura_Studio.url` or open `http://127.0.0.1:8188/?zura=1`. All four models share the same project and review flow. The standalone Wan test graph is only a diagnostic example.
 
@@ -16,9 +16,9 @@ containing your voice. **Create a new facial performance** enables the engine's
 speech route automatically.
 Untick it for music or sound design. **Create a voice track** can also clone a
 voice or generate speech with local Zura LongCat and select the result
-automatically. Run `Setup_Speech_Windows.cmd` once for the optional speech models.
-Automatic uses the sharper LatentSync 1.6 driver at its trained 512 px face
-resolution when installed. MuseTalk 1.5 remains available in Graph view.
+automatically. Run `Setup_Wan_Speech_Windows.cmd` once for Wan's native
+InfiniteTalk guide. `Setup_Speech_Windows.cmd` installs the optional LatentSync
+1.6 mouth finish; MuseTalk 1.5 remains available in Graph view.
 The speech finish needs a visible human face; review timing and face detail on
 each take. See [Zura Studio](ARTIST_STUDIO.md) for setup and tested limitations.
 Wan's reference-speech mode uses a new audio-driven mouth guide before generation, retaining
@@ -26,8 +26,9 @@ its own facial texture. **More controls > Refine lips after generation** adds
 the optional mouth-only finish if needed. Original face tracking preserves the
 old mouth performance in Original mode. Reference mode instead uses the new
 speech guide.
-The guide uses a still resting mouth aligned to the moving head. An audio
-silence gate keeps quiet sections at rest without anticipating later words.
+The native guide uses an automatically checked portrait of the approved look.
+Studio caches successful guides and handles the model-memory hand-off. Original
+mode uses the source face directly, without creating a replacement performance.
 
 A set of artist-facing ComfyUI video, image and audio controls: load a source clip,
 mask or replace a performer, plan multicam shots, and optionally relight a

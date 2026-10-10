@@ -22,6 +22,7 @@ package = sys.modules[NAME]
 studio = importlib.import_module(NAME + '.studio')
 wan = importlib.import_module(NAME + '.wan')
 h3 = importlib.import_module(NAME + '.h3')
+wan_speech = importlib.import_module(NAME + '.wan_speech')
 
 
 class AudioModeTests(unittest.TestCase):
@@ -156,6 +157,9 @@ class AudioModeTests(unittest.TestCase):
         with patch.object(studio, 'assert_approved'), patch.object(studio, 'check_asset'), \
                 patch.object(studio, 'text_cache_info', return_value=('test-cache', {})), \
                 patch.object(wan, 'cache_key', return_value='c' * 64), \
+                patch.object(wan_speech, 'guide_ready', return_value=True), \
+                patch.object(wan_speech, 'load_guide', return_value={'path': '/synthetic-guide.mp4',
+                    'key_data': {'source': {'frames': 72}}}), \
                 patch.object(h3, 'cache_key', return_value='d' * 64):
             if engine == 'seedance':
                 return studio.editable_graph(p, 'draft')[0]
@@ -188,7 +192,10 @@ class AudioModeTests(unittest.TestCase):
                     self.assertEqual(graph['zura_audio_selection']['inputs']['audio'], ['zura_reference_audio', 0])
                     self.assertEqual(graph['zura_reference_audio']['inputs']['audio'], 'reference.wav')
                 if engine == 'wan':
-                    self.assertEqual(graph['wan_cached']['inputs']['face'], ['wan_speech_faces', 0])
+                    self.assertEqual(graph['wan_cached']['inputs']['face'], ['wan_speech_face_detect', 1])
+                    self.assertEqual(graph['wan_speech_video']['inputs']['force_rate'], 24.0)
+                    self.assertEqual(graph['wan_speech_video']['inputs']['format'], 'None')
+                    self.assertFalse(any(n['class_type'] == 'ZuraSpeechFaceGuide' for n in graph.values()))
                 elif engine == 'h3':
                     self.assertEqual(graph['h3_locked_audio']['inputs']['audio'], ['h3_pad', 2])
                 elif engine == 'local':

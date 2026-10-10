@@ -1,5 +1,59 @@
 # Zura Studio validation
 
+## 1.3.6 automatic Wan speech, 10 October 2026
+
+The shared selector provides Original audio + performance and Reference audio +
+new performance on Wan, MiniMax H3, LTX and Seedance. Original mode bypasses the
+replacement face guide and optional mouth finish. Switching modes remembers the
+reference locally while keeping it out of Original rendering. The switching,
+reload, silence and soundtrack-only contracts pass for all four engines.
+
+Wan reference speech now uses a native Wan 2.1 I2V / InfiniteTalk graph to create
+the facial performance before Wan 2.2 Animate. Native detectors check and crop
+the approved character opening. The original body pose remains the motion guide;
+the new performance supplies the face guide. Original mode retains the source
+face guide. The final renderer and character-replacement workflow remain Wan 2.2.
+
+An ordinary Studio animation action completed the full cold route: memory
+acknowledgement, speech generation, verified guide storage, another memory
+acknowledgement, motion preparation, a final acknowledgement and rendering.
+No manual prompt IDs, external performance composite or mouth finishing pass
+was used. The guide contained 125 frames at 25 fps and 480 × 640; the finished
+video contained 120 frames at 24 fps and 720 × 1280, with one selected audio
+track. This five-second sample includes leading and trailing silence, rather
+than five seconds of continuous speech. The final render took 467 seconds on
+the test machine, in addition to guide generation and preparation.
+
+Inspected frames showed consistent character appearance, visible mouth changes
+during the spoken interval, a resting expression during the later silence and
+retained body gestures. Captions did not return in the sampled frames. The
+largest-motion and continuation frames remained coherent. These observations
+are not a phoneme score or acceptance of arbitrary faces, long takes or
+occlusion. Artist review is still required.
+
+Guide reuse checks the actual selected waveform, approved mask and look, source
+timeline, seed, model stamps, native executed recipe, exported video hash and
+successful Comfy history. Failed, edited or mismatched jobs cannot silently
+warm Studio. Collection accepts both native tuple history and JSON list history;
+signatures tolerate lossless numeric formatting through Comfy FLOAT validation
+and browser JSON, while retaining checks on changed values.
+
+The 108 relevant CPU regressions pass, including 23 Wan speech/setup tests and
+12 serial memory-transition tests. Seven offline tests of frontend 1.53.10 pass
+for native subgraph conversion, export, reload and exposed seed changes. The
+compiled native speech graph matches the declared render recipe, and saved root
+layouts report zero wire crossings. Synthetic CPU checks cover graph-view
+cache hand-offs; a separate GPU queue from the physical graph editor was not
+performed. Browser and physical phone layout testing remain unavailable.
+
+The newer H3 fixed-audio and background-guidance test is recorded below. Three
+matched five-second LTX tests (existing settings, stronger modality guidance and
+audio timestep override) did not resolve the motion and mouth problems; the
+tested alternative settings are not shipped. LTX speech remains experimental.
+Seedance was inspected without paid generation. Seven existing projects and
+unrelated installed nodes were preserved. Private recordings, scripts, supplied
+workflow examples, test projects and test media are excluded from publication.
+
 ## Fixed H3 reference speech, 10 October 2026
 
 The earlier native previews failed the user's quality review: Wan retained good

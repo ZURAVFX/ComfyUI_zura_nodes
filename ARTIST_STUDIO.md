@@ -61,7 +61,7 @@ the source soundtrack for both guidance and the finished video. By default it
 starts at zero at the beginning of your selected video interval. Adjust its
 own **Reference audio start** in More controls if needed. It is trimmed to the
 selected clip length; shorter tracks are padded with silence. Remove it with
-**Use video's audio instead**, or select **Original audio + performance**.
+**Use original audio and performance**, or select **Original audio + performance**.
 Changing audio requires a fresh guidance review.
 
 Silent source videos receive valid silence for audio encoders, including the
@@ -72,23 +72,35 @@ With an uploaded track, **Create a new facial performance** selects the engine's
 speech route. H3 encodes and holds the selected audio fixed during sampling,
 including the original soundtrack in Original mode, alongside
 its native audio guide; LTX conditions video directly on the selected audio.
-Both keep their generated faces by default. Wan uses a separate
-local mouth guide before generation. For that guide, Automatic selects LatentSync
-1.6 at its trained 512 px face resolution when installed; MuseTalk 1.5 remains
-a smaller 256 px option in Graph view.
+Both keep their generated faces by default. Wan uses a native InfiniteTalk
+speech-performance guide before Wan 2.2 Animate. Run
+**Setup_Wan_Speech_Windows.cmd** once for its separate Wan 2.1 I2V base,
+InfiniteTalk patch and wav2vec2 weights. Setup reports any missing native node
+packs. The guide runs at 480 x 640 and 25 fps, then native face detection supplies
+the facial performance to Wan 2.2 at the shot's 24 fps. Wan 2.1 weights are used
+only for this guide; the final renderer remains Wan 2.2 Animate.
 H3 and LTX do not need these separate speech models unless lip refinement is
 selected. With speech disabled, the selected track still reaches their native
 audio conditioning for music or sound design and can influence movement.
-Wan generates a new mouth performance from the selected
-audio before its existing Animate sampler. It keeps the original head and body
-guidance, then renders the character's facial texture itself. Tracking the
-original face alone would retain the old dialogue's mouth movements.
-The old moving mouth is replaced in the speech network's visual reference with
-the least open source mouth, aligned using eyes and nose landmarks. A silence
-gate holds that resting mouth before speech starts and during longer pauses.
-It does not look ahead into future audio. Head direction, eyes and body motion
-still follow the source. This is automatic when a new facial performance is
-enabled. Original mode keeps Wan's unmodified source face guide.
+The speech reference is cropped automatically from the approved character look,
+with native source and opening-face checks. Wan retains the original body pose,
+camera and masked background. Reference speech supplies a new face performance;
+it can change head and eye expression. Original mode and soundtrack-only mode
+keep Wan's unmodified source face guide. Review large head turns and occlusions.
+
+Studio creates, validates and caches the guide, clears the previous model at an
+idle queue boundary, prepares Wan's conditioning and renders automatically.
+Changing final resolution or sampling quality can reuse the same verified guide;
+changing the speech, its offset, seed, source or approved look creates a new one.
+The extra guide takes several minutes and needs substantial system memory.
+Reference speech currently supports a maximum of 30 seconds and one visible
+human face. Longer takes and complex faces have not been quality validated.
+
+**More controls > Open in graph view > Wan speech performance** opens its native
+loaders, audio conditioning, sampler and export as editable subgraphs. Queuing
+that unmodified graph can save a guide for Studio to reuse after successful
+completion. Edited sampling or reference inputs are not silently adopted as
+the original Studio recipe. Opening a graph alone does not generate anything.
 
 **More controls > Refine lips after generation** is off by default for Wan,
 H3 and LTX. It optionally adds a second pass if articulation needs help. That
@@ -109,10 +121,8 @@ Lip sync needs one visible human face. Profiles, occlusion, stylised characters
 and multi-person shots may fail or lose detail. MuseTalk works at a 256 px face
 crop internally, even when the finished video is HD. Sharp lip sync needs a CUDA
 GPU. Review every talking take.
-The silence gate expects dialogue: music, noise and breathing may count as
-activity. A source with no usable resting mouth or a large head turn can give
-a weaker guide. Guide-only Wan can still improvise expressions; use the optional
-refinement if a take needs tighter mouth timing.
+The optional mouth finish expects dialogue and a clearly visible face. Music,
+noise, breathing, occlusion and large head turns can give weaker results.
 The local LTX graphs use the installed text encoder; unused cloud text-encoding
 branches from the source templates are removed.
 

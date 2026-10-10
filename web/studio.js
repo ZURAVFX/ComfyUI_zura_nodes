@@ -90,7 +90,7 @@ class ArtistStudio {
           <label><span class="gs-label">Seed</span><input id="gs-seed" type="number" min="0" max="9007199254740991" value="42"/></label>
           <label class="gs-checkbox"><input id="gs-pitch" type="checkbox"/><span>Shift guidance vocals +3 semitones<small>The finished video keeps your original soundtrack.</small></span></label>
           <p class="gs-note">Wan handles camera cuts automatically. Use one continuous shot with LTX and H3.</p>
-          <label><span class="gs-label">Open in graph view</span><select id="gs-graph-stage"><option value="auto">Current stage</option><option value="prepare">Prepare and review</option><option value="design">Character preview</option><option value="animate">Animation · use this look</option><option value="draft">Seedance draft · paid when queued</option><option value="final">Seedance final · paid when queued</option></select><small>Opens an editable copy in a new ComfyUI tab. Graph edits stay in that workflow. Opening a graph does not start a render.</small></label>
+          <label><span class="gs-label">Open in graph view</span><select id="gs-graph-stage"><option value="auto">Current stage</option><option value="prepare">Prepare and review</option><option value="design">Character preview</option><option value="animate">Animation · use this look</option><option value="wan_speech">Wan speech performance</option><option value="draft">Seedance draft · paid when queued</option><option value="final">Seedance final · paid when queued</option></select><small>Opens an editable copy in a new ComfyUI tab. Graph edits stay in that workflow. Opening a graph does not start a render.</small></label>
         </div></details>
         <div class="gs-action-area"><p id="gs-action-note">Add a video and character to get started.</p><button id="gs-primary" class="gs-primary" disabled>Prepare shot ${icon("arrow")}</button><button id="gs-redesign" class="gs-quiet" hidden>Try another character preview</button><button id="gs-cancel" class="gs-quiet gs-cancel" hidden>Stop this job</button></div>
       </aside>
@@ -316,6 +316,9 @@ class ArtistStudio {
     }
     this.updateModelStatus();
     const reference=this.$("audio-mode").value==="reference",activeReference=reference && !!this.audio;
+    const speechGraphOption=this.$("graph-stage").querySelector('option[value="wan_speech"]');
+    speechGraphOption.disabled=this.config.engine!=="wan" || !activeReference || !this.config.lip_sync;
+    if(speechGraphOption.disabled && this.$("graph-stage").value==="wan_speech")this.$("graph-stage").value="auto";
     this.$("reference-options").hidden=!reference;
     this.$("audio-mode").disabled=this.busy || this.project?.phase==="working";
     const referenceOption=this.$("audio-mode").querySelector('option[value="reference"]');
@@ -330,7 +333,7 @@ class ArtistStudio {
     this.$("speech-setting").hidden=!activeReference;
     this.$("refine-lips-setting").hidden=!activeReference || !this.config.lip_sync || !["wan","h3","local"].includes(this.config.engine);
     this.$("audio-note").textContent=activeReference?(this.config.lip_sync?
-      (this.config.engine==="wan"?(this.config.refine_lips?"Creates Wan's mouth-motion guide and adds the optional lip refinement pass. Review mouth timing and detail.":"Creates new mouth motion from this audio before Wan renders the character. Keeps the original head and body motion. Review the mouth timing."):
+      (this.config.engine==="wan"?("Creates a speech-driven facial performance, then Wan renders it with the original body motion."+(this.config.refine_lips?" Adds the optional lip refinement pass.":" Review timing, head turns and expression.")):
       ["h3","local"].includes(this.config.engine)?
       ((this.config.engine==="h3"?"MiniMax H3 uses its native audio guide to generate the performance.":"LTX generates video directly from the selected audio.")+
        (this.config.refine_lips?" Adds the optional lip refinement pass. Review mouth timing and detail.":" Review face quality, movement and speech timing.")):
@@ -375,8 +378,8 @@ class ArtistStudio {
     this.$("redesign").disabled=this.busy;
     this.$("working").hidden=!working;
     const stage=p?.actions?.at(-1)?.stage;
-    this.$("working-title").textContent=({prepare:"Finding and tracking the performer",design:"Creating your character preview",video_text:"Preparing the video prompt",h3_references:"Preparing the character and performance references",wan_prepare:"Preparing Wan motion and character",wan:"Replacing the performer with Wan 2.2",background:"Replacing the performer",restyle:"Restyling your shot",h3:"Replacing the performer with MiniMax H3",draft:"Generating the Seedance draft",final:"Rendering the accepted take at 1080p"})[stage] || "Working on your shot";
-    this.$("working-detail").textContent=p?.actions?.at(-1)?.state==="queued"?"Waiting in the ComfyUI queue":"Running in ComfyUI. Your shot is saved.";
+    this.$("working-title").textContent=({prepare:"Finding and tracking the performer",design:"Creating your character preview",video_text:"Preparing the video prompt",h3_references:"Preparing the character and performance references",wan_speech:"Creating your facial performance",wan_cleanup:"Preparing Wan",wan_prepare:"Preparing Wan motion and character",wan:"Replacing the performer with Wan 2.2",background:"Replacing the performer",restyle:"Restyling your shot",h3:"Replacing the performer with MiniMax H3",draft:"Generating the Seedance draft",final:"Rendering the accepted take at 1080p"})[stage] || "Working on your shot";
+    this.$("working-detail").textContent=p?.actions?.at(-1)?.state==="waiting"?"Waiting for an idle queue and clearing the previous model. Your shot will continue automatically.":p?.actions?.at(-1)?.state==="queued"?"Waiting in the ComfyUI queue":"Running in ComfyUI. Your shot is saved.";
     this.$("preview-tabs").hidden=!p?.review || phase==="opening" || phase==="done" || phase==="draft";
     this.$("preview-tabs").querySelectorAll("button").forEach(b=>b.classList.toggle("active",b.dataset.view===this.preview));
     let video=this.source?.url,opening=null,title="Your performance, a new character",description="Upload the shot you want to transform. We’ll follow its motion and keep the original soundtrack.";
@@ -413,8 +416,9 @@ class ArtistStudio {
   updateModelStatus() {
     if(!this.modelStatus)return;
     const engine=this.config.engine;
-    const ready=engine==="seedance" || (this.modelStatus.engine_ready?.[engine] ?? (engine==="local" && this.modelStatus.ready));
-    this.$("models").textContent=engine==="seedance"?"Uses Comfy credits":ready?(engine==="h3"?"H3 · experimental":engine==="wan"?"Wan models ready":"LTX models ready"):"Model setup needs attention";
+    const speech=engine==="wan" && !!this.config.audio_id && !!this.config.lip_sync;
+    const ready=(engine==="seedance" || (this.modelStatus.engine_ready?.[engine] ?? (engine==="local" && this.modelStatus.ready))) && (!speech || this.modelStatus.wan_speech?.ready);
+    this.$("models").textContent=engine==="seedance"?"Uses Comfy credits":ready?(engine==="h3"?"H3 · experimental":engine==="wan"?(speech?"Wan + speech models ready":"Wan models ready"):"LTX · experimental"):speech && !this.modelStatus.wan_speech?.ready?"Wan speech setup needed":"Model setup needs attention";
     this.$("models").classList.toggle("needs-attention",!ready);
   }
   async poll() {

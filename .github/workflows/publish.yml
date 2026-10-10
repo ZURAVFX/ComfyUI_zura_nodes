@@ -51,7 +51,7 @@ jobs:
               assert Path(asset).is_file(), f'Missing multicam release asset: {asset}'
           for asset in ('wan_artist.py', 'web/studio.js', 'web/studio.css',
                         'artist_studio/__init__.py', 'artist_studio/studio.py',
-                        'artist_studio/h3.py', 'artist_studio/wan.py',
+                        'artist_studio/h3.py', 'artist_studio/wan.py', 'artist_studio/wan_speech.py',
                         'artist_studio/speech.py', 'artist_studio/speech_latentsync.py',
                         'artist_studio/latentsync_vendor/NOTICE.md',
                         'artist_studio/latentsync_vendor/LICENSE-LatentSync',
@@ -71,6 +71,7 @@ jobs:
                         'artist_studio/voice.py', 'artist_studio/signals.py',
                         'web/artist_graph.js', 'web/graph_routing.js', 'web/vendor/elk.bundled.js', 'web/vendor/ELK-LICENSE.md',
                         'setup_speech.py', 'Setup_Speech_Windows.cmd',
+                        'setup_wan_speech.py', 'Setup_Wan_Speech_Windows.cmd',
                         'ARTIST_STUDIO.md', 'ARTIST_STUDIO_VALIDATION.md', 'Open_Zura_Studio.url'):
               assert Path(asset).is_file(), f'Missing artist studio asset: {asset}'
           for graph in Path('artist_studio/graphs').glob('*.json'):
@@ -130,6 +131,8 @@ jobs:
           python -m unittest discover -s tests -p 'test_artist_studio.py'
           python -m unittest discover -s tests -p 'test_studio_speech.py'
           python -m unittest discover -s tests -p 'test_studio_audio_modes.py'
+          python -m unittest discover -s tests -p 'test_wan_speech.py'
+          python -m unittest discover -s tests -p 'test_wan_cleanup.py'
           python -m unittest discover -s tests -p 'test_h3_reference_audio.py'
           python -m unittest discover -s tests -p 'test_text_removal.py'
           python -m unittest discover -s tests -p 'test_klein_look.py'

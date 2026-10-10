@@ -29,6 +29,8 @@ STAGES = {
     "h3": "06_H3_Character_Reference",
     "wan": "07_Wan_Character_Replacement",
     "wan_prepare": "07A_Wan_Motion_Preparation",
+    "wan_speech": "07B_Wan_Speech_Performance",
+    "wan_cleanup": "07C_Wan_Memory_HandOff",
 }
 DEFAULTS = {"engine": "local", "background": "keep", "scope": "person", "prompt": "",
             "start": 0.0, "duration": 2.0, "size": 512, "performer": -1,
@@ -178,6 +180,12 @@ def text_graph(info, cache_key):
 
 def build_graph(project, stage, use_cache=True):
     """Fill known native node inputs; no new subgraph interfaces are fabricated."""
+    if stage == "wan_speech":
+        from .wan_speech import build_graph as speech_graph
+        return speech_graph(project)
+    if stage == "wan_cleanup":
+        return {"ack": {"class_type": "PreviewAny", "inputs": {
+            "source": "Zura Wan memory hand-off " + project["id"]}}}
     if stage == "h3":
         from .h3 import build_h3_graph
         return build_h3_graph(project, use_cache=use_cache)
@@ -387,7 +395,13 @@ def editable_graph(project, stage="auto"):
         p["opening_approval"] = p["opening_key"]
         stage = (p["config"]["engine"] if p["config"]["engine"] in ("h3", "wan") else
                  "background" if p["config"]["background"] == "keep" else "restyle")
-    if stage not in ("prepare", "design", "background", "restyle", "h3", "wan", "draft", "final"):
+    if stage == "wan":
+        from .wan_speech import enabled, guide_ready
+        if enabled(p) and not guide_ready(p):
+            stage = "wan_speech"
+    if stage == "wan_speech" and p.get("opening_input"):
+        p["opening_approval"] = p["opening_key"]
+    if stage not in ("prepare", "design", "background", "restyle", "h3", "wan", "wan_speech", "draft", "final"):
         raise ValueError("Choose preparation, character preview or animation.")
     graph = build_graph(p, stage, use_cache=False)
     if stage in ("background", "restyle", "h3", "wan"):
@@ -431,6 +445,7 @@ class Studio:
         self.store = store or Store()
         self.lock = asyncio.Lock()
         self.watcher = None
+        self.resuming = set()
         from comfy.cli_args import args
         self.server_address = f"{args.listen}:{args.port}"
 
@@ -449,17 +464,61 @@ class Studio:
                         logging.exception("Zura Studio: could not collect a project result")
 
     async def resume_text(self, identity, action_id):
-        async with self.lock:
-            p = self.store.load(identity)
-            action = p["actions"][-1]
-            if (action["id"] != action_id or action["state"] != "complete" or p["phase"] != "working"
-                    or action.get("server_address", self.server_address) != self.server_address):
-                return
-            try:
-                await self.action(p, action["next_stage"], {"request_key": str(uuid.uuid5(uuid.NAMESPACE_URL, action_id))})
-            except Exception as e:
-                p.update(phase="error", error="Could not start the video after encoding its prompt: " + str(e)[:1600])
+        active = getattr(self, "resuming", None)
+        if active is None:
+            self.resuming = active = set()
+        if action_id in active:
+            return
+        active.add(action_id)
+        try:
+            async with self.lock:
+                p = self.store.load(identity)
+                action = p["actions"][-1]
+                if (action["id"] != action_id or action["state"] != "complete" or p["phase"] != "working"
+                        or action.get("server_address", self.server_address) != self.server_address):
+                    return
+                try:
+                    await self.action(p, action["next_stage"], {"request_key": str(uuid.uuid5(uuid.NAMESPACE_URL, action_id))})
+                except Exception as e:
+                    p.update(phase="error", error="Could not continue this render: " + str(e)[:1600])
+                    self.store.save(p)
+        finally:
+            active.discard(action_id)
+
+    def advance_wan_cleanup(self, p):
+        """Wait for an idle serial worker, then acknowledge its cache reset.
+
+        A /free success only submits flags. The CPU marker executes after the
+        worker consumes those flags and completes its normal cleanup, so no
+        InfiniteTalk or Animate model loads before the boundary is acknowledged.
+        """
+        action = p["actions"][-1]
+        queue = self.server.prompt_queue
+        with queue.mutex:
+            running, pending = queue.get_current_queue_volatile()
+            if running or pending:
+                return p
+            if not action.get("cleanup_requested"):
+                action["cleanup_requested"] = time.time()
+                queue.set_flag("unload_models", True)
+                queue.set_flag("free_memory", True)
                 self.store.save(p)
+                return p
+            flags = queue.get_flags(reset=False)
+            if flags.get("free_memory") or flags.get("unload_models"):
+                if time.time() - action["cleanup_requested"] > 120:
+                    raise ValueError("ComfyUI did not finish preparing memory for Wan. Check its queue before trying again.")
+                return p
+            action["state"] = "submitting"
+            self.store.save(p)
+            extra = {"client_id": "zura-studio", "create_time": int(time.time() * 1000),
+                     "comfy_usage_source": "zura-studio"}
+            number = self.server.number
+            self.server.number += 1
+            queue.put((number, action["id"], action["graph"], extra, action["output_nodes"], {}))
+            action["state"] = "queued"
+            self.store.save(p)
+        return p
 
     def collect(self, p):
         try:
@@ -474,16 +533,18 @@ class Studio:
 
     def _collect(self, p):
         actions = p.get("actions", [])
-        if (actions and actions[-1]["stage"] in ("video_text", "h3_references", "wan_prepare") and actions[-1]["state"] == "complete"
+        if (actions and actions[-1]["stage"] in ("video_text", "h3_references", "wan_prepare", "wan_speech", "wan_cleanup") and actions[-1]["state"] == "complete"
                 and p["phase"] == "working"
                 and actions[-1].get("server_address", self.server_address) == self.server_address):
             asyncio.create_task(self.resume_text(p["id"], actions[-1]["id"]))
             return p
-        if not actions or actions[-1]["state"] not in ("submitting", "queued", "running", "interrupted"):
+        if not actions or actions[-1]["state"] not in ("waiting", "submitting", "queued", "running", "interrupted"):
             return p
         action = actions[-1]
         if action.get("server_address", self.server_address) != self.server_address:
             return p  # Shared output folders can be used by another ComfyUI instance.
+        if action["stage"] == "wan_cleanup" and action["state"] == "waiting":
+            return self.advance_wan_cleanup(p)
         history = self.server.prompt_queue.get_history(action["id"]).get(action["id"])
         if not history:
             if action["state"] == "interrupted":
@@ -522,7 +583,14 @@ class Studio:
             return p
         outputs = history.get("outputs", {})
         stage = action["stage"]
-        if stage in ("video_text", "h3_references", "wan_prepare"):
+        if stage == "wan_speech":
+            from .wan_speech import record_guide
+            record_guide(p, history)
+        if stage in ("video_text", "h3_references", "wan_prepare", "wan_speech", "wan_cleanup"):
+            if stage == "wan_cleanup":
+                marker = history.get("prompt", [None, None, {}])[2].get("ack", {})
+                if marker != action.get("graph", {}).get("ack"):
+                    raise ValueError("Wan's memory hand-off returned an unexpected acknowledgement.")
             action["state"] = "complete"
             self.store.save(p)
             asyncio.create_task(self.resume_text(p["id"], action["id"]))
@@ -617,7 +685,7 @@ class Studio:
 
     async def action(self, p, stage, body):
         self.collect(p)
-        if p.get("actions") and p["actions"][-1]["state"] in ("submitting", "queued", "running"):
+        if p.get("actions") and p["actions"][-1]["state"] in ("waiting", "submitting", "queued", "running"):
             return p  # A double-click/reconnect never queues another job.
         if stage == "approve":
             from . import verify_review
@@ -650,11 +718,28 @@ class Studio:
             raise ValueError("Sign in to your Comfy account in ComfyUI before using Seedance. Local generation needs no sign-in.")
         if p.get("audio") and p["config"].get("lip_sync") and stage in ("wan", "h3", "background", "restyle", "draft", "final"):
             from .speech import readiness
-            needs_speech_model = stage in ("wan", "draft", "final") or p["config"].get("refine_lips")
+            needs_speech_model = stage in ("draft", "final") or p["config"].get("refine_lips")
             if needs_speech_model and not readiness()["ready"]:
                 raise ValueError("Install the local speech models with Setup_Speech_Windows.cmd, or untick Create a new facial performance to use this track as a soundtrack.")
-        graph = build_graph(p, stage)
         next_stage = None
+        if stage == "wan":
+            from .wan_speech import enabled, guide_ready, readiness as wan_speech_readiness
+            previous = p.get("actions", [])[-1] if p.get("actions") else {}
+            just_cleaned = (previous.get("stage") == "wan_cleanup" and previous.get("state") == "complete"
+                            and previous.get("next_stage") == "wan"
+                            and request_key == str(uuid.uuid5(uuid.NAMESPACE_URL, previous["id"])))
+            if enabled(p) and not just_cleaned:
+                has_guide = guide_ready(p)
+                if not has_guide and not wan_speech_readiness()["ready"]:
+                    raise ValueError("Set up Wan speech with Setup_Wan_Speech_Windows.cmd before creating a new facial performance.")
+                # A serial CPU acknowledgement clears previously retained
+                # models, including a guide run manually from graph view.
+                stage, next_stage = "wan_cleanup", "wan" if has_guide else "wan_speech"
+        if stage == "wan_cleanup" and next_stage is None:
+            next_stage = "wan"
+        elif stage == "wan_speech":
+            next_stage = "wan_cleanup"
+        graph = build_graph(p, stage)
         if stage in ("background", "restyle") and "genj_cached_text" not in graph:
             cache_key, info = text_cache_info(graph, stage)
             next_stage, stage = stage, "video_text"
@@ -686,10 +771,15 @@ class Studio:
             action["h3_preset"] = p["config"]["h3_preset"]
         if next_stage:
             action["next_stage"] = next_stage
+        if stage == "wan_cleanup":
+            action.update(state="waiting", graph=graph, output_nodes=valid[2])
         p.setdefault("actions", []).append(action)
         p["phase"] = "working"
         p["error"] = None
         self.store.save(p)  # Persist BEFORE queueing; ambiguity is never retried automatically.
+        if stage == "wan_cleanup":
+            self.start_watcher()
+            return p
         extra = {"client_id": data.get("client_id", "genj-studio"), "create_time": int(time.time() * 1000),
                  "comfy_usage_source": "zura-studio"}
         number = self.server.number
@@ -757,15 +847,17 @@ def register():
         wan_models = {key: bool(folder_paths.get_full_path(folder, name)) for key, (folder, name) in WAN_MODELS.items()}
         missing_wan_nodes = [name for name in WAN_NATIVE_NODES if name not in nodes.NODE_CLASS_MAPPINGS]
         from .speech import readiness
+        from .wan_speech import readiness as wan_speech_readiness
         return web.json_response({"models": models, "h3_models": h3_models, "wan_models": wan_models, "speech": readiness(),
+            "wan_speech": wan_speech_readiness(),
             "engine_ready": {"local": all(models.values()) and not missing_ltx_nodes, "h3": all(h3_models.values()) and not missing_h3_nodes,
                              "wan": all(wan_models.values()) and not missing_wan_nodes},
             "engine_quality": {"local": "experimental speech timing: current talking test failed lip-sync review",
-                               "h3": "experimental: current motion transfer failed user review",
-                               "wan": "Native continuation without decoded-frame cross-fades; review each take"},
+                               "h3": "Native fixed-audio speech and source-background guidance; review timing and motion",
+                               "wan": "Native source performance or an audio-driven face guide; review head turns and speech timing"},
             "missing_ltx_nodes": missing_ltx_nodes,
             "missing_wan_nodes": missing_wan_nodes,
-            "missing_h3_nodes": missing_h3_nodes, "ready": all(models.values()) and not missing_ltx_nodes, "version": 5, "brand": "Zura Studio", "package": "comfyui-zura-nodes",
+            "missing_h3_nodes": missing_h3_nodes, "ready": all(models.values()) and not missing_ltx_nodes, "version": 6, "brand": "Zura Studio", "package": "comfyui-zura-nodes",
             "runtime": {"source": str(HERE), "prompt_id": getattr(server, "last_prompt_id", None),
                         "running": [item[1] for item in server.prompt_queue.get_current_queue_volatile()[0]]}})
 

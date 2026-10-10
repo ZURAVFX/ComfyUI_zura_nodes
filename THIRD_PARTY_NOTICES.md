@@ -58,6 +58,17 @@ The character-replacement sequence is inspired by [Genjustsu Open Source Workflo
 
 ## Optional speech and graph layout
 
+Wan's native reference-speech route uses separately installed
+[InfiniteTalk](https://github.com/MeiGen-AI/InfiniteTalk), Wan 2.1 I2V, Lightx2v
+and Tencent wav2vec2 weights through
+[ComfyUI-WanVideoWrapper](https://github.com/kijai/ComfyUI-WanVideoWrapper).
+Native face preprocessing uses
+[WanAnimatePreprocess](https://github.com/kijai/ComfyUI-WanAnimatePreprocess),
+with KJNodes and VideoHelperSuite for resizing and video export. None of their
+source code or weights is bundled by this addition. The explicit
+`setup_wan_speech.py` command pins and verifies separately downloaded model
+files; each upstream component retains its own terms and notices.
+
 The separately downloaded [MuseTalk 1.5](https://github.com/TMElyralab/MuseTalk)
 weights and published latent/audio interface are used for local mouth animation.
 MuseTalk code and models are offered under MIT; its SD VAE and Whisper dependencies

@@ -38,9 +38,9 @@ export function expandStageSignals(prompt) {
 }
 
 function role(n) {
-  if(["GenjRestoreSoundtrack","GenjSaveReview","SaveImage","SaveVideo","GenjRecordDraft"].includes(n.type))return "save";
+  if(["GenjRestoreSoundtrack","GenjSaveReview","SaveImage","SaveVideo","GenjRecordDraft","VHS_VideoCombine","ZuraWanSpeechSaveGuide"].includes(n.type))return "save";
   if(n.type?.startsWith("ZuraSpeech")||String(n.id).startsWith("zura_speech_"))return "speech";
-  if(["LoadImage","LoadVideo","LoadAudio","GenjLoadReviewedShot","GenjApplyReferenceAudio"].includes(n.type)||n.type?.startsWith("Primitive"))return "inputs";
+  if(["LoadImage","LoadVideo","LoadAudio","GenjLoadReviewedShot","GenjApplyReferenceAudio","VHS_LoadVideoFFmpegPath"].includes(n.type)||n.type?.startsWith("Primitive"))return "inputs";
   return "process";
 }
 
@@ -58,9 +58,10 @@ function connectedStageSets(graph) {
 }
 
 function innerRole(n) {
+  if(n.type==="WanVideoBlockSwap")return "Models";
   if(/Loader|Lora|SamplingSD3|TorchSettings|Attention/.test(n.type) && !/ControlNetApply/.test(n.type))return "Models";
-  if(/Pose|Mask|Depth|Detection|Crop|Colour|Blockify|ReviewedFrames|Preparation|GetVideoComponents|GetImageSize|ImageScale|Resize|EmptyImage/.test(n.type))return "Motion and selection";
-  if(/TextEncode|Conditioning|ReferenceToVideo|AddGuide|LockReferenceAudio|PreserveBackground|VAEEncode|Modality|FramePad|SetLatent|Concat|Separate/.test(n.type))return "Guidance";
+  if(/Pose|Mask|Depth|Detection|Crop|Colour|Blockify|ReviewedFrames|Preparation|GetVideoComponents|GetImageSize|GetImageRange|ImageScale|Resize|EmptyImage|ComfyMathExpression|SpeechTimeline/.test(n.type))return "Motion and selection";
+  if(/TextEncode|TextEmbed|ClipVisionEncode|Wav2VecEmbeds|ImageToVideoMultiTalk|Conditioning|ReferenceToVideo|AddGuide|LockReferenceAudio|PreserveBackground|VAEEncode|Modality|FramePad|SetLatent|Concat|Separate/.test(n.type))return "Guidance";
   return "Render and decode";
 }
 
