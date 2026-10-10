@@ -13,8 +13,16 @@ then choose **Lip sync to this audio** for optional local mouth animation.
 Untick it for music or sound design. **Create a voice track** can also clone a
 voice or generate speech with local Zura LongCat and select the result
 automatically. Run `Setup_Speech_Windows.cmd` once for the optional speech models.
+Automatic uses the sharper LatentSync 1.6 driver at its trained 512 px face
+resolution when installed. MuseTalk 1.5 remains available in Graph view.
 The speech finish needs a visible human face; review timing and face detail on
 each take. See [Zura Studio](ARTIST_STUDIO.md) for setup and tested limitations.
+Wan now defaults to a new audio-driven mouth guide before generation, retaining
+its own facial texture. **More controls > Refine lips after generation** adds
+the optional mouth-only finish if needed. Original face tracking preserves the
+old mouth performance and is not a substitute for this new speech guide.
+The guide uses a still resting mouth aligned to the moving head. An audio
+silence gate keeps quiet sections at rest without anticipating later words.
 
 A set of artist-facing ComfyUI video, image and audio controls: load a source clip,
 mask or replace a performer, plan multicam shots, and optionally relight a

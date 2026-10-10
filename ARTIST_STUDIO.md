@@ -53,20 +53,46 @@ Silent source videos receive valid silence for audio encoders, including the
 full-resolution reread and LTX temporal padding. The final video stays quiet
 when there is no source audio and no reference track.
 
-With an uploaded track, **Lip sync to this audio** adds optional local MuseTalk
-1.5 mouth animation. Wan receives a speech-driven face guide before its existing
-Animate sampler, then a local mouth refinement on the generated character.
-LTX, H3 and the accepted Seedance final use the same local mouth refinement.
-It changes the generated lower face, preserving the rest of the generated scene.
+With an uploaded track, **Lip sync to this audio** adds optional local mouth
+animation. Automatic selects LatentSync 1.6 at its trained 512 px face resolution
+when installed; MuseTalk 1.5 remains a smaller 256 px option in Graph view.
+Wan generates a new mouth performance from the selected
+audio before its existing Animate sampler. It keeps the original head and body
+guidance, then renders the character's facial texture itself. Tracking the
+original face alone would retain the old dialogue's mouth movements.
+The old moving mouth is replaced in the speech network's visual reference with
+the least open source mouth, aligned using eyes and nose landmarks. A silence
+gate holds that resting mouth before speech starts and during longer pauses.
+It does not look ahead into future audio. Head direction, eyes and body motion
+still follow the source. This is automatic when lip sync is enabled.
+
+Wan defaults to this guide-only route. **More controls > Refine lips after
+generation** optionally adds a second pass if articulation needs help. That
+pass blends only around the detected mouth, with a mild bounded detail filter,
+preserving the surrounding cheeks, beard and chin before video compression.
+Review both timing and detail. LTX, H3 and the accepted Seedance final use the same local mouth
+refinement because they do not use Wan's native face-video guidance.
 Untick it for music or sound design; the audio is then only a soundtrack.
 Native LTX/H3 speech conditioning remains experimental, so this separate local
 finish provides the new articulation rather than relying on those models alone.
 
-Run **Setup_Speech_Windows.cmd** once for the optional local models and Python
+Run **Setup_Speech_Windows.cmd** once for the optional sharp local models and Python
 dependencies. There is no paid speech call or automatic download during renders.
+The sharp model uses 20 diffusion steps, 16-frame windows, sequential audio
+guidance and sliced VAE processing to bound GPU memory while retaining 512 px
+inference. Setup pins the published LatentSync 1.6 weights. Add `--fast-only`
+to setup for just the smaller MuseTalk bundle. Existing graphs that explicitly
+select MuseTalk retain that choice; newly created Studio graphs use Automatic.
 Lip sync needs one visible human face. Profiles, occlusion, stylised characters
 and multi-person shots may fail or lose detail. MuseTalk works at a 256 px face
-crop internally, even when the finished video is HD. Review every talking take.
+crop internally, even when the finished video is HD. Sharp lip sync needs a CUDA
+GPU. Review every talking take.
+The silence gate expects dialogue: music, noise and breathing may count as
+activity. A source with no usable resting mouth or a large head turn can give
+a weaker guide. Guide-only Wan can still improvise expressions; use the optional
+refinement if a take needs tighter mouth timing.
+The local LTX graphs use the installed text encoder; unused cloud text-encoding
+branches from the source templates are removed.
 
 **Create a voice track** expands the optional local Zura LongCat controls. Choose
 voice cloning, provide a clear sample and its exact transcript, and enter the

@@ -43,6 +43,12 @@ tests/tmp*/
 *.jpg
 *.jpeg
 
+# Licensed inference source and the published generic face mask are package assets.
+!artist_studio/latentsync_vendor/models/
+artist_studio/latentsync_vendor/models/*
+!artist_studio/latentsync_vendor/models/*.py
+!artist_studio/latentsync_vendor/mask.png
+
 # Keep the distributable frontend and example workflows visible if a broader
 # ignore rule is added by a consuming repository.
 !web/

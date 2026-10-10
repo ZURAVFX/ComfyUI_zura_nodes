@@ -63,6 +63,16 @@ weights and published latent/audio interface are used for local mouth animation.
 MuseTalk code and models are offered under MIT; its SD VAE and Whisper dependencies
 retain their own upstream terms. No speech weights or private media are bundled.
 
+The isolated LatentSync inference components are copied from
+[ByteDance LatentSync](https://github.com/bytedance/LatentSync), revision
+`a229c3948406bc2cf6eaf4873e662e70c6a04746`, under Apache-2.0. The audio encoder
+and mel transforms derive from OpenAI Whisper under MIT. Original notices,
+licences and modifications are recorded in `artist_studio/latentsync_vendor`.
+The optional setup separately downloads the published LatentSync 1.6 checkpoint,
+pinned to revision `c42c7e6c8e9c213626389fa7d9a3c444b8536353`.
+No InsightFace model or new face detector is used by the shipped adapter;
+it uses the existing native WanAnimatePreprocess landmarks.
+
 The unmodified elkjs 0.12.0 layout distribution is included at
 `web/vendor/elk.bundled.js` under Eclipse Public License 2.0. Its licence is
 retained in `web/vendor/ELK-LICENSE.md`. Corresponding source is available at

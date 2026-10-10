@@ -170,3 +170,59 @@ URL. Resubmitting the same voice request returned the original job rather than
 duplicating generation. Completed audio can be recovered even if a ComfyUI
 restart clears its queue history. The UI contract selects the completed track
 automatically, resets its offset and enables lip sync when its models are ready.
+
+## Sharper speech and tidy nested graphs (1.3.4)
+
+Automatic now selects the installed LatentSync 1.6 model at its trained 512 px
+face resolution. Explicit MuseTalk selections retain the 256 px model. The
+LatentSync checkpoint was matched strictly; its audio mel transform and
+pre-normalisation encoder embeddings matched the published implementation.
+The native detector's 69-point layout was corrected to exclude its leading
+foot point before interpreting the 68 facial landmarks. The alignment uses
+the published eyebrow-centre and nose-tip anchors.
+
+A real 48-frame qualification used 20 diffusion steps, 16-frame windows,
+sequential audio guidance and sliced VAE processing on RTX 4080. It retained
+512 px inference and measured 3.419 GiB allocated / 3.861 GiB reserved by that
+speech process. These figures are not the memory requirement for a complete
+Wan, H3 or LTX generation, or for other applications running alongside it.
+
+Four real sharp finishing tests completed on previously generated Wan, H3,
+LTX background-preserving and LTX restyle videos. They reuse existing sampler
+outputs rather than claiming four fresh full model renders. A separate fresh
+Wan test completed the new sharp face guide and the unchanged fast Animate
+sampler, followed by a separately tested sharp finish on that new take.
+All six deliveries contained 48 frames at 24 fps, 720 x 1280 pixels and two
+seconds of the chosen audio. Zero-lag audio correlation was 0.999945; its quiet
+lead remained quiet. No paid Seedance or other API inference was submitted.
+
+The sharper face model retains more lip texture than the previous guide.
+The least open source mouth provides a stable visual reference during quiet
+sections, reducing leakage from the old dialogue. Wan's guide-only take had
+clear facial detail and reduced early movement, but restrained articulation.
+The optional final mouth pass adds articulation. These short private tests do
+not establish perfect phoneme accuracy. H3's base video quality and LTX's
+underlying face motion remain experimental; a mouth finish cannot correct
+their entire head performance. All private source clips, recordings, scripts,
+transcripts and project data remain outside the repository and package.
+
+The installed frontend 1.53.10 native subgraph implementation was tested
+offline for preparation, look design, Wan, H3 and both LTX routes. Native
+conversion, export, reload and exposed-seed changes preserve the compiled
+inference inputs. Smaller nested groups keep each operation explorable.
+Unneeded hand-off sockets are trimmed again after configuration. H3 uses a
+native multiline text source to expose its existing prompt in Your inputs;
+the prompt text and model settings are preserved.
+
+Node sockets are arranged before layout. ELK routing is supplemented with a
+bounded orthogonal wire router that avoids occupied nodes and unrelated wires.
+Exported native positions were inspected separately from browser rendering.
+The root and internal layouts have zero measured unrelated wire crossings
+for all six tested stages. The crossing check also detects overlapping wires
+and contacts at bends; branches sharing the same output are intentional
+signal junctions. Other node versions or edited graphs may lay out differently.
+
+DOM interaction checks cover the shared resolution and original/custom length
+controls, direct audio, cloning, audio offsets, automatic review IDs and graph
+handoff without queueing work. Browser visual testing remains unavailable
+because Codex's saved browser setting rejects the local ComfyUI origin.

@@ -1,5 +1,6 @@
 // Native subgraph authoring and port-aware layout for Studio's editable copies.
 // ELK computes geometry; ComfyUI creates/serializes all nodes and subgraphs.
+import { routeFixedPorts } from "./graph_routing.js";
 export async function promptFingerprint(prompt) {
   prompt=expandStageSignals(prompt);
   const memo=new Map(), active=new Set();
@@ -135,24 +136,41 @@ export function crossingCount(layout) {
   let count=0;
   for(let i=0;i<edges.length;i++)for(let j=i+1;j<edges.length;j++){
     if(edges[i].source===edges[j].source||edges[i].target===edges[j].target)continue;
-    for(const [a,b] of edges[i].segments)for(const [c,d] of edges[j].segments){
-      const vertical=a.x===b.x,horizontal=c.y===d.y;
-      if(vertical===horizontal){const v=vertical?[a,b]:[c,d],h=vertical?[c,d]:[a,b];
-        if(v[0].x>Math.min(h[0].x,h[1].x)&&v[0].x<Math.max(h[0].x,h[1].x)&&
-           h[0].y>Math.min(v[0].y,v[1].y)&&h[0].y<Math.max(v[0].y,v[1].y))count++;
-      }
-    }
+    const between=(v,a,b)=>v>=Math.min(a,b)&&v<=Math.max(a,b);
+    const overlap=(a,b,c,d)=>Math.max(Math.min(a,b),Math.min(c,d))<=Math.min(Math.max(a,b),Math.max(c,d));
+    if(edges[i].segments.some(([a,b])=>edges[j].segments.some(([c,d])=>{
+      const av=a.x===b.x,cv=c.x===d.x;
+      if(av===cv)return av?a.x===c.x&&overlap(a.y,b.y,c.y,d.y):a.y===c.y&&overlap(a.x,b.x,c.x,d.x);
+      const v=av?[a,b]:[c,d],h=av?[c,d]:[a,b];
+      return between(v[0].x,h[0].x,h[1].x)&&between(h[0].y,v[0].y,v[1].y);
+    })))count++;
   }
   return count;
 }
 
+export function trimStageSignals(node) {
+  let keys;
+  try { keys=JSON.parse(node.widgets?.find(w=>w.name==="keys")?.value||"[]"); } catch { return; }
+  if(!Array.isArray(keys))return;
+  for(let i=node.inputs.length-1;i>=0;i--)
+    if(/^value_\d+$/.test(node.inputs[i].name)&&Number(node.inputs[i].name.slice(6))>=keys.length&&node.inputs[i].link==null)node.removeInput(i);
+}
+
 async function arrange(graph,elk) {
-  for(const n of graph._nodes||[]){n.flags.collapsed=false;const size=n.computeSize();n.setSize?.([Math.max(280,size[0]),size[1]]);}
+  for(const n of graph._nodes||[]){
+    if(n.type==="ZuraStudioSignals")trimStageSignals(n);
+    n.flags.collapsed=false;n._setConcreteSlots?.();
+    const size=n.computeSize();n.setSize?.([Math.max(280,size[0]),size[1]]);n.arrange?.();
+  }
   const data=layoutInput(graph);let best=await elk.layout(data);
   // Try different placement strategies when fixed native port order needs more room.
   if(crossingCount(best))for(const strategy of ["BRANDES_KOEPF","LINEAR_SEGMENTS"]){
     const next=await elk.layout({...layoutInput(graph),layoutOptions:{...data.layoutOptions,"elk.layered.nodePlacement.strategy":strategy}});
     if(crossingCount(next)<crossingCount(best))best=next;
+  }
+  if(crossingCount(best)){
+    const routed=routeFixedPorts(best);
+    if(routed&&crossingCount(routed)<crossingCount(best))best=routed;
   }
   const nodes=new Map((graph._nodes||[]).map(n=>[String(n.id),n]));
   for(const n of [graph.inputNode,graph.outputNode])if(n)nodes.set(String(n.id),n);
@@ -161,6 +179,7 @@ async function arrange(graph,elk) {
   for(const e of best.edges||[]){const link=graph.links.get(Number(e.id))||graph.links.get(e.id);if(!link)continue;
     for(const s of e.sections||[])for(const point of s.bendPoints||[])graph.createReroute([point.x,point.y],link);
   }
+  graph.extra??={};graph.extra.zuraWireCrossings=crossingCount(best);
   graph.setDirtyCanvas?.(true,true);return crossingCount(best);
 }
 
@@ -179,7 +198,7 @@ export function stagePlan(graph) {
   for(const n of ordered){let phase=ranks[label(n)];for(const l of links)if(String(l.target_id)===String(n.id))phase=Math.max(phase,phases.get(String(l.origin_id)));phases.set(String(n.id),phase);}
   const phaseNames=Object.keys(ranks);ordered.sort((a,b)=>phases.get(String(a.id))-phases.get(String(b.id)));
   const chunks=[];for(const n of ordered){const name=phaseNames[phases.get(String(n.id))];let chunk=chunks.at(-1);
-    if(!chunk||chunk.name!==name||chunk.nodes.length>=10){chunk={name,nodes:[]};chunks.push(chunk);}chunk.nodes.push(n);}
+    if(!chunk||chunk.name!==name||chunk.nodes.length>=1){chunk={name,nodes:[]};chunks.push(chunk);}chunk.nodes.push(n);}
   return {chunks,links,byId};
 }
 
@@ -220,10 +239,32 @@ export async function tidyArtistGraph(app,apiGraph,stage,ElkClass) {
     }
   }
   const controls=new Set(["image","file","audio","audio_start_seconds","render_long_edge","duration_seconds","start_seconds","use_original_length","prompt","text","value","seed","noise_seed","steps","cfg"]);
+  const stages=[];
   for(let i=0;i<chunks.length;i++){
-    const c=chunks[i],host=fold(graph,new Set(c.nodes),`${String(i+1).padStart(2,"0")} · ${names[c.name]}`,c.name==="Models"?new Set():controls);
+    const c=chunks[i];for(const n of c.nodes){n.properties??={};n.properties.zuraStudioPacket=i;}
+    let group=stages.at(-1);if(!group||group.name!==c.name){group={name:c.name,nodes:[]};stages.push(group);}group.nodes.push(...c.nodes);
+  }
+  for(let i=0;i<stages.length;i++){
+    const group=stages[i],host=fold(graph,new Set(group.nodes),`${String(i+1).padStart(2,"0")} · ${names[group.name]}`,group.name==="Models"?new Set():controls);
+    // Group actual cloned inner nodes; never refold existing subgraph hosts.
+    const packets=new Map();
+    for(const n of host.subgraph.nodes){const key=n.properties.zuraStudioPacket;delete n.properties.zuraStudioPacket;if(!packets.has(key))packets.set(key,new Set());packets.get(key).add(n);}
+    for(const items of packets.values()){
+      const title=[...items].find(n=>!["ZuraStudioSignals","ZuraStudioReadSignal"].includes(n.type))?.title||"Stage hand-off";
+      for(const n of items){n._setConcreteSlots?.();n.arrange?.();}
+      // Native boundary ports follow selection order: incoming signals first,
+      // then artist controls, then the outgoing hand-off.
+      const ordered=[...items].sort((a,b)=>{
+        const rank=n=>n.type==="ZuraStudioReadSignal"?0:n.type==="ZuraStudioSignals"?2:1;
+        if(rank(a)!==rank(b))return rank(a)-rank(b);
+        const target=n=>{const link=host.subgraph.links.get(n.outputs?.[0]?.links?.[0]),node=link&&host.subgraph.getNodeById(link.target_id);
+          return node?.getSlotPosition?node.getSlotPosition(link.target_slot,true)[1]-node.pos[1]:link?.target_slot??0;};
+        return rank(a)===0?target(a)-target(b):0;
+      });
+      const packet=fold(host.subgraph,new Set(ordered),title);
+      crossings+=await arrange(packet.subgraph,elk);
+    }
     crossings+=await arrange(host.subgraph,elk);
-    c.host=host;
   }
   const rootCrossings=await arrange(graph,elk);crossings+=rootCrossings;
   const after=(await app.graphToPrompt()).output;

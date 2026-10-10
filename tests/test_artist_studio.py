@@ -105,6 +105,25 @@ class SharedEngineTests(unittest.TestCase):
                 self.assertEqual(fast['wan_render']['inputs']['chunk_frames'], 81)
                 self.assertEqual(fast['wan_render']['inputs']['join_mode'], 'Native continuation')
 
+    def test_wan_synthesises_mouth_guide_before_rendering(self):
+        p = self.project()
+        p['audio'] = {'file':'speech.wav', 'sha':'speech'}
+        p['config'].update(audio_id='b'*32, lip_sync=True)
+        with patch.object(studio, 'assert_approved'), patch.object(studio, 'check_asset'), \
+                patch.object(wan, 'cache_key', return_value='a'*64):
+            graph = wan.build_wan_graph(p, use_cache=False)
+            self.assertEqual(graph['wan_speech_faces']['inputs']['face_images'], ['wan_pose_detect',1])
+            self.assertEqual(graph['wan_speech_faces']['inputs']['pose_data'], ['wan_pose_detect',0])
+            self.assertEqual(graph['wan_speech_faces']['inputs']['face_boxes'], ['wan_pose_detect',4])
+            self.assertEqual(graph['wan_cached']['inputs']['face'], ['wan_speech_faces',0])
+            self.assertEqual(graph['wan_cached']['inputs']['pose'], ['wan_pose_draw',0])
+            self.assertNotIn('zura_speech_0video', graph)
+            self.assertIn('resting closed mouth during silence', graph['wan_render']['inputs']['prompt'])
+            self.assertNotIn('action, expressions', graph['wan_render']['inputs']['prompt'])
+            p['config']['refine_lips'] = True
+            refined = wan.build_wan_graph(p, use_cache=False)
+            self.assertEqual(refined['wan_export']['inputs']['video'], ['zura_speech_0video',0])
+
     def test_ltx_speech_reaches_both_sampling_passes(self):
         p = self.project()
         p['config']['engine'] = 'local'
@@ -115,6 +134,8 @@ class SharedEngineTests(unittest.TestCase):
                     ('background', ('5410:4828', '5414:5209'), ('5409:5114', '5410:5013'), ('5409:5391', '5413:5396')),
                     ('restyle', ('5516:4828', '5517:4964'), ('9002:5012', '5549'), ('9002:4528', '5517:4969'))):
                 graph = studio.build_graph(p, stage)
+                self.assertFalse(any(node['class_type']=='GemmaAPITextEncode' for node in graph.values()))
+                self.assertFalse(any('api_key' in node['inputs'] for node in graph.values()))
                 self.assertEqual(graph['zura_av_coupling']['class_type'], 'LTXVModalityGuidance')
                 self.assertEqual(graph['zura_fixed_audio_mask']['inputs']['value'], 0.0)
                 self.assertFalse(any(node['class_type'] == 'LTXVSetAudioRefTokens' for node in graph.values()))

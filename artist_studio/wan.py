@@ -40,12 +40,13 @@ def cache_key(project):
     data = {"version": 4, "review": project["review"], "character": project["character"]["sha"],
         "resolution": c["resolution"], "scope": c["scope"], "models": stamps}
     if project.get("audio") and c.get("lip_sync"):
-        from .speech import bundle_path, FILES, readiness
-        if not readiness()["ready"]:
+        from .speech import bundle_path, model_files, readiness
+        state = readiness()
+        if not state["ready"]:
             raise ValueError("Install the local speech models with Setup_Speech_Windows.cmd, or untick Lip sync to use this track as a soundtrack.")
-        base = bundle_path()
-        data["speech"] = {"version": 1, "audio": project["audio"]["sha"], "start": c["audio_start"], "seed": c["seed"],
-            "models": [[name, (base / name).stat().st_size, (base / name).stat().st_mtime_ns] for name in FILES]}
+        base = bundle_path(state["model"])
+        data["speech"] = {"version": 3, "model": state["model"], "audio": project["audio"]["sha"], "start": c["audio_start"], "seed": c["seed"],
+            "models": [[name, (base / name).stat().st_size, (base / name).stat().st_mtime_ns] for name in model_files(state["model"])]}
     return hashlib.sha256(canonical(data).encode()).hexdigest()
 
 
@@ -95,10 +96,11 @@ def build_wan_graph(project, use_cache=True):
             x=0, y=0, resize_source=False, mask=["wan_character_crop", 1])
         face = ["wan_pose_detect", 1]
         if project.get("audio") and c.get("lip_sync"):
-            speech_model = node("wan_speech_model", "ZuraSpeechModelLoader", model="MuseTalk 1.5")
+            speech_model = node("wan_speech_model", "ZuraSpeechModelLoader", model="Automatic")
             node("wan_speech_audio", "GetVideoComponents", video=shot)
             face = node("wan_speech_faces", "ZuraSpeechFaceGuide", model=speech_model,
-                face_images=face, audio=["wan_speech_audio", 1], fps=24.0, seed=c["seed"], batch_size=4)
+                face_images=face, audio=["wan_speech_audio", 1], fps=24.0, seed=c["seed"], batch_size=4,
+                pose_data=pose_data, face_boxes=["wan_pose_detect", 4])
         inputs = dict(frames=frames, mask=mask, pose=pose, face=face, reference=reference, scope=c["scope"])
         if use_cache:
             node("wan_save", "ZuraWanSavePreparation", **inputs, cache_key=key)
@@ -127,7 +129,8 @@ def build_wan_graph(project, use_cache=True):
     if c["remove_text"]:
         prompt += " Remove masked captions and title panels entirely, replacing them with natural background or clothing. No on-screen text overlays."
     if project.get("audio") and c.get("lip_sync"):
-        prompt += " Follow the speech-driven face guide precisely for mouth movements. The performer speaks the replacement audio, not the original dialogue."
+        prompt = prompt.replace("action, expressions, hand gestures", "action, head direction, eye expressions, hand gestures")
+        prompt += " Follow the speech-driven face guide precisely for mouth movements. The performer speaks only when the replacement audio contains speech, with a resting closed mouth during silence. Ignore the original dialogue and its mouth movements."
     node("wan_render", "ZuraWan22LoopedChunksSampler", model=model, clip=clip, vae=vae, clip_vision=vision,
         reference_image=opening, vision_reference=["wan_cached", 1], footage=footage,
         prompt=prompt, negative_prompt="flicker, warped hands, extra limbs, identity drift, text overlays, collage",
@@ -136,8 +139,8 @@ def build_wan_graph(project, use_cache=True):
         join_mode="Native continuation")
     node("wan_export", "GenjRestoreSoundtrack", video=["wan_render", 1], clip_details=["wan_shot", 3],
         take_name="studio_" + project["id"][:8] + "_wan")
-    # The guide keeps Wan's expression transfer. A local finish on the generated
-    # character tightens the actual spoken words without changing its body/scene.
+    # Wan renders facial detail from the audio-driven guide. A second mouth
+    # pass is an explicit option because its small face decoder can soften detail.
     from .speech import add_finish
-    add_finish(graph, project)
+    add_finish(graph, project, native_speech=True)
     return graph

@@ -257,8 +257,11 @@ def build_h3_graph(project, use_cache=True):
     model = node("h3_inpaint", "MiniMaxH3FunControlNetApply", model=model, model_patch=patch,
                  vae=vae, strength=1.25, start_percent=0.0, end_percent=1.0,
                  source_video=["h3_pad", 0], mask=["h3_pad", 1], control_video=depth)
+    # A native prompt source keeps the artist control in Your inputs and lets
+    # the reference stage receive its inputs in a single ordered hand-off.
+    prompt_input = node("h3_prompt", "PrimitiveStringMultiline", value=prompt)
     positive = node("h3_references", "MiniMaxH3ReferenceToVideo", clip=clip, vae=vae, audio_vae=audio_vae,
-                    prompt=prompt, width=["h3_pad", 3], height=["h3_pad", 4], length=["h3_pad", 5],
+                    prompt=prompt_input, width=["h3_pad", 3], height=["h3_pad", 4], length=["h3_pad", 5],
                     ref_image_size="match", **{"ref_images.ref_image_0": opening,
                     "ref_images.ref_image_1": ["h3_character", 0], "ref_videos.ref_video_0": depth,
                     "ref_video_audios.ref_video_audio_0": ["h3_pad", 2]})

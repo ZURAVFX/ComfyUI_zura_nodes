@@ -1,9 +1,9 @@
 import { app } from "../../scripts/app.js";
 import { api } from "../../scripts/api.js";
-import { tidyArtistGraph } from "./artist_graph.js";
+import { tidyArtistGraph, trimStageSignals } from "./artist_graph.js";
 
 const ROOT = "/zura/studio";
-const defaults = {engine:"local", background:"keep", scope:"person", prompt:"", start:0, duration:2, size:512, performer:-1, margin:8, pitch:false, seed:42, render_size:0, h3_preset:"take_fast", remove_text:false, resolution:1280, quality:"fast", audio_id:"", audio_start:0, length_mode:"custom", lip_sync:false};
+const defaults = {engine:"local", background:"keep", scope:"person", prompt:"", start:0, duration:2, size:512, performer:-1, margin:8, pitch:false, seed:42, render_size:0, h3_preset:"take_fast", remove_text:false, resolution:1280, quality:"fast", audio_id:"", audio_start:0, length_mode:"custom", lip_sync:false, refine_lips:false};
 const icon = (name) => {
   const paths = {
     upload:'<path d="M12 16V3m-5 5 5-5 5 5M4 15v5h16v-5"/>',
@@ -83,6 +83,7 @@ class ArtistStudio {
         <details class="gs-advanced"><summary>More controls</summary><div class="gs-advanced-body">
           <label><span class="gs-label">Start (seconds)</span><input id="gs-start" type="number" min="0" max="86400" step="0.1" value="0"/></label>
           <label id="gs-audio-start-setting" hidden><span class="gs-label">Reference audio start (seconds)</span><input id="gs-audio_start" type="number" min="0" max="86400" step="0.1" value="0"/><small>Aligned to the start of your selected clip. Shorter tracks are padded with silence.</small></label>
+          <label id="gs-refine-lips-setting" class="gs-checkbox" hidden><input id="gs-refine_lips" type="checkbox"/><span>Refine lips after generation<small>Wan already follows an audio-driven face guide. Use this extra pass if mouth timing needs help; it can soften lip detail.</small></span></label>
           <div class="gs-two"><label><span class="gs-label">Performer</span><input id="gs-performer" type="number" min="-1" max="63" value="-1"/><small>-1 chooses automatically</small></label>
           <label><span class="gs-label">Mask margin (px)</span><input id="gs-margin" type="number" min="0" max="128" value="8"/></label></div>
           <label><span class="gs-label">Seed</span><input id="gs-seed" type="number" min="0" max="9007199254740991" value="42"/></label>
@@ -118,12 +119,13 @@ class ArtistStudio {
     c.size=this.config.size ?? 512;c.render_size=0;
     if(c.engine==="h3" || c.engine==="wan")c.background="keep";
     c.pitch=this.$("pitch").checked; c.remove_text=this.$("remove_text").checked;
-    c.lip_sync=!!this.audio && this.$("lip_sync").checked; return c;
+    c.lip_sync=!!this.audio && this.$("lip_sync").checked;
+    c.refine_lips=c.lip_sync && this.$("refine_lips").checked; return c;
   }
   bind() {
     this.$("exit").onclick=()=>this.graphView(); this.$("close").onclick=()=>this.close(); this.$("new").onclick=()=>this.reset();
     this.$("clear-audio").onclick=()=>this.perform(async()=>{
-      const config={...this.readConfig(),audio_id:"",audio_start:0,lip_sync:false};
+      const config={...this.readConfig(),audio_id:"",audio_start:0,lip_sync:false,refine_lips:false};
       if(this.project)this.project=await request(`/projects/${this.project.id}/config`,{config});
       this.audio=null;this.config=config;this.syncForm();this.render();
     });
@@ -267,6 +269,7 @@ class ArtistStudio {
     this.$("pitch").checked=this.config.pitch;
     this.$("remove_text").checked=!!this.config.remove_text;
     this.$("lip_sync").checked=!!this.config.lip_sync;
+    this.$("refine_lips").checked=!!this.config.refine_lips;
     this.$("sampling-setting").hidden=!["h3","wan"].includes(this.config.engine);
   }
   reset() {
@@ -309,8 +312,9 @@ class ArtistStudio {
     this.$("clear-audio").disabled=this.busy || this.project?.phase==="working";
     this.$("exit").disabled=this.busy;
     this.$("speech-setting").hidden=!this.audio;
+    this.$("refine-lips-setting").hidden=!this.audio || !this.config.lip_sync || this.config.engine!=="wan";
     this.$("audio-note").textContent=this.audio?(this.config.lip_sync?
-      (this.config.engine==="wan"?"Creates Wan's mouth-motion guide, then refines the generated face to this voice. Best with a visible human face; review the mouth timing.":
+      (this.config.engine==="wan"?(this.config.refine_lips?"Creates Wan's mouth-motion guide and adds the optional lip refinement pass. Review mouth timing and detail.":"Creates new mouth motion from this audio before Wan renders the character. Keeps the original head and body motion. Review the mouth timing."):
       "Adds a local speech lip-sync finish to the generated character. Best with a visible human face."):
       "Uses this track as music or sound design. Mouth motion follows the performance video."):
       "Uses the video's audio by default. Silent videos work too.";
@@ -425,6 +429,13 @@ class ArtistStudio {
 
 app.registerExtension({
   name:"Zura.Artist.Studio",
+  beforeRegisterNodeDef(nodeType,nodeData){
+    if(nodeData.name!=="ZuraStudioSignals")return;
+    for(const hook of ["onConfigure","onGraphConfigured"]){
+      const previous=nodeType.prototype[hook];
+      nodeType.prototype[hook]=function(...args){const result=previous?.apply(this,args);trimStageSignals(this);return result;};
+    }
+  },
   async setup(){
     const css=document.createElement("link");css.rel="stylesheet";css.href=new URL("./studio.css",import.meta.url).href;document.head.appendChild(css);
     const studio=new ArtistStudio();
