@@ -60,7 +60,7 @@ function connectedStageSets(graph) {
 function innerRole(n) {
   if(/Loader|Lora|SamplingSD3|TorchSettings|Attention/.test(n.type) && !/ControlNetApply/.test(n.type))return "Models";
   if(/Pose|Mask|Depth|Detection|Crop|Colour|Blockify|ReviewedFrames|Preparation|GetVideoComponents|GetImageSize|ImageScale|Resize|EmptyImage/.test(n.type))return "Motion and selection";
-  if(/TextEncode|Conditioning|ReferenceToVideo|AddGuide|Modality|FramePad|SetLatent|Concat|Separate/.test(n.type))return "Guidance";
+  if(/TextEncode|Conditioning|ReferenceToVideo|AddGuide|LockReferenceAudio|PreserveBackground|VAEEncode|Modality|FramePad|SetLatent|Concat|Separate/.test(n.type))return "Guidance";
   return "Render and decode";
 }
 

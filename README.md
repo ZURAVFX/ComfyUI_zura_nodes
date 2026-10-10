@@ -4,12 +4,16 @@
 
 To open the complete studio, start ComfyUI and click **Zura Studio**. On a default local installation, use `Open_Zura_Studio.url` or open `http://127.0.0.1:8188/?zura=1`. All four models share the same project and review flow. The standalone Wan test graph is only a diagnostic example.
 
-Choose **Original clip length** or **Custom length**, and optionally upload a
-separate **Reference audio** track. Silent videos work with the audio encoders.
+Choose **Original clip length** or **Custom length**. **Audio and performance**
+defaults to **Original audio + performance** for every model. Select
+**Reference audio + new performance** to upload a track or create a voice.
+Switching back to Original retains that track locally for later use.
+Silent videos work with the audio encoders.
 **Graph view** opens the current stage as an editable ComfyUI workflow in a new
 tab; the **Zura Studio** button returns to the artist interface. Graph edits
-remain in that workflow. Upload an audio file or a video containing your voice,
-then choose **Lip sync to this audio** for optional local mouth animation.
+remain in that workflow. Reference mode accepts an audio file or a video
+containing your voice. **Create a new facial performance** enables the engine's
+speech route automatically.
 Untick it for music or sound design. **Create a voice track** can also clone a
 voice or generate speech with local Zura LongCat and select the result
 automatically. Run `Setup_Speech_Windows.cmd` once for the optional speech models.
@@ -17,10 +21,11 @@ Automatic uses the sharper LatentSync 1.6 driver at its trained 512 px face
 resolution when installed. MuseTalk 1.5 remains available in Graph view.
 The speech finish needs a visible human face; review timing and face detail on
 each take. See [Zura Studio](ARTIST_STUDIO.md) for setup and tested limitations.
-Wan now defaults to a new audio-driven mouth guide before generation, retaining
+Wan's reference-speech mode uses a new audio-driven mouth guide before generation, retaining
 its own facial texture. **More controls > Refine lips after generation** adds
 the optional mouth-only finish if needed. Original face tracking preserves the
-old mouth performance and is not a substitute for this new speech guide.
+old mouth performance in Original mode. Reference mode instead uses the new
+speech guide.
 The guide uses a still resting mouth aligned to the moving head. An audio
 silence gate keeps quiet sections at rest without anticipating later words.
 

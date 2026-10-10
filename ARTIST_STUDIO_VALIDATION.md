@@ -1,5 +1,57 @@
 # Zura Studio validation
 
+## Fixed H3 reference speech, 10 October 2026
+
+The earlier native previews failed the user's quality review: Wan retained good
+visuals but weak speech performance, H3 expression was unconvincing, and LTX had
+poor lip timing and arm warping. Their successful executions below are not an
+acceptance of those results.
+
+H3 selected audio now fills its target audio latent and sets that stream's
+native noise mask to zero. Previously the track was reference conditioning while
+the target audio remained free to change, despite exporting the selected voice.
+The thin Zura adapter uses the native audio VAE and preserves the video stream,
+its mask and latent metadata. It works after loading cached references as well.
+
+Seven H3 adapter tests, 22 shared-engine tests, 24 speech tests, 12 audio-mode
+tests and eight caption-mask tests pass.
+They check real-waveform silence padding, trimming/resampling, invalid input,
+video-mask preservation and cached sampling connections. These CPU checks do
+not establish rendering quality.
+
+A separate five-second H3 test of the fixed-audio method completed with the
+installed Pixaroma node, compatible Ref2VA turbo LoRA and eight sampling steps:
+720 × 1280, 120 frames at 24 fps, one selected audio track and no mouth finish.
+A matched five-second test then completed with the installed Zura adapter itself,
+with the same dimensions, frame count and selected soundtrack. The user accepted
+the speech-lock method, then reported opening colour shift, movement edges and
+caption leakage. Those remaining visual issues require separate validation.
+No paid inference ran. Test media and supplied workflow examples remain private.
+
+The shared Audio and performance selector defaults to original audio and source
+performance guidance on all four engines. Reference mode enables new speech;
+soundtrack-only mode disables the separate face guide and finishing pass.
+Switching to Original remembers the uploaded or cloned reference locally without
+feeding it to rendering. CPU checks cover switching, reload, legacy projects,
+silence, offsets, original/refined graph routing and all four model choices.
+Seedance graphs were inspected without submitting paid jobs.
+
+Six fresh offline tests of frontend 1.53.10 passed after the held-caption and
+source-latent changes, including the experimental H3 background adapter. Native
+subgraph conversion, export, reload and changed exposed seed preserve the compiled
+render inputs, with zero measured root wire crossings. This does not establish
+browser rendering or video quality.
+
+A further five-second H3 render completed with native source-video encoding,
+background noise masking, held caption regions and cleaned depth guidance. It
+delivered 120 frames at 24 fps, 720 × 1280 and the selected audio, with no mouth
+finish or post-generation RGB composite. Inspected frames at the start, through
+the shot and at the end showed no returning caption panels. The static upper
+wall's opening-frame change fell from 1.816 to 0.409 mean absolute RGB units;
+source-relative colour error also decreased across six sampled frames. This is
+a local background-region measurement, not a whole-video quality or phoneme
+score. Moving edges and facial performance still require artist review.
+
 ## Native speech paths, 10 October 2026
 
 H3 and LTX now retain their native generated faces by default. The shared local
@@ -16,7 +68,7 @@ and depth ControlNet strength 1.0 without a duplicate video reference.
 Frame inspection found a more consistent H3 face and visible hand gesture
 transfer. LTX retained the opening appearance but changed gesture timing and
 showed mouth movement during the quiet opening. Exact phoneme synchronisation
-was not measured, and user acceptance of these new takes is pending. Neither
+was not measured, and the user subsequently rejected these takes. Neither
 successful rendering nor restored audio establishes good lip sync.
 
 The 21 shared-engine and 24 speech tests pass. Six native frontend graph

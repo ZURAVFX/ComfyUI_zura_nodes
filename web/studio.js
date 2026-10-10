@@ -48,13 +48,14 @@ class ArtistStudio {
           <label class="gs-upload gs-image-upload" id="gs-character-drop" for="gs-character"><img id="gs-character-image" alt="Replacement character" hidden/><span class="gs-upload-symbol">${icon("plus")}</span><strong>Choose a character image</strong><span>A clear face and the clothing you want</span><span class="gs-filename"></span></label>
           <input class="gs-file" id="gs-character" type="file" accept="image/png,image/jpeg,image/webp" aria-label="Replacement character"/>
         </div>
-        <div class="gs-upload-group"><label class="gs-label" for="gs-audio">Reference audio <small>Optional</small></label>
+        <div class="gs-upload-group"><label><span class="gs-label">Audio and performance</span><select id="gs-audio-mode"><option value="original">Original audio + performance</option><option value="reference">Reference audio + new performance</option></select></label>
+          <p id="gs-audio-note" class="gs-note">Follows the original facial performance and keeps the video's audio. Silent videos work too.</p>
+          <div id="gs-reference-options" hidden><label class="gs-label" for="gs-audio">Reference audio</label>
           <label class="gs-upload" id="gs-audio-drop" for="gs-audio"><strong>Choose audio or a video with audio</strong><span>Your character voice, music or sound effects</span><span class="gs-filename"></span></label>
           <input class="gs-file" id="gs-audio" type="file" accept="audio/*,video/*,.wav,.mp3,.m4a,.flac,.ogg,.aac,.aiff,.mp4,.mov,.mkv,.webm" aria-label="Reference audio"/>
           <audio id="gs-reference-player" controls preload="metadata" hidden aria-label="Preview reference audio"></audio>
-          <button id="gs-clear-audio" class="gs-quiet" hidden>Use video's audio instead</button>
-          <label id="gs-speech-setting" class="gs-checkbox" hidden><input id="gs-lip_sync" type="checkbox"/><span>Lip sync to this audio</span></label>
-          <p id="gs-audio-note" class="gs-note">Uses the video's audio by default. Silent videos work too.</p>
+          <button id="gs-clear-audio" class="gs-quiet" hidden>Use original audio and performance</button>
+          <label id="gs-speech-setting" class="gs-checkbox" hidden><input id="gs-lip_sync" type="checkbox"/><span>Create a new facial performance<small>Untick to use this track as music or sound design.</small></span></label>
           <details class="gs-advanced"><summary>Create a voice track</summary><div class="gs-advanced-body">
             <label><span class="gs-label">Voice</span><select id="gs-voice-mode"><option>Clone a voice</option><option>Text to speech</option></select></label>
             <div id="gs-voice-clone-fields"><label><span class="gs-label">Voice sample</span><input id="gs-voice-sample" type="file" accept="audio/*,video/*"/><small id="gs-voice-sample-name">One clear speaker. A video with audio works too.</small></label>
@@ -62,7 +63,7 @@ class ArtistStudio {
             <label><span class="gs-label">What should your character say?</span><textarea id="gs-voice-script" rows="3"></textarea></label>
             <button id="gs-create-voice" class="gs-quiet">Create and use this voice track</button>
             <p id="gs-voice-note" class="gs-note">Uses local Zura LongCat. Your sample and words stay on this computer.</p>
-          </div></details>
+          </div></details></div>
         </div>
         <fieldset><legend>Generate with</legend><div class="gs-segment">
           <label><input type="radio" name="gs-engine" value="local" checked/><span>LTX 2.5 <small>Local</small></span></label>
@@ -97,7 +98,7 @@ class ArtistStudio {
         <div class="gs-preview-heading"><div><h2 id="gs-preview-title">Your performance, a new character</h2><p id="gs-preview-description">Upload the shot you want to transform. We’ll follow its motion and keep the original soundtrack.</p></div><div id="gs-preview-tabs" class="gs-tabs" hidden><button data-view="mask" class="active">Mask</button><button data-view="guide">Guidance</button><button data-view="source">Original</button></div></div>
         <div class="gs-canvas" id="gs-canvas"><div class="gs-empty" id="gs-empty">${icon("frames")}<h3>Start with your performance</h3><p>Your previews and finished takes appear here.</p></div><video id="gs-player" controls playsinline preload="metadata" hidden></video><img id="gs-opening" alt="Generated character preview in the original scene" hidden/><div id="gs-working" class="gs-working" hidden><div class="gs-loading-bar"></div><strong id="gs-working-title">Preparing your shot</strong><span id="gs-working-detail">Running in ComfyUI</span></div></div>
         <div id="gs-message" class="gs-message" role="status" aria-live="polite" hidden></div>
-        <section class="gs-results" id="gs-results" hidden><div class="gs-section-heading"><h2>Your takes</h2><span>The original soundtrack is restored automatically.</span></div><div id="gs-takes"></div></section>
+        <section class="gs-results" id="gs-results" hidden><div class="gs-section-heading"><h2>Your takes</h2><span>Your selected soundtrack is restored automatically.</span></div><div id="gs-takes"></div></section>
         <section class="gs-library"><div class="gs-section-heading"><h2>Recent shots</h2><button id="gs-refresh" class="gs-quiet">Refresh</button></div><div id="gs-library-list"><p class="gs-note">Your shots are saved on this computer. You can return to them later.</p></div></section>
       </main></div>`;
     this.bind();this.syncForm();
@@ -111,7 +112,9 @@ class ArtistStudio {
     const c={...this.config};
     for (const key of ["scope","background","prompt","length_mode"]) c[key]=this.$(key).value;
     for (const key of ["start","duration","resolution","performer","margin","seed","audio_start"]) c[key]=Number(this.$(key).value);
-    c.audio_id=this.audio?.id || "";
+    const reference=this.$("audio-mode").value==="reference" && !!this.audio;
+    c.audio_id=reference?this.audio.id:"";
+    if(!reference)c.audio_start=0;
     if(c.length_mode==="original")c.start=0;
     c.engine=this.container.querySelector('input[name="gs-engine"]:checked').value;
     c.quality=this.$("quality").value;
@@ -119,7 +122,7 @@ class ArtistStudio {
     c.size=this.config.size ?? 512;c.render_size=0;
     if(c.engine==="h3" || c.engine==="wan")c.background="keep";
     c.pitch=this.$("pitch").checked; c.remove_text=this.$("remove_text").checked;
-    c.lip_sync=!!this.audio && this.$("lip_sync").checked;
+    c.lip_sync=reference && this.$("lip_sync").checked;
     c.refine_lips=c.lip_sync && this.$("refine_lips").checked; return c;
   }
   bind() {
@@ -127,7 +130,7 @@ class ArtistStudio {
     this.$("clear-audio").onclick=()=>this.perform(async()=>{
       const config={...this.readConfig(),audio_id:"",audio_start:0,lip_sync:false,refine_lips:false};
       if(this.project)this.project=await request(`/projects/${this.project.id}/config`,{config});
-      this.audio=null;this.config=config;this.syncForm();this.render();
+      this.pendingReference=false;this.config=config;this.syncForm();this.render();
     });
     this.$("primary").onclick=()=>this.primary();
     this.$("voice-mode").onchange=()=>{this.$("voice-clone-fields").hidden=this.$("voice-mode").value!=="Clone a voice";};
@@ -172,6 +175,12 @@ class ArtistStudio {
     this.container.querySelectorAll("select,textarea,input:not([type=file])").forEach(input=>{
       if(input.id==="gs-graph-stage"||input.id.startsWith("gs-voice-"))return;
       input.addEventListener("change",()=>this.perform(async()=>{
+        if(input.id==="gs-audio-mode"){
+          this.pendingReference=input.value==="reference" && !this.audio;
+          this.$("lip_sync").checked=input.value==="reference" && !!this.audio;
+          this.$("refine_lips").checked=false;
+          if(input.value==="original")this.$("audio_start").value=0;
+        }
         this.config=this.readConfig();
         if(this.project)this.project=await request(`/projects/${this.project.id}/config`,{config:this.config});
         this.render();
@@ -193,9 +202,9 @@ class ArtistStudio {
       const asset=await r.json();if(!r.ok)throw new Error(asset.error || "The upload could not complete.");
       asset.url=api.apiURL("/view?"+new URLSearchParams({filename:asset.file.split("/").pop(),subfolder:asset.file.split("/").slice(0,-1).join("/"),type:"input"}));
       if(type==="audio"){
-        const config={...this.readConfig(),audio_id:asset.id,audio_start:0,lip_sync:["h3","local"].includes(this.config.engine)||!!this.modelStatus?.speech?.ready};
+        const config={...this.readConfig(),audio_id:asset.id,audio_start:0,lip_sync:true,refine_lips:false};
         if(this.project)this.project=await request(`/projects/${this.project.id}/config`,{config});
-        this.audio=asset;this.config=config;this.syncForm();
+        this.audio=asset;this.pendingReference=false;this.config=config;this.syncForm();
       }else{
         this[type]=asset;this.project=null;localStorage.removeItem("genj-studio-project");this.lastVideo=null;
       }
@@ -235,6 +244,7 @@ class ArtistStudio {
   }
   async primary() {
     await this.perform(async()=>{
+      if(this.$("audio-mode").value==="reference" && !this.audio)throw new Error("Choose or create a reference audio track first.");
       this.config=this.readConfig();
       if(this.project?.phase==="done"){
         this.config.seed=Math.floor(Math.random()*2**48);this.syncForm();
@@ -269,18 +279,19 @@ class ArtistStudio {
     this.$("pitch").checked=this.config.pitch;
     this.$("remove_text").checked=!!this.config.remove_text;
     this.$("lip_sync").checked=!!this.config.lip_sync;
+    this.$("audio-mode").value=this.pendingReference || this.config.audio_id?"reference":"original";
     this.$("refine_lips").checked=!!this.config.refine_lips;
     this.$("sampling-setting").hidden=!["h3","wan"].includes(this.config.engine);
   }
   reset() {
     if(this.project?.phase==="working"){this.message("Wait for this shot to finish, or stop its job first.",true);return;}
-    this.project=null;this.source=null;this.character=null;this.audio=null;this.config={...defaults};this.lastVideo=null;
+    this.project=null;this.source=null;this.character=null;this.audio=null;this.pendingReference=false;this.config={...defaults};this.lastVideo=null;
     localStorage.removeItem("genj-studio-project");this.syncForm();this.message("");this.render();
   }
   async loadProject(id) {
     await this.perform(async()=>{
       this.project=await request("/projects/"+id);
-      this.source=this.project.source;this.character=this.project.character;this.audio=this.project.audio || null;this.config={...defaults,...this.project.config};
+      this.source=this.project.source;this.character=this.project.character;this.audio=this.project.audio || this.project.reference_audio || null;this.pendingReference=false;this.config={...defaults,...this.project.config};
       if(this.project.config.resolution==null)this.config.resolution=this.project.config.render_size || this.project.config.size || 512;
       if(this.project.config.quality==null)this.config.quality=this.project.config.h3_preset?.endsWith("_quality")?"detailed":"fast";
       localStorage.setItem("genj-studio-project",id);this.syncForm();this.lastVideo=null;this.render();
@@ -304,23 +315,28 @@ class ArtistStudio {
       if(option.value==="512")option.textContent=this.config.engine==="seedance"?"480p · small test":"512 px · small test";
     }
     this.updateModelStatus();
-    this.$("audio-start-setting").hidden=!this.audio;
-    const referencePlayer=this.$("reference-player");referencePlayer.hidden=!this.audio;
-    if(this.audio && referencePlayer.getAttribute("src")!==this.audio.url)referencePlayer.src=this.audio.url;
-    if(!this.audio && referencePlayer.hasAttribute("src")){referencePlayer.pause();referencePlayer.removeAttribute("src");referencePlayer.load();}
-    this.$("clear-audio").hidden=!this.audio;
+    const reference=this.$("audio-mode").value==="reference",activeReference=reference && !!this.audio;
+    this.$("reference-options").hidden=!reference;
+    this.$("audio-mode").disabled=this.busy || this.project?.phase==="working";
+    const referenceOption=this.$("audio-mode").querySelector('option[value="reference"]');
+    referenceOption.textContent=activeReference && !this.config.lip_sync?"Reference audio · soundtrack only":"Reference audio + new performance";
+    this.$("audio-start-setting").hidden=!activeReference;
+    const referencePlayer=this.$("reference-player");referencePlayer.hidden=!activeReference;
+    if(activeReference && referencePlayer.getAttribute("src")!==this.audio.url)referencePlayer.src=this.audio.url;
+    if(!activeReference && referencePlayer.hasAttribute("src")){referencePlayer.pause();referencePlayer.removeAttribute("src");referencePlayer.load();}
+    this.$("clear-audio").hidden=!activeReference;
     this.$("clear-audio").disabled=this.busy || this.project?.phase==="working";
     this.$("exit").disabled=this.busy;
-    this.$("speech-setting").hidden=!this.audio;
-    this.$("refine-lips-setting").hidden=!this.audio || !this.config.lip_sync || !["wan","h3","local"].includes(this.config.engine);
-    this.$("audio-note").textContent=this.audio?(this.config.lip_sync?
+    this.$("speech-setting").hidden=!activeReference;
+    this.$("refine-lips-setting").hidden=!activeReference || !this.config.lip_sync || !["wan","h3","local"].includes(this.config.engine);
+    this.$("audio-note").textContent=activeReference?(this.config.lip_sync?
       (this.config.engine==="wan"?(this.config.refine_lips?"Creates Wan's mouth-motion guide and adds the optional lip refinement pass. Review mouth timing and detail.":"Creates new mouth motion from this audio before Wan renders the character. Keeps the original head and body motion. Review the mouth timing."):
       ["h3","local"].includes(this.config.engine)?
       ((this.config.engine==="h3"?"MiniMax H3 uses its native audio guide to generate the performance.":"LTX generates video directly from the selected audio.")+
        (this.config.refine_lips?" Adds the optional lip refinement pass. Review mouth timing and detail.":" Review face quality, movement and speech timing.")):
       "Adds a local speech lip-sync finish to the generated character. Best with a visible human face."):
       (["h3","local"].includes(this.config.engine)?"Uses this track as music or sound design. The model can also react to the audio; review the movement.":"Uses this track as music or sound design. Mouth motion follows the performance video.")):
-      "Uses the video's audio by default. Silent videos work too.";
+      reference?"Choose an audio file, extract audio from a video, or create a voice track below.":"Follows the original facial performance and keeps the video's audio. Silent videos work too.";
     const p=this.project,working=p?.phase==="working",phase=p?.phase || "new";
     this.$("duration-setting").hidden=this.config.length_mode==="original";
     const originalOption=this.$("length_mode").querySelector('option[value="original"]');
@@ -351,8 +367,9 @@ class ArtistStudio {
       }
     }
     if(working){label="Working on your shot";note="You can close this view and return later. The job is saved.";}
+    if(reference && !this.audio && !working){label="Choose reference audio";note="Upload a track or create a voice below Audio and performance.";}
     if(this.busy && !working)label="Please wait";
-    btn.innerHTML=escape(label)+icon(working?"frames":"arrow");btn.disabled=!hasAssets || working || this.busy;
+    btn.innerHTML=escape(label)+icon(working?"frames":"arrow");btn.disabled=!hasAssets || (reference && !this.audio) || working || this.busy;
     this.$("action-note").textContent=note;this.$("cancel").hidden=!working;this.$("cancel").disabled=this.busy;
     this.$("redesign").hidden=working || this.config.engine==="seedance" || !p?.opening_input;
     this.$("redesign").disabled=this.busy;
@@ -408,9 +425,9 @@ class ArtistStudio {
         try{
           const job=await request("/voice/"+identity);this.voiceJob=job;
           if(job.state==="complete"&&this.project?.phase!=="working"){
-            const config={...this.readConfig(),audio_id:job.audio.id,audio_start:0,lip_sync:["h3","local"].includes(this.config.engine)||!!this.modelStatus?.speech?.ready};
+            const config={...this.readConfig(),audio_id:job.audio.id,audio_start:0,lip_sync:true,refine_lips:false};
             if(this.project)this.project=await request(`/projects/${this.project.id}/config`,{config});
-            this.audio=job.audio;this.config=config;this.voiceJob=null;localStorage.removeItem("zura-studio-voice-job");
+            this.audio=job.audio;this.pendingReference=false;this.config=config;this.voiceJob=null;localStorage.removeItem("zura-studio-voice-job");
             this.$("voice-note").textContent="Voice ready. It is selected as your reference audio.";this.syncForm();this.render();
           }else if(job.state==="error"){
             this.voiceJob=null;localStorage.removeItem("zura-studio-voice-job");this.message(job.error,true);this.render();

@@ -107,6 +107,41 @@ class SharedEngineTests(unittest.TestCase):
             p['config']['lip_sync'] = True
             self.assertNotEqual(before, h3.cache_key(p))
 
+    def test_h3_replacement_speech_stays_locked_after_loading_reference_cache(self):
+        p = self.project()
+        p['audio'] = {'file':'speech.wav', 'sha':'speech'}
+        p['config'].update(engine='h3', audio_id='b'*32, lip_sync=True)
+        package.verify_review = lambda _: (None, {'clip': {'frames':72}})
+        with patch.object(studio,'assert_approved'), patch.object(studio,'check_asset'), \
+                patch.object(h3,'cache_key',return_value='c'*64), tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / 'references.pt'
+            with patch.object(h3,'cache_path',return_value=path):
+                graph = h3.build_h3_graph(p)
+                self.assertEqual(graph['h3_sample']['inputs']['latent_image'], ['h3_locked_audio',0])
+                self.assertEqual(graph['h3_locked_audio']['inputs']['audio'], ['h3_pad',2])
+                self.assertEqual(graph['h3_locked_audio']['inputs']['latent'], ['h3_preserve_background',0])
+                self.assertEqual(graph['h3_preserve_background']['inputs']['latent'], ['h3_references',1])
+                path.touch()
+                graph = h3.build_h3_graph(p)
+                self.assertEqual(graph['h3_sample']['inputs']['latent_image'], ['h3_locked_audio',0])
+                self.assertEqual(graph['h3_locked_audio']['inputs']['latent'], ['h3_preserve_background',0])
+                self.assertEqual(graph['h3_preserve_background']['inputs']['latent'], ['h3_cached',1])
+                self.assertNotIn('h3_references', graph)
+                p['config']['lip_sync'] = False
+                graph = h3.build_h3_graph(p)
+                self.assertEqual(graph['h3_locked_audio']['inputs']['latent'], ['h3_preserve_background',0])
+                p.pop('audio')
+                p['config']['lip_sync'] = True
+                graph = h3.build_h3_graph(p)
+                self.assertEqual(graph['h3_locked_audio']['inputs']['audio'], ['h3_pad',2])
+                preserved = h3.build_h3_graph(p, preserve_background=True)
+                self.assertEqual(preserved['h3_source_latent']['inputs']['pixels'], ['h3_pad',0])
+                self.assertEqual(preserved['h3_preserve_background']['inputs']['latent'], ['h3_cached',1])
+                self.assertEqual(preserved['h3_locked_audio']['inputs']['latent'], ['h3_preserve_background',0])
+                unmasked = h3.build_h3_graph(p, preserve_background=False)
+                self.assertEqual(unmasked['h3_locked_audio']['inputs']['latent'], ['h3_cached',1])
+                self.assertNotIn('h3_preserve_background', unmasked)
+
     def test_native_h3_and_ltx_speech_do_not_overwrite_faces_by_default(self):
         p = self.project()
         p['audio'] = {'file':'speech.wav','sha':'speech'}

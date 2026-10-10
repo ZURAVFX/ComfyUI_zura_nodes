@@ -1,5 +1,6 @@
 """H3 data padding and orchestration of native reference/inpainting nodes."""
 from math import ceil
+import math
 import hashlib
 import json
 import re
@@ -190,7 +191,147 @@ class GenjH3FramePad:
         return (images, mask, audio, width, height, length, count)
 
 
-def build_h3_graph(project, use_cache=True):
+class ZuraH3LockReferenceAudio:
+    """Fit and encode the selected track into H3's preserved audio stream.
+
+    Uses ComfyUI's native nested latent/noise-mask contract. The distinction
+    between an audio reference and a fixed sampling stream is demonstrated by
+    Pixaroma's H3 Audio Sync workflow; no inference or model patch is hidden here.
+    """
+
+    CATEGORY = "Zura/Artist Studio"
+    FUNCTION = "lock"
+    RETURN_TYPES = ("LATENT",)
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {"required": {"latent": ("LATENT",), "audio_vae": ("VAE",), "audio": ("AUDIO",)}}
+
+    def lock(self, latent, audio_vae, audio):
+        from comfy.nested_tensor import NestedTensor
+        import comfy.audio
+
+        samples = latent.get("samples")
+        if not isinstance(samples, NestedTensor) or len(samples.tensors) != 2:
+            raise ValueError("Connect a MiniMax H3 audio-video latent.")
+        video, template = samples.tensors
+        if video.ndim != 5 or video.shape[:2] != (1, 24) or template.ndim != 4 or template.shape[:3] != (1, 32, 2) or template.shape[-1] < 1:
+            raise ValueError("Reference audio locking requires a single MiniMax H3 take.")
+        wave = audio["waveform"]
+        rate = int(audio["sample_rate"])
+        if rate <= 0 or wave.ndim != 3 or wave.shape[0] != 1 or wave.shape[1] not in (1, 2) or wave.shape[-1] == 0 or not torch.isfinite(wave).all():
+            raise ValueError("Provide a finite mono or stereo reference audio track.")
+        vae_rate = int(getattr(audio_vae, "audio_sample_rate", 32000))
+        if rate != vae_rate:
+            wave = comfy.audio.resample(wave, rate, vae_rate)
+        if wave.shape[1] == 1:
+            wave = wave.repeat(1, 2, 1)
+        count = round(template.shape[-1] * vae_rate / 40)
+        # Pad real waveform silence before encoding, never empty audio latents.
+        wave = F.pad(wave[..., :count], (0, max(0, count - wave.shape[-1])))
+        encoded = audio_vae.encode(wave.movedim(1, -1))
+        if encoded.shape[:-1] != template.shape[:-1] or encoded.shape[-1] < 1 or abs(encoded.shape[-1] - template.shape[-1]) > 2:
+            raise ValueError("Choose the MiniMax H3 audio VAE for this speech track.")
+        missing = template.shape[-1] - encoded.shape[-1]
+        if missing > 0:
+            encoded = torch.cat((encoded, encoded[..., -1:].expand(*encoded.shape[:-1], missing)), dim=-1)
+        encoded = encoded[..., :template.shape[-1]]
+        previous = latent.get("noise_mask")
+        if previous is not None and (not isinstance(previous, NestedTensor) or len(previous.tensors) != 2):
+            raise ValueError("Connect an H3 latent with separate video and audio noise masks.")
+        video_mask = previous.tensors[0] if isinstance(previous, NestedTensor) else torch.ones_like(video)
+        return ({**latent, "samples": NestedTensor((video, encoded)),
+                 "noise_mask": NestedTensor((video_mask, torch.zeros_like(encoded)))},)
+
+
+class ZuraH3PreserveBackground:
+    """Pack a native source-video latent with conservative H3 edit masks.
+
+    Video encoding remains a visible native VAEEncode node. This adapter only
+    aligns the reviewed mask with H3's temporal bins and 32-pixel DiT patches.
+    """
+
+    CATEGORY = "Zura/Artist Studio"
+    FUNCTION = "preserve"
+    RETURN_TYPES = ("LATENT",)
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {"required": {"latent": ("LATENT",), "source_latent": ("LATENT",), "mask": ("MASK",)}}
+
+    def preserve(self, latent, source_latent, mask):
+        from comfy.nested_tensor import NestedTensor
+        samples = latent.get("samples")
+        if not isinstance(samples, NestedTensor) or len(samples.tensors) != 2:
+            raise ValueError("Connect a MiniMax H3 audio-video latent.")
+        template, audio = samples.tensors
+        video = source_latent.get("samples")
+        if not isinstance(video, torch.Tensor) or video.shape != template.shape or video.ndim != 5 or video.shape[:2] != (1,24):
+            raise ValueError("Encode the padded H3 source video with the MiniMax H3 video VAE.")
+        tokens, height, width = video.shape[-3:]
+        frames = sum((1,4,4,4,4)[k % 5] for k in range(tokens))
+        if mask.shape != (frames,height*16,width*16) or height % 2 or width % 2 or not torch.isfinite(mask).all():
+            raise ValueError("The approved mask must match the padded H3 source video.")
+        pixel = (mask > .5).float()
+        spatial = F.max_pool2d(pixel[:,None],16,16)[:,0]
+        # Each native VAE chunk spans 17 frames. Its causal history can mix a
+        # moving edge into later tokens, so retain every edit within that chunk.
+        temporal = torch.stack([spatial[(k//5)*17:min((k//5+1)*17,frames)].amax(0)
+                                for k in range(tokens)])[None,None]
+        patches = F.max_pool3d(temporal,(1,2,2),(1,2,2))
+        video_mask = patches.repeat_interleave(2,-2).repeat_interleave(2,-1).expand(video.shape)
+        previous = latent.get("noise_mask")
+        audio_mask = previous.tensors[1] if isinstance(previous,NestedTensor) and len(previous.tensors)==2 else torch.ones_like(audio)
+        return ({**latent, "samples": NestedTensor((video,audio)),
+                 "noise_mask": NestedTensor((video_mask,audio_mask))},)
+
+
+class ZuraH3CleanDepthTextRegions:
+    """Remove detected caption geometry from a native depth guide, not RGB."""
+
+    CATEGORY = "Zura/Artist Studio"
+    FUNCTION = "clean"
+    RETURN_TYPES = ("IMAGE",)
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {"required": {"depth": ("IMAGE",), "clip_details": ("GENJ_CLIP",)}}
+
+    def clean(self, depth, clip_details):
+        regions = clip_details.get("text_regions", [])
+        if not regions:
+            return (depth,)
+        reference = clip_details.get("text_regions_size")
+        if not reference or len(reference) != 2 or min(reference) <= 0:
+            raise ValueError("Prepare the text removal mask again before cleaning depth.")
+        if depth.ndim != 4 or not torch.isfinite(depth).all():
+            raise ValueError("Connect the source video's native depth guide.")
+        height, width = depth.shape[1:3]
+        result = depth.clone()
+        for region in regions:
+            x,y,w,h = (float(region[key]) for key in ("x","y","width","height"))
+            if not all(math.isfinite(value) for value in (x,y,w,h)) or w <= 0 or h <= 0:
+                continue
+            left=max(0,min(width,math.floor(x*width/reference[0])))
+            right=max(0,min(width,math.ceil((x+w)*width/reference[0])))
+            top=max(0,min(height,math.floor(y*height/reference[1])))
+            bottom=max(0,min(height,math.ceil((y+h)*height/reference[1])))
+            if right<=left or bottom<=top:
+                continue
+            # Interpolate neighbouring depth rows across the text panel. Keep
+            # source pose, facial geometry and every other depth pixel intact.
+            above = depth[:,max(0,top-3):top,left:right].mean(1,keepdim=True) if top else None
+            below = depth[:,bottom:min(height,bottom+3),left:right].mean(1,keepdim=True) if bottom<height else None
+            if above is None and below is None:
+                continue
+            if above is None: above=below
+            if below is None: below=above
+            amount=((torch.arange(bottom-top,device=depth.device,dtype=depth.dtype)+1)/(bottom-top+1))[None,:,None,None]
+            result[:,top:bottom,left:right] = above*(1-amount)+below*amount
+        return (result,)
+
+
+def build_h3_graph(project, use_cache=True, preserve_background=True):
     """Separate picture references, native audio and depth-controlled masked conditioning."""
     from . import verify_review
     from .studio import assert_approved, check_asset
@@ -262,6 +403,8 @@ def build_h3_graph(project, use_cache=True):
                  ckpt_name="depth_anything_v2_vitl.pth", resolution=512)
     depth = node("h3_depth_size", "ImageScale", image=depth, upscale_method="bilinear",
                  width=["h3_pad", 3], height=["h3_pad", 4], crop="disabled")
+    if c.get("remove_text") and manifest["clip"].get("text_regions"):
+        depth = node("h3_clean_depth", "ZuraH3CleanDepthTextRegions", depth=depth, clip_details=["h3_shot",3])
     model = node("h3_inpaint", "MiniMaxH3FunControlNetApply", model=model, model_patch=patch,
                  vae=vae, strength=1.0, start_percent=0.0, end_percent=1.0,
                  source_video=["h3_pad", 0], mask=["h3_pad", 1], control_video=depth)
@@ -278,6 +421,14 @@ def build_h3_graph(project, use_cache=True):
                     vae=vae, image=opening, frame_idx=0)
     positive = node("h3_speech", "MiniMaxH3AddGuide", positive=positive, latent=latent,
                     audio_vae=audio_vae, audio=["h3_pad", 2], frame_idx=0)
+    if preserve_background:
+        source_latent = node("h3_source_latent", "VAEEncode", pixels=["h3_pad",0], vae=vae)
+        latent = node("h3_preserve_background", "ZuraH3PreserveBackground", latent=latent,
+                      source_latent=source_latent, mask=["h3_pad",1])
+    # Keep the actual selected soundtrack fixed in both original-performance
+    # and replacement-dialogue modes, including valid silence for silent clips.
+    latent = node("h3_locked_audio", "ZuraH3LockReferenceAudio", latent=latent,
+                  audio_vae=audio_vae, audio=["h3_pad", 2])
     guider = node("h3_guider", "BasicGuider", model=model, conditioning=positive)
     noise = node("h3_noise", "RandomNoise", noise_seed=c["seed"])
     sigmas = node("h3_schedule", "BasicScheduler", model=model, scheduler="simple",
@@ -294,12 +445,20 @@ def build_h3_graph(project, use_cache=True):
     if use_cache and cache_path(key).exists():
         node("h3_cached", "GenjLoadH3Conditioning", cache_key=key)
         graph["h3_guider"]["inputs"]["conditioning"] = ["h3_cached", 0]
-        graph["h3_sample"]["inputs"]["latent_image"] = ["h3_cached", 1]
+        if "h3_preserve_background" in graph:
+            graph["h3_preserve_background"]["inputs"]["latent"] = ["h3_cached", 1]
+        elif "h3_locked_audio" in graph:
+            graph["h3_locked_audio"]["inputs"]["latent"] = ["h3_cached", 1]
+        else:
+            graph["h3_sample"]["inputs"]["latent_image"] = ["h3_cached", 1]
         graph = reachable_graph(graph, ["h3_export"])
     from .speech import add_finish
     return add_finish(graph, project, native_speech=True)
 
 
-NODE_CLASS_MAPPINGS = {c.__name__: c for c in (GenjH3FramePad, GenjSaveH3Conditioning, GenjLoadH3Conditioning)}
+NODE_CLASS_MAPPINGS = {c.__name__: c for c in (GenjH3FramePad, GenjSaveH3Conditioning, GenjLoadH3Conditioning, ZuraH3LockReferenceAudio, ZuraH3PreserveBackground, ZuraH3CleanDepthTextRegions)}
 NODE_DISPLAY_NAME_MAPPINGS = {"GenjH3FramePad": "Prepare H3 Frames and Mask",
-    "GenjSaveH3Conditioning": "Save H3 Character References", "GenjLoadH3Conditioning": "Load H3 Character References"}
+    "GenjSaveH3Conditioning": "Save H3 Character References", "GenjLoadH3Conditioning": "Load H3 Character References",
+    "ZuraH3LockReferenceAudio": "Zura · Keep Selected Audio During H3 Sampling",
+    "ZuraH3PreserveBackground": "Zura · Preserve H3 Background During Sampling",
+    "ZuraH3CleanDepthTextRegions": "Zura · Remove Captions from H3 Depth Guide"}

@@ -43,7 +43,7 @@ def cache_key(project):
         from .speech import bundle_path, model_files, readiness
         state = readiness()
         if not state["ready"]:
-            raise ValueError("Install the local speech models with Setup_Speech_Windows.cmd, or untick Lip sync to use this track as a soundtrack.")
+            raise ValueError("Install the local speech models with Setup_Speech_Windows.cmd, or untick Create a new facial performance to use this track as a soundtrack.")
         base = bundle_path(state["model"])
         data["speech"] = {"version": 3, "model": state["model"], "audio": project["audio"]["sha"], "start": c["audio_start"], "seed": c["seed"],
             "models": [[name, (base / name).stat().st_size, (base / name).stat().st_mtime_ns] for name in model_files(state["model"])]}

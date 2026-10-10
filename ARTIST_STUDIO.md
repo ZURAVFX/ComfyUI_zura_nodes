@@ -7,7 +7,7 @@ default local installation. The direct studio link is
 `http://127.0.0.1:8188/?zura=1`.
 
 Open **Zura Studio** in ComfyUI, upload the performance video and a character
-image, optionally add **Reference audio**, then choose a model, **Resolution**
+image, choose **Audio and performance**, then choose a model, **Resolution**
 and **Clip length** (original video or a custom length). Prepare the shot,
 check the mask, create the character preview, then animate the approved look.
 Job IDs, reference copies, model preparation and cache hand-offs are automatic.
@@ -39,7 +39,21 @@ seed and sampling controls are exposed on the graph. Technical settings remain
 editable inside each stage. Graph conversion checks the compiled render inputs
 and restores the original editable graph if conversion changes them.
 
-## Optional reference audio
+## Audio and performance
+
+The same selector is available for Wan, MiniMax H3, LTX and Seedance:
+
+- **Original audio + performance** is the default. It keeps the video's
+  soundtrack and source-performance guidance. No replacement speech guide or
+  mouth finishing pass is added.
+- **Reference audio + new performance** uses an uploaded or locally created
+  voice track. **Create a new facial performance** is enabled automatically.
+  Untick it to use the track as music or sound design instead.
+
+Switching back to Original retains the reference track on this computer so
+you can select it again without uploading it. An inactive reference never
+feeds the renderer. These modes select the appropriate guidance; they do not
+guarantee exact expression or phoneme reproduction by every model.
 
 **Reference audio** accepts WAV, MP3, M4A, FLAC, OGG, AAC and AIFF, or audio from
 an MP4, MOV, MKV or WebM. Video uploads in this field use only their audio. It replaces
@@ -47,15 +61,18 @@ the source soundtrack for both guidance and the finished video. By default it
 starts at zero at the beginning of your selected video interval. Adjust its
 own **Reference audio start** in More controls if needed. It is trimmed to the
 selected clip length; shorter tracks are padded with silence. Remove it with
-**Use video's audio instead**. Changing audio requires a fresh guidance review.
+**Use video's audio instead**, or select **Original audio + performance**.
+Changing audio requires a fresh guidance review.
 
 Silent source videos receive valid silence for audio encoders, including the
 full-resolution reread and LTX temporal padding. The final video stays quiet
 when there is no source audio and no reference track.
 
-With an uploaded track, **Lip sync to this audio** selects the engine's speech
-route. H3 uses its native audio guide and LTX conditions video directly on the
-selected audio. Both keep their generated faces by default. Wan uses a separate
+With an uploaded track, **Create a new facial performance** selects the engine's
+speech route. H3 encodes and holds the selected audio fixed during sampling,
+including the original soundtrack in Original mode, alongside
+its native audio guide; LTX conditions video directly on the selected audio.
+Both keep their generated faces by default. Wan uses a separate
 local mouth guide before generation. For that guide, Automatic selects LatentSync
 1.6 at its trained 512 px face resolution when installed; MuseTalk 1.5 remains
 a smaller 256 px option in Graph view.
@@ -70,7 +87,8 @@ The old moving mouth is replaced in the speech network's visual reference with
 the least open source mouth, aligned using eyes and nose landmarks. A silence
 gate holds that resting mouth before speech starts and during longer pauses.
 It does not look ahead into future audio. Head direction, eyes and body motion
-still follow the source. This is automatic when lip sync is enabled.
+still follow the source. This is automatic when a new facial performance is
+enabled. Original mode keeps Wan's unmodified source face guide.
 
 **More controls > Refine lips after generation** is off by default for Wan,
 H3 and LTX. It optionally adds a second pass if articulation needs help. That
@@ -164,9 +182,21 @@ The native loader explicitly uses `fp8_e4m3fn_fast` for the supplied KJ-scaled
 Wan checkpoint; current core otherwise expands it to FP16 and renders much slower.
 H3 has its own compatible 8-step acceleration / 40-step Euler route. Its native
 depth ControlNet carries source motion; separate image references carry appearance
-and an audio guide carries speech timing. It does not also attach the source as a
+and an audio guide carries speech timing. In both audio modes,
+the selected waveform also replaces the audio latent with a zero-noise mask.
+This prevents H3 from generating different audio beneath the finished soundtrack.
+Real silence pads the waveform to the internal duration before encoding; export
+still uses the selected clip length and original track. This uses the native H3
+sampling contract demonstrated by [Pixaroma's audio-sync node](https://github.com/pixaroma/ComfyUI-Pixaroma/blob/main/nodes/node_h3_audio_sync.py).
+It does not also attach the source as a
 video reference. Short takes retain 124 frames of internal model context and trim
 back to the selected duration. This increases memory and render time for previews.
+Untouched background cells retain native source-video latents during sampling.
+The editable area is expanded conservatively across each VAE chunk and DiT
+patch to cover moving character edges. This reduces colour drift without a
+post-render RGB composite, but VAE decoding can still change fine detail.
+In Graph view, bypass **Zura · Preserve H3 Background Latents** to use the
+earlier full-video sampling path while retaining fixed audio.
 LTX keeps its existing distilled schedule and neutral audio/video modality guidance.
 Both LTX passes receive frozen source audio with the zero-noise mask used in
 the official LTX-2.5 Audio-to-Video workflow;
@@ -181,7 +211,11 @@ timing signal. See the [official workflow compatibility guide](https://docs.ltx.
 
 **Remove on-screen text** adds detected title panels and subtitles to the
 pre-generation removal mask. Check the orange coverage before approval. The
-original RGB background and combined mask condition each supported local model
+detected text panels are held across the selected clip so intermittent OCR or
+changing captions do not briefly uncover the old text. Performer tracking stays
+per frame. Moving titles or cuts can require a larger removal area; review it.
+H3 also clears these regions in its depth guidance before sampling.
+The original RGB background and combined mask condition each supported local model
 before sampling. There is no post-render performer paste or text cover-up.
 
 Wan preparation uses native `PoseAndFaceDetection`, `DrawViTPose`, SAM 3 and

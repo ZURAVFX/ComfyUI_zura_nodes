@@ -129,6 +129,9 @@ jobs:
           python -m compileall -q artist_studio wan_artist.py
           python -m unittest discover -s tests -p 'test_artist_studio.py'
           python -m unittest discover -s tests -p 'test_studio_speech.py'
+          python -m unittest discover -s tests -p 'test_studio_audio_modes.py'
+          python -m unittest discover -s tests -p 'test_h3_reference_audio.py'
+          python -m unittest discover -s tests -p 'test_text_removal.py'
           python -m unittest discover -s tests -p 'test_klein_look.py'
           python -m unittest discover -s tests -p 'test_multicam_v3.py'
           python -m unittest discover -s tests -p 'test_short_take_duration.py'

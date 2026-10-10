@@ -136,7 +136,7 @@ def check_asset(asset):
 def prep_key(project):
     settings = {"source": project["source"]["sha"], **{k: project["config"][k] for k in PREP_KEYS}}
     if project["config"].get("remove_text"):
-        settings["remove_text"] = 1
+        settings["remove_text"] = 2
     if project["config"].get("length_mode") == "original":
         settings["length_mode"] = "original"
     if project.get("audio"):
@@ -414,7 +414,9 @@ def media_url(asset):
 
 def public_project(project):
     p = copy.deepcopy(project)
-    for key in ("source", "character", "opening_input", "audio"):
+    if p.get("audio") and "audio_id" not in p.get("config", {}) and p["audio"].get("id"):
+        p["config"]["audio_id"] = p["audio"]["id"]
+    for key in ("source", "character", "opening_input", "audio", "reference_audio"):
         if p.get(key):
             a = p[key]
             a["url"] = media_url({"filename": Path(a["file"]).name, "subfolder": str(Path(a["file"]).parent).replace("\\", "/"), "type": "input"})
@@ -578,15 +580,29 @@ class Studio:
         self.collect(p)
         if p["phase"] == "working":
             raise ValueError("Wait for the current job before changing its settings.")
-        old_key, prior = prep_key(p), clean_config(p["config"])
+        prior_value = dict(p["config"])
+        if "audio_id" not in prior_value and p.get("audio") and p["audio"].get("id"):
+            prior_value["audio_id"] = p["audio"]["id"]
+        old_key, prior = prep_key(p), clean_config(prior_value)
         config = clean_config(value)
         audio = self.store.load(config["audio_id"]) if config["audio_id"] else None
         if audio:
             if audio.get("asset_kind") != "audio":
                 raise ValueError("Choose an audio file for the reference soundtrack.")
             check_asset(audio)
+        # Selecting the original performance must not discard an uploaded or
+        # generated track. `audio` remains the active input for every engine;
+        # this separate asset only remembers the last reference selection.
+        remembered_audio = audio or p.get("reference_audio") or p.get("audio")
+        if remembered_audio:
+            p["reference_audio"] = copy.deepcopy(remembered_audio)
         p["config"], p["audio"] = config, audio
-        if old_key != prep_key(p):
+        stale_text_review = bool(config.get("remove_text") and p.get("review")
+                                 and p.get("prepared_key") != prep_key(p))
+        if old_key != prep_key(p) or stale_text_review:
+            # A text-enabled review made before held caption regions must be
+            # prepared again. Refresh only when the artist configures/continues
+            # this shot, never while reading the saved library or finished take.
             p.update(phase="new", review=None, approval=None, opening_input=None,
                      opening_key=None, opening_url=None, opening_approval=None,
                      draft_task=None, accepted_draft=None)
@@ -636,7 +652,7 @@ class Studio:
             from .speech import readiness
             needs_speech_model = stage in ("wan", "draft", "final") or p["config"].get("refine_lips")
             if needs_speech_model and not readiness()["ready"]:
-                raise ValueError("Install the local speech models with Setup_Speech_Windows.cmd, or untick Lip sync to use this track as a soundtrack.")
+                raise ValueError("Install the local speech models with Setup_Speech_Windows.cmd, or untick Create a new facial performance to use this track as a soundtrack.")
         graph = build_graph(p, stage)
         next_stage = None
         if stage in ("background", "restyle") and "genj_cached_text" not in graph:
