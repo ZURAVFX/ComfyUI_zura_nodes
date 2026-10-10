@@ -293,7 +293,7 @@ def build_graph(project, stage, use_cache=True):
             graph["5549"]["inputs"].update(positive=[first_cond, 0], negative=[first_cond, 1])
             audio_model = ["5004:5607", 0]
         graph["zura_av_coupling"] = {"class_type": "LTXVModalityGuidance", "inputs": {
-            "model": audio_model, "modality_scale": 3.0, "start_percent": 0.0, "end_percent": 1.0}}
+            "model": audio_model, "modality_scale": 1.0, "start_percent": 0.0, "end_percent": 1.0}}
         for index, (guider, concat, cond, audio) in enumerate(zip(
                 guiders, concats, (first_cond, second_cond), audio_latents)):
             frozen = "zura_frozen_audio_" + str(index)
@@ -303,6 +303,14 @@ def build_graph(project, stage, use_cache=True):
             graph[guider]["inputs"].update(model=["zura_av_coupling", 0],
                 positive=[cond, 0], negative=[cond, 1])
         key = "5404" if stage == "background" else "5508"
+        if project.get("audio") and c.get("lip_sync"):
+            direction = graph[key]["inputs"]["value"]
+            direction = direction.replace("expression and lip movements", "head direction, eye expression and body gestures")
+            direction = direction.replace("lip movements", "head direction and eye expression")
+            graph[key]["inputs"]["value"] = direction + (
+                " The supplied audio is the replacement dialogue. Articulate its words through natural mouth and jaw motion,"
+                " following the audio timing. Keep a resting mouth during silence. Ignore the source video's old dialogue"
+                " and lip movements. Preserve the replacement character's identity from the approved opening image.")
         if c["prompt"]:
             graph[key]["inputs"]["value"] += " Appearance direction: " + c["prompt"]
         if c.get("remove_text"):
@@ -359,7 +367,7 @@ def build_graph(project, stage, use_cache=True):
         graph["2"]["_meta"] = {"title": "Use the accepted draft · automatic"}
     if stage in ("background", "restyle", "draft", "final"):
         from .speech import add_finish
-        add_finish(graph, project)
+        add_finish(graph, project, native_speech=stage in ("background", "restyle"))
     return graph
 
 
@@ -626,7 +634,8 @@ class Studio:
             raise ValueError("Sign in to your Comfy account in ComfyUI before using Seedance. Local generation needs no sign-in.")
         if p.get("audio") and p["config"].get("lip_sync") and stage in ("wan", "h3", "background", "restyle", "draft", "final"):
             from .speech import readiness
-            if not readiness()["ready"]:
+            needs_speech_model = stage in ("wan", "draft", "final") or p["config"].get("refine_lips")
+            if needs_speech_model and not readiness()["ready"]:
                 raise ValueError("Install the local speech models with Setup_Speech_Windows.cmd, or untick Lip sync to use this track as a soundtrack.")
         graph = build_graph(p, stage)
         next_stage = None

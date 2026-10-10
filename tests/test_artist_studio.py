@@ -74,6 +74,62 @@ class SharedEngineTests(unittest.TestCase):
             self.assertEqual(graph['h3_shot']['inputs']['render_long_edge'], 1280)
             self.assertEqual(graph['h3_shot']['inputs']['preview_seconds'], 0)
             self.assertEqual(graph['h3_schedule']['inputs']['steps'], 40)
+            self.assertEqual(graph['h3_sampler']['inputs']['sampler_name'], 'euler')
+            self.assertEqual(graph['h3_inpaint']['inputs']['strength'], 1.0)
+            self.assertEqual(graph['h3_inpaint']['inputs']['control_video'], ['h3_depth_size',0])
+            self.assertNotIn('ref_videos.ref_video_0',graph['h3_references']['inputs'])
+            self.assertEqual(graph['h3_references']['inputs']['ref_audios.ref_audio_0'],['h3_pad',2])
+
+    def test_h3_short_take_keeps_full_model_context_and_original_delivery_length(self):
+        images = torch.rand(48, 32, 32, 3)
+        masks = torch.ones_like(images)
+        audio = {'waveform':torch.ones(1, 1, 48000), 'sample_rate':24000}
+        video = types.SimpleNamespace(get_components=lambda:types.SimpleNamespace(images=images, audio=audio, frame_rate=24))
+        mask = types.SimpleNamespace(get_components=lambda:types.SimpleNamespace(images=masks, frame_rate=24))
+        padded, _, track, _, _, context, delivery = h3.GenjH3FramePad().pad(video, mask)
+        self.assertEqual((context, delivery), (124,48))
+        self.assertTrue(torch.equal(padded[:48], images))
+        self.assertTrue(torch.equal(padded[-1], images[-1]))
+        self.assertEqual(track['waveform'].shape[-1], 48000, 'Model context must not extend the artist audio take')
+
+    def test_h3_voice_changes_invalidate_encoded_reference_cache(self):
+        import folder_paths
+        p = self.project()
+        p['audio'] = {'file':'speech.wav','sha':'first-voice'}
+        with patch.object(folder_paths, 'get_full_path', return_value=str(Path(__file__))):
+            before = h3.cache_key(p)
+            p['audio']['sha'] = 'different-voice'
+            self.assertNotEqual(before, h3.cache_key(p))
+            p['audio']['sha'] = 'first-voice'
+            p['config']['audio_start'] = 1.0
+            self.assertNotEqual(before, h3.cache_key(p))
+            p['config']['audio_start'] = 0
+            p['config']['lip_sync'] = True
+            self.assertNotEqual(before, h3.cache_key(p))
+
+    def test_native_h3_and_ltx_speech_do_not_overwrite_faces_by_default(self):
+        p = self.project()
+        p['audio'] = {'file':'speech.wav','sha':'speech'}
+        p['config'].update(audio_id='b'*32, lip_sync=True)
+        package.verify_review = lambda _: (None, {'clip': {'frames':48}})
+        with patch.object(studio,'assert_approved'), patch.object(studio,'check_asset'), \
+                patch.object(h3,'cache_key',return_value='c'*64), \
+                patch.object(studio,'text_cache_info',return_value=('cache',{})):
+            for engine, stage in [('h3','h3'),('local','background'),('local','restyle')]:
+                p['config']['engine'] = engine
+                graph = studio.build_graph(p, stage, use_cache=False)
+                self.assertNotIn('zura_speech_0video',graph)
+                if engine=='h3':
+                    self.assertEqual(graph['h3_speech']['inputs']['audio'],['h3_pad',2])
+                    self.assertIn('replacement dialogue',graph['h3_prompt']['inputs']['value'])
+                else:
+                    self.assertEqual(graph['zura_av_coupling']['inputs']['modality_scale'],1.0)
+                    prompt = graph['5404' if stage=='background' else '5508']['inputs']['value']
+                    self.assertIn('replacement dialogue',prompt)
+                    self.assertNotIn('expression and lip movements',prompt)
+                p['config']['refine_lips'] = True
+                self.assertIn('zura_speech_0video',studio.build_graph(p,stage,use_cache=False))
+                p['config']['refine_lips'] = False
 
     def test_wan_native_preparation_and_model_stack(self):
         p = self.project()

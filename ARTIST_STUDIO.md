@@ -53,9 +53,15 @@ Silent source videos receive valid silence for audio encoders, including the
 full-resolution reread and LTX temporal padding. The final video stays quiet
 when there is no source audio and no reference track.
 
-With an uploaded track, **Lip sync to this audio** adds optional local mouth
-animation. Automatic selects LatentSync 1.6 at its trained 512 px face resolution
-when installed; MuseTalk 1.5 remains a smaller 256 px option in Graph view.
+With an uploaded track, **Lip sync to this audio** selects the engine's speech
+route. H3 uses its native audio guide and LTX conditions video directly on the
+selected audio. Both keep their generated faces by default. Wan uses a separate
+local mouth guide before generation. For that guide, Automatic selects LatentSync
+1.6 at its trained 512 px face resolution when installed; MuseTalk 1.5 remains
+a smaller 256 px option in Graph view.
+H3 and LTX do not need these separate speech models unless lip refinement is
+selected. With speech disabled, the selected track still reaches their native
+audio conditioning for music or sound design and can influence movement.
 Wan generates a new mouth performance from the selected
 audio before its existing Animate sampler. It keeps the original head and body
 guidance, then renders the character's facial texture itself. Tracking the
@@ -66,15 +72,13 @@ gate holds that resting mouth before speech starts and during longer pauses.
 It does not look ahead into future audio. Head direction, eyes and body motion
 still follow the source. This is automatic when lip sync is enabled.
 
-Wan defaults to this guide-only route. **More controls > Refine lips after
-generation** optionally adds a second pass if articulation needs help. That
+**More controls > Refine lips after generation** is off by default for Wan,
+H3 and LTX. It optionally adds a second pass if articulation needs help. That
 pass blends only around the detected mouth, with a mild bounded detail filter,
 preserving the surrounding cheeks, beard and chin before video compression.
-Review both timing and detail. LTX, H3 and the accepted Seedance final use the same local mouth
-refinement because they do not use Wan's native face-video guidance.
-Untick it for music or sound design; the audio is then only a soundtrack.
-Native LTX/H3 speech conditioning remains experimental, so this separate local
-finish provides the new articulation rather than relying on those models alone.
+Review both timing and detail. The accepted Seedance final can use the same local
+mouth refinement. Native LTX/H3 speech quality remains experimental; a completed
+render does not establish good identity, motion or lip sync.
 
 Run **Setup_Speech_Windows.cmd** once for the optional sharp local models and Python
 dependencies. There is no paid speech call or automatic download during renders.
@@ -117,7 +121,7 @@ The original-length option never silently substitutes the custom duration.
 | Model | Current behaviour |
 | --- | --- |
 | LTX 2.5 | Local masked replacement; original background or depth-guided scene restyling. Uses the approved opening scene. Speech timing remains experimental after failed talking tests. |
-| MiniMax H3 | Experimental local replacement with separate opening and character references, depth control and source audio. The earlier 512 px test failed user quality review: motion transfer remains weak. |
+| MiniMax H3 | Local replacement with separate opening and character references, native audio guidance and depth control. Review face fidelity, gesture transfer and speech timing. |
 | Wan 2.2 Animate | Local pose and face-driven replacement with the approved background mask. Uses the approved opening scene for the latent reference and an isolated character view for CLIP Vision. |
 | Seedance | Paid draft and accepted-final route through Comfy. Requires explicit paid action and Comfy sign-in. No paid calls were used during this update. |
 
@@ -139,6 +143,9 @@ light, while rendering rereads the original footage at the selected resolution.
 **Clip length** governs the selected source interval and delivered audio/video.
 There is no hidden two-second preview limit. Native temporal padding is trimmed.
 H3 currently supports 0.21–5 seconds; use one continuous shot with H3 or LTX.
+Short H3 takes use a full 124-frame model context internally, with the requested
+video and audio length restored at export. Padding cannot create missing motion;
+the longer context is a model setup correction, not a quality guarantee.
 Wan uses bounded 81-frame windows, real-frame continuation and automatic cut
 detection. Two-second previews render in one pass. Native joins retain the
 previous frames and discard repeated context instead of cross-fading faces.
@@ -155,8 +162,12 @@ Fast adds the two supplied LightX2V LoRAs at 0.7/0.6 with 6 steps and CFG 1;
 Detailed removes those two acceleration LoRAs and uses 40 steps with CFG 5.
 The native loader explicitly uses `fp8_e4m3fn_fast` for the supplied KJ-scaled
 Wan checkpoint; current core otherwise expands it to FP16 and renders much slower.
-H3 has its own compatible 8-step acceleration / 40-step route. LTX keeps its
-existing distilled schedule and adds native audio/video modality guidance.
+H3 has its own compatible 8-step acceleration / 40-step Euler route. Its native
+depth ControlNet carries source motion; separate image references carry appearance
+and an audio guide carries speech timing. It does not also attach the source as a
+video reference. Short takes retain 124 frames of internal model context and trim
+back to the selected duration. This increases memory and render time for previews.
+LTX keeps its existing distilled schedule and neutral audio/video modality guidance.
 Both LTX passes receive frozen source audio with the zero-noise mask used in
 the official LTX-2.5 Audio-to-Video workflow;
 the restyle route no longer generates silent audio and merely restores the

@@ -1,5 +1,32 @@
 # Zura Studio validation
 
+## Native speech paths, 10 October 2026
+
+H3 and LTX now retain their native generated faces by default. The shared local
+mouth finish runs only when Refine lips after generation is selected. Wan keeps
+its separate audio-driven guide before generation. Native H3/LTX speech no longer
+requires the optional mouth-correction models.
+
+Two fresh local renders used replacement audio with no mouth finish: LTX at
+1080 × 1920 and H3 at 720 × 1280 with 40 Euler steps. Both delivered 48 frames
+at 24 fps, two seconds and one correctly aligned selected audio track. H3 used
+124 frames of internal context, separate image references, native audio guidance
+and depth ControlNet strength 1.0 without a duplicate video reference.
+
+Frame inspection found a more consistent H3 face and visible hand gesture
+transfer. LTX retained the opening appearance but changed gesture timing and
+showed mouth movement during the quiet opening. Exact phoneme synchronisation
+was not measured, and user acceptance of these new takes is pending. Neither
+successful rendering nor restored audio establishes good lip sync.
+
+The 21 shared-engine and 24 speech tests pass. Six native frontend graph
+export/reload tests pass, including changed root controls and zero root wire
+crossings. DOM/mock checks cover optional refinement, native speech without
+separate correction models, engine switching and the private mobile preview
+selector. Browser and physical phone testing remain unavailable. Seven saved
+projects and unrelated installed modules were preserved. No paid inference ran;
+private recordings, scripts, test media and project data are excluded from GitHub.
+
 ## 1.3.2 audio, graph view and original clip length
 
 Checked on 10 October 2026. Eight additional Python regressions exercise

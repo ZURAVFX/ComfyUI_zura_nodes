@@ -42,9 +42,10 @@ def cache_key(project):
         stamp = Path(filename).stat()
         stamps[key] = [name, stamp.st_size, stamp.st_mtime_ns]
     c = project["config"]
-    data = {"version": 4, "motion": "native_depth_reference", "review": project["review"], "character": project["character"]["sha"],
+    data = {"version": 6, "motion": "native_depth_control", "review": project["review"], "character": project["character"]["sha"],
             "opening": project["opening_key"], "settings": {k: c.get(k) for k in ("resolution", "size", "scope", "prompt", "pitch")},
-            "preview": False, "encoders": stamps}
+            "audio": (project.get("audio") or {}).get("sha"), "audio_start": c.get("audio_start", 0),
+            "lip_sync": c.get("lip_sync", False), "preview": False, "encoders": stamps}
     return hashlib.sha256(json.dumps(data, sort_keys=True).encode()).hexdigest()
 
 
@@ -172,7 +173,9 @@ class GenjH3FramePad:
         mask = (mask >= 0.5).to(images.dtype)
         if not bool(mask.any()):
             raise ValueError("The replacement mask is empty. Check the selection before rendering.")
-        length = valid_length(count)
+        # The native H3 examples use at least 124 frames (~5 seconds). Keep a
+        # full temporal context for short previews, then trim the decoded take.
+        length = max(124, valid_length(count))
         extra = length - count
         if extra:
             images = torch.cat((images, images[-1:].expand(extra, -1, -1, -1)))
@@ -188,7 +191,7 @@ class GenjH3FramePad:
 
 
 def build_h3_graph(project, use_cache=True):
-    """Two separate picture references, AV performance, native masked conditioning."""
+    """Separate picture references, native audio and depth-controlled masked conditioning."""
     from . import verify_review
     from .studio import assert_approved, check_asset
 
@@ -214,7 +217,7 @@ def build_h3_graph(project, use_cache=True):
         "<Picture 1> is the approved opening scene and defines framing, pose, lighting and the replacement character in this shot. "
         "<Picture 2> is the same replacement character's appearance reference: use its face, hairstyle, clothing, "
         "colours and details whenever they become visible. Treat any multiple views on this image as reference views of one character, "
-        "never as a collage or extra people. <Video 1> is the source performance rendered as a depth motion guide, "
+        "never as a collage or extra people. The depth control supplies the source performance's geometry and motion, "
         "not the output's appearance. Match its changing hand positions, body gestures, facial movement and camera timing. "
         "Use the replacement character's face and clothes throughout; do not return to the original performer's costume. "
         "<Audio 1> supplies the original performance and speech timing. " + direction +
@@ -222,6 +225,11 @@ def build_h3_graph(project, use_cache=True):
         "camera and lighting outside the replacement area. " + c["prompt"])
     if c.get("remove_text"):
         prompt += " Remove all masked title banners, captions and subtitles completely. Fill them with clean background or character clothing. Do not reproduce any on-screen text overlays."
+    if project.get("audio") and c.get("lip_sync"):
+        prompt = prompt.replace("facial movement and camera timing", "head direction, eye expression and camera timing")
+        prompt = prompt.replace("<Audio 1> supplies the original performance and speech timing.",
+            "<Audio 1> is the replacement dialogue. Reproduce its words and timing through natural mouth and jaw articulation, with a resting mouth during silence. Ignore the source video's original dialogue and mouth movements.")
+        prompt = prompt.replace("Follow the source gestures and speech.", "Follow the source body gestures and the replacement audio's speech.")
     graph = {}
 
     def node(identity, typ, **inputs):
@@ -255,7 +263,7 @@ def build_h3_graph(project, use_cache=True):
     depth = node("h3_depth_size", "ImageScale", image=depth, upscale_method="bilinear",
                  width=["h3_pad", 3], height=["h3_pad", 4], crop="disabled")
     model = node("h3_inpaint", "MiniMaxH3FunControlNetApply", model=model, model_patch=patch,
-                 vae=vae, strength=1.25, start_percent=0.0, end_percent=1.0,
+                 vae=vae, strength=1.0, start_percent=0.0, end_percent=1.0,
                  source_video=["h3_pad", 0], mask=["h3_pad", 1], control_video=depth)
     # A native prompt source keeps the artist control in Your inputs and lets
     # the reference stage receive its inputs in a single ordered hand-off.
@@ -263,8 +271,8 @@ def build_h3_graph(project, use_cache=True):
     positive = node("h3_references", "MiniMaxH3ReferenceToVideo", clip=clip, vae=vae, audio_vae=audio_vae,
                     prompt=prompt_input, width=["h3_pad", 3], height=["h3_pad", 4], length=["h3_pad", 5],
                     ref_image_size="match", **{"ref_images.ref_image_0": opening,
-                    "ref_images.ref_image_1": ["h3_character", 0], "ref_videos.ref_video_0": depth,
-                    "ref_video_audios.ref_video_audio_0": ["h3_pad", 2]})
+                    "ref_images.ref_image_1": ["h3_character", 0],
+                    "ref_audios.ref_audio_0": ["h3_pad", 2]})
     latent = ["h3_references", 1]
     positive = node("h3_first_frame", "MiniMaxH3AddGuide", positive=positive, latent=latent,
                     vae=vae, image=opening, frame_idx=0)
@@ -274,7 +282,7 @@ def build_h3_graph(project, use_cache=True):
     noise = node("h3_noise", "RandomNoise", noise_seed=c["seed"])
     sigmas = node("h3_schedule", "BasicScheduler", model=model, scheduler="simple",
                   steps=8 if fast else 40, denoise=1.0)
-    sampler = node("h3_sampler", "KSamplerSelect", sampler_name="res_multistep")
+    sampler = node("h3_sampler", "KSamplerSelect", sampler_name="res_multistep" if fast else "euler")
     sampled = node("h3_sample", "SamplerCustomAdvanced", noise=noise, guider=guider,
                    sampler=sampler, sigmas=sigmas, latent_image=latent)
     decoded = node("h3_decode", "VAEDecode", samples=sampled, vae=vae)
@@ -289,7 +297,7 @@ def build_h3_graph(project, use_cache=True):
         graph["h3_sample"]["inputs"]["latent_image"] = ["h3_cached", 1]
         graph = reachable_graph(graph, ["h3_export"])
     from .speech import add_finish
-    return add_finish(graph, project)
+    return add_finish(graph, project, native_speech=True)
 
 
 NODE_CLASS_MAPPINGS = {c.__name__: c for c in (GenjH3FramePad, GenjSaveH3Conditioning, GenjLoadH3Conditioning)}

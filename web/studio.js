@@ -74,8 +74,8 @@ class ArtistStudio {
           <div><label><span class="gs-label">Clip length</span><select id="gs-length_mode"><option value="original">Original clip length</option><option value="custom" selected>Custom length</option></select></label><label id="gs-duration-setting"><span class="gs-label">Seconds</span><input id="gs-duration" type="number" min="0.25" max="30" step="0.25" value="2"/></label></div></div>
         <p class="gs-note" id="gs-output-note">Keeps your video's shape. Renders the length you choose from the original footage.</p>
         <label id="gs-sampling-setting" hidden><span class="gs-label">Detail level</span><select id="gs-quality"><option value="fast">Fast · accelerated model</option><option value="detailed">Detailed · full sampling</option></select><small>Changes sampling effort, while resolution and clip length stay as selected.</small></label>
-        <p id="gs-h3-setting" class="gs-note" hidden>H3 is experimental: the current method retains clothing but transfers motion poorly. Clips support up to 5 seconds.</p>
-        <p id="gs-ltx-setting" class="gs-note">LTX speech timing is still experimental. Wan transferred the talking performance better in our current tests.</p>
+        <p id="gs-h3-setting" class="gs-note" hidden>H3 uses native audio, separate appearance references and depth for motion. Clips support up to 5 seconds. Detailed takes are slower.</p>
+        <p id="gs-ltx-setting" class="gs-note">LTX uses direct audio conditioning. Review identity, motion and speech timing before keeping a take.</p>
         <div class="gs-two"><label><span class="gs-label">Replace</span><select id="gs-scope"><option value="person">Head and body</option><option value="head">Head only</option></select></label>
           <label><span class="gs-label">Background</span><select id="gs-background"><option value="keep">Keep original</option><option value="restyle">Restyle scene</option></select></label></div>
         <label class="gs-prompt"><span class="gs-label">Describe the look <small>Optional</small></span><textarea id="gs-prompt" rows="3" placeholder="For example, a red jacket with natural cinematic lighting"></textarea></label>
@@ -83,7 +83,7 @@ class ArtistStudio {
         <details class="gs-advanced"><summary>More controls</summary><div class="gs-advanced-body">
           <label><span class="gs-label">Start (seconds)</span><input id="gs-start" type="number" min="0" max="86400" step="0.1" value="0"/></label>
           <label id="gs-audio-start-setting" hidden><span class="gs-label">Reference audio start (seconds)</span><input id="gs-audio_start" type="number" min="0" max="86400" step="0.1" value="0"/><small>Aligned to the start of your selected clip. Shorter tracks are padded with silence.</small></label>
-          <label id="gs-refine-lips-setting" class="gs-checkbox" hidden><input id="gs-refine_lips" type="checkbox"/><span>Refine lips after generation<small>Wan already follows an audio-driven face guide. Use this extra pass if mouth timing needs help; it can soften lip detail.</small></span></label>
+          <label id="gs-refine-lips-setting" class="gs-checkbox" hidden><input id="gs-refine_lips" type="checkbox"/><span>Refine lips after generation<small>Optional local mouth correction after the model's own speech method. It can soften detail or change the expression.</small></span></label>
           <div class="gs-two"><label><span class="gs-label">Performer</span><input id="gs-performer" type="number" min="-1" max="63" value="-1"/><small>-1 chooses automatically</small></label>
           <label><span class="gs-label">Mask margin (px)</span><input id="gs-margin" type="number" min="0" max="128" value="8"/></label></div>
           <label><span class="gs-label">Seed</span><input id="gs-seed" type="number" min="0" max="9007199254740991" value="42"/></label>
@@ -193,7 +193,7 @@ class ArtistStudio {
       const asset=await r.json();if(!r.ok)throw new Error(asset.error || "The upload could not complete.");
       asset.url=api.apiURL("/view?"+new URLSearchParams({filename:asset.file.split("/").pop(),subfolder:asset.file.split("/").slice(0,-1).join("/"),type:"input"}));
       if(type==="audio"){
-        const config={...this.readConfig(),audio_id:asset.id,audio_start:0,lip_sync:!!this.modelStatus?.speech?.ready};
+        const config={...this.readConfig(),audio_id:asset.id,audio_start:0,lip_sync:["h3","local"].includes(this.config.engine)||!!this.modelStatus?.speech?.ready};
         if(this.project)this.project=await request(`/projects/${this.project.id}/config`,{config});
         this.audio=asset;this.config=config;this.syncForm();
       }else{
@@ -312,11 +312,14 @@ class ArtistStudio {
     this.$("clear-audio").disabled=this.busy || this.project?.phase==="working";
     this.$("exit").disabled=this.busy;
     this.$("speech-setting").hidden=!this.audio;
-    this.$("refine-lips-setting").hidden=!this.audio || !this.config.lip_sync || this.config.engine!=="wan";
+    this.$("refine-lips-setting").hidden=!this.audio || !this.config.lip_sync || !["wan","h3","local"].includes(this.config.engine);
     this.$("audio-note").textContent=this.audio?(this.config.lip_sync?
       (this.config.engine==="wan"?(this.config.refine_lips?"Creates Wan's mouth-motion guide and adds the optional lip refinement pass. Review mouth timing and detail.":"Creates new mouth motion from this audio before Wan renders the character. Keeps the original head and body motion. Review the mouth timing."):
+      ["h3","local"].includes(this.config.engine)?
+      ((this.config.engine==="h3"?"MiniMax H3 uses its native audio guide to generate the performance.":"LTX generates video directly from the selected audio.")+
+       (this.config.refine_lips?" Adds the optional lip refinement pass. Review mouth timing and detail.":" Review face quality, movement and speech timing.")):
       "Adds a local speech lip-sync finish to the generated character. Best with a visible human face."):
-      "Uses this track as music or sound design. Mouth motion follows the performance video."):
+      (["h3","local"].includes(this.config.engine)?"Uses this track as music or sound design. The model can also react to the audio; review the movement.":"Uses this track as music or sound design. Mouth motion follows the performance video.")):
       "Uses the video's audio by default. Silent videos work too.";
     const p=this.project,working=p?.phase==="working",phase=p?.phase || "new";
     this.$("duration-setting").hidden=this.config.length_mode==="original";
@@ -405,7 +408,7 @@ class ArtistStudio {
         try{
           const job=await request("/voice/"+identity);this.voiceJob=job;
           if(job.state==="complete"&&this.project?.phase!=="working"){
-            const config={...this.readConfig(),audio_id:job.audio.id,audio_start:0,lip_sync:!!this.modelStatus?.speech?.ready};
+            const config={...this.readConfig(),audio_id:job.audio.id,audio_start:0,lip_sync:["h3","local"].includes(this.config.engine)||!!this.modelStatus?.speech?.ready};
             if(this.project)this.project=await request(`/projects/${this.project.id}/config`,{config});
             this.audio=job.audio;this.config=config;this.voiceJob=null;localStorage.removeItem("zura-studio-voice-job");
             this.$("voice-note").textContent="Voice ready. It is selected as your reference audio.";this.syncForm();this.render();
