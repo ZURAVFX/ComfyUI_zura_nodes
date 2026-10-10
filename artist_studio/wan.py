@@ -39,6 +39,13 @@ def cache_key(project):
     c = project["config"]
     data = {"version": 4, "review": project["review"], "character": project["character"]["sha"],
         "resolution": c["resolution"], "scope": c["scope"], "models": stamps}
+    if project.get("audio") and c.get("lip_sync"):
+        from .speech import bundle_path, FILES, readiness
+        if not readiness()["ready"]:
+            raise ValueError("Install the local speech models with Setup_Speech_Windows.cmd, or untick Lip sync to use this track as a soundtrack.")
+        base = bundle_path()
+        data["speech"] = {"version": 1, "audio": project["audio"]["sha"], "start": c["audio_start"], "seed": c["seed"],
+            "models": [[name, (base / name).stat().st_size, (base / name).stat().st_mtime_ns] for name in FILES]}
     return hashlib.sha256(canonical(data).encode()).hexdigest()
 
 
@@ -86,8 +93,13 @@ def build_wan_graph(project, use_cache=True):
             batch_size=1, color=0x808080)
         reference = node("wan_character_isolated", "ImageCompositeMasked", destination=neutral, source=reference,
             x=0, y=0, resize_source=False, mask=["wan_character_crop", 1])
-        inputs = dict(frames=frames, mask=mask, pose=pose,
-            face=["wan_pose_detect", 1], reference=reference, scope=c["scope"])
+        face = ["wan_pose_detect", 1]
+        if project.get("audio") and c.get("lip_sync"):
+            speech_model = node("wan_speech_model", "ZuraSpeechModelLoader", model="MuseTalk 1.5")
+            node("wan_speech_audio", "GetVideoComponents", video=shot)
+            face = node("wan_speech_faces", "ZuraSpeechFaceGuide", model=speech_model,
+                face_images=face, audio=["wan_speech_audio", 1], fps=24.0, seed=c["seed"], batch_size=4)
+        inputs = dict(frames=frames, mask=mask, pose=pose, face=face, reference=reference, scope=c["scope"])
         if use_cache:
             node("wan_save", "ZuraWanSavePreparation", **inputs, cache_key=key)
             return graph
@@ -114,6 +126,8 @@ def build_wan_graph(project, use_cache=True):
     prompt = "The selected performer matches the reference character. Keep the driving video action, expressions, hand gestures, camera angle, framing and scene. Natural motion and consistent identity. Do not reproduce a reference sheet, collage or multiple views. " + c["prompt"]
     if c["remove_text"]:
         prompt += " Remove masked captions and title panels entirely, replacing them with natural background or clothing. No on-screen text overlays."
+    if project.get("audio") and c.get("lip_sync"):
+        prompt += " Follow the speech-driven face guide precisely for mouth movements. The performer speaks the replacement audio, not the original dialogue."
     node("wan_render", "ZuraWan22LoopedChunksSampler", model=model, clip=clip, vae=vae, clip_vision=vision,
         reference_image=opening, vision_reference=["wan_cached", 1], footage=footage,
         prompt=prompt, negative_prompt="flicker, warped hands, extra limbs, identity drift, text overlays, collage",
@@ -122,4 +136,8 @@ def build_wan_graph(project, use_cache=True):
         join_mode="Native continuation")
     node("wan_export", "GenjRestoreSoundtrack", video=["wan_render", 1], clip_details=["wan_shot", 3],
         take_name="studio_" + project["id"][:8] + "_wan")
+    # The guide keeps Wan's expression transfer. A local finish on the generated
+    # character tightens the actual spoken words without changing its body/scene.
+    from .speech import add_finish
+    add_finish(graph, project)
     return graph

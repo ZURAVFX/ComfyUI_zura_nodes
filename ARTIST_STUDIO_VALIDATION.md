@@ -130,3 +130,43 @@ path holds the correct source audio fixed rather than adding speaker-reference
 tokens; the studio explicitly marks LTX speech timing as experimental. Wan is
 the better tested route for this talking source. A dedicated, version-compatible
 speech correction model would need its own integration and quality validation.
+
+## Optional local speech and editable graphs (1.3.3)
+
+Two private Wan speech tests completed on RTX 4080 with the existing fast model,
+LoRA stack and background-preserving Animate route: 720 x 1280, 48 frames,
+24 fps, two seconds and the selected replacement audio. The first used a local
+MuseTalk 1.5 face guide; the second also completed the shared local lower-face
+finish. The dedicated guide test preserved every upper-face pixel and changed
+the lower face. These are real GPU executions, not just graph validation.
+The private outputs remain local. No private sample, transcript or script is
+included in the repository or release package. Review mouth timing and identity
+on each take; a successful execution does not establish perfect phoneme accuracy.
+
+LTX, H3 and accepted Seedance finals use the same tested finish nodes after their
+own video generation. Their new engine-to-finish paths were checked structurally;
+new full LTX/H3/paid Seedance speech renders are not claimed here. MuseTalk's
+internal 256 px face crop can soften detail and requires a visible human face.
+
+The installed frontend 1.53.10 native graph code was exercised offline for all
+six local stages. Conversion, export, reload and API compilation preserve the
+original inference inputs after expanding the lossless stage adapters. Changing
+the exposed seed changes the intended inner input and restoring it restores the
+original prompt. The root graph has zero measured wire crossings. Complex
+internal stages retain some crossings; their nodes and boundary ports are routed
+with ELK. This is not a claim that every internal graph is planar.
+The hand-off nodes also completed a real ComfyUI audio-to-audio execution:
+sample rate, length and every decoded audio sample were unchanged.
+
+Browser visual testing remains unavailable because Codex's saved browser policy
+rejects the local ComfyUI origin. DOM interactions, backend uploads, native video
+objects and offline native graph tests were checked separately. The native
+runtime also checks compiled inputs when the user opens Graph view and falls
+back to the original editable copy if conversion changes them.
+
+The Studio voice endpoint completed real local LongCat text-to-speech and
+voice-cloning jobs. Both returned an uploaded-style audio asset with a playable
+URL. Resubmitting the same voice request returned the original job rather than
+duplicating generation. Completed audio can be recovered even if a ComfyUI
+restart clears its queue history. The UI contract selects the completed track
+automatically, resets its offset and enables lip sync when its models are ready.

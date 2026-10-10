@@ -284,8 +284,9 @@ def build_h3_graph(project, use_cache=True):
         node("h3_cached", "GenjLoadH3Conditioning", cache_key=key)
         graph["h3_guider"]["inputs"]["conditioning"] = ["h3_cached", 0]
         graph["h3_sample"]["inputs"]["latent_image"] = ["h3_cached", 1]
-        return reachable_graph(graph, ["h3_export"])
-    return graph
+        graph = reachable_graph(graph, ["h3_export"])
+    from .speech import add_finish
+    return add_finish(graph, project)
 
 
 NODE_CLASS_MAPPINGS = {c.__name__: c for c in (GenjH3FramePad, GenjSaveH3Conditioning, GenjLoadH3Conditioning)}

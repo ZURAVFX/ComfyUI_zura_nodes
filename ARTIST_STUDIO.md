@@ -31,12 +31,18 @@ Studio with the cross also returns directly to your existing canvas.
 Wan's exported animation graph contains native pose detection, SAM character
 segmentation, reference cropping and the selected sampler together. H3 and LTX
 exports contain editable prompts and conditioning rather than frozen Studio
-conditioning caches. Native ComfyUI arranges the imported nodes; they can be
-regrouped and edited normally.
+conditioning caches. Native subgraphs form a single left-to-right chain with
+labelled stage hand-offs. These small Zura data adapters carry existing model,
+image and audio objects without changing or copying them. Open a stage to see
+the native inference nodes and their routed connections. Common source, prompt,
+seed and sampling controls are exposed on the graph. Technical settings remain
+editable inside each stage. Graph conversion checks the compiled render inputs
+and restores the original editable graph if conversion changes them.
 
 ## Optional reference audio
 
-**Reference audio** accepts WAV, MP3, M4A, FLAC, OGG, AAC and AIFF. It replaces
+**Reference audio** accepts WAV, MP3, M4A, FLAC, OGG, AAC and AIFF, or audio from
+an MP4, MOV, MKV or WebM. Video uploads in this field use only their audio. It replaces
 the source soundtrack for both guidance and the finished video. By default it
 starts at zero at the beginning of your selected video interval. Adjust its
 own **Reference audio start** in More controls if needed. It is trimmed to the
@@ -47,13 +53,33 @@ Silent source videos receive valid silence for audio encoders, including the
 full-resolution reread and LTX temporal padding. The final video stays quiet
 when there is no source audio and no reference track.
 
-LTX and H3 receive this audio before sampling. Their speech timing remains
-experimental; the new upload does not establish successful lip sync. Seedance
-receives it in the guidance clip and restores it in the result. Wan 2.2 Animate
-follows facial motion from the driving video and uses the track as a soundtrack;
-it does not lip sync to a new speech track. In local animation graph exports,
-the optional Reference Audio adapter accepts a native LoadAudio connection and
-keeps that selection connected to the model input and final export.
+With an uploaded track, **Lip sync to this audio** adds optional local MuseTalk
+1.5 mouth animation. Wan receives a speech-driven face guide before its existing
+Animate sampler, then a local mouth refinement on the generated character.
+LTX, H3 and the accepted Seedance final use the same local mouth refinement.
+It changes the generated lower face, preserving the rest of the generated scene.
+Untick it for music or sound design; the audio is then only a soundtrack.
+Native LTX/H3 speech conditioning remains experimental, so this separate local
+finish provides the new articulation rather than relying on those models alone.
+
+Run **Setup_Speech_Windows.cmd** once for the optional local models and Python
+dependencies. There is no paid speech call or automatic download during renders.
+Lip sync needs one visible human face. Profiles, occlusion, stylised characters
+and multi-person shots may fail or lose detail. MuseTalk works at a 256 px face
+crop internally, even when the finished video is HD. Review every talking take.
+
+**Create a voice track** expands the optional local Zura LongCat controls. Choose
+voice cloning, provide a clear sample and its exact transcript, and enter the
+new words. Or choose text to speech without a sample. The generated track is
+selected and previewed automatically. Setup uses **Setup_LongCat_Windows.cmd**.
+Existing audio files do not require voice cloning. In graph view, a native
+**LoadAudio** or **Zura LongCat Voice** AUDIO output can feed the Reference Audio
+adapter or Mouth Motion from Audio node directly.
+
+Samples, scripts, generated audio and project records remain in local ComfyUI
+input/output folders. They are never uploaded to GitHub or included in releases.
+The optional paid Seedance route sends its guidance to the selected service
+when you explicitly queue a paid action.
 
 **Original clip length** selects the entire source from the beginning at 24 fps,
 rounded down to a whole frame. **Custom length** enables Seconds and the video

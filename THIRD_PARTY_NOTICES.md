@@ -55,3 +55,16 @@ The existing Zura Nodes licence is unchanged.
 ## Artist Studio
 
 The character-replacement sequence is inspired by [Genjustsu Open Source Workflow](https://github.com/sirioberati/Genjustsu-Open-Source-Workflow) and uses ComfyUI native inference nodes. Artist Studio orchestration and Zura data adapters are distributed as part of Zura Nodes under its existing licence. ComfyUI-LTXVideo, ComfyUI-KJNodes, WanAnimatePreprocess, controlnet_aux and MelBandRoFormer remain separately installed dependencies. Native workflows and model weights retain their upstream terms; weights, source media and credentials are not bundled.
+
+## Optional speech and graph layout
+
+The separately downloaded [MuseTalk 1.5](https://github.com/TMElyralab/MuseTalk)
+weights and published latent/audio interface are used for local mouth animation.
+MuseTalk code and models are offered under MIT; its SD VAE and Whisper dependencies
+retain their own upstream terms. No speech weights or private media are bundled.
+
+The unmodified elkjs 0.12.0 layout distribution is included at
+`web/vendor/elk.bundled.js` under Eclipse Public License 2.0. Its licence is
+retained in `web/vendor/ELK-LICENSE.md`. Corresponding source is available at
+https://github.com/kieler/elkjs/tree/v0.12.0 . Zura graph code calls ELK only to
+calculate layout; native ComfyUI creates and serialises the workflow objects.

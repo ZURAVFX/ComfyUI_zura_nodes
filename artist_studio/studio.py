@@ -33,7 +33,7 @@ STAGES = {
 DEFAULTS = {"engine": "local", "background": "keep", "scope": "person", "prompt": "",
             "start": 0.0, "duration": 2.0, "size": 512, "performer": -1,
             "margin": 8, "pitch": False, "seed": 42, "render_size": 0, "h3_preset": "preview_quality", "remove_text": False,
-            "resolution": 1280, "quality": "fast", "audio_id": "", "audio_start": 0.0, "length_mode": "custom"}
+            "resolution": 1280, "quality": "fast", "audio_id": "", "audio_start": 0.0, "length_mode": "custom", "lip_sync": False}
 PREP_KEYS = ("start", "duration", "size", "scope", "performer", "margin", "pitch")
 
 
@@ -76,6 +76,7 @@ def clean_config(value):
     c["audio_id"] = str(c["audio_id"] or "")
     if c["audio_id"] and not re.fullmatch(r"[a-f0-9]{32}", c["audio_id"]):
         raise ValueError("Choose an uploaded reference audio track.")
+    c["lip_sync"] = bool(c["lip_sync"]) and bool(c["audio_id"])
     if c["length_mode"] == "original":
         c["start"] = 0.0
     for key, low, high in [("size", 256, 960), ("performer", -1, 63), ("margin", 0, 128), ("seed", 0, 2**53 - 1)]:
@@ -191,6 +192,7 @@ def build_graph(project, stage, use_cache=True):
         typ, inputs = node["class_type"], node["inputs"]
         if typ == "GenjLoadReviewedShot":
             inputs.update(shot_id=project["review"], approved_shot_id=project["review"])
+            node["_meta"] = {"title": "Reviewed shot · automatic"}
         elif typ == "RandomNoise":
             inputs["noise_seed"] = c["seed"]
         elif typ == "GenjRestoreSoundtrack":
@@ -341,6 +343,10 @@ def build_graph(project, stage, use_cache=True):
         if not task or project.get("accepted_draft") != task:
             raise ValueError("Inspect the draft and choose Finish at 1080p first.")
         graph["2"]["inputs"].update(draft_task_id=task, accepted_draft_id=task)
+        graph["2"]["_meta"] = {"title": "Use the accepted draft · automatic"}
+    if stage in ("background", "restyle", "draft", "final"):
+        from .speech import add_finish
+        add_finish(graph, project)
     return graph
 
 
@@ -605,6 +611,10 @@ class Studio:
         auth = {k: body.get(k) for k in ("auth_token_comfy_org", "api_key_comfy_org") if body.get(k)}
         if stage in ("draft", "final") and not auth:
             raise ValueError("Sign in to your Comfy account in ComfyUI before using Seedance. Local generation needs no sign-in.")
+        if p.get("audio") and p["config"].get("lip_sync") and stage in ("wan", "h3", "background", "restyle", "draft", "final"):
+            from .speech import readiness
+            if not readiness()["ready"]:
+                raise ValueError("Install the local speech models with Setup_Speech_Windows.cmd, or untick Lip sync to use this track as a soundtrack.")
         graph = build_graph(p, stage)
         next_stage = None
         if stage in ("background", "restyle") and "genj_cached_text" not in graph:
@@ -708,7 +718,8 @@ def register():
                              if name not in nodes.NODE_CLASS_MAPPINGS]
         wan_models = {key: bool(folder_paths.get_full_path(folder, name)) for key, (folder, name) in WAN_MODELS.items()}
         missing_wan_nodes = [name for name in WAN_NATIVE_NODES if name not in nodes.NODE_CLASS_MAPPINGS]
-        return web.json_response({"models": models, "h3_models": h3_models, "wan_models": wan_models,
+        from .speech import readiness
+        return web.json_response({"models": models, "h3_models": h3_models, "wan_models": wan_models, "speech": readiness(),
             "engine_ready": {"local": all(models.values()) and not missing_ltx_nodes, "h3": all(h3_models.values()) and not missing_h3_nodes,
                              "wan": all(wan_models.values()) and not missing_wan_nodes},
             "engine_quality": {"local": "experimental speech timing: current talking test failed lip-sync review",
@@ -731,7 +742,7 @@ def register():
         kind = request.query.get("kind", "")
         suffix = Path(part.filename).suffix.lower()
         supported = {"video": (".mp4", ".mov", ".mkv", ".webm"), "image": (".png", ".jpg", ".jpeg", ".webp"),
-                     "audio": (".wav", ".mp3", ".m4a", ".flac", ".ogg", ".aac", ".aiff")}
+                     "audio": (".wav", ".mp3", ".m4a", ".flac", ".ogg", ".aac", ".aiff", ".mp4", ".mov", ".mkv", ".webm")}
         if kind not in supported or suffix not in supported[kind]:
             raise ValueError("Choose a supported video, character image or audio file (WAV, MP3, M4A, FLAC).")
         identity = uuid.uuid4().hex
@@ -764,6 +775,11 @@ def register():
                 if not math.isfinite(duration) or duration <= 0:
                     raise ValueError("The audio length could not be read. Export a WAV and try again.")
                 details = {"duration": duration}
+            if suffix in supported["video"]:
+                from . import ffmpeg
+                extracted = path.with_suffix(".wav")
+                await asyncio.to_thread(ffmpeg, "-i", path, "-map", "0:a:0", "-vn", "-c:a", "pcm_f32le", extracted)
+                path, relative = extracted, str(Path(relative).with_suffix(".wav")).replace("\\", "/")
         else:
             with Image.open(path) as image:
                 image.verify()
@@ -771,6 +787,22 @@ def register():
                  "sha": sha(path), "name": Path(part.filename).name, **details}
         studio.store.save(asset)
         return web.json_response(public_project(asset))
+
+    @routes.post("/zura/studio/voice")
+    @routes.post("/genj/studio/voice")
+    @response
+    async def create_voice_track(request):
+        from .voice import create_voice
+        async with studio.lock:
+            return web.json_response(await create_voice(studio, await request.json()))
+
+    @routes.get("/zura/studio/voice/{identity}")
+    @routes.get("/genj/studio/voice/{identity}")
+    @response
+    async def voice_track_status(request):
+        from .voice import collect_voice
+        async with studio.lock:
+            return web.json_response(public_project(collect_voice(studio, request.match_info["identity"])))
 
     @routes.get("/zura/studio/projects")
     @routes.get("/genj/studio/projects")

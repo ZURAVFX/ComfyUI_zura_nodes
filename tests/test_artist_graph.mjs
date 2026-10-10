@@ -1,0 +1,21 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import {webcrypto} from 'node:crypto';
+if(!globalThis.crypto)Object.defineProperty(globalThis,'crypto',{value:webcrypto});
+const js=fs.readFileSync(new URL('../web/artist_graph.js',import.meta.url),'utf8');
+const {promptFingerprint,expandStageSignals,crossingCount}=await import('data:text/javascript;base64,'+Buffer.from(js).toString('base64'));
+const original={image:{class_type:'LoadImage',inputs:{image:'example_character.png'}},render:{class_type:'Render',inputs:{image:['image',0],seed:42}}};
+const renamed={'10':{class_type:'LoadImage',inputs:{image:'example_character.png'}},'11':{class_type:'Render',inputs:{image:['10',0],seed:42}}};
+assert.equal(await promptFingerprint(original),await promptFingerprint(renamed));
+renamed['11'].inputs.seed=43;
+assert.notEqual(await promptFingerprint(original),await promptFingerprint(renamed),'A changed seed must fail the graph safety check');
+const routed={...original,pack:{class_type:'ZuraStudioSignals',inputs:{keys:'["image"]',value_0:['image',0]}},read:{class_type:'ZuraStudioReadSignal',inputs:{stage_data:['pack',0],key:'image'}},render:{...original.render,inputs:{image:['read',0],seed:42}}};
+assert.deepEqual(expandStageSignals(routed),original);
+assert.equal(await promptFingerprint(routed),await promptFingerprint(original));
+routed.read.inputs.key='missing';assert.throws(()=>expandStageSignals(routed),/missing/);
+const cross={edges:[{id:'a',sources:['a'],targets:['b'],sections:[{startPoint:{x:0,y:5},endPoint:{x:10,y:5}}]},
+ {id:'b',sources:['c'],targets:['d'],sections:[{startPoint:{x:5,y:0},endPoint:{x:5,y:10}}]}]};
+assert.equal(crossingCount(cross),1);
+cross.edges[1].sections[0].startPoint.x=20;cross.edges[1].sections[0].endPoint.x=20;
+assert.equal(crossingCount(cross),0);
+console.log('Artist graph semantic checks and crossing detection passed.');

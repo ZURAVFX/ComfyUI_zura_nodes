@@ -51,7 +51,11 @@ jobs:
               assert Path(asset).is_file(), f'Missing multicam release asset: {asset}'
           for asset in ('wan_artist.py', 'web/studio.js', 'web/studio.css',
                         'artist_studio/__init__.py', 'artist_studio/studio.py',
-                        'artist_studio/h3.py', 'artist_studio/wan.py', 'ARTIST_STUDIO.md', 'ARTIST_STUDIO_VALIDATION.md', 'Open_Zura_Studio.url'):
+                        'artist_studio/h3.py', 'artist_studio/wan.py',
+                        'artist_studio/speech.py', 'artist_studio/voice.py', 'artist_studio/signals.py',
+                        'web/artist_graph.js', 'web/vendor/elk.bundled.js', 'web/vendor/ELK-LICENSE.md',
+                        'setup_speech.py', 'Setup_Speech_Windows.cmd',
+                        'ARTIST_STUDIO.md', 'ARTIST_STUDIO_VALIDATION.md', 'Open_Zura_Studio.url'):
               assert Path(asset).is_file(), f'Missing artist studio asset: {asset}'
           for graph in Path('artist_studio/graphs').glob('*.json'):
               assert json.loads(graph.read_text()), f'Invalid native graph: {graph}'
@@ -108,6 +112,7 @@ jobs:
           python -m unittest discover -s tests -p 'test_v2_*.py'
           python -m compileall -q artist_studio wan_artist.py
           python -m unittest discover -s tests -p 'test_artist_studio.py'
+          python -m unittest discover -s tests -p 'test_studio_speech.py'
           python -m unittest discover -s tests -p 'test_klein_look.py'
           python -m unittest discover -s tests -p 'test_multicam_v3.py'
           python -m unittest discover -s tests -p 'test_short_take_duration.py'
@@ -125,6 +130,7 @@ jobs:
           node tests/test_multicam_widget_migration.mjs
           node tests/test_single_camera_gallery.mjs
           node tests/test_anyangle_english.mjs
+          node tests/test_artist_graph.mjs
       - name: Publish reviewed version
         uses: Comfy-Org/publish-node-action@d2366e7abb6ab16f3bb03e3520ae25c8cf749bc9
         with:

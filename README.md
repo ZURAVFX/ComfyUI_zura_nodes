@@ -8,8 +8,13 @@ Choose **Original clip length** or **Custom length**, and optionally upload a
 separate **Reference audio** track. Silent videos work with the audio encoders.
 **Graph view** opens the current stage as an editable ComfyUI workflow in a new
 tab; the **Zura Studio** button returns to the artist interface. Graph edits
-remain in that workflow. LTX/H3 receive reference audio before sampling; Wan
-follows the driving video's facial motion and uses the audio as a soundtrack.
+remain in that workflow. Upload an audio file or a video containing your voice,
+then choose **Lip sync to this audio** for optional local mouth animation.
+Untick it for music or sound design. **Create a voice track** can also clone a
+voice or generate speech with local Zura LongCat and select the result
+automatically. Run `Setup_Speech_Windows.cmd` once for the optional speech models.
+The speech finish needs a visible human face; review timing and face detail on
+each take. See [Zura Studio](ARTIST_STUDIO.md) for setup and tested limitations.
 
 A set of artist-facing ComfyUI video, image and audio controls: load a source clip,
 mask or replace a performer, plan multicam shots, and optionally relight a
