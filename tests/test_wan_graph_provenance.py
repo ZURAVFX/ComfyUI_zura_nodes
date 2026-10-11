@@ -144,8 +144,18 @@ class EditableSpeechTests(unittest.TestCase):
         self.assertEqual(graph["wan_cfg"]["inputs"]["value"], 1.0)
         self.assertEqual(graph["wan_cached"]["inputs"]["speech_guide_key"], self.key)
         self.assertEqual(graph["wan_cached"]["inputs"]["speech_guide_sha"], self.record["sha"])
-        cold = wan.build_wan_graph(self.project)
+        # The native bounded coordinator reads the confined review manifest,
+        # unlike the legacy in-memory branch exercised above.
+        from pathlib import Path
+        import folder_paths
+        review = Path(folder_paths.get_output_directory()) / "genj" / "reviews" / self.project["review"]
+        review.mkdir(parents=True, exist_ok=True)
+        (review / "review.json").write_text(json.dumps(self.fixture.manifest), encoding="utf-8")
+        with patch.object(fixtures.package, "verify_review", return_value=(review, self.fixture.manifest)):
+            cold = wan.build_wan_graph(self.project)
         self.assertEqual(cold["wan_save"]["inputs"]["speech_guide_sha"], self.record["sha"])
+        self.assertEqual(cold["wan_save"]["class_type"], "ZuraWanSavePreparationPart")
+        self.assertEqual(cold["wan_frames"]["inputs"]["frame_count"], 24)
         self.assertNotIn("wan_render", cold)
 
     def test_original_and_soundtrack_only_keep_source_face_without_guide(self):

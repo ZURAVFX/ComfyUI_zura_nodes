@@ -276,7 +276,7 @@
           "links": null
         }
       ],
-      "title": "Turbo (LightX2V) + official bf16 relight",
+      "title": "Wan2.1 LightX2V + official bf16 relight",
       "properties": {
         "Show Strengths": "Single Strength",
         "Match": "",
@@ -286,12 +286,6 @@
         {},
         {
           "type": "PowerLoraLoaderHeaderWidget"
-        },
-        {
-          "on": true,
-          "lora": "wan2.2_i2v_lightx2v_4steps_lora_v1_high_noise.safetensors",
-          "strength": 0.7,
-          "strengthTwo": null
         },
         {
           "on": true,

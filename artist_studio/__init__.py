@@ -172,7 +172,10 @@ class GenjSelectClip:
         frames = max(1, int(min(duration_seconds, available - start_seconds) * 24 + 1e-6))
         duration = frames / 24
         scale = min(1.0, long_edge / max(width, height))
-        w, h = max(64, round(width * scale / 64) * 64), max(64, round(height * scale / 64) * 64)
+        # SAM and review videos need even codec dimensions, not a diffusion
+        # model's 64-pixel grid. At 512px that grid turned 16:9 into 2:1,
+        # distorting the camera geometry before the opening look was created.
+        w, h = max(2, round(width * scale / 2) * 2), max(2, round(height * scale / 2) * 2)
         details = {"source": str(source), "source_hash": digest_file(source), "start": start_seconds,
                    "duration": duration, "frames": frames, "fps": 24, "width": w, "height": h,
                    "full_source": start_seconds == 0 and abs(duration - available) <= 1 / 24, "has_audio": has_audio}
@@ -281,7 +284,8 @@ class GenjSaveReview:
     @classmethod
     def INPUT_TYPES(cls):
         return {"required": {"clip_details": ("GENJ_CLIP",), "source_frames": ("IMAGE",),
-                             "mask": ("MASK",), "guide_frames": ("IMAGE",), "guidance_audio": ("AUDIO",)}}
+                             "mask": ("MASK",), "guide_frames": ("IMAGE",), "guidance_audio": ("AUDIO",)},
+                "optional": {"performer_mask": ("MASK",), "tracking_coverage": ("GENJ_TRACK_COVERAGE",)}}
 
     RETURN_TYPES = ("STRING",)
     RETURN_NAMES = ("shot_id",)
@@ -289,17 +293,43 @@ class GenjSaveReview:
     CATEGORY = CATEGORY
     OUTPUT_NODE = True
 
-    def save(self, clip_details, source_frames, mask, guide_frames, guidance_audio):
+    def save(self, clip_details, source_frames, mask, guide_frames, guidance_audio, performer_mask=None, tracking_coverage=None):
         count, h, w = source_frames.shape[:3]
+        if tracking_coverage is not None:
+            if not isinstance(tracking_coverage, dict) or tracking_coverage.get("frames") != count:
+                raise ValueError("Tracking coverage must match every source frame.")
+            clip_details = dict(clip_details, tracking_coverage=tracking_coverage)
         if len(mask) != count or len(guide_frames) != count:
             raise ValueError("Source, mask and guidance must have the same number of frames.")
         mask = F.interpolate(mask[:, None].float(), size=(h, w), mode="nearest")[:, 0]
         mask = (mask >= 0.5).float()
         if not bool(mask.any()):
             raise ValueError("The performer mask is empty. Repair it before generation.")
+        genuine_mask_bits = None
+        if performer_mask is not None:
+            if (performer_mask.ndim != 3 or len(performer_mask) != count
+                    or performer_mask.shape[1] <= 0 or performer_mask.shape[2] <= 0):
+                raise ValueError("The genuine performer mask must have one 2D mask for every source frame.")
+            if not bool(torch.isfinite(performer_mask).all()):
+                raise ValueError("The genuine performer mask contains invalid values. Prepare the mask again.")
+            genuine_mask_bits = (performer_mask.detach().float() >= 0.5).contiguous()
+            if not bool(genuine_mask_bits.any()):
+                raise ValueError("The genuine performer mask is empty. Repair it before generation.")
+            performer_mask = F.interpolate(genuine_mask_bits[:, None].float(), size=(h, w), mode="nearest")[:, 0]
+            performer_mask = (performer_mask >= 0.5).float()
+            if not bool(performer_mask.any()):
+                raise ValueError("The genuine performer mask is empty. Repair it before generation.")
         key = hashlib.sha256(json.dumps(clip_details, sort_keys=True).encode())
         for frames in (mask, guide_frames):
             for frame in frames:
+                key.update(frame.detach().cpu().numpy().tobytes())
+        # Keep the historical shot identity byte-for-byte when this optional
+        # input is absent. Text-removal reviews bind the separately saved,
+        # original binary genuine mask so it cannot be confused with another mask.
+        if performer_mask is not None:
+            key.update(b"genuine-performer-mask-v1")
+            key.update(str(tuple(genuine_mask_bits.shape)).encode())
+            for frame in genuine_mask_bits:
                 key.update(frame.detach().cpu().numpy().tobytes())
         key.update(guidance_audio["waveform"].detach().cpu().numpy().tobytes())
         key.update(str(guidance_audio["sample_rate"]).encode())
@@ -308,6 +338,8 @@ class GenjSaveReview:
         directory.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(clip_details["selected_path"], directory / "source.mp4")
         encode_frames(directory / "mask.mp4", mask[..., None].repeat(1, 1, 1, 3))
+        if performer_mask is not None:
+            encode_frames(directory / "performer_mask.mp4", performer_mask[..., None].repeat(1, 1, 1, 3))
         guide_video = InputImpl.VideoFromComponents(Types.VideoComponents(images=guide_frames, audio=guidance_audio, frame_rate=Fraction(24)))
         guide_video.save_to(str(directory / "guide.mp4"))
         tint = torch.tensor([1.0, 0.35, 0.1], device=source_frames.device)
@@ -315,8 +347,10 @@ class GenjSaveReview:
         encode_frames(directory / "mask_review.mp4", overlay)
         first = (source_frames[0].detach().cpu().clamp(0, 1).numpy() * 255).round().astype(np.uint8)
         Image.fromarray(first).save(directory / "opening_frame.png")
-        files = {name: digest_file(directory / name) for name in
-                 ["source.mp4", "mask.mp4", "guide.mp4", "mask_review.mp4", "opening_frame.png"]}
+        filenames = ["source.mp4", "mask.mp4", "guide.mp4", "mask_review.mp4", "opening_frame.png"]
+        if performer_mask is not None:
+            filenames.append("performer_mask.mp4")
+        files = {name: digest_file(directory / name) for name in filenames}
         manifest = {"shot_id": shot_id, "clip": clip_details, "files": files}
         (directory / "review.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
         text = f"{shot_id}\nMask ready. Review the full mask and guidance previews in Zura Studio, then choose Use this mask. Zura Studio links this shot automatically."
@@ -336,8 +370,8 @@ class GenjLoadReviewedShot:
                     "output_scale": ("INT", {"default": 1, "min": 1, "max": 2}),
                     "preview_seconds": ("FLOAT", {"default": 0, "min": 0, "max": 30})}}
 
-    RETURN_TYPES = ("VIDEO", "VIDEO", "VIDEO", "GENJ_CLIP")
-    RETURN_NAMES = ("source_clip", "performer_mask", "seedance_guide", "clip_details")
+    RETURN_TYPES = ("VIDEO", "VIDEO", "VIDEO", "GENJ_CLIP", "VIDEO")
+    RETURN_NAMES = ("source_clip", "performer_mask", "seedance_guide", "clip_details", "genuine_performer_mask")
     FUNCTION = "load"
     CATEGORY = CATEGORY
 
@@ -354,6 +388,8 @@ class GenjLoadReviewedShot:
             raise ValueError("Approve the reviewed mask in Zura Studio before generation. Standalone graphs require matching reviewed and approved shot IDs.")
         directory, manifest = verify_review(shot_id)
         details = {**manifest["clip"], "review_shot_id": shot_id}
+        has_genuine_mask = "performer_mask.mp4" in manifest.get("files", {})
+        genuine_mask = directory / ("performer_mask.mp4" if has_genuine_mask else "mask.mp4")
         if render_long_edge:
             source = Path(details["source"])
             if digest_file(source) != details["source_hash"]:
@@ -385,6 +421,12 @@ class GenjLoadReviewedShot:
             if not high_mask.exists():
                 ffmpeg("-i", directory / "mask.mp4", "-vf", "fps=24",
                        "-frames:v", details["frames"], "-an", "-c:v", "libx264", "-crf", 0, "-pix_fmt", "yuv420p", high_mask)
+            if preview_seconds:
+                preview_mask = cache / "genuine_performer_mask.mp4"
+                if not preview_mask.exists():
+                    ffmpeg("-i", genuine_mask, "-vf", "fps=24", "-frames:v", details["frames"], "-an",
+                           "-c:v", "libx264", "-crf", 0, "-pix_fmt", "yuv420p", preview_mask)
+                genuine_mask = preview_mask
             details.update(width=w, height=h, export_width=target_w, export_height=target_h,
                            render_long_edge=render_long_edge, selected_path=str(high_source))
             guide = directory / "guide.mp4"
@@ -394,8 +436,9 @@ class GenjLoadReviewedShot:
                     ffmpeg("-i", directory / "guide.mp4", "-t", details["duration"], "-frames:v", details["frames"],
                            "-c:v", "libx264", "-crf", 16, "-c:a", "aac", guide)
             return (InputImpl.VideoFromFile(str(high_source)), InputImpl.VideoFromFile(str(high_mask)),
-                    InputImpl.VideoFromFile(str(guide)), details)
-        return (*(InputImpl.VideoFromFile(str(directory / name)) for name in ["source.mp4", "mask.mp4", "guide.mp4"]), details)
+                    InputImpl.VideoFromFile(str(guide)), details, InputImpl.VideoFromFile(str(genuine_mask)))
+        return (*(InputImpl.VideoFromFile(str(directory / name)) for name in ["source.mp4", "mask.mp4", "guide.mp4"]),
+                details, InputImpl.VideoFromFile(str(genuine_mask)))
 
 
 class GenjLTXFramePad:
@@ -515,16 +558,19 @@ class GenjRestoreSoundtrack:
     @classmethod
     def INPUT_TYPES(cls):
         return {"required": {"video": ("VIDEO",), "clip_details": ("GENJ_CLIP",),
-                             "take_name": ("STRING", {"default": "replacement", "multiline": False})}}
+                             "take_name": ("STRING", {"default": "replacement", "multiline": False})},
+                "optional": {"output_subfolder": (["final", "studio_intermediate"],)}}
 
     RETURN_TYPES = ("VIDEO",)
     FUNCTION = "restore"
     CATEGORY = CATEGORY
     OUTPUT_NODE = True
 
-    def restore(self, video, clip_details, take_name):
+    def restore(self, video, clip_details, take_name, output_subfolder="final"):
         if not re.fullmatch(r"[A-Za-z0-9_-]{1,80}", take_name):
             raise ValueError("Take name can contain letters, numbers, underscores and hyphens.")
+        if output_subfolder not in ("final", "studio_intermediate"):
+            raise ValueError("Choose a supported Studio output folder.")
         source = Path(clip_details["source"])
         if digest_file(source) != clip_details["source_hash"]:
             raise ValueError("The original source changed after review. Prepare and review the shot again.")
@@ -535,7 +581,7 @@ class GenjRestoreSoundtrack:
         target_duration = clip_details["duration"]
         if duration + 1 / 24 < target_duration:
             raise ValueError(f"Generated video is too short ({duration:.3f}s for {target_duration:.3f}s). The source soundtrack will not be shortened to hide this.")
-        destination = root() / "final"
+        destination = root() / output_subfolder
         destination.mkdir(exist_ok=True)
         existing = list(destination.glob(take_name + "_*.mp4"))
         number = max([int(p.stem.rsplit("_", 1)[1]) for p in existing if p.stem.rsplit("_", 1)[1].isdigit()], default=0) + 1
@@ -552,7 +598,8 @@ class GenjRestoreSoundtrack:
         ffmpeg("-i", generated, "-ss", offset, "-i", soundtrack, "-map", "0:v:0", "-map", "1:a:0?",
                "-t", target_duration, "-vf", vf, "-frames:v", clip_details["frames"],
                "-c:v", "libx264", "-crf", 16, "-pix_fmt", "yuv420p", *audio, "-movflags", "+faststart", path)
-        preview = {"filename": path.name, "subfolder": "genj/final", "type": "output", "format": "video/mp4"}
+        preview = {"filename": path.name, "subfolder": "genj/" + output_subfolder,
+                   "type": "output", "format": "video/mp4"}
         return {"ui": {"gifs": [preview], "text": [f"Saved {path.name} with the selected soundtrack."]},
                 "result": (InputImpl.VideoFromFile(str(path)),)}
 
@@ -572,6 +619,21 @@ NODE_DISPLAY_NAME_MAPPINGS.update({"GenjSaveTextConditioning": "Cache Video Prom
 from .h3 import NODE_CLASS_MAPPINGS as H3_NODES, NODE_DISPLAY_NAME_MAPPINGS as H3_NAMES
 NODE_CLASS_MAPPINGS.update(H3_NODES)
 NODE_DISPLAY_NAME_MAPPINGS.update(H3_NAMES)
+from .h3_window_nodes import (ZuraH3PrepareFullAudioTimeline, ZuraH3WindowInputs,
+    ZuraSaveH3Continuation, ZuraLoadH3Continuation, ZuraApplyH3Continuation)
+_H3_WINDOW_NODES = (ZuraH3PrepareFullAudioTimeline, ZuraH3WindowInputs,
+    ZuraSaveH3Continuation, ZuraLoadH3Continuation, ZuraApplyH3Continuation)
+NODE_CLASS_MAPPINGS.update({cls.__name__: cls for cls in _H3_WINDOW_NODES})
+NODE_DISPLAY_NAME_MAPPINGS.update({
+    "ZuraH3PrepareFullAudioTimeline": "Zura · Prepare Full H3 Audio",
+    "ZuraH3WindowInputs": "Zura · Load H3 Motion Window",
+    "ZuraSaveH3Continuation": "Zura · Save H3 Continuation",
+    "ZuraLoadH3Continuation": "Zura · Load H3 Continuation",
+    "ZuraApplyH3Continuation": "Zura · Apply H3 Continuation",
+})
+from .enhancement import NODE_CLASS_MAPPINGS as ENHANCEMENT_NODES, NODE_DISPLAY_NAME_MAPPINGS as ENHANCEMENT_NAMES
+NODE_CLASS_MAPPINGS.update(ENHANCEMENT_NODES)
+NODE_DISPLAY_NAME_MAPPINGS.update(ENHANCEMENT_NAMES)
 from .text_removal import NODE_CLASS_MAPPINGS as TEXT_NODES, NODE_DISPLAY_NAME_MAPPINGS as TEXT_NAMES
 NODE_CLASS_MAPPINGS.update(TEXT_NODES)
 NODE_DISPLAY_NAME_MAPPINGS.update(TEXT_NAMES)
@@ -584,6 +646,12 @@ NODE_DISPLAY_NAME_MAPPINGS.update(VOICE_NAMES)
 from .signals import NODE_CLASS_MAPPINGS as SIGNAL_NODES, NODE_DISPLAY_NAME_MAPPINGS as SIGNAL_NAMES
 NODE_CLASS_MAPPINGS.update(SIGNAL_NODES)
 NODE_DISPLAY_NAME_MAPPINGS.update(SIGNAL_NAMES)
+from .mask_selection import NODE_CLASS_MAPPINGS as SELECTION_NODES, NODE_DISPLAY_NAME_MAPPINGS as SELECTION_NAMES
+NODE_CLASS_MAPPINGS.update(SELECTION_NODES)
+NODE_DISPLAY_NAME_MAPPINGS.update(SELECTION_NAMES)
+from .cut_tracking import NODE_CLASS_MAPPINGS as TRACKING_NODES, NODE_DISPLAY_NAME_MAPPINGS as TRACKING_NAMES
+NODE_CLASS_MAPPINGS.update(TRACKING_NODES)
+NODE_DISPLAY_NAME_MAPPINGS.update(TRACKING_NAMES)
 
 # The artist interface uses native inference nodes through ComfyUI's queue.
 WEB_DIRECTORY = "./web"

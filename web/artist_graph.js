@@ -38,9 +38,9 @@ export function expandStageSignals(prompt) {
 }
 
 function role(n) {
-  if(["GenjRestoreSoundtrack","GenjSaveReview","SaveImage","SaveVideo","GenjRecordDraft","VHS_VideoCombine","ZuraWanSpeechSaveGuide"].includes(n.type))return "save";
+  if(["GenjRestoreSoundtrack","GenjSaveReview","SaveImage","SaveVideo","GenjRecordDraft","VHS_VideoCombine","GenjVHSVideoFromFilenames","ZuraWanSpeechSaveGuide","ZuraWanSavePreparationPart","ZuraWanMergePreparation"].includes(n.type))return "save";
   if(n.type?.startsWith("ZuraSpeech")||String(n.id).startsWith("zura_speech_"))return "speech";
-  if(["LoadImage","LoadVideo","LoadAudio","GenjLoadReviewedShot","GenjApplyReferenceAudio","VHS_LoadVideoFFmpegPath"].includes(n.type)||n.type?.startsWith("Primitive"))return "inputs";
+  if(["LoadImage","LoadVideo","LoadAudio","GenjLoadReviewedShot","GenjApplyReferenceAudio","ZuraApplyBoundedReferenceAudio","VHS_LoadVideoFFmpegPath","VHS_LoadVideoPath","VHS_BatchManager"].includes(n.type)||n.type?.startsWith("Primitive"))return "inputs";
   return "process";
 }
 
@@ -58,9 +58,10 @@ function connectedStageSets(graph) {
 }
 
 function innerRole(n) {
+  if(n.type==="ZuraWanGraphQueueGuard")return "Motion and selection";
   if(n.type==="WanVideoBlockSwap")return "Models";
   if(/Loader|Lora|SamplingSD3|TorchSettings|Attention/.test(n.type) && !/ControlNetApply/.test(n.type))return "Models";
-  if(/Pose|Mask|Depth|Detection|Crop|Colour|Blockify|ReviewedFrames|Preparation|GetVideoComponents|GetImageSize|GetImageRange|ImageScale|Resize|EmptyImage|ComfyMathExpression|SpeechTimeline/.test(n.type))return "Motion and selection";
+  if(/SAM3|ChoosePerformer|Pose|Mask|Depth|Detection|TrackingShots|Crop|Colour|Blockify|ReviewedFrames|Preparation|GetVideoComponents|GetImageSize|GetImageRange|ImageScale|Resize|EmptyImage|ComfyMathExpression|SpeechTimeline/.test(n.type))return "Motion and selection";
   if(/TextEncode|TextEmbed|ClipVisionEncode|Wav2VecEmbeds|ImageToVideoMultiTalk|Conditioning|ReferenceToVideo|AddGuide|LockReferenceAudio|PreserveBackground|VAEEncode|Modality|FramePad|SetLatent|Concat|Separate/.test(n.type))return "Guidance";
   return "Render and decode";
 }
@@ -216,6 +217,10 @@ export async function tidyArtistGraph(app,apiGraph,stage,ElkClass) {
   const connect=(origin,output,target,input)=>{if(!origin.connect(output,target,input))throw new Error("ComfyUI could not connect a stage hand-off.");};
   const packs=[];
   const names={inputs:"Your inputs",Models:"Load models","Motion and selection":"Prepare motion and mask",Guidance:"Guide the look and motion","Render and decode":"Animate and decode",speech:"Speech lip sync",save:"Save and preview"};
+  if(stage==="h3_enhance"){
+    names["Motion and selection"]="Resize delivery";
+    names["Render and decode"]="Enhance frames";
+  }
   for(let i=0;i<chunks.length;i++){
     const c=chunks[i];let frontier=new Map();
     for(const l of links)if(owner.get(String(l.origin_id))===i&&owner.get(String(l.target_id))>i)
@@ -242,6 +247,7 @@ export async function tidyArtistGraph(app,apiGraph,stage,ElkClass) {
     }
   }
   const controls=new Set(["image","file","audio","audio_start_seconds","render_long_edge","duration_seconds","start_seconds","use_original_length","prompt","text","value","seed","noise_seed","steps","cfg"]);
+  if(stage==="h3_enhance")controls.add("video");
   const stages=[];
   for(let i=0;i<chunks.length;i++){
     const c=chunks[i];for(const n of c.nodes){n.properties??={};n.properties.zuraStudioPacket=i;}

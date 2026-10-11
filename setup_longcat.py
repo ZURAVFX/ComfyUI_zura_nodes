@@ -1,6 +1,7 @@
-"""One-time setup. Run --reuse-lab PATH on the audition PC, or --install on another PC.
+"""Check, reuse or explicitly download the optional LongCat model files.
 
-Only this explicit setup command downloads software. Synthesis stays offline.
+Python packages must be installed manually in the separate LongCat environment.
+Synthesis stays offline.
 """
 import argparse
 import json
@@ -18,6 +19,18 @@ MODEL_REVISION = "5d3e6dc007872d756c3a69b44951598d7d9bdf6d"
 
 def run(command):
     subprocess.run([str(x) for x in command], check=True)
+
+
+def dependencies_ready(python):
+    code = "import torch,torchaudio,soundfile,librosa,huggingface_hub"
+    try:
+        subprocess.run([str(python), "-c", code], check=True, capture_output=True, text=True)
+        return True
+    except subprocess.CalledProcessError:
+        print("The isolated LongCat environment is missing Python dependencies. Install them manually, then rerun setup:")
+        print(f'uv pip install --python "{python}" "torch==2.8.0" "torchaudio==2.8.0" --index-url https://download.pytorch.org/whl/cu128')
+        print(f'uv pip install --python "{python}" -r "{PACK / "longcat_runtime" / "requirements.txt"}"')
+        return False
 
 
 def main():
@@ -46,9 +59,8 @@ def main():
         python = env / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
         if not python.is_file():
             run([uv, "venv", "--python", "3.11", env])
-        run([uv, "pip", "install", "--python", python, "torch==2.8.0", "torchaudio==2.8.0",
-             "--index-url", "https://download.pytorch.org/whl/cu128"])
-        run([uv, "pip", "install", "--python", python, "-r", PACK / "longcat_runtime/requirements.txt"])
+        if not dependencies_ready(python):
+            return 2
         repo = root / "LongCat-AudioDiT"
         if not repo.exists():
             run([git, "clone", "https://github.com/meituan-longcat/LongCat-AudioDiT.git", repo])
@@ -87,4 +99,4 @@ Path(tokenizer,'zura_source_revision.txt').write_text(tokenizer_revision)
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

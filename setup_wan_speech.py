@@ -6,7 +6,7 @@ import hashlib
 import importlib
 import os
 import shutil
-import subprocess
+import subprocess  # Kept as a patch point for legacy installer regression tests; no installer calls remain.
 import sys
 import uuid
 from pathlib import Path
@@ -152,8 +152,9 @@ def main(argv=None):
         try:
             from huggingface_hub import hf_hub_download
         except ImportError:
-            subprocess.run([sys.executable, "-m", "pip", "install", "huggingface_hub>=0.34,<2"], check=True)
-            from huggingface_hub import hf_hub_download
+            print("Install the model-download helper manually into this ComfyUI Python environment, then rerun setup:")
+            print('"' + sys.executable + '" -m pip install "huggingface_hub>=0.34,<2"')
+            return 2
         for spec in missing:
             print("Downloading and verifying " + spec[1])
             install(spec, locations, hf_hub_download)

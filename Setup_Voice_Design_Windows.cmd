@@ -7,7 +7,13 @@ if errorlevel 1 (
   pause
   exit /b 1
 )
-uv run --python 3.11 --no-project --no-config setup_voice_design.py --install
+where python >nul 2>nul
+if errorlevel 1 (
+  echo Install Python first. See VOICE_DESIGN.md for setup instructions.
+  pause
+  exit /b 1
+)
+python "%~dp0setup_voice_design.py" --install
 set result=%errorlevel%
 pause
 exit /b %result%

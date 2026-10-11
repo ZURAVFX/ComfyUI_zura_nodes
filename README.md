@@ -1,8 +1,40 @@
 # Zura nodes (ComfyUI_zura_nodes)
 
-**Zura Studio:** the integrated character-replacement interface shipped inside the official Zura Nodes pack. It includes LTX 2.5, MiniMax H3, Wan 2.2 Animate and optional paid Seedance. Upload once, approve the mask and look, then switch models without copying job IDs. One resolution selector and one clip-length control govern the output. See [Zura Studio](ARTIST_STUDIO.md). H3 uses native audio conditioning; Wan can create a new performance with InfiniteTalk before Animate. LTX speech and motion quality remain experimental.
+**Zura Studio:** the integrated character-replacement interface shipped inside the official Zura Nodes pack. It includes LTX 2.5, MiniMax H3, Wan 2.2 Animate and optional paid Seedance. Upload once, approve the mask and look, then switch models without copying job IDs. One resolution selector and one clip-length control govern the output. See [Zura Studio](ARTIST_STUDIO.md). H3 uses native audio conditioning; Wan can create a new performance with InfiniteTalk before Animate. All nine short model/audio examples have artist approval. Longer H3/LTX clips, LTX masked speech and camera retention with a changed environment remain experimental; see [tested limits](ARTIST_STUDIO_VALIDATION.md).
+
+**New here?** Download the current **Zura Nodes** release ZIP from [GitHub Releases](https://github.com/ZURAVFX/ComfyUI_zura_nodes/releases), install it in ComfyUI, and restart. If that version is available in ComfyUI Manager, you can install it there instead. Model weights are separate downloads; the short [installation and model guide](INSTALL_STUDIO.md) has exact files and steps.
 
 To open the complete studio, start ComfyUI and click **Zura Studio**. On a default local installation, use `Open_Zura_Studio.url` or open `http://127.0.0.1:8188/?zura=1`. All four models share the same project and review flow. The standalone Wan test graph is only a diagnostic example.
+
+Studio shows your GPU memory and RAM, a model-specific starting size and clip length, and a collapsible checklist of missing model files. These are measured examples on an RTX 4080 with 16 GB VRAM and 64 GB RAM, not minimum specifications or guaranteed render times:
+
+| Model | Best reason to start here | Five-second example | Current length guidance |
+| --- | --- | --- | --- |
+| Wan 2.2 | Keep original acting, gestures and cuts; optional audio-driven speech | Native 1080p: about 25–28 minutes, with preparation and new speech guidance extra | Custom clips up to 30 seconds; original length is processed in sections. A 23.75-second 720p example was accepted with detail loss between sections. |
+| MiniMax H3 | Expressive faces and replacement speech | 720p enhanced to 1080p: about 10 minutes, with opening design and selection extra | Up to five seconds. Native 1080p remains unqualified on the tested 16 GB GPU. |
+| LTX 2.5 | Faster short whole-scene shots guided by the source body and audio | Motion-guided whole-scene 1080p: about 3 minutes 23 seconds, with opening design and selection extra | Up to five seconds. Masked speech and retaining camera motion while replacing the environment remain experimental. |
+| Seedance | Optional paid generation | Unbenchmarked; provider queue and cost apply | Check the provider's supported clip length and displayed price. |
+
+All three local routes were tested on the same 16 GB GPU / 64 GB RAM system. LTX's observed GPU peak was about 15.6 GB; exact Wan/H3 peaks and lower-memory systems are unqualified. An exact maximum resolution cannot be calculated from VRAM alone. Start with a short test on your own system. Voice cloning creates a separate audio track which the selected video model can use to guide the face.
+
+At the appearance step, **Use starting image** accepts an existing finished
+frame alongside the separate character reference. It preserves the uploaded
+image exactly and displays it for approval before animation. The automatic
+character-preview option remains available.
+
+With **Remove on-screen text** enabled, H3 automatically repairs eligible
+background text before sampling. It uses the saved performer mask separately
+from the combined edit mask and skips a detected text panel that touches or
+comes close to the performer. This needs [ComfyUI-ArtVenture](https://github.com/sipherxyz/comfyui-art-venture)
+and [ComfyUI-KJNodes](https://github.com/kijai/ComfyUI-KJNodes); ArtVenture may
+download `big-lama.pt` (about 196 MB) on first use. No extra artist controls
+are added.
+
+H3's resolution selector offers **720p**, **1080p enhanced** and **1080p native**.
+Enhanced delivery creates motion at 720p and automatically enhances the finished
+frames. Run `Setup_H3_Enhancement_Windows.cmd` once to install its enhancement
+model. Native 1080p uses substantially more memory and has not completed the
+local 16 GB GPU qualification. See the tested limits in [Zura Studio validation](ARTIST_STUDIO_VALIDATION.md).
 
 Choose **Original clip length** or **Custom length**. **Audio and performance**
 defaults to **Original audio + performance** for every model. Select
@@ -75,7 +107,7 @@ See [VOICE_DESIGN.md](VOICE_DESIGN.md) for the team guide, reference reuse and l
 
 | Node | Purpose |
 | --- | --- |
-| **Zura Load Video** | Local file or direct URL, trimmed to start/duration, decoded at 24 fps. Outputs an ordinary `VIDEO` — frames plus the original audio, understood by any ComfyUI video node — and the decoded frames. **Choose local video** uploads into ComfyUI's input folder and selects the file automatically. |
+| **Zura Load Video** | Uploaded local file, trimmed to start/duration, decoded at 24 fps. Outputs an ordinary `VIDEO` with frames and original audio, and the decoded frames. **Choose local video** uploads and selects the file automatically. Existing files must be inside ComfyUI's input/output/temp folders. Download remote clips yourself before uploading; the legacy URL field no longer fetches videos. |
 | **Zura Mask** | Takes **any** `VIDEO` wire, so it works outside the Wan pipeline too. One dropdown for the replacement area — **Whole character**, **Whole head** (hair, forehead and ears, cut at the neck), or **Face only** — plus mask expansion and a **Blockify mask** switch with a free **block size** integer (8–512 px, step 1, KJNodes `BlockifyMask` parity; it delegates to the installed KJNodes node and reproduces its bbox block-grid algorithm exactly as fallback). Inputs: `video`. Outputs: `mask_preview` (red-tinted control video), `masked_footage` (the payload the sampler consumes) and `mask` (the replacement mask itself, as a native `MASK`). |
 | **Zura Wan 2.2 Looped Chunks Sampler** | The looped `WanAnimateToVideo` renderer: native `continue_motion` continuation between chunks, hard reset at detected or manual cuts. `steps` and `cfg` are plain widgets the Turbo Switch node can override. Outputs generated frames **and** a finished `VIDEO` with the original audio and exact timing — no separate finish node. |
 | **Zura Wan 2.2 Turbo Switch** | Lazy base/accelerated model selector emitting model/steps/cfg. Wan 2.2 specific: turbo runs the accelerated branch at 4–8 steps with cfg 1.0, quality runs the base branch at 40 steps with cfg 5.0. LoRA branches stay visible in the graph (Power LoRA Loaders or similar). |
@@ -169,70 +201,74 @@ The graph is a starting point: replace the `example_clip.mp4` and
 image, and confirm that the named model and LoRA files exist in your ComfyUI
 installation before running it.
 
-The example uses **Power Lora Loader (rgthree)** so the three named Wan LoRA
+The example uses **Power Lora Loader (rgthree)** so the two named Wan LoRA
 weights remain visible in the graph. Install rgthree-comfy, or replace that
 node with an equivalent loader while keeping the model and CLIP connections.
 Load it from ComfyUI's Workflows menu (copy it into `user/default/workflows/`)
 or open the file directly.
 
-## Recommended LoRA stack
+## Fast Animate recipe
 
-Measured on one 41-frame chunk of real footage, same seed, only the LoRA stack
-changed. This is the stack the example ships with:
+The example's accelerated branch uses the Wan2.1 I2V LightX2V adapter at
+strength **0.60**, followed by the Wan Animate relighting LoRA at **1.00**.
+It excludes the Wan2.2 high-noise I2V LightX2V adapter. The [Wan2.2 project
+guidance](https://github.com/Wan-Video/Wan2.2#run-wan-animate) warns that
+LoRAs trained on Wan2.2 can behave unexpectedly with Wan-Animate. Kijai's
+[Wan Animate example](https://github.com/kijai/ComfyUI-WanVideoWrapper/blob/main/example_workflows/wanvideo_WanAnimate_example_01.json)
+also pairs the Wan2.1 I2V LightX2V adapter with the Animate relighting LoRA;
+its strengths differ from this workflow's settings. Comfy's [official Animate
+template](https://github.com/Comfy-Org/workflow_templates/blob/main/templates/video_wan2_2_14B_animate.json)
+lists the same Wan2.1 LightX2V file as its four-step acceleration adapter.
 
-| LoRA | Strength |
-| --- | --- |
-| `wan2.2_i2v_lightx2v_4steps_lora_v1_high_noise` | 0.70 |
-| `lightx2v_I2V_14B_480p_cfg_step_distill_rank64_bf16` | 0.60 |
-| `wan2.2_animate_14B_relight_lora_bf16` | 1.00 |
+The Turbo Switch runs this branch at **6 steps, CFG 1.0**. Its detailed
+branch uses the base Animate model at **40 steps, CFG 5.0**. These are graph
+settings, not a measured speed or quality guarantee. Earlier sweep claims
+were removed because they were measured with the now-excluded high-noise
+adapter, so they do not establish results for this recipe.
 
-**6 steps, cfg 1.0** at these settings (the Turbo Switch node's default). What the sweep
-found, in case you want to trade speed for detail:
-
-- The official bf16 relight LoRA beats the resized fp16 conversion: brighter, more
-  saturated, no loss of detail, and one less derived file to keep around.
-- `Wan14B_RealismBoost` is a taste knob, not a quality knob - it *lowers* measured
-  edge detail. The example keeps the row wired but switched off.
-- LoRA wiring order makes no measurable difference.
-- Step count is the only real speed lever: 4 steps is about a third faster than 6
-  for roughly 6% less edge detail. 5 steps buys nothing over either neighbour.
+The integrated Zura Studio has a separate native Animate graph and model
+stack. Its fast route uses the Wan2.1 LightX2V adapter at **0.60**, while its
+relight and realism LoRAs are loaded at **1.00**; do not read the standalone
+workflow's BF16 relight choice as the Studio's exact stack.
 
 ## How chunk continuation works
 
-Long clips render in 41-frame windows. At every chunk border the renderer uses
-**native continuation plus a cross-fade**, which is the same mechanism a
-hand-built Wan 2.2 Animate loop uses (`continue_motion` → sampler →
-`trim_image`):
+This standalone example renders long clips in 41-frame windows; the integrated
+Zura Studio uses 81-frame windows. At every chunk border the renderer uses
+**native continuation** by default, following a hand-built Wan 2.2 Animate
+loop (`continue_motion` → sampler → `trim_image`). The optional **Soft blend**
+setting adds a cross-fade between decoded versions of the shared frames:
 
 1. **The previous chunk's real frames are handed over as `continue_motion`.**
    The next chunk's sampling window starts on those exact frames, and the
    source conditioning (pose / face / background / mask) is aligned to the same
    absolute frames, so the model samples motion it has genuinely seen instead of
    inventing a fresh take. A graph loop drops the frames the native node reports
-   as `trim_image` because they only repeat output it already emitted; here they
-   are kept, because they are the cross-fade partner (step 2).
-2. **The join is a flat-ended Hann cross-fade.** Those shared frames now hold
+   as `trim_image` because they only repeat output it already emitted. Native
+   continuation keeps the predecessor's decoded frames and discards this
+   repeated context, avoiding a blend of moving faces.
+2. **Soft blend uses a flat-ended Hann cross-fade.** Those shared frames hold
    two renditions of the same absolute frames: the predecessor's real pixels
    and this chunk's rendition of them, produced with those pixels in its
-   context. Because the two agree closely by construction, ramping between them
-   has almost nothing to hide — but whatever difference remains is spread across
-   the whole zone rather than stepping at one frame boundary. The zone's first
+   context. Ramping between them spreads any difference across the zone, but
+   disagreement can soften or double moving features. The zone's first
    frame is exactly the predecessor's frame and its last frame is exactly this
    chunk's own continuation, which the following frame continues in the same
-   pass: neither edge steps.
+   pass.
 
-Because continuation is driven by real pixels, the cross-fade is between two
-versions of the same motion and should reduce visible boundary artefacts. The
-result still depends on the source clip, mask, conditioning, model, and
-sampling settings; inspect the preview and joins for each render.
+Continuation is driven by the previous generated pixels. The result still
+depends on the source clip, mask, conditioning, model, and sampling settings;
+inspect the preview and joins for each render. Use Native continuation when
+blending makes mouth detail softer.
 
 `overlap_frames` (default 5, must be 4n+1 and at most half of `chunk_frames`)
-is the length of both the continuation anchor and the cross-fade zone; raise it
+is the length of the continuation anchor and, in Soft blend, the cross-fade zone; raise it
 to 9 for a tighter hold on fast movement. A full continuation chunk's window is
 still exactly `chunk_frames` frames, so the continuation costs no extra sampling.
 Every chunk logs `mean |real - rendition|` for the frames it was given
-(`continuation_delta`, also in the receipt) — near zero means a true
-continuation; a large value means raise `overlap_frames`.
+(`continuation_delta`, also in the receipt). A small value indicates similar
+decoded context; a large value warrants inspecting the join before adjusting
+the overlap or conditioning.
 
 ### Shots
 
@@ -252,7 +288,7 @@ and the progress panel shows which shot and frame range is rendering.
 ## Files
 
 - `driving_clip.py`, `mask_performer.py`, `render.py`, `speed.py` — the four nodes (Zura Load Video, Zura Mask, Zura Wan 2.2 Looped Chunks Sampler, Zura Wan 2.2 Turbo Switch).
-- `media_source.py` — local/URL/download, 24 fps decode, YouTube discovery + preview (routes `/zura/video_candidates`, `/zura/preview_video`).
+- `media_source.py` — contained local media, 24 fps decode, YouTube source links and local previews (routes `/zura/video_candidates`, `/zura/preview_video`). Remote video fetching is disabled.
 - `planning.py`, `cut_detection.py` — frame planner and adaptive cut detector (unchanged from v1).
 - `segmentation.py` — CPU YOLO person mask.
 - `video.py` — native `VideoFromComponents` assembly with a test fallback.
@@ -282,7 +318,7 @@ clone it into the same `custom_nodes` directory, then restart ComfyUI.
 
 Put `ffmpeg` and `ffprobe` on the system `PATH`. They are used to decode and
 assemble video, including local clips. Node.js must also be available on
-`PATH` when using YouTube discovery or downloads, because yt-dlp uses it as a
+`PATH` when using YouTube source discovery, because yt-dlp uses it as a
 JavaScript runtime for YouTube extraction. Local clips do not need YouTube or
 Node.js.
 
@@ -306,7 +342,7 @@ Follow that project's current model instructions if its filenames or locations
 change.
 
 The example workflow names the Wan 2.2 Animate UNet, UMT5 text encoder, Wan
-VAE, CLIP Vision encoder, and three LoRAs explicitly. Replace those widget
+VAE, CLIP Vision encoder, and two LoRAs explicitly. Replace those widget
 values with the filenames installed in your own model folders. The workflow
 also contains user input placeholders as described above.
 

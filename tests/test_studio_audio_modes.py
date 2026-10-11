@@ -2,6 +2,7 @@
 import copy
 import hashlib
 import importlib
+import json
 import shutil
 import subprocess
 import sys
@@ -152,19 +153,35 @@ class AudioModeTests(unittest.TestCase):
         if reference:
             p['audio'] = self.audio()
             p['config'].update(audio_id='b' * 32, lip_sync=speech)
-        package.verify_review = lambda _: (None, {'clip': {'frames': 72, 'duration': 3}})
         package.text_cache_path = lambda _: Path('/nonexistent-audio-test-cache')
-        with patch.object(studio, 'assert_approved'), patch.object(studio, 'check_asset'), \
-                patch.object(studio, 'text_cache_info', return_value=('test-cache', {})), \
-                patch.object(wan, 'cache_key', return_value='c' * 64), \
-                patch.object(wan_speech, 'guide_ready', return_value=True), \
-                patch.object(wan_speech, 'load_guide', return_value={'path': '/synthetic-guide.mp4',
-                    'guide_key': 'b'*64, 'sha': 'c'*64,
-                    'key_data': {'source': {'frames': 72}}}), \
-                patch.object(h3, 'cache_key', return_value='d' * 64):
-            if engine == 'seedance':
-                return studio.editable_graph(p, 'draft')[0]
-            return studio.editable_graph(p, 'animate')[0]
+        folder_paths = importlib.import_module('folder_paths')
+        review_manifest = {'files': {'mask.mp4': 'f' * 64}, 'clip': {
+            'frames': 72, 'duration': 3, 'fps': 24, 'source_hash': 'e' * 64}}
+        with tempfile.TemporaryDirectory(prefix='studio-audio-mode-fixture-') as directory:
+            output_directory = Path(directory) / 'output'
+            review_directory = output_directory / 'genj' / 'reviews' / p['review']
+            review_directory.mkdir(parents=True)
+            (review_directory / 'review.json').write_text(
+                json.dumps(review_manifest), encoding='utf-8')
+            with patch.object(package, 'verify_review', return_value=(review_directory, review_manifest), create=True), \
+                    patch.object(folder_paths, 'get_output_directory', return_value=str(output_directory), create=True), \
+                    patch.object(studio, 'assert_approved'), patch.object(studio, 'check_asset'), \
+                    patch.object(studio, 'text_cache_info', return_value=('test-cache', {})), \
+                    patch.object(wan, 'cache_key', return_value='c' * 64), \
+                    patch.object(wan_speech, 'guide_ready', return_value=True), \
+                    patch.object(wan_speech, 'load_guide', return_value={'path': '/synthetic-guide.mp4',
+                        'guide_key': 'b'*64, 'sha': 'c'*64,
+                        'key_data': {'source': {'frames': 72}}}), \
+                    patch.object(h3, 'cache_key', return_value='d' * 64), \
+                    patch.dict(sys.modules, {NAME: package}):
+                if engine == 'seedance':
+                    return studio.editable_graph(p, 'draft')[0]
+                if engine == 'wan':
+                    # Audio-mode assertions inspect Wan's complete render graph;
+                    # Studio's default Wan export now exposes one preparation
+                    # window at a time before that render graph is available.
+                    return wan.build_wan_graph(p, use_cache=False)
+                return studio.editable_graph(p, 'animate')[0]
 
     def test_original_mode_keeps_native_performance_without_new_face_generation(self):
         for engine in ('local', 'h3', 'wan', 'seedance'):
@@ -229,7 +246,7 @@ const proto=context.Studio.prototype;
 for(const engine of ['local','h3','wan','seedance']){
  const ui=Object.create(proto),fields={};
  ui.config={size:512,lip_sync:true,refine_lips:true};ui.audio={id:'b'.repeat(32)};
- for(const [name,value] of Object.entries({scope:'person',background:'keep',prompt:'',length_mode:'custom',start:0,duration:3,resolution:1280,performer:-1,margin:8,seed:42,audio_start:1.25,quality:'fast','audio-mode':'original'}))fields[name]={value};
+ for(const [name,value] of Object.entries({scope:'person',background:'keep',prompt:'',length_mode:'custom',edit_area:'mask',mask_method:'auto',mask_prompt:'person',start:0,duration:3,resolution:1280,performer:-1,margin:8,seed:42,audio_start:1.25,quality:'fast','audio-mode':'original'}))fields[name]={value};
  fields.pitch={checked:false};fields.remove_text={checked:false};fields.lip_sync={checked:true};fields.refine_lips={checked:true};
  ui.$=name=>fields[name];ui.container={querySelector:()=>({value:engine})};
  let selected=ui.readConfig();assert.equal(selected.audio_id,'');assert.equal(selected.audio_start,0);assert.equal(selected.lip_sync,false);assert.equal(selected.refine_lips,false);

@@ -1,8 +1,8 @@
 /* Zura nodes · source picker for the Zura Load Video node.
  *
  * Adds upload + "Find video options" buttons to the node.  The YouTube search
- * dialog previews candidates and writes the chosen window into the node's
- * video_url / start_seconds / duration_seconds widgets. */
+ * dialog lists source links. Download a source yourself, then upload it with
+ * Choose local video; Zura never downloads a remote preview. */
 import { app } from '/scripts/app.js';
 import { api } from '/scripts/api.js';
 import { fetchJsonWithTimeout } from './v2_requests.js';
@@ -46,7 +46,7 @@ async function chooseVideo(node) {
     border: '1px solid #566', borderRadius: '12px', background: '#171b20', color: '#f1f5f9',
   });
   element('h2', 'Choose a source video', dialog);
-  element('p', 'Preview a source before selecting it. View counts indicate popularity, not live trend growth. Selecting fills the URL and clip window on the Driving clip node.', dialog);
+  element('p', 'Open a source to watch it. Download a clip you are allowed to use, close this window, then choose it with Choose local video. View counts indicate popularity, not live trend growth.', dialog);
   const requestController = new AbortController();
   let closed = false;
   const close = element('button', 'Close', dialog);
@@ -73,7 +73,7 @@ async function chooseVideo(node) {
       }, 90000);
       if (closed) return;
       clearInterval(elapsedTimer);
-      status.textContent = `${receipt.candidates.length} options. Nothing will be generated until you choose a video and run the workflow.`;
+      status.textContent = `${receipt.candidates.length} source links. Upload your chosen clip before running the workflow.`;
       for (const candidate of receipt.candidates) {
         const id = new URL(candidate.url).searchParams.get('v');
         if (!/^[A-Za-z0-9_-]{11}$/.test(id || '')) continue;
@@ -85,68 +85,8 @@ async function chooseVideo(node) {
         image.style.width = '100%';
         element('h3', candidate.title, card);
         element('p', `${candidate.channel || ''} · ${Number(candidate.view_count).toLocaleString()} views · ${Math.round(candidate.duration)} seconds`, card);
-        let preview = null;
-        const windowControls = element('div', '', card);
-        const startLabel = element('label', 'Start time (seconds) ', windowControls);
-        const startInput = element('input', '', startLabel);
-        startInput.type = 'number';
-        startInput.min = '0';
-        startInput.max = String(Math.max(0, candidate.duration - duration));
-        startInput.step = '0.1';
-        startInput.value = String(value('start_seconds', 0));
-        startInput.style.width = '75px';
-        const autoLabel = element('label', ' Suggest a section ', windowControls);
-        const autoInput = element('input', '', autoLabel);
-        autoInput.type = 'checkbox';
-        autoInput.checked = true;
-        startInput.disabled = autoInput.checked;
-        const previewArea = element('div', '', card);
-        const invalidate = () => { preview = null; use.disabled = true; use.style.opacity = '.45'; };
-        startInput.oninput = invalidate;
-        autoInput.onchange = () => { startInput.disabled = autoInput.checked; invalidate(); };
-        const watch = element('button', `Preview ${duration}-second clip`, card);
-        watch.onclick = async () => {
-          watch.disabled = true;
-          watch.textContent = 'Preparing preview…';
-          try {
-            invalidate();
-            startInput.disabled = true; autoInput.disabled = true;
-            const data = await fetchJsonWithTimeout(api.fetchApi.bind(api), '/zura/preview_video', {
-              method: 'POST', headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                url: candidate.url, start: Number(startInput.value), automatic: autoInput.checked,
-                youtube_mode: query.youtube_mode, duration, source_max_side: query.source_max_side,
-              }), signal: requestController.signal,
-            }, 180000);
-            if (closed) return;
-            preview = data;
-            previewArea.replaceChildren();
-            startInput.value = String(data.start);
-            const video = element('video', '', previewArea);
-            video.src = api.apiURL('/view?' + new URLSearchParams(data));
-            video.controls = true;
-            video.style.width = '100%';
-            video.preload = 'metadata';
-            element('p', `Selected window: ${data.start}–${data.start + data.duration} seconds.`, previewArea);
-            use.disabled = false; use.style.opacity = '1';
-            watch.textContent = 'Update preview';
-          } catch (error) {
-            if (!closed) { watch.textContent = 'Retry preview'; element('p', String(error), previewArea); }
-          } finally {
-            watch.disabled = false; autoInput.disabled = false; startInput.disabled = autoInput.checked;
-          }
-        };
         const link = element('a', 'Open on YouTube', card);
         link.href = candidate.url; link.target = '_blank'; link.rel = 'noopener noreferrer'; link.style.margin = '0 12px';
-        const use = element('button', `Use this ${duration}-second clip`, card);
-        use.disabled = true; use.style.opacity = '.45';
-        use.onclick = () => {
-          if (!preview) return;
-          set(node, 'video_url', candidate.url);
-          set(node, 'start_seconds', preview.start);
-          app.graph.setDirtyCanvas(true, true);
-          dialog.close();
-        };
       }
     } catch (error) {
       clearInterval(elapsedTimer);

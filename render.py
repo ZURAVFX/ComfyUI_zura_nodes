@@ -104,6 +104,15 @@ class ZuraWan22LoopedChunksSampler:
                negative_prompt, steps=6, cfg=1.0, seed=0, chunk_frames=41, overlap_frames=5,
                max_side=1280, shot_mode="Detect cuts", cut_threshold=.2, cut_frames="", unique_id=None,
                vision_reference=None, join_mode="Native continuation"):
+        return self._render(model, clip, vae, clip_vision, reference_image, footage, prompt,
+                            negative_prompt, steps, cfg, seed, chunk_frames, overlap_frames,
+                            max_side, shot_mode, cut_threshold, cut_frames, unique_id,
+                            vision_reference, join_mode)
+
+    def _render(self, model, clip, vae, clip_vision, reference_image, footage, prompt,
+                negative_prompt, steps=6, cfg=1.0, seed=0, chunk_frames=41, overlap_frames=5,
+                max_side=1280, shot_mode="Detect cuts", cut_threshold=.2, cut_frames="", unique_id=None,
+                vision_reference=None, join_mode="Native continuation", stream_key=None):
         # Fail fast on missing conditioning before importing ComfyUI internals.
         media = footage
         if join_mode not in ("Native continuation", "Soft blend"):
@@ -141,18 +150,80 @@ class ZuraWan22LoopedChunksSampler:
         import nodes
         from comfy_extras.nodes_wan import WanAnimateToVideo
 
+        streaming = stream_key is not None
+        writer = None
+        if streaming:
+            from pathlib import Path
+            import re
+            import folder_paths
+            provenance = media.get("streaming_preparation", {})
+            if (not isinstance(provenance, dict) or provenance.get("storage") not in
+                    ("torch_zip_mmap_float32", "torch_zip_readonly_windows_float32") or
+                    provenance.get("frames") != total or provenance.get("fps") != 24 or
+                    not re.fullmatch(r"[a-f0-9]{64}", str(provenance.get("cache_key", ""))) or
+                    not re.fullmatch(r"[a-f0-9]{64}", str(provenance.get("sha256", ""))) or
+                    not re.fullmatch(r"[a-f0-9]{64}", str(stream_key))):
+                raise ValueError("Use verified file-backed Wan preparation for streamed delivery.")
+            if join_mode != "Native continuation":
+                raise ValueError("Streamed Wan delivery requires native continuation joins.")
+            if media.get("keep_audio", False):
+                raise ValueError("Restore the global soundtrack after streamed Wan delivery.")
+            cache_file = Path(provenance["path"]).resolve(strict=True)
+            output_root = Path(folder_paths.get_output_directory()).resolve(strict=True)
+            if not cache_file.is_relative_to(output_root) or cache_file.name != provenance["cache_key"] + ".pt":
+                raise ValueError("Wan streaming preparation leaves its verified output cache.")
+            from .streaming_video import AtomicVideoWriter, file_video, verify_preparation_file
+            window_reader = None
+            if provenance["storage"] == "torch_zip_readonly_windows_float32":
+                from .wan_preparation_windows import WindowArray
+                fields = ("frames", "character_mask", "pose_video", "face_video")
+                if not all(isinstance(media[name], WindowArray) for name in fields):
+                    raise ValueError("Connect the bounded Wan preparation arrays to streamed delivery.")
+                window_reader = frames._reader
+                if (any(media[name]._reader is not window_reader or
+                        media[name] is not window_reader.arrays[name] for name in fields) or
+                        provenance != window_reader.provenance or
+                        window_reader.max_window_frames < int(chunk_frames)):
+                    raise ValueError("Wan's connected preparation does not match its verified window receipt.")
+                window_reader.assert_renderable()
+            def interrupt():
+                __import__("comfy.model_management", fromlist=["throw_exception_if_processing_interrupted"]).throw_exception_if_processing_interrupted()
+            def verify_cache():
+                if window_reader is not None:
+                    window_reader.verify()
+                verify_preparation_file(cache_file, provenance, interrupt=interrupt)
+            # A same-sized edit can restore mtime and still change native
+            # conditioning. Recheck actual bytes before prompt/model work.
+            verify_cache()
+            # Require the native file VIDEO API before any model work.
+            from comfy_api.latest import InputImpl
+            if not hasattr(InputImpl, "VideoFromFile"):
+                raise RuntimeError("This Comfy version does not support file-backed VIDEO delivery.")
         source_bg = frames
         # Wan's background conditioning must not contain the performer pixels.
         # Keep the tensor shape intact while blacking out the masked region.
-        m = mask.float()
-        if m.ndim == 3:
-            m = m.unsqueeze(-1)
-        if m.shape[-1] != 1:
-            m = m[..., :1]
-        if m.max() > 1.5:
-            m = m / 255.0
-        source_bg = source_bg * (1.0 - m.clamp(0, 1))
-        cuts = [] if shot_mode == "Continuous" else (parse_cut_frames(cut_frames, total) if shot_mode == "Manual cuts" else detect_cuts(frames, cut_threshold))
+        if not streaming:
+            m = mask.float()
+            if m.ndim == 3:
+                m = m.unsqueeze(-1)
+            if m.shape[-1] != 1:
+                m = m[..., :1]
+            if m.max() > 1.5:
+                m = m / 255.0
+            source_bg = source_bg * (1.0 - m.clamp(0, 1))
+        # Detection receives only boundedly generated thumbnails on the
+        # streaming route; interpolation never sees a full native-resolution batch.
+        cut_source = frames
+        if streaming and shot_mode == "Detect cuts":
+            thumbnails = []
+            for lo in range(0, total, 4):
+                thumbnails.append(torch.nn.functional.interpolate(
+                    frames[lo:lo + 4].permute(0, 3, 1, 2), (32, 32), mode="area").permute(0, 2, 3, 1))
+            cut_source = torch.cat(thumbnails)
+            del thumbnails
+        cuts = [] if shot_mode == "Continuous" else (parse_cut_frames(cut_frames, total) if shot_mode == "Manual cuts" else detect_cuts(cut_source, cut_threshold))
+        if streaming:
+            del cut_source
         plan = plan_chunks(total, chunk_frames, overlap_frames, cuts, continuation=True)
         validate_plan(plan, total)
         total_chunks = len(plan)
@@ -180,6 +251,10 @@ class ZuraWan22LoopedChunksSampler:
         preparation_timings = {}
         current_shot = current_chunk = completed_chunks = 0
         try:
+            if streaming:
+                import folder_paths
+                writer = AtomicVideoWriter(folder_paths.get_output_directory(), stream_key,
+                                           total, width, height, interrupt=interrupt)
             def prepare(stage, operation):
                 progress_event("preparing", stage=stage, stage_started_at=time.time(), elapsed_seconds=0,
                                shot=0, shots=total_shots, chunk=0)
@@ -222,10 +297,14 @@ class ZuraWan22LoopedChunksSampler:
                     if pending_blend is not None:
                         anchor = pending_blend["tail"]
                         if int(anchor.shape[0]) != part.anchor_frames:
+                            if streaming:
+                                raise RuntimeError("Wan generated continuation has an incorrect frame count.")
                             anchor = (anchor[-part.anchor_frames:]
                                       if int(anchor.shape[0]) > part.anchor_frames
                                       else hold_last(anchor, part.anchor_frames))
                     else:
+                        if streaming:
+                            raise RuntimeError("Wan continuation lost its generated predecessor tail.")
                         # Only reachable if a plan ever anchors across a shot
                         # boundary, which it must not: render the window fresh.
                         logging.warning("Wan 2.2 loop %s: no predecessor tail to continue from",
@@ -238,8 +317,16 @@ class ZuraWan22LoopedChunksSampler:
                              0 if anchor is None else int(anchor.shape[0]))
                 started = time.monotonic()
                 wsl = slice(part.window_start, part.window_start + part.window_count)
-                ppose, pface, pbg, pmask = [hold_last(x[wsl] if x is not None else None, length)
-                                            for x in (pose, face, source_bg, mask)]
+                if streaming:
+                    pmask = hold_last(mask[wsl], length)
+                    psource = hold_last(frames[wsl], length)
+                    m = pmask.unsqueeze(-1) if pmask.ndim == 3 else pmask
+                    pbg = psource * (1.0 - m.clamp(0, 1))
+                    ppose, pface = (hold_last(x[wsl], length) for x in (pose, face))
+                    del psource, m
+                else:
+                    ppose, pface, pbg, pmask = [hold_last(x[wsl] if x is not None else None, length)
+                                                for x in (pose, face, source_bg, mask)]
                 result = native.execute(positive, negative, vae, width, height, length, 1,
                                         int(part.anchor_frames) or 1, 0,
                                         reference_image=reference_image,
@@ -265,6 +352,8 @@ class ZuraWan22LoopedChunksSampler:
                 # Pad a tail-window to the planned count so the blend zone
                 # always exists even when the source runs out mid-window.
                 if int(window.shape[0]) < part.window_count:
+                    if streaming:
+                        raise RuntimeError("Native Wan decode returned fewer frames than its owned timeline.")
                     pad = window[-1:].repeat((part.window_count - int(window.shape[0]),) + (1,) * (window.ndim - 1))
                     window = torch.cat((window, pad), dim=0)
                 window = window[:part.window_count].detach().cpu()
@@ -294,7 +383,14 @@ class ZuraWan22LoopedChunksSampler:
 
                 # Assemble each timestamp once. Native joins retain the earlier
                 # pixels; optional blending weights the two decoded versions.
-                if pending_blend is not None and pending_blend["frames"] > 0:
+                if streaming:
+                    # Own the complete visible span immediately. Its tail is
+                    # already encoded; the next window's repeated rendition
+                    # will be discarded, exactly like the old native join.
+                    writer.write(images, part.output_start)
+                    pending_blend = ({"tail": window[-part.blend_frames:].clone(),
+                                      "frames": part.blend_frames} if part.blend_frames > 0 else None)
+                elif pending_blend is not None and pending_blend["frames"] > 0:
                     blend = pending_blend["frames"]
                     if join_mode == "Soft blend":
                         weights = _blend_weights(blend, device=window.device)
@@ -310,20 +406,33 @@ class ZuraWan22LoopedChunksSampler:
                 # prefix (frames before output_start, already covered by the
                 # predecessor's blend zone) and the blend tail (re-rendered by
                 # the successor).
-                context = part.output_start - part.window_start
-                keep = window[context:part.window_count - part.blend_frames]
-                decoded.append(keep.cpu())
-                if part.blend_frames > 0:
-                    pending_blend = {"tail": window[-part.blend_frames:], "frames": part.blend_frames}
+                if not streaming:
+                    context = part.output_start - part.window_start
+                    keep = window[context:part.window_count - part.blend_frames]
+                    decoded.append(keep.cpu())
+                    if part.blend_frames > 0:
+                        pending_blend = {"tail": window[-part.blend_frames:], "frames": part.blend_frames}
+                # The local anchor is another reference to the previous tail.
+                # Release it as well as the decode window before the next loop.
+                if streaming:
+                    del anchor
                 del sampled, latent, p, n, ppose, pface, pbg, pmask, window, images, result
                 completed_chunks = part.index + 1
                 if progress is not None:
                     progress.update(1)
                 progress_event("chunk_completed", shot=part.shot_index + 1, shots=total_shots,
                                chunk=part.index + 1, completed_chunks=completed_chunks)
-            output = torch.cat(decoded, dim=0)
-            if int(output.shape[0]) != total:
-                raise RuntimeError(f"continuation assembly produced {int(output.shape[0])} frames for a {total}-frame clip")
+            delivery = None
+            if streaming:
+                # The writer runs this after encoded-video readback and
+                # immediately before atomic publication, not after publishing.
+                delivery = writer.finish(before_publish=verify_cache)
+                generated_frames = delivery["frames"]
+            else:
+                output = torch.cat(decoded, dim=0)
+                generated_frames = int(output.shape[0])
+            if generated_frames != total:
+                raise RuntimeError(f"continuation assembly produced {generated_frames} frames for a {total}-frame clip")
             receipt = {"model": "Wan 2.2 Animate", "chunks": len(plan), "cuts": cuts, "shot_mode": shot_mode,
                        "join_mode": join_mode,
                        "shots": [[lo, hi] for lo, hi in shot_bounds],
@@ -332,10 +441,18 @@ class ZuraWan22LoopedChunksSampler:
                                                           for t in chunk_timings] or [0.0])},
                        "native_inputs": {"pose_video": pose is not None, "face_video": face is not None,
                                          "background_video": True, "character_mask": True},
-                       "requested_frames": total, "generated_frames": int(output.shape[0]),
+                       "requested_frames": total, "generated_frames": generated_frames,
                        "frame_plan": [p._asdict() for p in plan]}
             receipt['chunk_timings'] = chunk_timings
             receipt['preparation_timings'] = preparation_timings
+            if streaming:
+                receipt["delivery"] = delivery
+                receipt["preparation"] = provenance
+                receipt["streaming"] = True
+                receipt["audio_policy"] = "restore_global_soundtrack_once"
+                progress_event("completed", shot=total_shots, shots=total_shots, chunk=total_chunks,
+                               completed_chunks=total_chunks)
+                return file_video(delivery["path"]), json.dumps(receipt, ensure_ascii=False)
             progress_event("completed", shot=total_shots, shots=total_shots, chunk=total_chunks,
                            completed_chunks=total_chunks)
             # Assemble the finished clip with the original audio and exact
@@ -356,6 +473,25 @@ class ZuraWan22LoopedChunksSampler:
             progress_event("error", shot=current_shot, shots=total_shots, chunk=current_chunk,
                            completed_chunks=completed_chunks, error=str(exc))
             raise
+        finally:
+            if writer is not None and not writer.complete:
+                writer.abort()
+
+
+class ZuraWan22StreamedSampler(ZuraWan22LoopedChunksSampler):
+    """The same native Wan sampler, with bounded file VIDEO delivery."""
+    RETURN_TYPES = ("VIDEO", "STRING")
+    RETURN_NAMES = ("video", "receipt")
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        inputs = super().INPUT_TYPES()
+        inputs["required"]["delivery_key"] = ("STRING", {"default": ""})
+        inputs["optional"]["join_mode"] = (["Native continuation"], {"default": "Native continuation"})
+        return inputs
+
+    def render(self, delivery_key, **kwargs):
+        return self._render(**kwargs, stream_key=delivery_key)
 
 
 # Class IDs are the workflow contract: these keys are kept from the pack's

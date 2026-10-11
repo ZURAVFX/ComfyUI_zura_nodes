@@ -1,6 +1,6 @@
 """Zura nodes · Zura Load Video.
 
-One minimal video loader: a local file or a direct URL, trimmed to a start time
+One minimal video loader: an uploaded local file, trimmed to a start time
 and duration, decoded at 24 fps.  Outputs an ordinary ``VIDEO`` wire (frames
 plus original audio) that any ComfyUI video node understands, alongside the
 decoded frames, so the source can be previewed, combined or fed to Zura Mask.
@@ -57,8 +57,8 @@ class ZuraLoadVideo:
                 "tooltip": "Uploaded clips (and any videos already in the input folder). "
                            "Use the Choose local video button below, or pick from this list."}),
             "video_url": ("STRING", {"default": "", "multiline": False,
-                                     "tooltip": "Optional direct video URL (YouTube, direct MP4...). "
-                                                "Leave empty to use the uploaded clip."}),
+                                     "tooltip": "Legacy URL field. Download the clip yourself, then use "
+                                                "Choose local video. Leave this field empty."}),
             "start_seconds": ("FLOAT", {"default": 0, "min": 0, "max": 86400, "step": 0.1}),
             "duration_seconds": ("FLOAT", {"default": 10, "min": 1, "max": 120, "step": 0.1,
                                            "tooltip": "Length of the driving clip. Every second is 24 rendered frames."}),
@@ -69,8 +69,11 @@ class ZuraLoadVideo:
 
     @classmethod
     def VALIDATE_INPUTS(cls, clip):
-        if clip and not folder_paths.exists_annotated_filepath(clip):
-            return f"Invalid video file: {clip}"
+        if clip:
+            try:
+                media_source.local_path(clip)
+            except (ValueError, OSError) as exc:
+                return f"Invalid video file: {exc}"
         return True
 
     @classmethod
@@ -80,7 +83,10 @@ class ZuraLoadVideo:
         # ComfyUI's cache stale when the user changes the trim, audio, or size.
         if str(video_url or "").strip():
             return float("nan")
-        path = folder_paths.get_annotated_filepath(clip) if clip else ""
+        try:
+            path = media_source.local_path(clip) if clip else ""
+        except (ValueError, OSError):
+            return float("nan")
         if not path:
             return float("nan")
         try:

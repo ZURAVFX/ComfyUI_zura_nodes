@@ -52,6 +52,31 @@ class SharedEngineTests(unittest.TestCase):
         self.assertEqual(studio.clean_config({'size': 768})['resolution'], 768)
         self.assertEqual(studio.clean_config({'size': 512, 'resolution': 1280})['size'], 512)
 
+    def test_scene_opening_replaces_reference_identity_without_changing_masked_design(self):
+        p = self.project()
+        p['config'] = studio.clean_config({**p['config'], 'engine': 'local',
+            'edit_area': 'scene', 'prompt': 'Warm evening light.'})
+        with patch.object(studio, 'assert_approved'), patch.object(studio, 'check_asset'):
+            scene = studio.build_graph(p, 'design', use_cache=False)
+            p['config']['edit_area'] = 'mask'
+            masked = studio.build_graph(p, 'design', use_cache=False)
+        prompt = scene['127']['inputs']['value']
+        self.assertIn('If the second image shows a character, replace the visible performer in the first image with that character', prompt)
+        for required in ('face identity', 'hairstyle', 'hat or headwear', 'clothing and accessories',
+                         "do not retain the first performer's face or clothing", 'same body pose',
+                         'head angle', 'camera framing', 'ground plane', 'foot contact',
+                         'any environment shown in the second image', "first image's geometry",
+                         'For a character sheet, select one coherent identity and outfit',
+                         'If the second image shows only an environment',
+                         "without inventing a reference character or changing the performer's identity and outfit",
+                         'without a reference sheet or duplicate character'):
+            self.assertIn(required, prompt)
+        self.assertIn('Additional appearance direction: Warm evening light.', prompt)
+        self.assertEqual(scene['121']['inputs']['image'], 'character.png')
+        self.assertNotIn('any environment shown in the second image', masked['127']['inputs']['value'])
+        self.assertIn('zura_look_mask', masked)
+        self.assertNotIn('zura_look_mask', scene)
+
     def test_new_optional_defaults_do_not_reset_finished_legacy_shot(self):
         p = self.project()
         p['phase'] = 'done'
@@ -178,12 +203,22 @@ class SharedEngineTests(unittest.TestCase):
 
     def test_wan_native_preparation_and_model_stack(self):
         p = self.project()
+        import folder_paths
         with patch.object(studio, 'assert_approved'), patch.object(studio, 'check_asset'), \
                 patch.object(wan, 'cache_key', return_value='a' * 64), tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / 'cache.pt'
-            with patch.object(wan, 'cache_path', return_value=path):
+            review = Path(tmp) / 'genj' / 'reviews' / p['review']
+            review.mkdir(parents=True)
+            manifest = {'clip': {'frames': 72, 'fps': 24, 'source_hash': p['source']['sha']},
+                        'files': {'mask.mp4': 'approved-mask'}}
+            (review / 'review.json').write_text(json.dumps(manifest), encoding='utf-8')
+            with patch.object(wan, 'cache_path', return_value=path), \
+                    patch.object(folder_paths, 'get_output_directory', return_value=tmp, create=True), \
+                    patch.object(package, 'verify_review', return_value=(review, manifest)):
                 graph = wan.build_wan_graph(p)
                 self.assertIn('wan_save', graph)
+                self.assertEqual(graph['wan_save']['class_type'], 'ZuraWanSavePreparationPart')
+                self.assertEqual(graph['wan_frames']['inputs']['frame_count'], 72)
                 self.assertFalse(any(n['class_type'] == 'UNETLoader' for n in graph.values()))
                 self.assertEqual(graph['wan_shot']['inputs']['render_long_edge'], 1280)
                 self.assertEqual(graph['wan_shot']['inputs']['preview_seconds'], 0)
@@ -322,10 +357,12 @@ class SharedEngineTests(unittest.TestCase):
                 for method, path in routes if path.startswith('/zura/studio')}
             legacy = {(method, path) for method, path in routes if path.startswith('/genj/studio')}
             self.assertEqual(branded, legacy)
-            self.assertEqual(len(branded), 11)
+            self.assertEqual(len(branded), 13)
             self.assertIn(('GET', '/zura/studio/status'), routes)
+            self.assertIn(('POST', '/zura/studio/projects/{identity}/wan-graph/plan'), routes)
+            self.assertIn(('POST', '/zura/studio/projects/{identity}/opening'), routes)
             studio.register()
-            self.assertEqual(len(server.routes), 22, 'Reloading must not register duplicate routes')
+            self.assertEqual(len(server.routes), 26, 'Reloading must not register duplicate routes')
 
     def test_reference_audio_reaches_preparation_and_invalidates_old_approval(self):
         p = self.project()
@@ -347,19 +384,55 @@ class SharedEngineTests(unittest.TestCase):
         p['approval'] = studio.prep_key(p)
         p['opening_approval'] = None
         original = copy.deepcopy(p)
+        from ComfyUI_zura_nodes.artist_studio import wan_parts
+        def bounded(project, graph, key):
+            self.assertEqual(graph['wan_save']['class_type'], 'ZuraWanSavePreparation')
+            graph['wan_frames']['class_type'] = 'ZuraWanPreparationWindow'
+            graph['wan_frames']['inputs'].update(clip_details=['wan_shot', 3], start_frame=0, frame_count=72)
+            graph['wan_save']['class_type'] = 'ZuraWanSavePreparationPart'
+            return graph
         with patch.object(studio, 'assert_approved'), patch.object(studio, 'check_asset'), \
-                patch.object(wan, 'cache_key', return_value='a' * 64):
+                patch.object(wan, 'cache_key', return_value='a' * 64), \
+                patch.object(wan, 'cache_path', return_value=Path('missing-wan-test-cache.pt')), \
+                patch.object(wan_parts, 'prepare_next_part_graph', side_effect=bounded) as planner:
             graph, stage = studio.editable_graph(p, 'animate')
-        self.assertEqual(stage, 'wan')
+        self.assertEqual(stage, 'wan_prepare')
+        planner.assert_called_once()
         self.assertEqual(p, original, 'Export must not approve or queue the saved project')
         self.assertIn('wan_pose_detect', graph)
         self.assertIn('wan_character_detect', graph)
-        self.assertIn('wan_render', graph)
-        self.assertNotIn('wan_save', graph)
-        self.assertEqual(graph['wan_cached']['class_type'], 'ZuraWanPackPreparation')
+        self.assertNotIn('wan_render', graph, 'Preparation and sampling are distinct queue jobs')
+        self.assertEqual(graph['wan_save']['class_type'], 'ZuraWanSavePreparationPart')
+        self.assertEqual(graph['wan_frames']['class_type'], 'ZuraWanPreparationWindow')
+        self.assertNotIn('wan_cached', graph)
         self.assertEqual(graph['wan_frames']['inputs']['source'], ['wan_shot', 0])
-        self.assertEqual(graph['wan_export']['inputs']['clip_details'], ['wan_shot', 3])
         self.assertNotIn('zura_audio_selection', graph)
+
+    def test_warm_wan_graph_exports_streamed_video_without_full_image_preparation(self):
+        p = self.project()
+        p['approval'] = studio.prep_key(p)
+        original = copy.deepcopy(p)
+        with patch.object(studio, 'assert_approved'), patch.object(studio, 'check_asset'), \
+                patch.object(wan, 'cache_key', return_value='a' * 64), \
+                patch.object(wan, 'cache_path', return_value=Path(__file__)):
+            graph, stage = studio.editable_graph(p, 'animate')
+        self.assertEqual(stage, 'wan')
+        self.assertEqual(p, original)
+        self.assertEqual(graph['wan_cached']['class_type'], 'ZuraWanLoadWindowPreparation')
+        self.assertEqual(graph['wan_render']['class_type'], 'ZuraWan22StreamedSampler')
+        self.assertEqual(graph['wan_export']['inputs']['video'], ['wan_render', 0])
+        self.assertFalse({'ZuraWanReviewedFrames', 'ZuraWanPackPreparation',
+                          'ZuraWan22LoopedChunksSampler'} & {n['class_type'] for n in graph.values()})
+
+    def test_wan_graph_labels_cpu_merge_as_separate_stage(self):
+        p = self.project()
+        p['approval'] = studio.prep_key(p)
+        graph = {'finish': {'class_type': 'ZuraWanMergePreparation', 'inputs': {}}}
+        with patch.object(studio, 'build_graph', return_value=graph) as builder:
+            exported, stage = studio.editable_graph(p, 'animate')
+        self.assertEqual(stage, 'wan_merge')
+        self.assertEqual(exported, graph)
+        self.assertTrue(builder.call_args.kwargs['use_cache'])
 
     def test_graph_export_does_not_freeze_h3_prompt_in_cache(self):
         p = self.project()

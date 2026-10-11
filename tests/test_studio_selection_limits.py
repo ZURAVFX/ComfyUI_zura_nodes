@@ -78,6 +78,15 @@ class SelectionLimitsTests(unittest.TestCase):
             self.assertFalse(controller.store.save.called)
         self.assertEqual(project, before)
 
+    def test_ltx_whole_scene_length_checked_before_preparation(self):
+        self.validate(self.project("local", edit_area="scene", length_mode="original"), 120)
+        with self.assertRaisesRegex(ValueError, "up to 5 seconds"):
+            self.validate(self.project("local", edit_area="scene", length_mode="original"), 121)
+        self.validate(self.project("local", edit_area="scene", start=5, duration=5), 240)
+        with patch.object(studio.av, "open") as opened:
+            studio.validate_selection(self.project("local", edit_area="mask", length_mode="original"))
+            opened.assert_not_called()
+
 
 if __name__ == "__main__":
     unittest.main()

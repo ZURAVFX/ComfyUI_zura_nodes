@@ -68,6 +68,19 @@ print('VoiceDesign runtime OK:',torch.cuda.get_device_name())
                    env=isolated_environment(offline=True), check=True)
 
 
+def dependencies_ready(python):
+    code = 'import torch,torchaudio,transformers,huggingface_hub,qwen_tts'
+    try:
+        subprocess.run([str(python), '-c', code], env=isolated_environment(),
+                       capture_output=True, text=True, check=True)
+        return True
+    except subprocess.CalledProcessError:
+        print('The isolated VoiceDesign environment is missing Python dependencies. Install them manually, then rerun setup:')
+        print(f'uv pip install --python "{python}" "torch==2.8.0" "torchaudio==2.8.0" --index-url https://download.pytorch.org/whl/cu128')
+        print(f'uv pip install --python "{python}" -r "{PACK / "voice_design_runtime" / "requirements.txt"}"')
+        return False
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     modes = parser.add_mutually_exclusive_group(required=True)
@@ -95,9 +108,8 @@ def main():
             subprocess.run([str(item) for item in command], env=env, check=True)
         if not python.is_file():
             run([uv, 'venv', '--python', '3.11', environment])
-        run([uv, 'pip', 'install', '--python', python, 'torch==2.8.0', 'torchaudio==2.8.0',
-             '--index-url', 'https://download.pytorch.org/whl/cu128'])
-        run([uv, 'pip', 'install', '--python', python, '-r', PACK/'voice_design_runtime/requirements.txt'])
+        if not dependencies_ready(python):
+            return 2
         receipt = root/'model_snapshot.json'
         # The shared Hugging Face cache avoids duplicating weights already downloaded by other workflows.
         staging = """import json,sys
@@ -121,4 +133,4 @@ Path(sys.argv[3]).write_text(json.dumps({'path':model,'revision':sys.argv[2]}),e
 
 
 if __name__ == '__main__':
-    main()
+    raise SystemExit(main())

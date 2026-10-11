@@ -1,7 +1,7 @@
 """Zura nodes (ComfyUI_zura_nodes) · artist controls for ComfyUI workflows.
 
 Nodes:
-- Zura Load Video: local file or URL -> trimmed 24 fps VIDEO + decoded frames.
+- Zura Load Video: uploaded local file -> trimmed 24 fps VIDEO + decoded frames.
 - Zura Mask: takes any VIDEO wire; replacement-area masks (whole character /
   whole head / face only), user-controlled blockify, pose/face conditioning,
   mask preview video and the replacement mask itself.
@@ -62,7 +62,7 @@ NODE_DISPLAY_NAME_MAPPINGS.update(QWEN_DESIGN_NAMES)
 
 WEB_DIRECTORY = "./web"
 PACKAGE_ROOT = Path(__file__).resolve().parent
-__version__ = "1.3.7"
+__version__ = "1.3.8"
 
 
 def _register_routes():
@@ -73,7 +73,8 @@ def _register_routes():
 
     @server.routes.post('/zura/video_candidates')
     async def zura_video_candidates(request):
-        from .media_source import discover_video
+        from .media_source import discover_video, require_same_origin
+        require_same_origin(request)
         data = await request.json()
         keyword = str(data.get('keyword', '')).strip()[:160]
         hint = str(data.get('hint', 'live dance')).strip()[:160]
@@ -90,7 +91,8 @@ def _register_routes():
 
     @server.routes.post('/zura/preview_video')
     async def zura_preview_video(request):
-        from .media_source import preview_clip
+        from .media_source import preview_clip, require_same_origin
+        require_same_origin(request)
         data = await request.json()
         try:
             result = await asyncio.to_thread(
@@ -109,11 +111,52 @@ __all__ = ["NODE_CLASS_MAPPINGS", "NODE_DISPLAY_NAME_MAPPINGS", "WEB_DIRECTORY"]
 
 # Shared character-replacement interface and native Wan preparation adapters.
 from .wan_artist import NODE_CLASS_MAPPINGS as WAN_ARTIST_NODES, NODE_DISPLAY_NAME_MAPPINGS as WAN_ARTIST_NAMES
+from .wan_artist import ZuraWanLoadMappedPreparation
+from .wan_preparation_windows import ZuraWanLoadWindowPreparation
+from .bounded_video_audio import ZuraApplyBoundedReferenceAudio
+from .wan_preparation_parts import ZuraWanPreparationWindow, ZuraWanCarryPoseWindow, ZuraWanSavePreparationPart
+from .wan_preparation_runtime import ZuraWanMergePreparation
+from .artist_studio.wan_graph_guard import ZuraWanGraphQueueGuard
+from .render import ZuraWan22StreamedSampler
 from .artist_studio import NODE_CLASS_MAPPINGS as STUDIO_NODES, NODE_DISPLAY_NAME_MAPPINGS as STUDIO_NAMES
+from .studio_mask_cleanup import NODE_CLASS_MAPPINGS as MASK_CLEANUP_NODES, NODE_DISPLAY_NAME_MAPPINGS as MASK_CLEANUP_NAMES
+from .video_latent_data import NODE_CLASS_MAPPINGS as VIDEO_DATA_NODES, NODE_DISPLAY_NAME_MAPPINGS as VIDEO_DATA_NAMES
+from .h3_reference_data import NODE_CLASS_MAPPINGS as H3_REFERENCE_DATA_NODES, NODE_DISPLAY_NAME_MAPPINGS as H3_REFERENCE_DATA_NAMES
+from .h3_control_data import NODE_CLASS_MAPPINGS as H3_CONTROL_DATA_NODES, NODE_DISPLAY_NAME_MAPPINGS as H3_CONTROL_DATA_NAMES
 NODE_CLASS_MAPPINGS.update(WAN_ARTIST_NODES)
 NODE_CLASS_MAPPINGS.update(STUDIO_NODES)
+NODE_CLASS_MAPPINGS.update(MASK_CLEANUP_NODES)
+NODE_CLASS_MAPPINGS.update(VIDEO_DATA_NODES)
+NODE_CLASS_MAPPINGS.update(H3_REFERENCE_DATA_NODES)
+NODE_CLASS_MAPPINGS.update(H3_CONTROL_DATA_NODES)
 NODE_DISPLAY_NAME_MAPPINGS.update(WAN_ARTIST_NAMES)
 NODE_DISPLAY_NAME_MAPPINGS.update(STUDIO_NAMES)
+NODE_DISPLAY_NAME_MAPPINGS.update(MASK_CLEANUP_NAMES)
+NODE_DISPLAY_NAME_MAPPINGS.update(VIDEO_DATA_NAMES)
+NODE_DISPLAY_NAME_MAPPINGS.update(H3_REFERENCE_DATA_NAMES)
+NODE_DISPLAY_NAME_MAPPINGS.update(H3_CONTROL_DATA_NAMES)
+NODE_CLASS_MAPPINGS.update({
+    "ZuraWanLoadMappedPreparation": ZuraWanLoadMappedPreparation,
+    "ZuraWanLoadWindowPreparation": ZuraWanLoadWindowPreparation,
+    "ZuraApplyBoundedReferenceAudio": ZuraApplyBoundedReferenceAudio,
+    "ZuraWan22StreamedSampler": ZuraWan22StreamedSampler,
+    "ZuraWanPreparationWindow": ZuraWanPreparationWindow,
+    "ZuraWanCarryPoseWindow": ZuraWanCarryPoseWindow,
+    "ZuraWanSavePreparationPart": ZuraWanSavePreparationPart,
+    "ZuraWanMergePreparation": ZuraWanMergePreparation,
+    "ZuraWanGraphQueueGuard": ZuraWanGraphQueueGuard,
+})
+NODE_DISPLAY_NAME_MAPPINGS.update({
+    "ZuraWanLoadMappedPreparation": "Zura · Load File-Backed Wan Motion",
+    "ZuraWanLoadWindowPreparation": "Zura · Load Wan Motion in Sections",
+    "ZuraApplyBoundedReferenceAudio": "Zura · Reference Audio for Video",
+    "ZuraWan22StreamedSampler": "Zura · Wan Video Render",
+    "ZuraWanPreparationWindow": "Zura · Prepare Motion Section",
+    "ZuraWanCarryPoseWindow": "Zura · Continue Motion Preparation",
+    "ZuraWanSavePreparationPart": "Zura · Save Motion Section",
+    "ZuraWanMergePreparation": "Zura · Finish Motion Preparation",
+    "ZuraWanGraphQueueGuard": "Zura · Check Motion Section",
+})
 for _name in STUDIO_NODES:
     _display_name = NODE_DISPLAY_NAME_MAPPINGS.get(_name, _name)
     NODE_DISPLAY_NAME_MAPPINGS[_name] = _display_name if _display_name.startswith("Zura · ") else "Zura · " + _display_name

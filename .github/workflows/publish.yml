@@ -42,6 +42,8 @@ jobs:
           tree = ast.parse(Path('__init__.py').read_text(encoding='utf-8'))
           module_version = next(ast.literal_eval(n.value) for n in tree.body if isinstance(n, ast.Assign) and any(isinstance(t, ast.Name) and t.id == '__version__' for t in n.targets))
           assert version == module_version, 'Update __version__ as well as pyproject.toml'
+          template_version = tomllib.loads(Path('pyproject.toml.template').read_text())['project']['version']
+          assert version == template_version, 'Keep the package template version in sync'
           assert Path('LICENSE').is_file()
           assert Path('THIRD_PARTY_NOTICES.md').is_file()
           assert Path('web/v2_media_picker.js').is_file()
@@ -52,6 +54,8 @@ jobs:
           for asset in ('wan_artist.py', 'web/studio.js', 'web/studio.css',
                         'artist_studio/__init__.py', 'artist_studio/studio.py',
                         'artist_studio/h3.py', 'artist_studio/wan.py', 'artist_studio/wan_speech.py',
+                        'artist_studio/mask_selection.py', 'artist_studio/text_removal.py',
+                        'artist_studio/enhancement.py',
                         'artist_studio/speech.py', 'artist_studio/speech_latentsync.py',
                         'artist_studio/latentsync_vendor/NOTICE.md',
                         'artist_studio/latentsync_vendor/LICENSE-LatentSync',
@@ -72,8 +76,28 @@ jobs:
                         'web/artist_graph.js', 'web/graph_routing.js', 'web/vendor/elk.bundled.js', 'web/vendor/ELK-LICENSE.md',
                         'setup_speech.py', 'Setup_Speech_Windows.cmd',
                         'setup_wan_speech.py', 'Setup_Wan_Speech_Windows.cmd',
+                        'setup_h3_enhancement.py', 'Setup_H3_Enhancement_Windows.cmd',
                         'ARTIST_STUDIO.md', 'ARTIST_STUDIO_VALIDATION.md', 'Open_Zura_Studio.url'):
               assert Path(asset).is_file(), f'Missing artist studio asset: {asset}'
+          for asset in ('artist_studio/ltx25.py', 'artist_studio/opening.py', 'artist_studio/hardware.py', 'INSTALL_STUDIO.md',
+                        'artist_studio/wan_parts.py', 'artist_studio/wan_graph.py', 'artist_studio/wan_graph_guard.py',
+                        'artist_studio/h3_windows.py', 'artist_studio/h3_window_nodes.py',
+                        'artist_studio/cut_tracking.py', 'wan_preparation_runtime.py',
+                        'wan_preparation_parts.py', 'wan_preparation_windows.py', 'wan_preparation_merge.py',
+                        'wan_bounded_speech.py', 'streaming_video.py', 'bounded_video_audio.py',
+                        'h3_control_data.py', 'h3_reference_data.py', 'video_latent_data.py',
+                        'studio_mask_cleanup.py', 'web/wan_graph.js',
+                        'tests/test_ltx25_native_plan.py', 'tests/test_ltx25_studio_runtime.py',
+                        'tests/test_studio_opening.py', 'tests/test_wan_bounded_guard.py',
+                        'tests/test_wan_parts_graph.py', 'tests/test_wan_preparation_parts.py',
+                        'tests/test_wan_preparation_windows.py', 'tests/test_wan_preparation_merge.py',
+                        'tests/test_wan_streaming.py', 'tests/test_wan_graph.py',
+                        'tests/test_wan_graph_integration.py', 'tests/test_bounded_video_audio.py',
+                        'tests/test_h3_control_data.py', 'tests/test_h3_reference_data.py',
+                        'tests/test_h3_windows.py', 'tests/test_h3_window_nodes.py',
+                        'tests/test_video_latent_data.py', 'tests/test_cut_tracking.py',
+                        'tests/test_studio_mask_cleanup.py', 'tests/test_wan_graph.mjs'):
+              assert Path(asset).is_file(), f'Missing bounded Studio release asset: {asset}'
           for graph in Path('artist_studio/graphs').glob('*.json'):
               assert json.loads(graph.read_text()), f'Invalid native graph: {graph}'
           for filename in ('Zura_H3_Single_Camera.json',
@@ -122,22 +146,36 @@ jobs:
             sudo apt-get install -y --no-install-recommends ffmpeg
           fi
           python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
-          python -m pip install numpy scipy pillow requests soundfile av aiohttp opencv-python-headless
+          python -m pip install numpy scipy pillow requests soundfile av aiohttp opencv-python-headless safetensors
       - name: Run regression checks
         run: |
           python -m compileall -q __init__.py klein_look.py multicam_v3.py multicam_v4_clean.py h3_single_angle.py idv2v_control.py
           python -m unittest discover -s tests -p 'test_v2_*.py'
+          python -m unittest discover -s tests -p 'test_media_source_boundaries.py'
+          python -m unittest discover -s tests -p 'test_studio_hardware.py'
           python -m compileall -q artist_studio wan_artist.py
           python -m unittest discover -s tests -p 'test_artist_studio.py'
+          python -m unittest discover -s tests -p 'test_ltx25_native_plan.py'
+          python -m unittest discover -s tests -p 'test_ltx25_studio_runtime.py'
+          python -m unittest discover -s tests -p 'test_studio_opening.py'
+          python -m unittest discover -s tests -p 'test_cut_tracking.py'
+          python -m unittest discover -s tests -p 'test_video_latent_data.py'
           python -m unittest discover -s tests -p 'test_studio_speech.py'
           python -m unittest discover -s tests -p 'test_studio_audio_modes.py'
           python -m unittest discover -s tests -p 'test_studio_selection_limits.py'
+          python -m unittest discover -s tests -p 'test_studio_mask_*.py'
+          python -m unittest discover -s tests -p 'test_save_review_masks.py'
+          python -m unittest discover -s tests -p 'test_studio_wan_fast_recipe.py'
           python -m unittest discover -s tests -p 'test_wan_graph_provenance.py'
           python -m unittest discover -s tests -p 'test_wan_speech.py'
           python -m unittest discover -s tests -p 'test_wan_cleanup.py'
           python -m unittest discover -s tests -p 'test_h3_reference_audio.py'
           python -m unittest discover -s tests -p 'test_h3_conditioning_cache.py'
+          python -m unittest discover -s tests -p 'test_h3_text_cleanup_graph.py'
+          python -m unittest discover -s tests -p 'test_h3_enhanced1080.py'
+          python -m unittest discover -s tests -p 'test_wan_high_resolution.py'
           python -m unittest discover -s tests -p 'test_text_removal.py'
+          python -m unittest discover -s tests -p 'test_text_background_repair_mask.py'
           python -m unittest discover -s tests -p 'test_klein_look.py'
           python -m unittest discover -s tests -p 'test_multicam_v3.py'
           python -m unittest discover -s tests -p 'test_short_take_duration.py'
@@ -156,6 +194,51 @@ jobs:
           node tests/test_single_camera_gallery.mjs
           node tests/test_anyangle_english.mjs
           node tests/test_artist_graph.mjs
+          node tests/test_wan_graph.mjs
+      - name: Prepare qualified native Comfy CPU interfaces
+        env:
+          COMFYUI_ROOT: ${{ runner.temp }}/zura-native-comfy
+        run: |
+          git init "$COMFYUI_ROOT"
+          git -C "$COMFYUI_ROOT" fetch --depth 1 https://github.com/Comfy-Org/ComfyUI.git 3c1b7a17fdf239d35ce98cc777756f572d089795
+          git -C "$COMFYUI_ROOT" checkout --detach FETCH_HEAD
+          test "$(git -C "$COMFYUI_ROOT" rev-parse HEAD)" = 3c1b7a17fdf239d35ce98cc777756f572d089795
+          python -m pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install -r "$COMFYUI_ROOT/requirements.txt"
+      - name: Run isolated native data and bounded pipeline checks
+        env:
+          COMFYUI_ROOT: ${{ runner.temp }}/zura-native-comfy
+          PYTHONPATH: ${{ runner.temp }}/zura-native-comfy
+          CUDA_VISIBLE_DEVICES: ''
+        run: |
+          python - <<'PY'
+          import subprocess
+          import sys
+          # Native interfaces and tiny synthetic CPU fixtures only. Each leaf
+          # gets its own interpreter so its Comfy stubs cannot leak to others.
+          patterns = ('test_bounded_video_audio.py', 'test_wan_bounded_guard.py',
+                      'test_wan_parts_graph.py', 'test_wan_preparation_parts.py',
+                      'test_wan_preparation_windows.py', 'test_wan_preparation_merge.py',
+                      'test_wan_streaming.py', 'test_wan_graph.py', 'test_wan_graph_integration.py',
+                      'test_h3_control_data.py', 'test_h3_reference_data.py',
+                      'test_h3_windows.py', 'test_h3_window_nodes.py')
+          runner = """
+          import comfy.cli_args
+          comfy.cli_args.args.cpu = True
+          import sys
+          import unittest
+          from unittest.mock import patch
+          # Match CPU-only wheels when reproducing with a CUDA-enabled local
+          # interpreter; optional native attention imports must not probe GPUs.
+          with patch('torch.cuda.is_available', return_value=False):
+              suite = unittest.defaultTestLoader.discover('tests', pattern=sys.argv[1])
+              assert suite.countTestCases(), 'A required native regression suite is empty'
+              result = unittest.TextTestRunner(verbosity=2).run(suite)
+          sys.exit(0 if result.wasSuccessful() else 1)
+          """
+          for pattern in patterns:
+              subprocess.run([sys.executable, '-c', runner, pattern], check=True)
+          PY
       - name: Publish reviewed version
         uses: Comfy-Org/publish-node-action@d2366e7abb6ab16f3bb03e3520ae25c8cf749bc9
         with:

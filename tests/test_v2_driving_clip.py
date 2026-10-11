@@ -126,9 +126,9 @@ class ClipChoiceTests(unittest.TestCase):
         # VALIDATE_INPUTS exempts ``clip`` from ComfyUI's combo membership check,
         # so a file uploaded after the node was created still runs.
         cls = driving_clip.ZuraLoadVideo
-        with patch.object(driving_clip.folder_paths, "exists_annotated_filepath", return_value=True):
+        with patch.object(media_source, "local_path", return_value="freshly_uploaded.mp4"):
             self.assertIs(cls.VALIDATE_INPUTS(clip="freshly_uploaded.mp4"), True)
-        with patch.object(driving_clip.folder_paths, "exists_annotated_filepath", return_value=False):
+        with patch.object(media_source, "local_path", side_effect=ValueError("Choose local video")):
             self.assertIn("Invalid video file", cls.VALIDATE_INPUTS(clip="ghost.mp4"))
 
     def test_outputs_are_a_plain_video_and_frames(self):
@@ -147,11 +147,11 @@ class ClipChoiceTests(unittest.TestCase):
 
     def test_preview_clip_returns_temp_reference(self):
         probe = {"format": {"duration": "300"}, "streams": [{"codec_type": "video", "width": 1080, "height": 1920}]}
-        with patch.object(media_source, "download_video", return_value="dl.mp4"), \
+        with patch.object(media_source, "local_path", return_value=Path("dl.mp4")), \
                 patch.object(media_source, "choose_clip_start", return_value=12.0), \
                 patch("subprocess.check_output", return_value=b'{"format":{"duration":"300"},"streams":[{"codec_type":"video","width":1080,"height":1920}]}'), \
                 patch("subprocess.run") as run:
-            result = media_source.preview_clip("https://youtu.be/x", automatic=True, duration=10)
+            result = media_source.preview_clip("uploaded.mp4", automatic=True, duration=10)
         self.assertEqual(result["start"], 12.0)
         self.assertEqual(result["duration"], 10)
         self.assertEqual(result["type"], "temp")

@@ -54,18 +54,20 @@ Fixed Qwen inputs can return a cached result instead of creating another output 
 
 Install/update **Zura Nodes** (`comfyui-zura-nodes`) to 1.2.0 or newer. If Registry availability is still pending, use the reviewed GitHub release instead. Do not overwrite an existing package that has unsaved local code changes.
 
-1. Install `uv` if it is not available. Double-click **Setup_Voice_Design_Windows.cmd** in the installed Zura Nodes folder.
+1. Install Python and `uv` if they are not available. Double-click **Setup_Voice_Design_Windows.cmd** in the installed Zura Nodes folder. The helper creates a separate Python 3.11 environment and checks its dependencies. If any are missing, it prints manual `uv pip install` commands; run those commands in a terminal, then rerun the helper.
 2. For LongCat routes, also run **Setup_LongCat_Windows.cmd** once; it requires Git and uv. Existing working LongCat installations can be reused.
 3. Restart ComfyUI and open a workflow JSON from the package's `workflows` directory. Copy it into `ComfyUI/user/default/workflows` for a sidebar entry.
 
-These are explicit installers, not automatic downloads when ComfyUI starts. Qwen setup creates a separate Python 3.11 environment in `~/ZuraVoiceDesign/.venv`, stages the pinned weights in the shared Hugging Face cache and writes `qwen_voice_design.local.json`. Existing cached weights are reused. No Qwen/Transformers dependency pins are added to ComfyUI's own environment.
+These are explicitly launched setup helpers, not automatic downloads when ComfyUI starts. Qwen setup creates a separate Python 3.11 environment in `~/ZuraVoiceDesign/.venv`, stages the pinned weights in the shared Hugging Face cache and writes `qwen_voice_design.local.json`. Existing cached weights are reused. The helper does not install Python packages; it prints manual commands when dependencies are missing. No Qwen/Transformers dependency pins are added to ComfyUI's own environment.
 
 Equivalent commands from the Zura Nodes folder:
 
 ```powershell
-uv run --python 3.11 --no-project --no-config setup_voice_design.py --install
-uv run --python 3.11 --no-project --no-config setup_voice_design.py --check
+python setup_voice_design.py --install
+python setup_voice_design.py --check
 ```
+
+Run these commands from the Zura Nodes folder with Python on your PATH. `--check` validates an existing local configuration and runtime; it does not download models or install packages.
 
 Use `--root D:\AI\ZuraVoiceDesign` to place the isolated environment elsewhere. The weight cache follows Hugging Face's standard `HF_HOME`/`HF_HUB_CACHE` settings. Setup pins the tested qwen-tts 0.1.1 runtime, Torch 2.8.0 CUDA 12.8, BF16 and PyTorch SDPA. It does not require compiling FlashAttention. CUDA with BF16 support is required. Runtime tests use Windows and an RTX 4080 16 GB; other GPU/OS combinations are not validated.
 

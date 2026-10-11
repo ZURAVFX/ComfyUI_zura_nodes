@@ -44,19 +44,21 @@ Long scripts are split at sentence/word boundaries using the upstream duration e
 ## One-time setup on another workstation
 
 1. Install/update **Zura Nodes** (`comfyui-zura-nodes`) to **1.1.0 or newer** through ComfyUI Manager, or update the Git repository. Registration is included; do not manually replace `__init__.py`.
-2. Install **Git** and **uv** if missing. In the installed node package, double-click **Setup_LongCat_Windows.cmd**. This explicitly downloads the pinned model/source and tokenizer into `%USERPROFILE%\ZuraLongCat`, with a separate Python 3.11 environment.
+2. Install **Python**, **Git** and **uv** if missing. In the installed node package, double-click **Setup_LongCat_Windows.cmd**. The helper creates a separate Python 3.11 environment. It checks for required packages and prints manual `uv pip install` commands if any are missing; run those commands in a terminal, then rerun the helper. Once dependencies are present, the helper explicitly downloads the pinned model/source and tokenizer into `%USERPROFILE%\ZuraLongCat`.
 3. Restart ComfyUI and open either supplied workflow. Copy the JSONs to `ComfyUI/user/default/workflows` to add them to the sidebar.
 
 The model dependencies stay isolated. The node package adds only SoundFile for WAV I/O to ComfyUI's environment. Installing the Registry package does not itself download the model weights.
 
 Tested on Windows with an RTX 4080 16 GB and 64 GB RAM. CUDA with BF16 support is required. Smaller-memory GPUs and other operating systems are not validated. The full-precision checkpoint loads on CPU; allow sufficient RAM and disk space for the weights and isolated environment. The reuse/check setup route has been tested; a completely fresh workstation installation remains unvalidated.
 
-Equivalent commands from the Zura Nodes folder:
+Run the helper from the Zura Nodes folder with Python on your PATH:
 
 ```powershell
-uv run --python 3.11 --no-project --no-config setup_longcat.py --install
-uv run --python 3.11 --no-project --no-config setup_longcat.py --check
+python setup_longcat.py --install
+python setup_longcat.py --check
 ```
+
+The setup helper never installs Python packages itself. If dependencies are missing, it prints the exact manual `uv pip install` commands for the isolated environment. `--check` validates an existing local configuration and runtime; it does not download models or install packages.
 
 Add `--root D:\AI\ZuraLongCat` to choose another drive. Machine paths are stored in `longcat.local.json`, not workflows. This file and its backups are excluded from Git and Registry packages. Do not copy it between workstations. Advanced installs can set `ZURA_LONGCAT_CONFIG` and choose `device_index` in the config.
 

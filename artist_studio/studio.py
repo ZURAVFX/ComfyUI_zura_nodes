@@ -27,15 +27,20 @@ STAGES = {
     "draft": "04_Seedance_Draft",
     "final": "05_Seedance_Accepted_Final",
     "h3": "06_H3_Character_Reference",
+    "h3_enhance": "08_H3_Enhanced_1080p",
     "wan": "07_Wan_Character_Replacement",
     "wan_prepare": "07A_Wan_Motion_Preparation",
+    "wan_merge": "07D_Wan_Finish_Motion",
     "wan_speech": "07B_Wan_Speech_Performance",
     "wan_cleanup": "07C_Wan_Memory_HandOff",
 }
+STAGES.update({"ltx25_" + phase: "LTX 2.5 " + phase for phase in
+               ("text", "motion", "stage1", "upscale", "refine", "decode", "cleanup")})
 DEFAULTS = {"engine": "local", "background": "keep", "scope": "person", "prompt": "",
             "start": 0.0, "duration": 2.0, "size": 512, "performer": -1,
-            "margin": 8, "pitch": False, "seed": 42, "render_size": 0, "h3_preset": "preview_quality", "remove_text": False,
-            "resolution": 1280, "quality": "fast", "audio_id": "", "audio_start": 0.0, "length_mode": "custom", "lip_sync": False, "refine_lips": False}
+            "margin": 20, "pitch": False, "seed": 42, "render_size": 0, "h3_preset": "preview_quality", "remove_text": False,
+            "resolution": 1280, "delivery_mode": "native", "quality": "fast", "audio_id": "", "audio_start": 0.0, "length_mode": "custom", "lip_sync": False, "refine_lips": False,
+            "edit_area": "mask", "mask_method": "auto", "mask_prompt": "person", "mask_points": []}
 PREP_KEYS = ("start", "duration", "size", "scope", "performer", "margin", "pitch")
 
 
@@ -53,6 +58,10 @@ def canonical(value):
 
 def clean_config(value):
     c = {**DEFAULTS, **{k: v for k, v in value.items() if k in DEFAULTS}}
+    # Migrate the former scene-restyle selector when the artist configures a
+    # legacy shot. Reading its saved record alone never changes approvals.
+    if "edit_area" not in value and value.get("background") == "restyle":
+        c["edit_area"] = "scene"
     # Older saved projects retain their selected render size. New artist
     # controls keep mask preparation at 512 and specify output size separately.
     if "resolution" not in value:
@@ -63,10 +72,14 @@ def clean_config(value):
     for key, options in [("engine", ("local", "h3", "wan", "seedance")), ("background", ("keep", "restyle")),
                          ("quality", ("fast", "detailed")),
                          ("length_mode", ("custom", "original")),
+                         ("edit_area", ("mask", "scene")),
+                         ("mask_method", ("auto", "text", "points")),
                          ("h3_preset", H3_PRESETS),
                          ("scope", ("person", "head"))]:
         if c[key] not in options:
             raise ValueError(f"Choose a valid {key} option.")
+    # The visible edit-area choice is the sole source of scene routing.
+    c["background"] = "restyle" if c["engine"] in ("local", "seedance") and c["edit_area"] == "scene" else "keep"
     for key in ("start", "duration", "audio_start"):
         c[key] = float(c[key])
         if not math.isfinite(c[key]):
@@ -92,10 +105,43 @@ def clean_config(value):
     if c["render_size"] not in (0, 1920):
         raise ValueError("This saved output setting is invalid. Choose an output resolution.")
     c["prompt"] = str(c["prompt"]).strip()[:5000]
+    c["mask_prompt"] = str(c["mask_prompt"]).strip()[:500]
+    from .mask_selection import clean_points
+    c["mask_points"] = clean_points(c["mask_points"], require_positive=False)
     c["resolution"] = int(c["resolution"])
     if c["resolution"] not in (256, 512, 768, 960, 1280, 1920):
         raise ValueError("Choose a supported output resolution.")
+    if c["delivery_mode"] not in ("native", "enhanced1080"):
+        raise ValueError("Choose a supported H3 delivery mode.")
+    # Older projects only stored an integer resolution. Preserve their 1920
+    # setting as native H3; enhancement is opt-in through the explicit mode.
+    if c["engine"] != "h3" or c["resolution"] != 1920:
+        c["delivery_mode"] = "native"
+    if c["engine"] == "h3" and c["resolution"] not in (1280, 1920):
+        # H3 exposes one 720p generation option and two explicit 1080p
+        # delivery options. Migrate old small-test selections to the supported
+        # 720p base instead of keeping a hidden fourth choice in saved shots.
+        c["resolution"] = 1280
     return c
+
+
+def h3_generation_resolution(config):
+    """H3 Enhanced 1080p always samples at the tested 720p base raster."""
+    if config.get("engine") == "h3" and config.get("delivery_mode") == "enhanced1080":
+        return 1280
+    return int(config.get("resolution", config.get("size", 512)))
+
+
+def h3_render_rasters(project, long_edge):
+    """Mirror the reviewed-shot loader's diffusion canvas and encoded raster."""
+    import av
+    source = check_asset(project["source"])
+    with av.open(str(source)) as container:
+        stream = container.streams.video[0]
+        width, height = int(stream.width), int(stream.height)
+    from .enhancement import h3_dimensions
+    model, output = h3_dimensions(width, height, long_edge)
+    return {"width": model[0], "height": model[1]}, {"width": output[0], "height": output[1]}
 
 
 class Store:
@@ -139,8 +185,9 @@ def validate_selection(project):
     """Reject unsupported timelines before mask tracking or reference encoding."""
     c = project["config"]
     h3 = c["engine"] == "h3"
+    ltx_scene = c["engine"] == "local" and c.get("edit_area") == "scene"
     wan_speech = c["engine"] == "wan" and bool(project.get("audio")) and c.get("lip_sync")
-    if not (h3 or wan_speech):
+    if not (h3 or ltx_scene or wan_speech):
         return
     path = check_asset(project["source"])
     with av.open(str(path)) as container:
@@ -155,7 +202,9 @@ def validate_selection(project):
         raise ValueError("The start time is beyond the end of this video.")
     frames = max(1, int(seconds * 24 + 1e-6))
     if h3 and not 5 <= frames <= 120:
-        raise ValueError("H3 currently supports 0.21 to 5 seconds. Choose a shorter custom clip, or use Wan or LTX for this length.")
+        raise ValueError("H3 currently supports 0.21 to 5 seconds. Choose a shorter custom clip, or use Wan for a longer take.")
+    if ltx_scene and frames > 120:
+        raise ValueError("LTX whole-scene generation currently supports up to 5 seconds. Choose a shorter custom clip, or use Wan for a longer take.")
     if wan_speech and frames > 720:
         raise ValueError("Wan replacement speech currently supports up to 30 seconds. Choose a shorter custom clip.")
 
@@ -163,9 +212,26 @@ def validate_selection(project):
 def prep_key(project):
     settings = {"source": project["source"]["sha"], **{k: project["config"][k] for k in PREP_KEYS}}
     if project["config"].get("remove_text"):
-        settings["remove_text"] = 2
+        settings["remove_text"] = 6
     if project["config"].get("length_mode") == "original":
         settings["length_mode"] = "original"
+    c = project["config"]
+    # Bind new reviews to the cut-aware native tracking recipe. Remembered
+    # inactive click/text controls still cannot alter a scene selection.
+    if c.get("edit_area", "mask") != "scene" and c.get("mask_method", "auto") in ("auto", "text"):
+        settings["tracking_recipe"] = 2
+    if c.get("edit_area", "mask") == "scene":
+        settings["edit_area"] = "scene"
+        for key in ("scope", "performer", "margin"):
+            settings.pop(key)
+    elif c.get("mask_method", "auto") == "text":
+        settings.update(mask_method="text", mask_prompt=c.get("mask_prompt", ""))
+        for key in ("scope", "performer"):
+            settings.pop(key)
+    elif c.get("mask_method", "auto") == "points":
+        settings.update(mask_method="points", mask_points=c.get("mask_points", []))
+        for key in ("scope", "performer"):
+            settings.pop(key)
     if project.get("audio"):
         settings.update(audio=project["audio"]["sha"], audio_start=project["config"].get("audio_start", 0))
     return hashlib.sha256(canonical(settings).encode()).hexdigest()
@@ -203,17 +269,125 @@ def text_graph(info, cache_key):
     }
 
 
-def build_graph(project, stage, use_cache=True):
+def ltx25_scene_route(project, stage):
+    """Keep masked inpainting on its existing independent native route."""
+    return (stage in ("background", "restyle") and
+            project["config"].get("engine") == "local" and
+            project["config"].get("edit_area") == "scene")
+
+
+LTX25_DETECTORS = {
+    "bbox_detector": Path("comfyui_controlnet_aux/ckpts/yzd-v/DWPose/yolox_l.onnx"),
+    "pose_estimator": Path("comfyui_controlnet_aux/ckpts/hr16/DWPose-TorchScript-BatchSize5/dw-ll_ucoco_384_bs5.torchscript.pt"),
+}
+
+
+def ltx25_detector_paths():
+    roots = folder_paths.get_folder_paths("custom_nodes")
+    return {name: next((Path(root) / relative for root in roots if (Path(root) / relative).is_file()), None)
+            for name, relative in LTX25_DETECTORS.items()}
+
+
+def _ltx25_model_pin(path):
+    """Bounded file identity; model payloads are never loaded by Studio."""
+    path = Path(path).resolve(strict=True)
+    before = path.stat()
+    with path.open("rb") as stream:
+        prefix = stream.read(65536)
+    after = path.stat()
+    if (before.st_size, before.st_mtime_ns) != (after.st_size, after.st_mtime_ns):
+        raise ValueError("An LTX model changed while preparing this render.")
+    return {"path": str(path), "size": before.st_size, "mtime_ns": str(before.st_mtime_ns),
+            "prefix_sha256": hashlib.sha256(prefix).hexdigest()}
+
+
+def ltx25_native_plan(project):
+    """Resolve the current reviewed interval and model files without inference."""
+    from . import verify_review
+    from .ltx25 import QUALIFIED_MODELS, build_plan
+    assert_approved(project)
+    source = check_asset(project["source"])
+    check_asset(project["character"])
+    check_asset(project["opening_input"])
+    directory, manifest = verify_review(project["review"])
+    clip = manifest["clip"]
+    reviewed_source = Path(directory) / "source.mp4"
+    with av.open(str(source)) as container:
+        stream = container.streams.video[0]
+        width, height = int(stream.width), int(stream.height)
+        source_has_audio = bool(getattr(container.streams, "audio", []))
+    # A reviewed silent source contains a valid silence stream for decoding;
+    # its metadata retains whether the source/selected track actually exists.
+    scenario = ("replacement" if project.get("audio") and project["config"].get("lip_sync") else
+                "original" if project.get("audio") or source_has_audio else "silent")
+    timeline = {"frames": clip["frames"], "fps": clip["fps"], "width": width, "height": height,
+                "has_audio": bool(clip.get("has_audio")), "source_has_audio": source_has_audio, "start": clip["start"],
+                "review_source_sha256": sha(reviewed_source)}
+    categories = {"model": "diffusion_models", "video_vae": "vae", "audio_vae": "vae",
+                  "union": "loras", "upscaler": "latent_upscale_models"}
+    paths = {}
+    for name, category in categories.items():
+        value = folder_paths.get_full_path(category, QUALIFIED_MODELS[name])
+        if not value:
+            raise ValueError("An LTX 2.5 component is missing: " + QUALIFIED_MODELS[name])
+        paths[name] = Path(value)
+    for name, path in ltx25_detector_paths().items():
+        if path is None:
+            raise ValueError("The local LTX body-motion detector is missing: " + QUALIFIED_MODELS[name])
+        paths[name] = path
+    encoder = {"clip_name": "gemma4-12b-with-proj-ltx-2.5-nvfp4.safetensors", "type": "ltxv", "device": "default"}
+    encoder_path = folder_paths.get_full_path("text_encoders", encoder["clip_name"])
+    if not encoder_path:
+        raise ValueError("The LTX 2.5 text encoder is missing: " + encoder["clip_name"])
+    paths["text_encoder"] = Path(encoder_path)
+    # Read only the Union safetensors header to verify its native grid factor.
+    with paths["union"].open("rb") as stream:
+        length = int.from_bytes(stream.read(8), "little")
+        if not 0 < length <= 16 * 1024 * 1024:
+            raise ValueError("The LTX Union adapter has an invalid metadata header.")
+        header = json.loads(stream.read(length))
+    factor = float(header.get("__metadata__", {}).get("reference_downscale_factor", 1))
+    pins = {name: _ltx25_model_pin(path) for name, path in paths.items()}
+    return build_plan(project, scenario=scenario, timeline=timeline,
+        models=dict(QUALIFIED_MODELS), text_encoder_inputs=encoder, model_pins=pins,
+        approval_key=prep_key(project), original_audio_sha=project["source"]["sha"],
+        union_downscale_factor=factor)
+
+
+def ltx25_phase_graph(project, phase):
+    """Recheck current assets and bind only this run's completed native data."""
+    from .ltx25 import bind_phase
+    run = project.get("ltx25_run") or {}
+    plan = ltx25_native_plan(project)
+    if not run or run.get("plan", {}).get("key") != plan["key"]:
+        raise ValueError("The LTX source, audio or render settings changed. Start a new animation.")
+    return bind_phase(plan, phase, run.get("receipts", {}),
+                      output_directory=folder_paths.get_output_directory(),
+                      input_directory=folder_paths.get_input_directory())
+
+
+def build_graph(project, stage, use_cache=True, run_id=None):
     """Fill known native node inputs; no new subgraph interfaces are fabricated."""
+    if stage.startswith("ltx25_") and stage != "ltx25_cleanup":
+        return ltx25_phase_graph(project, stage.removeprefix("ltx25_"))
+    if stage == "ltx25_cleanup":
+        return {"ack": {"class_type": "PreviewAny", "inputs": {
+            "source": "Zura LTX memory hand-off " + project["id"]}}}
     if stage == "wan_speech":
         from .wan_speech import build_graph as speech_graph
         return speech_graph(project)
     if stage == "wan_cleanup":
+        previous = project.get("actions", [])[-1] if project.get("actions") else {}
+        is_h3_handoff = previous.get("stage") == "h3" and previous.get("delivery_mode") == "enhanced1080"
+        label = "H3 enhancement" if is_h3_handoff else "Wan"
         return {"ack": {"class_type": "PreviewAny", "inputs": {
-            "source": "Zura Wan memory hand-off " + project["id"]}}}
+            "source": f"Zura {label} memory hand-off " + project["id"]}}}
     if stage == "h3":
         from .h3 import build_h3_graph
         return build_h3_graph(project, use_cache=use_cache)
+    if stage == "h3_enhance":
+        from .enhancement import build_graph as enhancement_graph
+        return enhancement_graph(project, project.get("h3_enhancement_base"), run_id=run_id)
     if stage == "wan":
         from .wan import build_wan_graph
         return build_wan_graph(project, use_cache=use_cache)
@@ -246,19 +420,83 @@ def build_graph(project, stage, use_cache=True):
         graph["9"]["inputs"]["performer"] = c["performer"]
         graph["12"]["inputs"]["expand"] = c["margin"]
         graph["18"]["inputs"]["pitch_vocals"] = c["pitch"]
-        if c.get("remove_text"):
+        if c["edit_area"] == "scene":
+            # One full-frame mask is generated for every real source frame.
+            # No SAM detector/tracker runs when the artist chooses no mask.
+            for key in ("6", "7", "8", "9", "10", "11"):
+                graph.pop(key)
+            graph["12"] = {"class_type": "ZuraWholeSceneMask", "inputs": {"images": ["4", 0]},
+                           "_meta": {"title": "Whole scene · no selection mask"}}
+        elif c["mask_method"] == "text":
+            if not c["mask_prompt"]:
+                raise ValueError("Describe the area to change before preparing the mask.")
+            graph["7"]["inputs"]["text"] = c["mask_prompt"]
+            graph["8"]["inputs"]["individual_masks"] = False
+            graph["9"]["inputs"]["performer"] = -1
+        elif c["mask_method"] == "points":
+            from .mask_selection import clean_points
+            points = clean_points(c["mask_points"], require_positive=True)
+            # Native SAM treats text and point results as separate masks. A
+            # point correction must use only its included/excluded clicks.
+            graph.pop("7")
+            graph["8"]["inputs"].pop("conditioning")
+            graph["zura_mask_points"] = {"class_type": "ZuraMaskPoints", "inputs": {
+                "image": ["5", 0], "points_json": json.dumps(points)},
+                "_meta": {"title": "Clicks · include and exclude"}}
+            graph["8"]["inputs"].update(positive_coords=["zura_mask_points", 0],
+                                            negative_coords=["zura_mask_points", 1], individual_masks=False)
+            graph["9"]["inputs"]["performer"] = -1
+        if c["edit_area"] != "scene" and c["mask_method"] in ("auto", "text"):
+            # ComfyUI pairs each segment and its first frame through the visible
+            # native detector/tracker. The join restores the original timeline.
+            graph["zura_split_tracking_shots"] = {"class_type": "ZuraSplitTrackingShots",
+                "inputs": {"images": ["4", 0]},
+                "_meta": {"title": "Reset tracking at camera cuts"}}
+            graph["8"]["inputs"]["image"] = ["zura_split_tracking_shots", 1]
+            graph["10"]["inputs"]["images"] = ["zura_split_tracking_shots", 0]
+            graph["zura_join_tracking_masks"] = {"class_type": "ZuraJoinTrackingMasks",
+                "inputs": {"masks": ["11", 0], "tracking_segments": ["zura_split_tracking_shots", 2]},
+                "_meta": {"title": "Rejoin tracked shots · keep every source frame"}}
+            graph["12"]["inputs"]["mask"] = ["zura_join_tracking_masks", 0]
+            graph["20"]["inputs"]["tracking_coverage"] = ["zura_join_tracking_masks", 1]
+        if c.get("remove_text") and c["edit_area"] != "scene":
             graph["text_prompt"] = {"class_type": "CLIPTextEncode", "inputs": {"clip": ["6", 1], "text": "text:20"}}
             graph["text_detect"] = {"class_type": "SAM3_Detect", "inputs": {
                 "model": ["6", 0], "image": ["4", 0], "conditioning": ["text_prompt", 0],
-                "threshold": 0.25, "refine_iterations": 0, "individual_masks": False}}
+                "threshold": 0.5, "refine_iterations": 0, "individual_masks": False}}
             graph["text_removal"] = {"class_type": "GenjTextRemovalMask", "inputs": {
                 "performer_mask": ["12", 0], "text_mask": ["text_detect", 0],
                 "text_boxes": ["text_detect", 1], "clip_details": ["3", 1], "padding": 5}}
             graph["17"]["inputs"]["mask"] = ["text_removal", 0]
-            graph["20"]["inputs"].update(mask=["text_removal", 0], clip_details=["text_removal", 1])
+            graph["20"]["inputs"].update(mask=["text_removal", 0], clip_details=["text_removal", 1],
+                                        performer_mask=["zura_join_tracking_masks", 0] if "zura_join_tracking_masks" in graph else ["11", 0])
+            if "zura_split_tracking_shots" in graph:
+                graph["text_removal"]["inputs"]["tracking_segments"] = ["zura_split_tracking_shots", 2]
     elif stage == "design":
         graph["121"]["inputs"]["image"] = project["character"]["file"]
-        if c["scope"] == "head":
+        for key in ("92:111", "92:85"):
+            graph[key]["inputs"]["resolution_steps"] = 16
+        if c["edit_area"] == "scene":
+            graph["127"]["inputs"]["value"] = (
+                "If the second image shows a character, replace the visible performer in the first image "
+                "with that character. For a character sheet, select one coherent identity and outfit. "
+                "Match the second image's face identity, hairstyle, hat or headwear, clothing and accessories; "
+                "in this character replacement, do not retain the first performer's face or clothing. "
+                "If the second image shows only an environment, apply its scene appearance without inventing "
+                "a reference character or changing the performer's identity and outfit. Keep one performer in the first image's "
+                "same body pose, head angle and position. Finish the whole scene using any environment shown "
+                "in the second image as the intended scene appearance, adapted to the first image's geometry. "
+                "Preserve the first image's camera framing, lens perspective, ground plane, object positions "
+                "and foot contact. Return one complete scene with the same composition and aspect ratio, "
+                "without a reference sheet or duplicate character. Do not add text or extra people.")
+        elif c["mask_method"] != "auto":
+            region = ("the area described as " + c["mask_prompt"] if c["mask_method"] == "text"
+                      else "the selected performer or object")
+            graph["127"]["inputs"]["value"] = (
+                "In the first image, change only " + region + " using the second image as the appearance reference. "
+                "Keep the original camera framing, pose, ground contact, background and unselected objects. "
+                "Return one complete scene with the same composition. Do not add text or extra people.")
+        elif c["scope"] == "head":
             graph["127"]["inputs"]["value"] = (
                 "In the first image, replace only the performer's head with the identity from the second image. "
                 "Match the face and hairstyle. Keep the original body, clothing, pose, head angle, expression, "
@@ -268,6 +506,37 @@ def build_graph(project, stage, use_cache=True):
             graph["127"]["inputs"]["value"] += " Additional appearance direction: " + c["prompt"]
         if c.get("remove_text"):
             graph["127"]["inputs"]["value"] += " Remove all on-screen captions, subtitles, title banners and lettering. Fill their former areas naturally with the scene or clothing."
+        if c["edit_area"] == "mask":
+            # Register the approved opening look to the real source before
+            # video inference. Only the selected region may change; this is
+            # never a post-generation paste of the original performer.
+            graph["zura_look_source"] = {"class_type": "ImageScale", "inputs": {
+                "image": ["125", 0], "upscale_method": "lanczos", "crop": "disabled",
+                "width": ["92:114", 0], "height": ["92:114", 1]}}
+            graph["zura_look_mask_video"] = {"class_type": "GetVideoComponents", "inputs": {"video": ["123", 1]}}
+            graph["zura_look_mask_frame"] = {"class_type": "ImageFromBatch", "inputs": {
+                "image": ["zura_look_mask_video", 0], "batch_index": 0, "length": 1}}
+            graph["zura_look_mask"] = {"class_type": "ImageToMask", "inputs": {
+                "image": ["zura_look_mask_frame", 0], "channel": "red"}}
+            # Review masks are videos: remove codec noise, then soften the
+            # opening boundary inside the reviewed area. Neither operation
+            # increases that area or changes a saved review.
+            graph["zura_look_boundary"] = {"class_type": "ThresholdMask", "inputs": {
+                "mask": ["zura_look_mask", 0], "value": 0.5}}
+            graph["zura_look_boundary_image"] = {"class_type": "MaskToImage", "inputs": {
+                "mask": ["zura_look_boundary", 0]}}
+            graph["zura_look_boundary_blur"] = {"class_type": "ImageBlur", "inputs": {
+                "image": ["zura_look_boundary_image", 0], "blur_radius": 3, "sigma": 1.0}}
+            graph["zura_look_soft_mask"] = {"class_type": "ImageToMask", "inputs": {
+                "image": ["zura_look_boundary_blur", 0], "channel": "red"}}
+            graph["zura_look_inside_mask"] = {"class_type": "MaskComposite", "inputs": {
+                "destination": ["zura_look_boundary", 0], "source": ["zura_look_soft_mask", 0],
+                "x": 0, "y": 0, "operation": "multiply"}}
+            graph["zura_masked_look"] = {"class_type": "ImageCompositeMasked", "inputs": {
+                "destination": ["zura_look_source", 0], "source": ["92:105", 0],
+                "mask": ["zura_look_inside_mask", 0], "x": 0, "y": 0, "resize_source": False},
+                "_meta": {"title": "Opening look · change only the reviewed area"}}
+            graph["122"]["inputs"]["images"] = ["zura_masked_look", 0]
         graph["122"]["inputs"]["filename_prefix"] = "genj/studio_images/" + project["id"]
     elif stage in ("background", "restyle"):
         if project.get("opening_approval") != project.get("opening_key") or not project.get("opening_input"):
@@ -336,8 +605,18 @@ def build_graph(project, stage, use_cache=True):
             graph[guider]["inputs"].update(model=["zura_av_coupling", 0],
                 positive=[cond, 0], negative=[cond, 1])
         key = "5404" if stage == "background" else "5508"
+        if c["edit_area"] == "scene" or c["mask_method"] != "auto":
+            area = "the whole scene" if c["edit_area"] == "scene" else "only the reviewed masked area"
+            graph[key]["inputs"]["value"] = (
+                "Transform " + area + " to match the approved opening image and appearance reference. "
+                "Follow the source video's changing camera perspective, framing, object positions, "
+                "body action, ground plane and foot contact throughout. Keep the original facial performance "
+                "and lip movements where a performer is present. Do not introduce sliding feet, extra objects "
+                "or reference-sheet layouts. " + ("Preserve all unselected surroundings. " if c["edit_area"] == "mask" else ""))
         if project.get("audio") and c.get("lip_sync"):
             direction = graph[key]["inputs"]["value"]
+            direction = direction.replace("Keep the original facial performance and lip movements where a performer is present.",
+                "Retain head direction, eye expression and body gestures where a performer is present.")
             direction = direction.replace("expression and lip movements", "head direction, eye expression and body gestures")
             direction = direction.replace("lip movements", "head direction and eye expression")
             graph[key]["inputs"]["value"] = direction + (
@@ -383,7 +662,7 @@ def build_graph(project, stage, use_cache=True):
         graph["2"]["inputs"]["image"] = project["character"]["file"]
         if c.get("remove_text"):
             graph["100"]["inputs"]["model.prompt"] += " Remove all on-screen captions, subtitles and title banners. Fill their former areas naturally. Do not add text overlays."
-        if c["scope"] == "head":
+        if c["edit_area"] == "mask" and c["mask_method"] == "auto" and c["scope"] == "head":
             graph["100"]["inputs"]["model.prompt"] = graph["100"]["inputs"]["model.prompt"].replace(
                 "entire selected subject", "selected head only; keep the body and clothing unchanged")
         if c["background"] == "restyle":
@@ -426,9 +705,19 @@ def editable_graph(project, stage="auto"):
             stage = "wan_speech"
     if stage == "wan_speech" and p.get("opening_input"):
         p["opening_approval"] = p["opening_key"]
-    if stage not in ("prepare", "design", "background", "restyle", "h3", "wan", "wan_speech", "draft", "final"):
+    if ltx25_scene_route(p, stage):
+        run = p.get("ltx25_run")
+        if not run or not run.get("namespace"):
+            run = p["ltx25_run"] = {"namespace": uuid.uuid4().hex}
+        plan = ltx25_native_plan(p)
+        if not run or run.get("plan", {}).get("key") != plan["key"]:
+            p["ltx25_run"] = {"namespace": run["namespace"], "plan": plan, "receipts": {}, "next_phase": "text"}
+        stage = "ltx25_" + (p["ltx25_run"].get("next_phase") or "decode")
+    if stage not in ("prepare", "design", "background", "restyle", "h3", "h3_enhance", "wan", "wan_speech", "draft", "final") and not stage.startswith("ltx25_"):
         raise ValueError("Choose preparation, character preview or animation.")
-    graph = build_graph(p, stage, use_cache=False)
+    # Each native Wan preparation section is a separate queue job. Folding
+    # the old full-clip IMAGE branch into subgraphs does not bound memory.
+    graph = build_graph(p, stage, use_cache=stage == "wan")
     if stage in ("background", "restyle", "h3"):
         shot = next(k for k, n in graph.items() if n["class_type"] == "GenjLoadReviewedShot")
         for n in graph.values():
@@ -444,11 +733,110 @@ def editable_graph(project, stage="auto"):
                 "inputs": {"audio": p["audio"]["file"]}, "_meta": {"title": "Reference audio · optional"}}
             inputs["audio"] = ["zura_reference_audio", 0]
         graph["zura_audio_selection"] = {"class_type": "GenjApplyReferenceAudio", "inputs": inputs}
+    if stage == "wan":
+        classes = {node["class_type"] for node in graph.values()}
+        if "ZuraWanSavePreparationPart" in classes:
+            stage = "wan_prepare"
+        elif "ZuraWanMergePreparation" in classes:
+            stage = "wan_merge"
     return graph, stage
+
+
+def _wan_graph_snapshot(project):
+    """Accept the visible look only in a private, editable Graph snapshot."""
+    snapshot = copy.deepcopy(project)
+    snapshot["config"] = clean_config(snapshot["config"])
+    if snapshot["config"]["engine"] != "wan":
+        raise ValueError("Choose Wan before opening its motion graph.")
+    if not snapshot.get("opening_input") or not snapshot.get("opening_key"):
+        raise ValueError("Create the character preview before editing Wan motion.")
+    snapshot["opening_approval"] = snapshot["opening_key"]
+    return snapshot
+
+
+def _materialise_wan_graph_plan(snapshot, plan):
+    """Attach a strict streamed render only after the metadata planner is ready."""
+    if plan["action"] != "render":
+        return plan
+    from .wan import build_wan_graph, cache_path
+    request = plan.get("render_request") or {}
+    pins = plan["context"]["project_pins"]
+    key = request.get("cache_key_override")
+    stamp = request.get("cache_stamp")
+    if request.get("require_streamed_sampler") is not True or type(stamp) is not dict:
+        raise ValueError("Finish motion preparation before opening its render.")
+    path = cache_path(key)
+    current = path.stat()
+    if (str(path) != stamp.get("path") or current.st_size != stamp.get("size") or
+            str(current.st_mtime_ns) != str(stamp.get("mtime_ns"))):
+        raise ValueError("The prepared Wan motion changed. Update the section again.")
+    graph = build_wan_graph(snapshot, use_cache=True, cache_key_override=key,
+        preparation_controls={"resolution": pins["resolution"], "scope": pins["scope"]})
+    classes = {node["class_type"] for node in graph.values()}
+    if (not {"ZuraWanLoadWindowPreparation", "ZuraWan22StreamedSampler"} <= classes or
+            classes & {"ZuraWanReviewedFrames", "ZuraWanPackPreparation", "ZuraWan22LoopedChunksSampler"}):
+        raise ValueError("Wan Graph rendering requires completed motion and bounded video output.")
+    return {**plan, "graph": graph}
+
+
+def wan_graph_plan_payload(project, body):
+    """Read-only Graph planning; artists still submit every job with Queue."""
+    if type(body) is not dict or body.get("action") not in ("next", "finish", "render", "edit_motion"):
+        raise ValueError("Choose the next motion section or open its render.")
+    from .wan import build_wan_graph, cache_path
+    from .wan_graph import plan_wan_graph
+    snapshot = _wan_graph_snapshot(project)
+    action, context, prompt = body["action"], body.get("context"), body.get("prompt")
+    if action == "edit_motion":
+        # A cold bounded native template preserves all editable preparation
+        # nodes. The planner derives the real recipe key before any job runs.
+        key = hashlib.sha256(("editable-wan:" + uuid.uuid4().hex).encode()).hexdigest()
+        if cache_path(key).exists():
+            raise ValueError("The temporary motion key is occupied. Open Edit motion again.")
+        prompt = build_wan_graph(snapshot, use_cache=True, cache_key_override=key)
+        context = None
+    elif action == "render" and context is None:
+        # Automatic Studio preparation can be opened directly at its CPU merge
+        # stage. Its render becomes available only after the native merge runs.
+        graph = build_wan_graph(snapshot, use_cache=True)
+        classes = {node["class_type"] for node in graph.values()}
+        if classes == {"ZuraWanMergePreparation"}:
+            return {"action": "merge", "graph": graph, "context": None, "progress": None}
+        if {"ZuraWanLoadWindowPreparation", "ZuraWan22StreamedSampler"} <= classes:
+            return {"action": "render", "graph": graph, "context": None, "progress": None}
+        raise ValueError("Use Queue to finish the approved motion preparation first.")
+    if type(prompt) is not dict or not prompt:
+        raise ValueError("The editable Wan motion graph is missing. Open Edit motion again.")
+    return _materialise_wan_graph_plan(snapshot, plan_wan_graph(snapshot, prompt, context))
+
+
+def graph_export_payload(project, stage="auto"):
+    graph, stage = editable_graph(project, stage)
+    payload = {"graph": graph, "stage": stage, "project_id": project["id"],
+        "name": "Zura Studio · " + stage + " · " + project["id"][:8]}
+    if stage == "wan_prepare":
+        from .wan_graph import plan_wan_graph
+        plan = _materialise_wan_graph_plan(_wan_graph_snapshot(project),
+            plan_wan_graph(_wan_graph_snapshot(project), graph))
+        stage = {"prepare": "wan_prepare", "merge": "wan_merge", "render": "wan"}[plan["action"]]
+        payload.update(plan)
+        payload["stage"] = stage
+        payload["name"] = "Zura Studio · " + stage + " · " + project["id"][:8]
+    return payload
 
 
 def media_url(asset):
     return "/view?" + urlencode({k: asset[k] for k in ("filename", "subfolder", "type") if k in asset})
+
+
+def append_result_once(project, item):
+    """Append an action result at most once, even after collector retries."""
+    action_id = item.get("action_id")
+    results = project.setdefault("results", [])
+    if action_id and any(existing.get("action_id") == action_id for existing in results):
+        return False
+    results.append(item)
+    return True
 
 
 def public_project(project):
@@ -461,6 +849,13 @@ def public_project(project):
             a["url"] = media_url({"filename": Path(a["file"]).name, "subfolder": str(Path(a["file"]).parent).replace("\\", "/"), "type": "input"})
     for action in p.get("actions", []):
         action.pop("graph", None)
+    p.pop("ltx25_run", None)  # Native graphs, histories and cache paths stay private.
+    from .enhancement import generation_key
+    base = p.get("h3_enhancement_base")
+    p["h3_enhancement_ready"] = bool(
+        base and p.get("config", {}).get("delivery_mode") == "enhanced1080"
+        and base.get("generation_key") == generation_key(p))
+    p.pop("h3_enhancement_base", None)
     return p
 
 
@@ -471,6 +866,7 @@ class Studio:
         self.lock = asyncio.Lock()
         self.watcher = None
         self.resuming = set()
+        self.resume_scheduled = set()
         from comfy.cli_args import args
         self.server_address = f"{args.listen}:{args.port}"
 
@@ -487,6 +883,31 @@ class Studio:
                         self.collect(p)
                     except Exception:
                         logging.exception("Zura Studio: could not collect a project result")
+
+    def schedule_resume(self, identity, action_id):
+        """Schedule a handoff once while repeated collector polls are running."""
+        scheduled = getattr(self, "resume_scheduled", None)
+        if scheduled is None:
+            self.resume_scheduled = scheduled = set()
+        if action_id in scheduled:
+            return None
+        scheduled.add(action_id)
+        try:
+            task = asyncio.create_task(self.resume_text(identity, action_id))
+        except Exception:
+            scheduled.discard(action_id)
+            raise
+        task.add_done_callback(lambda _task: scheduled.discard(action_id))
+        return task
+
+    @staticmethod
+    def _history_has_action_tag(history, action_id):
+        try:
+            prompt = history.get("prompt", ())
+            extra_data = prompt[3]
+            return isinstance(extra_data, dict) and extra_data.get("zura_studio_action") == action_id
+        except (IndexError, TypeError, AttributeError):
+            return False
 
     async def resume_text(self, identity, action_id):
         active = getattr(self, "resuming", None)
@@ -511,13 +932,15 @@ class Studio:
             active.discard(action_id)
 
     def advance_wan_cleanup(self, p):
-        """Wait for an idle serial worker, then acknowledge its cache reset.
+        """Wait for an idle serial worker, then acknowledge model release.
 
         A /free success only submits flags. The CPU marker executes after the
         worker consumes those flags and completes its normal cleanup, so no
         InfiniteTalk or Animate model loads before the boundary is acknowledged.
         """
         action = p["actions"][-1]
+        h3_handoff = action.get("next_stage") == "h3_enhance"
+        engine_name = "LTX" if action.get("stage") == "ltx25_cleanup" else "H3 enhancement" if h3_handoff else "Wan"
         queue = self.server.prompt_queue
         with queue.mutex:
             running, pending = queue.get_current_queue_volatile()
@@ -532,7 +955,7 @@ class Studio:
             flags = queue.get_flags(reset=False)
             if flags.get("free_memory") or flags.get("unload_models"):
                 if time.time() - action["cleanup_requested"] > 120:
-                    raise ValueError("ComfyUI did not finish preparing memory for Wan. Check its queue before trying again.")
+                    raise ValueError(f"ComfyUI did not finish releasing models for {engine_name}. Check its queue before trying again.")
                 return p
             action["state"] = "submitting"
             self.store.save(p)
@@ -543,6 +966,120 @@ class Studio:
             queue.put((number, action["id"], action["graph"], extra, action["output_nodes"], {}))
             action["state"] = "queued"
             self.store.save(p)
+        return p
+
+    def _collect_ltx25_phase(self, p, action, history):
+        """Freeze native producer receipts and advance without artist IDs."""
+        from .ltx25 import PHASES, digest, bind_phase, image_sequence_receipt
+        run = p.get("ltx25_run") or {}
+        plan = run.get("plan") or {}
+        phase = action["stage"].removeprefix("ltx25_")
+        prompt = history.get("prompt", [])
+        if (action.get("ltx25_plan_key") != plan.get("key") or len(prompt) < 3 or
+                prompt[1] != action["id"] or prompt[2] != action.get("graph") or
+                history.get("status", {}).get("completed") is not True or
+                history.get("status", {}).get("status_str") != "success"):
+            raise ValueError("LTX returned a different or incomplete native phase.")
+        if ltx25_native_plan(p)["key"] != plan["key"]:
+            raise ValueError("The LTX source, audio or model files changed during this phase.")
+        submitted = action["graph"]
+        frozen = {"prompt": copy.deepcopy(prompt[:3]),
+                  "status": {"status_str": "success", "completed": True},
+                  "outputs": copy.deepcopy(history.get("outputs", {}))}
+        output_root = Path(folder_paths.get_output_directory()).resolve()
+        input_root = Path(folder_paths.get_input_directory()).resolve()
+        receipts = run.setdefault("receipts", {})
+        for name, spec in plan["artifacts"].items():
+            if spec["phase"] != phase:
+                continue
+            receipt = {"plan_key": plan["key"], "scenario": plan["scenario"], "artifact": name,
+                "producer_phase": phase, "template_graph_sha256": plan["graph_hashes"][phase],
+                "producer_graph_sha256": digest(submitted), "submitted_graph": copy.deepcopy(submitted),
+                "prompt_id": action["id"], "history": frozen}
+            if spec["kind"] == "images":
+                receipt.update(image_sequence_receipt(spec, frozen, output_directory=output_root))
+                receipts[name] = receipt
+                continue
+            if spec["kind"] == "audio":
+                assets = frozen["outputs"].get(spec["node"], {}).get("latents", [])
+                if len(assets) != 1 or assets[0].get("type") != "output":
+                    raise ValueError("LTX returned no unique conditioning-audio latent.")
+                asset = assets[0]
+                path = (output_root / asset.get("subfolder", "") / asset["filename"]).resolve()
+                prefix = Path(submitted[spec["node"]]["inputs"]["filename_prefix"])
+                if (not path.is_relative_to(output_root) or not path.is_file() or
+                        path.parent != (output_root / prefix.parent).resolve() or
+                        not re.fullmatch(re.escape(prefix.name) + r"_\d+_\.latent", path.name)):
+                    raise ValueError("LTX returned an audio latent outside its output folder.")
+                value = sha(path)
+                filename = "zura_ltx25_" + plan["key"][:16] + "_" + value[:16] + ".latent"
+                target = input_root / filename
+                if target.exists():
+                    if target.is_symlink() or sha(target) != value:
+                        raise ValueError("The LTX audio input cache is occupied by changed data.")
+                else:
+                    temporary = input_root / ("." + filename + "." + uuid.uuid4().hex + ".tmp")
+                    try:
+                        shutil.copyfile(path, temporary)
+                        if sha(temporary) != value:
+                            raise ValueError("The LTX audio latent changed during copying.")
+                        # Exclusive publication cannot overwrite another render's cache.
+                        try:
+                            import os
+                            os.link(temporary, target)
+                        except FileExistsError:
+                            if sha(target) != value:
+                                raise ValueError("The LTX audio input cache changed during copying.")
+                    finally:
+                        temporary.unlink(missing_ok=True)
+                receipt.update(input_filename=filename, input_path=str(target))
+            else:
+                relative = (Path("genj/text_cache") / (spec["key"] + ".pt") if spec["kind"] == "text" else
+                            Path("zura/latent_data") / (spec["key"] + ".safetensors"))
+                path = (output_root / relative).resolve()
+                if not path.is_relative_to(output_root) or not path.is_file():
+                    raise ValueError("The completed LTX phase returned no matching data cache.")
+                value = sha(path)
+                receipt["cache_key"] = spec["key"]
+            receipt.update(path=str(path), sha256=value)
+            receipts[name] = receipt
+        index = PHASES.index(phase)
+        if phase == "decode":
+            assets = frozen["outputs"].get("save_video", {}).get("images", [])
+            prefix = Path(submitted["save_video"]["inputs"]["filename_prefix"])
+            candidates = [asset for asset in assets if asset.get("type") == "output" and
+                Path(asset.get("subfolder", "")) == prefix.parent and
+                re.fullmatch(re.escape(prefix.name) + r"_\d+_\.mp4", asset.get("filename", ""))]
+            if len(candidates) != 1:
+                raise ValueError("LTX returned no unique matching final video.")
+            asset = candidates[0]
+            path = (output_root / asset["subfolder"] / asset["filename"]).resolve()
+            if not path.is_relative_to(output_root):
+                raise ValueError("LTX returned a video outside its output folder.")
+            from .enhancement import inspect_video
+            width, height = plan["basis"]["delivery"]
+            actual = inspect_video(path, expected_frames=plan["basis"]["timeline"]["frames"],
+                expected_width=width, expected_height=height, expected_fps=24,
+                expected_audio_tracks=0 if plan["scenario"] == "silent" else 1)
+            append_result_once(p, {"stage": "restyle", "label": "LTX 2.5", "url": media_url(asset),
+                "asset": asset, "created": time.time(), "action_id": action["id"],
+                "resolution": action["resolution"], "duration": actual["frames"] / actual["fps"],
+                "quality": action["quality"], "audio_mode": plan["scenario"],
+                "generation_audio": plan.get("generation_audio"), "delivery_audio": plan.get("delivery_audio"),
+                "output_raster": actual, "sha256": sha(path)})
+            run["next_phase"] = None
+            p["phase"] = "done"
+        else:
+            run["next_phase"] = PHASES[index + 1]
+            # Check the full upstream provenance now, before the cleanup handoff.
+            bind_phase(plan, run["next_phase"], receipts,
+                       output_directory=output_root, input_directory=input_root)
+            p["phase"] = "working"
+        action["state"] = "complete"
+        p["error"] = None
+        self.store.save(p)
+        if phase != "decode":
+            self.schedule_resume(p["id"], action["id"])
         return p
 
     def collect(self, p):
@@ -556,19 +1093,178 @@ class Studio:
             self.store.save(p)
             return p
 
+    def _collect_h3_base(self, p, action, history):
+        """Keep the 720p H3 file internal and hand it to the enhancer."""
+        if action.get("delivery_mode") != "enhanced1080":
+            return False
+        if (action.get("studio_action_tag") != action.get("id")
+                or not self._history_has_action_tag(history, action.get("id"))):
+            raise ValueError("The H3 base render did not return its matching Studio action tag.")
+        from . import verify_review
+        from .enhancement import (audio_mode, checked_output_path, generation_key,
+                                  inspect_video)
+
+        node = history.get("outputs", {}).get("h3_export", {})
+        assets = [asset for asset in node.get("gifs", [])
+                  if asset.get("subfolder") == "genj/studio_intermediate"
+                  and asset.get("type") == "output"]
+        if len(assets) != 1:
+            raise ValueError("The H3 base render did not return one private intermediate file.")
+        asset = assets[0]
+        path = checked_output_path(asset, expected_subfolder="genj/studio_intermediate")
+        manifest = verify_review(p["review"])[1]
+        mode = audio_mode(p, manifest["clip"])
+        tracks = 0 if mode == "silent" else 1
+        raster = action.get("base_output_raster", {})
+        actual = inspect_video(path, expected_frames=action.get("expected_frames"),
+                               expected_width=raster.get("width"), expected_height=raster.get("height"),
+                               expected_fps=24, expected_audio_tracks=tracks)
+        if actual["frames"] > 120:
+            raise ValueError("The H3 base render is longer than this Studio route supports.")
+        delivery_raster = h3_render_rasters(p, 1920)[1]
+        p["h3_enhancement_base"] = {
+            "asset": copy.deepcopy(asset), "sha256": sha(path),
+            "generation_key": generation_key(p), "generation_resolution": action.get("generation_resolution"),
+            "generation_raster": copy.deepcopy(action.get("generation_raster")),
+            "output_raster": copy.deepcopy(raster), "delivery_raster": delivery_raster,
+            "frames": actual["frames"], "fps": actual["fps"], "audio_mode": mode,
+            "audio_tracks": actual["audio_tracks"], "created": time.time(),
+        }
+        action["state"] = "complete"
+        p["phase"] = "working"
+        p["error"] = None
+        self.store.save(p)
+        self.schedule_resume(p["id"], action["id"])
+        return True
+
+    def _collect_h3_enhancement(self, p, action):
+        """Track every VHS continuation carrying this Studio action tag."""
+        queue = self.server.prompt_queue
+        history = queue.get_history()
+        running, pending = queue.get_current_queue_volatile()
+        action_id = action["id"]
+
+        def tagged_prompt(item):
+            try:
+                return item[3].get("zura_studio_action") == action_id
+            except (IndexError, AttributeError, TypeError):
+                return False
+
+        family = {prompt_id: record for prompt_id, record in history.items()
+                  if tagged_prompt(record.get("prompt", ())) }
+        active_running = [item for item in running if tagged_prompt(item)]
+        active_pending = [item for item in pending if tagged_prompt(item)]
+        for record in family.values():
+            status = record.get("status") or {}
+            if status.get("status_str") != "success":
+                action["state"] = "failed"
+                p["phase"] = "error"
+                p["error"] = "The Enhanced 1080p continuation stopped before finishing. It has not been replayed. Check the Comfy job before trying again."
+                self.store.save(p)
+                return p
+
+        expected = int(action.get("expected_frames") or 0)
+        completed = len(family)
+        if completed > expected:
+            action["state"] = "failed"
+            p["phase"] = "error"
+            p["error"] = "The Enhanced 1080p continuation family returned more jobs than expected. No result was recorded."
+            self.store.save(p)
+            return p
+        if active_running or active_pending or completed < expected:
+            if active_running:
+                action["state"] = "running"
+                action.pop("absent_since", None)
+            elif active_pending:
+                action["state"] = "queued"
+                action.pop("absent_since", None)
+            elif completed < expected:
+                action["state"] = "interrupted"
+                action.setdefault("absent_since", time.time())
+                if time.time() - action["absent_since"] > 90:
+                    action["state"] = "failed"
+                    p["phase"] = "error"
+                    p["error"] = "The Enhanced 1080p continuation is no longer in ComfyUI's queue. It has not been replayed. Check the Comfy job before trying again."
+                    self.store.save(p)
+                    return p
+            p["phase"] = "working"
+            self.store.save(p)
+            return p
+
+        final_assets = []
+        take_name = action.get("take_name", "")
+        for record in family.values():
+            outputs = record.get("outputs", {}).get("h3_enhance_export", {})
+            for asset in outputs.get("gifs", []):
+                if (asset.get("subfolder") == "genj/final" and asset.get("type") == "output"
+                        and str(asset.get("filename", "")).startswith(take_name + "_")
+                        and str(asset.get("filename", "")).lower().endswith(".mp4")):
+                    final_assets.append(asset)
+        if len(final_assets) != 1:
+            action["state"] = "failed"
+            p["phase"] = "error"
+            p["error"] = "The Enhanced 1080p continuation completed without one verified final video. No result was recorded."
+            self.store.save(p)
+            return p
+
+        from .enhancement import checked_output_path, inspect_video
+        asset = final_assets[0]
+        path = checked_output_path(asset, expected_subfolder="genj/final")
+        raster = action.get("output_raster", {})
+        base = p.get("h3_enhancement_base", {})
+        tracks = 0 if base.get("audio_mode") == "silent" else 1
+        actual = inspect_video(path, expected_frames=expected,
+                               expected_width=raster.get("width"), expected_height=raster.get("height"),
+                               expected_fps=24, expected_audio_tracks=tracks)
+        item = {"stage": "h3_enhance", "label": "Enhanced 1080p", "delivery_mode": "enhanced1080",
+                "url": media_url(asset), "asset": asset, "created": time.time(), "action_id": action_id,
+                "resolution": 1920, "generation_resolution": action.get("generation_resolution"),
+                "generation_raster": copy.deepcopy(action.get("generation_raster")),
+                "base_output_raster": copy.deepcopy(action.get("base_output_raster")),
+                "output_raster": actual, "duration": action.get("duration"), "quality": action.get("quality"),
+                "h3_preset": action.get("h3_preset"), "audio_mode": base.get("audio_mode"),
+                "audio_tracks": actual["audio_tracks"], "sha256": sha(path)}
+        append_result_once(p, item)
+        action["state"] = "complete"
+        action["output_raster"] = actual
+        p["phase"] = "done"
+        p["error"] = None
+        self.store.save(p)
+        return p
+
     def _collect(self, p):
         actions = p.get("actions", [])
-        if (actions and actions[-1]["stage"] in ("video_text", "h3_references", "wan_prepare", "wan_speech", "wan_cleanup") and actions[-1]["state"] == "complete"
-                and p["phase"] == "working"
-                and actions[-1].get("server_address", self.server_address) == self.server_address):
-            asyncio.create_task(self.resume_text(p["id"], actions[-1]["id"]))
-            return p
+        if actions and actions[-1]["state"] == "complete" and p["phase"] == "working":
+            action = actions[-1]
+            action_id = action.get("id")
+            server_matches = action.get("server_address", self.server_address) == self.server_address
+            auto_handoff = (action.get("stage") in ("video_text", "h3_references", "wan_prepare", "wan_speech", "wan_cleanup", "ltx25_cleanup") or
+                            str(action.get("stage", "")).startswith("ltx25_") and action.get("stage") != "ltx25_decode")
+            if auto_handoff and server_matches:
+                self.schedule_resume(p["id"], action_id)
+                return p
+            if (action.get("stage") == "h3" and action.get("delivery_mode") == "enhanced1080"
+                    and action.get("server_address") == self.server_address):
+                from .enhancement import generation_key
+                base = p.get("h3_enhancement_base") or {}
+                if (action.get("next_stage") != "wan_cleanup"
+                        or action.get("studio_action_tag") != action_id
+                        or base.get("generation_key") != generation_key(p)):
+                    action["state"] = "failed"
+                    p["phase"] = "error"
+                    p["error"] = "The completed H3 base has no matching Enhanced 1080p hand-off record. It was not resumed."
+                    self.store.save(p)
+                    return p
+                self.schedule_resume(p["id"], action_id)
+                return p
         if not actions or actions[-1]["state"] not in ("waiting", "submitting", "queued", "running", "interrupted"):
             return p
         action = actions[-1]
         if action.get("server_address", self.server_address) != self.server_address:
             return p  # Shared output folders can be used by another ComfyUI instance.
-        if action["stage"] == "wan_cleanup" and action["state"] == "waiting":
+        if action["stage"] == "h3_enhance":
+            return self._collect_h3_enhancement(p, action)
+        if action["stage"] in ("wan_cleanup", "ltx25_cleanup") and action["state"] == "waiting":
             return self.advance_wan_cleanup(p)
         history = self.server.prompt_queue.get_history(action["id"]).get(action["id"])
         if not history:
@@ -608,17 +1304,19 @@ class Studio:
             return p
         outputs = history.get("outputs", {})
         stage = action["stage"]
+        if stage.startswith("ltx25_") and stage != "ltx25_cleanup":
+            return self._collect_ltx25_phase(p, action, history)
         if stage == "wan_speech":
             from .wan_speech import record_guide
             record_guide(p, history)
-        if stage in ("video_text", "h3_references", "wan_prepare", "wan_speech", "wan_cleanup"):
-            if stage == "wan_cleanup":
+        if stage in ("video_text", "h3_references", "wan_prepare", "wan_speech", "wan_cleanup", "ltx25_cleanup"):
+            if stage in ("wan_cleanup", "ltx25_cleanup"):
                 marker = history.get("prompt", [None, None, {}])[2].get("ack", {})
                 if marker != action.get("graph", {}).get("ack"):
                     raise ValueError("Wan's memory hand-off returned an unexpected acknowledgement.")
             action["state"] = "complete"
             self.store.save(p)
-            asyncio.create_task(self.resume_text(p["id"], action["id"]))
+            self.schedule_resume(p["id"], action["id"])
             return p
         elif stage == "prepare":
             text = "\n".join(s for value in outputs.values() for s in value.get("text", []))
@@ -634,6 +1332,9 @@ class Studio:
             p["mask_url"] = media_url({"filename": "mask_review.mp4", "subfolder": folder, "type": "output"})
             p["guide_url"] = media_url({"filename": "guide.mp4", "subfolder": folder, "type": "output"})
             p["selected_url"] = media_url({"filename": "source.mp4", "subfolder": folder, "type": "output"})
+            from . import verify_review
+            _, manifest = verify_review(p["review"])
+            p["tracking_coverage"] = manifest["clip"].get("tracking_coverage")
         elif stage == "design":
             image = next(a for value in outputs.values() for a in value.get("images", []) if a.get("type") == "output")
             source = Path(folder_paths.get_output_directory()) / image.get("subfolder", "") / image["filename"]
@@ -648,12 +1349,29 @@ class Studio:
             p["opening_approval"] = None
             p["opening_url"] = media_url(image)
             p["phase"] = "opening"
+        elif stage == "h3" and action.get("delivery_mode") == "enhanced1080":
+            self._collect_h3_base(p, action, history)
+            return p
         else:
             video = next(a for value in outputs.values() for a in value.get("gifs", []) if a.get("subfolder") == "genj/final")
             item = {"stage": stage, "url": media_url(video), "asset": video, "created": time.time(),
+                    "action_id": action["id"],
                     "render_size": action.get("render_size", 0), "h3_preset": action.get("h3_preset"),
                     "resolution": action.get("resolution"), "duration": action.get("duration"), "quality": action.get("quality")}
-            p.setdefault("results", []).append(item)
+            if stage == "h3":
+                from .enhancement import checked_output_path, inspect_video
+                path = checked_output_path(video)
+                actual = inspect_video(path, expected_frames=action.get("expected_frames"),
+                                       expected_width=action.get("base_output_raster", {}).get("width"),
+                                       expected_height=action.get("base_output_raster", {}).get("height"),
+                                       expected_fps=24)
+                item.update(label=("Native H3 · 1080p" if action.get("resolution") == 1920
+                                   else "H3 · 720p"),
+                            delivery_mode=action.get("delivery_mode", "native"),
+                            generation_resolution=action.get("generation_resolution"),
+                            generation_raster=copy.deepcopy(action.get("generation_raster")),
+                            output_raster=actual, sha256=sha(path))
+            append_result_once(p, item)
             if stage == "draft":
                 text = "\n".join(s for value in outputs.values() for s in value.get("text", []))
                 match = re.search(r"Draft task ID: ([^\s]+)", text)
@@ -693,9 +1411,9 @@ class Studio:
         stale_text_review = bool(config.get("remove_text") and p.get("review")
                                  and p.get("prepared_key") != prep_key(p))
         if old_key != prep_key(p) or stale_text_review:
-            # A text-enabled review made before held caption regions must be
-            # prepared again. Refresh only when the artist configures/continues
-            # this shot, never while reading the saved library or finished take.
+            # Earlier text reviews did not save the independent genuine mask
+            # needed by the text-repair path. Reprepare them when text removal
+            # is active so a legacy review cannot claim the newer capability.
             p.update(phase="new", review=None, approval=None, opening_input=None,
                      opening_key=None, opening_url=None, opening_approval=None,
                      draft_task=None, accepted_draft=None)
@@ -740,6 +1458,17 @@ class Studio:
             return p
         if stage in ("prepare", "design", "h3", "wan", "wan_speech"):
             validate_selection(p)
+        if stage == "h3" and p["config"].get("delivery_mode") == "enhanced1080":
+            from .enhancement import readiness as enhancement_readiness, SETUP_COMMAND, UPSCALE_MODEL
+            available = enhancement_readiness()
+            if not available["ready"]:
+                missing = ", ".join(available["missing_nodes"])
+                if not available["model_ready"]:
+                    missing = (missing + ", " if missing else "") + UPSCALE_MODEL
+                message = "H3 Enhanced 1080p is unavailable until these installed components are ready: " + missing + "."
+                if not available["model_ready"]:
+                    message += " Run " + available.get("setup_command", SETUP_COMMAND) + " and restart ComfyUI."
+                raise ValueError(message)
         if approve_opening:
             p["opening_approval"] = p["opening_key"]
         auth = {k: body.get(k) for k in ("auth_token_comfy_org", "api_key_comfy_org") if body.get(k)}
@@ -751,6 +1480,20 @@ class Studio:
             if needs_speech_model and not readiness()["ready"]:
                 raise ValueError("Install the local speech models with Setup_Speech_Windows.cmd, or untick Create a new facial performance to use this track as a soundtrack.")
         next_stage = None
+        if ltx25_scene_route(p, stage):
+            # Request replay was rejected above. A new render owns fresh files;
+            # subsequent native phases retain this persisted namespace.
+            namespace = uuid.uuid4().hex
+            plan = ltx25_native_plan({**p, "ltx25_run": {"namespace": namespace}})
+            p["ltx25_run"] = {"namespace": namespace, "plan": plan, "receipts": {}, "next_phase": "text"}
+            stage, next_stage = "ltx25_cleanup", "ltx25_text"
+        elif stage == "ltx25_cleanup":
+            phase = (p.get("ltx25_run") or {}).get("next_phase")
+            if not phase:
+                raise ValueError("This LTX render has no pending native phase.")
+            next_stage = "ltx25_" + phase
+        elif stage.startswith("ltx25_") and stage != "ltx25_decode":
+            next_stage = "ltx25_cleanup"
         if stage == "wan":
             from .wan_speech import enabled, guide_ready, readiness as wan_speech_readiness
             previous = p.get("actions", [])[-1] if p.get("actions") else {}
@@ -765,10 +1508,16 @@ class Studio:
                 # models, including a guide run manually from graph view.
                 stage, next_stage = "wan_cleanup", "wan" if has_guide else "wan_speech"
         if stage == "wan_cleanup" and next_stage is None:
-            next_stage = "wan"
+            previous = p.get("actions", [])[-1] if p.get("actions") else {}
+            next_stage = ("h3_enhance" if previous.get("stage") == "h3"
+                          and previous.get("delivery_mode") == "enhanced1080" else "wan")
         elif stage == "wan_speech":
             next_stage = "wan_cleanup"
-        graph = build_graph(p, stage)
+        if stage == "h3" and p["config"].get("delivery_mode") == "enhanced1080":
+            next_stage = "wan_cleanup"
+        prompt_id = str(uuid.uuid4())
+        graph = (build_graph(p, stage, run_id=prompt_id) if stage == "h3_enhance"
+                 else build_graph(p, stage))
         if stage in ("background", "restyle") and "genj_cached_text" not in graph:
             cache_key, info = text_cache_info(graph, stage)
             next_stage, stage = stage, "video_text"
@@ -778,13 +1527,17 @@ class Studio:
             next_stage, stage = stage, "h3_references"
             graph = reference_graph(graph, h3_cache_key(p))
         elif stage == "wan" and "wan_save" in graph:
-            next_stage, stage = "wan", "wan_prepare"
+            # The native preprocessing tensors must leave the previous worker
+            # graph before loading the file-backed Animate sampling route.
+            next_stage, stage = "wan_cleanup", "wan_prepare"
         import execution
-        prompt_id = str(uuid.uuid4())
+        planned_graph = copy.deepcopy(graph) if stage.startswith("ltx25_") else None
         data = self.server.trigger_on_prompt({"prompt": graph, "prompt_id": prompt_id,
                                              "client_id": body.get("client_id", "genj-studio")})
         graph = data["prompt"]
         self.server.node_replace_manager.apply_replacements(graph)
+        if planned_graph is not None and graph != planned_graph:
+            raise ValueError("An extension changed this LTX native phase. Its data handoff cannot be verified.")
         valid = await execution.validate_prompt(prompt_id, graph, None)
         if not valid[0]:
             details = "; ".join(e.get("message", "") for n in valid[3].values() for e in n.get("errors", []))
@@ -798,19 +1551,50 @@ class Studio:
         if stage in ("h3", "h3_references"):
             action["render_size"] = 0
             action["h3_preset"] = p["config"]["h3_preset"]
+            action["delivery_mode"] = p["config"].get("delivery_mode", "native")
+            action["generation_resolution"] = h3_generation_resolution(p["config"])
+            if stage == "h3":
+                from . import verify_review
+                generation_raster, base_output_raster = h3_render_rasters(
+                    p, action["generation_resolution"])
+                action["generation_raster"] = generation_raster
+                action["base_output_raster"] = base_output_raster
+                action["expected_frames"] = verify_review(p["review"])[1]["clip"]["frames"]
+                if action["delivery_mode"] == "enhanced1080":
+                    action["next_stage"] = "wan_cleanup"
+                    action["studio_action_tag"] = prompt_id
+        elif stage == "h3_enhance":
+            base = p.get("h3_enhancement_base") or {}
+            action["delivery_mode"] = "enhanced1080"
+            action["generation_resolution"] = 1280
+            action["generation_raster"] = base.get("generation_raster")
+            action["base_output_raster"] = base.get("output_raster")
+            action["output_raster"] = h3_render_rasters(p, 1920)[1]
+            action["expected_frames"] = base.get("frames")
+            action["audio_mode"] = base.get("audio_mode")
+            action["label"] = "Enhanced 1080p"
+            action["filename_prefix"] = f"genj/studio_h3_enhance/{p['id']}/{prompt_id}"
+            action["take_name"] = f"studio_{p['id'][:8]}_h3_enhanced_{prompt_id}"
+            action["studio_action_tag"] = prompt_id
         if next_stage:
             action["next_stage"] = next_stage
-        if stage == "wan_cleanup":
+        if stage.startswith("ltx25_"):
+            action.update(graph=copy.deepcopy(graph), ltx25_plan_key=p["ltx25_run"]["plan"]["key"])
+        if stage in ("wan_cleanup", "ltx25_cleanup"):
             action.update(state="waiting", graph=graph, output_nodes=valid[2])
         p.setdefault("actions", []).append(action)
         p["phase"] = "working"
         p["error"] = None
         self.store.save(p)  # Persist BEFORE queueing; ambiguity is never retried automatically.
-        if stage == "wan_cleanup":
+        if stage in ("wan_cleanup", "ltx25_cleanup"):
             self.start_watcher()
             return p
         extra = {"client_id": data.get("client_id", "genj-studio"), "create_time": int(time.time() * 1000),
                  "comfy_usage_source": "zura-studio"}
+        if (stage == "h3_enhance"
+                or stage == "h3" and p["config"].get("delivery_mode") == "enhanced1080"):
+            # VHS copies extra_data unchanged to each freshly numbered continuation.
+            extra["zura_studio_action"] = prompt_id
         number = self.server.number
         self.server.number += 1
         self.server.prompt_queue.put((number, prompt_id, graph, extra, valid[2], auth))
@@ -846,10 +1630,14 @@ def register():
                 return web.json_response({"error": str(e)}, status=400)
         return wrapped
 
+    from .opening import register as register_opening
+    register_opening(studio, routes, response)
+
     @routes.get("/zura/studio/status")
     @routes.get("/genj/studio/status")
     @response
     async def status(request):
+        from .hardware import snapshot as hardware_snapshot
         required = {
             "inpaint": ("loras", "ltx-2.3-22b-ic-lora-in-outpainting-0.9.safetensors"),
             "ltx": ("diffusion_models", "ltx-2.5-22b-distilled-transformer-comfy-int8-convrot.safetensors"),
@@ -858,6 +1646,7 @@ def register():
             "vocals": ("diffusion_models", "MelBandRoformer_fp16.safetensors"),
             "ltx_text": ("text_encoders", "gemma4-12b-with-proj-ltx-2.5-nvfp4.safetensors"),
             "ltx_video_vae": ("vae", "ltx-2.5-video-vae-bf16.safetensors"),
+            "ltx_scene_video_vae": ("vae", "ltx-2.5-video-vae-conv-bf16.safetensors"),
             "ltx_audio_vae": ("vae", "ltx-2.5-audio-vae-bf16.safetensors"),
             "ltx_upscaler": ("latent_upscale_models", "ltx-2.5-latent-spatial-upscaler-x2-bf16-1.0.safetensors"),
             "klein_text": ("text_encoders", "qwen_3_8b_fp8mixed.safetensors"),
@@ -865,7 +1654,7 @@ def register():
             "depth_control": ("loras", "ltx-2.3-22b-ic-lora-union-control-ref0.5.safetensors"),
         }
         models = {key: bool(folder_paths.get_full_path(folder, name)) for key, (folder, name) in required.items()}
-        from .h3 import H3_MODELS, H3_NATIVE_NODES
+        from .h3 import H3_MODELS, H3_NATIVE_NODES, text_cleanup_readiness
         import nodes
         h3_models = {key: bool(folder_paths.get_full_path(folder, name)) for key, (folder, name) in H3_MODELS.items()}
         missing_h3_nodes = [name for name in H3_NATIVE_NODES if name not in nodes.NODE_CLASS_MAPPINGS]
@@ -873,20 +1662,51 @@ def register():
         missing_ltx_nodes = [name for name in ("LTXVModalityGuidance", "SolidMask", "SetLatentNoiseMask",
                                               "MaskFix+", "ThresholdMask", "ComfyMathExpression")
                              if name not in nodes.NODE_CLASS_MAPPINGS]
+        scene_keys = set(required) - {"inpaint", "ltx_video_vae", "vocals"}
+        scene_nodes = ("DWPreprocessor", "ResizeImageMaskNode", "VHS_LoadImagesPath",
+                       "LTXVConditioning", "LTXVPreprocess", "LTXVImgToVideoInplace",
+                       "LTXAddVideoICLoRAGuideAdvanced", "LTXICLoRALoaderModelOnly",
+                       "LTXVEmptyLatentAudio", "LTXVAudioVAEEncode", "LTXVConcatAVLatent",
+                       "LTXVSeparateAVLatent", "LTXVCropGuides", "LTXVLatentUpsampler",
+                       "LatentUpscaleModelLoader", "ManualSigmas", "GenjLTXFramePad",
+                       "GenjLoadReviewedShot", "GenjApplyReferenceAudio", "GenjSaveTextConditioning",
+                       "GenjLoadTextConditioning", "ZuraSaveVideoLatentData", "ZuraLoadVideoLatentData")
+        missing_ltx_scene_nodes = [name for name in scene_nodes if name not in nodes.NODE_CLASS_MAPPINGS]
+        detectors = ltx25_detector_paths()
+        masked_keys = set(required) - {"ltx_scene_video_vae"}
         wan_models = {key: bool(folder_paths.get_full_path(folder, name)) for key, (folder, name) in WAN_MODELS.items()}
         missing_wan_nodes = [name for name in WAN_NATIVE_NODES if name not in nodes.NODE_CLASS_MAPPINGS]
+        from .enhancement import readiness as h3_enhancement_readiness
+        h3_enhancement = h3_enhancement_readiness()
         from .speech import readiness
         from .wan_speech import readiness as wan_speech_readiness
-        return web.json_response({"models": models, "h3_models": h3_models, "wan_models": wan_models, "speech": readiness(),
+        return web.json_response({**hardware_snapshot(), "models": models, "h3_models": h3_models, "wan_models": wan_models, "speech": readiness(),
+            "h3_text_cleanup": text_cleanup_readiness(),
             "wan_speech": wan_speech_readiness(),
-            "engine_ready": {"local": all(models.values()) and not missing_ltx_nodes, "h3": all(h3_models.values()) and not missing_h3_nodes,
+            "engine_ready": {"local": all(models[key] for key in masked_keys) and not missing_ltx_nodes,
+                             "local_scene": all(models[key] for key in scene_keys) and all(detectors.values()) and not missing_ltx_scene_nodes,
+                             "h3": all(h3_models.values()) and not missing_h3_nodes,
+                             "h3_enhanced1080": all(h3_models.values()) and not missing_h3_nodes and h3_enhancement["ready"],
                              "wan": all(wan_models.values()) and not missing_wan_nodes},
-            "engine_quality": {"local": "experimental speech timing: current talking test failed lip-sync review",
+            "engine_quality": {"local": "Reviewed five-second whole-scene examples; masked speech and longer continuation remain experimental",
                                "h3": "Native fixed-audio speech and source-background guidance; review timing and motion",
                                "wan": "Native source performance or an audio-driven face guide; review head turns and speech timing"},
             "missing_ltx_nodes": missing_ltx_nodes,
+            "missing_ltx_scene_nodes": missing_ltx_scene_nodes,
+            "model_files": {
+                "local_scene": [{"folder": folder, "filename": name, "ready": models[key]}
+                                for key, (folder, name) in required.items() if key in scene_keys] +
+                               [{"path": "custom_nodes/" + relative.as_posix(), "ready": detectors[key] is not None}
+                                for key, relative in LTX25_DETECTORS.items()],
+                "local": [{"folder": folder, "filename": name, "ready": models[key]}
+                          for key, (folder, name) in required.items() if key in masked_keys],
+                "h3": [{"folder": folder, "filename": name, "ready": h3_models[key]}
+                       for key, (folder, name) in H3_MODELS.items()],
+                "wan": [{"folder": folder, "filename": name, "ready": wan_models[key]}
+                        for key, (folder, name) in WAN_MODELS.items()]},
             "missing_wan_nodes": missing_wan_nodes,
-            "missing_h3_nodes": missing_h3_nodes, "ready": all(models.values()) and not missing_ltx_nodes, "version": 6, "brand": "Zura Studio", "package": "comfyui-zura-nodes",
+            "missing_h3_nodes": missing_h3_nodes, "h3_enhancement": h3_enhancement,
+            "ready": all(models[key] for key in masked_keys) and not missing_ltx_nodes, "version": 6, "brand": "Zura Studio", "package": "comfyui-zura-nodes",
             "runtime": {"source": str(HERE), "prompt_id": getattr(server, "last_prompt_id", None),
                         "running": [item[1] for item in server.prompt_queue.get_current_queue_volatile()[0]]}})
 
@@ -997,9 +1817,18 @@ def register():
     async def export_project_graph(request):
         async with studio.lock:
             p = studio.store.load(request.match_info["identity"])
-            graph, stage = editable_graph(p, request.query.get("stage", "auto"))
-            return web.json_response({"graph": graph, "stage": stage,
-                "name": "Zura Studio · " + stage + " · " + p["id"][:8]})
+            payload = await asyncio.to_thread(graph_export_payload, p, request.query.get("stage", "auto"))
+            return web.json_response(payload)
+
+    @routes.post("/zura/studio/projects/{identity}/wan-graph/plan")
+    @routes.post("/genj/studio/projects/{identity}/wan-graph/plan")
+    @response
+    async def plan_project_wan_graph(request):
+        body = await request.json()
+        async with studio.lock:
+            p = studio.store.load(request.match_info["identity"])
+            payload = await asyncio.to_thread(wan_graph_plan_payload, p, body)
+            return web.json_response(payload)
 
     @routes.post("/zura/studio/projects/{identity}/config")
     @routes.post("/genj/studio/projects/{identity}/config")
@@ -1028,13 +1857,29 @@ def register():
         async with studio.lock:
             p = studio.collect(studio.store.load(request.match_info["identity"]))
             if p["phase"] == "working":
-                identity = p["actions"][-1]["id"]
-                # Atomic and scoped: never interrupt the user's other Comfy jobs.
-                server.prompt_queue.interrupt_if_running(identity)
-                server.prompt_queue.delete_queue_item(lambda item: item[1] == identity)
-                p["actions"][-1]["state"] = "cancelled"
+                action = p["actions"][-1]
+                identity = action["id"]
+                queue = server.prompt_queue
+                if action["stage"] == "h3_enhance":
+                    # VHS gives each continuation a new prompt id but preserves
+                    # this action tag. Stop only this family, including children.
+                    with queue.mutex:
+                        running, pending = queue.get_current_queue_volatile()
+                        family = [item for item in running + pending
+                                  if len(item) > 3 and isinstance(item[3], dict)
+                                  and item[3].get("zura_studio_action") == identity]
+                        for item in running:
+                            if len(item) > 3 and isinstance(item[3], dict) and item[3].get("zura_studio_action") == identity:
+                                queue.interrupt_if_running(item[1])
+                        family_ids = {item[1] for item in family}
+                        queue.delete_queue_item(lambda item: item[1] in family_ids)
+                else:
+                    # Atomic and scoped: never interrupt the user's other Comfy jobs.
+                    queue.interrupt_if_running(identity)
+                    queue.delete_queue_item(lambda item: item[1] == identity)
+                action["state"] = "cancelled"
                 p["phase"] = "error"
                 p["error"] = ("Stopped this job. A provider request that already started may still be billed; it was not resubmitted."
-                              if p["actions"][-1].get("paid") else "Stopped this local job.")
+                              if action.get("paid") else "Stopped this local job. The continuation will not be replayed.")
                 studio.store.save(p)
             return web.json_response(public_project(p))

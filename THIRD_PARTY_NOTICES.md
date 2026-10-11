@@ -89,3 +89,14 @@ The unmodified elkjs 0.12.0 layout distribution is included at
 retained in `web/vendor/ELK-LICENSE.md`. Corresponding source is available at
 https://github.com/kieler/elkjs/tree/v0.12.0 . Zura graph code calls ELK only to
 calculate layout; native ComfyUI creates and serialises the workflow objects.
+
+## H3 delivery enhancement
+
+The optional **Enhanced 1080p** delivery uses Philip Hofmann's
+[2xNomosUni ESRGAN multijpg model](https://github.com/Phhofm/models/releases/tag/2xNomosUni_esrgan_multijpg),
+released under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).
+Its weights are separately downloaded by the explicit setup command and are
+not bundled. The model itself is unmodified. Zura uses the native ComfyUI
+upscaler and Lanczos resize on each frame, with separately installed
+[VideoHelperSuite](https://github.com/Kosinkadink/ComfyUI-VideoHelperSuite)
+for streaming. The resulting video is enhanced from a 720p H3 render.

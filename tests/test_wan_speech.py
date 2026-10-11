@@ -371,7 +371,7 @@ class GuideTests(unittest.TestCase):
         # Shared Wan detection models exist but InfiniteTalk and generic speech do not.
         for identity in ("base", "speech", "wav2vec"):
             self.model_paths.pop((speech.MODELS[identity][0], speech.MODELS[identity][1]))
-        graph = wan.build_wan_graph(self.project)
+        graph = self.bounded_motion_graph()
         self.assertEqual(graph["wan_save"]["inputs"]["face"], ["wan_pose_detect", 1])
         self.assertNotIn("wan_speech_video", graph)
         self.assertFalse(speech.enabled(self.project))
@@ -379,19 +379,29 @@ class GuideTests(unittest.TestCase):
     def test_warm_native_faces_keep_source_pose_and_exact24fps_count(self):
         graph, path, history = self.save_and_history()
         speech.record_guide(self.project, history)
-        prepared = wan.build_wan_graph(self.project)
+        prepared = self.bounded_motion_graph()
         loader = prepared["wan_speech_video"]["inputs"]
         self.assertEqual(loader["video"], str(path.resolve()))
         self.assertEqual(loader["force_rate"], 24)
         self.assertEqual(loader["frame_load_cap"], 24)
         self.assertEqual(loader["format"], "None")
         self.assertEqual(prepared["wan_save"]["inputs"]["face"], ["wan_speech_face_detect", 1])
-        self.assertEqual(prepared["wan_pose_draw"]["inputs"]["pose_data"], ["wan_pose_detect", 0])
+        self.assertEqual(prepared["wan_pose_draw"]["inputs"]["pose_data"], ["wan_pose_carry", 0])
+        self.assertEqual(prepared["wan_pose_carry"]["inputs"]["pose_data"], ["wan_pose_detect", 0])
         self.assertNotIn("ZuraSpeechFaceGuide", json.dumps(prepared))
         initial = wan.cache_key(self.project)
         self.project["config"]["resolution"] = 1080
         self.assertNotEqual(initial, wan.cache_key(self.project))
         self.assertTrue(speech.guide_ready(self.project))
+
+    def bounded_motion_graph(self):
+        # The bounded coordinator verifies a real confined review manifest.
+        import folder_paths
+        review = Path(folder_paths.get_output_directory()) / 'genj' / 'reviews' / self.project['review']
+        review.mkdir(parents=True, exist_ok=True)
+        (review / 'review.json').write_text(json.dumps(self.manifest), encoding='utf-8')
+        with patch.object(package, 'verify_review', return_value=(review, self.manifest)):
+            return wan.build_wan_graph(self.project)
 
 
 class CropTests(unittest.TestCase):

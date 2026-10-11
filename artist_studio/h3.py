@@ -21,7 +21,14 @@ H3_MODELS = {
 }
 H3_NATIVE_NODES = ("MiniMaxH3ReferenceToVideo", "MiniMaxH3AddGuide",
                    "MiniMaxH3FunControlNetApply", "MiniMaxH3SigmaShift")
+H3_TEXT_CLEANUP_NODES = ("LoadLaMaModel", "LaMaInpaint", "LazySwitchKJ")
 H3_PRESETS = ("preview_fast", "preview_quality", "take_fast", "take_quality")
+
+
+def text_cleanup_readiness():
+    import nodes
+    missing = [name for name in H3_TEXT_CLEANUP_NODES if name not in nodes.NODE_CLASS_MAPPINGS]
+    return {"ready": not missing, "missing_nodes": missing}
 
 
 def cache_path(key):
@@ -44,10 +51,17 @@ def cache_key(project):
         stamp = Path(filename).stat()
         stamps[key] = [name, stamp.st_size, stamp.st_mtime_ns]
     c = project["config"]
+    generation_resolution = 1280 if c.get("delivery_mode") == "enhanced1080" else c.get("resolution")
     data = {"version": 6, "motion": "native_depth_control", "review": project["review"], "character": project["character"]["sha"],
-            "opening": project["opening_key"], "settings": {k: c.get(k) for k in ("resolution", "size", "scope", "prompt", "pitch")},
+            "opening": project["opening_key"], "settings": {**{k: c.get(k) for k in ("size", "scope", "prompt", "pitch")},
+                                                                "resolution": generation_resolution},
             "audio": (project.get("audio") or {}).get("sha"), "audio_start": c.get("audio_start", 0),
             "lip_sync": c.get("lip_sync", False), "preview": False, "encoders": stamps}
+    if c.get("edit_area", "mask") == "scene":
+        data["selection"] = {"edit_area": "scene"}
+    elif c.get("mask_method", "auto") != "auto":
+        data["selection"] = {"mask_method": c["mask_method"],
+                             "mask_prompt": c.get("mask_prompt", "") if c["mask_method"] == "text" else ""}
     return hashlib.sha256(json.dumps(data, sort_keys=True).encode()).hexdigest()
 
 
@@ -495,6 +509,19 @@ def build_h3_graph(project, use_cache=True, preserve_background=True):
         "<Audio 1> supplies the original performance and speech timing. " + direction +
         "Keep one performer in the scene. Follow the source gestures and speech. Preserve the background, objects, "
         "camera and lighting outside the replacement area. " + c["prompt"])
+    if c.get("edit_area", "mask") == "scene" or c.get("mask_method", "auto") != "auto":
+        area = ("Transform the whole scene. " if c.get("edit_area") == "scene" else
+                "Transform only the reviewed masked area" +
+                (" described as " + c.get("mask_prompt", "") if c.get("mask_method") == "text" else " selected by the artist") + ". ")
+        prompt = (
+            "<Picture 1> is the approved opening scene. Match its appearance throughout the shot. "
+            "<Picture 2> supplies additional appearance details for the selected area. " + area +
+            "The depth control supplies the source geometry and motion, not its appearance. "
+            "Retain the changing camera perspective, framing, ground plane, object positions and foot contact. "
+            "Where a performer is present, match the changing hand positions, body gestures, facial movement and camera timing. "
+            "<Audio 1> supplies the original performance and speech timing. Follow the source gestures and speech. " +
+            ("Preserve the background, objects and lighting outside the selected area. " if c.get("edit_area") != "scene" else "") +
+            "Do not reproduce a reference collage or add extra people. " + c["prompt"])
     if c.get("remove_text"):
         prompt += " Remove all masked title banners, captions and subtitles completely. Fill them with clean background or character clothing. Do not reproduce any on-screen text overlays."
     if project.get("audio") and c.get("lip_sync"):
@@ -508,14 +535,49 @@ def build_h3_graph(project, use_cache=True, preserve_background=True):
         graph[identity] = {"class_type": typ, "inputs": inputs}
         return [identity, 0]
 
+    generation_resolution = 1280 if c.get("delivery_mode") == "enhanced1080" else c.get("resolution", c["size"])
     reviewed = node("h3_shot", "GenjLoadReviewedShot", shot_id=project["review"],
-                    approved_shot_id=project["review"], render_long_edge=c.get("resolution", c["size"]),
+                    approved_shot_id=project["review"], render_long_edge=generation_resolution,
                     output_scale=1, preview_seconds=2 if preview else 0)
     pad_inputs = {"source": reviewed, "mask_video": ["h3_shot", 1]}
     if c["pitch"]:
         node("h3_guidance", "GetVideoComponents", video=["h3_shot", 2])
         pad_inputs["guidance_audio"] = ["h3_guidance", 1]
     node("h3_pad", "GenjH3FramePad", **pad_inputs)
+    model_source = ["h3_pad", 0]
+    model_mask = ["h3_pad", 1]
+    has_verified_performer_mask = "performer_mask.mp4" in manifest.get("files", {})
+    repair_background_text = bool(
+        preserve_background and c.get("remove_text") and manifest["clip"].get("text_regions")
+        and has_verified_performer_mask)
+    if repair_background_text:
+        cleanup = text_cleanup_readiness()
+        if not cleanup["ready"]:
+            raise ValueError(
+                "H3 background text cleanup needs ComfyUI-ArtVenture and ComfyUI-KJNodes. "
+                "Install these packs, restart ComfyUI and try again. Missing nodes: "
+                + ", ".join(cleanup["missing_nodes"]))
+        genuine_pad_inputs = {"source": reviewed, "mask_video": ["h3_shot", 4]}
+        if c["pitch"]:
+            genuine_pad_inputs["guidance_audio"] = ["h3_guidance", 1]
+        node("h3_genuine_mask_pad", "GenjH3FramePad", **genuine_pad_inputs)
+        node("h3_text_background_mask", "ZuraTextBackgroundRepairMask",
+             combined_mask=["h3_pad", 1], performer_mask=["h3_genuine_mask_pad", 1],
+             clip_details=["h3_shot", 3], context=32)
+        node("h3_text_background_crop", "ImageCrop", image=["h3_pad", 0],
+             width=["h3_text_background_mask", 2], height=["h3_text_background_mask", 3],
+             x=["h3_text_background_mask", 4], y=["h3_text_background_mask", 5])
+        node("h3_lama_model", "LoadLaMaModel", model_name="big-lama.pt")
+        node("h3_lama_inpaint", "LaMaInpaint", image=["h3_text_background_crop", 0],
+             mask=["h3_text_background_mask", 0], device_mode="AUTO", lama_model=["h3_lama_model", 0])
+        node("h3_text_background_composite", "ImageCompositeMasked", destination=["h3_pad", 0],
+             source=["h3_lama_inpaint", 0], x=["h3_text_background_mask", 4],
+             y=["h3_text_background_mask", 5], resize_source=False,
+             mask=["h3_text_background_mask", 0])
+        model_source = node("h3_text_repair_switch", "LazySwitchKJ",
+                            switch=["h3_text_background_mask", 6], on_false=["h3_pad", 0],
+                            on_true=["h3_text_background_composite", 0])
+        model_mask = ["h3_text_background_mask", 1]
     node("h3_opening", "LoadImage", image=project["opening_input"]["file"])
     node("h3_character", "LoadImage", image=project["character"]["file"])
     opening = node("h3_opening_size", "ImageScale", image=["h3_opening", 0], upscale_method="lanczos",
@@ -530,7 +592,7 @@ def build_h3_graph(project, use_cache=True, preserve_background=True):
     vae = node("h3_vae", "VAELoader", vae_name=H3_MODELS["h3_video_vae"][1])
     audio_vae = node("h3_audio_vae", "VAELoader", vae_name=H3_MODELS["h3_audio_vae"][1])
     patch = node("h3_patch", "ModelPatchLoader", name=H3_MODELS["h3_control"][1])
-    depth = node("h3_depth", "DepthAnythingV2Preprocessor", image=["h3_pad", 0],
+    depth = node("h3_depth", "DepthAnythingV2Preprocessor", image=model_source,
                  ckpt_name="depth_anything_v2_vitl.pth", resolution=512)
     depth = node("h3_depth_size", "ImageScale", image=depth, upscale_method="bilinear",
                  width=["h3_pad", 3], height=["h3_pad", 4], crop="disabled")
@@ -538,7 +600,7 @@ def build_h3_graph(project, use_cache=True, preserve_background=True):
         depth = node("h3_clean_depth", "ZuraH3CleanDepthTextRegions", depth=depth, clip_details=["h3_shot",3])
     model = node("h3_inpaint", "MiniMaxH3FunControlNetApply", model=model, model_patch=patch,
                  vae=vae, strength=1.0, start_percent=0.0, end_percent=1.0,
-                 source_video=["h3_pad", 0], mask=["h3_pad", 1], control_video=depth)
+                 source_video=model_source, mask=model_mask, control_video=depth)
     # A native prompt source keeps the artist control in Your inputs and lets
     # the reference stage receive its inputs in a single ordered hand-off.
     prompt_input = node("h3_prompt", "PrimitiveStringMultiline", value=prompt)
@@ -553,9 +615,9 @@ def build_h3_graph(project, use_cache=True, preserve_background=True):
     positive = node("h3_speech", "MiniMaxH3AddGuide", positive=positive, latent=latent,
                     audio_vae=audio_vae, audio=["h3_pad", 2], frame_idx=0)
     if preserve_background:
-        source_latent = node("h3_source_latent", "VAEEncode", pixels=["h3_pad",0], vae=vae)
+        source_latent = node("h3_source_latent", "VAEEncode", pixels=model_source, vae=vae)
         latent = node("h3_preserve_background", "ZuraH3PreserveBackground", latent=latent,
-                      source_latent=source_latent, mask=["h3_pad",1])
+                      source_latent=source_latent, mask=model_mask)
     # Keep the actual selected soundtrack fixed in both original-performance
     # and replacement-dialogue modes, including valid silence for silent clips.
     latent = node("h3_locked_audio", "ZuraH3LockReferenceAudio", latent=latent,
@@ -570,8 +632,10 @@ def build_h3_graph(project, use_cache=True, preserve_background=True):
     decoded = node("h3_decode", "VAEDecode", samples=sampled, vae=vae)
     trimmed = node("h3_trim", "GetImageRangeFromBatch", images=decoded, start_index=0, num_frames=["h3_pad", 6])
     video = node("h3_video", "CreateVideo", images=trimmed, fps=24.0, audio=["h3_pad", 2])
+    enhanced_delivery = c.get("delivery_mode") == "enhanced1080"
     node("h3_export", "GenjRestoreSoundtrack", video=video, clip_details=["h3_shot", 3],
-         take_name="studio_" + project["id"][:8] + "_h3")
+         take_name="studio_" + project["id"][:8] + ("_h3_base" if enhanced_delivery else "_h3"),
+         **({"output_subfolder": "studio_intermediate"} if enhanced_delivery else {}))
     key = cache_key(project)
     cached_digest = None
     if use_cache and cache_valid(key, expected_frames=max(124, valid_length(count))):

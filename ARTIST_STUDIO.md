@@ -6,13 +6,44 @@ Start ComfyUI and click **Zura Studio**, or use `Open_Zura_Studio.url` on a
 default local installation. The direct studio link is
 `http://127.0.0.1:8188/?zura=1`.
 
-Open **Zura Studio** in ComfyUI, upload the performance video and a character
-image, choose **Audio and performance**, then choose a model, **Resolution**
+Open **Zura Studio** in ComfyUI, upload the source video and an appearance
+reference, choose **What should change?** and **Audio and performance**, then choose a model, **Resolution**
 and **Clip length** (original video or a custom length). Prepare the shot,
 check the mask, create the character preview, then animate the approved look.
 Job IDs, reference copies, model preparation and cache hand-offs are automatic.
+At the appearance step, choose **Use starting image** to supply your own
+finished opening frame. The separate character reference stays selected.
+Check the displayed image, then choose **Animate this look**. Uploading a
+starting image preserves its bytes; automatic preview generation is optional.
 Existing saved projects and media remain readable on the same computer. Legacy
 storage paths and node IDs remain compatible; public names use Zura branding.
+
+## Select the area
+
+Footage and grey viewport renders use the same Studio. **What should change?**
+offers **Masked area** or **Whole scene · no mask**. Whole scene selects every
+frame in full and skips segmentation. It allows the background to change while
+the source still supplies movement and camera guidance.
+
+For a masked edit, **Find the area** offers automatic character selection,
+**Describe the area** (for example, a person in a red coat or a chair), and
+**Click to select**. Click on the selected opening frame to include an area;
+use Exclude to reject unwanted parts. Zura tracks the selection through the
+clip. Changing the source or selected start frame clears old points. Review
+the complete tracked mask before continuing.
+
+New shots leave extra room around the selection for hair and clothing. This
+padding is visible in the mask preview; adjust **Room around the selection**
+when needed. Existing shots retain their saved margin. A different silhouette,
+such as taller headwear, still needs enough room inside the reviewed mask.
+
+The character or scene preview keeps the source framing. For a masked edit,
+the approved mask also limits the opening-image change before animation.
+The opening edge is lightly softened inside that boundary. This does not expand
+a mask that has already been reviewed.
+Movement, ground contact and camera fidelity still need review in the generated
+video, especially with LTX. Whole-scene selection does not make a generative
+model an exact camera or animation solver.
 
 ## Studio and graph view
 
@@ -28,8 +59,14 @@ project; graph edits stay in the new workflow and are not imported back into
 Studio. Save that workflow normally in ComfyUI to retain your edits. Closing
 Studio with the cross also returns directly to your existing canvas.
 
-Wan's exported animation graph contains native pose detection, SAM character
-segmentation, reference cropping and the selected sampler together. H3 and LTX
+Wan's editable motion graph contains native pose detection, SAM character
+segmentation and reference cropping. Motion preparation runs in bounded
+sections: Queue the current section, then click **Next section**. After the
+last section, choose **Finish motion**, Queue the merge, then **Open render**.
+The section controls carry the reviewed shot and cache references automatically;
+there is no need to copy IDs. **Edit motion** returns to the preparation graph.
+The render graph uses the completed preparation with its editable native sampler.
+H3 and LTX
 exports contain editable prompts and conditioning rather than frozen Studio
 conditioning caches. Native subgraphs form a single left-to-right chain with
 labelled stage hand-offs. These small Zura data adapters carry existing model,
@@ -156,7 +193,7 @@ can change the length or model without spending time tracking an unusable clip.
 
 | Model | Current behaviour |
 | --- | --- |
-| LTX 2.5 | Local masked replacement; original background or depth-guided scene restyling. Uses the approved opening scene. Speech timing remains experimental after failed talking tests. |
+| LTX 2.5 | Original, replacement-speech and silent five-second whole-scene examples accepted. Source body guidance and native audio conditioning use the approved opening scene. Masked speech, longer clips and camera retention with a changed environment remain experimental. |
 | MiniMax H3 | Local replacement with separate opening and character references, native audio guidance and depth control. Review face fidelity, gesture transfer and speech timing. |
 | Wan 2.2 Animate | Local pose and face-driven replacement with the approved background mask. Uses the approved opening scene for the latent reference and an isolated character view for CLIP Vision. |
 | Seedance | Paid draft and accepted-final route through Comfy. Requires explicit paid action and Comfy sign-in. No paid calls were used during this update. |
@@ -169,8 +206,22 @@ by repeated clicks or automatically retried after an ambiguous paid submission.
 
 ## Size and timing
 
-There is one output resolution selector: small 512 px tests, 768 px, 720p HD
-(1280 px long edge) and 1080p Full HD (1920 px long edge). Landscape and portrait
+There is one output resolution selector. LTX and Wan offer small 512 px tests,
+768 px, 720p HD and 1080p Full HD. H3 offers **720p**, **1080p Enhanced H3** and
+**1080p Native H3**. Enhanced H3 generates at 720p, releases its generation
+models, then automatically enhances each frame to 1080p. Only the completed
+enhanced video appears as a finished take. It keeps the selected soundtrack;
+silent footage stays silent. Native H3 1080p is a separate, demanding render
+and has not completed on the tested 16 GB GPU. It does not silently switch to
+enhancement. Older saved 1080p projects retain their native setting.
+
+If Enhanced H3 reports missing setup, run **Setup_H3_Enhancement_Windows.cmd**
+once and install VideoHelperSuite through Comfy Manager. The setup verifies the
+separate 34 MB Nomos model. Rendering does not download models. In Graph view,
+**H3 base render** opens the generation stage; after it completes,
+**H3 1080p enhancement** opens the editable native enhancement stage.
+
+720p uses a 1280 px long edge and 1080p uses 1920 px. Landscape and portrait
 source proportions are preserved. Native models require dimensions in multiples
 of 16/32/64; the final export restores the source aspect ratio at the chosen size.
 Generation and mask review have separate internal sizes: the 512 px review stays
@@ -182,20 +233,24 @@ H3 currently supports 0.21–5 seconds; use one continuous shot with H3 or LTX.
 Short H3 takes use a full 124-frame model context internally, with the requested
 video and audio length restored at export. Padding cannot create missing motion;
 the longer context is a model setup correction, not a quality guarantee.
-Wan uses bounded 81-frame windows, real-frame continuation and automatic cut
-detection. Two-second previews render in one pass. Native joins retain the
-previous frames and discard repeated context instead of cross-fading faces.
+Wan uses bounded 41-frame windows at 1080p and 81-frame windows at lower
+resolutions, with real-frame continuation and automatic cut detection.
+Native joins retain the previous frames and discard repeated context instead
+of cross-fading faces.
 Each chunk decodes in one temporal tile, retaining spatial tiles for memory.
 Continuation resets at cuts. Review joins and facial motion visually.
+Longer Wan clips can show changes in sharpness and fine detail between sections.
+This remains a known release limitation.
 The tested Wan source contains one central performer. Explicit pose targeting
 in multi-person shots has not been validated.
 Seedance supports model-specific output sizes; its final paid step is 1080p.
 Unsupported choices fail before submission rather than silently changing size.
 
 **Fast/Detailed** changes denoising effort, not resolution or clip length. Wan
-uses the supplied workflow's shift 8, Euler/simple, relight and realism LoRAs.
-Fast adds the two supplied LightX2V LoRAs at 0.7/0.6 with 6 steps and CFG 1;
-Detailed removes those two acceleration LoRAs and uses 40 steps with CFG 5.
+uses shift 8, Euler/simple, and the relight and realism LoRAs at strength 1.0.
+Fast adds the Wan2.1 I2V LightX2V adapter at strength 0.6, with 6 steps and
+CFG 1. Detailed removes that acceleration adapter and uses 40 steps with CFG 5,
+while retaining relight and realism.
 The native loader explicitly uses `fp8_e4m3fn_fast` for the supplied KJ-scaled
 Wan checkpoint; current core otherwise expands it to FP16 and renders much slower.
 H3 has its own compatible 8-step acceleration / 40-step Euler route. Its native
@@ -232,7 +287,13 @@ pre-generation removal mask. Check the orange coverage before approval. The
 detected text panels are held across the selected clip so intermittent OCR or
 changing captions do not briefly uncover the old text. Performer tracking stays
 per frame. Moving titles or cuts can require a larger removal area; review it.
-H3 also clears these regions in its depth guidance before sampling.
+H3 also clears these regions in its depth guidance before sampling. When
+background preservation and text removal are enabled, H3 first repairs eligible
+background text with LaMa before sampling. It uses the saved genuine performer
+outline separately from the expanded edit mask, and conservatively skips a text
+panel if it touches or comes close to the performer. The generated character
+then fills the approved edit area over the cleaned source. This runs
+automatically, with no extra mask or cleanup controls.
 The original RGB background and combined mask condition each supported local model
 before sampling. There is no post-render performer paste or text cover-up.
 
@@ -259,16 +320,34 @@ disabled backup folder to avoid duplicate interfaces; keep only one active
 Studio extension. Existing Zura nodes and workflows continue using their old IDs.
 
 Native dependencies: current ComfyUI (including H3/Union 2.0 and SAM 3 support),
-ComfyUI-KJNodes, ComfyUI-WanAnimatePreprocess, comfyui_controlnet_aux,
+[ComfyUI-KJNodes](https://github.com/kijai/ComfyUI-KJNodes),
+[ComfyUI-ArtVenture](https://github.com/sipherxyz/comfyui-art-venture),
+ComfyUI-WanAnimatePreprocess, comfyui_controlnet_aux,
 ComfyUI-MelBandRoFormer, ComfyUI-essentials (Mask Fix) and the LTX native nodes
 used by the bundled graphs.
-FFmpeg must be available on PATH. The interface doesn't download weights silently.
+[ComfyUI-ArtVenture](https://github.com/sipherxyz/comfyui-art-venture) supplies
+LaMa inpainting, and KJNodes supplies the lazy switch used to run that repair
+only when selected. The first H3 background-text
+cleanup may download `big-lama.pt` (about 196 MB) through ArtVenture's native
+loader if it is missing. Other optional speech models still use their separate
+setup steps. FFmpeg must be available on PATH.
 
 Model filenames are defined in `artist_studio/wan.py`, `artist_studio/h3.py` and
 the model-status section of `artist_studio/studio.py`. No models, uploaded
 references, project records or credentials are included in the release.
 
 ## Verification
+
+Automatic and description-based masks restart tracking at camera cuts, then
+rejoin the original timeline. Check that each shot selects the intended person
+or object in the mask preview. A cutaway to another subject can require a
+selection correction. Missing selections are flagged for review rather than
+filled with an invented mask. Point selections retain their original tracking
+path. Text-removal locations are held within each tracked shot, so a title in
+one shot does not select its former location in a later shot.
+
+These selection changes require a fresh mask review for an older project;
+the saved source, character and previous renders remain available.
 
 Shared-engine tests check approval retention, legacy resolution migration,
 native preparation, family-specific model stacks, exact mask/frame alignment,

@@ -1,5 +1,327 @@
 # Zura Studio validation
 
+## Current release qualification, 11 October 2026
+
+The artist accepts all three five-second Wan 1080p examples and all three
+five-second H3 Enhanced 1080p examples: original performance, selected speech
+and genuinely silent footage. This is approval of the exact reviewed outputs.
+Wan uses native 1080p generation; H3 generates at 720p and enhances its delivery
+to 1080p. The full-length Wan 720p example is also accepted with section-to-section
+detail degradation recorded as a known limitation.
+
+All three exact five-second LTX 2.5 examples are also accepted, bringing the
+short-example sign-offs to nine of nine. Longer H3 speech continuation, the
+new LTX Studio integration and actual Desktop and mobile checks remain open.
+The diagnostic history below includes
+earlier attempts with separate acceptance scopes. Private recordings, dialogue,
+project identifiers and media remain outside the public repository.
+
+A separate LTX 2.5 audio-to-video diagnostic completed native preparation,
+refinement sampling and decoding as three jobs, preserving the native video
+noise mask across the cache boundary. Its delivered five-second video contains
+120 frames at 24 fps and 1408 × 2560. The artist likes its appearance. This
+diagnostic conditions on an opening image and selected audio, however, and does
+not retain the source video's body performance or camera motion. Complete frame
+review also found mouth opening before measured audio activity and limited
+articulation during the speech tail. It is not qualified as the replacement
+workflow or included among the six accepted release examples.
+
+A separate motion-guided refinement completed native preparation, sampling and
+decode using the saved body-guided first-stage video and selected-audio
+refinement. The artist accepts its exact five-second, 120-frame 1408 × 2560
+selected-speech output for this release, bringing accepted examples to seven
+of nine. Complete frame review finds improved source gesture preservation and
+broadly coherent identity, with soft moving hands and early mouth closure
+during the audio tail recorded as limitations. Longer clips and environment
+replacement retain separate qualification scopes.
+
+The artist subsequently accepts the exact five-second LTX silent example,
+bringing accepted examples to eight of nine. It delivers 120 frames at 24 fps
+and 1408 × 2560, with no audio track. Complete frame review finds coherent
+identity and retained source gestures; moving hand detail remains soft.
+
+The artist also accepts the exact five-second original-performance LTX example.
+It uses source facial landmarks and frozen original audio, followed by native
+refinement and decode. All 120 face and body frames were reviewed. Native
+CreateVideo receives the original soundtrack directly, preserving the
+1408 × 2560 output raster; the earlier downscaled diagnostic is not this
+accepted example. Moving hand detail remains soft. This sign-off covers the
+exact prototype video rather than longer continuation or Studio integration.
+
+The final native Studio candidate passed 34 focused CPU planner, runtime and
+uploaded-opening checks, plus independent read-only validation against 47
+installed node schemas. All 12 shared audio-mode checks also pass. A fresh
+project completed normal preparation and opening design, but its first sampler
+stopped at the system-memory reserve before generating frames. Its regenerated
+appearance also failed artist review. The starting-image option now allows
+an already approved frame to be used exactly, alongside the character reference.
+
+The revised automatic pipeline separates text, motion/audio preparation,
+first sampling, upscaling, refinement and decode into six native phases.
+Each new take gets its own files automatically; repeated requests retain the
+same run. A fresh ordinary Studio run subsequently completed all six phases
+and automatic handoffs, delivering 120 frames at 24 fps, 1080 × 1920, with
+the original audio track and the previously approved opening image unchanged.
+All 120 body and face frames were screened: the adult character is coherent,
+the source gestures remain visible and moving hand detail is soft. This is
+runtime and frame-screening evidence; the new integration video retains a
+separate artist-approval scope from the nine accepted prototypes.
+
+The successful run kept Premiere open and retained at least 12.46 GiB of
+sampled commit headroom and 16.65 GiB of available physical memory. An earlier
+retry was cancelled by the test harness's conservative reserve threshold;
+that interruption was not a native model error. These figures describe this
+one workstation/run, not a guarantee on other machines. Masked inpainting
+continues to use its separate route. The body-guided pipeline changes the
+whole scene and supports intervals up to five seconds at 24 fps.
+
+H3's new preparation adapters passed 13 CPU differential tests against the
+installed native control calculation and a fresh independent review. Their live
+node schemas are verified locally. These checks use a stub VAE; production VAE
+parity, memory savings and longer-render quality remain unqualified. Sampling
+from prepared control data is staged separately from native encoding and decode.
+Native control preparation subsequently completed; successful sampling and
+longer-render qualification are still required.
+The first sampler using those prepared controls stopped at the system-memory
+reserve after three of eight steps and produced no video. The approved short
+examples retain their separate acceptance.
+
+The separate environment-replacement diagnostic now completes native sampling
+and decode. A later native guide-dilation correction removes the performer
+colour cast, and the artist confirms the target environment is correct.
+The source camera move is missing. An earlier full-frame Layout comparison
+also generated the target environment with static architecture, so changing
+the reference alone does not establish a remedy. Whole-scene viewport camera
+preservation remains unqualified.
+
+The edited full-length Wan preparation matches the approved preparation bitwise
+across source frames, performer masks, pose, face and reference tensors. Its
+render graph uses automatic cuts where the approved render used a marked cut.
+No render from that edited namespace or actual interface review is established
+by the cache comparison.
+
+A subsequent bounded CPU check ran the actual automatic cut detector on the
+prepared source thumbnails. It found the same marked cut and produced the same
+nine-section plan as the approved render. This resolves the planning difference
+for this source without establishing a new render or interface test.
+
+## Unreleased selection and text cleanup checks, 11 October 2026
+
+Masked-area and whole-scene preparation now share the same Studio flow. Text
+and point selections use native tracking, and whole-scene preparation skips
+segmentation. CPU checks cover selection limits, stale-review invalidation,
+opening-frame registration and the independent tracked performer mask.
+
+Automatic and described selections now reset the visible native SAM detector
+and tracker at camera cuts, then rejoin their masks in source-frame order. A
+native full-length Prepare test completed all 570 frames at 24 fps, with a
+288 × 512 selection raster and two independently tracked shots. The performer
+remained selected through the cut and all final 93 frames, where the previous
+continuous tracker had lost its mask. All 570 overview frames and native-size
+cut and tail examples were inspected. There were no near-empty masks or
+full-frame text-removal masks. This verifies preparation, rather than a finished
+long video or artist approval of the selection.
+
+Text removal uses the native detector's default confidence and holds its exact
+pixel regions within each tracked shot. Text panels no longer carry across
+cuts, and compact region metadata cannot paint extra mask pixels. A small
+text-like face detection remained in the test; this is not a guarantee of OCR
+accuracy or automatic identity matching between different people. The review
+asks the artist to check selection after each cut. Point selections retain
+their existing tracking route.
+
+The actual updated Prepare graph also passed an offline export, reload and
+API-compilation check using frontend 1.53.10's native subgraph code. Render
+inputs were preserved, with zero measured unrelated wire crossings. This is
+separate from Desktop or mobile visual testing.
+
+H3's automatic background-text cleanup completed a native five-second render
+at 24 fps and 720 × 1280. All 120 repaired-area and face crops were inspected:
+the repaired background was materially steadier, with slight softness, while
+visible articulation and body gestures remained. This is a local review;
+artist acceptance of this exact repaired take is pending. The native LaMa path
+repairs eligible source background before generation and protects the genuine
+performer outline. It adds no performer composite after generation.
+
+The artist clarified that the earlier title defect is a fading or colour-changing
+repair region, rather than returning text. The new repair is materially steadier
+in the inspected take; its remaining softness and artist acceptance are still open.
+
+A native 1080 × 1920 H3 delivery test was interrupted before completing its first
+sampling step after system memory commitment reached 99.3% on a machine with
+16 GB GPU memory and 64 GB RAM. Its internal generation raster was 1088 × 1920.
+This attempt establishes a practical memory limit for that configuration, with
+no completed 1080p video or quality pass.
+
+A separate same-raster H3 comparison first saved and verified native 1080p
+conditioning, then released about 20 GB of system commitment before rendering.
+It still reached near-full system commitment without a completed sampling step
+and was targeted-interrupted after about 13 minutes. Native history records an
+interruption, not an out-of-memory exception. This configuration remains
+unsuitable as a validated native 1080p route on that machine.
+
+A separately labelled enhanced-1080p comparison completed all 120 native
+framewise upscale batches from the working 720p H3 original-audio take.
+Both learned-enhancement and plain-resize deliveries contain 120 frames at
+24 fps and 1080 × 1920. Their source AAC packet payloads were copied unchanged.
+All paired native face and repaired-area crops and body overviews were inspected.
+Learned enhancement gives modestly sharper facial and fabric detail, with
+remaining softness. The repaired area stayed materially steady in the inspected
+frames. This is post-generation enhancement, not native 1080p diffusion or a
+new speech performance. Artist acceptance of that comparison is pending.
+
+The automatic Studio route separately completed a selected-audio test from one
+launch: fresh matching reference preparation, 720p H3 generation, idle-safe model
+release and all 120 framewise enhancement jobs. It recorded one final result at
+1080 × 1920, 24 fps and five seconds, with the selected soundtrack. The 720p
+intermediate was not displayed as a finished 1080p take. All 120 delivered face,
+repaired-area and body views were inspected. No conspicuous repaired-panel
+colour flash, fading rectangle or replacement-character discontinuity was
+identified. Open-mouth detail remains soft; audiovisual review of the final
+words around 2.5–2.9 seconds was subsequently accepted by the artist in the
+exact final five-second example. Soundtrack
+correlation checks fidelity and mux timing, not phoneme synchrony. The same
+automatic route also completed original-audio and genuinely silent tests, each
+with all 120 enhancement jobs and one final five-second 1080p result. Original
+audio delivery has zero measured lag; the silent source and delivery both have
+zero audio tracks. All original-audio face, repaired-area and body frames were
+inspected with no conspicuous repair-region colour pump or abrupt character
+change. All silent-delivery face, repaired-area and body frames were also
+inspected, with coherent gestures and no conspicuous repair-region colour pump.
+Mouth detail and fast hands remain soft, and some silent facial expressions
+are prolonged. A sampled original-source comparison found changes in blink,
+head-tilt and mouth-opening timing, so exact performance retention is not
+certified. These runtime checks preserve the distinction between enhanced delivery and native
+1080p diffusion. The artist now accepts all three exact final five-second files
+for this release. Longer speech continuation retains its separate qualification.
+CPU checks also cover continuation failure, interruption, output provenance and
+soundtrack selection. Mid-enhancement process restart is not a resumable batch;
+the collector reports interruption without silently replaying the generation.
+
+Separate H3 original-audio and silent-input renders also completed at the same
+five-second size and frame rate. All 120 native face and repaired-area crops,
+plus body overviews, were inspected for each. Replacement identity and gestures
+remained coherent, and the title repair stayed materially steady. Original
+soundtrack delivery was checked; the silent output has zero audio tracks.
+Generated expressions and mouth shapes differ from the source, so these checks
+do not establish exact facial performance or phoneme accuracy. Artist acceptance
+of both examples is pending.
+
+The updated Wan fast recipe excludes the Wan2.2 high-noise I2V adapter. Its
+five-second native test exercised the Studio's 81-frame continuation windows.
+All 120 face frames were inspected with no obvious double-image blend at the
+join. Artist feedback on the earlier 41-frame diagnostic is positive; acceptance
+of the new 81-frame take and longer clips remains separate.
+
+A separate five-second Wan original-audio take also completed at 720 × 1280
+and 24 fps. All 120 native face and repaired-area crops, plus body overviews,
+were inspected. Mouth changes, blinks and head movement broadly followed the
+source, with no obvious jump at the 81-frame continuation boundary. The title
+repair appeared steady through the source title fade. Fast-moving hands remain
+soft. Original soundtrack delivery was checked; exact speech and performance
+acceptance by the artist is pending.
+
+A native 1080 × 1920 Wan test using 81-frame windows was interrupted before
+its first completed sampling step under sustained system-memory pressure.
+The separate 41-frame-window comparison completed in about 25 minutes on the
+same 16 GB GPU and 64 GB RAM machine, with the same 1088 × 1920 internal raster
+and conditioning. All 120 native delivered face and repaired-title-area crops
+and body overviews were inspected: replacement identity remained coherent,
+with no obvious double-image blend at the three window joins. The former title
+area stayed materially steady through the source fade, with soft texture.
+Original soundtrack delivery was checked separately. Fast movement still
+softens. The artist now accepts this exact original-audio example for release.
+This does not validate longer clips or the other audio scenarios at 1080p.
+The Studio now selects the tested 41-frame windows automatically at its 1080p
+resolution setting, while lower resolution settings retain 81-frame windows.
+Both cached and inline graph builders use this policy without another artist
+control. Fifteen focused builder, recipe and provenance checks passed.
+
+Matching five-second Wan selected-speech and silent-source tests also completed
+at 1080 × 1920, 24 fps and 120 frames using 41-frame windows. All delivered face,
+repaired-area and body frames were inspected independently, including the three
+joins. Character identity and broad gestures remained coherent, with soft fast
+hand movement and no conspicuous top-repair colour flash or hard join seam.
+The selected soundtrack was checked separately; early mouth posture during its
+quiet lead was included in the subsequent artist review request. The silent
+delivery contains zero audio tracks. The artist accepts both exact five-second
+files for release. Longer selected-speech and silent clips remain separate tests.
+
+A separate Wan render from a genuinely silent source also completed at the
+same five-second size and frame rate. All 120 native face and repaired-area
+crops, plus body overviews, were inspected. Identity and gestures remained
+coherent, with no obvious 81-frame join jump. The repaired title area appeared
+steady through the source fade, with soft texture. The delivered video contains
+zero audio tracks. Artist acceptance of this example is pending.
+
+Thirteen offline native graph tests passed conversion, export, reload and
+exposed-control changes, including automatic H3 text cleanup. Computed root
+and internal wire crossings are zero. Actual Desktop and phone interface
+testing remains unverified. Saved Studio records and unrelated installed
+modules were preserved by the local update.
+
+A five-second LTX 2.5 original-audio test also completed, but failed motion
+review: the replacement missed the source's large hand gestures and changed
+the facial expression. Original soundtrack delivery was verified separately.
+The matching silent test is staged; motion conditioning needs correction before
+further testing of that route. A successful render alone is not a quality pass.
+
+A separate native partial-source comparison retained the broad gestures, but
+failed identity and text cleanup: the replacement morphed back into the original
+performer within the opening frames and retained source captions. Its native
+masked video and fixed-audio checks passed, which establishes preserved latent
+context rather than a valid replacement. This recipe is rejected and is not
+included in the public Studio builder.
+
+A separate five-second LTX 2.5 Union-pose comparison completed at 720 × 1280
+and 24 fps. The lossless source pose sequence was inspected before sampling;
+all 120 delivered face and title-area crops and body overviews were then
+reviewed. Replacement identity and broad hand gestures remained coherent,
+and the source title stayed removed through its fade. Facial expression and
+some mouth shapes differed from the original performance, with softness
+during movement. Native frozen-background and audio tensor checks passed;
+these do not certify decoded pixels or exact speech timing. Artist feedback
+is pending. The same-resolution refinement and background-mask composition
+remain experimental and are not included in the public Studio builder.
+
+The matching five-second silent-source Union-pose test also completed with
+zero delivered audio tracks. All 120 native face and repaired-area crops and
+body overviews were inspected. Identity and broad gestures remained coherent,
+but mouth movement followed the original silent visual performance too weakly.
+That facial-performance result fails review and is not a production pass.
+
+A separate five-second replacement-speech Union-pose test completed with a
+body-and-hands motion guide and native LTX audio conditioning. An independent
+review inspected all 120 face crops, repaired-area strips and body overviews;
+the root inspected selected speaking and fast-motion frames. Character and
+broad gestures remained coherent, but fast movement introduced facial softness
+and coloured fringing. The selected audio was delivered at zero lag, and saved
+audio latents were exactly preserved through both sampling passes. These are
+audio-handling checks, not lip-sync certification. Artist speech assessment
+and final-resolution quality remain pending. The recipe remains private and
+experimental rather than a change to the public Studio builder.
+
+A controlled native audio/video coupling comparison changed only modality scale
+from 1 to 3, plus output names. All 120 face, top, full-frame and lower-torso
+views were inspected. Mouth movement became larger but less natural, with lip
+and cheek colour fringes; a new caption-like overlay appeared over the clothing.
+Fast hand and face softness remained. The selected soundtrack and frozen audio
+latents passed their checks, but the visual result fails review. This setting
+remains exploratory and is not promoted to the public default.
+
+LTX whole-scene camera transfer remains experimental. The video-derived scene
+guide retained broad body timing, but its native comparison still warped
+architecture and changed clothing. A separate native temporal-depth comparison
+improved architecture and outfit continuity, but left the camera largely static
+and apparent hovering after the intended jump. A controlled comparison using
+the author's signed reference-position correction also retained an unwanted
+late lift and a largely stationary street camera. These experiments are not
+included in the shipped Studio route. Corrected LTX original/silent scenarios,
+final-resolution quality and artist video signoffs remain required before
+calling all three routes production ready.
+Private inputs, dialogue, generated media and machine paths are excluded from
+the public package.
+
 ## 1.3.7 editable speech checks, 10 October 2026
 
 Original audio + performance remains the default for all engines. Reference
@@ -381,8 +703,8 @@ their entire head performance. All private source clips, recordings, scripts,
 transcripts and project data remain outside the repository and package.
 
 The installed frontend 1.53.10 native subgraph implementation was tested
-offline for preparation, look design, Wan, H3 and both LTX routes. Native
-conversion, export, reload and exposed-seed changes preserve the compiled
+offline for preparation, look design, Wan, H3, H3 enhancement and both LTX routes. Native
+conversion, export, reload and exposed-control changes preserve the compiled
 inference inputs. Smaller nested groups keep each operation explorable.
 Unneeded hand-off sockets are trimmed again after configuration. H3 uses a
 native multiline text source to expose its existing prompt in Your inputs;
@@ -392,7 +714,7 @@ Node sockets are arranged before layout. ELK routing is supplemented with a
 bounded orthogonal wire router that avoids occupied nodes and unrelated wires.
 Exported native positions were inspected separately from browser rendering.
 The root and internal layouts have zero measured unrelated wire crossings
-for all six tested stages. The crossing check also detects overlapping wires
+for all seven tested stages. The crossing check also detects overlapping wires
 and contacts at bends; branches sharing the same output are intentional
 signal junctions. Other node versions or edited graphs may lay out differently.
 
@@ -400,3 +722,38 @@ DOM interaction checks cover the shared resolution and original/custom length
 controls, direct audio, cloning, audio offsets, automatic review IDs and graph
 handoff without queueing work. Browser visual testing remains unavailable
 because Codex's saved browser setting rejects the local ComfyUI origin.
+
+## Full-length Wan qualification, 11 October 2026
+
+A native original-performance render delivered all 570 frames at 24 fps,
+720 × 1280, including a camera cut. Bounded preparation and rendering completed
+within the monitored memory reserves using the saved loading policy. Every
+frame and section boundary was inspected. Original audio packets and decoded
+audio match the delivered source prefix; the omitted final 6 ms is a near-silent
+codec tail. Removed text stayed clean throughout.
+
+The artist accepted this full-length result for this release while noting
+quality degradation between chunks. Changes in sharpness and fine detail
+between sections remain a known limitation. This approval covers this 720p
+original-performance qualification; final 1080p and other audio scenarios
+retain their separate validation requirements.
+
+## Native Wan Graph continuation, 11 October 2026
+
+The installed native subgraph export completed all 570 frames in eight motion
+preparation sections, including the camera cut, followed by a separate native
+merge. Next retained the same preparation recipe and motion cache key through
+every section. Finish returned the prepared render graph without manual IDs.
+Planning did not queue jobs or alter any of the 35 saved Studio projects.
+The merge exceeded the initial three-minute monitoring window and later
+completed successfully; it was not resubmitted. Rendering from this edited
+namespace remains a separate check.
+
+Two native compatibility failures were repaired and independently reviewed:
+Comfy's injected runtime cache marker is excluded from recipe identity, and
+six specific omitted optional inputs retain the same identity when native
+import adds their empty-string defaults. Nonempty values and other edits still
+require a new plan. All 29 focused planner checks and 21 integration/provenance
+checks pass. These native execution and identity checks supplement the existing
+frontend save/reload tests; they do not establish Desktop or mobile visual
+interface readiness.

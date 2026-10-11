@@ -1,4 +1,4 @@
-"""Video sourcing for Zura nodes: local files, direct URLs and search.
+"""Video sourcing for Zura nodes: contained local uploads and search.
 
 Trimmed from the original Trend Studio media module to Wan 2.2 Animate only:
 topic imagery, the H3/Animate-2 backends and the selection-receipt gating are
@@ -15,66 +15,87 @@ import subprocess
 from datetime import datetime, timezone
 import math
 from urllib.parse import urlencode, urlsplit
+import os
 
 import numpy as np
 import torch
 from PIL import Image, ImageOps
 
 UA = {'User-Agent': 'ZuraNodes/1.0 (local ComfyUI video sourcing)'}
+LOCAL_VIDEO_HELP = ('Use Choose local video to upload the clip, or choose a video '
+                    'inside ComfyUI input, output or temp.')
+# Uploaded playlists must not turn a local preview into remote fetching or
+# reads of files referenced by a manifest. These are the picker containers.
+LOCAL_DEMUX = ['-protocol_whitelist', 'file,pipe', '-format_whitelist',
+               'mov,matroska,webm,avi,asf,mpeg,mpegvideo']
+
+
+def require_same_origin(request):
+    """Match Studio's browser-origin boundary; CLI without Origin is allowed."""
+    from aiohttp import web
+    origin = request.headers.get('Origin')
+    if origin:
+        parsed = urlsplit(origin)
+        if parsed.scheme not in ('http', 'https') or parsed.netloc != request.host or parsed.username or parsed.password:
+            raise web.HTTPForbidden(text='Open the video picker inside this ComfyUI instance.')
+    elif request.headers.get('Sec-Fetch-Site') == 'cross-site':
+        raise web.HTTPForbidden(text='Open the video picker inside this ComfyUI instance.')
+
+
+def _media_path(path):
+    """Check lexical containment before probing, then follow realpath safely."""
+    import folder_paths
+    roots = [Path(os.path.abspath(getter())) for getter in
+             (folder_paths.get_input_directory, folder_paths.get_output_directory, folder_paths.get_temp_directory)]
+    real_roots = [root.resolve() for root in roots]
+    candidate = Path(os.path.abspath(path))
+    # Reject Windows alternate streams as well as ordinary traversal.
+    if any(':' in component for component in candidate.parts[1:]):
+        raise ValueError(LOCAL_VIDEO_HELP)
+    if not any(candidate.is_relative_to(root) for root in (*roots, *real_roots)):
+        raise ValueError(LOCAL_VIDEO_HELP)
+    resolved = candidate.resolve()
+    if not any(resolved.is_relative_to(root) for root in real_roots):
+        raise ValueError(LOCAL_VIDEO_HELP)
+    return resolved
 
 
 def cache_dir():
     import folder_paths
-    path = Path(folder_paths.get_temp_directory()) / 'zura_media'
+    path = _media_path(Path(folder_paths.get_temp_directory()) / 'zura_media')
     path.mkdir(parents=True, exist_ok=True)
     return path
 
 
 def local_path(name):
     if not str(name).strip():
-        raise ValueError('Choose a local video or paste a video URL')
+        raise ValueError(LOCAL_VIDEO_HELP)
     import folder_paths
-    supplied = Path(str(name))
-    path = (supplied if supplied.is_absolute() else Path(folder_paths.get_annotated_filepath(str(name)))).resolve()
+    name = str(name).strip()
+    if re.match(r'^[A-Za-z][A-Za-z0-9+.-]*://', name):
+        raise ValueError('Download the clip yourself, then use Choose local video to upload it. Remote video URLs are not loaded by Zura.')
+    annotation = re.search(r'\s*\[(input|output|temp)\]$', name)
+    base = {'input': folder_paths.get_input_directory, 'output': folder_paths.get_output_directory,
+            'temp': folder_paths.get_temp_directory}[annotation[1] if annotation else 'input']()
+    supplied = Path(name[:annotation.start()].rstrip() if annotation else name)
+    if '..' in supplied.parts:
+        raise ValueError(LOCAL_VIDEO_HELP)
+    path = _media_path(supplied if supplied.is_absolute() else Path(base) / supplied)
     if not path.is_file():
-        raise ValueError('Choose an existing video file: ' + str(name))
+        raise ValueError(LOCAL_VIDEO_HELP)
     return path
 
 
 def download_video(url):
-    parsed = urlsplit(url)
-    if parsed.scheme not in ('https', 'http') or not parsed.hostname or parsed.username or parsed.password:
-        raise ValueError('Use a public HTTP(S) video URL without embedded credentials')
-    import yt_dlp
-    key = hashlib.sha256(url.encode()).hexdigest()
-    cached = [p for p in cache_dir().glob(key + '.*') if p.suffix in ('.mp4', '.mkv', '.webm', '.mov')]
-    if cached:
-        return cached[0]
-
-    def cap(progress):
-        if progress.get('downloaded_bytes', 0) > 512 * 1024 * 1024:
-            raise ValueError('Video download exceeds 512 MB; use a local trimmed clip')
-
-    options = dict(outtmpl=str(cache_dir() / (key + '.%(ext)s')), noplaylist=True, quiet=True,
-                   format='bv*[height<=1080]+ba/b[height<=1080]/bv*+ba/b', merge_output_format='mp4',
-                   max_filesize=512 * 1024 * 1024, socket_timeout=20, retries=1, fragment_retries=1,
-                   progress_hooks=[cap], js_runtimes={'node': {'path': shutil.which('node') or 'node'}})
-    with yt_dlp.YoutubeDL(options) as downloader:
-        info = downloader.extract_info(url, download=True)
-        path = Path(downloader.prepare_filename(info))
-        if not path.is_file() and path.with_suffix('.mp4').is_file():
-            path = path.with_suffix('.mp4')
-        path.with_suffix('.source.json').write_text(json.dumps(
-            {k: info.get(k) for k in ('title', 'webpage_url', 'upload_date', 'view_count', 'channel', 'duration')},
-            ensure_ascii=False), encoding='utf-8')
-    if not path.is_file():
-        raise ValueError('Video could not be downloaded. Use a local file; login/DRM bypass is not supported.')
-    return path
+    """Remote fetching is unavailable until redirects/subresources are safe."""
+    raise ValueError('Download the clip yourself, then use Choose local video to upload it. '
+                     'Remote video URLs are not loaded by Zura.')
 
 
 def choose_clip_start(path, duration=10):
     """Prefer a visible, moving, relatively continuous window in the first 120s."""
-    raw = subprocess.check_output([shutil.which('ffmpeg'), '-v', 'error', '-i', str(path), '-t', '120', '-an',
+    path = local_path(path)
+    raw = subprocess.check_output([shutil.which('ffmpeg'), '-v', 'error', *LOCAL_DEMUX, '-i', str(path), '-t', '120', '-an',
                                    '-vf', 'fps=1,scale=160:90', '-f', 'rawvideo', '-pix_fmt', 'gray', 'pipe:1'], timeout=90)
     images = np.frombuffer(raw, dtype=np.uint8).reshape(-1, 90, 160).astype(np.float32)
     if len(images) < 10:
@@ -116,7 +137,8 @@ def decode_clip(path, start, clip_seconds=10, max_side=1280):
     if not math.isfinite(clip_seconds) or not 1 <= clip_seconds <= 120:
         raise ValueError('Clip duration must be a finite number between 1 and 120 seconds')
     max_side = source_max_side(max_side)
-    probe = json.loads(subprocess.check_output([ffprobe, '-v', 'error', '-show_streams', '-show_format', '-of', 'json', str(path)]))
+    path = local_path(path)
+    probe = json.loads(subprocess.check_output([ffprobe, '-v', 'error', *LOCAL_DEMUX, '-show_streams', '-show_format', '-of', 'json', str(path)]))
     video = next((s for s in probe['streams'] if s['codec_type'] == 'video'), None)
     if not video:
         raise ValueError('The selected file has no video stream')
@@ -128,7 +150,7 @@ def decode_clip(path, start, clip_seconds=10, max_side=1280):
     rw = max(16, round(width * scale / 16) * 16)
     rh = max(16, round(height * scale / 16) * 16)
     delivery_frames = round(clip_seconds * 24)
-    args = [ffmpeg, '-v', 'error', '-ss', str(start), '-i', str(path), '-t', str(clip_seconds), '-an',
+    args = [ffmpeg, '-v', 'error', '-ss', str(start), *LOCAL_DEMUX, '-i', str(path), '-t', str(clip_seconds), '-an',
             '-vf', f'fps=24,scale={rw}:{rh}', '-frames:v', str(delivery_frames),
             '-f', 'rawvideo', '-pix_fmt', 'rgb24', 'pipe:1']
     raw = subprocess.check_output(args, timeout=120)
@@ -139,7 +161,7 @@ def decode_clip(path, start, clip_seconds=10, max_side=1280):
     has_audio = any(s['codec_type'] == 'audio' for s in probe['streams'])
     audio = None
     if has_audio:
-        raw = subprocess.check_output([ffmpeg, '-v', 'error', '-ss', str(start), '-i', str(path), '-t', str(clip_seconds), '-vn',
+        raw = subprocess.check_output([ffmpeg, '-v', 'error', '-ss', str(start), *LOCAL_DEMUX, '-i', str(path), '-t', str(clip_seconds), '-vn',
                                        '-ar', '32000', '-ac', '2', '-f', 'f32le', 'pipe:1'], timeout=120)
         samples = np.frombuffer(raw, dtype='<f4').reshape(-1, 2).copy()
         target_samples = round(clip_seconds * 32000)
@@ -276,29 +298,29 @@ def discover_video(query, hint='live dance', choice=0, min_views=10000, shorts_o
 
 
 def preview_clip(url, start=0, automatic=True, shorts_only=False, duration=10, max_side=1280):
-    """Download, pick a window and cache a small preview MP4 for the picker UI."""
+    """Pick a window from an uploaded local clip and cache its picker preview."""
     duration = float(duration)
     if not 1 <= duration <= 120:
         raise ValueError('Clip duration must be between 1 and 120 seconds')
     max_side = source_max_side(max_side)
-    path = download_video(url)
+    path = local_path(url)
     if shorts_only:
         ffprobe = shutil.which('ffprobe')
-        probe = json.loads(subprocess.check_output([ffprobe, '-v', 'error', '-show_streams', '-show_format', '-of', 'json', str(path)], timeout=30))
+        probe = json.loads(subprocess.check_output([ffprobe, '-v', 'error', *LOCAL_DEMUX, '-show_streams', '-show_format', '-of', 'json', str(path)], timeout=30))
         video = next((s for s in probe.get('streams', []) if s.get('codec_type') == 'video'), None)
         if not video or int(video.get('height', 0)) <= int(video.get('width', 0)):
             raise ValueError('Shorts-only mode rejected this source because it is not vertical')
         if float(probe.get('format', {}).get('duration', 0)) > 180.5:
             raise ValueError('Shorts-only mode rejected this source because it is longer than 180 seconds')
     start = choose_clip_start(path, duration) if automatic else max(0, float(start))
-    probe = json.loads(subprocess.check_output([shutil.which('ffprobe'), '-v', 'error', '-show_format', '-of', 'json', str(path)], timeout=30))
+    probe = json.loads(subprocess.check_output([shutil.which('ffprobe'), '-v', 'error', *LOCAL_DEMUX, '-show_format', '-of', 'json', str(path)], timeout=30))
     source_duration = float(probe.get('format', {}).get('duration', 0))
     if source_duration - start < duration:
         raise ValueError(f'Choose a start time with at least {duration:g} seconds remaining in the source video')
     key = hashlib.sha256(f'{url}|{start}|{duration}|{max_side}'.encode()).hexdigest()[:24]
-    target = cache_dir() / f'preview_{key}.mp4'
+    target = _media_path(cache_dir() / f'preview_{key}.mp4')
     if not target.exists():
-        subprocess.run([shutil.which('ffmpeg'), '-y', '-v', 'error', '-ss', str(start), '-i', str(path), '-t', str(duration),
+        subprocess.run([shutil.which('ffmpeg'), '-y', '-v', 'error', '-ss', str(start), *LOCAL_DEMUX, '-i', str(path), '-t', str(duration),
                         '-vf', 'scale=640:-2', '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '24', '-c:a', 'aac',
                         '-movflags', '+faststart', str(target)], check=True, timeout=120)
     return dict(filename=target.name, subfolder='zura_media', type='temp', start=start, duration=duration,

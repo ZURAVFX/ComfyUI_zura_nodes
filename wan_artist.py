@@ -10,6 +10,7 @@ import json
 import hashlib
 import math
 import re
+import zipfile
 from pathlib import Path
 
 import torch
@@ -145,6 +146,93 @@ class ZuraWanLoadPreparation:
         return data["footage"], data["reference"], int(frames.shape[2]), int(frames.shape[1])
 
 
+def validate_mapped_preparation(data, chunk_frames=4):
+    """Validate an exact FP32 cache without full-clip temporary allocations."""
+    if not isinstance(data, dict) or type(data.get("version")) is not int or data["version"] != 1:
+        raise ValueError("Prepare this Wan shot again: unsupported streaming cache version.")
+    footage = data.get("footage")
+    if not isinstance(footage, dict):
+        raise ValueError("Wan preparation is missing footage metadata.")
+    frames = footage.get("frames")
+    if (not isinstance(frames, torch.Tensor) or frames.ndim != 4 or
+            frames.shape[-1] != 3 or min(frames.shape) < 1):
+        raise ValueError("Wan preparation is missing RGB source frames.")
+    count = len(frames)
+    mask_seen = False
+    for name in ("frames", "character_mask", "pose_video", "face_video", "reference"):
+        value = data.get(name) if name == "reference" else footage.get(name)
+        if (not isinstance(value, torch.Tensor) or value.device.type != "cpu" or
+                value.dtype != torch.float32 or value.layout != torch.strided):
+            raise ValueError(f"Wan {name} must be exact CPU float32 strided storage.")
+        if name == "character_mask":
+            if tuple(value.shape) != tuple(frames.shape[:3]):
+                raise ValueError("Wan preparation mask does not match the complete source timeline.")
+        elif (value.ndim != 4 or value.shape[-1] != 3 or min(value.shape) < 1 or
+              value.shape[0] != (1 if name == "reference" else count)):
+            raise ValueError(f"Wan {name} does not cover the source timeline.")
+        # Scale validation blocks by raster too, so a giant IMAGE cannot make
+        # the finite/range boolean temporary itself a whole-clip allocation.
+        stride = max(1, min(chunk_frames, 4_000_000 // max(1, value[0].numel())))
+        for start in range(0, len(value), stride):
+            block = value[start:start + stride]
+            if not torch.isfinite(block).all() or block.min() < 0 or block.max() > 1:
+                raise ValueError(f"Wan {name} contains invalid pixels outside [0,1].")
+            if name == "character_mask" and (block > .5).any():
+                mask_seen = True
+    if not mask_seen:
+        raise ValueError("Wan streaming requires a non-empty approved performer mask.")
+    info = footage.get("video_info")
+    if not isinstance(info, dict) or info.get("fps") != 24:
+        raise ValueError("Wan streaming preparation must use the reviewed 24 fps timeline.")
+    if footage.get("replacement_area") not in ("Whole head", "Whole character"):
+        raise ValueError("Wan preparation has an unsupported replacement scope.")
+    provenance = footage.get("speech_provenance")
+    if provenance is not None:
+        if (not isinstance(provenance, dict) or set(provenance) != {"guide_key", "guide_sha"} or
+                not all(isinstance(value, str) and value for value in provenance.values())):
+            raise ValueError("Wan speech provenance is invalid.")
+        _attach_speech_provenance({}, provenance.get("guide_key", ""), provenance.get("guide_sha", ""))
+    return footage, data["reference"]
+
+
+def load_mapped_preparation(path, cache_key):
+    """Supported torch ZIP caches only; never fall back to a full CPU load."""
+    from .streaming_video import file_sha256
+    if not isinstance(cache_key, str) or not re.fullmatch(r"[a-f0-9]{64}", cache_key):
+        raise ValueError("Invalid Wan preparation cache key.")
+    path = Path(path).resolve(strict=True)
+    if not zipfile.is_zipfile(path):
+        raise ValueError("This Wan cache cannot be memory mapped. Prepare the shot again.")
+    before = path.stat()
+    try:
+        data = torch.load(path, map_location="cpu", weights_only=True, mmap=True)
+    except (RuntimeError, ValueError, TypeError, OSError) as error:
+        raise ValueError("This Wan cache cannot be safely memory mapped. Prepare the shot again.") from error
+    footage, reference = validate_mapped_preparation(data)
+    sha = file_sha256(path)
+    after = path.stat()
+    if (before.st_size, before.st_mtime_ns) != (after.st_size, after.st_mtime_ns):
+        raise ValueError("Wan preparation changed during validation.")
+    # No tensor conversion, clone, quantisation or whole-batch allocation.
+    footage = dict(footage)
+    footage["streaming_preparation"] = {"version": 1, "cache_key": cache_key,
+        "path": str(path), "sha256": sha, "size": after.st_size, "mtime_ns": after.st_mtime_ns,
+        "storage": "torch_zip_mmap_float32", "frames": int(footage["frames"].shape[0]), "fps": 24}
+    return footage, reference
+
+
+class ZuraWanLoadMappedPreparation(ZuraWanLoadPreparation):
+    """Exact file-backed preparation for the VIDEO-only streaming sampler."""
+    def load(self, cache_key):
+        path = cache_path(cache_key)
+        import folder_paths
+        if not path.resolve(strict=True).is_relative_to(Path(folder_paths.get_output_directory()).resolve(strict=True)):
+            raise ValueError("Wan preparation cache leaves the Comfy output folder.")
+        footage, reference = load_mapped_preparation(path, cache_key)
+        frames = footage["frames"]
+        return footage, reference, int(frames.shape[2]), int(frames.shape[1])
+
+
 def _attach_speech_provenance(footage, key, sha):
     if key or sha:
         if not re.fullmatch(r"[a-f0-9]{64}", key) or not re.fullmatch(r"[a-f0-9]{64}", sha):
@@ -194,7 +282,18 @@ class ZuraWanSpeechGuard:
             require(actual["sha"] == record["sha"], "The facial-performance video changed.")
             require(footage.get("speech_provenance") == {"guide_key": guide_key, "guide_sha": actual["sha"]},
                     "The prepared face motion belongs to a different facial performance.")
-            validate_footage(footage)
+            from .wan_preparation_windows import WindowArray
+            preparation_receipt = footage.get("streaming_preparation")
+            bounded = (any(isinstance(footage.get(name), WindowArray) for name in
+                           ("frames", "character_mask", "pose_video", "face_video")) or
+                       (isinstance(preparation_receipt, dict) and preparation_receipt.get("storage") ==
+                        "torch_zip_readonly_windows_float32"))
+            if bounded:
+                from .wan_bounded_speech import validate_window_footage, verify_selected_media
+                from comfy.model_management import throw_exception_if_processing_interrupted
+                validate_window_footage(footage, throw_exception_if_processing_interrupted)
+            else:
+                validate_footage(footage)
             source = data["source"]
             require(clip_details.get("review_shot_id") == source["review"] and
                     clip_details.get("source_hash") == source["source_sha"] and
@@ -207,14 +306,18 @@ class ZuraWanSpeechGuard:
                     "The source footage changed after review.")
             _, manifest = verify_review(source["review"])
             require(manifest["files"]["mask.mp4"] == source["mask_sha"], "The reviewed performer mask changed.")
-            images, audio, fps = video_components(selected_video)
-            require(fps == source["fps"] and len(images) == source["frames"] and
-                    float(footage.get("video_info", {}).get("fps", 0)) == source["fps"],
-                    "The actual selected video no longer matches the facial-performance timeline.")
-            require(torch.equal(footage["frames"].detach().cpu().float(), images.detach().cpu().float()),
-                    "The actual selected frames differ from the prepared motion.")
-            require(audio is not None and wan_speech.audio_signature(audio) == data["selected_audio"],
-                    "The selected audio or its start time changed after the facial performance was created.")
+            if bounded:
+                verify_selected_media(footage, selected_video, source, data["selected_audio"],
+                                      throw_exception_if_processing_interrupted)
+            else:
+                images, audio, fps = video_components(selected_video)
+                require(fps == source["fps"] and len(images) == source["frames"] and
+                        float(footage.get("video_info", {}).get("fps", 0)) == source["fps"],
+                        "The actual selected video no longer matches the facial-performance timeline.")
+                require(torch.equal(footage["frames"].detach().cpu().float(), images.detach().cpu().float()),
+                        "The actual selected frames differ from the prepared motion.")
+                require(audio is not None and wan_speech.audio_signature(audio) == data["selected_audio"],
+                        "The selected audio or its start time changed after the facial performance was created.")
             require(clip_details.get("audio_mode") == "reference" and clip_details.get("audio_source"),
                     "The final soundtrack no longer uses the selected reference audio.")
             require(wan_speech.digest(clip_details["audio_source"]) == clip_details.get("audio_hash"),
