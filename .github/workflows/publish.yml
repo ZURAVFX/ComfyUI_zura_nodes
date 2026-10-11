@@ -147,6 +147,8 @@ jobs:
           fi
           python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
           python -m pip install numpy scipy pillow requests soundfile av aiohttp opencv-python-headless safetensors
+      - name: Install graph test DOM dependency outside the package
+        run: npm install --prefix "$GITHUB_WORKSPACE/../ui-check" --ignore-scripts --no-audit --no-fund linkedom@0.18.13
       - name: Run regression checks
         run: |
           python -m compileall -q __init__.py klein_look.py multicam_v3.py multicam_v4_clean.py h3_single_angle.py idv2v_control.py
