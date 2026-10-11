@@ -205,13 +205,38 @@ jobs:
           git -C "$COMFYUI_ROOT" fetch --depth 1 https://github.com/Comfy-Org/ComfyUI.git 3c1b7a17fdf239d35ce98cc777756f572d089795
           git -C "$COMFYUI_ROOT" checkout --detach FETCH_HEAD
           test "$(git -C "$COMFYUI_ROOT" rev-parse HEAD)" = 3c1b7a17fdf239d35ce98cc777756f572d089795
+          # The native preparation parity tests import these genuine helpers,
+          # not the pack's model-loading entry point. Keep its source outside
+          # the public package alongside the qualified core checkout.
+          NATIVE_POSE_ROOT="$COMFYUI_ROOT/custom_nodes/ComfyUI-WanAnimatePreprocess"
+          git init "$NATIVE_POSE_ROOT"
+          git -C "$NATIVE_POSE_ROOT" fetch --depth 1 https://github.com/kijai/ComfyUI-WanAnimatePreprocess.git 0e0b6a2a555625acf4d4aefb780e27d06937132f
+          git -C "$NATIVE_POSE_ROOT" checkout --detach FETCH_HEAD
+          test "$(git -C "$NATIVE_POSE_ROOT" rev-parse HEAD)" = 0e0b6a2a555625acf4d4aefb780e27d06937132f
+          python - <<'PY'
+          import hashlib
+          import os
+          from pathlib import Path
+          root = Path(os.environ['COMFYUI_ROOT']) / 'custom_nodes' / 'ComfyUI-WanAnimatePreprocess'
+          # Match the three helper files from the qualified local v1.0.3 pack.
+          expected = {
+              'pose_utils/pose2d_utils.py': 'f278e3bbecdf615e957a510bf92151c7deb0c9079f92683a9b93d0a77493f87a',
+              'pose_utils/human_visualization.py': '53fa92c12f21d2ea2b0c9fc46aab53c0d740cbf259a4e12e467649f2c95a70f0',
+              'utils.py': 'b73640d6657c795ad932fc7e0d9aad58a6a466affe43cb1cd62f4e6db50d8265',
+          }
+          for name, digest in expected.items():
+              assert hashlib.sha256((root / name).read_bytes()).hexdigest() == digest, f'Unqualified native helper: {name}'
+          PY
           python -m pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
           python -m pip install -r "$COMFYUI_ROOT/requirements.txt"
+          # Only CPU helper imports are required; no ONNX inference or GPU pack dependencies.
+          python -m pip install matplotlib==3.11.0
       - name: Run isolated native data and bounded pipeline checks
         env:
           COMFYUI_ROOT: ${{ runner.temp }}/zura-native-comfy
           PYTHONPATH: ${{ runner.temp }}/zura-native-comfy
           CUDA_VISIBLE_DEVICES: ''
+          MPLBACKEND: Agg
         run: |
           python - <<'PY'
           import subprocess
