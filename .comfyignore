@@ -48,10 +48,10 @@ artist_studio/latentsync_vendor/models/*
 !artist_studio/latentsync_vendor/mask.png
 
 # The package UI and example workflows are part of the release.
-!web/
-!web/**
-!workflows/
-!workflows/**
+!/web/
+!/web/**
+!/workflows/
+!/workflows/**
 
 # LongCat machine configuration is never distributed.
 longcat.local.json*
