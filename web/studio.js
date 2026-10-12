@@ -38,31 +38,44 @@ async function tidyWanStage(app, graph, stage) {
 class ArtistStudio {
   constructor() {
     this.project = null; this.source = null; this.character = null; this.audio = null; this.busy = false;
+    this.references=[];this.readyAsset=null;this.lookMode="build";
     this.config = {...defaults}; this.preview = "mask"; this.lastVideo = null;
     this.container = document.createElement("section");
     this.container.id = "genj-studio"; this.container.setAttribute("aria-label", "Zura Studio");
     this.container.innerHTML = `
-      <header class="gs-top"><div class="gs-brand">${icon("frames")}<strong>Zura Studio</strong><span>Character replacement</span></div>
+      <header class="gs-top"><div class="gs-brand">${icon("frames")}<strong>Zura Studio</strong><span>Video transformations</span></div>
         <div class="gs-top-actions"><span id="gs-models" class="gs-status">Checking models</span><button id="gs-exit" class="gs-quiet" title="Open an editable copy of this stage. Animation uses the visible character look.">Graph view ${icon("arrow")}</button><button id="gs-close" class="gs-icon-button" title="Close Studio and show the current graph" aria-label="Close Studio">${icon("close")}</button></div></header>
       <div class="gs-workspace"><aside class="gs-controls">
         <div class="gs-control-heading"><h1>Create a shot</h1><button id="gs-new" class="gs-icon-button" title="New shot" aria-label="New shot">${icon("plus")}</button></div>
         <div class="gs-upload-group"><label class="gs-label" for="gs-source">Source video</label>
-          <label class="gs-upload" id="gs-source-drop" for="gs-source"><span class="gs-upload-symbol">${icon("upload")}</span><strong>Drop your video here</strong><span>or choose a file · MP4, MOV</span><span class="gs-filename"></span></label>
+          <label class="gs-upload gs-source-upload" id="gs-source-drop" for="gs-source"><img id="gs-source-poster" alt="Loaded video thumbnail" hidden/><video id="gs-source-thumb" muted playsinline preload="auto" hidden aria-label="Loaded source video thumbnail"></video><span class="gs-upload-symbol">${icon("upload")}</span><strong>Drop your video here</strong><span id="gs-source-detail">MP4, MOV, WebM or MKV</span><span class="gs-filename"></span></label>
           <input class="gs-file" id="gs-source" type="file" accept="video/mp4,video/quicktime,video/webm,.mkv" aria-label="Source video"/>
         </div>
         <section class="gs-selection"><label><span class="gs-label">What should change?</span><select id="gs-edit_area"><option value="mask">Masked area</option><option value="scene">Whole scene · no mask</option></select></label>
-          <p id="gs-selection-note" class="gs-note">Works with footage and viewport renders. Everything outside the mask is kept as the source.</p>
-          <div id="gs-mask-options"><label><span class="gs-label">Find the area</span><select id="gs-mask_method"><option value="auto">Automatic character selection</option><option value="text">Describe the area</option><option value="points">Click to select</option></select></label>
-            <label id="gs-auto-mask-setting"><span class="gs-label">Character area</span><select id="gs-scope"><option value="person">Head and body</option><option value="head">Head only</option></select></label>
-            <label id="gs-mask-prompt-setting" hidden><span class="gs-label">Area to change</span><input id="gs-mask_prompt" type="text" maxlength="500" placeholder="person in a red coat, chair, sky…"/><small>Checks matching areas, then tracks the selection through the clip.</small></label>
+          <p id="gs-selection-note" class="gs-note">Only the selected area changes.</p>
+          <details id="gs-selection-options" class="gs-advanced"><summary id="gs-selection-summary">Person · automatic</summary><div id="gs-mask-options"><label><span class="gs-label">Select an area</span><select id="gs-mask_method"><option value="auto">Person · automatic</option><option value="text">Describe a person or object</option><option value="points">Click to select</option></select></label>
+            <label id="gs-auto-mask-setting"><span class="gs-label">Person area</span><select id="gs-scope"><option value="person">Head and body</option><option value="head">Head only</option></select></label>
+            <label id="gs-mask-prompt-setting" hidden><span class="gs-label">Area to change</span><input id="gs-mask_prompt" type="text" maxlength="500" placeholder="Red coat, chair, sky…"/></label>
             <div id="gs-mask-points-setting" hidden><button id="gs-select-points" class="gs-quiet">Select on opening frame</button><span id="gs-mask-points-note" class="gs-note">Include the area you want to change. Exclude anything selected by mistake.</span></div>
-          </div>
+          </div></details>
         </section>
-        <div class="gs-upload-group"><label class="gs-label" id="gs-character-label" for="gs-character">Replacement character</label>
-          <label class="gs-upload gs-image-upload" id="gs-character-drop" for="gs-character"><img id="gs-character-image" alt="Replacement character" hidden/><span class="gs-upload-symbol">${icon("plus")}</span><strong>Choose a character image</strong><span>A clear face and the clothing you want</span><span class="gs-filename"></span></label>
-          <input class="gs-file" id="gs-character" type="file" accept="image/png,image/jpeg,image/webp" aria-label="Replacement character"/>
-        </div>
-        <div class="gs-upload-group"><label><span class="gs-label">Audio and performance</span><select id="gs-audio-mode"><option value="original">Original audio + performance</option><option value="reference">Reference audio + new performance</option></select></label>
+        <section class="gs-look"><h2>Starting look</h2>
+          <div class="gs-segment gs-look-choice" role="group" aria-label="How to create the starting look">
+            <label><input type="radio" name="gs-look" value="build" checked/><span>Build from references</span></label>
+            <label><input type="radio" name="gs-look" value="ready"/><span>Use finished frame</span></label>
+          </div><p id="gs-look-note" class="gs-note">Add people, objects or scene references.</p>
+          <div id="gs-ready-group" class="gs-upload-group" hidden>
+            <label class="gs-upload gs-image-upload" id="gs-ready-drop" for="gs-ready"><img id="gs-ready-image" alt="Finished starting frame" hidden/><span class="gs-upload-symbol">${icon("plus")}</span><strong>Drop your finished starting frame</strong><span>Already composed for this shot</span><span class="gs-filename"></span></label>
+            <input class="gs-file" id="gs-ready" type="file" accept="image/png,image/jpeg,image/webp" aria-label="Finished starting frame"/>
+          </div>
+          <div class="gs-upload-group"><label class="gs-label" id="gs-character-label" for="gs-character">Reference images</label>
+            <div id="gs-reference-gallery" class="gs-reference-gallery" aria-label="Loaded appearance references"></div>
+            <label class="gs-upload gs-reference-upload" id="gs-character-drop" for="gs-character"><span class="gs-upload-symbol">${icon("plus")}</span><strong id="gs-reference-upload-label">Drop one or more images</strong><span class="gs-filename"></span></label>
+            <input class="gs-file" id="gs-character" type="file" accept="image/png,image/jpeg,image/webp" multiple aria-label="Appearance reference images"/>
+          </div>
+          <label class="gs-prompt" id="gs-look-prompt"><span class="gs-label">What should it look like? <small>Optional</small></span><textarea id="gs-prompt" rows="2" placeholder="Replace the chair with the oak chair in reference 1"></textarea></label>
+        </section>
+        <details class="gs-advanced" id="gs-audio-settings"><summary id="gs-audio-summary">Audio · original performance</summary><div class="gs-advanced-body gs-upload-group"><label><span class="gs-label">Audio and performance</span><select id="gs-audio-mode"><option value="original">Original audio + performance</option><option value="reference">Reference audio + new performance</option></select></label>
           <p id="gs-audio-note" class="gs-note">Follows the original facial performance and keeps the video's audio. Silent videos work too.</p>
           <div id="gs-reference-options" hidden><label class="gs-label" for="gs-audio">Reference audio</label>
           <label class="gs-upload" id="gs-audio-drop" for="gs-audio"><strong>Choose audio or a video with audio</strong><span>Your character voice, music or sound effects</span><span class="gs-filename"></span></label>
@@ -78,7 +91,7 @@ class ArtistStudio {
             <button id="gs-create-voice" class="gs-quiet">Create and use this voice track</button>
             <p id="gs-voice-note" class="gs-note">Uses local Zura LongCat. Your sample and words stay on this computer.</p>
           </div></details></div>
-        </div>
+        </div></details>
         <fieldset><legend>Generate with</legend><div class="gs-segment">
           <label><input type="radio" name="gs-engine" value="local" checked/><span>LTX 2.5 <small>Local</small></span></label>
           <label><input type="radio" name="gs-engine" value="h3"/><span>MiniMax H3 <small>Local</small></span></label>
@@ -97,13 +110,10 @@ class ArtistStudio {
         </fieldset>
         <div class="gs-two"><label id="gs-quality-setting"><span class="gs-label">Resolution</span><select id="gs-resolution"><option value="512">512 px · small test</option><option value="768">768 px</option><option value="1280">720p · HD</option><option value="1920">1080p · Full HD</option><option value="1920-enhanced">1080p · Enhanced after H3</option></select></label>
           <div><label><span class="gs-label">Clip length</span><select id="gs-length_mode"><option value="original">Original clip length</option><option value="custom" selected>Custom length</option></select></label><label id="gs-duration-setting"><span class="gs-label">Seconds</span><input id="gs-duration" type="number" min="0.25" max="30" step="0.25" value="2"/></label></div></div>
-        <p class="gs-note" id="gs-output-note">Keeps your video's shape. Renders the length you choose from the original footage.</p>
-        <div class="gs-note" id="gs-system-guidance" aria-live="polite"><p id="gs-hardware-note">Checking this system…</p><p id="gs-limit-note"></p><details><summary>Speed and memory guide</summary><p id="gs-speed-note"></p><p id="gs-memory-note"></p><p>Timings are measured examples on an RTX 4080 with 16 GB VRAM and 64 GB RAM. Other hardware and settings can take longer. Workflow limits are shown separately from hardware recommendations.</p></details></div>
+        <details class="gs-advanced"><summary>Output, speed and memory</summary><div class="gs-advanced-body"><p class="gs-note" id="gs-output-note"></p><div class="gs-note" id="gs-system-guidance" aria-live="polite"><p id="gs-hardware-note">Checking this system…</p><p id="gs-limit-note"></p><p id="gs-speed-note"></p><p id="gs-memory-note"></p><p>Measured on an RTX 4080 with 16 GB VRAM and 64 GB RAM. Other systems vary.</p></div></div></details>
         <label id="gs-sampling-setting" hidden><span class="gs-label">Detail level</span><select id="gs-quality"><option value="fast">Fast · accelerated model</option><option value="detailed">Detailed · full sampling</option></select><small>Changes sampling effort, while resolution and clip length stay as selected.</small></label>
-        <p id="gs-h3-setting" class="gs-note" hidden>H3 uses native audio, separate appearance references and depth for motion. Clips support up to 5 seconds. Detailed takes are slower.</p>
-        <p id="gs-ltx-setting" class="gs-note">LTX uses direct audio conditioning. Review identity, motion and speech timing before keeping a take.</p>
-        <label class="gs-prompt"><span class="gs-label">Describe the look <small>Optional</small></span><textarea id="gs-prompt" rows="3" placeholder="For example, a red jacket with natural cinematic lighting"></textarea></label>
-        <label class="gs-checkbox"><input id="gs-remove_text" type="checkbox"/><span>Remove on-screen text<small>Adds detected titles and subtitles to the removal mask. Check the orange coverage before continuing.</small></span></label>
+        <p id="gs-h3-setting" class="gs-note" hidden></p><p id="gs-ltx-setting" class="gs-note" hidden></p>
+        <label class="gs-checkbox"><input id="gs-remove_text" type="checkbox"/><span>Remove on-screen text</span></label>
         <details class="gs-advanced"><summary>More controls</summary><div class="gs-advanced-body">
           <label><span class="gs-label">Start (seconds)</span><input id="gs-start" type="number" min="0" max="86400" step="0.1" value="0"/></label>
           <label id="gs-audio-start-setting" hidden><span class="gs-label">Reference audio start (seconds)</span><input id="gs-audio_start" type="number" min="0" max="86400" step="0.1" value="0"/><small>Aligned to the start of your selected clip. Shorter tracks are padded with silence.</small></label>
@@ -115,11 +125,11 @@ class ArtistStudio {
           <p class="gs-note">Wan handles camera cuts automatically. Use one continuous shot with LTX and H3.</p>
           <label><span class="gs-label">Open in graph view</span><select id="gs-graph-stage"><option value="auto">Current stage</option><option value="prepare">Prepare and review</option><option value="design">Character preview</option><option value="animate">Animation · use this look</option><option value="h3">H3 base render</option><option value="h3_enhance">H3 1080p enhancement</option><option value="wan_speech">Wan speech performance</option><option value="draft">Seedance draft · paid when queued</option><option value="final">Seedance final · paid when queued</option></select><small>Opens an editable copy in a new ComfyUI tab. Graph edits stay in that workflow. Opening a graph does not start a render.</small></label>
         </div></details>
-        <div class="gs-action-area"><p id="gs-action-note">Add a video and character to get started.</p><button id="gs-primary" class="gs-primary" disabled>Prepare shot ${icon("arrow")}</button><button id="gs-redesign" class="gs-quiet" hidden>Try another character preview</button><button id="gs-starting-image" class="gs-quiet" hidden>Use starting image</button><input class="gs-file" id="gs-opening-file" type="file" accept="image/png,image/jpeg,image/webp" aria-label="Starting image"/><button id="gs-cancel" class="gs-quiet gs-cancel" hidden>Stop this job</button></div>
+        <div class="gs-action-area"><p id="gs-action-note">Add a video and starting look.</p><button id="gs-primary" class="gs-primary" disabled>Prepare shot ${icon("arrow")}</button><button id="gs-redesign" class="gs-quiet" hidden>Try another starting look</button><button id="gs-starting-image" class="gs-quiet" hidden>Replace starting frame</button><input class="gs-file" id="gs-opening-file" type="file" accept="image/png,image/jpeg,image/webp" aria-label="Starting image"/><button id="gs-cancel" class="gs-quiet gs-cancel" hidden>Stop this job</button></div>
       </aside>
       <main class="gs-main"><nav class="gs-steps" aria-label="Progress"><span data-step="0" class="active">Upload</span><i></i><span data-step="1">Review mask</span><i></i><span data-step="2">Create</span></nav>
         <div class="gs-preview-heading"><div><h2 id="gs-preview-title">Your performance, a new character</h2><p id="gs-preview-description">Upload the shot you want to transform. We’ll follow its motion and keep the original soundtrack.</p></div><div id="gs-preview-tabs" class="gs-tabs" hidden><button data-view="mask" class="active">Mask</button><button data-view="guide">Guidance</button><button data-view="source">Original</button></div></div>
-        <div class="gs-canvas" id="gs-canvas"><div class="gs-empty" id="gs-empty">${icon("frames")}<h3>Start with your performance</h3><p>Your previews and finished takes appear here.</p></div><video id="gs-player" controls playsinline preload="metadata" hidden></video><img id="gs-opening" alt="Generated character preview in the original scene" hidden/><div id="gs-working" class="gs-working" hidden><div class="gs-loading-bar"></div><strong id="gs-working-title">Preparing your shot</strong><span id="gs-working-detail">Running in ComfyUI</span></div></div>
+        <div class="gs-canvas" id="gs-canvas"><div class="gs-empty" id="gs-empty">${icon("frames")}<h3>Add a source video</h3><p>Review the selection, starting frame and finished take here.</p></div><video id="gs-player" controls playsinline preload="metadata" hidden></video><img id="gs-opening" alt="Starting frame for this shot" hidden/><div id="gs-working" class="gs-working" hidden><div class="gs-loading-bar"></div><strong id="gs-working-title">Preparing your shot</strong><span id="gs-working-detail">Running in ComfyUI</span></div></div>
         <div id="gs-message" class="gs-message" role="status" aria-live="polite" hidden></div>
         <section class="gs-results" id="gs-results" hidden><div class="gs-section-heading"><h2>Your takes</h2><span>Your selected soundtrack is restored automatically.</span></div><div id="gs-takes"></div></section>
         <section class="gs-library"><div class="gs-section-heading"><h2>Recent shots</h2><button id="gs-refresh" class="gs-quiet">Refresh</button></div><div id="gs-library-list"><p class="gs-note">Your shots are saved on this computer. You can return to them later.</p></div></section>
@@ -127,6 +137,10 @@ class ArtistStudio {
     this.bind();this.syncForm();
   }
   $(id) { return this.container.querySelector("#gs-" + id); }
+  hasLook(){return this.lookMode==="ready"?!!this.readyAsset:this.references.length>0;}
+  projectBody(){return {source:this.source.id,character:this.character?.id,look_mode:this.lookMode,
+    references:this.references.map(a=>a.id),starting_image:this.readyAsset?.id,config:this.config};}
+  invalidateLook(){this.character=this.references[0] || this.readyAsset;this.project=null;localStorage.removeItem("genj-studio-project");}
   message(text, error=false) {
     const el=this.$("message"); el.hidden=!text; el.textContent=text || "";
     el.classList.toggle("is-error", error);
@@ -195,12 +209,22 @@ class ArtistStudio {
     this.$("cancel").onclick=()=>this.perform(async()=>{
       this.project=await request(`/projects/${this.project.id}/cancel`,{});this.render();
     });
-    for (const type of ["source","character","audio"]) {
-      this.$(type).onchange=e=>this.upload(type,e.target.files[0]);
+    this.container.querySelectorAll('input[name="gs-look"]').forEach(input=>input.onchange=()=>{
+      if(this.busy || this.project?.phase==="working")return;
+      this.lookMode=input.value;this.invalidateLook();this.render();
+    });
+    this.$("reference-gallery").onclick=e=>{
+      const button=e.target.closest("[data-remove-reference]");
+      if(!button || this.busy || this.project?.phase==="working")return;
+      this.references=this.references.filter(a=>a.id!==button.dataset.removeReference);
+      this.invalidateLook();this.render();
+    };
+    for (const type of ["source","character","ready","audio"]) {
+      this.$(type).onchange=e=>{const files=Array.from(e.target.files);e.target.value="";this.upload(type,type==="character"?files:files[0]);};
       const drop=this.$(type+"-drop");
       drop.ondragover=e=>{e.preventDefault();drop.classList.add("dragging");};
       drop.ondragleave=()=>drop.classList.remove("dragging");
-      drop.ondrop=e=>{e.preventDefault();drop.classList.remove("dragging");this.upload(type,e.dataTransfer.files[0]);};
+      drop.ondrop=e=>{e.preventDefault();drop.classList.remove("dragging");this.upload(type,type==="character"?Array.from(e.dataTransfer.files):e.dataTransfer.files[0]);};
     }
     this.$("preview-tabs").querySelectorAll("button").forEach(button=>button.onclick=()=>{
       this.preview=button.dataset.view;this.render();
@@ -209,7 +233,7 @@ class ArtistStudio {
       const button=e.target.closest("[data-project]");if(button)this.loadProject(button.dataset.project);
     };
     this.container.querySelectorAll("select,textarea,input:not([type=file])").forEach(input=>{
-      if(input.id==="gs-graph-stage"||input.id.startsWith("gs-voice-"))return;
+      if(input.name==="gs-look"||input.id==="gs-graph-stage"||input.id.startsWith("gs-voice-"))return;
       input.addEventListener("change",()=>this.perform(async()=>{
         if(input.id==="gs-audio-mode"){
           this.pendingReference=input.value==="reference" && !this.audio;
@@ -297,9 +321,12 @@ class ArtistStudio {
     } finally {video.pause();video.removeAttribute("src");video.load();}
   }
   async upload(type,file) {
-    if(!file || this.project?.phase==="working")return;
+    const files=Array.isArray(file)?file:[file];
+    if(!files.length || !files[0] || this.project?.phase==="working")return;
     await this.perform(async()=>{
       if(type==="opening" && !this.project)throw new Error("Prepare and review the shot before choosing a starting image.");
+      if(type==="character" && this.references.length+files.length>3)throw new Error("Use up to three reference images. Remove one before adding more.");
+      for(const file of files){
       const form=new FormData();form.append("file",file);
       this.message("Uploading to your local ComfyUI…");
       const r=await api.fetchApi(`${ROOT}/upload?kind=${type==="source"?"video":type==="audio"?"audio":"image"}`,{method:"POST",body:form});
@@ -313,10 +340,17 @@ class ArtistStudio {
         if(this.project.phase==="review" && !this.project.approval)await this.run("approve");
         if(!this.project.approval)throw new Error("Review and approve the source mask before choosing a starting image.");
         this.project=await request(`/projects/${this.project.id}/opening`,{asset_id:asset.id});
+        this.readyAsset=asset;this.lookMode="ready";this.syncForm();
+      }else if(type==="character"){
+        if(!this.references.some(a=>a.sha===asset.sha))this.references.push(asset);
+        this.invalidateLook();
+      }else if(type==="ready"){
+        this.readyAsset=asset;this.invalidateLook();
       }else{
         this[type]=asset;this.project=null;localStorage.removeItem("genj-studio-project");this.lastVideo=null;
       }
       if(type==="source"){this.config.duration=Math.min(2,asset.duration);this.config.start=0;this.config.mask_points=[];this.pointFrameStart=0;this.syncForm();}
+      }
       this.message("");this.render();
     });
   }
@@ -327,11 +361,11 @@ class ArtistStudio {
     this.render();
   }
   async graphView() {
-    if(!this.project && (!this.source || !this.character)){this.close();return;}
+    if(!this.project && (!this.source || !this.hasLook())){this.close();return;}
     await this.perform(async()=>{
       this.config=this.readConfig();
       if(!this.project){
-        this.project=await request("/projects",{source:this.source.id,character:this.character.id,config:this.config});
+        this.project=await request("/projects",this.projectBody());
         localStorage.setItem("genj-studio-project",this.project.id);
       }else if(this.project.phase!=="working"){
         this.project=await request(`/projects/${this.project.id}/config`,{config:this.config});
@@ -360,7 +394,7 @@ class ArtistStudio {
         this.config.seed=Math.floor(Math.random()*2**48);this.syncForm();
       }
       if(!this.project){
-        this.project=await request("/projects",{source:this.source.id,character:this.character.id,config:this.config});
+        this.project=await request("/projects",this.projectBody());
         localStorage.setItem("genj-studio-project",this.project.id);
       } else {
         this.project=await request(`/projects/${this.project.id}/config`,{config:this.config});
@@ -369,10 +403,15 @@ class ArtistStudio {
       if(!p.review || p.phase==="new" || p.prepared_key!==p.approval && p.phase!=="review")return this.run("prepare");
       if(p.phase==="review"){
         await this.run("approve");
-        if(this.config.engine!=="seedance")await this.run("design");
+        if(this.config.engine!=="seedance" && this.lookMode!=="ready")await this.run("design");
         return;
       }
-      if(this.config.engine!=="seedance")return this.run(p.opening_input?"animate":"design");
+      if(this.config.engine!=="seedance"){
+        if(this.lookMode==="ready" && !p.opening_input){
+          this.project=await request(`/projects/${p.id}/opening`,{asset_id:this.readyAsset.id});return;
+        }
+        return this.run(p.opening_input?"animate":"design");
+      }
       return this.run(p.phase==="draft" && p.draft_task?"final":"draft");
     });
   }
@@ -394,16 +433,19 @@ class ArtistStudio {
     this.$("audio-mode").value=this.pendingReference || this.config.audio_id?"reference":"original";
     this.$("refine_lips").checked=!!this.config.refine_lips;
     this.$("sampling-setting").hidden=!["h3","wan"].includes(this.config.engine);
+    this.container.querySelectorAll('input[name="gs-look"]').forEach(input=>input.checked=input.value===this.lookMode);
   }
   reset() {
     if(this.project?.phase==="working"){this.message("Wait for this shot to finish, or stop its job first.",true);return;}
     this.project=null;this.source=null;this.character=null;this.audio=null;this.pendingReference=false;this.config={...defaults};this.lastVideo=null;
+    this.references=[];this.readyAsset=null;this.lookMode="build";this.referenceFingerprint=null;this.$("audio-settings").open=false;
     localStorage.removeItem("genj-studio-project");this.syncForm();this.message("");this.render();
   }
   async loadProject(id) {
     await this.perform(async()=>{
       this.project=await request("/projects/"+id);
       this.source=this.project.source;this.character=this.project.character;this.audio=this.project.audio || this.project.reference_audio || null;this.pendingReference=false;this.config={...defaults,...this.project.config};
+      this.references=this.project.references || [this.character];this.readyAsset=this.project.starting_asset || null;this.lookMode=this.project.look_mode || "build";
       if(this.project.config.edit_area==null && this.project.config.background==="restyle")this.config.edit_area="scene";
       if(this.project.config.resolution==null)this.config.resolution=this.project.config.render_size || this.project.config.size || 512;
       if(this.config.engine==="h3"){
@@ -423,23 +465,35 @@ class ArtistStudio {
   render() {
     const wholeScene=this.config.edit_area==="scene",method=this.config.mask_method;
     this.$("mask-options").hidden=wholeScene;
+    this.$("selection-options").hidden=wholeScene;
+    this.$("selection-summary").textContent=method==="text"?`Selection · ${this.config.mask_prompt || "describe an area"}`:method==="points"?"Selection · click to choose":"Person · automatic";
     this.$("auto-mask-setting").hidden=method!=="auto";
     this.$("mask-prompt-setting").hidden=method!=="text";
     this.$("mask-points-setting").hidden=method!=="points";
-    this.$("selection-note").textContent=wholeScene?"The whole frame may change. The source still guides camera, layout and movement. Review the result for drift.":"Works with footage and viewport renders. The mask marks what may change; the source guides everything around it.";
-    this.$("character-label").textContent=wholeScene?"Look reference":"Replacement character";
+    this.$("selection-note").textContent=wholeScene?"The whole frame can change. Source motion still guides the result.":"Only the selected area changes. Review the mask before continuing.";
+    this.$("ready-group").hidden=this.lookMode!=="ready";
+    this.$("look-prompt").hidden=this.lookMode==="ready";
+    this.$("look-note").textContent=this.lookMode==="ready"?"Use an already-composed frame. No image generation.":"Combine up to three references into one starting frame.";
+    this.$("character-label").textContent=this.lookMode==="ready"?"Appearance references · optional":"Reference images";
+    this.$("reference-upload-label").textContent=this.references.length?"Add images":"Drop one or more images";
+    const readyImage=this.$("ready-image");readyImage.hidden=!this.readyAsset;
+    if(this.readyAsset && readyImage.getAttribute("src")!==this.readyAsset.url)readyImage.src=this.readyAsset.url;
+    const referenceFingerprint=JSON.stringify(this.references.map(a=>[a.id,a.url,a.name]));
+    if(referenceFingerprint!==this.referenceFingerprint){
+      this.referenceFingerprint=referenceFingerprint;
+      this.$("reference-gallery").innerHTML=this.references.map((a,i)=>`<figure><img src="${escape(a.url)}" alt="Reference ${i+1}: ${escape(a.name)}"/><figcaption>${i+1}. ${escape(a.name)}</figcaption><button class="gs-icon-button" data-remove-reference="${escape(a.id)}" aria-label="Remove reference ${i+1}">${icon("close")}</button></figure>`).join("");
+    }
     this.$("select-points").disabled=!this.source || this.busy || this.project?.phase==="working";
     const points=this.config.mask_points||[];
     this.$("mask-points-note").textContent=points.length?`${points.filter(p=>p.include).length} include, ${points.filter(p=>!p.include).length} exclude. Tracked from the opening frame.`:"Include the area you want to change. Exclude anything selected by mistake.";
     this.$("create-voice").disabled=!!this.voiceJob||this.busy||this.project?.phase==="working";
     this.$("sampling-setting").hidden=!["h3","wan"].includes(this.config.engine);
-    this.$("h3-setting").hidden=this.config.engine!=="h3";
-    this.$("ltx-setting").hidden=this.config.engine!=="local";
+    this.$("h3-setting").hidden=true;this.$("ltx-setting").hidden=true;
     this.$("engine-hint").textContent={
-      wan:"Best starting point for retaining original acting, gestures and camera cuts. Replacement speech is available too.",
-      h3:"Good for expressive faces and a new performance driven by your voice track. Use 1080p Enhanced for the tested high-resolution option.",
-      local:"Good for fast, short whole-scene shots with source motion and audio guidance. Start with five seconds or less; changing scenery may lose the camera move.",
-      seedance:"Optional paid generation. Review the cost before rendering. Local model tests do not establish Seedance quality."
+      wan:"Best for people and retaining the original acting.",
+      h3:"Strong expressive faces and replacement speech.",
+      local:"Start here for objects, environments and short scene changes. Review motion for drift.",
+      seedance:"Paid generation using Comfy credits."
     }[this.config.engine] || "";
     this.$("output-note").textContent=this.config.engine==="seedance"?"The draft uses your selected resolution and clip length. Finishing an accepted draft is a separate paid 1080p step.":this.config.engine==="h3"&&this.config.delivery_mode==="enhanced1080"?"H3 creates motion at 720p, then enhances each frame to 1080p. The approved original or selected soundtrack is restored once.":this.config.engine==="h3"?"Native H3 renders at the selected size. Native 1080p is a separate, memory-intensive render.":"Keeps your video's shape. Renders the length you choose from the original footage.";
     for(const option of this.$("resolution").options){
@@ -501,22 +555,30 @@ class ArtistStudio {
     this.$("duration-setting").hidden=this.config.length_mode==="original";
     const originalOption=this.$("length_mode").querySelector('option[value="original"]');
     originalOption.textContent="Original clip length"+(this.source?.duration?` · ${Number(this.source.duration).toFixed(2)}s`:"");
-    for(const type of ["source","character","audio"]){
-      const drop=this.$(type+"-drop"),asset=this[type];drop.classList.toggle("has-file",!!asset);
-      drop.querySelector(".gs-filename").textContent=asset?.name || "";
+    this.$("audio-summary").textContent=this.config.audio_id?"Audio · replacement track":"Audio · original performance";
+    for(const type of ["source","character","ready","audio"]){
+      const drop=this.$(type+"-drop"),asset=type==="ready"?this.readyAsset:type==="character"?this.references[0]:this[type];drop.classList.toggle("has-file",!!asset);
+      drop.querySelector(".gs-filename").textContent=type==="character"?"":asset?.name || "";
       this.$(type).disabled=working || this.busy;
     }
-    const char=this.$("character-image");char.hidden=!this.character;
-    if(this.character && char.getAttribute("src")!==this.character.url)char.src=this.character.url;
+    this.$("reference-gallery").querySelectorAll("button").forEach(button=>button.disabled=working || this.busy);
+    const poster=this.$("source-poster"),posterURL=this.source?.thumbnail_url;
+    poster.hidden=!posterURL;if(posterURL && poster.getAttribute("src")!==posterURL)poster.src=posterURL;
+    const thumbnail=this.$("source-thumb");thumbnail.hidden=!this.source || !!posterURL;
+    if(this.source && !posterURL && thumbnail.getAttribute("src")!==this.source.url){
+      thumbnail.src=this.source.url;thumbnail.muted=true;
+      thumbnail.onloadedmetadata=()=>{if(thumbnail.duration>0)thumbnail.currentTime=Math.min(0.1,thumbnail.duration/2);};thumbnail.load();
+    }else if(!this.source && thumbnail.getAttribute("src")){thumbnail.pause();thumbnail.removeAttribute("src");thumbnail.load();}
+    this.$("source-detail").textContent=this.source?`${this.source.width} × ${this.source.height} · ${Number(this.source.duration).toFixed(2)}s · Click to replace`:"MP4, MOV, WebM or MKV";
     this.container.querySelectorAll("select,textarea,input:not([type=file])").forEach(el=>el.disabled=(el.id==="gs-graph-stage"?false:working) || this.busy);
     if(this.config.length_mode==="original"){this.$("start").value=0;this.$("start").disabled=true;}
-    const btn=this.$("primary"),hasAssets=!!this.source && !!this.character;
-    let label="Prepare shot",note="Add a video and character to get started.";
+    const btn=this.$("primary"),hasAssets=!!this.source && this.hasLook();
+    let label="Prepare shot",note="Add a video and starting look.";
     if(hasAssets)note=wholeScene?"We’ll prepare the complete scene and its motion guidance.":"We’ll track your selection and show the mask before generation.";
-    if(p?.phase==="review"){label=wholeScene?(this.config.engine!=="seedance"?"Use whole scene & create look":"Use whole scene"):(this.config.engine!=="seedance"?"Use this mask & create look":"Use this mask");note=wholeScene?"Watch the source and guidance. The entire frame is selected for change.":"Watch the full mask and guidance previews before continuing. The orange area will be replaced.";}
+    if(p?.phase==="review"){label=this.lookMode==="ready"?"Use selection & starting frame":wholeScene?"Use whole scene & build look":"Use selection & build look";note="Check the selection throughout the clip before continuing.";}
     else if(p?.approval && phase!=="new"){
       if(this.config.engine!=="seedance"){
-        label=p.opening_input?(phase==="done"?"Generate another take":"Animate this look"):(wholeScene?"Create scene preview":"Create character preview");
+        label=p.opening_input?(phase==="done"?"Generate another take":"Animate this look"):(this.lookMode==="ready"?"Use starting frame":"Build starting frame");
         note=p.opening_input?"Check the look, pose, ground contact and camera framing. Then animate this look locally.":"We’ll create the opening frame automatically from your reference image.";
         if(this.config.engine==="h3" && p.opening_input)note="H3 uses this opening frame and your character image separately, with the approved mask and original performance.";
         if(this.config.engine==="wan" && p.opening_input)note="Wan uses your approved look, character reference, motion and mask. Preparation runs automatically.";
@@ -544,7 +606,7 @@ class ArtistStudio {
     if(enhancementUnavailable&&!working&&!this.busy&&hasAssets){label=this.modelStatus.engine_ready?.h3?"1080p enhancement setup needed":"H3 model setup needs attention";note=!this.modelStatus.engine_ready?.h3?"Set up the H3 models before starting this shot.":!enhancementStatus.model_ready?`Run ${enhancementSetupCommand} and restart ComfyUI before starting H3 Enhanced 1080p.`:"Enable the required native VHS and upscale nodes before starting H3 Enhanced 1080p.";}
     btn.innerHTML=escape(label)+icon(working?"frames":"arrow");btn.disabled=!hasAssets || missingSelection || (reference && !this.audio) || invalidLength || enhancementUnavailable || working || this.busy;
     this.$("action-note").textContent=note;this.$("cancel").hidden=!working;this.$("cancel").disabled=this.busy;
-    this.$("redesign").hidden=working || this.config.engine==="seedance" || !p?.opening_input;
+    this.$("redesign").hidden=working || this.lookMode==="ready" || this.config.engine==="seedance" || !p?.opening_input;
     this.$("redesign").disabled=this.busy;
     this.$("starting-image").hidden=working || !p || this.config.engine==="seedance" || phase==="new";
     this.$("starting-image").disabled=this.busy;
@@ -556,11 +618,11 @@ class ArtistStudio {
     this.$("working-detail").textContent=p?.actions?.at(-1)?.state==="waiting"?"Waiting for an idle queue and clearing the previous model. Your shot will continue automatically.":p?.actions?.at(-1)?.state==="queued"?"Waiting in the ComfyUI queue":"Running in ComfyUI. Your shot is saved.";
     this.$("preview-tabs").hidden=!p?.review || phase==="opening" || phase==="done" || phase==="draft";
     this.$("preview-tabs").querySelectorAll("button").forEach(b=>b.classList.toggle("active",b.dataset.view===this.preview));
-    let video=this.source?.url,opening=null,title="Your performance, a new character",description="Upload the shot you want to transform. We’ll follow its motion and keep the original soundtrack.";
+    let video=this.source?.url,opening=null,title=this.source?"Your source video":"Create a new look",description=this.source?"Video loaded. Choose what changes and add your starting look.":"Start with footage or a viewport render.";
     if(p?.review){video=({mask:p.mask_url,guide:p.guide_url,source:p.selected_url})[this.preview];title="Check the selection";description=wholeScene?"The whole frame is selected. Review the source movement and framing before creating the look.":this.config.remove_text?"Watch the full clip. The orange mask should cover the selected area and all titles and subtitles you want removed.":"Watch the full clip. Make sure the orange mask covers the selected area throughout the shot.";}
     if(p?.review && !wholeScene && p.tracking_coverage?.cut_reselection_requires_review)description+=" Check that the correct person or object stays selected after each camera cut.";
     if(p?.review && !wholeScene && p.tracking_coverage?.near_empty_frames)description+=" The selection is missing in part of the clip. Check whether the subject has left the picture or the mask needs correcting.";
-    if(phase==="opening"){opening=p.opening_url;video=null;title=wholeScene?"Your scene look":"Your character in the scene";description="Check the appearance, pose, ground contact and camera framing. This frame guides the local video.";}
+    if(phase==="opening"){opening=p.opening_url;video=null;title="Review your starting frame";description="Check the appearance and framing before animation.";}
     if((phase==="draft" || phase==="done") && p.results?.length){video=p.results.at(-1).url;title=phase==="draft"?"Review your draft":"Your finished take";description="The selected soundtrack is restored. Watch the entire take before keeping it.";}
     this.$("preview-title").textContent=title;this.$("preview-description").textContent=description;
     const player=this.$("player"),image=this.$("opening");player.hidden=!video;image.hidden=!opening;

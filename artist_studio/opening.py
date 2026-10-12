@@ -128,7 +128,8 @@ def register(studio, routes, response):
                 check_asset=check_asset,
                 media_url=media_url,
             )
-            if changed:
+            if changed or project.get("look_mode") != "ready" or (project.get("starting_asset") or {}).get("id") != asset_id:
+                project.update(look_mode="ready", starting_asset=dict(uploaded))
                 studio.store.save(project)
             return web.json_response(public_project(project))
 

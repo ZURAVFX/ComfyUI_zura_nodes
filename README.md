@@ -383,3 +383,13 @@ These files contain placeholder media names only. The source images and videos
 used to create them are not bundled or shared. They depend on the ComfyUI and
 custom-node packs represented by their node classes, plus the model files named
 inside each graph.
+
+### Starting images in node view
+
+- [Build a starting frame](workflows/Zura_Build_Starting_Frame.json): source opening image, one appearance reference and an editable prompt.
+- [Build with three references](workflows/Zura_Build_Starting_Frame_3_References.json): three separate native image-conditioning inputs.
+- [Use a finished frame](workflows/Zura_Use_Finished_Starting_Frame.json): load and preview without generation.
+
+Open the native subgraphs for sampling and model controls. These starting-image
+workflows run without a Studio project. For video, Studio's **Graph view** exports
+the current model stage with editable native nodes. See [the artist guide](ARTIST_STUDIO.md#studio-and-graph-view).

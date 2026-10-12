@@ -391,6 +391,16 @@ def build_graph(project, stage, use_cache=True, run_id=None):
     if stage == "wan":
         from .wan import build_wan_graph
         return build_wan_graph(project, use_cache=use_cache)
+    if stage == "design" and project.get("look_mode") == "ready":
+        assert_approved(project)
+        asset = project.get("starting_asset")
+        if not asset:
+            raise ValueError("Upload your finished starting frame first.")
+        check_asset(asset)
+        return {"starting_frame": {"class_type": "LoadImage", "inputs": {"image": asset["file"]},
+                                   "_meta": {"title": "Finished starting frame · no generation"}},
+                "preview": {"class_type": "PreviewImage", "inputs": {"images": ["starting_frame", 0]},
+                            "_meta": {"title": "Review the starting frame"}}}
     graph = json.loads((HERE / "graphs" / (STAGES[stage] + ".json")).read_text(encoding="utf8"))
     c = project["config"]
     if stage != "prepare":
@@ -489,6 +499,10 @@ def build_graph(project, stage, use_cache=True, run_id=None):
                 "Preserve the first image's camera framing, lens perspective, ground plane, object positions "
                 "and foot contact. Return one complete scene with the same composition and aspect ratio, "
                 "without a reference sheet or duplicate character. Do not add text or extra people.")
+            graph["127"]["inputs"]["value"] += (
+                " If the appearance reference shows an object or product, replace the matching object "
+                "using its shape, materials and details. Keep its scene position, scale and perspective. "
+                "Do not turn an object reference into a person.")
         elif c["mask_method"] != "auto":
             region = ("the area described as " + c["mask_prompt"] if c["mask_method"] == "text"
                       else "the selected performer or object")
@@ -506,6 +520,8 @@ def build_graph(project, stage, use_cache=True, run_id=None):
             graph["127"]["inputs"]["value"] += " Additional appearance direction: " + c["prompt"]
         if c.get("remove_text"):
             graph["127"]["inputs"]["value"] += " Remove all on-screen captions, subtitles, title banners and lettering. Fill their former areas naturally with the scene or clothing."
+        from .appearance import add_design_references
+        add_design_references(graph, project.get("references") or [project["character"]], check_asset)
         if c["edit_area"] == "mask":
             # Register the approved opening look to the real source before
             # video inference. Only the selected region may change; this is
@@ -847,6 +863,13 @@ def public_project(project):
         if p.get(key):
             a = p[key]
             a["url"] = media_url({"filename": Path(a["file"]).name, "subfolder": str(Path(a["file"]).parent).replace("\\", "/"), "type": "input"})
+    for a in [*p.get("references", []), *([p["starting_asset"]] if p.get("starting_asset") else [])]:
+        a["url"] = media_url({"filename": Path(a["file"]).name,
+                              "subfolder": str(Path(a["file"]).parent).replace("\\", "/"), "type": "input"})
+    for a in [p, *([p["source"]] if p.get("source") else [])]:
+        if a.get("thumbnail_file"):
+            a["thumbnail_url"] = media_url({"filename": Path(a["thumbnail_file"]).name,
+                "subfolder": str(Path(a["thumbnail_file"]).parent).replace("\\", "/"), "type": "input"})
     for action in p.get("actions", []):
         action.pop("graph", None)
     p.pop("ltx25_run", None)  # Native graphs, histories and cache paths stay private.
@@ -1439,6 +1462,10 @@ class Studio:
             verify_review(p["review"])
             p["approval"] = prep_key(p)
             p["phase"] = "approved"
+            if p.get("look_mode") == "ready" and p.get("starting_asset"):
+                from .opening import bind_uploaded_opening
+                bind_uploaded_opening(p, p["starting_asset"], folder_paths.get_input_directory(),
+                                      assert_approved=assert_approved, check_asset=check_asset, media_url=media_url)
             self.store.save(p)
             return p
         if stage == "animate":
@@ -1717,13 +1744,13 @@ def register():
         reader = await request.multipart()
         part = await reader.next()
         if part is None or not part.filename:
-            raise ValueError("Choose a video or a character image.")
+            raise ValueError("Choose a video, image or audio file.")
         kind = request.query.get("kind", "")
         suffix = Path(part.filename).suffix.lower()
         supported = {"video": (".mp4", ".mov", ".mkv", ".webm"), "image": (".png", ".jpg", ".jpeg", ".webp"),
                      "audio": (".wav", ".mp3", ".m4a", ".flac", ".ogg", ".aac", ".aiff", ".mp4", ".mov", ".mkv", ".webm")}
         if kind not in supported or suffix not in supported[kind]:
-            raise ValueError("Choose a supported video, character image or audio file (WAV, MP3, M4A, FLAC).")
+            raise ValueError("Choose a supported video, image or audio file (WAV, MP3, M4A, FLAC).")
         identity = uuid.uuid4().hex
         relative = "genj_studio/" + identity + "/reference" + suffix
         path = Path(folder_paths.get_input_directory()) / relative
@@ -1745,6 +1772,14 @@ def register():
                 if not math.isfinite(duration) or duration <= 0:
                     raise ValueError("The clip length could not be read. Export an MP4 and upload it again.")
                 details = {"duration": duration, "width": stream.width, "height": stream.height}
+                frame = next(video.decode(video=0), None)
+                if frame is None:
+                    raise ValueError("The video has no readable frames. Export an MP4 and try again.")
+                thumbnail = frame.to_image()
+                thumbnail.thumbnail((480, 480))
+                thumbnail_path = path.parent / "thumbnail.jpg"
+                thumbnail.convert("RGB").save(thumbnail_path, quality=85)
+                details["thumbnail_file"] = thumbnail_path.relative_to(Path(folder_paths.get_input_directory())).as_posix()
         elif kind == "audio":
             with av.open(str(path)) as media:
                 if not media.streams.audio:
@@ -1795,11 +1830,13 @@ def register():
     @response
     async def create_project(request):
         body = await request.json()
-        source, character = studio.store.load(body["source"]), studio.store.load(body["character"])
-        if source.get("asset_kind") != "video" or character.get("asset_kind") != "image":
-            raise ValueError("Choose both a performance video and a character image.")
+        source = studio.store.load(body["source"])
+        if source.get("asset_kind") != "video":
+            raise ValueError("Choose a source video.")
+        from .appearance import resolve_appearance
+        appearance = resolve_appearance(body, studio.store.load, check_asset)
         p = {"id": uuid.uuid4().hex, "kind": "project", "name": source["name"], "source": source,
-             "character": character, "config": clean_config(body.get("config", {})), "phase": "new",
+             **appearance, "config": clean_config(body.get("config", {})), "phase": "new",
              "actions": [], "results": [], "created": time.time()}
         studio.configure(p, p["config"])
         return web.json_response(public_project(p))

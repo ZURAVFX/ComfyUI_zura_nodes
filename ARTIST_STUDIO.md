@@ -6,15 +6,25 @@ Start ComfyUI and click **Zura Studio**, or use `Open_Zura_Studio.url` on a
 default local installation. The direct studio link is
 `http://127.0.0.1:8188/?zura=1`.
 
-Open **Zura Studio** in ComfyUI, upload the source video and an appearance
-reference, choose **What should change?** and **Audio and performance**, then choose a model, **Resolution**
-and **Clip length** (original video or a custom length). Prepare the shot,
-check the mask, create the character preview, then animate the approved look.
+Open **Zura Studio** in ComfyUI and drop a source video. Its thumbnail confirms
+the upload. Choose **What should change?**, then **Starting look**:
+
+- **Build from references:** add one to three images of people, objects,
+  materials or environments. Describe the change if needed. All references
+  guide the creation of one starting frame; they are not pasted into a collage.
+- **Use finished frame:** upload an already-composed opening image. This skips
+  image generation. Extra appearance references are optional; the first is the
+  separate appearance input for video routes that support it.
+
+Choose a model, **Resolution** and **Clip length**. Audio keeps the original
+performance by default; expand **Audio** for a replacement track or voice.
+Prepare the shot, review the selection, then review the starting frame before
+choosing **Animate this look**. People, object edits and viewport renders use
+the same controls. Wan and H3 are strongest for people; object edits need their
+own quality review. Changing a whole environment may lose the source camera move.
 Job IDs, reference copies, model preparation and cache hand-offs are automatic.
-At the appearance step, choose **Use starting image** to supply your own
-finished opening frame. The separate character reference stays selected.
-Check the displayed image, then choose **Animate this look**. Uploading a
-starting image preserves its bytes; automatic preview generation is optional.
+Uploading a finished starting frame preserves its bytes. **Replace starting
+frame** swaps it after selection review without regenerating the image.
 Existing saved projects and media remain readable on the same computer. Legacy
 storage paths and node IDs remain compatible; public names use Zura branding.
 
@@ -25,7 +35,7 @@ offers **Masked area** or **Whole scene · no mask**. Whole scene selects every
 frame in full and skips segmentation. It allows the background to change while
 the source still supplies movement and camera guidance.
 
-For a masked edit, **Find the area** offers automatic character selection,
+For a masked edit, expand the selection settings for automatic person selection,
 **Describe the area** (for example, a person in a red coat or a chair), and
 **Click to select**. Click on the selected opening frame to include an area;
 use Exclude to reject unwanted parts. Zura tracks the selection through the
@@ -75,6 +85,19 @@ the native inference nodes and their routed connections. Common source, prompt,
 seed and sampling controls are exposed on the graph. Technical settings remain
 editable inside each stage. Graph conversion checks the compiled render inputs
 and restores the original editable graph if conversion changes them.
+
+### Starting images without Studio
+
+Open **Zura Build Starting Frame** or **Zura Build Starting Frame 3 References**
+from Zura Nodes templates. Choose the source opening image and each appearance
+reference in Inputs, edit the prompt and queue normally. The output is a starting
+image for Studio's **Use finished frame** route or your own video graph. These
+workflows require no Studio project, approval or copied IDs. The three-reference
+version expects all three inputs; use the single-reference version for one image.
+
+**Zura Use Finished Starting Frame** loads and previews an existing image without
+sampling. All three are saved native workflows. Open the subgraphs to edit the
+underlying nodes, then save and reopen normally in ComfyUI.
 
 ## Audio and performance
 

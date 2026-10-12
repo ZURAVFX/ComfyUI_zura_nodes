@@ -1,0 +1,762 @@
+{
+  "id": "00000000-0000-4000-8000-000000000011",
+  "revision": 0,
+  "last_node_id": 7,
+  "last_link_id": 12,
+  "nodes": [
+    {
+      "id": 4,
+      "type": "02945044-7342-4c58-84c9-aec0b175eaa9",
+      "pos": [
+        80,
+        110
+      ],
+      "size": [
+        280,
+        58
+      ],
+      "flags": {
+        "collapsed": false
+      },
+      "order": 0,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "image",
+          "type": "COMBO",
+          "widget": {
+            "name": "image"
+          },
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "name": "0",
+          "type": "ZURA_STUDIO_SIGNALS",
+          "links": [
+            11
+          ]
+        }
+      ],
+      "title": "01 · Your inputs",
+      "properties": {
+        "previewExposures": []
+      },
+      "color": "#313647",
+      "bgcolor": "#1d2230",
+      "widgets_values": [
+        ""
+      ]
+    },
+    {
+      "id": 6,
+      "type": "68bc06a4-509e-4dda-943d-dd1c39248faa",
+      "pos": [
+        540,
+        110
+      ],
+      "size": [
+        280,
+        26
+      ],
+      "flags": {
+        "collapsed": false
+      },
+      "order": 1,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "previous",
+          "type": "ZURA_STUDIO_SIGNALS",
+          "link": 11
+        }
+      ],
+      "outputs": [],
+      "title": "02 · Save and preview",
+      "properties": {
+        "previewExposures": []
+      },
+      "color": "#313647",
+      "bgcolor": "#1d2230"
+    }
+  ],
+  "links": [
+    [
+      11,
+      4,
+      0,
+      6,
+      0,
+      "ZURA_STUDIO_SIGNALS"
+    ]
+  ],
+  "groups": [],
+  "definitions": {
+    "subgraphs": [
+      {
+        "id": "02945044-7342-4c58-84c9-aec0b175eaa9",
+        "version": 1,
+        "state": {
+          "lastGroupId": 0,
+          "lastNodeId": 7,
+          "lastLinkId": 12,
+          "lastRerouteId": 2
+        },
+        "revision": 0,
+        "config": {},
+        "name": "01 · Your inputs",
+        "inputNode": {
+          "id": -10,
+          "bounding": [
+            80,
+            122,
+            128,
+            68
+          ]
+        },
+        "outputNode": {
+          "id": -20,
+          "bounding": [
+            935.5,
+            100,
+            128,
+            68
+          ]
+        },
+        "inputs": [
+          {
+            "id": "fa7d452d-b6d8-4add-9124-4990cd9ffffe",
+            "name": "image",
+            "type": "COMBO",
+            "linkIds": [
+              9
+            ],
+            "pos": [
+              184,
+              146
+            ]
+          }
+        ],
+        "outputs": [
+          {
+            "id": "1c096de8-41ac-44b8-91b4-ecf46625058c",
+            "name": "0",
+            "type": "ZURA_STUDIO_SIGNALS",
+            "linkIds": [
+              10
+            ],
+            "pos": [
+              959.5,
+              124
+            ]
+          }
+        ],
+        "widgets": [],
+        "nodes": [
+          {
+            "id": 5,
+            "type": "9af209dd-1df2-4e05-81ca-8e4be52a192c",
+            "pos": [
+              388,
+              110
+            ],
+            "size": [
+              367.49999999999994,
+              58
+            ],
+            "flags": {
+              "collapsed": false
+            },
+            "order": 0,
+            "mode": 0,
+            "inputs": [
+              {
+                "name": "image",
+                "type": "COMBO",
+                "widget": {
+                  "name": "image"
+                },
+                "link": 9
+              }
+            ],
+            "outputs": [
+              {
+                "name": "0",
+                "type": "ZURA_STUDIO_SIGNALS",
+                "links": [
+                  10
+                ]
+              }
+            ],
+            "title": "Finished starting frame · no generation",
+            "properties": {
+              "previewExposures": []
+            },
+            "color": "#313647",
+            "bgcolor": "#1d2230",
+            "widgets_values": [
+              ""
+            ]
+          }
+        ],
+        "groups": [],
+        "links": [
+          {
+            "id": 9,
+            "origin_id": -10,
+            "origin_slot": 0,
+            "target_id": 5,
+            "target_slot": 0,
+            "type": "COMBO"
+          },
+          {
+            "id": 10,
+            "origin_id": 5,
+            "origin_slot": 0,
+            "target_id": -20,
+            "target_slot": 0,
+            "type": "ZURA_STUDIO_SIGNALS"
+          }
+        ],
+        "extra": {
+          "zuraWireCrossings": 0
+        }
+      },
+      {
+        "id": "9af209dd-1df2-4e05-81ca-8e4be52a192c",
+        "version": 1,
+        "state": {
+          "lastGroupId": 0,
+          "lastNodeId": 7,
+          "lastLinkId": 12,
+          "lastRerouteId": 2
+        },
+        "revision": 0,
+        "config": {},
+        "name": "Finished starting frame · no generation",
+        "inputNode": {
+          "id": -10,
+          "bounding": [
+            80,
+            162,
+            128,
+            68
+          ]
+        },
+        "outputNode": {
+          "id": -20,
+          "bounding": [
+            1395.5,
+            100,
+            128,
+            68
+          ]
+        },
+        "inputs": [
+          {
+            "id": "60552f8c-c7c7-4ef3-9f00-67d587832e96",
+            "name": "image",
+            "type": "COMBO",
+            "linkIds": [
+              8
+            ],
+            "pos": [
+              184,
+              186
+            ]
+          }
+        ],
+        "outputs": [
+          {
+            "id": "7a83c4c8-23ed-44f3-a24d-6c526e7714e7",
+            "name": "0",
+            "type": "ZURA_STUDIO_SIGNALS",
+            "linkIds": [
+              3
+            ],
+            "pos": [
+              1419.5,
+              124
+            ]
+          }
+        ],
+        "widgets": [],
+        "nodes": [
+          {
+            "id": "starting_frame",
+            "type": "LoadImage",
+            "pos": [
+              388,
+              130
+            ],
+            "size": [
+              367.49999999999994,
+              78
+            ],
+            "flags": {
+              "collapsed": false
+            },
+            "order": 1,
+            "mode": 0,
+            "inputs": [
+              {
+                "name": "image",
+                "type": "COMBO",
+                "widget": {
+                  "name": "image"
+                },
+                "link": 8
+              }
+            ],
+            "outputs": [
+              {
+                "name": "IMAGE",
+                "type": "IMAGE",
+                "links": [
+                  2
+                ]
+              },
+              {
+                "name": "MASK",
+                "type": "MASK",
+                "links": null
+              }
+            ],
+            "title": "Finished starting frame · no generation",
+            "properties": {},
+            "widgets_values": [
+              ""
+            ],
+            "widgets_values_named": {
+              "image": ""
+            }
+          },
+          {
+            "id": 1,
+            "type": "ZuraStudioSignals",
+            "pos": [
+              935.5,
+              110
+            ],
+            "size": [
+              280,
+              78
+            ],
+            "flags": {
+              "collapsed": false
+            },
+            "order": 0,
+            "mode": 0,
+            "inputs": [
+              {
+                "name": "keys",
+                "type": "STRING",
+                "widget": {
+                  "name": "keys"
+                },
+                "link": null
+              },
+              {
+                "name": "previous",
+                "type": "ZURA_STUDIO_SIGNALS",
+                "link": null
+              },
+              {
+                "label": "IMAGE",
+                "name": "value_0",
+                "type": "IMAGE",
+                "link": 2
+              }
+            ],
+            "outputs": [
+              {
+                "name": "0",
+                "type": "ZURA_STUDIO_SIGNALS",
+                "links": [
+                  3
+                ]
+              }
+            ],
+            "title": "Stage hand-off",
+            "properties": {},
+            "widgets_values": [
+              "[\"starting_frame/0\"]"
+            ],
+            "widgets_values_named": {
+              "keys": "[\"starting_frame/0\"]"
+            }
+          }
+        ],
+        "groups": [],
+        "links": [
+          {
+            "id": 8,
+            "origin_id": -10,
+            "origin_slot": 0,
+            "target_id": "starting_frame",
+            "target_slot": 0,
+            "type": "COMBO"
+          },
+          {
+            "id": 3,
+            "origin_id": 1,
+            "origin_slot": 0,
+            "target_id": -20,
+            "target_slot": 0,
+            "type": "ZURA_STUDIO_SIGNALS"
+          },
+          {
+            "id": 2,
+            "origin_id": "starting_frame",
+            "origin_slot": 0,
+            "target_id": 1,
+            "target_slot": 2,
+            "type": "IMAGE"
+          }
+        ],
+        "extra": {
+          "zuraWireCrossings": 0
+        }
+      },
+      {
+        "id": "68bc06a4-509e-4dda-943d-dd1c39248faa",
+        "version": 1,
+        "state": {
+          "lastGroupId": 0,
+          "lastNodeId": 7,
+          "lastLinkId": 12,
+          "lastRerouteId": 2
+        },
+        "revision": 0,
+        "config": {},
+        "name": "02 · Save and preview",
+        "inputNode": {
+          "id": -10,
+          "bounding": [
+            80,
+            100,
+            128,
+            68
+          ]
+        },
+        "outputNode": {
+          "id": -20,
+          "bounding": [
+            60,
+            -24,
+            128,
+            48
+          ]
+        },
+        "inputs": [
+          {
+            "id": "ab4b9713-8be5-44bd-849b-b0d32c1c610c",
+            "name": "previous",
+            "type": "ZURA_STUDIO_SIGNALS",
+            "linkIds": [
+              12
+            ],
+            "pos": [
+              184,
+              124
+            ]
+          }
+        ],
+        "outputs": [],
+        "widgets": [],
+        "nodes": [
+          {
+            "id": 7,
+            "type": "68c9ec42-33ef-4411-816b-4863c019feeb",
+            "pos": [
+              388,
+              110
+            ],
+            "size": [
+              280,
+              26
+            ],
+            "flags": {
+              "collapsed": false
+            },
+            "order": 0,
+            "mode": 0,
+            "inputs": [
+              {
+                "name": "stage_data",
+                "type": "ZURA_STUDIO_SIGNALS",
+                "link": 12
+              }
+            ],
+            "outputs": [],
+            "title": "Review the starting frame",
+            "properties": {
+              "previewExposures": []
+            },
+            "color": "#313647",
+            "bgcolor": "#1d2230"
+          }
+        ],
+        "groups": [],
+        "links": [
+          {
+            "id": 12,
+            "origin_id": -10,
+            "origin_slot": 0,
+            "target_id": 7,
+            "target_slot": 0,
+            "type": "ZURA_STUDIO_SIGNALS"
+          }
+        ],
+        "extra": {
+          "zuraWireCrossings": 0
+        }
+      },
+      {
+        "id": "68c9ec42-33ef-4411-816b-4863c019feeb",
+        "version": 1,
+        "state": {
+          "lastGroupId": 0,
+          "lastNodeId": 7,
+          "lastLinkId": 12,
+          "lastRerouteId": 2
+        },
+        "revision": 0,
+        "config": {},
+        "name": "Review the starting frame",
+        "inputNode": {
+          "id": -10,
+          "bounding": [
+            80,
+            100,
+            128,
+            68
+          ]
+        },
+        "outputNode": {
+          "id": -20,
+          "bounding": [
+            60,
+            -24,
+            128,
+            48
+          ]
+        },
+        "inputs": [
+          {
+            "id": "40be5447-ec4e-4107-84cb-e81ccf810b46",
+            "name": "stage_data",
+            "type": "ZURA_STUDIO_SIGNALS",
+            "linkIds": [
+              7,
+              6
+            ],
+            "pos": [
+              184,
+              124
+            ]
+          }
+        ],
+        "outputs": [],
+        "widgets": [],
+        "nodes": [
+          {
+            "id": 3,
+            "type": "ZuraStudioReadSignal",
+            "pos": [
+              388,
+              380
+            ],
+            "size": [
+              280,
+              58
+            ],
+            "flags": {
+              "collapsed": false
+            },
+            "order": 1,
+            "mode": 0,
+            "inputs": [
+              {
+                "name": "stage_data",
+                "type": "ZURA_STUDIO_SIGNALS",
+                "link": 7
+              },
+              {
+                "name": "key",
+                "type": "STRING",
+                "widget": {
+                  "name": "key"
+                },
+                "link": null
+              }
+            ],
+            "outputs": [
+              {
+                "name": "0",
+                "type": "IMAGE",
+                "links": [
+                  5
+                ]
+              }
+            ],
+            "title": "IMAGE",
+            "properties": {},
+            "widgets_values": [
+              "starting_frame/0"
+            ],
+            "widgets_values_named": {
+              "key": "starting_frame/0"
+            }
+          },
+          {
+            "id": "preview",
+            "type": "PreviewImage",
+            "pos": [
+              848,
+              380
+            ],
+            "size": [
+              280,
+              26
+            ],
+            "flags": {
+              "collapsed": false
+            },
+            "order": 2,
+            "mode": 0,
+            "inputs": [
+              {
+                "name": "images",
+                "type": "IMAGE",
+                "link": 5
+              }
+            ],
+            "outputs": [
+              {
+                "name": "images",
+                "type": "IMAGE",
+                "links": null
+              }
+            ],
+            "title": "Review the starting frame",
+            "properties": {}
+          },
+          {
+            "id": 2,
+            "type": "ZuraStudioSignals",
+            "pos": [
+              388,
+              110
+            ],
+            "size": [
+              280,
+              58
+            ],
+            "flags": {
+              "collapsed": false
+            },
+            "order": 0,
+            "mode": 0,
+            "inputs": [
+              {
+                "name": "keys",
+                "type": "STRING",
+                "widget": {
+                  "name": "keys"
+                },
+                "link": null
+              },
+              {
+                "name": "previous",
+                "type": "ZURA_STUDIO_SIGNALS",
+                "link": 6
+              }
+            ],
+            "outputs": [
+              {
+                "name": "0",
+                "type": "ZURA_STUDIO_SIGNALS",
+                "links": null
+              }
+            ],
+            "title": "Stage hand-off",
+            "properties": {},
+            "widgets_values": [
+              "[]"
+            ],
+            "widgets_values_named": {
+              "keys": "[]"
+            }
+          }
+        ],
+        "groups": [],
+        "links": [
+          {
+            "id": 5,
+            "origin_id": 3,
+            "origin_slot": 0,
+            "target_id": "preview",
+            "target_slot": 0,
+            "type": "IMAGE"
+          },
+          {
+            "id": 7,
+            "origin_id": -10,
+            "origin_slot": 0,
+            "target_id": 3,
+            "target_slot": 0,
+            "type": "ZURA_STUDIO_SIGNALS",
+            "parentId": 2
+          },
+          {
+            "id": 6,
+            "origin_id": -10,
+            "origin_slot": 0,
+            "target_id": 2,
+            "target_slot": 1,
+            "type": "ZURA_STUDIO_SIGNALS"
+          }
+        ],
+        "reroutes": [
+          {
+            "id": 1,
+            "pos": [
+              253,
+              124
+            ],
+            "linkIds": [
+              7
+            ]
+          },
+          {
+            "id": 2,
+            "parentId": 1,
+            "pos": [
+              253,
+              394
+            ],
+            "linkIds": [
+              7
+            ]
+          }
+        ],
+        "extra": {
+          "zuraWireCrossings": 0
+        }
+      }
+    ]
+  },
+  "config": {},
+  "extra": {
+    "zuraWireCrossings": 0,
+    "zuraStudio": {
+      "stage": "design_ready_standalone",
+      "nativeSubgraphs": true,
+      "wireCrossings": 0,
+      "rootWireCrossings": 0
+    }
+  },
+  "version": 0.4
+}

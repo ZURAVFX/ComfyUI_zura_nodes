@@ -77,9 +77,11 @@ jobs:
                         'setup_speech.py', 'Setup_Speech_Windows.cmd',
                         'setup_wan_speech.py', 'Setup_Wan_Speech_Windows.cmd',
                         'setup_h3_enhancement.py', 'Setup_H3_Enhancement_Windows.cmd',
+                        'workflows/Zura_Build_Starting_Frame.json', 'workflows/Zura_Build_Starting_Frame_3_References.json',
+                        'workflows/Zura_Use_Finished_Starting_Frame.json',
                         'ARTIST_STUDIO.md', 'ARTIST_STUDIO_VALIDATION.md', 'Open_Zura_Studio.url'):
               assert Path(asset).is_file(), f'Missing artist studio asset: {asset}'
-          for asset in ('artist_studio/ltx25.py', 'artist_studio/opening.py', 'artist_studio/hardware.py', 'INSTALL_STUDIO.md',
+          for asset in ('artist_studio/ltx25.py', 'artist_studio/opening.py', 'artist_studio/appearance.py', 'artist_studio/hardware.py', 'INSTALL_STUDIO.md',
                         'artist_studio/wan_parts.py', 'artist_studio/wan_graph.py', 'artist_studio/wan_graph_guard.py',
                         'artist_studio/h3_windows.py', 'artist_studio/h3_window_nodes.py',
                         'artist_studio/cut_tracking.py', 'wan_preparation_runtime.py',
@@ -160,6 +162,7 @@ jobs:
           python -m unittest discover -s tests -p 'test_ltx25_native_plan.py'
           python -m unittest discover -s tests -p 'test_ltx25_studio_runtime.py'
           python -m unittest discover -s tests -p 'test_studio_opening.py'
+          python -m unittest discover -s tests -p 'test_studio_appearance.py'
           python -m unittest discover -s tests -p 'test_cut_tracking.py'
           python -m unittest discover -s tests -p 'test_video_latent_data.py'
           python -m unittest discover -s tests -p 'test_studio_speech.py'
