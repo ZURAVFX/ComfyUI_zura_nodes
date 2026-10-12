@@ -393,3 +393,7 @@ inside each graph.
 Open the native subgraphs for sampling and model controls. These starting-image
 workflows run without a Studio project. For video, Studio's **Graph view** exports
 the current model stage with editable native nodes. See [the artist guide](ARTIST_STUDIO.md#studio-and-graph-view).
+
+In Zura Studio, the shared **Prompt** field is available for every model and
+with either starting-image option. It guides LTX, H3, Wan and Seedance, and also
+guides the starting image when you build one from references.

@@ -16,6 +16,10 @@ the upload. Choose **What should change?**, then **Starting look**:
   image generation. Extra appearance references are optional; the first is the
   separate appearance input for video routes that support it.
 
+The shared **Prompt** stays available with either starting-image route. Add
+optional direction for the shot; it is passed to LTX, H3, Wan and Seedance. When
+building a starting frame, it also guides that image.
+
 Choose a model, **Resolution** and **Clip length**. Audio keeps the original
 performance by default; expand **Audio** for a replacement track or voice.
 Prepare the shot, review the selection, then review the starting frame before

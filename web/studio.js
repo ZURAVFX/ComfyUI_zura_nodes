@@ -73,8 +73,8 @@ class ArtistStudio {
             <label class="gs-upload gs-reference-upload" id="gs-character-drop" for="gs-character"><span class="gs-upload-symbol">${icon("plus")}</span><strong id="gs-reference-upload-label">Drop one or more images</strong><span class="gs-filename"></span></label>
             <input class="gs-file" id="gs-character" type="file" accept="image/png,image/jpeg,image/webp" multiple aria-label="Appearance reference images"/>
           </div>
-          <label class="gs-prompt" id="gs-look-prompt"><span class="gs-label">What should it look like? <small>Optional</small></span><textarea id="gs-prompt" rows="2" placeholder="Replace the chair with the oak chair in reference 1"></textarea></label>
         </section>
+        <label class="gs-prompt" id="gs-model-prompt"><span class="gs-label">Prompt <small>Optional · guides every model</small></span><textarea id="gs-prompt" rows="2" placeholder="Describe the shot, movement or details to keep"></textarea></label>
         <details class="gs-advanced" id="gs-audio-settings"><summary id="gs-audio-summary">Audio · original performance</summary><div class="gs-advanced-body gs-upload-group"><label><span class="gs-label">Audio and performance</span><select id="gs-audio-mode"><option value="original">Original audio + performance</option><option value="reference">Reference audio + new performance</option></select></label>
           <p id="gs-audio-note" class="gs-note">Follows the original facial performance and keeps the video's audio. Silent videos work too.</p>
           <div id="gs-reference-options" hidden><label class="gs-label" for="gs-audio">Reference audio</label>
@@ -472,7 +472,6 @@ class ArtistStudio {
     this.$("mask-points-setting").hidden=method!=="points";
     this.$("selection-note").textContent=wholeScene?"The whole frame can change. Source motion still guides the result.":"Only the selected area changes. Review the mask before continuing.";
     this.$("ready-group").hidden=this.lookMode!=="ready";
-    this.$("look-prompt").hidden=this.lookMode==="ready";
     this.$("look-note").textContent=this.lookMode==="ready"?"Use an already-composed frame. No image generation.":"Combine up to three references into one starting frame.";
     this.$("character-label").textContent=this.lookMode==="ready"?"Appearance references · optional":"Reference images";
     this.$("reference-upload-label").textContent=this.references.length?"Add images":"Drop one or more images";
