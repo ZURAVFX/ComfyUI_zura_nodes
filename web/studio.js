@@ -47,12 +47,16 @@ class ArtistStudio {
         <div class="gs-top-actions"><span id="gs-models" class="gs-status">Checking models</span><button id="gs-exit" class="gs-quiet" title="Open an editable copy of this stage. Animation uses the visible character look.">Graph view ${icon("arrow")}</button><button id="gs-close" class="gs-icon-button" title="Close Studio and show the current graph" aria-label="Close Studio">${icon("close")}</button></div></header>
       <div class="gs-workspace"><aside class="gs-controls">
         <div class="gs-control-heading"><h1>Create a shot</h1><button id="gs-new" class="gs-icon-button" title="New shot" aria-label="New shot">${icon("plus")}</button></div>
+        <fieldset class="gs-workflow-choice"><legend>Choose a task</legend><div class="gs-segment" role="group" aria-label="Edit mode">
+          <label><input type="radio" name="gs-workflow" value="motion" checked/><span>Motion transfer<small>Rebuild around movement</small></span></label>
+          <label><input type="radio" name="gs-workflow" value="swap"/><span>Object swap<small>Replace a selected area</small></span></label>
+        </div></fieldset>
         <div class="gs-upload-group"><label class="gs-label" for="gs-source">Source video</label>
           <label class="gs-upload gs-source-upload" id="gs-source-drop" for="gs-source"><img id="gs-source-poster" alt="Loaded video thumbnail" hidden/><video id="gs-source-thumb" muted playsinline preload="auto" hidden aria-label="Loaded source video thumbnail"></video><span class="gs-upload-symbol">${icon("upload")}</span><strong>Drop your video here</strong><span id="gs-source-detail">MP4, MOV, WebM or MKV</span><span class="gs-filename"></span></label>
           <input class="gs-file" id="gs-source" type="file" accept="video/mp4,video/quicktime,video/webm,.mkv" aria-label="Source video"/>
         </div>
-        <section class="gs-selection"><label><span class="gs-label">What should change?</span><select id="gs-edit_area"><option value="mask">Masked area</option><option value="scene">Whole scene · no mask</option></select></label>
-          <p id="gs-selection-note" class="gs-note">Only the selected area changes.</p>
+        <section class="gs-selection">
+          <p id="gs-selection-note" class="gs-note">Rebuild the shot using source movement as a guide. The scene may change.</p>
           <details id="gs-selection-options" class="gs-advanced"><summary id="gs-selection-summary">Person · automatic</summary><div id="gs-mask-options"><label><span class="gs-label">Select an area</span><select id="gs-mask_method"><option value="auto">Person · automatic</option><option value="text">Describe a person or object</option><option value="points">Click to select</option></select></label>
             <label id="gs-auto-mask-setting"><span class="gs-label">Person area</span><select id="gs-scope"><option value="person">Head and body</option><option value="head">Head only</option></select></label>
             <label id="gs-mask-prompt-setting" hidden><span class="gs-label">Area to change</span><input id="gs-mask_prompt" type="text" maxlength="500" placeholder="Red coat, chair, sky…"/></label>
@@ -74,7 +78,10 @@ class ArtistStudio {
             <input class="gs-file" id="gs-character" type="file" accept="image/png,image/jpeg,image/webp" multiple aria-label="Appearance reference images"/>
           </div>
         </section>
-        <label class="gs-prompt" id="gs-model-prompt"><span class="gs-label">Prompt <small>Optional · guides every model</small></span><textarea id="gs-prompt" rows="2" placeholder="Describe the shot, movement or details to keep"></textarea></label>
+        <details class="gs-advanced gs-prompt-toggle" id="gs-model-prompt"><summary>Prompt · all models</summary><div class="gs-advanced-body">
+          <textarea id="gs-prompt" rows="3" aria-label="Prompt for the selected model" placeholder="Describe the shot, movement or details to keep"></textarea>
+          <p class="gs-note">Also guides the starting frame when building from references.</p>
+        </div></details>
         <details class="gs-advanced" id="gs-audio-settings"><summary id="gs-audio-summary">Audio · original performance</summary><div class="gs-advanced-body gs-upload-group"><label><span class="gs-label">Audio and performance</span><select id="gs-audio-mode"><option value="original">Original audio + performance</option><option value="reference">Reference audio + new performance</option></select></label>
           <p id="gs-audio-note" class="gs-note">Follows the original facial performance and keeps the video's audio. Silent videos work too.</p>
           <div id="gs-reference-options" hidden><label class="gs-label" for="gs-audio">Reference audio</label>
@@ -147,7 +154,8 @@ class ArtistStudio {
   }
   readConfig() {
     const c={...this.config};
-    for (const key of ["scope","prompt","length_mode","edit_area","mask_method","mask_prompt"]) c[key]=this.$(key).value;
+    for (const key of ["scope","prompt","length_mode","mask_method","mask_prompt"]) c[key]=this.$(key).value;
+    c.edit_area=this.container.querySelector('input[name="gs-workflow"]:checked').value==="motion"?"scene":"mask";
     for (const key of ["start","duration","performer","margin","seed","audio_start"]) c[key]=Number(this.$(key).value);
     const reference=this.$("audio-mode").value==="reference" && !!this.audio;
     c.audio_id=reference?this.audio.id:"";
@@ -242,6 +250,7 @@ class ArtistStudio {
           if(input.value==="original")this.$("audio_start").value=0;
         }
         this.config=this.readConfig();
+        if(input.name==="gs-workflow" && this.config.edit_area==="scene")this.config.mask_points=[];
         const pointStart=this.config.length_mode==="original"?0:this.config.start;
         const priorStart=this.project?.config?.length_mode==="original"?0:(this.project?.config?.start ?? this.pointFrameStart ?? pointStart);
         if(["gs-start","gs-length_mode"].includes(input.id) && pointStart!==priorStart)this.config.mask_points=[];
@@ -424,9 +433,11 @@ class ArtistStudio {
       option.textContent=resolution+" px · saved setting";option.dataset.saved="true";
       this.$("resolution").append(option);
     }
-    for(const key of ["scope","prompt","start","duration","performer","margin","seed","quality","audio_start","length_mode","edit_area","mask_method","mask_prompt"])this.$(key).value=this.config[key] ?? defaults[key];
+    for(const key of ["scope","prompt","start","duration","performer","margin","seed","quality","audio_start","length_mode","mask_method","mask_prompt"])this.$(key).value=this.config[key] ?? defaults[key];
     this.$("resolution").value=resolution;
     this.container.querySelector(`input[name="gs-engine"][value="${this.config.engine}"]`).checked=true;
+    this.container.querySelector(`input[name="gs-workflow"][value="${this.config.edit_area==="scene"?"motion":"swap"}"]`).checked=true;
+    this.$("model-prompt").open=!!this.config.prompt;
     this.$("pitch").checked=this.config.pitch;
     this.$("remove_text").checked=!!this.config.remove_text;
     this.$("lip_sync").checked=!!this.config.lip_sync;
@@ -470,7 +481,7 @@ class ArtistStudio {
     this.$("auto-mask-setting").hidden=method!=="auto";
     this.$("mask-prompt-setting").hidden=method!=="text";
     this.$("mask-points-setting").hidden=method!=="points";
-    this.$("selection-note").textContent=wholeScene?"The whole frame can change. Source motion still guides the result.":"Only the selected area changes. Review the mask before continuing.";
+    this.$("selection-note").textContent=wholeScene?"Rebuild the shot using source movement as a guide. The scene may change.":"Replace the selected area and preserve the rest. Review the selection before continuing.";
     this.$("ready-group").hidden=this.lookMode!=="ready";
     this.$("look-note").textContent=this.lookMode==="ready"?"Use an already-composed frame. No image generation.":"Combine up to three references into one starting frame.";
     this.$("character-label").textContent=this.lookMode==="ready"?"Appearance references · optional":"Reference images";

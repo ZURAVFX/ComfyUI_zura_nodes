@@ -6,8 +6,8 @@ Start ComfyUI and click **Zura Studio**, or use `Open_Zura_Studio.url` on a
 default local installation. The direct studio link is
 `http://127.0.0.1:8188/?zura=1`.
 
-Open **Zura Studio** in ComfyUI and drop a source video. Its thumbnail confirms
-the upload. Choose **What should change?**, then **Starting look**:
+Open **Zura Studio** in ComfyUI, choose **Motion transfer** or **Object swap**,
+then drop a source video. Its thumbnail confirms the upload. Choose **Starting look**:
 
 - **Build from references:** add one to three images of people, objects,
   materials or environments. Describe the change if needed. All references
@@ -16,8 +16,7 @@ the upload. Choose **What should change?**, then **Starting look**:
   image generation. Extra appearance references are optional; the first is the
   separate appearance input for video routes that support it.
 
-The shared **Prompt** stays available with either starting-image route. Add
-optional direction for the shot; it is passed to LTX, H3, Wan and Seedance. When
+The optional shared **Prompt** is passed to LTX, H3, Wan and Seedance. When
 building a starting frame, it also guides that image.
 
 Choose a model, **Resolution** and **Clip length**. Audio keeps the original
@@ -34,10 +33,11 @@ storage paths and node IDs remain compatible; public names use Zura branding.
 
 ## Select the area
 
-Footage and grey viewport renders use the same Studio. **What should change?**
-offers **Masked area** or **Whole scene · no mask**. Whole scene selects every
-frame in full and skips segmentation. It allows the background to change while
-the source still supplies movement and camera guidance.
+Footage and grey viewport renders use the same Studio. **Motion transfer** uses
+the whole frame and skips segmentation, rebuilding the shot from references
+with source movement as guidance. **Object swap** selects a mask and changes
+that area while preserving the rest. Model results vary; whole-scene LTX is
+best kept to short clips, and its camera match still needs review.
 
 For a masked edit, expand the selection settings for automatic person selection,
 **Describe the area** (for example, a person in a red coat or a chair), and

@@ -397,3 +397,6 @@ the current model stage with editable native nodes. See [the artist guide](ARTIS
 In Zura Studio, the shared **Prompt** field is available for every model and
 with either starting-image option. It guides LTX, H3, Wan and Seedance, and also
 guides the starting image when you build one from references.
+
+Choose **Motion transfer** to rebuild the scene around the source movement, or
+**Object swap** to mask a person or object and preserve the rest of the shot.
