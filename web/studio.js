@@ -7,7 +7,7 @@ import { ContentDetection } from "./studio_content.js";
 import { clipLength, recoverClipLength } from "./studio_length.js";
 
 const ROOT = "/zura/studio";
-const defaults = {engine:"local", background:"keep", scope:"person", prompt:"", start:0, duration:2, size:512, performer:-1, margin:20, pitch:false, seed:42, render_size:0, h3_preset:"take_fast", remove_text:false, resolution:1280, delivery_mode:"native", quality:"fast", audio_id:"", audio_start:0, length_mode:"custom", lip_sync:false, refine_lips:false, workflow_mode:"motion", edit_area:"mask", mask_method:"auto", mask_prompt:"person", mask_points:[],subject_mode:"auto"};
+const defaults = {engine:"local", background:"keep", scope:"person", prompt:"", start:0, duration:2, size:512, performer:-1, margin:20, pitch:false, seed:42, render_size:0, h3_preset:"take_fast", h3_steps:0, remove_text:false, resolution:1280, delivery_mode:"native", quality:"fast", audio_id:"", audio_start:0, length_mode:"custom", lip_sync:false, refine_lips:false, workflow_mode:"motion", edit_area:"mask", mask_method:"auto", mask_prompt:"person", mask_points:[],subject_mode:"auto"};
 const icon = (name) => {
   const paths = {
     upload:'<path d="M12 16V3m-5 5 5-5 5 5M4 15v5h16v-5"/>',
@@ -109,7 +109,8 @@ class ArtistStudio {
           <div><label><span class="gs-label">Clip length</span><select id="gs-length_mode"><option value="original">Original clip length</option><option value="custom" selected>Custom length</option></select></label><label id="gs-duration-setting"><span class="gs-label">Seconds</span><input id="gs-duration" type="number" min="0.25" max="30" step="0.25" value="2"/></label></div></div>
         <label id="gs-trim-start"><span class="gs-label">Start at <small>seconds</small></span><input id="gs-start" type="number" min="0" max="86400" step="0.1" value="0"/></label>
         <details class="gs-advanced"><summary>Output, speed and memory</summary><div class="gs-advanced-body"><p class="gs-note" id="gs-output-note"></p><div class="gs-note" id="gs-system-guidance" aria-live="polite"><p id="gs-hardware-note">Checking this system…</p><p id="gs-limit-note"></p><p id="gs-speed-note"></p><p id="gs-memory-note"></p><p>Measured on an RTX 4080 with 16 GB VRAM and 64 GB RAM. Other systems vary.</p></div></div></details>
-        <label id="gs-sampling-setting" hidden><span class="gs-label">Detail level</span><select id="gs-quality"><option value="fast">Fast · accelerated model</option><option value="detailed">Detailed · full sampling</option></select><small id="gs-quality-note">Changes sampling effort, while resolution and clip length stay as selected.</small></label>
+        <label id="gs-sampling-setting" hidden><span id="gs-sampling-label" class="gs-label">Detail level</span><select id="gs-quality"><option value="fast">Fast · accelerated model</option><option value="detailed">Detailed · full sampling</option></select><small id="gs-quality-note">Changes sampling effort, while resolution and clip length stay as selected.</small></label>
+        <label id="gs-h3-steps-setting" hidden><span class="gs-label">H3 sampling steps</span><input id="gs-h3_steps" type="number" min="4" max="80" step="1" value="8"/><small id="gs-h3-steps-note">8 recommended with Turbo. More steps take longer.</small></label>
         <p id="gs-h3-setting" class="gs-note" hidden></p><p id="gs-ltx-setting" class="gs-note" hidden></p>
         <label class="gs-checkbox"><input id="gs-remove_text" type="checkbox"/><span>Remove on-screen text</span></label>
         <details class="gs-advanced"><summary>More controls</summary><div class="gs-advanced-body">
@@ -184,6 +185,7 @@ class ArtistStudio {
     c.delivery_mode=c.engine==="h3" && resolution==="1920-enhanced"?"enhanced1080":"native";
     c.quality=this.$("quality").value;
     c.h3_preset=c.quality==="fast"?"take_fast":"take_quality";
+    c.h3_steps=Number(this.$("h3_steps")?.value ?? this.config.h3_steps ?? 0);
     c.size=this.config.size ?? 512;c.render_size=0;
     c.background=(c.engine==="local" || c.engine==="seedance") && c.edit_area==="scene"?"restyle":"keep";
     c.pitch=this.$("pitch").checked; c.remove_text=this.$("remove_text").checked;
@@ -276,11 +278,12 @@ class ArtistStudio {
           if(input.value==="original")this.$("audio_start").value=0;
         }
         this.config=this.readConfig();
+        if(input.id==="gs-quality"){this.config.h3_steps=0;this.syncForm();}
         if(input.name==="gs-workflow" && this.config.workflow_mode==="viewport"){
           this.config.engine="h3";
           this.config.resolution=1280;
           this.config.delivery_mode="native";
-          this.config.quality="fast";this.config.h3_preset="take_fast";
+          this.config.quality="fast";this.config.h3_preset="take_fast";this.config.h3_steps=0;
           this.syncForm();
         }
       if(input.name==="gs-workflow" && this.config.edit_area==="scene")this.config.mask_points=[];
@@ -487,6 +490,7 @@ class ArtistStudio {
     this.$("lip_sync").checked=!!this.config.lip_sync;
     this.$("audio-mode").value=this.pendingReference || this.config.audio_id?"reference":"original";
     this.$("refine_lips").checked=!!this.config.refine_lips;
+    this.$("h3_steps").value=this.config.h3_steps || (this.config.quality==="fast"?8:40);
     this.$("sampling-setting").hidden=!["h3","wan"].includes(this.config.engine);
     this.container.querySelectorAll('input[name="gs-look"]').forEach(input=>input.checked=input.value===this.lookMode);
   }
@@ -553,9 +557,13 @@ class ArtistStudio {
     this.$("create-voice").disabled=!!this.voiceJob||this.busy||this.project?.phase==="working";
     this.$("sampling-setting").hidden=!["h3","wan"].includes(this.config.engine);
     const h3Quality=this.config.engine==="h3";
+    this.$("h3-steps-setting").hidden=!h3Quality;
+    this.$("sampling-label").textContent=h3Quality?"H3 sampling mode":"Detail level";
+    this.$("h3-steps-note").textContent=this.config.quality==="fast"?"8 steps recommended with Turbo. Custom counts are unbenchmarked.":"40 steps is the standard default. Lower counts run faster; check the result.";
+
     this.$("quality").querySelector('option[value="fast"]').textContent=h3Quality?"Fast · 8 steps (recommended)":"Fast · accelerated model";
     this.$("quality").querySelector('option[value="detailed"]').textContent=h3Quality?"Detailed · 40 steps":"Detailed · full sampling";
-    this.$("quality-note").textContent=h3Quality&&this.config.quality==="detailed"?"Five times the sampling steps. May take tens of minutes with 16 GB VRAM and offloading; better quality is not guaranteed.":"Fast is the tested starting point. Resolution and clip length stay as selected.";
+    this.$("quality-note").textContent=h3Quality&&this.config.quality==="detailed"?"Standard sampling can take tens of minutes with 16 GB VRAM. Set the step count below; more steps do not guarantee better quality.":"Fast is the tested starting point. Resolution and clip length stay as selected.";
     this.$("h3-setting").hidden=true;this.$("ltx-setting").hidden=true;
     this.$("engine-hint").textContent={
       wan:"Best for people and retaining the original acting.",
@@ -592,7 +600,9 @@ class ArtistStudio {
       const workflowLimit=viewport?(this.config.engine==="h3"?5:this.config.engine==="local"?15:30):guide.workflow_max_custom_seconds;
       this.$("duration").max=String(viewport?workflowLimit:guide.workflow_max_custom_seconds);
       this.$("limit-note").textContent=`Start with ${guide.start_seconds} seconds at ${startSize}. ${this.config.engine==="wan"?"Custom clips: up to 30 seconds; original length uses sections.":`Clip limit: ${workflowLimit} seconds, including Original clip length.`} Tested: ${guide.tested}.`;
-      this.$("speed-note").textContent=guide.quality_guidance?.[this.config.quality]?.reference_speed || guide.reference_speed;
+      this.$("speed-note").textContent=this.config.engine==="h3" && this.config.h3_steps && this.config.h3_steps!==(this.config.quality==="fast"?8:40)
+        ?`Custom H3 sampling: ${this.config.h3_steps} steps. This count has no measured time or quality benchmark.`
+        :guide.quality_guidance?.[this.config.quality]?.reference_speed || guide.reference_speed;
       this.$("memory-note").textContent=this.config.engine==="seedance"?"Generation runs with the paid provider; local VRAM does not set its limits.":"All three local models were tested on a 16 GB GPU with 64 GB RAM. Lower-memory systems are unqualified and may need shorter clips, lower resolution or slower offloading. VRAM alone cannot establish your maximum resolution. LTX's measured peak was about 15.6 GB; exact Wan/H3 peaks were not captured.";
     }else{
       this.$("limit-note").textContent="Workflow limits will appear when ComfyUI reports the selected model.";

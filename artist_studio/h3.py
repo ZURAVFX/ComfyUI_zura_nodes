@@ -31,6 +31,17 @@ def text_cleanup_readiness():
     return {"ready": not missing, "missing_nodes": missing}
 
 
+def sampling_steps(config, fast):
+    """Zero preserves legacy preset defaults; explicit counts reach the sampler."""
+    raw = config.get("h3_steps", 0)
+    if isinstance(raw, bool):
+        raise ValueError("Choose an integer H3 step count from 4 to 80.")
+    count = int(raw)
+    if float(raw) != count or count != 0 and not 4 <= count <= 80:
+        raise ValueError("Choose an integer H3 step count from 4 to 80.")
+    return count or (8 if fast else 40)
+
+
 def cache_path(key):
     from . import root
     if not re.fullmatch(r"[a-f0-9]{64}", key):
@@ -428,7 +439,7 @@ def build_h3_viewport_graph(project):
     guider = node("h3_guider", "BasicGuider", model=model, conditioning=positive)
     noise = node("h3_noise", "RandomNoise", noise_seed=c["seed"])
     sigmas = node("h3_schedule", "BasicScheduler", model=model, scheduler="simple",
-                  steps=8 if fast else 40, denoise=1.0)
+                  steps=sampling_steps(c, fast), denoise=1.0)
     sampler = node("h3_sampler", "KSamplerSelect", sampler_name="res_multistep" if fast else "euler")
     sampled = node("h3_sample", "SamplerCustomAdvanced", noise=noise, guider=guider,
                    sampler=sampler, sigmas=sigmas, latent_image=latent)
@@ -786,7 +797,7 @@ def build_h3_graph(project, use_cache=True, preserve_background=True):
     guider = node("h3_guider", "BasicGuider", model=model, conditioning=positive)
     noise = node("h3_noise", "RandomNoise", noise_seed=c["seed"])
     sigmas = node("h3_schedule", "BasicScheduler", model=model, scheduler="simple",
-                  steps=8 if fast else 40, denoise=1.0)
+                  steps=sampling_steps(c, fast), denoise=1.0)
     sampler = node("h3_sampler", "KSamplerSelect", sampler_name="res_multistep" if fast else "euler")
     sampled = node("h3_sample", "SamplerCustomAdvanced", noise=noise, guider=guider,
                    sampler=sampler, sigmas=sigmas, latent_image=latent)

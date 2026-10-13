@@ -38,7 +38,7 @@ STAGES.update({"ltx25_" + phase: "LTX 2.5 " + phase for phase in
                ("text", "motion", "stage1", "upscale", "refine", "decode", "cleanup")})
 DEFAULTS = {"engine": "local", "background": "keep", "scope": "person", "prompt": "",
             "start": 0.0, "duration": 2.0, "size": 512, "performer": -1,
-            "margin": 20, "pitch": False, "seed": 42, "render_size": 0, "h3_preset": "preview_quality", "remove_text": False,
+            "margin": 20, "pitch": False, "seed": 42, "render_size": 0, "h3_preset": "preview_quality", "h3_steps": 0, "remove_text": False,
             "resolution": 1280, "delivery_mode": "native", "quality": "fast", "audio_id": "", "audio_start": 0.0, "length_mode": "custom", "lip_sync": False, "refine_lips": False,
             "subject_mode": "auto", "workflow_mode": "swap", "edit_area": "mask", "mask_method": "auto", "mask_prompt": "person", "mask_points": []}
 PREP_KEYS = ("start", "duration", "size", "scope", "performer", "margin", "pitch")
@@ -106,6 +106,12 @@ def clean_config(value):
         c[key] = int(c[key])
         if not low <= c[key] <= high:
             raise ValueError(f"{key.title()} is outside its supported range.")
+    raw_steps = c["h3_steps"]
+    if isinstance(raw_steps, bool):
+        raise ValueError("Choose an integer H3 step count from 4 to 80.")
+    c["h3_steps"] = int(raw_steps)
+    if float(raw_steps) != c["h3_steps"] or c["h3_steps"] != 0 and not 4 <= c["h3_steps"] <= 80:
+        raise ValueError("Choose an integer H3 step count from 4 to 80.")
     c["pitch"] = bool(c["pitch"])
     c["remove_text"] = bool(c["remove_text"])
     c["render_size"] = int(c["render_size"])

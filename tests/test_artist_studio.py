@@ -117,6 +117,9 @@ class SharedEngineTests(unittest.TestCase):
             self.assertEqual(graph['h3_sampler']['inputs']['sampler_name'], 'euler')
             self.assertEqual(graph['h3_inpaint']['inputs']['strength'], 1.0)
             self.assertEqual(graph['h3_inpaint']['inputs']['control_video'], ['h3_depth_size',0])
+            p['config']['h3_steps'] = 16
+            custom = h3.build_h3_graph(p)
+            self.assertEqual(custom['h3_schedule']['inputs']['steps'], 16)
             self.assertNotIn('ref_videos.ref_video_0',graph['h3_references']['inputs'])
             self.assertEqual(graph['h3_references']['inputs']['ref_audios.ref_audio_0'],['h3_pad',2])
 

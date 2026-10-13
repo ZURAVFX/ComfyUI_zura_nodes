@@ -64,6 +64,25 @@ class H3ViewportRenderTests(unittest.TestCase):
                 return False
         return Container()
 
+    def test_custom_steps_reach_viewport_sampler_in_both_modes(self):
+        for quality, steps in (("fast", 12), ("detailed", 16)):
+            project = self.project()
+            project["config"] = studio.clean_config({**project["config"], "quality": quality, "h3_steps": steps})
+            with patch.object(studio, "assert_approved"), patch.object(studio, "check_asset"), \
+                    patch("av.open", return_value=self.media_container(15)):
+                graph = h3.build_h3_graph(project, use_cache=False)
+            self.assertEqual(graph["h3_schedule"]["inputs"]["steps"], steps)
+            self.assertEqual(graph["h3_references"]["inputs"]["ref_image_size"], "match")
+
+    def test_step_defaults_and_validation(self):
+        self.assertEqual(h3.sampling_steps({}, True), 8)
+        self.assertEqual(h3.sampling_steps({}, False), 40)
+        for bad in (True, 3, 81, 12.5, "bad"):
+            with self.subTest(value=bad), self.assertRaises(ValueError):
+                studio.clean_config({"h3_steps": bad})
+        for good in (4, 12, 80):
+            self.assertEqual(studio.clean_config({"h3_steps": good})["h3_steps"], good)
+
     def test_viewport_frame_data_enforces_local_h3_frame_contract(self):
         data = h3.GenjH3ViewportFrameData()
         frames, width, height, length, real, crop_x, crop_y, crop_width, crop_height = data.prepare(Video())

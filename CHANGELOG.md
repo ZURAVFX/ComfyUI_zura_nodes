@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Add a visible H3 sampling-step control, saved with each shot and passed to both native H3 schedulers. Preserve legacy 8/40 defaults and label custom counts unbenchmarked.
+
+
 - Rebuild Studio around source/look, real preview and shot-settings panels with the user-approved navy/violet styling.
 - Make oversized original-length recovery actionable without queuing a render, and expose Cancel run beside live progress.
 - Preserve visible native image loaders and their exact file paths when opening an editable graph.
