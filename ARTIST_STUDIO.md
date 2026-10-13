@@ -29,6 +29,12 @@ In **Viewport to final** with MiniMax H3, the video and look references go
 straight to H3, so it skips a separate generated starting frame. Choose
 **Use finished frame** when you want to supply a composed image as well.
 
+Each viewport route uses its model's own guidance: LTX reads the raw blockout
+with its Layout-to-Render adapter, H3 receives the source as a reference video,
+and Wan prepares pose guidance. Zura does not add a blanket Canny or depth
+pass. In the tested LTX scene, adding depth softened the image and shifted
+details, so the raw layout remains the default.
+
 The optional shared **Prompt** is passed to LTX, H3, Wan and Seedance. When
 building a starting frame, it also guides that image.
 

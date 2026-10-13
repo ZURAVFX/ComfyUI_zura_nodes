@@ -15,10 +15,16 @@ renders remain local and are not included in the package.
 The supplied MiniMax API workflow uses five connected train reference images
 and a text prompt. Its `LoadVideo` node is not connected to the model's
 `reference_videos.video_1` input. It is therefore an image-reference example,
-not evidence of hidden video Canny/depth preprocessing or of local
-viewport-video conditioning. That route demonstrates that its API generation
-can work from image references without a geometry prepass, but it does not
-replace a matched local video-conditioning test.
+not evidence of hidden video Canny/depth preprocessing or viewport-video
+conditioning. The local H3 route separately connects the blockout as a
+reference video.
+
+The same blockout was also run through all three local viewport routes at
+1280 × 720. Each returned exactly 120 frames at 24 fps (five seconds). LTX
+pads its generation guide to the model's required frame count, then trims the
+decoded result back to the exact selected interval. These were integration
+tests, not artist sign-offs. The files and source media remain local and are
+not included in the package. No Canny test was run.
 
 ## Current release qualification, 11 October 2026
 
@@ -30,9 +36,10 @@ to 1080p. The full-length Wan 720p example is also accepted with section-to-sect
 detail degradation recorded as a known limitation.
 
 All three exact five-second LTX 2.5 examples are also accepted, bringing the
-short-example sign-offs to nine of nine. Longer H3 speech continuation, the
-new LTX Studio integration and actual Desktop and mobile checks remain open.
-The diagnostic history below includes
+short-example sign-offs to nine of nine. The new viewport integration has now
+run on the current blockout through LTX, H3 and Wan; those exact viewport clips
+still need separate artist review. Longer H3 speech continuation and actual
+Desktop and mobile visual checks remain open. The diagnostic history below includes
 earlier attempts with separate acceptance scopes. Private recordings, dialogue,
 project identifiers and media remain outside the public repository.
 
@@ -553,7 +560,9 @@ switching LTX, H3, Wan and Seedance while retaining the approved mask and look.
 Changing the selected source interval requires a new review. Rendering reads
 the source at the selected output size; mask review stays internally smaller.
 H3 and LTX graph checks confirm the old two-second cap is disabled. H3 supports
-at most five seconds. Wan continues through bounded frame windows.
+at most five seconds. LTX supports up to fifteen seconds in Viewport to final
+and five seconds in its other Studio routes. Wan continues through bounded
+frame windows.
 
 The 1.3.1 checks include 137 Python regression tests and six JavaScript regression
 suites. A separate DOM/mock

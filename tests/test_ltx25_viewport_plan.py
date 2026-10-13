@@ -34,20 +34,26 @@ class ViewportPlanTests(unittest.TestCase):
         self.assertNotIn("VideoDepthAnythingProcess", all_types)
         self.assertNotIn("CannyEdgePreprocessor", all_types)
 
-    def test_actual_delivery_uses_valid_source_interval_without_repeated_tail(self):
+    def test_layout_is_padded_for_sampling_and_delivery_keeps_exact_interval(self):
         project, kwargs = viewport_inputs()
         plan = plan_module.build_plan(project, **kwargs)
-        self.assertEqual(plan["delivered_frames"], 353)
+        self.assertEqual(plan["delivered_frames"], 360)
         self.assertEqual(plan["basis"]["timeline"]["frames"], 360)
-        self.assertEqual(plan["basis"]["frames"], plan["delivered_frames"])
+        self.assertEqual(plan["basis"]["frames"], 361)
+        self.assertEqual(plan["basis"]["source_frames"], 360)
         self.assertEqual(plan["basis"]["base"], [960, 544])
         self.assertEqual(plan["basis"]["native"], [1920, 1088])
-        self.assertEqual(plan["trimmed_tail_frames"], 7)
-        self.assertEqual(plan["artifacts"]["layout"]["frames"], 353)
-        self.assertEqual(plan["phases"]["decode"]["trim_frames"]["inputs"]["length"], 353)
+        self.assertEqual(plan["generation_frames"], 361)
+        self.assertEqual(plan["trimmed_tail_frames"], 0)
+        self.assertEqual(plan["artifacts"]["layout"]["frames"], 361)
+        self.assertEqual(plan["phases"]["motion"]["pad_source"]["class_type"], "GenjLTXFramePad")
+        self.assertEqual(plan["phases"]["decode"]["trim_frames"]["inputs"]["length"], 360)
         self.assertNotIn("audio", plan["phases"]["decode"]["create_video"]["inputs"])
-        kwargs["timeline"]["frames"] = 121
-        self.assertEqual(plan_module.build_plan(project, **kwargs)["trimmed_tail_frames"], 0)
+        kwargs["timeline"]["frames"] = 120
+        five_second = plan_module.build_plan(project, **kwargs)
+        self.assertEqual(five_second["generation_frames"], 121)
+        self.assertEqual(five_second["delivered_frames"], 120)
+        self.assertEqual(five_second["trimmed_tail_frames"], 0)
 
     def test_wrong_adapter_and_unqualified_speech_fail_explicitly(self):
         project, kwargs = viewport_inputs()
@@ -73,7 +79,7 @@ class ViewportPlanTests(unittest.TestCase):
         plan = plan_module.build_plan(project, **kwargs)
         self.assertEqual(plan["generation_audio"], "zero")
         self.assertEqual(plan["delivery_audio"], "original")
-        self.assertEqual(plan["phases"]["decode"]["trim_audio"]["inputs"]["duration"], 353 / 24)
+        self.assertEqual(plan["phases"]["decode"]["trim_audio"]["inputs"]["duration"], 360 / 24)
 
 if __name__ == "__main__":
     unittest.main()

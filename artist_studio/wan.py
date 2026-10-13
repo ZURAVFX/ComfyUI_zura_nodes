@@ -76,7 +76,7 @@ def build_wan_graph(project, use_cache=True, *, cache_key_override=None, prepara
     viewport_render = bool(project.get("viewport_render") or c.get("viewport_render"))
     custom_selection = (viewport_render or c.get("edit_area", "mask") == "scene" or
                         c.get("mask_method", "auto") != "auto")
-    if c["background"] != "keep":
+    if c["background"] != "keep" and not viewport_render:
         raise ValueError("Wan currently keeps the original background. Choose LTX for scene restyling.")
     if project.get("opening_approval") != project.get("opening_key") or not project.get("opening_input"):
         raise ValueError("Approve the character preview before animating.")

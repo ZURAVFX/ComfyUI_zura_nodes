@@ -63,5 +63,5 @@ These helpers are not run when the pack is installed. Read the prompts and licen
 
 ## What to try first
 
-Begin with a continuous, single-shot clip of up to five seconds and the lowest resolution that suits your review. The release's artist-approved examples are five seconds long; H3 and LTX currently support up to five seconds. Wan accepts longer clips, but inspect the joins and detail across sections. Camera changes while changing the environment and masked LTX speech remain experimental; generated models can alter scene details and do not guarantee exact camera or performance retention. See [tested limits](ARTIST_STUDIO_VALIDATION.md) before planning a longer or more complex shot.
+Begin with a continuous, single-shot clip of up to five seconds and the lowest resolution that suits your review. H3 supports up to five seconds. LTX supports up to five seconds for regular shots and up to fifteen seconds in Viewport to final. Wan can process longer clips in sections; inspect joins and detail across sections. Camera changes while replacing an environment and masked LTX speech remain experimental. Generated models can alter scene details and do not guarantee exact camera or performance retention. See [tested limits](ARTIST_STUDIO_VALIDATION.md) before planning a longer or more complex shot.
 
