@@ -5,6 +5,7 @@ import { attachWanGraphControls } from "./wan_graph.js";
 import { stageProgress } from "./studio_progress.js";
 import { ContentDetection } from "./studio_content.js";
 import { clipLength, recoverClipLength } from "./studio_length.js";
+import { ShotComparison } from "./studio_compare.js";
 
 const ROOT = "/zura/studio";
 const defaults = {engine:"local", background:"keep", scope:"person", prompt:"", start:0, duration:2, size:512, performer:-1, margin:20, pitch:false, seed:42, render_size:0, h3_preset:"take_fast", h3_steps:0, h3_attention:"native", remove_text:false, resolution:1280, delivery_mode:"native", quality:"fast", audio_id:"", audio_start:0, length_mode:"custom", lip_sync:false, refine_lips:false, workflow_mode:"motion", edit_area:"mask", mask_method:"auto", mask_prompt:"person", mask_points:[],subject_mode:"auto",finished_frame_position:"first",finished_frame_number:1};
@@ -150,12 +151,19 @@ class ArtistStudio {
       </aside>
       <main class="gs-main">
         <div class="gs-preview-heading"><div><h2 id="gs-preview-title">Your performance, a new character</h2><p id="gs-preview-description">Upload the shot you want to transform. We’ll follow its motion and keep the original soundtrack.</p></div><div id="gs-preview-tabs" class="gs-tabs" hidden><button data-view="mask" class="active">Mask</button><button data-view="guide">Guidance</button><button data-view="source">Original</button></div></div>
-        <div class="gs-canvas" id="gs-canvas"><div class="gs-empty" id="gs-empty">${icon("frames")}<h3>Your shot starts here</h3><p>Add a video and a starting look in the controls.</p></div><video id="gs-player" controls playsinline preload="metadata" hidden></video><img id="gs-opening" alt="Starting frame for this shot" hidden/><div id="gs-working" class="gs-working" hidden><div class="gs-progress-heading"><strong id="gs-working-title">Preparing your shot</strong><div class="gs-progress-actions"><span id="gs-working-percent"></span><button id="gs-live-cancel" type="button" class="gs-stop">Cancel run</button></div></div><div id="gs-working-progress" class="gs-loading-bar is-indeterminate" role="progressbar" aria-label="Current stage progress" aria-valuemin="0" aria-valuemax="100"><div id="gs-working-fill"></div></div><div class="gs-progress-caption"><span id="gs-working-detail" role="status" aria-live="polite">Estimating time for this stage…</span><span id="gs-working-meta"></span></div></div></div>
+        <button id="gs-compare-toggle" class="gs-quiet gs-compare-launch" type="button" hidden>Compare before / after</button><section id="gs-comparison" class="gs-comparison" aria-label="Compare source and final render" hidden></section><div class="gs-canvas" id="gs-canvas"><div class="gs-empty" id="gs-empty">${icon("frames")}<h3>Your shot starts here</h3><p>Add a video and a starting look in the controls.</p></div><video id="gs-player" controls playsinline preload="metadata" hidden></video><img id="gs-opening" alt="Starting frame for this shot" hidden/><div id="gs-working" class="gs-working" hidden><div class="gs-progress-heading"><strong id="gs-working-title">Preparing your shot</strong><div class="gs-progress-actions"><span id="gs-working-percent"></span><button id="gs-live-cancel" type="button" class="gs-stop">Cancel run</button></div></div><div id="gs-working-progress" class="gs-loading-bar is-indeterminate" role="progressbar" aria-label="Current stage progress" aria-valuemin="0" aria-valuemax="100"><div id="gs-working-fill"></div></div><div class="gs-progress-caption"><span id="gs-working-detail" role="status" aria-live="polite">Estimating time for this stage…</span><span id="gs-working-meta"></span></div></div></div>
         <div id="gs-message" class="gs-message" role="status" aria-live="polite" hidden></div>
         <section class="gs-results" id="gs-results" hidden><div class="gs-section-heading"><h2>Your takes</h2><span>Your selected soundtrack is restored automatically.</span></div><div id="gs-takes"></div></section>
         <section class="gs-library"><div class="gs-section-heading"><h2>Recent shots</h2><button id="gs-refresh" class="gs-quiet">Refresh</button></div><div id="gs-library-list"><p class="gs-note">Your shots are saved on this computer. You can return to them later.</p></div></section>
       </main></div>`;
     this.bind();this.syncForm();
+  }
+  compareTake(url) {
+    const p=this.project,source=p?.selected_url || this.source?.url,result=url || p?.results?.at(-1)?.url;
+    if(!source || !result)return;
+    if(!this.comparison){this.comparison=new ShotComparison(this.$("comparison"));this.comparison.onClose=()=>{this.compareActive=false;this.render();};}
+    this.compareActive=true;this.compareProject=p.id;this.compareResult=result;this.$("player").pause();
+    this.comparison.show(source,result,p?.selected_url?0:(p?.config?.start || 0));this.render();
   }
   $(id) { return this.container.querySelector("#gs-" + id); }
   hasLook(){return this.lookMode==="ready"?!!this.readyAsset:this.references.length>0;}
@@ -214,6 +222,8 @@ class ArtistStudio {
       if(Number(button.dataset.step)===1)this.$(this.lookMode==="ready"?"ready":"character").focus();
       if(Number(button.dataset.step)===3)this.$("primary").focus();
     });
+    this.$("compare-toggle").onclick=()=>this.compareTake();
+    this.$("takes").addEventListener("click",e=>{const button=e.target.closest("[data-compare-result]");if(button)this.compareTake(button.dataset.compareResult);});
     this.$("exit").onclick=()=>this.graphView(); this.$("close").onclick=()=>this.close(); this.$("new").onclick=()=>this.reset();
     this.$("clear-audio").onclick=()=>this.perform(async(epoch)=>{
       const config={...this.readConfig(),audio_id:"",audio_start:0,lip_sync:false,refine_lips:false};
@@ -640,7 +650,7 @@ class ArtistStudio {
     const referenceFingerprint=JSON.stringify(this.references.map(a=>[a.id,a.url,a.name,a.role,viewport]));
     if(referenceFingerprint!==this.referenceFingerprint){
       this.referenceFingerprint=referenceFingerprint;
-      this.$("reference-gallery").innerHTML=this.references.map((a,i)=>`<figure><img src="${escape(a.url)}" alt="Reference ${i+1}: ${escape(a.name)}"/><figcaption>${i+1}. ${escape(a.name)}</figcaption>${viewport?`<label class="gs-reference-role-label"><span>Use as</span><select data-reference-role="${escape(a.id)}"><option value="auto" ${a.role==="auto"?"selected":""}>Auto</option><option value="environment" ${a.role==="environment"?"selected":""}>Environment</option><option value="character" ${a.role==="character"?"selected":""}>Character</option><option value="object" ${a.role==="object"?"selected":""}>Object</option><option value="detail" ${a.role==="detail"?"selected":""}>Detail</option><option value="style" ${a.role==="style"?"selected":""}>Style</option></select></label>`:""}<button class="gs-icon-button" data-remove-reference="${escape(a.id)}" aria-label="Remove reference ${i+1}">${icon("close")}</button></figure>`).join("");
+      this.$("reference-gallery").innerHTML=this.references.map((a,i)=>`<figure><img src="${escape(a.url)}" alt="Reference ${i+1}: ${escape(a.name)}"/><figcaption title="${escape(a.name)}">Reference ${i+1}</figcaption>${viewport?`<label class="gs-reference-role-label"><span>Use as</span><select data-reference-role="${escape(a.id)}"><option value="auto" ${a.role==="auto"?"selected":""}>Auto</option><option value="environment" ${a.role==="environment"?"selected":""}>Environment</option><option value="character" ${a.role==="character"?"selected":""}>Character</option><option value="object" ${a.role==="object"?"selected":""}>Object</option><option value="detail" ${a.role==="detail"?"selected":""}>Detail</option><option value="style" ${a.role==="style"?"selected":""}>Style</option></select></label>`:""}<button class="gs-icon-button" data-remove-reference="${escape(a.id)}" aria-label="Remove reference ${i+1}">${icon("close")}</button></figure>`).join("");
     }
     this.$("select-points").disabled=!this.source || this.busy || this.project?.phase==="working";
     const points=this.config.mask_points||[];
@@ -845,6 +855,11 @@ class ArtistStudio {
     if(!video && this.lastVideo){player.pause();player.removeAttribute("src");player.load();this.lastVideo=null;}
     if(opening && image.getAttribute("src")!==opening)image.src=opening;
     this.$("empty").hidden=!!video || !!opening;
+    const canCompare=(phase==="done" || phase==="draft") && !!p?.results?.length && !!(p.selected_url || this.source?.url);
+    this.$("compare-toggle").hidden=!canCompare;
+    if(!canCompare || this.compareProject!==p?.id){this.compareActive=false;this.comparison?.hide();}
+    this.$("canvas").hidden=!!this.compareActive;
+    if(this.compareActive)this.comparison.show(p.selected_url || this.source.url,this.compareResult || video,p.selected_url?0:(p.config?.start || 0));
     const step=!this.source?0:!this.hasLook()?1:!p?.review || phase==="review" || phase==="opening"?2:3;
     this.container.querySelectorAll("[data-step]").forEach(e=>{const current=Number(e.dataset.step)===step;e.classList.toggle("active",current);e.classList.toggle("complete",Number(e.dataset.step)<step);if(current)e.setAttribute("aria-current","step");else e.removeAttribute("aria-current");});
     if(p?.error)this.message(p.error,true);
@@ -855,7 +870,7 @@ class ArtistStudio {
       this.$("takes").innerHTML=results.slice().reverse().map((item,i)=>{
         const label=item.label || ({wan:"Wan 2.2",h3:"MiniMax H3",h3_enhance:"Enhanced H3",draft:"Seedance draft",final:"Seedance final",background:"LTX · original background",restyle:"LTX · scene restyle"})[item.stage] || "Take";
         const raster=item.output_raster?.width&&item.output_raster?.height?`${item.output_raster.width} × ${item.output_raster.height}`:item.resolution?`${item.resolution}px`:"";
-        return `<article class="gs-take"><video src="${escape(item.url)}" controls playsinline preload="metadata"></video><div><span>${escape(label+(raster?` · ${raster}`:"")+(item.duration?` · ${item.duration}s`:""))}</span><a href="${escape(item.url)}" download="zura-take-${results.length-i}.mp4">${icon("download")} Download</a></div></article>`;
+        return `<article class="gs-take"><video src="${escape(item.url)}" controls playsinline preload="metadata"></video><div><span>${escape(label+(raster?` · ${raster}`:"")+(item.duration?` · ${item.duration}s`:""))}</span><button class="gs-quiet" type="button" data-compare-result="${escape(item.url)}">Compare</button><a href="${escape(item.url)}" download="zura-take-${results.length-i}.mp4">${icon("download")} Download</a></div></article>`;
       }).join("");
     }
   }
@@ -916,7 +931,7 @@ class ArtistStudio {
     }catch(e){if(epoch===this.resetEpoch)this.message("Connection interrupted. Your job is saved. Reopen this view when ComfyUI reconnects.",true);}
     finally{if(epoch===this.resetEpoch)this.polling=false;}
   }
-  close(){this.container.querySelectorAll("video,audio").forEach(media=>media.pause());this.container.remove();document.documentElement.classList.remove("genj-open");clearInterval(this.timer);}
+  close(){this.comparison?.hide();this.container.querySelectorAll("video,audio").forEach(media=>media.pause());this.container.remove();document.documentElement.classList.remove("genj-open");clearInterval(this.timer);}
 }
 
 app.registerExtension({

@@ -117,3 +117,44 @@
 .gs-length-choice button:hover:not(:disabled){background:#352163;color:#fff}
 .gs-length-choice button:focus-visible{outline:2px solid var(--gs-focus);outline-offset:2px}
 .gs-length-choice button:disabled{opacity:.55;cursor:not-allowed}
+
+/* One clock, two views: reveal the render over its exact selected source clip. */
+.gs-compare-launch{align-self:flex-end;margin:10px 0}
+.gs-comparison{--gs-wipe:50%;--gs-compare-ratio:16 / 9;background:#060a11;border:1px solid var(--gs-line);border-radius:12px;overflow:hidden}
+.gs-compare-toolbar,.gs-compare-controls{display:flex;align-items:center;gap:12px;padding:12px 16px;background:var(--gs-panel)}
+.gs-compare-toolbar{justify-content:space-between}.gs-comparison button{min-height:40px;padding:8px 12px;background:#241b48;color:#f0eaff;border:1px solid #8765c0;border-radius:6px;font:inherit;cursor:pointer}
+.gs-comparison button:focus-visible{outline:2px solid var(--gs-focus);outline-offset:2px}
+.gs-compare-stage{position:relative;aspect-ratio:var(--gs-compare-ratio);max-height:calc(100dvh - 320px);width:100%;background:#060a11;overflow:hidden}
+.gs-compare-stage video{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;pointer-events:none}
+.gs-compare-stage [data-source]{clip-path:inset(0 0 0 var(--gs-wipe))}
+.gs-compare-label{position:absolute;top:14px;padding:6px 10px;border-radius:4px;background:#080d17e6;color:#f5f3ff;font-size:12px;pointer-events:none}
+.gs-compare-label.is-result{left:14px}.gs-compare-label.is-source{right:14px}
+.gs-compare-divider{position:absolute;left:var(--gs-wipe);top:0;bottom:0;width:2px;background:#f0eaff;pointer-events:none;transform:translateX(-1px)}
+.gs-compare-divider span{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);display:grid;place-items:center;width:42px;height:42px;border-radius:50%;background:#6d3ae9;border:2px solid #f0eaff;color:white}
+#genj-studio .gs-compare-wipe{position:absolute;inset:0;width:100%;height:100%;margin:0;opacity:0;cursor:ew-resize;min-height:0}
+.gs-compare-stage:focus-within{outline:2px solid var(--gs-focus);outline-offset:-2px}
+#genj-studio .gs-compare-controls input{flex:1;min-width:40px;padding:0;accent-color:var(--gs-accent-bright);background:none;border:0}
+.gs-compare-controls output{font-variant-numeric:tabular-nums;color:#d7deed;font-size:12px}.gs-compare-message{padding:12px 16px;color:#edb977}
+.gs-comparison:fullscreen{display:flex;flex-direction:column;justify-content:center;background:#060a11}.gs-comparison:fullscreen .gs-compare-stage{max-height:none;flex:1;min-height:0;aspect-ratio:auto}
+@media(max-width:600px){.gs-compare-controls{gap:8px;padding:10px;flex-wrap:wrap}.gs-compare-controls [data-seek]{order:5;flex-basis:100%}.gs-compare-stage{max-height:480px}.gs-compare-label{top:8px;font-size:11px}.gs-compare-label.is-result{left:8px}.gs-compare-label.is-source{right:8px}}
+
+/* The desktop shell never scrolls; only panels scroll their own content. */
+html.genj-open,html.genj-open body{overflow:hidden!important;overscroll-behavior:none}
+@media(min-width:901px){
+ #genj-studio{display:flex;flex-direction:column;overflow:hidden;height:100dvh}
+ .gs-top,.gs-steps{flex-shrink:0}
+ .gs-workspace{flex:1;min-height:0;height:auto;width:100%;margin:0 auto;padding-bottom:16px;overflow:hidden}
+ .gs-controls,.gs-settings,.gs-main{overflow-y:auto;overscroll-behavior:contain;scrollbar-gutter:stable}
+ .gs-main{position:static;align-self:stretch;max-height:none;padding-bottom:12px}
+}
+@media(min-width:901px) and (max-width:1240px){.gs-workspace{grid-template-rows:minmax(0,1fr) minmax(0,1fr)}.gs-controls,.gs-settings{overflow-y:auto}}
+.gs-reference-gallery{grid-template-columns:repeat(2,minmax(0,1fr));gap:14px 12px}
+.gs-reference-gallery img{height:auto;aspect-ratio:4 / 3;background:#080d17}
+.gs-reference-role-label{display:block;font-size:11px;margin-top:8px}
+.gs-reference-role-label>span{display:block;margin-bottom:5px;white-space:nowrap}
+#genj-studio .gs-reference-role-label select{max-width:100%;width:100%;font-size:12px;padding:9px 24px 9px 10px;min-height:38px}
+.gs-look-choice span{padding:10px 8px;font-size:12px;line-height:1.35;min-height:48px;text-align:center}
+.gs-settings label>small{display:block;margin-top:6px;font-size:12px;line-height:1.5;color:var(--gs-muted)}
+.gs-settings label,.gs-controls label{min-width:0}
+.gs-compare-controls button:hover,.gs-compare-toolbar button:hover{background:#352163}
+.gs-compare-divider svg{width:22px;height:22px}
