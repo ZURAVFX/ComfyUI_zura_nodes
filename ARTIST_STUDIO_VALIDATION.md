@@ -786,3 +786,24 @@ require a new plan. All 29 focused planner checks and 21 integration/provenance
 checks pass. These native execution and identity checks supplement the existing
 frontend save/reload tests; they do not establish Desktop or mobile visual
 interface readiness.
+## Viewport artist review, 13 October 2026
+
+The artist approved the five-second H3 train viewport result. The equivalent
+Wan and LTX results were rejected. Wan did not retain the scene or camera;
+LTX retained the crude blockout character shape and showed severe warping.
+Successful execution of those two routes is not visual qualification. Their
+viewport quality remains unresolved; earlier performance-edit approvals apply
+only to those separate workflows. New viewport recipes require fresh renders
+and artist review before being presented as qualified.
+
+After this review, the artist agreed to remove Wan from viewport mode. H3 is
+the recommended viewport route; Wan's approved performance-edit routes remain
+available. LTX's official-recipe retry retained the crude character, and adding
+interior appearance keyframes restored the character but did not resolve
+warping between keyframes. Those diagnostic retries are not artist-approved.
+
+### Progress and subject UX verification
+
+The full Python regression suite passes 636 tests. JavaScript stage-progress, subject debounce/stale reply, artist graph and Wan graph checks pass. A real local CPU YOLOv10 probe detects the performer in four of five sampled source frames. Explicit LTX object Canny routing is graph-tested; it has not yet received a new artist quality approval.
+
+The design detector reports three source-less image warnings on intentionally hidden upload/starting-frame placeholders. Their source is assigned from the uploaded media before display. No placeholder is intentionally shown. Live browser visual checks remain unavailable because the browser tool rejects the local ComfyUI address; responsive CSS and behaviour checks do not substitute for visual approval.

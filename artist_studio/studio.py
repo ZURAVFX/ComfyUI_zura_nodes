@@ -40,7 +40,7 @@ DEFAULTS = {"engine": "local", "background": "keep", "scope": "person", "prompt"
             "start": 0.0, "duration": 2.0, "size": 512, "performer": -1,
             "margin": 20, "pitch": False, "seed": 42, "render_size": 0, "h3_preset": "preview_quality", "remove_text": False,
             "resolution": 1280, "delivery_mode": "native", "quality": "fast", "audio_id": "", "audio_start": 0.0, "length_mode": "custom", "lip_sync": False, "refine_lips": False,
-            "workflow_mode": "swap", "edit_area": "mask", "mask_method": "auto", "mask_prompt": "person", "mask_points": []}
+            "subject_mode": "auto", "workflow_mode": "swap", "edit_area": "mask", "mask_method": "auto", "mask_prompt": "person", "mask_points": []}
 PREP_KEYS = ("start", "duration", "size", "scope", "performer", "margin", "pitch")
 
 
@@ -77,6 +77,7 @@ def clean_config(value):
                          ("quality", ("fast", "detailed")),
                          ("length_mode", ("custom", "original")),
                          ("workflow_mode", ("motion", "swap", "viewport")),
+                         ("subject_mode", ("auto", "people", "objects")),
                          ("mask_method", ("auto", "text", "points")),
                          ("h3_preset", H3_PRESETS),
                          ("scope", ("person", "head"))]:
@@ -186,7 +187,11 @@ class Store:
         project["updated"] = time.time()
         path = self.root / (project["id"] + ".json")
         temporary = path.with_suffix(".tmp")
-        temporary.write_text(json.dumps(project, indent=2), encoding="utf8")
+        saved = copy.deepcopy(project)
+        # Runtime progress is refreshed from Comfy's in-memory registry and is
+        # deliberately never persisted with a project record.
+        saved.pop("progress", None)
+        temporary.write_text(json.dumps(saved, indent=2), encoding="utf8")
         temporary.replace(path)
 
     def load(self, identity):
@@ -358,7 +363,9 @@ def ltx25_native_plan(project):
                 "has_audio": bool(clip.get("has_audio")), "source_has_audio": source_has_audio, "start": clip["start"],
                 "review_source_sha256": sha(reviewed_source)}
     viewport = bool(project.get("config", {}).get("viewport_render"))
-    model_set = VIEWPORT_MODELS if viewport else QUALIFIED_MODELS
+    objects = project.get("config", {}).get("subject_mode") == "objects"
+    model_set = VIEWPORT_MODELS if viewport else {k: v for k, v in QUALIFIED_MODELS.items()
+        if not objects or k not in ("bbox_detector", "pose_estimator")}
     categories = {"model": "diffusion_models", "video_vae": "vae", "audio_vae": "vae",
                   "union": "loras", "upscaler": "latent_upscale_models"}
     paths = {}
@@ -367,7 +374,7 @@ def ltx25_native_plan(project):
         if not value:
             raise ValueError("An LTX 2.5 component is missing: " + model_set[name])
         paths[name] = Path(value)
-    if not viewport:
+    if not viewport and not objects:
         for name, path in ltx25_detector_paths().items():
             if path is None:
                 raise ValueError("The local LTX body-motion detector is missing: " + QUALIFIED_MODELS[name])
@@ -955,6 +962,8 @@ class Studio:
         self.watcher = None
         self.resuming = set()
         self.resume_scheduled = set()
+        from .progress import NativeProgressAdapter
+        self.progress_adapter = NativeProgressAdapter()
         from comfy.cli_args import args
         self.server_address = f"{args.listen}:{args.port}"
 
@@ -1175,14 +1184,46 @@ class Studio:
 
     def collect(self, p):
         try:
-            return self._collect(p)
+            result = self._collect(p)
         except Exception as e:
             if p.get("actions"):
                 p["actions"][-1]["state"] = "failed"
             p["phase"] = "error"
             p["error"] = "Could not read this job's output: " + (str(e) or type(e).__name__)[:1600]
             self.store.save(p)
-            return p
+            result = p
+        try:
+            self._attach_progress(result)
+        except Exception:
+            # Optional telemetry must never fail an otherwise valid render.
+            logging.getLogger(__name__).debug("Progress snapshot unavailable", exc_info=True)
+            result.pop("progress", None)
+        return result
+
+    def _attach_progress(self, project):
+        """Attach a transient, action-scoped snapshot for the Studio JSON response."""
+        if not getattr(self, "progress_adapter", None) or not getattr(self, "server_address", None):
+            project.pop("progress", None)
+            return
+        actions = project.get("actions", [])
+        if not actions:
+            project.pop("progress", None)
+            return
+        action = actions[-1]
+        if action.get("server_address", self.server_address) != self.server_address:
+            project.pop("progress", None)
+            return
+        queue_position = None
+        try:
+            _running, pending = self.server.prompt_queue.get_current_queue_volatile()
+            for index, item in enumerate(pending, 1):
+                if len(item) > 1 and item[1] == action.get("id"):
+                    queue_position = index
+                    break
+        except (AttributeError, TypeError):
+            pass
+        project["progress"] = self.progress_adapter.project_progress(
+            self.server, self.server_address, action, queue_position)
 
     def _collect_h3_base(self, p, action, history):
         """Keep the 720p H3 file internal and hand it to the enhancer."""
@@ -1727,6 +1768,8 @@ def register():
 
     from .opening import register as register_opening
     register_opening(studio, routes, response)
+    from .content import register as register_content
+    register_content(studio, routes, response)
 
     @routes.get("/zura/studio/status")
     @routes.get("/genj/studio/status")

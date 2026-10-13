@@ -240,13 +240,13 @@ class AudioModeTests(unittest.TestCase):
 const fs=require('fs'),vm=require('vm'),assert=require('assert');
 let source=fs.readFileSync(process.argv[1],'utf8').split('\napp.registerExtension({')[0];
 source=source.replace(/^import .*;\r?\n/gm,'');
-const context={console,document:{createElement:()=>({setAttribute(){}})}};
+const context={console,ContentDetection:class {},document:{createElement:()=>({setAttribute(){}})}};
 vm.createContext(context);vm.runInContext(source+'\nthis.Studio=ArtistStudio;',context);
 const proto=context.Studio.prototype;
 for(const engine of ['local','h3','wan','seedance']){
  const ui=Object.create(proto),fields={};
  ui.config={size:512,lip_sync:true,refine_lips:true};ui.audio={id:'b'.repeat(32)};
- for(const [name,value] of Object.entries({scope:'person',background:'keep',prompt:'',length_mode:'custom',edit_area:'mask',mask_method:'auto',mask_prompt:'person',start:0,duration:3,resolution:1280,performer:-1,margin:8,seed:42,audio_start:1.25,quality:'fast','audio-mode':'original'}))fields[name]={value};
+ for(const [name,value] of Object.entries({scope:'person',background:'keep',prompt:'',length_mode:'custom',edit_area:'mask',mask_method:'auto',mask_prompt:'person',subject_mode:'auto',start:0,duration:3,resolution:1280,performer:-1,margin:8,seed:42,audio_start:1.25,quality:'fast','audio-mode':'original'}))fields[name]={value};
  fields.pitch={checked:false};fields.remove_text={checked:false};fields.lip_sync={checked:true};fields.refine_lips={checked:true};
  ui.$=name=>fields[name];ui.container={querySelector:()=>({value:engine})};
  let selected=ui.readConfig();assert.equal(selected.audio_id,'');assert.equal(selected.audio_start,0);assert.equal(selected.lip_sync,false);assert.equal(selected.refine_lips,false);

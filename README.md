@@ -4,6 +4,8 @@
 
 **New here?** In ComfyUI Manager, search for **Zura Nodes**, install the pack and restart ComfyUI. You can also download the current [release ZIP](https://github.com/ZURAVFX/ComfyUI_zura_nodes/releases). Model weights are separate downloads; the short [installation and model guide](INSTALL_STUDIO.md) lists the files and steps.
 
+For **Viewport to final**, start with H3: its five-second train example was artist-approved. LTX remains experimental because crude blockout shapes and warping can persist. Wan is available for motion transfer and swaps, rather than viewport rendering.
+
 To open the complete studio, start ComfyUI and click **Zura Studio**. On a default local installation, use `Open_Zura_Studio.url` or open `http://127.0.0.1:8188/?zura=1`. All four models share the same project and review flow. The standalone Wan test graph is only a diagnostic example.
 
 Studio shows your GPU memory and RAM, a model-specific starting size and clip length, and a collapsible checklist of missing model files. These are measured examples on an RTX 4080 with 16 GB VRAM and 64 GB RAM, not minimum specifications or guaranteed render times:

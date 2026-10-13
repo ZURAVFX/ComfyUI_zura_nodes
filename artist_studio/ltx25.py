@@ -91,6 +91,7 @@ def build_plan(project, *, scenario, timeline, models, text_encoder_inputs,
             project.get("opening_approval") != project["opening_key"]):
         raise ValueError("Approve the current opening appearance before animating.")
     c = project["config"]
+    objects = c.get("subject_mode") == "objects"
     namespace = (project.get("ltx25_run") or {}).get("namespace")
     if not isinstance(namespace, str) or not re.fullmatch(r"[a-f0-9]{32}", namespace):
         raise ValueError("Start a new LTX render to prepare its files safely.")
@@ -102,11 +103,13 @@ def build_plan(project, *, scenario, timeline, models, text_encoder_inputs,
     opening = _asset(project.get("opening_input"), "approved opening image")
     character = _asset(project.get("character"), "appearance reference")
     required_models = {"model", "video_vae", "audio_vae", "union", "upscaler", "bbox_detector", "pose_estimator"}
+    if objects:
+        required_models -= {"bbox_detector", "pose_estimator"}
     if set(models) != required_models or set(model_pins) != required_models | {"text_encoder"}:
         raise ValueError("Resolve and pin every LTX model, encoder and pose detector first.")
     if any(not isinstance(value, str) or not value for value in models.values()) or any(not value for value in model_pins.values()):
         raise ValueError("Model names and verified model pins cannot be empty.")
-    if any(models[name] != value for name, value in QUALIFIED_MODELS.items()):
+    if any(models[name] != QUALIFIED_MODELS[name] for name in required_models):
         raise ValueError("This bounded planner requires the qualified LTX 2.5 model, Union adapter, VAEs and pose detectors.")
     if not isinstance(text_encoder_inputs, dict) or not text_encoder_inputs.get("clip_name"):
         raise ValueError("Resolve the native LTX text encoder inputs first.")
@@ -162,10 +165,14 @@ def build_plan(project, *, scenario, timeline, models, text_encoder_inputs,
         "replacement": "Follow the source body and hand motion. Speak the supplied replacement audio naturally at its timing. Keep a resting mouth during silence; ignore the source mouth performance.",
         "silent": "Follow the source body and hand motion. The performer stays silent with a relaxed resting mouth; do not articulate speech.",
     }[scenario]
+    if objects:
+        direction = "Follow the source scene, camera movement, object placement and object motion."
     positive = "Match the approved opening appearance and scene. " + direction
     if prompt:
         positive += " " + prompt
     negative = "warped anatomy, sliding feet, flicker, extra people, text, subtitles"
+    if objects:
+        negative = "warped objects, drifting camera, flicker, text, subtitles"
     basis = {"schema": SCHEMA, "run_namespace": namespace, "scenario": scenario, "review": project["review"],
              "approval": approval_key, "opening_key": project["opening_key"],
              "source": source, "opening": opening, "character": character,
@@ -175,6 +182,8 @@ def build_plan(project, *, scenario, timeline, models, text_encoder_inputs,
              "models": copy.deepcopy(models), "model_pins": copy.deepcopy(model_pins),
              "encoder": copy.deepcopy(text_encoder_inputs), "union_factor": 2,
              "sigmas": [STAGE1_SIGMAS, STAGE2_SIGMAS]}
+    if objects:
+        basis["guide_type"] = "canny_objects"
     key = digest(basis)
     keys = {name: digest({"plan": key, "artifact": name}) for name in
             ("text", "guided_text", "initial_video", "audio", "stage1_video", "upscaled_video", "stage2_video")}
@@ -229,9 +238,12 @@ def build_plan(project, *, scenario, timeline, models, text_encoder_inputs,
     g = graph("motion")
     src = source_video(g)
     components = node(g, "source_components", "GetVideoComponents", video=src)
-    pose = node(g, "pose", "DWPreprocessor", image=components, detect_body="enable", detect_hand="enable",
-                detect_face="enable" if scenario == "original" else "disable", resolution=512,
-                scale_stick_for_xinsr_cn="disable", bbox_detector=models["bbox_detector"], pose_estimator=models["pose_estimator"])
+    if objects:
+        pose = node(g, "pose", "Canny", image=components, low_threshold=.1, high_threshold=.2)
+    else:
+        pose = node(g, "pose", "DWPreprocessor", image=components, detect_body="enable", detect_hand="enable",
+                    detect_face="enable" if scenario == "original" else "disable", resolution=512,
+                    scale_stick_for_xinsr_cn="disable", bbox_detector=models["bbox_detector"], pose_estimator=models["pose_estimator"])
     pose = node(g, "pose_fit", "ResizeImageMaskNode", input=pose, resize_type="match size",
                 scale_method="lanczos", **{"resize_type.match": components, "resize_type.crop": "center"})
     pose_prefix = "zura/ltx25/" + key + "/pose/frame"
@@ -438,7 +450,8 @@ def build_viewport_plan(project, *, scenario, timeline, models, text_encoder_inp
                 "Follow the guide camera movement, framing, timing, object placement and animation throughout. "
                 + str(c.get("prompt", "")).strip())
     negative = "flicker, sliding feet, warped anatomy, text, subtitles"
-    basis = {"schema": SCHEMA, "route": "viewport_layout_to_render", "run_namespace": namespace,
+    basis = {"schema": SCHEMA, "route": "viewport_layout_to_render", "recipe_version": 2,
+             "run_namespace": namespace,
              "scenario": scenario, "review": project["review"], "approval": approval_key,
              "opening_key": project["opening_key"], "source": source, "opening": look,
              "timeline": copy.deepcopy(timeline), "frames": padded, "padded": padded,
@@ -510,18 +523,20 @@ def build_viewport_plan(project, *, scenario, timeline, models, text_encoder_inp
         layout = load(g, phase, "layout")
         layout = node(g, "fit_layout", "ImageScale", image=layout, width=raster[0], height=raster[1], upscale_method="lanczos", crop="disabled")
         look_image = node(g, "look", "LoadImage", image=look["file"])
+        # Match the dedicated Layout-to-Render graph: full-canvas guide VAE
+        # encoding on both stages. Decode tiling must not change guide latents.
         guided = node(g, "layout_guide", "LTXAddVideoICLoRAGuide", positive=cond, negative=[cond[0], 1],
                       vae=vae, latent=latent, image=layout, frame_idx=0, strength=1, latent_downscale_factor=adapter_factor,
-                      crop="disabled", use_tiled_encode=True, tile_size=256, tile_overlap=64)
+                      crop="disabled", use_tiled_encode=False, tile_size=256, tile_overlap=64)
         guided = node(g, "appearance_guide", "LTXAddVideoICLoRAGuide", positive=guided, negative=[guided[0], 1],
                       vae=vae, latent=[guided[0], 2], image=look_image, frame_idx=-1, strength=1,
-                      latent_downscale_factor=adapter_factor, crop="center", use_tiled_encode=True, tile_size=256, tile_overlap=64)
+                      latent_downscale_factor=adapter_factor, crop="center", use_tiled_encode=False, tile_size=256, tile_overlap=64)
         audio_vae = node(g, "audio_vae", "VAELoader", vae_name=models["audio_vae"])
         audio = node(g, "zero_audio", "LTXVEmptyLatentAudio", frames_number=padded, frame_rate=fps, batch_size=1, audio_vae=audio_vae)
         av = node(g, "concat", "LTXVConcatAVLatent", video_latent=[guided[0], 2], audio_latent=audio)
         guider = node(g, "guider", "CFGGuider", model=adapter, positive=guided, negative=[guided[0], 1], cfg=1)
         noise = node(g, "noise", "RandomNoise", noise_seed=seed)
-        sampler = node(g, "sampler", "KSamplerSelect", sampler_name="euler_ancestral" if phase == "stage1" else "euler")
+        sampler = node(g, "sampler", "KSamplerSelect", sampler_name="euler_ancestral")
         sigmas = node(g, "sigmas", "ManualSigmas", sigmas=STAGE1_SIGMAS if phase == "stage1" else STAGE2_SIGMAS)
         output = node(g, "sample", "SamplerCustomAdvanced", noise=noise, guider=guider, sampler=sampler, sigmas=sigmas, latent_image=av)
         video = node(g, "separate", "LTXVSeparateAVLatent", av_latent=output)

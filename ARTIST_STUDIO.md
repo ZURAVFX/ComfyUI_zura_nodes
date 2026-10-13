@@ -12,9 +12,9 @@ Its thumbnail confirms the upload.
 - **Motion transfer** rebuilds the full frame around the source movement.
 - **Object swap** changes a selected person or object and keeps the surrounding
   shot as the guide.
-- **Viewport to final** turns a grey 3D blockout into a finished scene. Leave
-  the mask off to change the full frame, or add a mask to limit the edit to the
-  selected area.
+- **Viewport to final** turns a grey 3D blockout into a finished whole scene.
+  H3 is recommended. LTX remains experimental; Wan is available in the other
+  editing modes.
 
 Choose **Starting look**:
 
@@ -30,8 +30,9 @@ straight to H3, so it skips a separate generated starting frame. Choose
 **Use finished frame** when you want to supply a composed image as well.
 
 Each viewport route uses its model's own guidance: LTX reads the raw blockout
-with its Layout-to-Render adapter, H3 receives the source as a reference video,
-and Wan prepares pose guidance. Zura does not add a blanket Canny or depth
+with its Layout-to-Render adapter and H3 receives the source as a reference video.
+Wan's human pose route did not retain whole-scene blockout motion and is no
+longer offered for viewport renders. Zura does not add a blanket Canny or depth
 pass. In the tested LTX scene, adding depth softened the image and shifted
 details, so the raw layout remains the default.
 
@@ -55,8 +56,7 @@ storage paths and node IDs remain compatible; public names use Zura branding.
 The workflow choice controls what changes. **Motion transfer** rebuilds the
 whole frame around source movement. **Object swap** changes the selected area
 and uses the rest of the shot as a guide. **Viewport to final** uses the grey
-render as the camera and layout guide. Leave its mask off to change the whole
-scene, or add one to limit the change to that area. The model routes differ,
+render as the camera and layout guide for the whole scene. The model routes differ,
 so check the result for camera movement, contact and scene consistency.
 
 For a masked edit, expand the selection settings for automatic person selection,
@@ -403,3 +403,9 @@ multicam, camera, audio and voice regression suites were rerun. Live render
 results and limitations are recorded separately in `ARTIST_STUDIO_VALIDATION.md`.
 DOM interaction checks are separate from browser visual checks, which remain
 unavailable because of the saved local-origin browser permission.
+
+### Progress and subject guidance
+
+Studio shows the active stage, elapsed time and native sampling steps where available. Once several steps have completed, it estimates the remaining time for that stage. Loading, encoding, decoding and saving use an indeterminate bar when ComfyUI reports no measurable total. Queue position is separate from render progress; this is not a whole-job completion estimate.
+
+More controls includes Auto, People and Objects & scenery. Auto samples five frames locally on CPU using an already-installed optional YOLOv10 detector. Detection is advisory, and missing detectors or grey viewport figures return an uncertain result. Explicit Objects uses Canny with LTX's existing Union adapter, avoiding pose estimation; H3 retains its native scene controls. Wan Animate requires a human performance. Auto and People preserve the previously validated human routes.

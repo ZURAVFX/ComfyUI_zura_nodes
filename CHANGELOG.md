@@ -1,5 +1,20 @@
 # Release notes
 
+## Unreleased
+
+- Show native sampling steps, stage progress, elapsed time and measured stage estimates; unknown loading stages remain indeterminate.
+- Simplify Studio controls and keep progress below the preview on mobile.
+- Add local CPU subject checks and manual People / Objects overrides. Explicit LTX objects use Canny guidance; Wan Animate explains its human-performance requirement.
+
+
+- Recommend H3 for Viewport to final and select it when entering that mode.
+- Remove Wan from viewport choices after the whole-scene quality review;
+  preserve its motion-transfer, swap and speech routes.
+- Mark LTX viewport quality experimental. Match the official ancestral
+  refinement sampler and full-canvas guide encoding, with fresh cache keys.
+- H3's viewport example is artist-approved. Wan and LTX's earlier viewport
+  integration renders were rejected; successful execution was not approval.
+
 ## 1.3.13
 
 - Adds **Viewport to final** for turning a grey 3D blockout into a finished

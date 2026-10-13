@@ -374,12 +374,12 @@ class SharedEngineTests(unittest.TestCase):
                 for method, path in routes if path.startswith('/zura/studio')}
             legacy = {(method, path) for method, path in routes if path.startswith('/genj/studio')}
             self.assertEqual(branded, legacy)
-            self.assertEqual(len(branded), 13)
+            self.assertEqual(len(branded), 14)
             self.assertIn(('GET', '/zura/studio/status'), routes)
             self.assertIn(('POST', '/zura/studio/projects/{identity}/wan-graph/plan'), routes)
             self.assertIn(('POST', '/zura/studio/projects/{identity}/opening'), routes)
             studio.register()
-            self.assertEqual(len(server.routes), 26, 'Reloading must not register duplicate routes')
+            self.assertEqual(len(server.routes), 28, 'Reloading must not register duplicate routes')
 
     def test_reference_audio_reaches_preparation_and_invalidates_old_approval(self):
         p = self.project()
