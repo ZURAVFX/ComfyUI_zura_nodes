@@ -42,6 +42,31 @@ def sampling_steps(config, fast):
     return count or (8 if fast else 40)
 
 
+
+def apply_attention_backend(node, model, config):
+    """Opt-in native model patches; the approved default graph stays unchanged.
+
+    Kitchen changes dense attention only. Sage + Sol additionally approximates
+    attention inside its selected sampling interval, so it remains a separate
+    experimental choice rather than an automatic quality-preserving fallback.
+    """
+    backend = config.get("h3_attention", "native")
+    if backend == "native":
+        return model
+    if backend == "kitchen":
+        return node("h3_attention", "ModelAttentionBackend", model=model,
+                    attention="comfy kitchen attention")
+    if backend == "sage_sol":
+        model = node("h3_sage_attention", "PathchSageAttentionKJ", model=model,
+                     sage_attention="auto", allow_compile=False)
+        return node("h3_attention", "SolAttnPatch", model=model,
+                    tau=1.5, start_percent=0.2, end_percent=0.9,
+                    min_tokens=4096, int8_qk=True, sink_conditioning="exact_kv",
+                    morton=False, morton_curve="3d", int8_pv=False,
+                    verbose=False, use_tma=False, dense_blocks="")
+    raise ValueError("Choose Native, Comfy Kitchen or Sage + Sol for H3 attention.")
+
+
 def cache_path(key):
     from . import root
     if not re.fullmatch(r"[a-f0-9]{64}", key):
@@ -500,6 +525,7 @@ def build_h3_viewport_graph(project):
         model = node("h3_turbo", "LoraLoaderModelOnly", model=model,
                      lora_name=H3_MODELS["h3_turbo"][1], strength_model=1.0)
     model = node("h3_shift", "MiniMaxH3SigmaShift", model=model, shift_video=12.0, shift_audio=3.0)
+    model = apply_attention_backend(node, model, c)
     clip = node("h3_clip", "CLIPLoader", clip_name=H3_MODELS["h3_text"][1], type="minimax", device="default")
     vae = node("h3_vae", "VAELoader", vae_name=H3_MODELS["h3_video_vae"][1])
     audio_vae = node("h3_audio_vae", "VAELoader", vae_name=H3_MODELS["h3_audio_vae"][1])
@@ -846,6 +872,7 @@ def build_h3_graph(project, use_cache=True, preserve_background=True):
         model = node("h3_turbo", "LoraLoaderModelOnly", model=model,
                      lora_name=H3_MODELS["h3_turbo"][1], strength_model=1.0)
     model = node("h3_shift", "MiniMaxH3SigmaShift", model=model, shift_video=12.0, shift_audio=3.0)
+    model = apply_attention_backend(node, model, c)
     clip = node("h3_clip", "CLIPLoader", clip_name=H3_MODELS["h3_text"][1], type="minimax", device="default")
     vae = node("h3_vae", "VAELoader", vae_name=H3_MODELS["h3_video_vae"][1])
     audio_vae = node("h3_audio_vae", "VAELoader", vae_name=H3_MODELS["h3_audio_vae"][1])

@@ -7,7 +7,7 @@ import { ContentDetection } from "./studio_content.js";
 import { clipLength, recoverClipLength } from "./studio_length.js";
 
 const ROOT = "/zura/studio";
-const defaults = {engine:"local", background:"keep", scope:"person", prompt:"", start:0, duration:2, size:512, performer:-1, margin:20, pitch:false, seed:42, render_size:0, h3_preset:"take_fast", h3_steps:0, remove_text:false, resolution:1280, delivery_mode:"native", quality:"fast", audio_id:"", audio_start:0, length_mode:"custom", lip_sync:false, refine_lips:false, workflow_mode:"motion", edit_area:"mask", mask_method:"auto", mask_prompt:"person", mask_points:[],subject_mode:"auto",finished_frame_position:"first",finished_frame_number:1};
+const defaults = {engine:"local", background:"keep", scope:"person", prompt:"", start:0, duration:2, size:512, performer:-1, margin:20, pitch:false, seed:42, render_size:0, h3_preset:"take_fast", h3_steps:0, h3_attention:"native", remove_text:false, resolution:1280, delivery_mode:"native", quality:"fast", audio_id:"", audio_start:0, length_mode:"custom", lip_sync:false, refine_lips:false, workflow_mode:"motion", edit_area:"mask", mask_method:"auto", mask_prompt:"person", mask_points:[],subject_mode:"auto",finished_frame_position:"first",finished_frame_number:1};
 const icon = (name) => {
   const paths = {
     upload:'<path d="M12 16V3m-5 5 5-5 5 5M4 15v5h16v-5"/>',
@@ -118,6 +118,7 @@ class ArtistStudio {
         <p id="gs-h3-setting" class="gs-note" hidden></p><p id="gs-ltx-setting" class="gs-note" hidden></p>
         <label class="gs-checkbox"><input id="gs-remove_text" type="checkbox"/><span>Remove on-screen text</span></label>
         <details class="gs-advanced"><summary>More controls</summary><div class="gs-advanced-body">
+          <label id="gs-h3-attention-setting" hidden><span class="gs-label">H3 attention</span><select id="gs-h3_attention"><option value="native">Native · default</option><option value="kitchen" disabled>Comfy Kitchen</option><option value="sage_sol" disabled>Sage + Sol · experimental</option></select><small id="gs-h3-attention-note">Choose an installed sampling backend.</small></label>
           <label><span class="gs-label">Subject guidance</span><select id="gs-subject_mode"><option value="auto">Auto · detect from video</option><option value="people">People</option><option value="objects">Objects & scenery</option></select><small>Each model uses its own motion guidance.</small></label>
           <label id="gs-audio-start-setting" hidden><span class="gs-label">Reference audio start (seconds)</span><input id="gs-audio_start" type="number" min="0" max="86400" step="0.1" value="0"/><small>Aligned to the start of your selected clip. Shorter tracks are padded with silence.</small></label>
           <label id="gs-refine-lips-setting" class="gs-checkbox" hidden><input id="gs-refine_lips" type="checkbox"/><span>Refine lips after generation<small>Optional local mouth correction after the model's own speech method. It can soften detail or change the expression.</small></span></label>
@@ -191,6 +192,7 @@ class ArtistStudio {
     c.quality=this.$("quality").value;
     c.h3_preset=c.quality==="fast"?"take_fast":"take_quality";
     c.h3_steps=Number(this.$("h3_steps")?.value ?? this.config.h3_steps ?? 0);
+    c.h3_attention=this.$("h3_attention")?.value ?? this.config.h3_attention ?? "native";
     c.size=this.config.size ?? 512;c.render_size=0;
     c.background=(c.engine==="local" || c.engine==="seedance") && c.edit_area==="scene"?"restyle":"keep";
     c.pitch=this.$("pitch").checked; c.remove_text=this.$("remove_text").checked;
@@ -538,7 +540,22 @@ class ArtistStudio {
     this.$("refine_lips").checked=!!this.config.refine_lips;
     this.$("h3_steps").value=this.config.h3_steps || (this.config.quality==="fast"?8:40);
     this.$("sampling-setting").hidden=!["h3","wan"].includes(this.config.engine);
+    this.syncAttentionBackend();
     this.container.querySelectorAll('input[name="gs-look"]').forEach(input=>input.checked=input.value===this.lookMode);
+  }
+  syncAttentionBackend() {
+    const select=this.$("h3_attention"),setting=this.$("h3-attention-setting"),note=this.$("h3-attention-note");
+    if(!select || !setting)return;
+    setting.hidden=this.config.engine!=="h3";
+    const available=this.modelStatus?.h3_attention_backends || {native:true};
+    for(const option of select.options)option.disabled=option.value!=="native" && !available[option.value];
+    const selected=this.config.h3_attention || "native";
+    select.value=selected;
+    if(note)note.textContent=selected!=="native" && !available[selected]
+      ?"This backend is unavailable. Install its nodes or choose Native."
+      :selected==="sage_sol"?"Sparse attention can change detail. Check faces and motion."
+      :selected==="kitchen"?"Uses Comfy Kitchen attention for this shot."
+      :"Keeps the model’s default attention.";
   }
   async reset() {
     if(this.resetting)return false;
@@ -632,6 +649,7 @@ class ArtistStudio {
     this.$("sampling-setting").hidden=!["h3","wan"].includes(this.config.engine);
     const h3Quality=this.config.engine==="h3";
     this.$("h3-steps-setting").hidden=!h3Quality;
+    this.syncAttentionBackend();
     this.$("sampling-label").textContent=h3Quality?"H3 sampling mode":"Detail level";
     this.$("h3-steps-note").textContent=this.config.quality==="fast"?"8 steps recommended with Turbo. Custom counts are unbenchmarked.":"40 steps is the standard default. Lower counts run faster; check the result.";
 

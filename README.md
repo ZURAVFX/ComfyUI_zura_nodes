@@ -6,6 +6,8 @@
 
 For **Viewport to final**, start with H3: its five-second train example was artist-approved. LTX remains experimental because crude blockout shapes and warping can persist. Wan is available for motion transfer and swaps, rather than viewport rendering.
 
+H3 offers optional **Comfy Kitchen** and experimental **Sage + Sol** attention under **More controls**. See [measured speed comparisons and setup](H3_SPEED.md). Native remains the default for existing shots.
+
 To open the complete studio, start ComfyUI and click **Zura Studio**. On a default local installation, use `Open_Zura_Studio.url` or open `http://127.0.0.1:8188/?zura=1`. All four models share the same project and review flow. The standalone Wan test graph is only a diagnostic example.
 
 Studio shows your GPU memory and RAM, a model-specific starting size and clip length, and a collapsible checklist of missing model files. These are measured examples on an RTX 4080 with 16 GB VRAM and 64 GB RAM, not minimum specifications or guaranteed render times:

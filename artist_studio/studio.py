@@ -38,7 +38,7 @@ STAGES.update({"ltx25_" + phase: "LTX 2.5 " + phase for phase in
                ("text", "motion", "stage1", "upscale", "refine", "decode", "cleanup")})
 DEFAULTS = {"engine": "local", "background": "keep", "scope": "person", "prompt": "",
             "start": 0.0, "duration": 2.0, "size": 512, "performer": -1,
-            "margin": 20, "pitch": False, "seed": 42, "render_size": 0, "h3_preset": "preview_quality", "h3_steps": 0, "remove_text": False,
+            "margin": 20, "pitch": False, "seed": 42, "render_size": 0, "h3_preset": "preview_quality", "h3_steps": 0, "h3_attention": "native", "remove_text": False,
             "resolution": 1280, "delivery_mode": "native", "quality": "fast", "audio_id": "", "audio_start": 0.0, "length_mode": "custom", "lip_sync": False, "refine_lips": False,
             "finished_frame_position": "first", "finished_frame_number": 1,
             "subject_mode": "auto", "workflow_mode": "swap", "edit_area": "mask", "mask_method": "auto", "mask_prompt": "person", "mask_points": []}
@@ -55,6 +55,14 @@ def sha(path):
 
 def canonical(value):
     return json.dumps(value, sort_keys=True, separators=(",", ":"))
+
+
+def h3_attention_capabilities(node_mappings):
+    """Optional sampling patches never determine baseline H3 readiness."""
+    return {"native": True,
+            "kitchen": "ModelAttentionBackend" in node_mappings,
+            "sage_sol": all(name in node_mappings for name in
+                            ("PathchSageAttentionKJ", "SolAttnPatch"))}
 
 
 def clean_config(value):
@@ -82,6 +90,7 @@ def clean_config(value):
                          ("finished_frame_position", ("first", "last", "frame")),
                          ("mask_method", ("auto", "text", "points")),
                          ("h3_preset", H3_PRESETS),
+                         ("h3_attention", ("native", "kitchen", "sage_sol")),
                          ("scope", ("person", "head"))]:
         if c[key] not in options:
             raise ValueError(f"Choose a valid {key} option.")
@@ -1845,6 +1854,7 @@ def register():
         from .wan_speech import readiness as wan_speech_readiness
         return web.json_response({**hardware_snapshot(), "models": models, "h3_models": h3_models, "wan_models": wan_models, "speech": readiness(),
             "h3_text_cleanup": text_cleanup_readiness(),
+            "h3_attention_backends": h3_attention_capabilities(nodes.NODE_CLASS_MAPPINGS),
             "wan_speech": wan_speech_readiness(),
             "engine_ready": {"local": all(models[key] for key in masked_keys) and not missing_ltx_nodes,
                              "local_scene": all(models[key] for key in scene_keys) and all(detectors.values()) and not missing_ltx_scene_nodes,
