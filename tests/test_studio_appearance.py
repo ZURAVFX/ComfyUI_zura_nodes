@@ -44,10 +44,14 @@ class AppearanceTests(unittest.TestCase):
 
     def test_invalid_or_unverified_image_choices_are_rejected(self):
         for body in ({"look_mode": "unknown"}, {"references": []},
-                     {"references": ["1", "2", "3", "4"]}, {"references": "1"},
+                     {"references": ["1"] * 10}, {"references": "1"},
                      {"references": [None]}):
             with self.assertRaises(ValueError):
                 self.resolve(body)
+        with self.assertRaisesRegex(ValueError, "match"):
+            self.resolve({"references": ["1", "2"], "reference_roles": ["character"]})
+        with self.assertRaisesRegex(ValueError, "valid role"):
+            self.resolve({"references": ["1"], "reference_roles": ["building"]})
         self.assets["1"]["asset_kind"] = "video"
         with self.assertRaises(ValueError):
             self.resolve({"references": ["1"]})
@@ -89,7 +93,7 @@ class AppearanceTests(unittest.TestCase):
     def test_person_and_object_selections_share_the_reference_path(self):
         p = fixture.SharedEngineTests().project()
         p["references"] = [self.assets["1"], self.assets["2"]]
-        p["config"] = studio.clean_config({**p["config"], "mask_method": "text", "mask_prompt": "chair"})
+        p["config"] = studio.clean_config({**p["config"], "workflow_mode": "swap", "mask_method": "text", "mask_prompt": "chair"})
         with patch.object(studio, "assert_approved"), patch.object(studio, "check_asset"):
             graph = studio.build_graph(p, "design")
         self.assertIn("the area described as chair", graph["127"]["inputs"]["value"])

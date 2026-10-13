@@ -47,8 +47,8 @@ class DrivingClipTests(unittest.TestCase):
                 patch.object(media_source, "decode_clip", return_value=(frames, audio, info)):
             video, _ = driving_clip.ZuraLoadVideo().load(
                 clip="ref.mp4", duration_seconds=2, keep_source_audio=False, source_max_side=1280)
-        components = video if isinstance(video, dict) else video.get_components()
-        self.assertIsNone(components["audio"])
+        _, out_audio, _ = video_module.video_components(video)
+        self.assertIsNone(out_audio)
 
     def test_silent_source_does_not_invent_audio(self):
         frames, info = self.make_frames(), {"fps": 24}
@@ -56,8 +56,8 @@ class DrivingClipTests(unittest.TestCase):
                 patch.object(media_source, "decode_clip", return_value=(frames, None, info)):
             video, _ = driving_clip.ZuraLoadVideo().load(
                 clip="ref.mp4", duration_seconds=2, keep_source_audio=True, source_max_side=1280)
-        components = video if isinstance(video, dict) else video.get_components()
-        self.assertIsNone(components["audio"])
+        _, out_audio, _ = video_module.video_components(video)
+        self.assertIsNone(out_audio)
 
     def test_url_takes_priority_over_local_file(self):
         with patch.object(media_source, "download_video", return_value="downloaded.mp4") as download, \

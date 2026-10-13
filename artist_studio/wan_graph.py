@@ -475,8 +475,10 @@ def _project_pins(project: Any) -> dict[str, Any]:
     source, character, opening = project.get("source"), project.get("character"), project.get("opening_input")
     if type(source) is not dict or type(character) is not dict or type(opening) is not dict:
         raise WanGraphPlanError("The Wan project is missing its approved source or appearance references.")
+    viewport_render = bool(config.get("viewport_render") or config.get("workflow_mode") == "viewport")
+    appearance = opening if viewport_render else character
     source_sha = _sha(source.get("sha"), "source")
-    character_sha = _sha(character.get("sha"), "character appearance")
+    character_sha = _sha(appearance.get("sha"), "scene appearance" if viewport_render else "character appearance")
     opening_sha = _sha(opening.get("sha"), "opening appearance")
     approval = _sha(project.get("approval"), "mask approval")
     opening_key = _sha(project.get("opening_key"), "opening review")
@@ -528,7 +530,7 @@ def _project_pins(project: Any) -> dict[str, Any]:
         "source_file": source.get("file"),
         "approval": approval,
         "character_sha": character_sha,
-        "character_file": character.get("file"),
+        "character_file": appearance.get("file"),
         "opening_sha": opening_sha,
         "opening_key": opening_key,
         "opening_approval": opening_approval,
@@ -540,6 +542,7 @@ def _project_pins(project: Any) -> dict[str, Any]:
         "length_mode": length_mode,
         "resolution": resolution,
         "scope": scope,
+        "viewport_render": viewport_render,
     }
 
 

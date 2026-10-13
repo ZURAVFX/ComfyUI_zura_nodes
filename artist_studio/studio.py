@@ -40,7 +40,7 @@ DEFAULTS = {"engine": "local", "background": "keep", "scope": "person", "prompt"
             "start": 0.0, "duration": 2.0, "size": 512, "performer": -1,
             "margin": 20, "pitch": False, "seed": 42, "render_size": 0, "h3_preset": "preview_quality", "remove_text": False,
             "resolution": 1280, "delivery_mode": "native", "quality": "fast", "audio_id": "", "audio_start": 0.0, "length_mode": "custom", "lip_sync": False, "refine_lips": False,
-            "edit_area": "mask", "mask_method": "auto", "mask_prompt": "person", "mask_points": []}
+            "workflow_mode": "swap", "edit_area": "mask", "mask_method": "auto", "mask_prompt": "person", "mask_points": []}
 PREP_KEYS = ("start", "duration", "size", "scope", "performer", "margin", "pitch")
 
 
@@ -58,10 +58,14 @@ def canonical(value):
 
 def clean_config(value):
     c = {**DEFAULTS, **{k: v for k, v in value.items() if k in DEFAULTS}}
-    # Migrate the former scene-restyle selector when the artist configures a
-    # legacy shot. Reading its saved record alone never changes approvals.
-    if "edit_area" not in value and value.get("background") == "restyle":
-        c["edit_area"] = "scene"
+    # Preserve the former two-way edit selector on older saved shots. The
+    # viewport route is opt-in and never inferred from a legacy scene edit.
+    if "workflow_mode" not in value:
+        if value.get("edit_area") == "scene" or (
+                "edit_area" not in value and value.get("background") == "restyle"):
+            c["workflow_mode"] = "motion"
+        elif value.get("edit_area") == "mask":
+            c["workflow_mode"] = "swap"
     # Older saved projects retain their selected render size. New artist
     # controls keep mask preparation at 512 and specify output size separately.
     if "resolution" not in value:
@@ -72,13 +76,15 @@ def clean_config(value):
     for key, options in [("engine", ("local", "h3", "wan", "seedance")), ("background", ("keep", "restyle")),
                          ("quality", ("fast", "detailed")),
                          ("length_mode", ("custom", "original")),
-                         ("edit_area", ("mask", "scene")),
+                         ("workflow_mode", ("motion", "swap", "viewport")),
                          ("mask_method", ("auto", "text", "points")),
                          ("h3_preset", H3_PRESETS),
                          ("scope", ("person", "head"))]:
         if c[key] not in options:
             raise ValueError(f"Choose a valid {key} option.")
-    # The visible edit-area choice is the sole source of scene routing.
+    c["viewport_render"] = c["workflow_mode"] == "viewport"
+    c["edit_area"] = "mask" if c["workflow_mode"] == "swap" else "scene"
+    # The visible task choice is the sole source of scene/mask routing.
     c["background"] = "restyle" if c["engine"] in ("local", "seedance") and c["edit_area"] == "scene" else "keep"
     for key in ("start", "duration", "audio_start"):
         c[key] = float(c[key])
@@ -123,6 +129,33 @@ def clean_config(value):
         # 720p base instead of keeping a hidden fourth choice in saved shots.
         c["resolution"] = 1280
     return c
+
+
+def _viewport_project(project):
+    """Expose the single shared viewport flag and ordered reference roles to model builders."""
+    result = copy.copy(project)
+    config = dict(project.get("config") or {})
+    viewport = config.get("workflow_mode") == "viewport" or bool(config.get("viewport_render"))
+    config["viewport_render"] = viewport
+    if viewport:
+        config["edit_area"] = "scene"
+        config["background"] = "restyle"
+    result["config"] = config
+    result["viewport_render"] = viewport
+    references = list(project.get("references", []))
+    if (viewport and config.get("engine") == "h3" and project.get("look_mode") == "ready" and
+            project.get("starting_asset")):
+        if len(references) >= 9:
+            raise ValueError("H3 can use a finished scene image plus up to eight extra look references.")
+        references.insert(0, {**project["starting_asset"], "role": "environment",
+                              "viewport_role": "starting_frame"})
+    if viewport and not references and project.get("character"):
+        references = [project["character"]]
+    result["viewport_references"] = [
+        {**reference, "role": reference.get("role", "auto")}
+        for reference in references
+    ]
+    return result
 
 
 def h3_generation_resolution(config):
@@ -203,8 +236,9 @@ def validate_selection(project):
     frames = max(1, int(seconds * 24 + 1e-6))
     if h3 and not 5 <= frames <= 120:
         raise ValueError("H3 currently supports 0.21 to 5 seconds. Choose a shorter custom clip, or use Wan for a longer take.")
-    if ltx_scene and frames > 120:
-        raise ValueError("LTX whole-scene generation currently supports up to 5 seconds. Choose a shorter custom clip, or use Wan for a longer take.")
+    if ltx_scene and frames > (360 if c.get("workflow_mode") == "viewport" else 120):
+        limit = "15 seconds" if c.get("workflow_mode") == "viewport" else "5 seconds"
+        raise ValueError(f"LTX whole-scene generation currently supports up to {limit}. Choose a shorter custom clip.")
     if wan_speech and frames > 720:
         raise ValueError("Wan replacement speech currently supports up to 30 seconds. Choose a shorter custom clip.")
 
@@ -304,7 +338,7 @@ def _ltx25_model_pin(path):
 def ltx25_native_plan(project):
     """Resolve the current reviewed interval and model files without inference."""
     from . import verify_review
-    from .ltx25 import QUALIFIED_MODELS, build_plan
+    from .ltx25 import QUALIFIED_MODELS, VIEWPORT_MODELS, build_plan
     assert_approved(project)
     source = check_asset(project["source"])
     check_asset(project["character"])
@@ -323,18 +357,21 @@ def ltx25_native_plan(project):
     timeline = {"frames": clip["frames"], "fps": clip["fps"], "width": width, "height": height,
                 "has_audio": bool(clip.get("has_audio")), "source_has_audio": source_has_audio, "start": clip["start"],
                 "review_source_sha256": sha(reviewed_source)}
+    viewport = bool(project.get("config", {}).get("viewport_render"))
+    model_set = VIEWPORT_MODELS if viewport else QUALIFIED_MODELS
     categories = {"model": "diffusion_models", "video_vae": "vae", "audio_vae": "vae",
                   "union": "loras", "upscaler": "latent_upscale_models"}
     paths = {}
     for name, category in categories.items():
-        value = folder_paths.get_full_path(category, QUALIFIED_MODELS[name])
+        value = folder_paths.get_full_path(category, model_set[name])
         if not value:
-            raise ValueError("An LTX 2.5 component is missing: " + QUALIFIED_MODELS[name])
+            raise ValueError("An LTX 2.5 component is missing: " + model_set[name])
         paths[name] = Path(value)
-    for name, path in ltx25_detector_paths().items():
-        if path is None:
-            raise ValueError("The local LTX body-motion detector is missing: " + QUALIFIED_MODELS[name])
-        paths[name] = path
+    if not viewport:
+        for name, path in ltx25_detector_paths().items():
+            if path is None:
+                raise ValueError("The local LTX body-motion detector is missing: " + QUALIFIED_MODELS[name])
+            paths[name] = path
     encoder = {"clip_name": "gemma4-12b-with-proj-ltx-2.5-nvfp4.safetensors", "type": "ltxv", "device": "default"}
     encoder_path = folder_paths.get_full_path("text_encoders", encoder["clip_name"])
     if not encoder_path:
@@ -346,10 +383,13 @@ def ltx25_native_plan(project):
         if not 0 < length <= 16 * 1024 * 1024:
             raise ValueError("The LTX Union adapter has an invalid metadata header.")
         header = json.loads(stream.read(length))
-    factor = float(header.get("__metadata__", {}).get("reference_downscale_factor", 1))
+    factor = 1 if viewport else 2
+    metadata_factor = (header.get("__metadata__") or {}).get("reference_downscale_factor")
+    if factor == 2 and str(metadata_factor) != "2":
+        raise ValueError("The selected LTX adapter does not declare the required guide downscale factor.")
     pins = {name: _ltx25_model_pin(path) for name, path in paths.items()}
-    return build_plan(project, scenario=scenario, timeline=timeline,
-        models=dict(QUALIFIED_MODELS), text_encoder_inputs=encoder, model_pins=pins,
+    return build_plan(_viewport_project(project), scenario=scenario, timeline=timeline,
+        models=dict(model_set), text_encoder_inputs=encoder, model_pins=pins,
         approval_key=prep_key(project), original_audio_sha=project["source"]["sha"],
         union_downscale_factor=factor)
 
@@ -384,13 +424,13 @@ def build_graph(project, stage, use_cache=True, run_id=None):
             "source": f"Zura {label} memory hand-off " + project["id"]}}}
     if stage == "h3":
         from .h3 import build_h3_graph
-        return build_h3_graph(project, use_cache=use_cache)
+        return build_h3_graph(_viewport_project(project), use_cache=use_cache)
     if stage == "h3_enhance":
         from .enhancement import build_graph as enhancement_graph
         return enhancement_graph(project, project.get("h3_enhancement_base"), run_id=run_id)
     if stage == "wan":
         from .wan import build_wan_graph
-        return build_wan_graph(project, use_cache=use_cache)
+        return build_wan_graph(_viewport_project(project), use_cache=use_cache)
     if stage == "design" and project.get("look_mode") == "ready":
         assert_approved(project)
         asset = project.get("starting_asset")
@@ -503,6 +543,13 @@ def build_graph(project, stage, use_cache=True, run_id=None):
                 " If the appearance reference shows an object or product, replace the matching object "
                 "using its shape, materials and details. Keep its scene position, scale and perspective. "
                 "Do not turn an object reference into a person.")
+            if c.get("workflow_mode") == "viewport":
+                graph["127"]["inputs"]["value"] = (
+                    "Turn the grey 3D viewport/blockout into one finished, coherent scene. Treat the first image as "
+                    "the exact composition, camera perspective, subject placement, geometry and ground contact to preserve. "
+                    "Use the appearance references only for the elements they depict. Replace the grey viewport shading "
+                    "throughout the full frame, keep the existing subjects and objects in place, and do not add or remove "
+                    "scene elements. Return one finished frame with the same composition and aspect ratio. Do not add text.")
         elif c["mask_method"] != "auto":
             region = ("the area described as " + c["mask_prompt"] if c["mask_method"] == "text"
                       else "the selected performer or object")
@@ -521,7 +568,17 @@ def build_graph(project, stage, use_cache=True, run_id=None):
         if c.get("remove_text"):
             graph["127"]["inputs"]["value"] += " Remove all on-screen captions, subtitles, title banners and lettering. Fill their former areas naturally with the scene or clothing."
         from .appearance import add_design_references
-        add_design_references(graph, project.get("references") or [project["character"]], check_asset)
+        add_design_references(graph, (project.get("references") or [project["character"]])[:3], check_asset)
+        if c.get("workflow_mode") == "viewport":
+            role_names = {"auto": "visual reference", "environment": "environment", "character": "character",
+                          "object": "object", "detail": "detail", "style": "style"}
+            refs = project.get("references") or [project["character"]]
+            role_text = " ".join(
+                f"Reference {index + 1} is for the {role_names.get(asset.get('role', 'auto'), 'visual')} ."
+                for index, asset in enumerate(refs[:3]))
+            graph["127"]["inputs"]["value"] += (
+                " Map each image to the scene element it depicts: " + role_text +
+                " Preserve distinct characters as distinct designs; do not copy a character sheet into the frame.")
         if c["edit_area"] == "mask":
             # Register the approved opening look to the real source before
             # video inference. Only the selected region may change; this is
@@ -699,12 +756,19 @@ def build_graph(project, stage, use_cache=True, run_id=None):
     return graph
 
 
+def _needs_h3_reference_stage(project, graph):
+    """Only legacy H3 needs a serialized reference-conditioning hand-off."""
+    return ("h3_cached" not in graph
+            and not _viewport_project(project).get("viewport_render", False))
+
+
 def editable_graph(project, stage="auto"):
     """Export a snapshot without queuing, spending credits or changing approvals."""
     p = copy.deepcopy(project)
     p["config"] = clean_config(p["config"])
     if stage == "auto":
         stage = ("prepare" if not p.get("approval") or p["approval"] != prep_key(p) else
+                 "h3" if p["config"].get("workflow_mode") == "viewport" and p["config"]["engine"] == "h3" else
                  "animate" if p.get("opening_input") and p["config"]["engine"] != "seedance" else
                  "design" if p["config"]["engine"] != "seedance" else "draft")
     if stage == "animate":
@@ -735,20 +799,21 @@ def editable_graph(project, stage="auto"):
     # the old full-clip IMAGE branch into subgraphs does not bound memory.
     graph = build_graph(p, stage, use_cache=stage == "wan")
     if stage in ("background", "restyle", "h3"):
-        shot = next(k for k, n in graph.items() if n["class_type"] == "GenjLoadReviewedShot")
-        for n in graph.values():
-            for name, value in list(n["inputs"].items()):
-                if value == [shot, 0]:
-                    n["inputs"][name] = ["zura_audio_selection", 0]
-                elif value == [shot, 3]:
-                    n["inputs"][name] = ["zura_audio_selection", 1]
-        inputs = {"video": [shot, 0], "clip_details": [shot, 3],
-                  "audio_start_seconds": p["config"]["audio_start"]}
-        if p.get("audio"):
-            graph["zura_reference_audio"] = {"class_type": "LoadAudio",
-                "inputs": {"audio": p["audio"]["file"]}, "_meta": {"title": "Reference audio · optional"}}
-            inputs["audio"] = ["zura_reference_audio", 0]
-        graph["zura_audio_selection"] = {"class_type": "GenjApplyReferenceAudio", "inputs": inputs}
+        shot = next((k for k, n in graph.items() if n["class_type"] == "GenjLoadReviewedShot"), None)
+        if shot is not None:
+            for n in graph.values():
+                for name, value in list(n["inputs"].items()):
+                    if value == [shot, 0]:
+                        n["inputs"][name] = ["zura_audio_selection", 0]
+                    elif value == [shot, 3]:
+                        n["inputs"][name] = ["zura_audio_selection", 1]
+            inputs = {"video": [shot, 0], "clip_details": [shot, 3],
+                      "audio_start_seconds": p["config"]["audio_start"]}
+            if p.get("audio"):
+                graph["zura_reference_audio"] = {"class_type": "LoadAudio",
+                    "inputs": {"audio": p["audio"]["file"]}, "_meta": {"title": "Reference audio · optional"}}
+                inputs["audio"] = ["zura_reference_audio", 0]
+            graph["zura_audio_selection"] = {"class_type": "GenjApplyReferenceAudio", "inputs": inputs}
     if stage == "wan":
         classes = {node["class_type"] for node in graph.values()}
         if "ZuraWanSavePreparationPart" in classes:
@@ -1081,7 +1146,10 @@ class Studio:
                 raise ValueError("LTX returned a video outside its output folder.")
             from .enhancement import inspect_video
             width, height = plan["basis"]["delivery"]
-            actual = inspect_video(path, expected_frames=plan["basis"]["timeline"]["frames"],
+            # Layout-to-Render intentionally snaps the source interval down to
+            # 8k+1 frames. Validate the encoded delivery against that planned
+            # count, not the longer reviewed source interval.
+            actual = inspect_video(path, expected_frames=plan["basis"]["frames"],
                 expected_width=width, expected_height=height, expected_fps=24,
                 expected_audio_tracks=0 if plan["scenario"] == "silent" else 1)
             append_result_once(p, {"stage": "restyle", "label": "LTX 2.5", "url": media_url(asset),
@@ -1549,7 +1617,7 @@ class Studio:
             cache_key, info = text_cache_info(graph, stage)
             next_stage, stage = stage, "video_text"
             graph = text_graph(info, cache_key)
-        elif stage == "h3" and "h3_cached" not in graph:
+        elif stage == "h3" and _needs_h3_reference_stage(p, graph):
             from .h3 import cache_key as h3_cache_key, reference_graph
             next_stage, stage = stage, "h3_references"
             graph = reference_graph(graph, h3_cache_key(p))
@@ -1874,6 +1942,20 @@ def register():
         async with studio.lock:
             p = studio.store.load(request.match_info["identity"])
             body = await request.json()
+            roles = body.get("reference_roles")
+            if roles is not None:
+                from .appearance import REFERENCE_ROLES
+                if not p.get("references") and roles and p.get("character"):
+                    p["references"] = [copy.deepcopy(p["character"])]
+                references = p.get("references", [])
+                if not isinstance(roles, list) or len(roles) != len(references) or any(role not in REFERENCE_ROLES for role in roles):
+                    raise ValueError("Choose a valid role for every reference image.")
+                if any(reference.get("role", "auto") != role for reference, role in zip(references, roles)):
+                    for reference, role in zip(references, roles):
+                        reference["role"] = role
+                    p.update(opening_input=None, opening_key=None, opening_url=None, opening_approval=None,
+                             draft_task=None, accepted_draft=None)
+                    p["phase"] = "approved" if p.get("approval") else "review" if p.get("review") else "new"
             p = studio.configure(p, body.get("config", {}))
             return web.json_response(public_project(p))
 

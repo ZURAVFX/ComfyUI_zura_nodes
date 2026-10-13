@@ -1,5 +1,25 @@
 # Zura Studio validation
 
+## Viewport guide comparison, 13 October 2026
+
+The supplied train blockout is 15 seconds at 1920 × 1080. A five-second
+LTX 2.5 Layout-to-Render run generated 113 frames at 24 fps and 1920 × 1080.
+A second run added the LTX 2.3 Union Control depth guide at the same output
+size. Both completed. In this scene, the raw Layout route kept the exterior
+train composition closer to its reference. The depth-guided result softened
+the image and shifted scene details, so depth was removed from the artist
+controls. No Canny comparison was run; it is not a qualified release option.
+Neither diagnostic is an artist-approved final. The source video and test
+renders remain local and are not included in the package.
+
+The supplied MiniMax API workflow uses five connected train reference images
+and a text prompt. Its `LoadVideo` node is not connected to the model's
+`reference_videos.video_1` input. It is therefore an image-reference example,
+not evidence of hidden video Canny/depth preprocessing or of local
+viewport-video conditioning. That route demonstrates that its API generation
+can work from image references without a geometry prepass, but it does not
+replace a matched local video-conditioning test.
+
 ## Current release qualification, 11 October 2026
 
 The artist accepts all three five-second Wan 1080p examples and all three

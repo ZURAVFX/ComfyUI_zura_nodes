@@ -286,6 +286,165 @@ def valid_length(count):
     return 5 + 17 * max(0, ceil((count - 5) / 17))
 
 
+class GenjH3ViewportFrameData:
+    """Validate a prepared viewport clip and size the local H3 target latent."""
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {"required": {"video": ("VIDEO",)}}
+
+    RETURN_TYPES = ("IMAGE", "INT", "INT", "INT", "INT", "INT", "INT", "INT", "INT")
+    RETURN_NAMES = ("reference_frames", "width", "height", "padded_frames", "real_frames",
+                    "crop_x", "crop_y", "crop_width", "crop_height")
+    FUNCTION = "prepare"
+    CATEGORY = "Zura/Artist Studio"
+
+    def prepare(self, video):
+        components = video.get_components()
+        images = components.images
+        if images.ndim != 4 or not torch.isfinite(images).all():
+            raise ValueError("Connect a valid viewport video with decoded frames.")
+        count, height, width = images.shape[:3]
+        if abs(float(components.frame_rate) - 24) > 0.001:
+            raise ValueError("Prepare the viewport clip at 24 fps before using H3.")
+        if not 5 <= count <= 120:
+            raise ValueError("Local H3 viewport renders currently support 0.21–5 seconds per take. Select a five-second section of the train scene.")
+        # Preserve the full camera frame with a tiny replicated border rather
+        # than cropping or stretching common 16:9 sizes such as 1280x720.
+        target_width, target_height = ceil(width / 32) * 32, ceil(height / 32) * 32
+        left, top = (target_width - width) // 2, (target_height - height) // 2
+        padded = F.pad(images.permute(0, 3, 1, 2),
+                       (left, target_width - width - left, top, target_height - height - top),
+                       mode="replicate").permute(0, 2, 3, 1)
+        return (padded, target_width, target_height, valid_length(count), count,
+                left, top, width, height)
+
+
+H3_VIEWPORT_ROLES = {
+    "auto": "a visual appearance reference for the scene",
+    "environment": "the environment and scene design",
+    "character": "the character appearance and identity",
+    "object": "the object or product design",
+    "detail": "a close-up detail to reproduce accurately",
+    "style": "the visual style and material treatment",
+}
+
+
+def build_h3_viewport_graph(project):
+    """Build a local reference-to-video graph for a complete viewport scene."""
+    from .studio import assert_approved, check_asset
+
+    if not project.get("viewport_render"):
+        raise ValueError("Choose Viewport render mode before starting this H3 route.")
+    assert_approved(project)
+    c = project["config"]
+    if c["engine"] != "h3":
+        raise ValueError("Choose MiniMax H3 before starting a viewport render.")
+    source = project.get("source")
+    if not source:
+        raise ValueError("Upload the viewport blockout video first.")
+    source_path = check_asset(source)
+    import av
+    with av.open(str(source_path)) as container:
+        stream = container.streams.video[0]
+        available = (float(stream.duration * stream.time_base) if stream.duration
+                     else float(container.duration / av.time_base))
+    original_length = c.get("length_mode") == "original"
+    start = 0.0 if original_length else c["start"]
+    if start >= available:
+        raise ValueError("The selected start time is beyond the end of this viewport video.")
+    selected_seconds = available if original_length else min(c["duration"], available - start)
+    selected_frames = max(1, int(selected_seconds * 24 + 1e-6))
+    if not 5 <= selected_frames <= 120:
+        raise ValueError("Local H3 viewport renders currently support 0.21–5 seconds per take. Select a five-second section of the train scene.")
+    references = project.get("viewport_references") or []
+    if not 1 <= len(references) <= 9:
+        raise ValueError("Add between one and nine appearance references for the H3 viewport render.")
+    for reference in references:
+        check_asset(reference)
+
+    # H3 Max's TrainScene prompt treats the viewport as a camera/layout guide
+    # and assigns a separate job to each still. Keep those roles explicit in
+    # the local route instead of trying to collapse the references into one
+    # opening frame or one collage.
+    role_lines = []
+    for index, reference in enumerate(references):
+        if reference.get("viewport_role") == "starting_frame":
+            role_lines.append(
+                f"<Picture {index + 1}> is the finished scene image supplied by the artist. Use it for the scene's "
+                "materials, lighting and overall visual treatment; the viewport video remains authoritative for "
+                "camera, framing, layout and motion.")
+        else:
+            role = H3_VIEWPORT_ROLES.get(reference.get("role", "auto"), H3_VIEWPORT_ROLES["auto"])
+            role_lines.append(f"<Picture {index + 1}> is {role}. Use it only for the depicted design details.")
+    prompt = (
+        "<Video 1> is the grey 3D viewport/blockout for the shot. Use it as the guide for the exact camera path, "
+        "perspective, framing, timing, object placement, scale, scene layout and motion. Recreate the whole frame "
+        "as a finished scene; do not preserve the grey viewport shading, untextured materials, or blockout appearance. "
+        + " ".join(role_lines) + " "
+        "Build one coherent final scene from the references. Keep distinct character designs distinct, place each "
+        "reference on its corresponding subject, and do not turn the reference images into a collage or add duplicate people. "
+        "Retain the source camera movement, parallax, train movement, geometry and timing throughout the shot. "
+        "Use the cap/logo reference for its visible small details without inventing or replacing the mark. "
+        + str(c.get("prompt", "")).strip()
+    ).strip()
+    if c.get("remove_text"):
+        prompt += " Remove all on-screen text, subtitles, labels and interface overlays. Rebuild their former areas as part of the finished scene."
+
+    graph = {}
+
+    def node(identity, typ, **inputs):
+        graph[identity] = {"class_type": typ, "inputs": inputs}
+        return [identity, 0]
+
+    source_video = node("h3_viewport_source", "LoadVideo", file=source["file"])
+    selected = node("h3_viewport_clip", "GenjSelectClip", video=source_video,
+                    start_seconds=c["start"], duration_seconds=c["duration"],
+                    long_edge=c.get("resolution", c["size"]),
+                    use_original_length=original_length)
+    node("h3_viewport_data", "GenjH3ViewportFrameData", video=selected)
+    image_refs = {}
+    for index, reference in enumerate(references):
+        image_refs[f"ref_images.ref_image_{index}"] = node(
+            f"h3_viewport_image_{index + 1}", "LoadImage", image=reference["file"])
+
+    model = node("h3_model", "UNETLoader", unet_name=H3_MODELS["h3"][1], weight_dtype="default")
+    fast = c.get("h3_preset", "take_quality").endswith("_fast")
+    if fast:
+        model = node("h3_turbo", "LoraLoaderModelOnly", model=model,
+                     lora_name=H3_MODELS["h3_turbo"][1], strength_model=1.0)
+    model = node("h3_shift", "MiniMaxH3SigmaShift", model=model, shift_video=12.0, shift_audio=3.0)
+    clip = node("h3_clip", "CLIPLoader", clip_name=H3_MODELS["h3_text"][1], type="minimax", device="default")
+    vae = node("h3_vae", "VAELoader", vae_name=H3_MODELS["h3_video_vae"][1])
+    audio_vae = node("h3_audio_vae", "VAELoader", vae_name=H3_MODELS["h3_audio_vae"][1])
+    width = ["h3_viewport_data", 1]
+    height = ["h3_viewport_data", 2]
+    length = ["h3_viewport_data", 3]
+    positive = node("h3_references", "MiniMaxH3ReferenceToVideo", clip=clip, vae=vae,
+                    audio_vae=audio_vae, prompt=prompt, width=width, height=height,
+                    length=length, ref_image_size="match", **image_refs,
+                    **{"ref_videos.ref_video_0": ["h3_viewport_data", 0]})
+    latent = ["h3_references", 1]
+    guider = node("h3_guider", "BasicGuider", model=model, conditioning=positive)
+    noise = node("h3_noise", "RandomNoise", noise_seed=c["seed"])
+    sigmas = node("h3_schedule", "BasicScheduler", model=model, scheduler="simple",
+                  steps=8 if fast else 40, denoise=1.0)
+    sampler = node("h3_sampler", "KSamplerSelect", sampler_name="res_multistep" if fast else "euler")
+    sampled = node("h3_sample", "SamplerCustomAdvanced", noise=noise, guider=guider,
+                   sampler=sampler, sigmas=sigmas, latent_image=latent)
+    decoded = node("h3_decode", "VAEDecode", samples=sampled, vae=vae)
+    trimmed = node("h3_trim", "GetImageRangeFromBatch", images=decoded,
+                    start_index=0, num_frames=["h3_viewport_data", 4])
+    cropped = node("h3_crop", "ImageCrop", image=trimmed,
+                   width=["h3_viewport_data", 7], height=["h3_viewport_data", 8],
+                   x=["h3_viewport_data", 5], y=["h3_viewport_data", 6])
+    video = node("h3_video", "CreateVideo", images=cropped, fps=24.0)
+    node("h3_export", "GenjRestoreSoundtrack", video=video,
+         clip_details=["h3_viewport_clip", 1],
+         take_name="studio_" + project["id"][:8] + "_h3_viewport")
+    return graph
+
+
 class GenjH3FramePad:
     """Pad source and approved mask together; never perform model inference."""
 
@@ -478,6 +637,8 @@ class ZuraH3CleanDepthTextRegions:
 
 def build_h3_graph(project, use_cache=True, preserve_background=True):
     """Separate picture references, native audio and depth-controlled masked conditioning."""
+    if project.get("viewport_render"):
+        return build_h3_viewport_graph(project)
     from . import verify_review
     from .studio import assert_approved, check_asset
 
@@ -658,8 +819,9 @@ def build_h3_graph(project, use_cache=True, preserve_background=True):
     return add_finish(graph, project, native_speech=True)
 
 
-NODE_CLASS_MAPPINGS = {c.__name__: c for c in (GenjH3FramePad, GenjSaveH3Conditioning, GenjLoadH3Conditioning, ZuraH3LockReferenceAudio, ZuraH3PreserveBackground, ZuraH3CleanDepthTextRegions)}
+NODE_CLASS_MAPPINGS = {c.__name__: c for c in (GenjH3FramePad, GenjH3ViewportFrameData, GenjSaveH3Conditioning, GenjLoadH3Conditioning, ZuraH3LockReferenceAudio, ZuraH3PreserveBackground, ZuraH3CleanDepthTextRegions)}
 NODE_DISPLAY_NAME_MAPPINGS = {"GenjH3FramePad": "Prepare H3 Frames and Mask",
+    "GenjH3ViewportFrameData": "Prepare H3 Viewport Frames",
     "GenjSaveH3Conditioning": "Save H3 Character References", "GenjLoadH3Conditioning": "Load H3 Character References",
     "ZuraH3LockReferenceAudio": "Zura · Keep Selected Audio During H3 Sampling",
     "ZuraH3PreserveBackground": "Zura · Preserve H3 Background During Sampling",

@@ -90,6 +90,8 @@ class ZuraWan22LoopedChunksSampler:
             "cut_frames": ("STRING", {"default": "", "multiline": False,
                                       "tooltip": "Manual cuts: comma-separated frame numbers where a new shot begins. At 24 fps, frame 96 is 4 seconds."}),
         }, "optional": {"vision_reference": ("IMAGE", {"tooltip": "Optional separate character view for CLIP Vision; the main reference still guides the scene latent."}),
+                       "viewport_render": ("BOOLEAN", {"default": False,
+                           "tooltip": "Keep the full blockout frame as Wan's background guide while regenerating the complete scene."}),
                        "join_mode": (["Native continuation", "Soft blend"], {"default": "Native continuation",
                            "tooltip": "Native continuation keeps the previous frames intact and discards the repeated context. Soft blend fades between two decoded versions and can soften moving faces."})},
             "hidden": {"unique_id": "UNIQUE_ID"}}
@@ -103,16 +105,17 @@ class ZuraWan22LoopedChunksSampler:
     def render(self, model, clip, vae, clip_vision, reference_image, footage, prompt,
                negative_prompt, steps=6, cfg=1.0, seed=0, chunk_frames=41, overlap_frames=5,
                max_side=1280, shot_mode="Detect cuts", cut_threshold=.2, cut_frames="", unique_id=None,
-               vision_reference=None, join_mode="Native continuation"):
+               vision_reference=None, join_mode="Native continuation", viewport_render=False):
         return self._render(model, clip, vae, clip_vision, reference_image, footage, prompt,
                             negative_prompt, steps, cfg, seed, chunk_frames, overlap_frames,
                             max_side, shot_mode, cut_threshold, cut_frames, unique_id,
-                            vision_reference, join_mode)
+                            vision_reference, join_mode, viewport_render=viewport_render)
 
     def _render(self, model, clip, vae, clip_vision, reference_image, footage, prompt,
                 negative_prompt, steps=6, cfg=1.0, seed=0, chunk_frames=41, overlap_frames=5,
                 max_side=1280, shot_mode="Detect cuts", cut_threshold=.2, cut_frames="", unique_id=None,
-                vision_reference=None, join_mode="Native continuation", stream_key=None):
+                vision_reference=None, join_mode="Native continuation", stream_key=None,
+                viewport_render=False):
         # Fail fast on missing conditioning before importing ComfyUI internals.
         media = footage
         if join_mode not in ("Native continuation", "Soft blend"):
@@ -200,9 +203,9 @@ class ZuraWan22LoopedChunksSampler:
             if not hasattr(InputImpl, "VideoFromFile"):
                 raise RuntimeError("This Comfy version does not support file-backed VIDEO delivery.")
         source_bg = frames
-        # Wan's background conditioning must not contain the performer pixels.
-        # Keep the tensor shape intact while blacking out the masked region.
-        if not streaming:
+        # Whole-scene viewport rendering uses every source pixel as layout and
+        # camera context. Masked replacement keeps the performer-removal path.
+        if not streaming and not viewport_render:
             m = mask.float()
             if m.ndim == 3:
                 m = m.unsqueeze(-1)
@@ -321,7 +324,7 @@ class ZuraWan22LoopedChunksSampler:
                     pmask = hold_last(mask[wsl], length)
                     psource = hold_last(frames[wsl], length)
                     m = pmask.unsqueeze(-1) if pmask.ndim == 3 else pmask
-                    pbg = psource * (1.0 - m.clamp(0, 1))
+                    pbg = psource if viewport_render else psource * (1.0 - m.clamp(0, 1))
                     ppose, pface = (hold_last(x[wsl], length) for x in (pose, face))
                     del psource, m
                 else:
@@ -441,6 +444,7 @@ class ZuraWan22LoopedChunksSampler:
                                                           for t in chunk_timings] or [0.0])},
                        "native_inputs": {"pose_video": pose is not None, "face_video": face is not None,
                                          "background_video": True, "character_mask": True},
+                       "viewport_render": bool(viewport_render),
                        "requested_frames": total, "generated_frames": generated_frames,
                        "frame_plan": [p._asdict() for p in plan]}
             receipt['chunk_timings'] = chunk_timings

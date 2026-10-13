@@ -6,8 +6,17 @@ Start ComfyUI and click **Zura Studio**, or use `Open_Zura_Studio.url` on a
 default local installation. The direct studio link is
 `http://127.0.0.1:8188/?zura=1`.
 
-Open **Zura Studio** in ComfyUI, choose **Motion transfer** or **Object swap**,
-then drop a source video. Its thumbnail confirms the upload. Choose **Starting look**:
+Open **Zura Studio** in ComfyUI, choose a workflow, then drop a source video.
+Its thumbnail confirms the upload.
+
+- **Motion transfer** rebuilds the full frame around the source movement.
+- **Object swap** changes a selected person or object and keeps the surrounding
+  shot as the guide.
+- **Viewport to final** turns a grey 3D blockout into a finished scene. Leave
+  the mask off to change the full frame, or add a mask to limit the edit to the
+  selected area.
+
+Choose **Starting look**:
 
 - **Build from references:** add one to three images of people, objects,
   materials or environments. Describe the change if needed. All references
@@ -15,6 +24,10 @@ then drop a source video. Its thumbnail confirms the upload. Choose **Starting l
 - **Use finished frame:** upload an already-composed opening image. This skips
   image generation. Extra appearance references are optional; the first is the
   separate appearance input for video routes that support it.
+
+In **Viewport to final** with MiniMax H3, the video and look references go
+straight to H3, so it skips a separate generated starting frame. Choose
+**Use finished frame** when you want to supply a composed image as well.
 
 The optional shared **Prompt** is passed to LTX, H3, Wan and Seedance. When
 building a starting frame, it also guides that image.
@@ -33,11 +46,12 @@ storage paths and node IDs remain compatible; public names use Zura branding.
 
 ## Select the area
 
-Footage and grey viewport renders use the same Studio. **Motion transfer** uses
-the whole frame and skips segmentation, rebuilding the shot from references
-with source movement as guidance. **Object swap** selects a mask and changes
-that area while preserving the rest. Model results vary; whole-scene LTX is
-best kept to short clips, and its camera match still needs review.
+The workflow choice controls what changes. **Motion transfer** rebuilds the
+whole frame around source movement. **Object swap** changes the selected area
+and uses the rest of the shot as a guide. **Viewport to final** uses the grey
+render as the camera and layout guide. Leave its mask off to change the whole
+scene, or add one to limit the change to that area. The model routes differ,
+so check the result for camera movement, contact and scene consistency.
 
 For a masked edit, expand the selection settings for automatic person selection,
 **Describe the area** (for example, a person in a red coat or a chair), and

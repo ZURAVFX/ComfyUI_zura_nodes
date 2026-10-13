@@ -18,6 +18,11 @@ studio = fixture.studio
 class MaskModeTests(unittest.TestCase):
     def project(self, **settings):
         p = fixture.SharedEngineTests().project()
+        # The task selector now owns scene versus masked editing. Translate
+        # legacy test inputs into the equivalent current control before
+        # normalising a config that already contains workflow_mode.
+        if "edit_area" in settings and "workflow_mode" not in settings:
+            settings["workflow_mode"] = "motion" if settings["edit_area"] == "scene" else "swap"
         p['config'] = studio.clean_config({**p['config'], **settings})
         return p
 
@@ -126,7 +131,7 @@ class MaskModeTests(unittest.TestCase):
             p = self.project()
             p['approval'] = studio.prep_key(p)
             p['prepared_key'] = p['approval']
-            controller.configure(p, {**p['config'], 'edit_area':'scene'})
+            controller.configure(p, {**p['config'], 'workflow_mode':'motion', 'edit_area':'scene'})
             self.assertEqual(p['phase'], 'new')
             self.assertIsNone(p['review'])
             self.assertIsNone(p['opening_input'])

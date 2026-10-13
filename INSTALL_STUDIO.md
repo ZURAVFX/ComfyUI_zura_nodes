@@ -4,7 +4,9 @@ Zura Studio is included in the official **Zura Nodes** ComfyUI pack. The pack is
 
 ## Install the pack
 
-Download the ZIP for the current version from the official [Zura Nodes GitHub Releases](https://github.com/ZURAVFX/ComfyUI_zura_nodes/releases) page. Extract it to `ComfyUI/custom_nodes/ComfyUI_zura_nodes` so that `requirements.txt` is directly inside that folder. If the current version is listed in ComfyUI Manager, you can instead open **Manager → Install Custom Nodes**, search for **Zura Nodes**, and install the entry published by **ZURAVFX**. Manager installs the pack's Python requirements for you.
+For the simplest install, open **ComfyUI Manager → Install Custom Nodes**, search for **Zura Nodes**, and install the entry published by **ZURAVFX**. Manager installs the pack's Python requirements for you. Restart ComfyUI, then click **Zura Studio** in the sidebar.
+
+If Manager is unavailable, download the current ZIP from the official [Zura Nodes GitHub Releases](https://github.com/ZURAVFX/ComfyUI_zura_nodes/releases). Extract it to `ComfyUI/custom_nodes/ComfyUI_zura_nodes` so that `requirements.txt` is directly inside that folder.
 
 For a Windows portable ComfyUI install, open Command Prompt in the portable folder and run:
 
