@@ -1146,10 +1146,10 @@ class Studio:
                 raise ValueError("LTX returned a video outside its output folder.")
             from .enhancement import inspect_video
             width, height = plan["basis"]["delivery"]
-            # Layout-to-Render intentionally snaps the source interval down to
-            # 8k+1 frames. Validate the encoded delivery against that planned
-            # count, not the longer reviewed source interval.
-            actual = inspect_video(path, expected_frames=plan["basis"]["frames"],
+            # The sampler receives an 8k+1 padded guide, while delivery is
+            # trimmed back to the exact reviewed source interval.
+            expected_frames = plan["basis"].get("source_frames", plan["basis"]["frames"])
+            actual = inspect_video(path, expected_frames=expected_frames,
                 expected_width=width, expected_height=height, expected_fps=24,
                 expected_audio_tracks=0 if plan["scenario"] == "silent" else 1)
             append_result_once(p, {"stage": "restyle", "label": "LTX 2.5", "url": media_url(asset),

@@ -134,6 +134,7 @@ class H3ViewportRenderTests(unittest.TestCase):
             graph = h3.build_h3_graph(project, use_cache=False)
         self.assertIn("h3_shot", graph)
         self.assertNotIn("h3_viewport_source", graph)
+        self.assertNotIn("h3_viewport_control", graph)
 
     def test_graph_view_exports_direct_h3_route_without_reviewed_shot_rewiring(self):
         project = self.project()

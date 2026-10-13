@@ -413,9 +413,10 @@ def build_viewport_plan(project, *, scenario, timeline, models, text_encoder_inp
         raise ValueError("Viewport rendering requires at least nine verified frames at 24 fps.")
     if source_frames > 360:
         raise ValueError("Viewport rendering currently supports up to fifteen seconds per shot.")
-    # Official Layout-to-Render uses 8k+1 frames, rounded DOWN, without inventing
-    # repeated motion at the end of the blockout. Delivery follows this interval.
-    frames = 1 + 8 * ((source_frames - 1) // 8)
+    # Layout-to-Render requires 8k+1 frames. Pad the guide's final frame for
+    # sampling, then trim delivery back to the exact reviewed interval.
+    frames = source_frames
+    padded = frames + (1 - frames) % 8
     width, height = timeline.get("width"), timeline.get("height")
     if type(width) is not int or type(height) is not int or min(width, height) < 1:
         raise ValueError("Verify the viewport video's dimensions first.")
@@ -440,7 +441,8 @@ def build_viewport_plan(project, *, scenario, timeline, models, text_encoder_inp
     basis = {"schema": SCHEMA, "route": "viewport_layout_to_render", "run_namespace": namespace,
              "scenario": scenario, "review": project["review"], "approval": approval_key,
              "opening_key": project["opening_key"], "source": source, "opening": look,
-             "timeline": copy.deepcopy(timeline), "frames": frames, "padded": frames,
+             "timeline": copy.deepcopy(timeline), "frames": padded, "padded": padded,
+             "source_frames": source_frames,
              "delivery": delivery, "base": base, "native": native, "seed": seed,
              "positive": positive, "negative": negative, "models": copy.deepcopy(models),
              "model_pins": copy.deepcopy(model_pins), "encoder": copy.deepcopy(text_encoder_inputs),
@@ -467,7 +469,7 @@ def build_viewport_plan(project, *, scenario, timeline, models, text_encoder_inp
         dependencies[phase].append(name)
         if spec["kind"] == "images":
             return node(g, "load_" + name, "VHS_LoadImagesPath", directory="__UNBOUND__",
-                        image_load_cap=frames, skip_first_images=0, select_every_nth=1)
+                        image_load_cap=padded, skip_first_images=0, select_every_nth=1)
         typ = "GenjLoadTextConditioning" if spec["kind"] == "text" else "ZuraLoadVideoLatentData"
         args = {"cache_key": spec["key"]}
         if spec["kind"] == "video":
@@ -486,13 +488,14 @@ def build_viewport_plan(project, *, scenario, timeline, models, text_encoder_inp
     node(g, "save_text", "GenjSaveTextConditioning", positive=p, negative=n, cache_key=text_key)
     artifacts["text"] = {"phase": "text", "node": "save_text", "kind": "text", "key": text_key}
     g = graph("motion")
-    components = node(g, "components", "GetVideoComponents", video=reviewed(g))
-    images = node(g, "trim_layout", "ImageFromBatch", image=components, batch_index=0, length=frames)
+    padded_source = node(g, "pad_source", "GenjLTXFramePad", video=reviewed(g))
+    components = node(g, "components", "GetVideoComponents", video=padded_source)
+    images = node(g, "trim_layout", "ImageFromBatch", image=components, batch_index=0, length=padded)
     images = node(g, "fit_layout", "ImageScale", image=images, width=base[0], height=base[1], upscale_method="lanczos", crop="disabled")
     prefix = "zura/ltx25/" + key + "/layout/frame"
     node(g, "save_layout", "SaveImage", images=images, filename_prefix=prefix)
     artifacts["layout"] = {"phase": "motion", "node": "save_layout", "kind": "images",
-                           "prefix": prefix, "frames": frames, "raster": base, "guide": "raw_layout"}
+                           "prefix": prefix, "frames": padded, "raster": base, "guide": "raw_layout"}
 
     def sample(phase, raster, initial_name=None):
         g = graph(phase)
@@ -503,7 +506,7 @@ def build_viewport_plan(project, *, scenario, timeline, models, text_encoder_inp
         adapter = node(g, "layout_adapter", "LTXICLoRALoaderModelOnly", model=model,
                        lora_name=models["union"], strength_model=1)
         adapter_factor = [adapter[0], 1]
-        latent = load(g, phase, initial_name) if initial_name else node(g, "empty_video", "EmptyLTXVLatentVideo", width=raster[0], height=raster[1], length=frames, batch_size=1)
+        latent = load(g, phase, initial_name) if initial_name else node(g, "empty_video", "EmptyLTXVLatentVideo", width=raster[0], height=raster[1], length=padded, batch_size=1)
         layout = load(g, phase, "layout")
         layout = node(g, "fit_layout", "ImageScale", image=layout, width=raster[0], height=raster[1], upscale_method="lanczos", crop="disabled")
         look_image = node(g, "look", "LoadImage", image=look["file"])
@@ -514,7 +517,7 @@ def build_viewport_plan(project, *, scenario, timeline, models, text_encoder_inp
                       vae=vae, latent=[guided[0], 2], image=look_image, frame_idx=-1, strength=1,
                       latent_downscale_factor=adapter_factor, crop="center", use_tiled_encode=True, tile_size=256, tile_overlap=64)
         audio_vae = node(g, "audio_vae", "VAELoader", vae_name=models["audio_vae"])
-        audio = node(g, "zero_audio", "LTXVEmptyLatentAudio", frames_number=frames, frame_rate=fps, batch_size=1, audio_vae=audio_vae)
+        audio = node(g, "zero_audio", "LTXVEmptyLatentAudio", frames_number=padded, frame_rate=fps, batch_size=1, audio_vae=audio_vae)
         av = node(g, "concat", "LTXVConcatAVLatent", video_latent=[guided[0], 2], audio_latent=audio)
         guider = node(g, "guider", "CFGGuider", model=adapter, positive=guided, negative=[guided[0], 1], cfg=1)
         noise = node(g, "noise", "RandomNoise", noise_seed=seed)
@@ -537,12 +540,12 @@ def build_viewport_plan(project, *, scenario, timeline, models, text_encoder_inp
     video = load(g, "decode", "stage2_video")
     vae = node(g, "video_vae", "VAELoader", vae_name=models["video_vae"])
     images = node(g, "decode", "VAEDecodeTiled", samples=video, vae=vae, tile_size=256, overlap=64, temporal_size=128, temporal_overlap=8)
-    images = node(g, "trim_frames", "ImageFromBatch", image=images, batch_index=0, length=frames)
+    images = node(g, "trim_frames", "ImageFromBatch", image=images, batch_index=0, length=source_frames)
     images = node(g, "delivery_size", "ImageScale", image=images, width=delivery[0], height=delivery[1], upscale_method="lanczos", crop="disabled")
     args = {"images": images, "fps": fps, "bit_depth": 8, "color_space": "sRGB", "codec": "none"}
     if scenario == "original":
         components = node(g, "source_components", "GetVideoComponents", video=reviewed(g))
-        args["audio"] = node(g, "trim_audio", "TrimAudioDuration", audio=[components[0], 1], start_index=0., duration=frames / fps)
+        args["audio"] = node(g, "trim_audio", "TrimAudioDuration", audio=[components[0], 1], start_index=0., duration=source_frames / fps)
     video = node(g, "create_video", "CreateVideo", **args)
     node(g, "save_video", "SaveVideo", video=video, filename_prefix="zura/ltx25/" + key + "/result",
          format="mp4", **{"format.codec": "h264", "format.codec.encoding": "re-encode", "format.codec.encoding.crf": 16.})
@@ -553,7 +556,8 @@ def build_viewport_plan(project, *, scenario, timeline, models, text_encoder_inp
             "stage1_vae_sampling_split": False, "motion_preparation_split": True,
             "stage1_handoff": "Layout and appearance guides remain native and are cropped before caching.",
             "qualification": "Experimental viewport route; current-media visual testing required.",
-            "source_frames": source_frames, "delivered_frames": frames, "trimmed_tail_frames": source_frames - frames,
+            "source_frames": source_frames, "generation_frames": padded,
+            "delivered_frames": source_frames, "trimmed_tail_frames": 0,
             "appearance_reference_role": "composed_scene_plate_at_rope_minus_one",
             "graph_hashes": {phase: digest(value) for phase, value in phases.items()}}
 

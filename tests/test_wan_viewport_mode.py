@@ -13,6 +13,7 @@ class WanViewportModeTests(unittest.TestCase):
     def test_viewport_mode_uses_approved_scene_look_and_whole_frame_route(self):
         project = fixture.SharedEngineTests().project()
         project["viewport_render"] = True
+        project["config"]["background"] = "restyle"
         project["viewport_references"] = [
             {"file": f"train_ref_{index}.png", "sha": str(index) * 64}
             for index in range(1, 6)
@@ -42,6 +43,13 @@ class WanViewportModeTests(unittest.TestCase):
         self.assertFalse(graph["wan_render"]["inputs"]["viewport_render"])
         self.assertEqual(graph["wan_character"]["inputs"]["image"], "character.png")
         self.assertIn("wan_character_crop", graph)
+
+    def test_legacy_full_scene_restyle_still_routes_to_ltx(self):
+        project = fixture.SharedEngineTests().project()
+        project["config"]["background"] = "restyle"
+        with patch.object(studio, "assert_approved"), patch.object(studio, "check_asset"):
+            with self.assertRaisesRegex(ValueError, "Choose LTX for scene restyling"):
+                wan.build_wan_graph(project, use_cache=False)
 
     def test_viewport_cache_key_tracks_approved_scene_opening(self):
         project = fixture.SharedEngineTests().project()
