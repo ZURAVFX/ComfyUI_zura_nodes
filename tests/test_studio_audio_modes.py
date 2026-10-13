@@ -240,8 +240,10 @@ class AudioModeTests(unittest.TestCase):
 const fs=require('fs'),vm=require('vm'),assert=require('assert');
 let source=fs.readFileSync(process.argv[1],'utf8').split('\napp.registerExtension({')[0];
 source=source.replace(/^import .*;\r?\n/gm,'');
+let lengthSource=fs.readFileSync(require('path').join(require('path').dirname(process.argv[1]),'studio_length.js'),'utf8').replace(/export /g,'');
 const context={console,ContentDetection:class {},document:{createElement:()=>({setAttribute(){}})}};
-vm.createContext(context);vm.runInContext(source+'\nthis.Studio=ArtistStudio;',context);
+vm.createContext(context);vm.runInContext(lengthSource,context);
+vm.runInContext(source+'\nthis.Studio=ArtistStudio;',context);
 const proto=context.Studio.prototype;
 for(const engine of ['local','h3','wan','seedance']){
  const ui=Object.create(proto),fields={};

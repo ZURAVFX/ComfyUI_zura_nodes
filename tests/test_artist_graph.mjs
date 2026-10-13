@@ -5,7 +5,7 @@ if(!globalThis.crypto)Object.defineProperty(globalThis,'crypto',{value:webcrypto
 const routing=fs.readFileSync(new URL('../web/graph_routing.js',import.meta.url),'utf8');
 const routingUrl='data:text/javascript;base64,'+Buffer.from(routing).toString('base64');
 const js=fs.readFileSync(new URL('../web/artist_graph.js',import.meta.url),'utf8').replace('"./graph_routing.js"',JSON.stringify(routingUrl));
-const {promptFingerprint,expandStageSignals,crossingCount,trimStageSignals}=await import('data:text/javascript;base64,'+Buffer.from(js).toString('base64'));
+const {promptFingerprint,expandStageSignals,crossingCount,trimStageSignals,visibleArtistInputs,initialiseArtistImages}=await import('data:text/javascript;base64,'+Buffer.from(js).toString('base64'));
 const {routeFixedPorts}=await import(routingUrl);
 const original={image:{class_type:'LoadImage',inputs:{image:'example_character.png'}},render:{class_type:'Render',inputs:{image:['image',0],seed:42}}};
 const renamed={'10':{class_type:'LoadImage',inputs:{image:'example_character.png'}},'11':{class_type:'Render',inputs:{image:['10',0],seed:42}}};
@@ -42,4 +42,17 @@ const handoff={widgets:[{name:'keys',value:'["image","audio"]'}],
  removeInput(index){this.inputs.splice(index,1)}};
 trimStageSignals(handoff);
 assert.deepEqual(handoff.inputs.map(i=>i.name),['keys','previous','value_0','value_1','value_10'],'Trim unused slots without disconnecting existing data');
+const callbacks=[];
+const imageNodes=['ref_0','ref_1'].map(id=>({id,type:'LoadImage',widgets:[{name:'image',value:'wrong.png',callback(value){callbacks.push([id,value]);}}]}));
+const mediaGraph={_nodes:[...imageNodes,{id:'video',type:'LoadVideo'}]};
+const mediaApi={ref_0:{class_type:'LoadImage',inputs:{image:'studio/project/ref0.png'}},ref_1:{class_type:'LoadImage',inputs:{image:'studio/project/ref1.png'}}};
+await initialiseArtistImages(mediaGraph,mediaApi);
+assert.deepEqual(callbacks,[['ref_0','studio/project/ref0.png'],['ref_1','studio/project/ref1.png']],'Each real native loader refreshes its own selected file once');
+assert.deepEqual([...visibleArtistInputs(mediaGraph._nodes)],imageNodes,'All reference images remain native root nodes, not filename-only promoted widgets');
+const rendered=Object.fromEntries(imageNodes.map(n=>[n.id,{class_type:n.type,inputs:{image:n.widgets[0].value}}]));
+assert.equal(await promptFingerprint(mediaApi),await promptFingerprint(rendered),'Visible native image controls retain the exact executable file inputs');
+const remapped={_nodes:[{id:'12_ref',type:'LoadImage',widgets:[{name:'image',value:''}]}]};
+await initialiseArtistImages(remapped,{'12:ref':{class_type:'LoadImage',inputs:{image:'nested/reference.png'}}});
+assert.equal(remapped._nodes[0].widgets[0].value,'nested/reference.png','Native API colon-ID remapping does not lose a loaded reference');
+await assert.rejects(()=>initialiseArtistImages({_nodes:[]},mediaApi),/reference image is missing/);
 console.log('Artist graph semantic checks and crossing detection passed.');

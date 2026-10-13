@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Rebuild Studio around source/look, real preview and shot-settings panels with the user-approved navy/violet styling.
+- Make oversized original-length recovery actionable without queuing a render, and expose Cancel run beside live progress.
+- Preserve visible native image loaders and their exact file paths when opening an editable graph.
+- Explain H3 Fast 8-step versus Detailed 40-step costs, retaining reference detail and explicit quality choices.
+
+
 - Show native sampling steps, stage progress, elapsed time and measured stage estimates; unknown loading stages remain indeterminate.
 - Simplify Studio controls and keep progress below the preview on mobile.
 - Add local CPU subject checks and manual People / Objects overrides. Explicit LTX objects use Canny guidance; Wan Animate explains its human-performance requirement.

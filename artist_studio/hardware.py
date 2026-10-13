@@ -14,7 +14,21 @@ def guidance(hardware):
             "workflow_max_custom_seconds": 5, "original_length_supported": True,
             "start_resolution": 1280, "start_seconds": 2 if small_gpu else 5,
             "tested": "5 seconds at 720p, enhanced to 1080p; native 1080p unqualified on 16 GB",
-            "reference_speed": "About 10 minutes for 5 seconds at Enhanced 1080p; opening design and selection extra",
+            "reference_speed": "Fast uses 8 steps; Detailed uses 40. Reference count and GPU memory pressure also affect time",
+            "recommended_quality": "fast",
+            "quality_guidance": {
+                "fast": {
+                    "sampling_steps": 8,
+                    "reference_speed": "Fast: 8-step Turbo. Previous 5-second Enhanced 1080p examples took about 10 minutes; viewport scenes with several references are not separately benchmarked",
+                    "description": "Recommended for the first take; uses the approved accelerated H3 adapter",
+                },
+                "detailed": {
+                    "sampling_steps": 40,
+                    "reference_speed": "Detailed: 40 steps, five times the sampling steps of Fast. No measured time guarantee; a short clip can still take tens of minutes",
+                    "description": "Full sampling for comparison; extra steps do not guarantee a better result",
+                },
+            },
+            "speed_warning": "H3 can offload model weights on a 16 GB GPU. Several reference images add work at every sampling step. Other Comfy instances or graphics apps sharing the GPU can slow it further",
         },
         "local": {
             "workflow_max_custom_seconds": 5, "original_length_supported": True,

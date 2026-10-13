@@ -1,6 +1,39 @@
 // Native subgraph authoring and port-aware layout for Studio's editable copies.
 // ELK computes geometry; ComfyUI creates/serializes all nodes and subgraphs.
 import { routeFixedPorts } from "./graph_routing.js";
+
+// Native loader nodes own their upload controls and asynchronous preview state.
+// Keep them on the canvas: converting/promoting just the filename widget loses
+// the linked upload/preview lifecycle on some Comfy frontend versions.
+export function visibleArtistInputs(nodes) {
+  return new Set([...nodes].filter(n=>n.type==="LoadImage"));
+}
+
+export async function initialiseArtistImages(graph, apiGraph) {
+  const nodes=[...(graph._nodes||[])], taken=new Set(Object.keys(apiGraph).filter(id=>!id.includes(":")));
+  const mapped=new Map();
+  for(const id of Object.keys(apiGraph)){
+    let local=id;
+    if(id.includes(":")){local=id.replaceAll(":","_");while(taken.has(local))local+="_";taken.add(local);}
+    mapped.set(id,local);
+  }
+  const loaders=[];
+  for(const [id,data] of Object.entries(apiGraph)){
+    if(data.class_type!=="LoadImage"||typeof data.inputs?.image!=="string")continue;
+    const node=nodes.find(n=>String(n.id)===mapped.get(id));
+    const widget=node?.widgets?.find(w=>w.name==="image");
+    if(!node||node.type!=="LoadImage"||!widget)throw new Error("A reference image is missing from the editable graph.");
+    widget.value=data.inputs.image;loaders.push({node,widget,value:data.inputs.image});
+  }
+  // Let native onNodeCreated's initial preview callback finish before refreshing
+  // the selected value. No custom thumbnail or image network request is added.
+  if(typeof requestAnimationFrame==="function")await new Promise(resolve=>requestAnimationFrame(resolve));
+  for(const {node,widget,value} of loaders){
+    await widget.callback?.call(widget,value);
+    node.graph?.setDirtyCanvas?.(true,true);
+  }
+  return loaders.map(({node})=>node);
+}
 export async function promptFingerprint(prompt) {
   prompt=expandStageSignals(prompt);
   const memo=new Map(), active=new Set();
@@ -209,6 +242,8 @@ export function stagePlan(graph) {
 export async function tidyArtistGraph(app,apiGraph,stage,ElkClass) {
   const graph=app.rootGraph||app.graph;
   if(!graph?.convertToSubgraph)throw new Error("Update ComfyUI to use native Studio subgraphs.");
+  await initialiseArtistImages(graph,apiGraph);
+  const visibleInputs=visibleArtistInputs(graph._nodes||[]);
   const before=(await app.graphToPrompt()).output;
   const elk=new ElkClass();let crossings=0;
   const {chunks,links,byId}=stagePlan(graph),owner=new Map();
@@ -254,7 +289,8 @@ export async function tidyArtistGraph(app,apiGraph,stage,ElkClass) {
     let group=stages.at(-1);if(!group||group.name!==c.name){group={name:c.name,nodes:[]};stages.push(group);}group.nodes.push(...c.nodes);
   }
   for(let i=0;i<stages.length;i++){
-    const group=stages[i],host=fold(graph,new Set(group.nodes),`${String(i+1).padStart(2,"0")} · ${names[group.name]}`,group.name==="Models"?new Set():controls);
+    const group=stages[i],host=fold(graph,new Set(group.nodes.filter(n=>!visibleInputs.has(n))),`${String(i+1).padStart(2,"0")} · ${names[group.name]}`,group.name==="Models"?new Set():controls);
+    if(!host)continue;
     // Group actual cloned inner nodes; never refold existing subgraph hosts.
     const packets=new Map();
     for(const n of host.subgraph.nodes){const key=n.properties.zuraStudioPacket;delete n.properties.zuraStudioPacket;if(!packets.has(key))packets.set(key,new Set());packets.get(key).add(n);}
@@ -275,6 +311,7 @@ export async function tidyArtistGraph(app,apiGraph,stage,ElkClass) {
     }
     crossings+=await arrange(host.subgraph,elk);
   }
+  for(const n of visibleInputs)delete n.properties.zuraStudioPacket;
   const rootCrossings=await arrange(graph,elk);crossings+=rootCrossings;
   const after=(await app.graphToPrompt()).output;
   if(await promptFingerprint(before)!==await promptFingerprint(after))throw new Error("Native graph conversion changed the render inputs. The original editable graph will be restored.");
