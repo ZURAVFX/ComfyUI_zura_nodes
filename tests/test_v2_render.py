@@ -10,6 +10,7 @@ from unittest.mock import patch
 
 import v2_bootstrap  # noqa: F401
 from ComfyUI_zura_nodes import render as render_module
+from ComfyUI_zura_nodes.video import video_components
 
 import torch
 
@@ -89,11 +90,11 @@ class RenderTests(unittest.TestCase):
             self.assertEqual(images.shape[0], 100)
             self.assertIsNotNone(calls[0]["mask"])
             # Built-in audio assembly: exact frame count and source audio kept.
-            components = video if isinstance(video, dict) else video.get_components()
-            self.assertEqual(int(components["images"].shape[0]), 100)
-            self.assertIsNotNone(components["audio"])
-            self.assertTrue(torch.equal(components["audio"]["waveform"], media["audio"]["waveform"]))
-            self.assertEqual(components["frame_rate"].numerator, 24)
+            video_images, video_audio, video_fps = video_components(video)
+            self.assertEqual(int(video_images.shape[0]), 100)
+            self.assertIsNotNone(video_audio)
+            self.assertTrue(torch.equal(video_audio["waveform"], media["audio"]["waveform"]))
+            self.assertEqual(video_fps, 24.0)
             receipt_data = json.loads(receipt)
             self.assertEqual(receipt_data["generated_frames"], 100)
             self.assertEqual(receipt_data["cuts"], [50])
@@ -121,8 +122,8 @@ class RenderTests(unittest.TestCase):
             _, video, _ = render_module.ZuraWan22LoopedChunksSampler().render(
                 "m", "c", "v", "cv", media["frames"][:1], media, "p", "n", chunk_frames=41,
                 max_side=16, overlap_frames=5, shot_mode="Continuous")
-            components = video if isinstance(video, dict) else video.get_components()
-            self.assertIsNone(components["audio"])
+            _, video_audio, _ = video_components(video)
+            self.assertIsNone(video_audio)
         finally:
             render_module._send_wan22_progress = old_send
             for k, v in old_modules.items():
@@ -149,6 +150,32 @@ class RenderTests(unittest.TestCase):
             background = calls[0]["background"]
             self.assertEqual(float(background[:, 1:3, 1:3].max()), 0.0, "performer pixels must be removed")
             self.assertEqual(float(background[:, 0, 0].max()), 1.0, "background pixels must be preserved")
+        finally:
+            render_module._send_wan22_progress = old_send
+            for k, v in old_modules.items():
+                if v is None:
+                    sys.modules.pop(k, None)
+                else:
+                    sys.modules[k] = v
+
+    def test_viewport_mode_keeps_the_complete_source_as_scene_guide(self):
+        calls, crops = [], []
+        old_send = render_module._send_wan22_progress
+        render_module._send_wan22_progress = lambda **data: None
+        old_modules, _ = install_fake_native(calls, crops)
+        try:
+            media = self.make_media(total=10)
+            media["character_mask"] = torch.zeros((10, 4, 4))
+            media["character_mask"][:, 1:3, 1:3] = 1
+            media["frames"] = torch.rand((10, 4, 4, 3))
+            source = media["frames"].clone()
+            media["pose_video"] = torch.ones_like(source)
+            media["face_video"] = torch.ones_like(source)
+            _, _, receipt = render_module.ZuraWan22LoopedChunksSampler().render(
+                "m", "c", "v", "cv", source[:1], media, "p", "n", chunk_frames=9,
+                max_side=16, overlap_frames=1, shot_mode="Continuous", viewport_render=True)
+            self.assertTrue(torch.equal(calls[0]["background"], source[:9]))
+            self.assertTrue(json.loads(receipt)["viewport_render"])
         finally:
             render_module._send_wan22_progress = old_send
             for k, v in old_modules.items():

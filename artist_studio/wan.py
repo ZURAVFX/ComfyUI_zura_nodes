@@ -46,9 +46,19 @@ def cache_key(project):
         stamps[identity] = [name, stat.st_size, stat.st_mtime_ns]
     c = project["config"]
     from . import wan_speech
-    data = {"version": 6 if wan_speech.enabled(project) else 5, "review": project["review"], "character": project["character"]["sha"],
-        "resolution": c["resolution"], "scope": c["scope"], "models": stamps,
+    viewport_render = bool(project.get("viewport_render") or c.get("viewport_render"))
+    character = project.get("character") or {}
+    data = {"version": 7 if viewport_render else (6 if wan_speech.enabled(project) else 5),
+        "review": project["review"], "character": character.get("sha"),
+        "resolution": c["resolution"], "scope": "person" if viewport_render else c["scope"], "models": stamps,
         "performance_mode": "reference" if wan_speech.enabled(project) else "original"}
+    if viewport_render:
+        # Native Wan Animate accepts one still appearance reference. In this
+        # route the approved full-scene opening consolidates the chosen look.
+        data["viewport_render"] = True
+        data["opening_sha"] = project["opening_input"]["sha"]
+    elif not data["character"]:
+        raise ValueError("A Wan character reference is required outside viewport mode.")
     if c.get("edit_area", "mask") == "scene" or c.get("mask_method", "auto") != "auto":
         data["scope"] = "person"
         data["selection"] = "scene" if c.get("edit_area") == "scene" else "selected_area"
@@ -63,13 +73,16 @@ def build_wan_graph(project, use_cache=True, *, cache_key_override=None, prepara
     from .studio import assert_approved, check_asset
     assert_approved(project)
     c = dict(project["config"])
-    custom_selection = c.get("edit_area", "mask") == "scene" or c.get("mask_method", "auto") != "auto"
+    viewport_render = bool(project.get("viewport_render") or c.get("viewport_render"))
+    custom_selection = (viewport_render or c.get("edit_area", "mask") == "scene" or
+                        c.get("mask_method", "auto") != "auto")
     if c["background"] != "keep":
         raise ValueError("Wan currently keeps the original background. Choose LTX for scene restyling.")
     if project.get("opening_approval") != project.get("opening_key") or not project.get("opening_input"):
         raise ValueError("Approve the character preview before animating.")
     check_asset(project["opening_input"])
-    check_asset(project["character"])
+    if not viewport_render:
+        check_asset(project["character"])
     if cache_key_override is not None:
         if (not use_cache or not isinstance(cache_key_override, str) or
                 not re.fullmatch(r"[a-f0-9]{64}", cache_key_override)):
@@ -113,7 +126,11 @@ def build_wan_graph(project, use_cache=True, *, cache_key_override=None, prepara
             width=["wan_frames", 2], height=["wan_frames", 3], face_padding=0)
         pose = node("wan_pose_draw", "DrawViTPose", pose_data=pose_data, width=["wan_frames", 2],
             height=["wan_frames", 3], retarget_padding=0, body_stick_width=-1, hand_stick_width=-1, draw_head=True)
-        character = node("wan_character", "LoadImage", image=project["character"]["file"])
+        # Wan Animate has one reference-image input. Use the approved whole
+        # scene look rather than treating an environment or object ref as a
+        # character crop. Multiple still refs must be consolidated upstream.
+        reference_asset = project["opening_input"] if viewport_render else project["character"]
+        character = node("wan_character", "LoadImage", image=reference_asset["file"])
         sam = node("wan_sam", "CheckpointLoaderSimple", ckpt_name="sam3.1_multiplex_fp16.safetensors")
         prompt = node("wan_person_prompt", "CLIPTextEncode", clip=["wan_sam", 1], text="person:10")
         detection = node("wan_character_detect", "SAM3_Detect", model=sam, image=character, conditioning=prompt,
@@ -191,8 +208,19 @@ def build_wan_graph(project, use_cache=True, *, cache_key_override=None, prepara
     clip = node("wan_clip", "CLIPLoader", clip_name=WAN_MODELS["wan_text"][1], type="wan", device="cpu")
     vae = node("wan_vae", "VAELoader", vae_name=WAN_MODELS["wan_vae"][1])
     vision = node("wan_vision", "CLIPVisionLoader", clip_name=WAN_MODELS["wan_vision"][1])
-    prompt = "The selected performer matches the reference character. Keep the driving video action, expressions, hand gestures, camera angle, framing and scene. Natural motion and consistent identity. Do not reproduce a reference sheet, collage or multiple views. " + c["prompt"]
-    if custom_selection:
+    if viewport_render:
+        prompt = (
+            "Convert the entire grey 3D viewport/blockout into one coherent finished scene. "
+            "Treat the source video as the authoritative guide for exact camera path, perspective, framing, "
+            "timing, object placement, scale, scene layout and motion. Replace the untextured viewport look "
+            "throughout the frame while preserving source camera movement, parallax, geometry, subject positions, "
+            "ground plane and contact with the ground. Use the approved opening image as the single consolidated "
+            "appearance reference. Keep the result visually consistent across frames; do not switch back to grey "
+            "viewport shading, add duplicate subjects, or reproduce a reference sheet. " + c["prompt"]
+        )
+    else:
+        prompt = "The selected performer matches the reference character. Keep the driving video action, expressions, hand gestures, camera angle, framing and scene. Natural motion and consistent identity. Do not reproduce a reference sheet, collage or multiple views. " + c["prompt"]
+    if custom_selection and not viewport_render:
         area = "the whole scene" if c.get("edit_area") == "scene" else "only the reviewed masked area"
         prompt = ("Transform " + area + " to match the approved opening image and appearance reference. "
                   "Keep the driving video action, expressions, hand gestures and changing camera perspective. "
@@ -226,7 +254,7 @@ def build_wan_graph(project, use_cache=True, *, cache_key_override=None, prepara
         prompt=prompt, negative_prompt="flicker, warped hands, extra limbs, identity drift, text overlays, collage",
         steps=steps, cfg=cfg, seed=seed, chunk_frames=_chunk_frames_for_resolution(c["resolution"]),
         overlap_frames=5, max_side=c["resolution"], shot_mode="Detect cuts", cut_threshold=.2, cut_frames="",
-        join_mode="Native continuation", **delivery_inputs)
+        join_mode="Native continuation", viewport_render=viewport_render, **delivery_inputs)
     node("wan_export", "GenjRestoreSoundtrack", video=["wan_render", 0 if streamed else 1], clip_details=details,
         take_name="studio_" + project["id"][:8] + "_wan")
     # Wan renders facial detail from the audio-driven guide. A second mouth

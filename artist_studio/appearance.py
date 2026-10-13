@@ -1,7 +1,8 @@
 """Artist image choices and native multi-reference opening-frame conditioning."""
 import copy
 
-MAX_REFERENCES = 3  # With the source frame, stay within Klein's four-image guide.
+MAX_REFERENCES = 9  # H3 accepts nine still references; Klein uses the first three for its opening plate.
+REFERENCE_ROLES = ("auto", "environment", "character", "object", "detail", "style")
 
 
 def resolve_appearance(body, load_asset, check_asset):
@@ -10,7 +11,10 @@ def resolve_appearance(body, load_asset, check_asset):
         raise ValueError("Choose a finished starting image or build one from references.")
     identities = body.get("references", [body["character"]] if body.get("character") else [])
     if not isinstance(identities, list) or len(identities) > MAX_REFERENCES:
-        raise ValueError("Use up to three appearance reference images.")
+        raise ValueError("Use up to nine appearance reference images.")
+    roles = body.get("reference_roles", [])
+    if not isinstance(roles, list) or len(roles) > MAX_REFERENCES or (roles and len(roles) != len(identities)):
+        raise ValueError("Reference image roles must match the uploaded images.")
     references = []
     seen = set()
     def image(identity):
@@ -21,8 +25,13 @@ def resolve_appearance(body, load_asset, check_asset):
             raise ValueError("Choose an image for the starting frame or appearance reference.")
         check_asset(asset)
         return copy.deepcopy(asset)
-    for identity in identities:
+    for index, identity in enumerate(identities):
         asset = image(identity)
+        role = roles[index] if index < len(roles) else "auto"
+        if role not in REFERENCE_ROLES:
+            raise ValueError("Choose a valid role for each reference image.")
+        if roles:
+            asset["role"] = role
         if identity not in seen:
             references.append(asset)
             seen.add(identity)
@@ -36,8 +45,8 @@ def resolve_appearance(body, load_asset, check_asset):
 def add_design_references(graph, references, check_asset):
     """Append genuine per-image ReferenceLatent nodes; never make a collage."""
     references = references or []
-    if len(references) > MAX_REFERENCES:
-        raise ValueError("Use up to three appearance reference images.")
+    if len(references) > 3:
+        raise ValueError("The opening-frame builder supports up to three references. H3 can use up to nine directly.")
     for asset in references:
         check_asset(asset)
     if references:

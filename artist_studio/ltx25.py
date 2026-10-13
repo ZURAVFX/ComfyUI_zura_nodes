@@ -28,6 +28,9 @@ QUALIFIED_MODELS = {
     "bbox_detector": "yolox_l.onnx",
     "pose_estimator": "dw-ll_ucoco_384_bs5.torchscript.pt",
 }
+VIEWPORT_MODELS = {name: value for name, value in QUALIFIED_MODELS.items()
+                   if name not in ("bbox_detector", "pose_estimator")}
+VIEWPORT_MODELS["union"] = "ltx-2.5-22b-ic-lora-layout-to-render-1.0.safetensors"
 
 
 def digest(value):
@@ -58,7 +61,7 @@ def _asset(asset, label):
 
 def build_plan(project, *, scenario, timeline, models, text_encoder_inputs,
                model_pins, approval_key, original_audio_sha=None,
-               union_downscale_factor=2):
+               union_downscale_factor=None):
     """Return serial native API phases plus dependency/artifact specifications.
 
     Call Studio's assert_approved/check_asset before this function. ``timeline``
@@ -71,6 +74,15 @@ def build_plan(project, *, scenario, timeline, models, text_encoder_inputs,
     identifies that raw source container. A selected soundtrack with no new
     performance affects delivery only in original mode.
     """
+    if project.get("config", {}).get("viewport_render"):
+        if union_downscale_factor is None:
+            union_downscale_factor = 1
+        return build_viewport_plan(project, scenario=scenario, timeline=timeline,
+                                   models=models, text_encoder_inputs=text_encoder_inputs,
+                                   model_pins=model_pins, approval_key=approval_key,
+                                   union_downscale_factor=union_downscale_factor)
+    if union_downscale_factor is None:
+        union_downscale_factor = 2
     if scenario not in ("original", "replacement", "silent"):
         raise ValueError("Choose original performance, replacement speech or silence.")
     if not approval_key or project.get("approval") != approval_key or not project.get("review"):
@@ -158,7 +170,7 @@ def build_plan(project, *, scenario, timeline, models, text_encoder_inputs,
              "approval": approval_key, "opening_key": project["opening_key"],
              "source": source, "opening": opening, "character": character,
              "audio": audio_identity, "timeline": copy.deepcopy(timeline),
-             "delivery": delivery, "native": native, "base": base, "padded": padded,
+             "frames": frames, "delivery": delivery, "native": native, "base": base, "padded": padded,
              "seed": seed, "positive": positive, "negative": negative,
              "models": copy.deepcopy(models), "model_pins": copy.deepcopy(model_pins),
              "encoder": copy.deepcopy(text_encoder_inputs), "union_factor": 2,
@@ -362,6 +374,187 @@ def build_plan(project, *, scenario, timeline, models, text_encoder_inputs,
             "motion_preparation_split": True,
             "stage1_handoff": "Native guide preparation and sampling stay together to retain signed Union mask sentinels. Only the cropped ordinary video latent is cached.",
             "qualification": "Native replacement-speech recipe basis; new assets, scenarios and delivery rasters require visual testing.",
+            "graph_hashes": {phase: digest(value) for phase, value in phases.items()}}
+
+
+def build_viewport_plan(project, *, scenario, timeline, models, text_encoder_inputs,
+                        model_pins, approval_key, union_downscale_factor=1):
+    """Plan the native LTX 2.5 Layout-to-Render viewport route.
+
+    The approved opening must be a composed final scene plate. It is an
+    appearance reference at RoPE -1, never an I2V frame or a character sheet.
+    Layout guidance is retained in BOTH sampling stages and cropped before
+    caching/upscaling. This experimental route needs a real visual qualification.
+    """
+    c = project["config"]
+    if scenario not in ("silent", "original"):
+        raise ValueError("Viewport rendering supports silence or the original soundtrack. Replacement speech is not qualified with Layout-to-Render yet.")
+    if not approval_key or project.get("approval") != approval_key or not project.get("review"):
+        raise ValueError("Approve the current source selection before animating.")
+    if not project.get("opening_key") or project.get("opening_approval") != project["opening_key"]:
+        raise ValueError("Approve the composed final scene appearance before animating.")
+    if c.get("edit_area", "mask") != "scene":
+        raise ValueError("Viewport rendering changes the whole scene; choose whole scene.")
+    namespace = (project.get("ltx25_run") or {}).get("namespace")
+    if not isinstance(namespace, str) or not re.fullmatch(r"[a-f0-9]{32}", namespace):
+        raise ValueError("Start a new LTX render to prepare its files safely.")
+    source = _asset(project.get("source"), "viewport video")
+    look = _asset(project.get("opening_input"), "approved composed scene plate")
+    expected_models = VIEWPORT_MODELS
+    expected_pins = set(expected_models) | {"text_encoder"}
+    if models != expected_models or set(model_pins) != expected_pins or any(not v for v in model_pins.values()):
+        raise ValueError("Resolve and pin the LTX 2.5 Layout-to-Render model, adapter, encoder and VAEs first.")
+    if union_downscale_factor != 1:
+        raise ValueError("The LTX 2.5 Layout-to-Render adapter requires guide downscale factor 1.")
+    if not isinstance(text_encoder_inputs, dict) or not text_encoder_inputs.get("clip_name"):
+        raise ValueError("Resolve the native LTX text encoder inputs first.")
+    source_frames, fps = timeline.get("frames"), timeline.get("fps")
+    if type(source_frames) is not int or source_frames < 9 or type(fps) not in (int, float) or fps != 24:
+        raise ValueError("Viewport rendering requires at least nine verified frames at 24 fps.")
+    if source_frames > 360:
+        raise ValueError("Viewport rendering currently supports up to fifteen seconds per shot.")
+    # Official Layout-to-Render uses 8k+1 frames, rounded DOWN, without inventing
+    # repeated motion at the end of the blockout. Delivery follows this interval.
+    frames = 1 + 8 * ((source_frames - 1) // 8)
+    width, height = timeline.get("width"), timeline.get("height")
+    if type(width) is not int or type(height) is not int or min(width, height) < 1:
+        raise ValueError("Verify the viewport video's dimensions first.")
+    resolution, seed = c.get("resolution"), c.get("seed", 42)
+    if type(resolution) is not int or resolution not in (512, 768, 960, 1280, 1920):
+        raise ValueError("Choose an LTX output resolution of at least 512 pixels.")
+    if type(seed) is not int or not 0 <= seed <= 2**53 - 1:
+        raise ValueError("Choose a valid seed.")
+    has_audio = timeline.get("has_audio")
+    if type(has_audio) is not bool:
+        raise ValueError("Verify whether the reviewed source contains audio.")
+    if scenario == "original" and not has_audio:
+        raise ValueError("The source has no audio. Choose silence for viewport rendering.")
+    delivery = [max(2, 2 * round(v * resolution / max(width, height) / 2)) for v in (width, height)]
+    # Keep the 16:9 layout route at the tested 960x544 -> 1920x1088 raster.
+    base = [max(32, 32 * round(v / 64)) for v in delivery]
+    native = [2 * v for v in base]
+    positive = ("Render the complete scene in the appearance of the approved scene reference. "
+                "Follow the guide camera movement, framing, timing, object placement and animation throughout. "
+                + str(c.get("prompt", "")).strip())
+    negative = "flicker, sliding feet, warped anatomy, text, subtitles"
+    basis = {"schema": SCHEMA, "route": "viewport_layout_to_render", "run_namespace": namespace,
+             "scenario": scenario, "review": project["review"], "approval": approval_key,
+             "opening_key": project["opening_key"], "source": source, "opening": look,
+             "timeline": copy.deepcopy(timeline), "frames": frames, "padded": frames,
+             "delivery": delivery, "base": base, "native": native, "seed": seed,
+             "positive": positive, "negative": negative, "models": copy.deepcopy(models),
+             "model_pins": copy.deepcopy(model_pins), "encoder": copy.deepcopy(text_encoder_inputs),
+             "audio": {"generation": "silent", "delivery": scenario},
+             "sigmas": [STAGE1_SIGMAS, STAGE2_SIGMAS]}
+    key = digest(basis)
+    phases, dependencies, artifacts = {}, {}, {}
+
+    def graph(phase):
+        phases[phase], dependencies[phase] = {}, []
+        return phases[phase]
+
+    def node(g, name, typ, **inputs):
+        g[name] = {"class_type": typ, "inputs": inputs}
+        return [name, 0]
+
+    def save(g, phase, name, value, kind="video"):
+        cache_key = digest({"plan": key, "artifact": name})
+        node(g, "save_" + name, "ZuraSaveVideoLatentData", samples=value, cache_key=cache_key)
+        artifacts[name] = {"phase": phase, "node": "save_" + name, "kind": kind, "key": cache_key}
+
+    def load(g, phase, name):
+        spec = artifacts[name]
+        dependencies[phase].append(name)
+        if spec["kind"] == "images":
+            return node(g, "load_" + name, "VHS_LoadImagesPath", directory="__UNBOUND__",
+                        image_load_cap=frames, skip_first_images=0, select_every_nth=1)
+        typ = "GenjLoadTextConditioning" if spec["kind"] == "text" else "ZuraLoadVideoLatentData"
+        args = {"cache_key": spec["key"]}
+        if spec["kind"] == "video":
+            args["cache_digest"] = "__UNBOUND__"
+        return node(g, "load_" + name, typ, **args)
+
+    def reviewed(g):
+        return node(g, "source", "GenjLoadReviewedShot", shot_id=project["review"],
+                    approved_shot_id=project["review"], render_long_edge=max(base), output_scale=1, preview_seconds=0)
+
+    g = graph("text")
+    encoder = node(g, "encoder", "CLIPLoader", **text_encoder_inputs)
+    p = node(g, "positive", "CLIPTextEncode", clip=encoder, text=positive)
+    n = node(g, "negative", "CLIPTextEncode", clip=encoder, text=negative)
+    text_key = digest({"plan": key, "artifact": "text"})
+    node(g, "save_text", "GenjSaveTextConditioning", positive=p, negative=n, cache_key=text_key)
+    artifacts["text"] = {"phase": "text", "node": "save_text", "kind": "text", "key": text_key}
+    g = graph("motion")
+    components = node(g, "components", "GetVideoComponents", video=reviewed(g))
+    images = node(g, "trim_layout", "ImageFromBatch", image=components, batch_index=0, length=frames)
+    images = node(g, "fit_layout", "ImageScale", image=images, width=base[0], height=base[1], upscale_method="lanczos", crop="disabled")
+    prefix = "zura/ltx25/" + key + "/layout/frame"
+    node(g, "save_layout", "SaveImage", images=images, filename_prefix=prefix)
+    artifacts["layout"] = {"phase": "motion", "node": "save_layout", "kind": "images",
+                           "prefix": prefix, "frames": frames, "raster": base, "guide": "raw_layout"}
+
+    def sample(phase, raster, initial_name=None):
+        g = graph(phase)
+        text = load(g, phase, "text")
+        cond = node(g, "conditioning", "LTXVConditioning", positive=text, negative=[text[0], 1], frame_rate=fps)
+        vae = node(g, "video_vae", "VAELoader", vae_name=models["video_vae"])
+        model = node(g, "model", "UNETLoader", unet_name=models["model"], weight_dtype="default")
+        adapter = node(g, "layout_adapter", "LTXICLoRALoaderModelOnly", model=model,
+                       lora_name=models["union"], strength_model=1)
+        adapter_factor = [adapter[0], 1]
+        latent = load(g, phase, initial_name) if initial_name else node(g, "empty_video", "EmptyLTXVLatentVideo", width=raster[0], height=raster[1], length=frames, batch_size=1)
+        layout = load(g, phase, "layout")
+        layout = node(g, "fit_layout", "ImageScale", image=layout, width=raster[0], height=raster[1], upscale_method="lanczos", crop="disabled")
+        look_image = node(g, "look", "LoadImage", image=look["file"])
+        guided = node(g, "layout_guide", "LTXAddVideoICLoRAGuide", positive=cond, negative=[cond[0], 1],
+                      vae=vae, latent=latent, image=layout, frame_idx=0, strength=1, latent_downscale_factor=adapter_factor,
+                      crop="disabled", use_tiled_encode=True, tile_size=256, tile_overlap=64)
+        guided = node(g, "appearance_guide", "LTXAddVideoICLoRAGuide", positive=guided, negative=[guided[0], 1],
+                      vae=vae, latent=[guided[0], 2], image=look_image, frame_idx=-1, strength=1,
+                      latent_downscale_factor=adapter_factor, crop="center", use_tiled_encode=True, tile_size=256, tile_overlap=64)
+        audio_vae = node(g, "audio_vae", "VAELoader", vae_name=models["audio_vae"])
+        audio = node(g, "zero_audio", "LTXVEmptyLatentAudio", frames_number=frames, frame_rate=fps, batch_size=1, audio_vae=audio_vae)
+        av = node(g, "concat", "LTXVConcatAVLatent", video_latent=[guided[0], 2], audio_latent=audio)
+        guider = node(g, "guider", "CFGGuider", model=adapter, positive=guided, negative=[guided[0], 1], cfg=1)
+        noise = node(g, "noise", "RandomNoise", noise_seed=seed)
+        sampler = node(g, "sampler", "KSamplerSelect", sampler_name="euler_ancestral" if phase == "stage1" else "euler")
+        sigmas = node(g, "sigmas", "ManualSigmas", sigmas=STAGE1_SIGMAS if phase == "stage1" else STAGE2_SIGMAS)
+        output = node(g, "sample", "SamplerCustomAdvanced", noise=noise, guider=guider, sampler=sampler, sigmas=sigmas, latent_image=av)
+        video = node(g, "separate", "LTXVSeparateAVLatent", av_latent=output)
+        cropped = node(g, "crop_guides", "LTXVCropGuides", positive=guided, negative=[guided[0], 1], latent=video)
+        save(g, phase, "stage1_video" if phase == "stage1" else "stage2_video", [cropped[0], 2])
+
+    sample("stage1", base)
+    g = graph("upscale")
+    video = load(g, "upscale", "stage1_video")
+    vae = node(g, "video_vae", "VAELoader", vae_name=models["video_vae"])
+    upscaler = node(g, "upscaler", "LatentUpscaleModelLoader", model_name=models["upscaler"])
+    video = node(g, "upscale", "LTXVLatentUpsampler", samples=video, upscale_model=upscaler, vae=vae)
+    save(g, "upscale", "upscaled_video", video)
+    sample("refine", native, "upscaled_video")
+    g = graph("decode")
+    video = load(g, "decode", "stage2_video")
+    vae = node(g, "video_vae", "VAELoader", vae_name=models["video_vae"])
+    images = node(g, "decode", "VAEDecodeTiled", samples=video, vae=vae, tile_size=256, overlap=64, temporal_size=128, temporal_overlap=8)
+    images = node(g, "trim_frames", "ImageFromBatch", image=images, batch_index=0, length=frames)
+    images = node(g, "delivery_size", "ImageScale", image=images, width=delivery[0], height=delivery[1], upscale_method="lanczos", crop="disabled")
+    args = {"images": images, "fps": fps, "bit_depth": 8, "color_space": "sRGB", "codec": "none"}
+    if scenario == "original":
+        components = node(g, "source_components", "GetVideoComponents", video=reviewed(g))
+        args["audio"] = node(g, "trim_audio", "TrimAudioDuration", audio=[components[0], 1], start_index=0., duration=frames / fps)
+    video = node(g, "create_video", "CreateVideo", **args)
+    node(g, "save_video", "SaveVideo", video=video, filename_prefix="zura/ltx25/" + key + "/result",
+         format="mp4", **{"format.codec": "h264", "format.codec.encoding": "re-encode", "format.codec.encoding.crf": 16.})
+    return {"schema": SCHEMA, "key": key, "scenario": scenario, "basis": basis,
+            "phases": {phase: phases[phase] for phase in PHASES}, "dependencies": dependencies, "artifacts": artifacts,
+            "scope": "whole_scene", "background_preservation": False, "generation_audio": "zero",
+            "delivery_audio": "original" if scenario == "original" else "none",
+            "stage1_vae_sampling_split": False, "motion_preparation_split": True,
+            "stage1_handoff": "Layout and appearance guides remain native and are cropped before caching.",
+            "qualification": "Experimental viewport route; current-media visual testing required.",
+            "source_frames": source_frames, "delivered_frames": frames, "trimmed_tail_frames": source_frames - frames,
+            "appearance_reference_role": "composed_scene_plate_at_rope_minus_one",
             "graph_hashes": {phase: digest(value) for phase, value in phases.items()}}
 
 

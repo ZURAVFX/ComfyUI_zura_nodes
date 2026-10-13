@@ -49,8 +49,16 @@ class ZuraWanGraphQueueGuard:
             "opening_approval", "audio_sha", "audio_start", "lip_sync",
             "start", "duration", "length_mode", "resolution", "scope",
         }
-        if set(value) != required:
+        # Older saved Graph View plans predate the viewport flag. Treat those
+        # as the existing motion-transfer route while pinning the flag for all
+        # newly generated plans.
+        allowed = required | {"viewport_render"}
+        if not required <= set(value) or set(value) - allowed:
             ZuraWanGraphQueueGuard._error("The saved motion pins are incomplete.")
+        value = dict(value)
+        value.setdefault("viewport_render", False)
+        if type(value["viewport_render"]) is not bool:
+            ZuraWanGraphQueueGuard._error("The saved viewport mode pin is malformed.")
         for key in ("source_sha", "approval", "character_sha", "opening_sha", "opening_key"):
             try:
                 wan_graph._sha(value.get(key), key.replace("_", " "))

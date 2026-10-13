@@ -159,6 +159,9 @@ jobs:
           python -m unittest discover -s tests -p 'test_studio_hardware.py'
           python -m compileall -q artist_studio wan_artist.py
           python -m unittest discover -s tests -p 'test_artist_studio.py'
+          python -m unittest discover -s tests -p 'test_h3_viewport_render.py'
+          python -m unittest discover -s tests -p 'test_ltx25_viewport_plan.py'
+          python -m unittest discover -s tests -p 'test_wan_viewport_mode.py'
           python -m unittest discover -s tests -p 'test_ltx25_native_plan.py'
           python -m unittest discover -s tests -p 'test_ltx25_studio_runtime.py'
           python -m unittest discover -s tests -p 'test_studio_opening.py'

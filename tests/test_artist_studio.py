@@ -52,13 +52,27 @@ class SharedEngineTests(unittest.TestCase):
         self.assertEqual(studio.clean_config({'size': 768})['resolution'], 768)
         self.assertEqual(studio.clean_config({'size': 512, 'resolution': 1280})['size'], 512)
 
+    def test_workflow_modes_migrate_legacy_settings_and_only_viewport_enables_layout_route(self):
+        motion = studio.clean_config({'edit_area': 'scene'})
+        swap = studio.clean_config({'edit_area': 'mask'})
+        viewport = studio.clean_config({'workflow_mode': 'viewport'})
+        self.assertEqual(motion['workflow_mode'], 'motion')
+        self.assertFalse(motion['viewport_render'])
+        self.assertEqual(swap['workflow_mode'], 'swap')
+        self.assertTrue(viewport['viewport_render'])
+        self.assertNotIn('viewport_guide', viewport)
+        self.assertEqual(viewport['edit_area'], 'scene')
+        self.assertTrue(studio._viewport_project({'config': viewport})['viewport_render'])
+        self.assertNotIn('viewport_guide', studio.clean_config(
+            {'workflow_mode': 'viewport', 'viewport_guide': 'depth'}))
+
     def test_scene_opening_replaces_reference_identity_without_changing_masked_design(self):
         p = self.project()
         p['config'] = studio.clean_config({**p['config'], 'engine': 'local',
-            'edit_area': 'scene', 'prompt': 'Warm evening light.'})
+            'workflow_mode': 'motion', 'prompt': 'Warm evening light.'})
         with patch.object(studio, 'assert_approved'), patch.object(studio, 'check_asset'):
             scene = studio.build_graph(p, 'design', use_cache=False)
-            p['config']['edit_area'] = 'mask'
+            p['config'] = studio.clean_config({**p['config'], 'workflow_mode': 'swap'})
             masked = studio.build_graph(p, 'design', use_cache=False)
         prompt = scene['127']['inputs']['value']
         self.assertIn('If the second image shows a character, replace the visible performer in the first image with that character', prompt)
@@ -345,6 +359,9 @@ class SharedEngineTests(unittest.TestCase):
         self.assertNotIn('first 2 seconds', text)
         for engine in ('local', 'h3', 'wan', 'seedance'):
             self.assertIn(f'value="{engine}"', text)
+        self.assertIn('value="viewport"', text)
+        self.assertIn('Viewport to final', text)
+        self.assertIn('data-reference-role', text)
 
     def test_zura_routes_keep_legacy_projects_accessible(self):
         server = types.SimpleNamespace(routes=studio.web.RouteTableDef())
