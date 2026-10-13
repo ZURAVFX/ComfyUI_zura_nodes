@@ -23,3 +23,13 @@ assert.equal(studio.config.length_mode,'custom');assert.equal(studio.config.dura
 assert.ok(events.includes('focus'));assert.ok(events.includes('select'));
 studio.busy=true;events.length=0;await studio.primary();assert.equal(events.length,0);
 console.log('Invalid source length recovers to editable bounded custom length, even without a look, and never queues generation.');
+
+context.Event=class{constructor(type,options){this.type=type;this.bubbles=options.bubbles;}};
+const select={value:"custom",dispatchEvent:event=>events.push(event)};
+studio.busy=false;studio.project=null;studio.$=()=>select;events.length=0;
+studio.chooseClipLength("original");assert.equal(select.value,"original");assert.equal(events[0].type,"change");assert.equal(events[0].bubbles,true);
+assert.equal(events.length,1);studio.chooseClipLength("original");assert.equal(events.length,1,"Already-selected button does not reconfigure the shot");
+studio.project={phase:"working"};studio.chooseClipLength("custom");assert.equal(select.value,"original","A running render cannot change its interval");
+studio.project=null;studio.chooseClipLength("custom");assert.equal(select.value,"custom");
+studio.chooseClipLength("bad");assert.equal(select.value,"custom");
+console.log("Visible Source/Custom buttons use the existing configuration change path and respect active runs.");

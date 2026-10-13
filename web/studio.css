@@ -104,3 +104,16 @@
 @media(max-width:900px){.gs-top{height:auto;min-height:64px;padding:14px 18px;gap:12px;flex-wrap:wrap}.gs-brand>span{display:none}.gs-top-actions{gap:12px}.gs-steps{gap:8px;padding:16px 12px}.gs-steps button{grid-template-columns:26px auto;column-gap:6px;min-height:44px}.gs-steps button:before{width:26px;height:26px;font-size:12px}.gs-steps strong{font-size:11px}.gs-steps small{display:none}.gs-steps i{width:12px}.gs-workspace{display:flex;flex-direction:column;gap:16px;padding:0 14px 24px;height:auto}.gs-controls{order:1;overflow:visible}.gs-main{order:2;overflow:visible}.gs-settings{order:3;overflow:visible}.gs-controls,.gs-settings{padding:18px}.gs-settings .gs-two{grid-template-columns:repeat(2,minmax(0,1fr))}.gs-action-area{bottom:0;padding:16px 0}.gs-preview-heading{flex-direction:column;padding:16px}.gs-canvas{min-height:220px}.gs-canvas>video,.gs-canvas>img{max-height:480px}.gs-working{position:relative;padding:16px;flex-shrink:0}.gs-canvas:has(.gs-working:not([hidden])){flex-direction:column;aspect-ratio:auto}.gs-canvas:has(.gs-working:not([hidden]))>video,.gs-canvas:has(.gs-working:not([hidden]))>img{aspect-ratio:16/9;height:auto}.gs-library-row>small{max-width:100px;text-align:right}#genj-studio select,#genj-studio input:not([type=radio]):not([type=checkbox]):not([type=file]),#genj-studio textarea{font-size:16px;min-height:44px}}
 
 .gs-launch-logo{width:24px!important;height:24px!important;object-fit:contain;filter:invert(1);mix-blend-mode:screen}
+
+/* Native option popups must not inherit pale text onto a light OS surface. */
+#genj-studio select{color-scheme:dark!important}
+#genj-studio select option,#genj-studio select optgroup{background:#131c29;color:#f0f1fb}
+#genj-studio select option:disabled{color:#b4bfd2}
+#gs-quality-setting{grid-column:1 / -1}
+.gs-clip-length{display:flex;flex-direction:column;gap:8px;margin-bottom:14px}
+.gs-length-choice{display:flex;gap:4px;padding:4px;background:#0b111b;border:1px solid var(--gs-line);border-radius:8px}
+.gs-length-choice button{flex:1;min-width:0;min-height:40px;padding:8px;color:#d0d8e8;background:transparent;border:1px solid transparent;border-radius:5px;font:inherit;cursor:pointer}
+.gs-length-choice button[aria-pressed=true]{background:var(--gs-selected);border-color:var(--gs-accent-bright);color:#f6f0ff}
+.gs-length-choice button:hover:not(:disabled){background:#352163;color:#fff}
+.gs-length-choice button:focus-visible{outline:2px solid var(--gs-focus);outline-offset:2px}
+.gs-length-choice button:disabled{opacity:.55;cursor:not-allowed}

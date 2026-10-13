@@ -19,3 +19,7 @@ assert.ok(html.includes('id="gs-working-progress" class="gs-loading-bar is-indet
 assert.ok(html.includes('id="gs-live-cancel" type="button"'));
 assert.ok(!html.includes('iframe'),'Preview remains native local media');
 console.log('Studio panel DOM preserves unique labelled controls, native previews, four stages and accessible live cancel/progress.');
+
+assert.ok(html.includes('data-length-mode="original" aria-pressed="false"'));
+assert.ok(html.includes('data-length-mode="custom" aria-pressed="true"'));
+assert.ok(html.includes('id="gs-length_mode" hidden aria-hidden="true" tabindex="-1"'),'Native clip popup is removed from visible and keyboard navigation');

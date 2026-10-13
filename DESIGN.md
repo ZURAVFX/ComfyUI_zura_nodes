@@ -60,3 +60,5 @@ State transitions use short ease-out changes. Indeterminate progress conveys ong
 ## Do's and Don'ts
 
 Keep native labelled inputs, keyboard focus outlines, current-step ARIA and progressbar semantics. Do not invent results, source imagery, account avatars or unsupported controls. Browser restrictions currently prevent visual verification; source and behavioural checks do not imply a completed browser review.
+
+Clip length uses visible Use source / Custom buttons with selected and focus states, instead of a native menu. Remaining native option popups have explicit dark surface and readable text colours.

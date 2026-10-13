@@ -110,7 +110,7 @@ class ArtistStudio {
           </div></details>
         </fieldset>
         <div class="gs-two"><label id="gs-quality-setting"><span class="gs-label">Resolution</span><select id="gs-resolution"><option value="512">512 px · small test</option><option value="768">768 px</option><option value="1280">720p · HD</option><option value="1920">1080p · Full HD</option><option value="1920-enhanced">1080p · Enhanced after H3</option></select></label>
-          <div><label><span class="gs-label">Clip length</span><select id="gs-length_mode"><option value="original">Original clip length</option><option value="custom" selected>Custom length</option></select></label><label id="gs-duration-setting"><span class="gs-label">Seconds</span><input id="gs-duration" type="number" min="0.25" max="30" step="0.25" value="2"/></label></div></div>
+          </div><div class="gs-clip-length"><span class="gs-label">Clip length</span><select id="gs-length_mode" hidden aria-hidden="true" tabindex="-1"><option value="original">Original clip length</option><option value="custom" selected>Custom length</option></select><div class="gs-length-choice" role="group" aria-label="Clip length"><button type="button" data-length-mode="original" aria-pressed="false">Use source</button><button type="button" data-length-mode="custom" aria-pressed="true">Custom</button></div><label id="gs-duration-setting"><span class="gs-label">Seconds</span><input id="gs-duration" type="number" min="0.25" max="30" step="0.25" value="2"/></label></div>
         <label id="gs-trim-start"><span class="gs-label">Start at <small>seconds</small></span><input id="gs-start" type="number" min="0" max="86400" step="0.1" value="0"/></label>
         <details class="gs-advanced"><summary>Output, speed and memory</summary><div class="gs-advanced-body"><p class="gs-note" id="gs-output-note"></p><div class="gs-note" id="gs-system-guidance" aria-live="polite"><p id="gs-hardware-note">Checking this system…</p><p id="gs-limit-note"></p><p id="gs-speed-note"></p><p id="gs-memory-note"></p><p>Measured on an RTX 4080 with 16 GB VRAM and 64 GB RAM. Other systems vary.</p></div></div></details>
         <label id="gs-sampling-setting" hidden><span id="gs-sampling-label" class="gs-label">Detail level</span><select id="gs-quality"><option value="fast">Fast · accelerated model</option><option value="detailed">Detailed · full sampling</option></select><small id="gs-quality-note">Changes sampling effort, while resolution and clip length stay as selected.</small></label>
@@ -197,7 +197,14 @@ class ArtistStudio {
     c.lip_sync=reference && this.$("lip_sync").checked;
     c.refine_lips=c.lip_sync && this.$("refine_lips").checked; return c;
   }
+  chooseClipLength(mode) {
+    if(this.busy || this.project?.phase==="working" || !["original","custom"].includes(mode))return;
+    const select=this.$("length_mode");
+    if(select.value===mode)return;
+    select.value=mode;select.dispatchEvent(new Event("change",{bubbles:true}));
+  }
   bind() {
+    this.container.querySelectorAll("[data-length-mode]").forEach(button=>button.onclick=()=>this.chooseClipLength(button.dataset.lengthMode));
     this.container.querySelectorAll("[data-step]").forEach(button=>button.onclick=()=>{
       const targets=[this.$("source-drop"),this.container.querySelector(".gs-look"),this.$("canvas"),this.container.querySelector(".gs-settings")];
       const target=targets[Number(button.dataset.step)];target?.scrollIntoView({block:"nearest",behavior:"instant"});
@@ -720,6 +727,12 @@ class ArtistStudio {
     this.$("duration-setting").hidden=this.config.length_mode==="original";
     const originalOption=this.$("length_mode").querySelector('option[value="original"]');
     originalOption.textContent="Use source"+(this.source?.duration?` (${Number(this.source.duration).toFixed(2)}s)`:"");
+    this.container.querySelectorAll("[data-length-mode]").forEach(button=>{
+      const original=button.dataset.lengthMode==="original";
+      button.textContent=original?"Use source"+(this.source?.duration?` · ${Number(this.source.duration).toFixed(1)}s`:""):"Custom";
+      button.setAttribute("aria-pressed",String(button.dataset.lengthMode===this.config.length_mode));
+      button.disabled=working || this.busy || original && !this.source;
+    });
     this.$("audio-summary").textContent=this.config.audio_id?"Audio · replacement track":"Audio · original performance";
     for(const type of ["source","character","ready","audio"]){
       const drop=this.$(type+"-drop"),asset=type==="ready"?this.readyAsset:type==="character"?this.references[0]:this[type];drop.classList.toggle("has-file",!!asset);
