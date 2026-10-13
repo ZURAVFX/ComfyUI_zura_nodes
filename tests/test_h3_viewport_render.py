@@ -155,12 +155,12 @@ class H3ViewportRenderTests(unittest.TestCase):
         self.assertNotIn("h3_viewport_source", graph)
         self.assertNotIn("h3_viewport_control", graph)
 
-    def test_graph_view_exports_direct_h3_route_without_reviewed_shot_rewiring(self):
+    def test_explicit_graph_view_exports_direct_h3_route_without_reviewed_shot_rewiring(self):
         project = self.project()
         project["approval"] = studio.prep_key(project)
         with patch.object(studio, "assert_approved"), patch.object(studio, "check_asset"), \
                 patch("av.open", return_value=self.media_container(15)):
-            graph, stage = studio.editable_graph(project, "auto")
+            graph, stage = studio.editable_graph(project, "h3")
         self.assertEqual(stage, "h3")
         self.assertIn("h3_viewport_source", graph)
         self.assertNotIn("zura_audio_selection", graph)

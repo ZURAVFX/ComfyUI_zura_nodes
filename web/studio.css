@@ -158,3 +158,10 @@ html.genj-open,html.genj-open body{overflow:hidden!important;overscroll-behavior
 .gs-settings label,.gs-controls label{min-width:0}
 .gs-compare-controls button:hover,.gs-compare-toolbar button:hover{background:#352163}
 .gs-compare-divider svg{width:22px;height:22px}
+
+.gs-image-editor{padding:16px 18px;background:var(--gs-panel);border:1px solid var(--gs-line);border-radius:12px;margin:12px 0}
+.gs-image-editor>div{display:flex;gap:14px;justify-content:space-between;align-items:center;margin-top:10px}
+.gs-image-editor>div>span{color:var(--gs-muted);font-size:12px;line-height:1.4}
+#genj-studio .gs-image-editor textarea{min-height:76px;max-height:180px}
+.gs-image-editor button{white-space:nowrap;min-height:42px;padding:10px 16px;background:var(--gs-selected);border:1px solid var(--gs-accent-bright);border-radius:7px}
+@media(max-width:600px){.gs-image-editor>div{align-items:stretch;flex-direction:column}.gs-image-editor button{width:100%}}

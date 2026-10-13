@@ -10,6 +10,8 @@ H3 offers optional **Comfy Kitchen** and experimental **Sage + Sol** attention u
 
 After generation, choose **Compare before / after** or **Compare** on any take. Drag the divider to reveal the final render against the selected source clip, with synchronised playback, seeking and fullscreen. Only the finished render plays audio.
 
+**Build from references** now creates a starting frame for H3 viewport shots before animation. Use **Starting frame prompt** and **Regenerate frame**, then **Animate this look** to approve it. H3 receives a native first-frame guide, the viewport video and the original look references. This uses one of H3’s nine image slots, leaving up to eight extra references. The image prompt is separate from the video prompt; leave it blank to reuse video direction. This new generated-frame path has graph and interface tests, but has not yet had a fresh GPU quality review.
+
 To open the complete studio, start ComfyUI and click **Zura Studio**. On a default local installation, use `Open_Zura_Studio.url` or open `http://127.0.0.1:8188/?zura=1`. All four models share the same project and review flow. The standalone Wan test graph is only a diagnostic example.
 
 Studio shows your GPU memory and RAM, a model-specific starting size and clip length, and a collapsible checklist of missing model files. These are measured examples on an RTX 4080 with 16 GB VRAM and 64 GB RAM, not minimum specifications or guaranteed render times:

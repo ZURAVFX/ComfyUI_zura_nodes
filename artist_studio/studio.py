@@ -36,7 +36,7 @@ STAGES = {
 }
 STAGES.update({"ltx25_" + phase: "LTX 2.5 " + phase for phase in
                ("text", "motion", "stage1", "upscale", "refine", "decode", "cleanup")})
-DEFAULTS = {"engine": "local", "background": "keep", "scope": "person", "prompt": "",
+DEFAULTS = {"engine": "local", "background": "keep", "scope": "person", "prompt": "", "image_prompt": "",
             "start": 0.0, "duration": 2.0, "size": 512, "performer": -1,
             "margin": 20, "pitch": False, "seed": 42, "render_size": 0, "h3_preset": "preview_quality", "h3_steps": 0, "h3_attention": "native", "remove_text": False,
             "resolution": 1280, "delivery_mode": "native", "quality": "fast", "audio_id": "", "audio_start": 0.0, "length_mode": "custom", "lip_sync": False, "refine_lips": False,
@@ -143,6 +143,7 @@ def clean_config(value):
     if c["render_size"] not in (0, 1920):
         raise ValueError("This saved output setting is invalid. Choose an output resolution.")
     c["prompt"] = str(c["prompt"]).strip()[:5000]
+    c["image_prompt"] = str(c["image_prompt"]).strip()[:5000]
     c["mask_prompt"] = str(c["mask_prompt"]).strip()[:500]
     from .mask_selection import clean_points
     c["mask_points"] = clean_points(c["mask_points"], require_positive=False)
@@ -175,11 +176,19 @@ def _viewport_project(project):
     result["config"] = config
     result["viewport_render"] = viewport
     references = list(project.get("references", []))
-    if (viewport and config.get("engine") == "h3" and project.get("look_mode") == "ready" and
-            project.get("starting_asset")):
+    # Generated looks become a native first-frame guide only in this graph
+    # snapshot. Preserve the artist's saved Build from references choice.
+    if (viewport and config.get("engine") == "h3" and project.get("look_mode") != "ready"
+            and project.get("opening_input") and project.get("opening_key")
+            and project.get("opening_approval") == project.get("opening_key")):
+        result["look_mode"] = "ready"
+        result["starting_asset"] = copy.copy(project["opening_input"])
+        config.update(finished_frame_position="first", finished_frame_number=1)
+    if (viewport and config.get("engine") == "h3" and result.get("look_mode") == "ready" and
+            result.get("starting_asset")):
         if len(references) >= 9:
             raise ValueError("H3 can use a finished scene image plus up to eight extra look references.")
-        references.insert(0, {**project["starting_asset"], "role": "environment",
+        references.insert(0, {**result["starting_asset"], "role": "environment",
                               "viewport_role": "starting_frame"})
     if viewport and not references and project.get("character"):
         references = [project["character"]]
@@ -601,8 +610,9 @@ def build_graph(project, stage, use_cache=True, run_id=None):
                 "Match the face and hairstyle. Keep the original body, clothing, pose, head angle, expression, "
                 "camera framing, background, objects and lighting unchanged. Return one complete scene. "
                 "Do not add text or extra people.")
-        if c["prompt"]:
-            graph["127"]["inputs"]["value"] += " Additional appearance direction: " + c["prompt"]
+        image_direction = c.get("image_prompt") or c["prompt"]
+        if image_direction:
+            graph["127"]["inputs"]["value"] += " Additional appearance direction: " + image_direction
         if c.get("remove_text"):
             graph["127"]["inputs"]["value"] += " Remove all on-screen captions, subtitles, title banners and lettering. Fill their former areas naturally with the scene or clothing."
         from .appearance import add_design_references
@@ -806,7 +816,6 @@ def editable_graph(project, stage="auto"):
     p["config"] = clean_config(p["config"])
     if stage == "auto":
         stage = ("prepare" if not p.get("approval") or p["approval"] != prep_key(p) else
-                 "h3" if p["config"].get("workflow_mode") == "viewport" and p["config"]["engine"] == "h3" else
                  "animate" if p.get("opening_input") and p["config"]["engine"] != "seedance" else
                  "design" if p["config"]["engine"] != "seedance" else "draft")
     if stage == "animate":
@@ -817,6 +826,8 @@ def editable_graph(project, stage="auto"):
         p["opening_approval"] = p["opening_key"]
         stage = (p["config"]["engine"] if p["config"]["engine"] in ("h3", "wan") else
                  "background" if p["config"]["background"] == "keep" else "restyle")
+    if stage == "h3" and p.get("opening_input"):
+        p["opening_approval"] = p["opening_key"]
     if stage == "wan":
         from .wan_speech import enabled, guide_ready
         if enabled(p) and not guide_ready(p):
@@ -1585,7 +1596,7 @@ class Studio:
             if any(prior[key] != config[key] for key in ("finished_frame_position", "finished_frame_number")):
                 p["opening_approval"] = None
                 p.pop("ltx25_run", None)
-            if prior["prompt"] != p["config"]["prompt"]:
+            if prior["image_prompt"] != config["image_prompt"] or (prior["prompt"] != config["prompt"] and not config["image_prompt"]):
                 p.update(opening_input=None, opening_key=None, opening_url=None, opening_approval=None)
             p["phase"] = ("opening" if p.get("opening_input") and p["config"]["engine"] in ("local", "h3", "wan")
                           else "approved" if p.get("approval") else "review" if p.get("review") else "new")
