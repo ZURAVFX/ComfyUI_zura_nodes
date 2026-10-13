@@ -47,6 +47,33 @@ class SharedEngineTests(unittest.TestCase):
             controller.configure(p, {**p['config'], 'duration': 2})
             self.assertIsNone(p['review'], 'Changing the selected interval requires a new review')
 
+    def test_finished_frame_config_validates_numbers_and_routes(self):
+        for engine in ("local", "h3"):
+            config = studio.clean_config({"engine": engine, "workflow_mode": "motion", "finished_frame_position": "frame", "finished_frame_number": 49})
+            self.assertEqual(config["finished_frame_number"], 49)
+        for number in (True, 0, -1, 2.5, float("inf"), "bad"):
+            with self.subTest(number=number), self.assertRaises(ValueError):
+                studio.clean_config({"finished_frame_number": number})
+        for engine in ("wan", "seedance"):
+            with self.assertRaisesRegex(ValueError, "Timed finished-frame"):
+                studio.clean_config({"engine": engine, "finished_frame_position": "last"})
+
+    def test_finished_frame_change_invalidates_cached_conditioning(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            controller = studio.Studio.__new__(studio.Studio)
+            controller.store = studio.Store(tmp)
+            controller.collect = lambda p: p
+            p = self.project()
+            p["config"] = studio.clean_config({"engine": "local", "workflow_mode": "motion"})
+            p["approval"] = studio.prep_key(p)
+            p["prepared_key"] = p["approval"]
+            p["ltx25_run"] = {"stale": True}
+            opening = copy.deepcopy(p["opening_input"])
+            controller.configure(p, {**p["config"], "finished_frame_position": "last"})
+            self.assertEqual(p["opening_input"], opening)
+            self.assertIsNone(p["opening_approval"])
+            self.assertNotIn("ltx25_run", p)
+
     def test_old_resolution_migrates(self):
         self.assertEqual(studio.clean_config({'render_size': 1920})['resolution'], 1920)
         self.assertEqual(studio.clean_config({'size': 768})['resolution'], 768)

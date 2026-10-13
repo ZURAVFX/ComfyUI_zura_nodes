@@ -1,5 +1,16 @@
 # Zura Studio validation
 
+## Timed finished-frame references, 13 October 2026
+
+H3 and whole-scene LTX now accept First, Last or a 1-based output frame number.
+LTX places a single still using native guide conditioning in both sampling
+stages, removes guide latents before caching, and excludes temporal padding
+from the Last selection. Generated scene plates retain their earlier untimed
+appearance role. The native single-image resolver preserves arbitrary frame
+indices. H3 uses its native keyframe guide. Wan Animate and masked LTX do not
+offer arbitrary timed stills on their current routes. These changes are
+structurally tested; no new GPU render or visual approval is claimed.
+
 ## Viewport guide comparison, 13 October 2026
 
 The supplied train blockout is 15 seconds at 1920 Ã— 1080. A five-second

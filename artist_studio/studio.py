@@ -40,6 +40,7 @@ DEFAULTS = {"engine": "local", "background": "keep", "scope": "person", "prompt"
             "start": 0.0, "duration": 2.0, "size": 512, "performer": -1,
             "margin": 20, "pitch": False, "seed": 42, "render_size": 0, "h3_preset": "preview_quality", "h3_steps": 0, "remove_text": False,
             "resolution": 1280, "delivery_mode": "native", "quality": "fast", "audio_id": "", "audio_start": 0.0, "length_mode": "custom", "lip_sync": False, "refine_lips": False,
+            "finished_frame_position": "first", "finished_frame_number": 1,
             "subject_mode": "auto", "workflow_mode": "swap", "edit_area": "mask", "mask_method": "auto", "mask_prompt": "person", "mask_points": []}
 PREP_KEYS = ("start", "duration", "size", "scope", "performer", "margin", "pitch")
 
@@ -78,13 +79,28 @@ def clean_config(value):
                          ("length_mode", ("custom", "original")),
                          ("workflow_mode", ("motion", "swap", "viewport")),
                          ("subject_mode", ("auto", "people", "objects")),
+                         ("finished_frame_position", ("first", "last", "frame")),
                          ("mask_method", ("auto", "text", "points")),
                          ("h3_preset", H3_PRESETS),
                          ("scope", ("person", "head"))]:
         if c[key] not in options:
             raise ValueError(f"Choose a valid {key} option.")
+    raw_frame = c["finished_frame_number"]
+    if isinstance(raw_frame, bool):
+        raise ValueError("Choose a whole frame number starting at 1.")
+    try:
+        c["finished_frame_number"] = int(raw_frame)
+        valid_frame = math.isfinite(float(raw_frame)) and float(raw_frame) == c["finished_frame_number"] and 1 <= c["finished_frame_number"] <= 1000000
+    except (ValueError, TypeError, OverflowError):
+        valid_frame = False
+    if not valid_frame:
+        raise ValueError("Choose a whole frame number starting at 1.")
+    if c["engine"] not in ("local", "h3") and c["finished_frame_position"] != "first":
+        raise ValueError("Timed finished-frame references are supported by LTX and H3. Select First frame or switch models.")
     c["viewport_render"] = c["workflow_mode"] == "viewport"
     c["edit_area"] = "mask" if c["workflow_mode"] == "swap" else "scene"
+    if c["engine"] == "local" and c["edit_area"] == "mask" and c["finished_frame_position"] != "first":
+        raise ValueError("Timed LTX finished frames currently require a whole-scene task. Masked edits use the first frame.")
     # The visible task choice is the sole source of scene/mask routing.
     c["background"] = "restyle" if c["engine"] in ("local", "seedance") and c["edit_area"] == "scene" else "keep"
     for key in ("start", "duration", "audio_start"):
@@ -1557,6 +1573,9 @@ class Studio:
                      draft_task=None, accepted_draft=None)
         elif prior != p["config"]:
             p.update(draft_task=None, accepted_draft=None)
+            if any(prior[key] != config[key] for key in ("finished_frame_position", "finished_frame_number")):
+                p["opening_approval"] = None
+                p.pop("ltx25_run", None)
             if prior["prompt"] != p["config"]["prompt"]:
                 p.update(opening_input=None, opening_key=None, opening_url=None, opening_approval=None)
             p["phase"] = ("opening" if p.get("opening_input") and p["config"]["engine"] in ("local", "h3", "wan")
@@ -1808,7 +1827,7 @@ def register():
                              if name not in nodes.NODE_CLASS_MAPPINGS]
         scene_keys = set(required) - {"inpaint", "ltx_video_vae", "vocals"}
         scene_nodes = ("DWPreprocessor", "ResizeImageMaskNode", "VHS_LoadImagesPath",
-                       "LTXVConditioning", "LTXVPreprocess", "LTXVImgToVideoInplace",
+                       "LTXVConditioning", "LTXVPreprocess", "LTXVImgToVideoInplace", "LTXVAddGuide",
                        "LTXAddVideoICLoRAGuideAdvanced", "LTXICLoRALoaderModelOnly",
                        "LTXVEmptyLatentAudio", "LTXVAudioVAEEncode", "LTXVConcatAVLatent",
                        "LTXVSeparateAVLatent", "LTXVCropGuides", "LTXVLatentUpsampler",

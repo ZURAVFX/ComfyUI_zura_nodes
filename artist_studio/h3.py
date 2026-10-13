@@ -68,12 +68,64 @@ def cache_key(project):
                                                                 "resolution": generation_resolution},
             "audio": (project.get("audio") or {}).get("sha"), "audio_start": c.get("audio_start", 0),
             "lip_sync": c.get("lip_sync", False), "preview": False, "encoders": stamps}
+    if project.get("look_mode") == "ready" and project.get("starting_asset"):
+        position = c.get("finished_frame_position", "first")
+        # The first-frame cache already represents the same approved opening.
+        # Key other placements separately so a prior conditioning cache cannot
+        # silently put the finished frame back at frame zero.
+        if position != "first":
+            data["finished_frame"] = {
+                "position": position,
+                "number": c.get("finished_frame_number", 1) if position == "frame" else None,
+            }
     if c.get("edit_area", "mask") == "scene":
         data["selection"] = {"edit_area": "scene"}
     elif c.get("mask_method", "auto") != "auto":
         data["selection"] = {"mask_method": c["mask_method"],
                              "mask_prompt": c.get("mask_prompt", "") if c["mask_method"] == "text" else ""}
     return hashlib.sha256(json.dumps(data, sort_keys=True).encode()).hexdigest()
+
+
+def _finished_frame_index(project, delivered_frame_count):
+    """Return the selected finished-frame index within the delivered H3 clip.
+
+    H3 pads short takes to its 17k+5 latent grid. Artists select a frame in the
+    delivered 24 fps clip, so Last must resolve to the final real frame rather
+    than the last padded latent frame.
+    """
+    if project.get("look_mode") != "ready" or not project.get("starting_asset"):
+        return None
+    if isinstance(delivered_frame_count, bool):
+        raise ValueError("The selected H3 clip has no valid delivered frame count.")
+    try:
+        count = int(delivered_frame_count)
+        exact_count = float(delivered_frame_count) == count
+    except (TypeError, ValueError, OverflowError):
+        exact_count = False
+        count = 0
+    if not exact_count or count < 1:
+        raise ValueError("The selected H3 clip has no valid delivered frame count.")
+
+    config = project.get("config") or {}
+    position = config.get("finished_frame_position", "first")
+    if position == "first":
+        return 0
+    if position == "last":
+        return count - 1
+    if position != "frame":
+        raise ValueError("Choose First frame, Last frame or a specific finished frame.")
+    raw_number = config.get("finished_frame_number", 1)
+    if isinstance(raw_number, bool):
+        raise ValueError(f"Choose a finished frame from 1 to {count} for this clip.")
+    try:
+        number = int(raw_number)
+        valid_number = math.isfinite(float(raw_number)) and float(raw_number) == number
+    except (TypeError, ValueError, OverflowError):
+        valid_number = False
+        number = 0
+    if not valid_number or not 1 <= number <= count:
+        raise ValueError(f"Choose a finished frame from 1 to {count} for this clip.")
+    return number - 1
 
 
 def cpu_values(value):
@@ -368,7 +420,26 @@ def build_h3_viewport_graph(project):
     selected_frames = max(1, int(selected_seconds * 24 + 1e-6))
     if not 5 <= selected_frames <= 120:
         raise ValueError("Local H3 viewport renders currently support 0.21–5 seconds per take. Select a five-second section of the train scene.")
-    references = project.get("viewport_references") or []
+    references = list(project.get("viewport_references") or [])
+    finished_frame_index = _finished_frame_index(project, selected_frames)
+    finished_reference_index = None
+    if finished_frame_index is not None:
+        starting_asset = project["starting_asset"]
+        for index, reference in enumerate(references):
+            same_asset = (reference.get("sha") == starting_asset.get("sha")
+                          if reference.get("sha") and starting_asset.get("sha")
+                          else reference.get("file") == starting_asset.get("file"))
+            if same_asset:
+                finished_reference_index = index
+                references[index] = {**reference, "role": "environment",
+                                      "viewport_role": "starting_frame"}
+                break
+        if finished_reference_index is None:
+            if len(references) >= 9:
+                raise ValueError("H3 can use a finished scene image plus up to eight extra look references.")
+            references.insert(0, {**starting_asset, "role": "environment",
+                                  "viewport_role": "starting_frame"})
+            finished_reference_index = 0
     if not 1 <= len(references) <= 9:
         raise ValueError("Add between one and nine appearance references for the H3 viewport render.")
     for reference in references:
@@ -399,6 +470,10 @@ def build_h3_viewport_graph(project):
         "Use the cap/logo reference for its visible small details without inventing or replacing the mark. "
         + str(c.get("prompt", "")).strip()
     ).strip()
+    if finished_frame_index is not None:
+        prompt += (f" <Picture {finished_reference_index + 1}> is also the artist's finished frame for output "
+                   f"frame {finished_frame_index + 1} of {selected_frames}. Match it at that exact point in time; "
+                   "use the viewport video to guide motion and camera movement between frames.")
     if c.get("remove_text"):
         prompt += " Remove all on-screen text, subtitles, labels and interface overlays. Rebuild their former areas as part of the finished scene."
 
@@ -436,6 +511,10 @@ def build_h3_viewport_graph(project):
                     length=length, ref_image_size="match", **image_refs,
                     **{"ref_videos.ref_video_0": ["h3_viewport_data", 0]})
     latent = ["h3_references", 1]
+    if finished_frame_index is not None:
+        positive = node("h3_finished_frame", "MiniMaxH3AddGuide", positive=positive, latent=latent,
+                        vae=vae, image=[f"h3_viewport_image_{finished_reference_index + 1}", 0],
+                        frame_idx=finished_frame_index)
     guider = node("h3_guider", "BasicGuider", model=model, conditioning=positive)
     noise = node("h3_noise", "RandomNoise", noise_seed=c["seed"])
     sigmas = node("h3_schedule", "BasicScheduler", model=model, scheduler="simple",
@@ -669,6 +748,9 @@ def build_h3_graph(project, use_cache=True, preserve_background=True):
     count = manifest["clip"]["frames"]
     if not 5 <= count <= 120:
         raise ValueError("H3 supports a selected clip between 0.21 and 5 seconds. Change Clip length and prepare it again.")
+    finished_frame_index = _finished_frame_index(project, count)
+    if finished_frame_index is not None:
+        check_asset(project["starting_asset"])
     direction = ("Replace only the selected head; keep the body and clothing unchanged. "
                  if c["scope"] == "head" else "Replace the selected performer's head, body and clothing. ")
     prompt = (
@@ -701,6 +783,10 @@ def build_h3_graph(project, use_cache=True, preserve_background=True):
         prompt = prompt.replace("<Audio 1> supplies the original performance and speech timing.",
             "<Audio 1> is the replacement dialogue. Reproduce its words and timing through natural mouth and jaw articulation, with a resting mouth during silence. Ignore the source video's original dialogue and mouth movements.")
         prompt = prompt.replace("Follow the source gestures and speech.", "Follow the source body gestures and the replacement audio's speech.")
+    if finished_frame_index is not None:
+        prompt += (f" The approved finished image (<Picture 1>) is the visual keyframe for output frame "
+                   f"{finished_frame_index + 1} of {count}. Match that frame to the supplied image; use the source "
+                   "performance and depth guide to carry motion through the rest of the clip.")
     graph = {}
 
     def node(identity, typ, **inputs):
@@ -782,8 +868,15 @@ def build_h3_graph(project, use_cache=True, preserve_background=True):
                     "ref_images.ref_image_1": ["h3_character", 0],
                     "ref_audios.ref_audio_0": ["h3_pad", 2]})
     latent = ["h3_references", 1]
-    positive = node("h3_first_frame", "MiniMaxH3AddGuide", positive=positive, latent=latent,
-                    vae=vae, image=opening, frame_idx=0)
+    if finished_frame_index is not None and finished_frame_index != 0:
+        positive = node("h3_finished_frame", "MiniMaxH3AddGuide", positive=positive, latent=latent,
+                        vae=vae, image=opening, frame_idx=finished_frame_index)
+    else:
+        # Preserve the normal generated-opening behaviour when no finished
+        # frame is supplied, and retain the existing first-frame route when the
+        # uploaded finished image is explicitly assigned to frame one.
+        positive = node("h3_first_frame", "MiniMaxH3AddGuide", positive=positive, latent=latent,
+                        vae=vae, image=opening, frame_idx=0)
     positive = node("h3_speech", "MiniMaxH3AddGuide", positive=positive, latent=latent,
                     audio_vae=audio_vae, audio=["h3_pad", 2], frame_idx=0)
     if preserve_background:

@@ -1,18 +1,32 @@
 ---
 colors:
-  background: "#0d1119"
-  surface: "#141a25"
-  border: "#30394b"
-  primary: "#7850ed"
+  background: "#080c13"
+  surface: "#101620"
+  border: "#303b50"
+  primary: "#7846f7"
   foreground: "#f0f1f3"
-  muted: "#b0bacb"
-  primary-hover: "#8964ff"
-  primary-soft: "#c6b5ff"
-  primary-surface: "#30244f"
-  canvas: "#090d14"
+  muted: "#b4bfd2"
+  primary-hover: "#8150fa"
+  primary-soft: "#d0bfff"
+  primary-surface: "#241b48"
+  canvas: "#060a11"
   warning-surface: "#211c37"
   warning-border: "#55467a"
   warning-text: "#d7cded"
+  shell-light: "#26334d"
+  panel-light: "#151d2b"
+  input: "#131c29"
+  input-light: "#172130"
+  control-border: "#62728c"
+  focus: "#b8a4ff"
+  selected-border: "#a28aff"
+  step-light: "#ac91ff"
+  step-violet: "#865cff"
+  step-ink: "#100b24"
+  action: "#743df7"
+  action-end: "#6734e9"
+  action-hover-end: "#7748f5"
+  ready: "#b9ed70"
 ---
 
 # Zura Studio design system
@@ -23,11 +37,11 @@ Zura Studio is a local video editing workspace. The user-approved direction is a
 
 ## Colors
 
-The CSS variables on `#genj-studio` define the palette above. Violet identifies the current stage, selection, focus and primary action. Text and controls use neutral navy surfaces. Warnings explain the recovery beside the action they affect.
+The CSS variables on `#genj-studio` define the palette above. Violet identifies the current stage, selection, focus and primary action. Text and controls use navy surfaces with a restrained overhead light across the shell. Elevated panels and inputs use tonal navy shading; active stages and selected controls use brighter violet. The primary button owns the strongest violet. The supplied Zura logo is used unchanged, displayed in silver on the dark header using CSS inversion and screen blending. Readiness retains a green dot beside its text label. Warnings explain the recovery beside the action they affect.
 
 ## Typography
 
-Segoe UI with system sans-serif fallbacks. Base text is 14 px. Compact labels are 12â€“13 px; panel headings are 18 px. Mobile inputs use 16 px text and a 44 px minimum height.
+Segoe UI with system sans-serif fallbacks. Base text is 14 px. Compact labels are 12–13 px; panel headings are 18 px. Mobile inputs use 16 px text and a 44 px minimum height.
 
 ## Layout
 

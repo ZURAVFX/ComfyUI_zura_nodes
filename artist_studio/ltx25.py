@@ -33,6 +33,34 @@ VIEWPORT_MODELS = {name: value for name, value in QUALIFIED_MODELS.items()
 VIEWPORT_MODELS["union"] = "ltx-2.5-22b-ic-lora-layout-to-render-1.0.safetensors"
 
 
+def resolve_finished_frame(config, delivered_frames):
+    """Resolve a 1-based artist frame within the selected 24 fps output clip.
+
+    Native single-image LTX guides retain the exact nonnegative frame index.
+    Never use IC-LoRA frame_idx=-1 for Last: that is an untimed reference.
+    Native temporal padding is excluded from the artist's available frames.
+    """
+    if type(delivered_frames) is not int or delivered_frames < 1:
+        raise ValueError("Verify the selected clip's frame count first.")
+    position = config.get("finished_frame_position", "first")
+    if position == "first":
+        return 0
+    if position == "last":
+        return delivered_frames - 1
+    if position != "frame":
+        raise ValueError("Choose First frame, Last frame or Frame number.")
+    number = config.get("finished_frame_number", 1)
+    if type(number) is not int or not 1 <= number <= delivered_frames:
+        raise ValueError(f"Choose a frame number from 1 to {delivered_frames} within the selected clip.")
+    return number - 1
+
+
+def _finished_anchor(project, delivered_frames):
+    if project.get("look_mode") == "ready" and project.get("starting_asset"):
+        return resolve_finished_frame(project["config"], delivered_frames)
+    return None
+
+
 def digest(value):
     return hashlib.sha256(json.dumps(value, sort_keys=True, separators=(",", ":"),
                                      allow_nan=False).encode()).hexdigest()
@@ -117,6 +145,7 @@ def build_plan(project, *, scenario, timeline, models, text_encoder_inputs,
     if type(frames) is not int or frames < 1 or type(fps) not in (int, float) or not math.isfinite(fps) or fps != 24:
         raise ValueError("This bounded LTX recipe currently requires a verified 24 fps interval.")
     seconds = frames / fps
+    finished_anchor = _finished_anchor(project, frames)
     if seconds > 5:
         raise ValueError("This LTX recipe supports up to five seconds. Longer continuation is not qualified yet.")
     width, height = timeline.get("width"), timeline.get("height")
@@ -167,7 +196,8 @@ def build_plan(project, *, scenario, timeline, models, text_encoder_inputs,
     }[scenario]
     if objects:
         direction = "Follow the source scene, camera movement, object placement and object motion."
-    positive = "Match the approved opening appearance and scene. " + direction
+    positive = ("Match the approved finished frame appearance and scene. " if finished_anchor is not None
+                else "Match the approved opening appearance and scene. ") + direction
     if prompt:
         positive += " " + prompt
     negative = "warped anatomy, sliding feet, flicker, extra people, text, subtitles"
@@ -184,6 +214,8 @@ def build_plan(project, *, scenario, timeline, models, text_encoder_inputs,
              "sigmas": [STAGE1_SIGMAS, STAGE2_SIGMAS]}
     if objects:
         basis["guide_type"] = "canny_objects"
+    if finished_anchor is not None:
+        basis["finished_frame_index"] = finished_anchor
     key = digest(basis)
     keys = {name: digest({"plan": key, "artifact": name}) for name in
             ("text", "guided_text", "initial_video", "audio", "stage1_video", "upscaled_video", "stage2_video")}
@@ -287,7 +319,12 @@ def build_plan(project, *, scenario, timeline, models, text_encoder_inputs,
     image = node(g, "opening", "LoadImage", image=opening["file"])
     image = node(g, "preprocess", "LTXVPreprocess", image=image, img_compression=18)
     initial = node(g, "empty_video", "EmptyLTXVLatentVideo", width=base[0], height=base[1], length=padded, batch_size=1)
-    initial = node(g, "first_frame", "LTXVImgToVideoInplace", image=image, vae=vae, latent=initial, strength=.7, bypass=False)
+    if finished_anchor in (None, 0):
+        initial = node(g, "first_frame", "LTXVImgToVideoInplace", image=image, vae=vae, latent=initial, strength=.7, bypass=False)
+    else:
+        anchor = node(g, "finished_frame", "LTXVAddGuide", positive=cond, negative=[cond[0], 1],
+                      vae=vae, latent=initial, image=image, frame_idx=finished_anchor, strength=.7)
+        cond, initial = anchor, [anchor[0], 2]
     guided = node(g, "guide", "LTXAddVideoICLoRAGuideAdvanced", positive=cond, negative=[cond[0], 1],
                   vae=vae, latent=initial, image=pose, frame_idx=0, strength=1, latent_downscale_factor=2,
                   crop="disabled", use_tiled_encode=True, tile_size=256, tile_overlap=64, attention_strength=1)
@@ -300,6 +337,13 @@ def build_plan(project, *, scenario, timeline, models, text_encoder_inputs,
         text = load(g, phase, text_name)
         cond = text if union else node(g, "conditioning", "LTXVConditioning", positive=text, negative=[text[0], 1], frame_rate=fps)
         video = load(g, phase, video_name)
+        if not union and finished_anchor not in (None, 0):
+            vae = node(g, "video_vae", "VAELoader", vae_name=models["video_vae"])
+            image = node(g, "opening", "LoadImage", image=opening["file"])
+            image = node(g, "preprocess", "LTXVPreprocess", image=image, img_compression=18)
+            anchor = node(g, "finished_frame", "LTXVAddGuide", positive=cond, negative=[cond[0], 1],
+                          vae=vae, latent=video, image=image, frame_idx=finished_anchor, strength=1.)
+            cond, video = anchor, [anchor[0], 2]
         aud = load(g, phase, "audio")
         mask = node(g, "audio_mask", "SolidMask", value=0., width=1024, height=1024)
         frozen = node(g, "frozen_audio", "SetLatentNoiseMask", samples=aud, mask=mask)
@@ -313,7 +357,7 @@ def build_plan(project, *, scenario, timeline, models, text_encoder_inputs,
         sigmas = node(g, "sigmas", "ManualSigmas", sigmas=STAGE1_SIGMAS if union else STAGE2_SIGMAS)
         sampled = node(g, "sample", "SamplerCustomAdvanced", noise=noise, guider=guider, sampler=sampler, sigmas=sigmas, latent_image=av)
         separated = node(g, "separate", "LTXVSeparateAVLatent", av_latent=sampled)
-        if union:
+        if union or finished_anchor not in (None, 0):
             separated = [node(g, "crop_guides", "LTXVCropGuides", positive=cond, negative=[cond[0], 1], latent=separated)[0], 2]
         save(g, phase, "stage1_video" if union else "stage2_video", separated)
 
@@ -354,7 +398,8 @@ def build_plan(project, *, scenario, timeline, models, text_encoder_inputs,
     video = node(g, "upscale", "LTXVLatentUpsampler", samples=video, upscale_model=upscaler, vae=vae)
     image = node(g, "opening", "LoadImage", image=opening["file"])
     image = node(g, "preprocess", "LTXVPreprocess", image=image, img_compression=18)
-    video = node(g, "first_frame", "LTXVImgToVideoInplace", image=image, vae=vae, latent=video, strength=1., bypass=False)
+    if finished_anchor in (None, 0):
+        video = node(g, "first_frame", "LTXVImgToVideoInplace", image=image, vae=vae, latent=video, strength=1., bypass=False)
     save(g, "upscale", "upscaled_video", video)
     sample("refine", "upscaled_video", "text", False)
 
@@ -429,6 +474,7 @@ def build_viewport_plan(project, *, scenario, timeline, models, text_encoder_inp
     # sampling, then trim delivery back to the exact reviewed interval.
     frames = source_frames
     padded = frames + (1 - frames) % 8
+    finished_anchor = _finished_anchor(project, source_frames)
     width, height = timeline.get("width"), timeline.get("height")
     if type(width) is not int or type(height) is not int or min(width, height) < 1:
         raise ValueError("Verify the viewport video's dimensions first.")
@@ -461,6 +507,8 @@ def build_viewport_plan(project, *, scenario, timeline, models, text_encoder_inp
              "model_pins": copy.deepcopy(model_pins), "encoder": copy.deepcopy(text_encoder_inputs),
              "audio": {"generation": "silent", "delivery": scenario},
              "sigmas": [STAGE1_SIGMAS, STAGE2_SIGMAS]}
+    if finished_anchor is not None:
+        basis["finished_frame_index"] = finished_anchor
     key = digest(basis)
     phases, dependencies, artifacts = {}, {}, {}
 
@@ -529,7 +577,7 @@ def build_viewport_plan(project, *, scenario, timeline, models, text_encoder_inp
                       vae=vae, latent=latent, image=layout, frame_idx=0, strength=1, latent_downscale_factor=adapter_factor,
                       crop="disabled", use_tiled_encode=False, tile_size=256, tile_overlap=64)
         guided = node(g, "appearance_guide", "LTXAddVideoICLoRAGuide", positive=guided, negative=[guided[0], 1],
-                      vae=vae, latent=[guided[0], 2], image=look_image, frame_idx=-1, strength=1,
+                      vae=vae, latent=[guided[0], 2], image=look_image, frame_idx=-1 if finished_anchor is None else finished_anchor, strength=1,
                       latent_downscale_factor=adapter_factor, crop="center", use_tiled_encode=False, tile_size=256, tile_overlap=64)
         audio_vae = node(g, "audio_vae", "VAELoader", vae_name=models["audio_vae"])
         audio = node(g, "zero_audio", "LTXVEmptyLatentAudio", frames_number=padded, frame_rate=fps, batch_size=1, audio_vae=audio_vae)
@@ -573,7 +621,8 @@ def build_viewport_plan(project, *, scenario, timeline, models, text_encoder_inp
             "qualification": "Experimental viewport route; current-media visual testing required.",
             "source_frames": source_frames, "generation_frames": padded,
             "delivered_frames": source_frames, "trimmed_tail_frames": 0,
-            "appearance_reference_role": "composed_scene_plate_at_rope_minus_one",
+            "appearance_reference_role": ("composed_scene_plate_at_rope_minus_one" if finished_anchor is None
+                                          else "finished_frame_at_selected_time"),
             "graph_hashes": {phase: digest(value) for phase, value in phases.items()}}
 
 

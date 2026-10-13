@@ -3,16 +3,49 @@
   "generatedAt": "2026-10-13T00:00:00Z",
   "title": "Design System: Zura Studio",
   "extensions": {
-    "motion": [{"name": "control-state", "value": "0.18s ease-out", "purpose": "Hover and selection feedback"}],
-    "breakpoints": [{"name": "tablet", "value": "1240px"}, {"name": "stacked", "value": "900px"}]
+    "motion": [
+      {
+        "name": "control-state",
+        "value": "0.18s ease-out",
+        "purpose": "Hover and selection feedback"
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "tablet",
+        "value": "1240px"
+      },
+      {
+        "name": "stacked",
+        "value": "900px"
+      }
+    ]
   },
   "components": [],
   "narrative": {
     "northStar": "Real media first, clear controls around it",
-    "overview": "A dark navy editing workspace with violet actions. Source, look and prompt sit beside the real preview; shot settings and the next action remain together.",
-    "keyCharacteristics": ["Three-column editor", "Actual media previews", "Current-stage progress", "Native graph access"],
-    "rules": [{"name": "Honest progress", "body": "Never present a current-stage percentage as whole-job completion. Show measured remaining time as an estimate.", "section": "components"}],
-    "dos": ["Keep trimming recovery actionable", "Retain native audio, masking and graph controls"],
-    "donts": ["Do not fabricate previews or results", "Do not imply unavailable browser verification"]
+    "overview": "A deep navy editing workspace with overhead light, violet actions and the supplied Zura mark. Source, look and prompt sit beside the real preview; shot settings and the next action remain together.",
+    "keyCharacteristics": [
+      "Three-column editor",
+      "Actual media previews",
+      "Current-stage progress",
+      "Native graph access",
+      "Official supplied Zura logo"
+    ],
+    "rules": [
+      {
+        "name": "Honest progress",
+        "body": "Never present a current-stage percentage as whole-job completion. Show measured remaining time as an estimate.",
+        "section": "components"
+      }
+    ],
+    "dos": [
+      "Keep trimming recovery actionable",
+      "Retain native audio, masking and graph controls"
+    ],
+    "donts": [
+      "Do not fabricate previews or results",
+      "Do not imply unavailable browser verification"
+    ]
   }
 }

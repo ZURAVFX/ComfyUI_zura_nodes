@@ -21,9 +21,24 @@ Choose **Starting look**:
 - **Build from references:** add one to three images of people, objects,
   materials or environments. Describe the change if needed. All references
   guide the creation of one starting frame; they are not pasted into a collage.
-- **Use finished frame:** upload an already-composed opening image. This skips
+- **Use finished frame:** upload an already-composed image. This skips
   image generation. Extra appearance references are optional; the first is the
   separate appearance input for video routes that support it.
+
+For a finished image, **Frame position** offers First, Last or Frame number
+with H3 and whole-scene LTX. Frame numbers start at 1 in the selected **24 fps
+output clip**, rather than in the untrimmed source. Last means the final
+delivered frame, excluding internal model padding. These are native timed
+conditioning guides, not a promise of pixel-perfect reconstruction. One timed
+finished image is supported; additional images remain appearance references.
+Wan Animate and masked LTX edits retain their existing reference behaviour.
+Timed H3/LTX paths have structural and native-node tests; their visual quality
+has not yet been qualified with a new render.
+
+Whole-frame reviews open on **Guidance**. You can still switch to Original or
+Mask. **Start over** clears uploads, settings and stale frontend state and
+returns to Source. It cancels only the current Studio shot when necessary;
+saved shots and their output files stay in your local library.
 
 In **Viewport to final** with MiniMax H3, the video and look references go
 straight to H3, so it skips a separate generated starting frame. Choose
