@@ -4,8 +4,33 @@ import { api } from "../../scripts/api.js";
 const media = source => api.apiURL('/zura/dialogue/media?source='+encodeURIComponent(source));
 const widget = (node,name) => node?.widgets?.find(w=>w.name===name);
 const read = (node,name) => widget(node,name)?.value;
-const write = (node,name,value) => { const w=widget(node,name);if(w){w.value=value;w.callback?.(value);}node.graph?.setDirtyCanvas(true,true); };
+const write = (node,name,value) => { const w=widget(node,name);if(w){w.value=value;w.callback?.(value);}node.graph?.setDirtyCanvas(true,true);if(node.comfyClass==='ZuraDialogueSource'&&['word_start','word_end','context_start'].includes(name))syncSourceTiming(node); };
 const el = (tag,attrs={},text='') => {const e=document.createElement(tag);Object.assign(e,attrs);e.textContent=text;return e;};
+
+function connectedSource(node){
+  const seen=new Set();
+  while(node&&!seen.has(node)){
+    if(node.comfyClass==='ZuraDialogueSource')return node;
+    seen.add(node);const input=node.inputs?.find(i=>i.name==='edit'||i.type==='ZURA_DIALOGUE_EDIT'),links=node.graph?.links;
+    const link=typeof links?.get==='function'?links.get(input?.link):links?.[input?.link];
+    node=link?node.graph?.getNodeById?.(link.origin_id):null;
+  }
+  return null;
+}
+const timingMode=node=>read(node,'timing_mode')||node.properties?.zuraDialogueTimingMode||'source';
+function sourceRange(node){
+  const source=connectedSource(node);if(!source)return null;
+  const fps=source.properties?.zuraDialogueInfo?.fps;
+  const context=Number(read(source,'context_start'))||0;
+  const offset=fps?Math.floor(context*fps)/fps:context;
+  return [Number(read(source,'word_start'))-offset,Number(read(source,'word_end'))-offset];
+}
+function syncSourceTiming(source){
+  for(const node of source.graph?._nodes||[]){
+    if(node.comfyClass!=='ZuraDialogueFinish'||timingMode(node)!=='source'||connectedSource(node)!==source)continue;
+    const range=sourceRange(node);if(range){write(node,'generated_word_start',range[0]);write(node,'generated_word_end',range[1]);}
+  }
+}
 
 export function waveform(canvas,peaks,duration,getRange,setRange,seek,getPlayhead=()=>0,commit=()=>{}){
   const ctx=canvas.getContext('2d');let active=null;
@@ -40,6 +65,7 @@ async function picker(node,generated=false,host=null){
   if(!source)throw new Error(generated?'Run the workflow once to preview the generated words.':'Choose a local video first.');
   const response=await api.fetchApi('/zura/dialogue/info',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({source})});
   const info=await response.json();if(!response.ok)throw new Error(info.error);
+  if(!generated){node.properties.zuraDialogueInfo={fps:info.fps};syncSourceTiming(node);}
   const shade=el('div',{className:host?'zura-dialogue-inline':'zura-dialogue-shade'}),panel=el('section',{className:'zura-dialogue-panel'});shade.append(panel);
   const style=el('style');style.textContent=`
     .zura-dialogue-shade{position:fixed;inset:0;z-index:100000;background:#05080dd9;display:grid;place-items:center;font:14px system-ui;color:#e3eaf2}
@@ -65,6 +91,13 @@ async function picker(node,generated=false,host=null){
   `;shade.append(style);
   panel.append(el('h2',{},generated?'Select replacement words':'Select words and face'));
   panel.append(el('p',{},generated?'Mark only the replacement words. These times refer to the last generated face clip.':'Draw the face crop, place the mouth, then drag IN and OUT to isolate the words.'));
+  let timing;
+  if(generated){
+    const label=el('label',{},'Replacement timing');timing=el('select',{ariaLabel:'Replacement timing'});
+    timing.append(el('option',{value:'source'},'Match original timing (no retiming)'),el('option',{value:'manual'},'Choose replacement IN/OUT (no retiming)'));
+    timing.value=timingMode(node);label.append(timing);panel.append(label);
+    timing.onchange=()=>{node.properties.zuraDialogueTimingMode=timing.value;write(node,'timing_mode',timing.value);if(timing.value==='source'){const r=sourceRange(node);if(r){range=r;redraw();commit();}}};
+  }
   const row=el('div',{className:'zura-dialogue-row'}),picture=el('div',{className:'zura-dialogue-picture'}),video=el('video',{src:media(source),controls:false,playsInline:true,preload:'auto'}),overlay=el('canvas',{width:info.width,height:info.height,'ariaLabel':'Face crop and mouth selection'}),tools=el('div',{className:'zura-dialogue-tools'});
   picture.style.maxWidth=`calc(52vh * ${info.width/info.height})`;
   panel.append(row);row.append(picture,tools);picture.append(video,overlay);
@@ -87,7 +120,8 @@ async function picker(node,generated=false,host=null){
   play.innerHTML=playIcon;play.onclick=e=>{e.stopPropagation();stopAt=null;video.paused?startPlayback():video.pause();};
   video.onplay=()=>{cancelAnimationFrame(animation);playback();};video.onpause=video.onended=()=>{cancelAnimationFrame(animation);playback();};
   const startName=generated?'generated_word_start':'word_start',endName=generated?'generated_word_end':'word_end';
-  let range=[Number(read(node,startName)),Number(read(node,endName))];range=[Math.max(0,Math.min(info.duration-.001,range[0])),Math.min(info.duration,range[1])];range[1]=Math.max(range[0]+.001,range[1]);
+  let range=generated&&timingMode(node)==='source'?(sourceRange(node)||node._dialoguePreview.generated_range):null;
+  range=range||[Number(read(node,startName)),Number(read(node,endName))];range=[Math.max(0,Math.min(info.duration-.001,range[0])),Math.min(info.duration,range[1])];range[1]=Math.max(range[0]+.001,range[1]);
   const wave=el('canvas',{className:'zura-dialogue-wave',width:1400,height:126,ariaLabel:generated?'Generated speech timeline, drag IN and OUT handles':'Source speech timeline, drag IN and OUT handles'});panel.append(wave);
   const times=el('div',{className:'zura-dialogue-times'});panel.append(times);
   const start=number('Selection IN (seconds)',range[0],v=>{range[0]=Math.max(0,Math.min(range[1]-.001,v));redraw();commit();}),end=number('Selection OUT (seconds)',range[1],v=>{range[1]=Math.min(info.duration,Math.max(range[0]+.001,v));redraw();commit();});times.append(start.wrap,end.wrap);
@@ -111,6 +145,13 @@ async function picker(node,generated=false,host=null){
   if(!host)shade.onclick=e=>{if(e.target===shade)close();};
   save.onclick=()=>{
     if(!generated&&!(Number(contextA.input.value)<=range[0]&&range[1]<=Number(contextB.input.value)&&Number(contextB.input.value)<=info.duration+.001)){status.textContent='Keep the selected words inside context, and context inside the clip.';return;}
+    if(generated){
+      const original=sourceRange(node),fps=connectedSource(node)?.properties?.zuraDialogueInfo?.fps||30;
+      const follows=original&&range.every((v,i)=>Math.abs(v-original[i])<.001);
+      const mode=follows?'source':'manual';
+      if(original&&Math.abs((range[1]-range[0])-(original[1]-original[0]))>1/fps+1e-6){status.textContent='Keep replacement and original selections the same length. No retiming is applied.';return;}
+      node.properties.zuraDialogueTimingMode=mode;write(node,'timing_mode',mode);timing.value=mode;
+    }
     write(node,startName,range[0]);write(node,endName,range[1]);
     if(!generated){write(node,'context_start',Number(contextA.input.value));write(node,'context_end',Number(contextB.input.value));write(node,'selection',JSON.stringify({box,mouth,frame,identity:info.identity}));}
     if(host){status.textContent='Selection saved';}else close();
@@ -157,18 +198,19 @@ function mountNodeEditor(node){
       body.style.background='#18212d';const preview=node._dialoguePreview;
       if(!preview){const p=el('p',{},'The finished video appears here after Run. Only the selected words and mouth region are replaced.');p.style.cssText='padding:16px;color:#cad8e7;font:14px system-ui;line-height:1.6';body.append(p);return;}
       const video=el('video',{src:media(preview.file),controls:true,playsInline:true,preload:'metadata'});video.style.cssText='display:block;width:100%;max-height:450px;background:#080d13;object-fit:contain';
-      const caption=el('p',{},'Original voice and picture retained outside the selection. Use Replacement words to adjust their generated timing, then Run again.');caption.style.cssText='padding:0 14px;color:#cad8e7;font:13px system-ui;line-height:1.5';body.append(video,caption);
+      const caption=el('p',{},preview.retimed===false?'Original timing preserved. Use Replacement words to move the replacement selection, then Run again. No video or audio retiming is applied.':'This preview predates the timing safeguard. Run again with Match original timing.');caption.style.cssText='padding:0 14px;color:#cad8e7;font:13px system-ui;line-height:1.5';body.append(video,caption);
+      const download=el('a',{href:media(preview.file),download:preview.file.split('/').pop().replace(' [output]','')},'Download finished video');download.style.cssText='display:inline-block;margin:0 14px 16px;color:#9eecd7';body.append(download);
       body._dialogueDispose=()=>{video.pause();video.removeAttribute('src');video.load();};
     }
     root._dialogueDispose=()=>body._dialogueDispose?.();
   };
-  const configured=node.onConfigure;node.onConfigure=function(data){configured?.call(this,data);if(source&&/Select Word and Face/i.test(node.title))node.title='Zura · Select Words and Face';node._dialoguePreview=data.properties?.zuraDialoguePreview;node.setSize([Math.max(480,node.size[0]),Math.max(source?920:760,node.size[1])]);queueMicrotask(()=>node._dialogueRefresh());};
+  const configured=node.onConfigure;node.onConfigure=function(data){configured?.call(this,data);if(source&&/Select Word and Face/i.test(node.title))node.title='Zura · Select Words and Face';if(!source&&['source','manual'].includes(node.properties?.zuraDialogueTimingMode))write(node,'timing_mode',node.properties.zuraDialogueTimingMode);node._dialoguePreview=data.properties?.zuraDialoguePreview;node.setSize([Math.max(480,node.size[0]),Math.max(source?920:760,node.size[1])]);queueMicrotask(()=>{const original=source?node:connectedSource(node);if(original)syncSourceTiming(original);node._dialogueRefresh();});};
   const removed=node.onRemoved;node.onRemoved=function(...args){revision++;root._dialogueDispose?.();removed?.apply(this,args);};
   if(source){
     const file=widget(node,'source'),previous=file.callback;file.callback=function(v){previous?.call(this,v);write(node,'selection','{}');node._dialogueRefresh();};
     hide(node,['selection','word_start','word_end','context_start','context_end','render_size','stabilize_crop']);
   }else{
-    hide(node,['generated_word_start','generated_word_end']);
+    hide(node,['generated_word_start','generated_word_end','timing_mode']);
     const executed=node.onExecuted;node.onExecuted=function(message){executed?.call(this,message);if(message.zura_dialogue?.[0]){node._dialoguePreview=message.zura_dialogue[0];node.properties.zuraDialoguePreview=node._dialoguePreview;node._dialogueRefresh();}};
   }
   node.setSize([480,source?920:760]);queueMicrotask(()=>node._dialogueRefresh());

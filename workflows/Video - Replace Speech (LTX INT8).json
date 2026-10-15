@@ -174,15 +174,28 @@
       },
       "widgets_values": [
         "",
-        0.0,
+        0,
         0.5,
-        0.0,
-        2.0,
+        0,
+        2,
         "{}",
         512,
         true,
-        true
-      ]
+        true,
+        ""
+      ],
+      "widgets_values_named": {
+        "source": "",
+        "word_start": 0,
+        "word_end": 0.5,
+        "context_start": 0,
+        "context_end": 2,
+        "selection": "{}",
+        "render_size": 512,
+        "track_face": true,
+        "stabilize_crop": true,
+        "dialogue_editor": ""
+      }
     },
     {
       "id": 101,
@@ -292,7 +305,8 @@
           "version": "7.8"
         },
         "cnr_id": "comfyui-zura-nodes",
-        "ver": "1.3.19"
+        "ver": "1.3.19",
+        "zuraDialogueTimingMode": "source"
       },
       "widgets_values": [
         0,
@@ -300,7 +314,7 @@
         12,
         0.24,
         "dialogue/edit",
-        "blend",
+        "nearest",
         ""
       ],
       "widgets_values_named": {
@@ -309,7 +323,7 @@
         "audio_fade_ms": 12,
         "mouth_feather": 0.24,
         "filename_prefix": "dialogue/edit",
-        "temporal_resampling": "blend",
+        "temporal_resampling": "nearest",
         "dialogue_editor": ""
       }
     },
@@ -322,7 +336,7 @@
       ],
       "size": [
         404,
-        800
+        960
       ],
       "flags": {
         "collapsed": false

@@ -39,7 +39,7 @@ Speaker references, transcripts and generated takes stay in local run folders. D
 
 ## Video and sound: LTX Dub-It
 
-Choose the video, draw the face crop, place the mouth centre, and select source words. Type the full revised phrase on the LTX stage. After a run, select the generated words in the final node and run again to blend them into the source. Outside that interval, source audio and picture are retained.
+Choose the video, draw the face crop, place the mouth centre, and select source words. Type the full revised phrase on the LTX stage. The final node defaults to **Match original timing**, using the same timestamps within the generated context. Outside that interval, source audio and picture are retained. Download the result directly from **Finished video**.
 
 The template uses the installed LTX 2.5 distilled INT8 transformer, Gemma 4 text encoder, matching 2.5 video/audio VAEs and latent upscaler, plus the Dub-It 0.9 LoRA for LTX 2.3. **The 2.3 Dub-It adapter on 2.5 is an experimental local combination, not an officially validated pairing.** Install the native LTX nodes from ComfyUI-LTXVideo for the graph's conditioning, audio reference and tiled decode nodes. The exact checkpoint filenames are exposed inside the native subgraph; weights are separate downloads.
 
@@ -47,7 +47,7 @@ The template uses the installed LTX 2.5 distilled INT8 transformer, Gemma 4 text
 
 The source validates constant frame rate and a zero start timestamp, pads generation to `8n+1`, and rounds spatial dimensions to multiples of 64. This local profile permits at most 121 generated frames and a 512-pixel base / 1024-pixel refined canvas on each axis. Unsupported geometry, changed source files and unexpected generated frame counts or sizes are rejected. The export is checked against the original frame count, size and frame rate. Use another workflow for longer edits or variable frame rate sources.
 
-The earlier artist temporal blend remains the default. Nearest-frame selection is available as an explicit comparison. The audio blend fits the chosen generated word interval to the source selection using pitch-preserving tempo adjustment, recorded in the receipt; selecting different boundaries changes that fit. The new audio-only workflow has its own explicit timing modes above.
+**Video and audio are never retimed in this workflow.** The old template could leave the generated range at 0–0.5 seconds while the selected original words were later and longer. This inserted a different head pose and interpolated it across the wrong interval, producing a smeared mouth/chin. Source timing now ignores stale generated IN/OUT values. If the generated delivery needs an offset, open **Replacement words**, choose **Choose replacement IN/OUT**, and select an interval of the same length as the original. Differences over one video frame are refused; smaller boundary differences use the exact original duration. Nearest-frame selection is the default, avoiding the blending of distinct mouth poses. The receipt records effective ranges, timing mode and `retimed: false`. The audio-only workflow has its separate timing modes above.
 
 ## Validation
 
