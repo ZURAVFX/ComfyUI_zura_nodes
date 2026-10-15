@@ -135,7 +135,8 @@ jobs:
           assert not list(Path('.').rglob('longcat.local.json*'))
           for asset in ('audio_dialogue.py', 'audio_parakeet.py', 'dialogue_edit.py',
                         'dialogue_signals.py', 'web/audio_dialogue_editor.js',
-                        'web/dialogue_editor.js', 'DIALOGUE_EDITING.md'):
+                        'web/dialogue_editor.js', 'web/dialogue_transcript.js',
+                        'web/dialogue_face_picker.js', 'DIALOGUE_EDITING.md'):
               assert Path(asset).is_file(), f'Missing dialogue editor asset: {asset}'
           assert not list(Path('.').rglob('parakeet.local.json*'))
           for filename in ('Audio - Replace Speech (LongCat).json', 'Video - Replace Speech (LTX INT8).json'):
@@ -164,6 +165,9 @@ jobs:
         run: |
           python -m unittest discover -s tests -p 'test_template_catalogue.py'
           node tests/test_audio_editor_connections.mjs
+          node tests/test_dialogue_timing_connections.mjs
+          node tests/test_dialogue_transcript.mjs
+          node tests/test_dialogue_face_picker.mjs
           python -m unittest discover -s tests -p 'test_audio_dialogue.py'
           python -m unittest discover -s tests -p 'test_audio_split_editor.py'
           python -m unittest discover -s tests -p 'test_dialogue_edit.py'

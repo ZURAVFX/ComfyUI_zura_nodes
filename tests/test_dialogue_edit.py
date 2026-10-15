@@ -21,6 +21,21 @@ dialogue = importlib.import_module('ComfyUI_zura_nodes.dialogue_edit')
 
 
 class DialogueTests(unittest.TestCase):
+    def test_dot_sized_mouth_is_rejected_before_sampling(self):
+        meta={'identity':'new','width':360,'height':640}
+        data={'identity':'new','box':[10,75,341,299],'mouth':[219,276,3,3],'mouth_confirmed':True}
+        with self.assertRaisesRegex(ValueError,'too small'):
+            dialogue.selection_data(json.dumps(data),meta)
+        data['mouth']=[190,276,45,36]
+        dialogue.selection_data(json.dumps(data),meta)
+
+    def test_reference_frame_outside_effective_context_stops_before_decoding(self):
+        meta={'identity':'new','width':360,'height':640,'duration':60,'fps':24,'frames':1440}
+        selection=json.dumps({'box':[10,75,341,299],'mouth':[190,276,45,36],'frame':34.271,'mouth_confirmed':True})
+        with patch.object(dialogue,'local_path',return_value='test.mp4'),patch.object(dialogue,'inspect',return_value=meta),patch.object(dialogue,'validate_source_cadence'),patch.object(dialogue.cv2,'VideoCapture',side_effect=AssertionError('Must stop before decode')):
+            with self.assertRaisesRegex(ValueError,'reference frame is outside'):
+                dialogue.ZuraDialogueSource().prepare('test.mp4',24.494,31.112,19,34,selection,512,True,True)
+
     def test_source_timing_ignores_stale_half_second_selection(self):
         edit={'word_start':.964,'word_end':1.973,'first':0,'meta':{'fps':30}}
         self.assertEqual(dialogue.resolve_timing(edit,0,.5),(.964,1.973))
