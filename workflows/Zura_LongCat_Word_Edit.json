@@ -1,0 +1,1052 @@
+{
+  "id": "854f8974-3c6c-42dc-b5cc-85a52144b786",
+  "revision": 0,
+  "last_node_id": 5,
+  "last_link_id": 20,
+  "nodes": [
+    {
+      "id": 1,
+      "type": "ZuraAudioDialogueSource",
+      "pos": [
+        80,
+        100
+      ],
+      "size": [
+        554,
+        970
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [
+        {
+          "localized_name": "source",
+          "name": "source",
+          "type": "STRING",
+          "widget": {
+            "name": "source"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "source_transcript",
+          "name": "source_transcript",
+          "type": "STRING",
+          "widget": {
+            "name": "source_transcript"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "word_start",
+          "name": "word_start",
+          "type": "FLOAT",
+          "widget": {
+            "name": "word_start"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "word_end",
+          "name": "word_end",
+          "type": "FLOAT",
+          "widget": {
+            "name": "word_end"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "reference_start",
+          "name": "reference_start",
+          "type": "FLOAT",
+          "widget": {
+            "name": "reference_start"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "reference_end",
+          "name": "reference_end",
+          "type": "FLOAT",
+          "widget": {
+            "name": "reference_end"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "extra_reference",
+          "name": "extra_reference",
+          "type": "STRING",
+          "widget": {
+            "name": "extra_reference"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "extra_transcript",
+          "name": "extra_transcript",
+          "type": "STRING",
+          "widget": {
+            "name": "extra_transcript"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "reference_mode",
+          "name": "reference_mode",
+          "type": "COMBO",
+          "widget": {
+            "name": "reference_mode"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "source_reference_transcript",
+          "name": "source_reference_transcript",
+          "shape": 7,
+          "type": "STRING",
+          "widget": {
+            "name": "source_reference_transcript"
+          },
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "localized_name": "speaker_reference",
+          "name": "speaker_reference",
+          "type": "AUDIO",
+          "links": [
+            18
+          ]
+        },
+        {
+          "localized_name": "reference_transcript",
+          "name": "reference_transcript",
+          "type": "STRING",
+          "links": [
+            19
+          ]
+        },
+        {
+          "localized_name": "edit",
+          "name": "edit",
+          "type": "ZURA_AUDIO_EDIT",
+          "links": [
+            20
+          ]
+        }
+      ],
+      "title": "Zura · Select Audio Words",
+      "properties": {
+        "Node name for S&R": "ZuraAudioDialogueSource",
+        "ue_properties": {
+          "widget_ue_connectable": {},
+          "input_ue_unconnectable": {},
+          "version": "7.8"
+        },
+        "cnr_id": "comfyui-zura-nodes",
+        "ver": "1.3.14"
+      },
+      "widgets_values": [
+        "",
+        "",
+        0.0,
+        0.5,
+        0.0,
+        0.0,
+        "",
+        "",
+        "Source and extra reference",
+        ""
+      ]
+    },
+    {
+      "id": 4,
+      "type": "ZuraAudioDialogueFinish",
+      "pos": [
+        1460,
+        100
+      ],
+      "size": [
+        554,
+        900
+      ],
+      "flags": {},
+      "order": 2,
+      "mode": 0,
+      "inputs": [
+        {
+          "localized_name": "generated_audio",
+          "name": "generated_audio",
+          "type": "AUDIO",
+          "link": 8
+        },
+        {
+          "localized_name": "edit",
+          "name": "edit",
+          "type": "ZURA_AUDIO_EDIT",
+          "link": 9
+        },
+        {
+          "localized_name": "selection_mode",
+          "name": "selection_mode",
+          "type": "COMBO",
+          "widget": {
+            "name": "selection_mode"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "generated_start",
+          "name": "generated_start",
+          "type": "FLOAT",
+          "widget": {
+            "name": "generated_start"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "generated_end",
+          "name": "generated_end",
+          "type": "FLOAT",
+          "widget": {
+            "name": "generated_end"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "timing",
+          "name": "timing",
+          "type": "COMBO",
+          "widget": {
+            "name": "timing"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "fade_ms",
+          "name": "fade_ms",
+          "type": "FLOAT",
+          "widget": {
+            "name": "fade_ms"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "project",
+          "name": "project",
+          "type": "STRING",
+          "widget": {
+            "name": "project"
+          },
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "localized_name": "finished_audio",
+          "name": "finished_audio",
+          "type": "AUDIO",
+          "links": null
+        },
+        {
+          "localized_name": "receipt",
+          "name": "receipt",
+          "type": "STRING",
+          "links": null
+        }
+      ],
+      "title": "Zura · Blend Audio Words",
+      "properties": {
+        "Node name for S&R": "ZuraAudioDialogueFinish",
+        "ue_properties": {
+          "widget_ue_connectable": {},
+          "input_ue_unconnectable": {},
+          "version": "7.8"
+        },
+        "cnr_id": "comfyui-zura-nodes",
+        "ver": "1.3.14"
+      },
+      "widgets_values": [
+        "Auto changed words",
+        0.0,
+        0.5,
+        "Natural duration (no stretch)",
+        12.0,
+        "Dialogue_Edit"
+      ],
+      "widgets_values_named": {
+        "selection_mode": "Auto changed words",
+        "generated_start": 1.474,
+        "generated_end": 1.874,
+        "timing": "Natural duration (no stretch)",
+        "fade_ms": 12,
+        "project": "Audio_Dialogue_Edit",
+        "audio_dialogue_editor": ""
+      }
+    },
+    {
+      "id": 5,
+      "type": "9fb3c7ec-c9db-406e-9b0f-37720573f412",
+      "pos": [
+        830,
+        100
+      ],
+      "size": [
+        420,
+        780
+      ],
+      "flags": {},
+      "order": 1,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "seed",
+          "type": "INT",
+          "link": null
+        },
+        {
+          "name": "reference_audio",
+          "type": "AUDIO",
+          "link": 18
+        },
+        {
+          "name": "reference_transcript",
+          "type": "STRING",
+          "link": 19
+        },
+        {
+          "name": "script",
+          "type": "STRING",
+          "widget": {
+            "name": "script"
+          },
+          "link": null
+        },
+        {
+          "name": "pace",
+          "type": "FLOAT",
+          "widget": {
+            "name": "pace"
+          },
+          "link": null
+        },
+        {
+          "name": "seed",
+          "type": "INT",
+          "widget": {
+            "name": "seed"
+          },
+          "link": null
+        },
+        {
+          "name": "project",
+          "type": "STRING",
+          "widget": {
+            "name": "project"
+          },
+          "link": null
+        },
+        {
+          "name": "edit",
+          "type": "ZURA_AUDIO_EDIT",
+          "link": 20
+        }
+      ],
+      "outputs": [
+        {
+          "localized_name": "generated_audio",
+          "name": "generated_audio",
+          "type": "AUDIO",
+          "links": [
+            8
+          ]
+        },
+        {
+          "localized_name": "edit",
+          "name": "edit",
+          "type": "ZURA_AUDIO_EDIT",
+          "links": [
+            9
+          ]
+        }
+      ],
+      "properties": {
+        "ue_properties": {
+          "widget_ue_connectable": {},
+          "input_ue_unconnectable": {},
+          "version": "7.8"
+        },
+        "zuraAudioDirection": true,
+        "previewExposures": []
+      },
+      "widgets_values": [
+        "Type the complete revised phrase here.",
+        1.0,
+        8923,
+        "Dialogue_Take"
+      ],
+      "widgets_values_named": {
+        "script": "They wanted me to pay eight euros for that.",
+        "pace": 1,
+        "seed": 8923,
+        "project": "Audio_Dialogue_Test",
+        "audio_direction": ""
+      },
+      "color": "#263f39",
+      "bgcolor": "#172a26"
+    }
+  ],
+  "links": [
+    [
+      8,
+      5,
+      0,
+      4,
+      0,
+      "AUDIO"
+    ],
+    [
+      9,
+      5,
+      1,
+      4,
+      1,
+      "ZURA_AUDIO_EDIT"
+    ],
+    [
+      18,
+      1,
+      0,
+      5,
+      1,
+      "AUDIO"
+    ],
+    [
+      19,
+      1,
+      1,
+      5,
+      2,
+      "STRING"
+    ],
+    [
+      20,
+      1,
+      2,
+      5,
+      7,
+      "ZURA_AUDIO_EDIT"
+    ]
+  ],
+  "groups": [],
+  "definitions": {
+    "subgraphs": [
+      {
+        "id": "9fb3c7ec-c9db-406e-9b0f-37720573f412",
+        "version": 1,
+        "state": {
+          "lastGroupId": 0,
+          "lastNodeId": 5,
+          "lastLinkId": 20,
+          "lastRerouteId": 14
+        },
+        "revision": 0,
+        "config": {},
+        "name": "LongCat · Full replacement phrase",
+        "inputNode": {
+          "id": -10,
+          "bounding": [
+            80,
+            152,
+            162.404296875,
+            208
+          ]
+        },
+        "outputNode": {
+          "id": -20,
+          "bounding": [
+            1405.7583984375,
+            100,
+            142.60546875,
+            88
+          ]
+        },
+        "inputs": [
+          {
+            "id": "9be51fba-6e0c-4278-a05b-a0429e9ca38f",
+            "name": "seed",
+            "type": "INT",
+            "linkIds": [],
+            "pos": [
+              218.404296875,
+              176
+            ]
+          },
+          {
+            "id": "6c16224b-29c7-48bf-b42d-b78ed7a9d158",
+            "name": "reference_audio",
+            "type": "AUDIO",
+            "linkIds": [
+              11
+            ],
+            "pos": [
+              218.404296875,
+              196
+            ]
+          },
+          {
+            "id": "b48f4a41-36f4-4543-a88a-fdfec733118f",
+            "name": "reference_transcript",
+            "type": "STRING",
+            "linkIds": [
+              12
+            ],
+            "pos": [
+              218.404296875,
+              216
+            ]
+          },
+          {
+            "id": "912df84b-0b72-48f7-9d1d-41e81514dc08",
+            "name": "script",
+            "type": "STRING",
+            "linkIds": [
+              13
+            ],
+            "pos": [
+              218.404296875,
+              236
+            ]
+          },
+          {
+            "id": "9b555359-ce15-4fb7-8fe2-49bf4368a4bf",
+            "name": "pace",
+            "type": "FLOAT",
+            "linkIds": [
+              14
+            ],
+            "pos": [
+              218.404296875,
+              256
+            ]
+          },
+          {
+            "id": "30010b36-832f-4a26-be0c-9f4cbde875f7",
+            "name": "seed",
+            "type": "INT",
+            "linkIds": [
+              15
+            ],
+            "pos": [
+              218.404296875,
+              276
+            ]
+          },
+          {
+            "id": "ccd555b1-4321-4aca-bb1a-31d6103b0a19",
+            "name": "project",
+            "type": "STRING",
+            "linkIds": [
+              16
+            ],
+            "pos": [
+              218.404296875,
+              296
+            ]
+          },
+          {
+            "id": "859757b7-ace9-4ce9-b2b4-8e4e505005d6",
+            "name": "edit",
+            "type": "ZURA_AUDIO_EDIT",
+            "linkIds": [
+              17
+            ],
+            "pos": [
+              218.404296875,
+              316
+            ]
+          }
+        ],
+        "outputs": [
+          {
+            "id": "015091b8-921d-42c2-85c4-cfb90e7337f8",
+            "name": "generated_audio",
+            "type": "AUDIO",
+            "linkIds": [
+              6
+            ],
+            "localized_name": "generated_audio",
+            "pos": [
+              1429.7583984375,
+              124
+            ]
+          },
+          {
+            "id": "a86a27a0-d1d4-4255-9d8c-3b4045284c92",
+            "name": "edit",
+            "type": "ZURA_AUDIO_EDIT",
+            "linkIds": [
+              7
+            ],
+            "localized_name": "edit",
+            "pos": [
+              1429.7583984375,
+              144
+            ]
+          }
+        ],
+        "widgets": [],
+        "nodes": [
+          {
+            "id": 2,
+            "type": "ZuraLongCatDialogueVoice",
+            "pos": [
+              422.404296875,
+              110
+            ],
+            "size": [
+              280,
+              228
+            ],
+            "flags": {
+              "collapsed": false
+            },
+            "order": 0,
+            "mode": 0,
+            "inputs": [
+              {
+                "localized_name": "reference_audio",
+                "name": "reference_audio",
+                "type": "AUDIO",
+                "link": 11
+              },
+              {
+                "localized_name": "reference_transcript",
+                "name": "reference_transcript",
+                "type": "STRING",
+                "link": 12
+              },
+              {
+                "localized_name": "mode",
+                "name": "mode",
+                "type": "COMBO",
+                "widget": {
+                  "name": "mode"
+                },
+                "link": null
+              },
+              {
+                "localized_name": "script",
+                "name": "script",
+                "type": "STRING",
+                "widget": {
+                  "name": "script"
+                },
+                "link": 13
+              },
+              {
+                "localized_name": "pace",
+                "name": "pace",
+                "type": "FLOAT",
+                "widget": {
+                  "name": "pace"
+                },
+                "link": 14
+              },
+              {
+                "localized_name": "seed",
+                "name": "seed",
+                "type": "INT",
+                "widget": {
+                  "name": "seed"
+                },
+                "link": 15
+              },
+              {
+                "localized_name": "project",
+                "name": "project",
+                "type": "STRING",
+                "widget": {
+                  "name": "project"
+                },
+                "link": 16
+              }
+            ],
+            "outputs": [
+              {
+                "localized_name": "audio",
+                "name": "audio",
+                "type": "AUDIO",
+                "links": [
+                  3
+                ]
+              },
+              {
+                "localized_name": "run_report",
+                "name": "run_report",
+                "type": "STRING",
+                "links": [
+                  4
+                ]
+              }
+            ],
+            "title": "LongCat · Clone the full phrase",
+            "properties": {
+              "Node name for S&R": "ZuraLongCatDialogueVoice",
+              "ue_properties": {
+                "widget_ue_connectable": {},
+                "input_ue_unconnectable": {},
+                "version": "7.8"
+              }
+            },
+            "widgets_values": [
+              "Clone a voice",
+              "They wanted me to pay eight euros for that.",
+              1,
+              8923,
+              "randomize",
+              "Audio_Dialogue_Test"
+            ],
+            "widgets_values_named": {
+              "mode": "Clone a voice",
+              "script": "They wanted me to pay eight euros for that.",
+              "pace": 1,
+              "seed": 8923,
+              "control_after_generate": "randomize",
+              "project": "Audio_Dialogue_Test"
+            }
+          },
+          {
+            "id": 3,
+            "type": "ZuraAudioDialogueTake",
+            "pos": [
+              882.404296875,
+              110
+            ],
+            "size": [
+              343.3541015625,
+              66
+            ],
+            "flags": {
+              "collapsed": false
+            },
+            "order": 1,
+            "mode": 0,
+            "inputs": [
+              {
+                "localized_name": "audio",
+                "name": "audio",
+                "type": "AUDIO",
+                "link": 3
+              },
+              {
+                "localized_name": "run_report",
+                "name": "run_report",
+                "type": "STRING",
+                "link": 4
+              },
+              {
+                "localized_name": "edit",
+                "name": "edit",
+                "type": "ZURA_AUDIO_EDIT",
+                "link": 17
+              }
+            ],
+            "outputs": [
+              {
+                "localized_name": "generated_audio",
+                "name": "generated_audio",
+                "type": "AUDIO",
+                "links": [
+                  6
+                ]
+              },
+              {
+                "localized_name": "edit",
+                "name": "edit",
+                "type": "ZURA_AUDIO_EDIT",
+                "links": [
+                  7
+                ]
+              }
+            ],
+            "title": "Keep source edit and generated take together",
+            "properties": {
+              "Node name for S&R": "ZuraAudioDialogueTake",
+              "ue_properties": {
+                "widget_ue_connectable": {},
+                "input_ue_unconnectable": {},
+                "version": "7.8"
+              }
+            }
+          }
+        ],
+        "groups": [],
+        "links": [
+          {
+            "id": 3,
+            "origin_id": 2,
+            "origin_slot": 0,
+            "target_id": 3,
+            "target_slot": 0,
+            "type": "AUDIO"
+          },
+          {
+            "id": 4,
+            "origin_id": 2,
+            "origin_slot": 1,
+            "target_id": 3,
+            "target_slot": 1,
+            "type": "STRING"
+          },
+          {
+            "id": 6,
+            "origin_id": 3,
+            "origin_slot": 0,
+            "target_id": -20,
+            "target_slot": 0,
+            "type": "AUDIO"
+          },
+          {
+            "id": 7,
+            "origin_id": 3,
+            "origin_slot": 1,
+            "target_id": -20,
+            "target_slot": 1,
+            "type": "ZURA_AUDIO_EDIT"
+          },
+          {
+            "id": 11,
+            "origin_id": -10,
+            "origin_slot": 1,
+            "target_id": 2,
+            "target_slot": 0,
+            "type": "AUDIO",
+            "parentId": 2
+          },
+          {
+            "id": 12,
+            "origin_id": -10,
+            "origin_slot": 2,
+            "target_id": 2,
+            "target_slot": 1,
+            "type": "STRING",
+            "parentId": 4
+          },
+          {
+            "id": 13,
+            "origin_id": -10,
+            "origin_slot": 3,
+            "target_id": 2,
+            "target_slot": 3,
+            "type": "STRING",
+            "parentId": 6
+          },
+          {
+            "id": 14,
+            "origin_id": -10,
+            "origin_slot": 4,
+            "target_id": 2,
+            "target_slot": 4,
+            "type": "FLOAT",
+            "parentId": 8
+          },
+          {
+            "id": 15,
+            "origin_id": -10,
+            "origin_slot": 5,
+            "target_id": 2,
+            "target_slot": 5,
+            "type": "INT"
+          },
+          {
+            "id": 16,
+            "origin_id": -10,
+            "origin_slot": 6,
+            "target_id": 2,
+            "target_slot": 6,
+            "type": "STRING",
+            "parentId": 10
+          },
+          {
+            "id": 17,
+            "origin_id": -10,
+            "origin_slot": 7,
+            "target_id": 3,
+            "target_slot": 2,
+            "type": "ZURA_AUDIO_EDIT",
+            "parentId": 14
+          }
+        ],
+        "reroutes": [
+          {
+            "id": 1,
+            "pos": [
+              287.404296875,
+              196
+            ],
+            "linkIds": [
+              11
+            ]
+          },
+          {
+            "id": 2,
+            "parentId": 1,
+            "pos": [
+              287.404296875,
+              124
+            ],
+            "linkIds": [
+              11
+            ]
+          },
+          {
+            "id": 3,
+            "pos": [
+              297.404296875,
+              216
+            ],
+            "linkIds": [
+              12
+            ]
+          },
+          {
+            "id": 4,
+            "parentId": 3,
+            "pos": [
+              297.404296875,
+              144
+            ],
+            "linkIds": [
+              12
+            ]
+          },
+          {
+            "id": 5,
+            "pos": [
+              307.404296875,
+              236
+            ],
+            "linkIds": [
+              13
+            ]
+          },
+          {
+            "id": 6,
+            "parentId": 5,
+            "pos": [
+              307.404296875,
+              190
+            ],
+            "linkIds": [
+              13
+            ]
+          },
+          {
+            "id": 7,
+            "pos": [
+              287.404296875,
+              256
+            ],
+            "linkIds": [
+              14
+            ]
+          },
+          {
+            "id": 8,
+            "parentId": 7,
+            "pos": [
+              287.404296875,
+              252
+            ],
+            "linkIds": [
+              14
+            ]
+          },
+          {
+            "id": 9,
+            "pos": [
+              297.404296875,
+              296
+            ],
+            "linkIds": [
+              16
+            ]
+          },
+          {
+            "id": 10,
+            "parentId": 9,
+            "pos": [
+              297.404296875,
+              324
+            ],
+            "linkIds": [
+              16
+            ]
+          },
+          {
+            "id": 11,
+            "pos": [
+              287.404296875,
+              316
+            ],
+            "linkIds": [
+              17
+            ]
+          },
+          {
+            "id": 12,
+            "parentId": 11,
+            "pos": [
+              287.404296875,
+              378
+            ],
+            "linkIds": [
+              17
+            ]
+          },
+          {
+            "id": 13,
+            "parentId": 12,
+            "pos": [
+              747.404296875,
+              378
+            ],
+            "linkIds": [
+              17
+            ]
+          },
+          {
+            "id": 14,
+            "parentId": 13,
+            "pos": [
+              747.404296875,
+              164
+            ],
+            "linkIds": [
+              17
+            ]
+          }
+        ],
+        "extra": {
+          "pixaromaGroups": [],
+          "zuraWireCrossings": 0
+        }
+      }
+    ]
+  },
+  "config": {},
+  "extra": {
+    "ue_links": [],
+    "ds": {
+      "scale": 0.4828584558823529,
+      "offset": [
+        278.44018273531924,
+        110
+      ]
+    }
+  },
+  "version": 0.4
+}

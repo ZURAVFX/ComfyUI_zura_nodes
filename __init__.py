@@ -62,7 +62,7 @@ NODE_DISPLAY_NAME_MAPPINGS.update(QWEN_DESIGN_NAMES)
 
 WEB_DIRECTORY = "./web"
 PACKAGE_ROOT = Path(__file__).resolve().parent
-__version__ = "1.3.13"
+__version__ = "1.3.14"
 
 
 def _register_routes():
@@ -160,3 +160,19 @@ NODE_DISPLAY_NAME_MAPPINGS.update({
 for _name in STUDIO_NODES:
     _display_name = NODE_DISPLAY_NAME_MAPPINGS.get(_name, _name)
     NODE_DISPLAY_NAME_MAPPINGS[_name] = _display_name if _display_name.startswith("Zura · ") else "Zura · " + _display_name
+
+
+from .dialogue_signals import NODE_CLASS_MAPPINGS as DIALOGUE_SIGNALS
+for _dialogue_name, _dialogue_class in DIALOGUE_SIGNALS.items():
+    NODE_CLASS_MAPPINGS.setdefault(_dialogue_name, _dialogue_class)
+from .dialogue_edit import NODE_CLASS_MAPPINGS as DIALOGUE_NODES, NODE_DISPLAY_NAME_MAPPINGS as DIALOGUE_NAMES
+from .dialogue_edit import register_routes as register_dialogue_routes
+NODE_CLASS_MAPPINGS.update(DIALOGUE_NODES)
+NODE_DISPLAY_NAME_MAPPINGS.update(DIALOGUE_NAMES)
+from .audio_dialogue import NODE_CLASS_MAPPINGS as AUDIO_DIALOGUE_NODES, NODE_DISPLAY_NAME_MAPPINGS as AUDIO_DIALOGUE_NAMES
+from .audio_dialogue import register_routes as register_audio_dialogue_routes
+NODE_CLASS_MAPPINGS.update(AUDIO_DIALOGUE_NODES)
+NODE_DISPLAY_NAME_MAPPINGS.update(AUDIO_DIALOGUE_NAMES)
+if getattr(PromptServer, "instance", None) is not None:
+    register_dialogue_routes(PromptServer.instance)
+    register_audio_dialogue_routes(PromptServer.instance)

@@ -2,6 +2,8 @@
 
 **Zura Studio** is the guided scene-editing interface in the official Zura Nodes pack. Choose Motion transfer, Object swap, or Viewport to final for a grey 3D blockout. Add a prompt and look references, choose a mask when you want to limit the edit, then select LTX 2.5, MiniMax H3, Wan 2.2 Animate or optional paid Seedance. The models share one review flow, resolution selector and clip-length control. See [Zura Studio](ARTIST_STUDIO.md). H3 supports up to five seconds; LTX supports up to five seconds for regular shots and fifteen seconds for Viewport to final. Camera retention while changing an environment and masked LTX speech remain experimental; see [tested limits](ARTIST_STUDIO_VALIDATION.md).
 
+**Word replacement:** edit audio with LongCat or video with a tracked LTX Dub-It face crop. Both native workflows provide waveform selection and a full replacement phrase inside the nodes, then blend only the chosen words into the source. Extra speaker references are optional for LongCat. See [Dialogue editing](DIALOGUE_EDITING.md) for setup, timing controls and tested limits.
+
 **New here?** In ComfyUI Manager, search for **Zura Nodes**, install the pack and restart ComfyUI. You can also download the current [release ZIP](https://github.com/ZURAVFX/ComfyUI_zura_nodes/releases). Model weights are separate downloads; the short [installation and model guide](INSTALL_STUDIO.md) lists the files and steps.
 
 To open the complete studio, start ComfyUI and click **Zura Studio**. On a default local installation, use `Open_Zura_Studio.url` or open `http://127.0.0.1:8188/?zura=1`. All four models share the same project and review flow. The standalone Wan test graph is only a diagnostic example.

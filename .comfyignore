@@ -59,3 +59,6 @@ longcat.local.json*
 
 # Workstation-only VoiceDesign settings.
 qwen_voice_design.local.json*
+
+# Local optional Parakeet interpreter and model paths.
+parakeet.local.json*
