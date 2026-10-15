@@ -1,5 +1,11 @@
 # Release notes
 
+## 1.3.18
+
+- Fix OUT handles at the end of audio: a half-millisecond rounding tolerance snaps to the final sample.
+- Keep larger out-of-range selections invalid, and pass sample-aligned cuts from the selection editor to the final blend.
+
+
 ## 1.3.17
 
 - Select the original and replacement sections together on two labelled waveforms.

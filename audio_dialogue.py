@@ -63,7 +63,10 @@ def peaks(audio, bins=1600):
 
 
 def bounds(start, end, length, rate, label):
-    if not all(math.isfinite(v) for v in (start, end)) or not 0 <= start < end <= length / rate + .5 / rate:
+    # ComfyUI's millisecond controls may round the final sample upwards.
+    # Accept only that half-millisecond discrepancy and snap it to the file end.
+    tolerance = max(.0005, .5 / rate) + 1e-12
+    if not all(math.isfinite(v) for v in (start, end)) or not 0 <= start < end <= length / rate + tolerance:
         raise ValueError(f'Keep {label} IN and OUT inside the audio, with OUT after IN.')
     a,b=round(start * rate),min(length, round(end * rate))
     if b<=a:raise ValueError(f'Select at least one audio sample for {label}.')
@@ -302,7 +305,8 @@ class ZuraAudioDialogueSelect:
         original,source_rate=decode(source)
         source_selection=[edit['word_start'] if original_start<0 else original_start,
                           edit['word_end'] if original_end<0 else original_end]
-        bounds(*source_selection,len(original),source_rate,'Original')
+        source_a,source_b=bounds(*source_selection,len(original),source_rate,'Original')
+        source_selection=[source_a/source_rate,source_b/source_rate]
         wav=generated_audio['waveform']
         if wav.ndim!=3 or wav.shape[0]!=1 or not wav.shape[-1]:raise ValueError('Use one nonempty generated take.')
         audio=wav[0].detach().float().cpu().numpy().T
@@ -322,7 +326,9 @@ class ZuraAudioDialogueSelect:
             if selection_mode=='Auto changed words':selection=list(changed_range(edit['source_transcript'],edit['take']['script'],words))
         except (ValueError,RuntimeError,KeyError) as error:
             if selection_mode=='Auto changed words':notice=str(error)
-        if not notice:bounds(*selection,len(audio),rate,'Replacement')
+        if not notice:
+            gen_a,gen_b=bounds(*selection,len(audio),rate,'Replacement')
+            selection=[gen_a/rate,gen_b/rate]
         selected={**edit,'word_start':source_selection[0],'word_end':source_selection[1],
                   'generated_selection':selection,'selection_error':notice}
         preview={'take':str(path),'take_duration':len(audio)/rate,'take_peaks':peaks(audio),

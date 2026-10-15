@@ -32,6 +32,9 @@ class SplitEditorTests(unittest.TestCase):
                 np.testing.assert_array_equal(output[:14400],original[:14400])
                 np.testing.assert_array_equal(output[14400+4800:],original[22800:])
                 np.testing.assert_allclose(result['ui']['zura_audio_dialogue'][0]['output_selection'],[.6,.8])
+                at_end=selector.select(take,edit,'Manual IN/OUT',.9,2.0004,.6,2.0004)
+                self.assertEqual(at_end['result'][1]['word_end'],2.)
+                self.assertEqual(at_end['result'][1]['generated_selection'][1],2.)
 
     def test_failed_auto_selection_cannot_export_unchanged_source_as_finished(self):
         with tempfile.TemporaryDirectory() as temp:

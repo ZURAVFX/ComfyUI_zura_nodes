@@ -51,6 +51,20 @@ class AudioDialogueTests(unittest.TestCase):
         for start,end in [(1.,.5),(-1.,.5),(0.,3.),(float('nan'),1.)]:
             with self.assertRaises(ValueError):m.bounds(start,end,88200,44100,'test')
 
+    def test_millisecond_rounded_file_end_snaps_only_within_half_a_millisecond(self):
+        for rate,length in [(44100,80640),(48000,87771),(24000,43886)]:
+            duration=length/rate
+            start,end=m.bounds(.5,round(duration,3),length,rate,'Original')
+            self.assertEqual(start,round(.5*rate))
+            self.assertLessEqual(end,length)
+            if round(duration,3)>duration:self.assertEqual(end,length)
+            with self.assertRaises(ValueError):m.bounds(.5,duration+.0006,length,rate,'Original')
+        original,generated=self.audio()
+        original=original[:80640]
+        output,receipt=m.splice(original,generated,44100,1.065,1.829,1.388,1.7,12,'Natural duration (no stretch)')
+        self.assertEqual(receipt['source_samples'][1],len(original))
+        np.testing.assert_array_equal(output[:round(1.065*44100)],original[:round(1.065*44100)])
+
     def test_auto_words_accept_spoken_number_and_reject_ambiguous_match(self):
         words=[{'text':t,'start':i*.2,'end':i*.2+.15} for i,t in enumerate('They wanted me to pay 8 euros for that.'.split())]
         np.testing.assert_allclose(m.changed_range('They wanted me to pay eight quid for that.','They wanted me to pay eight euros for that.',words),(1.2,1.35))
