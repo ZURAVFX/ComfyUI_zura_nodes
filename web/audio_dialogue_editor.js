@@ -4,9 +4,14 @@ import {waveform,embeddedWidget} from './dialogue_editor.js';
 
 const field=(n,k)=>n.widgets?.find(w=>w.name===k);
 const get=(n,k)=>field(n,k)?.value;
-const set=(n,k,v)=>{const w=field(n,k);if(w){w.value=v;w.callback?.(v);}n.graph?.setDirtyCanvas(true,true);};
+function pending(n){
+ const graph=app.rootGraph||n.graph;
+ for(const target of graph?._nodes||[]){if(target.comfyClass==='ZuraAudioDialogueOutput'){target.properties.zuraAudioPending=true;target._audioRefresh?.();}}
+}
+const set=(n,k,v)=>{const w=field(n,k);if(w){const changed=w.value!==v;w.value=v;w.callback?.(v);if(changed&&!n._audioHydrating)pending(n);}n.graph?.setDirtyCanvas(true,true);};
 const el=(tag,props={},text='')=>{const e=document.createElement(tag);Object.assign(e,props);e.textContent=text;return e;};
 const media=p=>api.apiURL('/zura/audio-dialogue/media?source='+encodeURIComponent(p));
+function refreshSelections(n){for(const target of (app.rootGraph||n.graph)?._nodes||[]){if(target.comfyClass==='ZuraAudioDialogueSelect')target._audioRefresh?.();}}
 const post=async(route,data)=>{const r=await api.fetchApi('/zura/audio-dialogue/'+route,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});const v=await r.json();if(!r.ok)throw Error(v.error);return v;};
 const playIcon='<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M7 4v16l14-8z"/></svg>';
 const pauseIcon='<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M6 4h5v16H6zM15 4h5v16h-5z"/></svg>';
@@ -15,7 +20,7 @@ async function upload(n,key,refresh){
  const input=el('input',{type:'file',accept:'audio/*'});
  input.onchange=async()=>{if(!input.files?.length)return;try{const body=new FormData();body.append('image',input.files[0]);body.append('type','input');const r=await api.fetchApi('/upload/image',{method:'POST',body});if(!r.ok)throw Error('Audio upload failed');const file=await r.json();const path=(file.subfolder?file.subfolder+'/':'')+file.name;
   const info=await post('info',{source:path});set(n,key,path);
-  if(key==='source'){set(n,'word_start',0);set(n,'word_end',Math.min(.5,info.duration));set(n,'reference_start',0);set(n,'reference_end',0);set(n,'source_transcript','');n.properties.zuraAudioWords=[];}
+  if(key==='source'){set(n,'word_start',0);set(n,'word_end',Math.min(.5,info.duration));set(n,'reference_start',0);set(n,'reference_end',0);set(n,'source_transcript','');n.properties.zuraAudioWords=[];for(const selector of (app.rootGraph||n.graph)?._nodes||[]){if(selector.comfyClass==='ZuraAudioDialogueSelect'){set(selector,'original_start',0);set(selector,'original_end',Math.min(.5,info.duration));delete selector.properties.zuraAudioPreview;selector._audioPreview=null;selector._audioRefresh?.();}}}
   else {set(n,'extra_transcript','');n._audioRefOpen=true;}refresh();
  }catch(e){app.extensionManager.toast.add({severity:'error',summary:'Audio editor',detail:e.message,life:7000});}};input.click();
 }
@@ -26,22 +31,25 @@ function number(n,key,text,refresh){const options=key==='seed'?{min:0,max:429496
 function text(n,key,title,placeholder){const input=el('textarea',{value:get(n,key)||'',rows:3,placeholder,ariaLabel:title});input.oninput=()=>set(n,key,input.value);return label(title,input);}
 function choice(n,key,title,onchange){const select=el('select',{ariaLabel:title});for(const value of field(n,key)?.options?.values||[]){select.append(el('option',{value},value));}select.value=get(n,key);select.onchange=()=>{set(n,key,select.value);onchange?.(select.value);};return label(title,select);}
 
-function timeline(panel,info,n,source,status,words=[]){
- const aKey=source?'word_start':'generated_start',bKey=source?'word_end':'generated_end';
- let range=[Number(get(n,aKey)),Number(get(n,bKey))];
+function timeline(panel,info,n,source,status,words=[],options={}){
+ const aKey=options.keys?.[0]||(source?'word_start':'generated_start'),bKey=options.keys?.[1]||(source?'word_end':'generated_end');
+ let range=[Number(get(n,aKey)),Number(get(n,bKey))];if(range.some(v=>v<0)&&options.fallback)range=[...options.fallback];
  range=[Math.max(0,Math.min(info.duration-.001,range[0])),Math.max(.001,Math.min(info.duration,range[1]))];if(range[1]<=range[0])range[1]=Math.min(info.duration,range[0]+.001);
  const audio=el('audio',{src:media(info.file),preload:'metadata'});panel.append(audio);
  let stopAt=null,animation=null;
  const row=el('div',{className:'zura-audio-row'}),play=el('button',{type:'button',ariaLabel:'Play audio',title:'Play audio'}),selected=el('button',{type:'button'},'Play selection');play.innerHTML=playIcon;row.append(play,selected);panel.append(row);
  const wave=el('canvas',{width:1600,height:150,ariaLabel:source?'Source waveform, drag IN and OUT':'Replacement waveform, drag IN and OUT'});panel.append(wave);
- const times=el('div',{className:'zura-audio-row'}),a=el('input',{type:'number',min:0,max:info.duration,step:.001,value:range[0],ariaLabel:'Selection IN'}),b=el('input',{type:'number',min:0,max:info.duration,step:.001,value:range[1],ariaLabel:'Selection OUT'});times.append(label('IN · seconds',a),label('OUT · seconds',b));panel.append(times);
- function commit(){set(n,aKey,range[0]);set(n,bKey,range[1]);if(!source){set(n,'selection_mode','Manual IN/OUT');const selector=panel.querySelector('select[aria-label="Replacement selection"]');if(selector)selector.value='Manual IN/OUT';}for(const w of wordButtons)w.button.setAttribute('aria-pressed',w.word.end>range[0]&&w.word.start<range[1]);}
+ const times=el('div',{className:'zura-audio-row'}),a=el('input',{type:'number',min:0,max:info.duration,step:.001,value:range[0],ariaLabel:options.prefix?options.prefix+' IN':'Selection IN'}),b=el('input',{type:'number',min:0,max:info.duration,step:.001,value:range[1],ariaLabel:options.prefix?options.prefix+' OUT':'Selection OUT'});times.append(label('IN · seconds',a),label('OUT · seconds',b));panel.append(times);
+ function commit(){set(n,aKey,range[0]);set(n,bKey,range[1]);if(!source){set(n,'selection_mode','Manual IN/OUT');const selector=n._audioRoot?.querySelector('select[aria-label="Replacement selection"]')||panel.querySelector('select[aria-label="Replacement selection"]');if(selector)selector.value='Manual IN/OUT';}updateSelectionText();for(const w of wordButtons)w.button.setAttribute('aria-pressed',w.word.end>range[0]+.015&&w.word.start<range[1]-.015);}
  function redraw(){a.value=range[0].toFixed(3);b.value=range[1].toFixed(3);draw();}
  const draw=waveform(wave,info.peaks,info.duration,()=>range,r=>{range=r;redraw();},t=>{audio.pause();audio.currentTime=t;},()=>audio.currentTime,commit);
  a.oninput=()=>{if(a.value==='')return;range[0]=Math.max(0,Math.min(range[1]-.001,Number(a.value)));redraw();commit();};
  b.oninput=()=>{if(b.value==='')return;range[1]=Math.min(info.duration,Math.max(range[0]+.001,Number(b.value)));redraw();commit();};
  const wordButtons=[];
  if(words.length){const list=el('div',{className:'zura-audio-words'});panel.append(el('p',{},'Select words. Shift-click to extend the selection.'),list);for(const word of words){const button=el('button',{type:'button',title:`${word.start.toFixed(3)}–${word.end.toFixed(3)} s`},word.text);button.onclick=e=>{range=e.shiftKey?[Math.min(range[0],word.start),Math.max(range[1],word.end)]:[word.start,word.end];range[1]=Math.min(info.duration,range[1]);redraw();commit();audio.pause();audio.currentTime=range[0];};wordButtons.push({word,button});list.append(button);}}
+ const selectionText=el('p',{role:'status'});panel.append(selectionText);
+ function updateSelectionText(){const selectedWords=words.filter(w=>w.end>range[0]+.015&&w.start<range[1]-.015);selectionText.textContent=selectedWords.length?'Selected: '+selectedWords.map(w=>w.text).join(' '):`Selected: ${range[0].toFixed(3)}–${range[1].toFixed(3)} seconds`;}
+ updateSelectionText();for(const w of wordButtons)w.button.setAttribute('aria-pressed',w.word.end>range[0]+.015&&w.word.start<range[1]-.015);
  function paint(){play.innerHTML=audio.paused?playIcon:pauseIcon;play.ariaLabel=audio.paused?'Play audio':'Pause audio';draw();if(!audio.paused){if(stopAt!==null&&audio.currentTime>=stopAt){const end=stopAt;audio.pause();audio.currentTime=end;stopAt=null;draw();return;}animation=requestAnimationFrame(paint);}}
  const start=()=>audio.play().catch(e=>{status.textContent=e.message;});
  play.onclick=()=>{stopAt=null;if(audio.paused){if(audio.ended)audio.currentTime=0;start();}else audio.pause();};
@@ -50,19 +58,29 @@ function timeline(panel,info,n,source,status,words=[]){
  return ()=>{cancelAnimationFrame(animation);audio.pause();audio.removeAttribute('src');audio.load();};
 }
 
+function finalWaveform(panel,preview,audio){
+ const canvas=el('canvas',{width:1600,height:180,ariaLabel:'Final waveform, highlighted replacement, click to seek'});panel.append(canvas,audio,el('p',{},'Highlighted section: the inserted audio. Click the waveform to listen from any point.'));
+ const ctx=canvas.getContext('2d');let animation;
+ function draw(){const w=canvas.width,h=canvas.height;ctx.clearRect(0,0,w,h);ctx.fillStyle='#101923';ctx.fillRect(0,0,w,h);const range=preview.output_selection||[];if(range.length===2){ctx.fillStyle='#285c4d';ctx.fillRect(range[0]/preview.duration*w,0,(range[1]-range[0])/preview.duration*w,h);}ctx.strokeStyle='#c4d8e8';ctx.lineWidth=1;const peaks=preview.peaks||[];ctx.beginPath();peaks.forEach((p,i)=>{const x=i/peaks.length*w,a=Math.min(1,p)*h*.45;ctx.moveTo(x,h/2-a);ctx.lineTo(x,h/2+a);});ctx.stroke();ctx.fillStyle='#8de6c9';ctx.fillRect(audio.currentTime/preview.duration*w,0,3,h);}
+ function paint(){draw();if(!audio.paused)animation=requestAnimationFrame(paint);}
+ canvas.onpointerdown=e=>{const box=canvas.getBoundingClientRect();audio.currentTime=Math.max(0,Math.min(preview.duration,(e.clientX-box.left)/box.width*preview.duration));draw();};
+ audio.onplay=()=>{cancelAnimationFrame(animation);paint();};audio.onpause=audio.onended=()=>{cancelAnimationFrame(animation);draw();};audio.ontimeupdate=draw;draw();
+ return ()=>{cancelAnimationFrame(animation);audio.pause();audio.removeAttribute('src');audio.load();};
+}
+
 function mount(n){
- const source=n.comfyClass==='ZuraAudioDialogueSource';hide(n);
+ const source=n.comfyClass==='ZuraAudioDialogueSource',select=n.comfyClass==='ZuraAudioDialogueSelect',output=n.comfyClass==='ZuraAudioDialogueOutput';hide(n);
  const root=el('section',{className:'zura-audio-editor'});n._audioRoot=root;
  const style=el('style');style.textContent=`.zura-audio-editor{font:13px system-ui;color:#e7eff6;background:#18212d;border-radius:10px;padding:14px;box-sizing:border-box;overflow:auto;width:100%;height:100%}.zura-audio-editor h3{margin:0 0 10px;font-size:19px}.zura-audio-editor p{color:#aec0d0;line-height:1.5}.zura-audio-editor .zura-audio-download,.zura-audio-editor button,.zura-audio-editor input,.zura-audio-editor textarea,.zura-audio-editor select{font:inherit;color:inherit;background:#263547;border:1px solid #52677c;border-radius:6px;padding:8px;box-sizing:border-box}.zura-audio-editor .zura-audio-download{display:inline-flex;align-items:center;gap:8px;text-decoration:none;background:#254f45;border-color:#8de6c9;font-weight:600}.zura-audio-editor button{cursor:pointer}.zura-audio-editor button[aria-pressed=true]{background:#254f45;border-color:#8de6c9}.zura-audio-editor label{display:grid;gap:6px;color:#bccddd;font-size:12px;flex:1;min-width:0;margin:10px 0}.zura-audio-editor textarea{width:100%;resize:vertical;min-height:80px}.zura-audio-editor input{width:100%}.zura-audio-editor canvas{width:100%;height:100px;border:1px solid #52677c;border-radius:7px;margin:12px 0;touch-action:none}.zura-audio-row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}.zura-audio-words{display:flex;gap:6px;flex-wrap:wrap}.zura-audio-words button{padding:5px 8px}.zura-audio-editor summary{cursor:pointer;padding:10px 0;color:#8de6c9}.zura-audio-status{line-height:1.5;margin:12px 0;color:#9ce8d0;overflow-wrap:anywhere}`;
  for(const event of ['pointerdown','pointerup','click','dblclick','keydown','wheel'])root.addEventListener(event,e=>e.stopPropagation());
- embeddedWidget(n,'audio_dialogue_editor','zuraAudioDialogueEditor',root,source?830:700,450);n.setSize([Math.max(n.size[0],550),source?970:900]);
+ embeddedWidget(n,'audio_dialogue_editor','zuraAudioDialogueEditor',root,source?700:output?660:select?1050:700,450);n.setSize([Math.max(n.size[0],550),source?840:output?820:select?1200:900]);
  let dispose=()=>{},revision=0;
- n._audioRefresh=async(tab='take')=>{const mine=++revision;dispose();root.replaceChildren(style);root.append(el('h3',{},source?'Select words':'Blend replacement words'));
+ n._audioRefresh=async(tab='take')=>{const mine=++revision;dispose();root.replaceChildren(style);root.append(el('h3',{},source?'Original audio and voice reference':select?'Choose the two sections':output?'Final audio':'Blend replacement words'));
   const status=el('div',{className:'zura-audio-status'});let info;
   try{
    if(source){const row=el('div',{className:'zura-audio-row'}),choose=el('button',{},'Choose audio'),transcribe=el('button',{},'Transcribe with Parakeet');row.append(choose,transcribe);root.append(row);choose.onclick=()=>upload(n,'source',()=>n._audioRefresh());
-    transcribe.onclick=async()=>{transcribe.disabled=true;status.textContent='Transcribing locally…';try{const v=await post('transcribe',{source:get(n,'source')});n.properties.zuraAudioWords=v.words;set(n,'source_transcript',v.words.map(w=>w.text).join(' '));await n._audioRefresh();}catch(e){status.textContent=e.message;}finally{transcribe.disabled=false;}};
-    if(get(n,'source')){info=await post('info',{source:get(n,'source')});info.file=get(n,'source');if(mine!==revision)return;root.append(el('p',{},`${get(n,'source')} · ${(info.sample_rate/1000).toFixed(1)} kHz · ${info.channels} channel${info.channels===1?'':'s'}`));dispose=timeline(root,info,n,true,status,n.properties.zuraAudioWords||[]);}
+    transcribe.onclick=async()=>{transcribe.disabled=true;status.textContent='Transcribing locally…';try{const v=await post('transcribe',{source:get(n,'source')});n.properties.zuraAudioWords=v.words;set(n,'source_transcript',v.words.map(w=>w.text).join(' '));refreshSelections(n);await n._audioRefresh();}catch(e){status.textContent=e.message;}finally{transcribe.disabled=false;}};
+    if(get(n,'source')){info=await post('info',{source:get(n,'source')});info.file=get(n,'source');if(mine!==revision)return;root.append(el('p',{},`${get(n,'source')} · ${(info.sample_rate/1000).toFixed(1)} kHz · ${info.channels} channel${info.channels===1?'':'s'}`));if(!(n.graph?._nodes||[]).some(x=>x.comfyClass==='ZuraAudioDialogueSelect'))dispose=timeline(root,info,n,true,status,n.properties.zuraAudioWords||[]);}
     else root.append(el('p',{},'Choose your original audio. Drag the waveform handles or select transcript words.'));
     root.append(text(n,'source_transcript','Original full phrase','The original words, before the edit. Parakeet can fill this in.'));
     const details=el('details',{open:Boolean(n._audioRefOpen)}),summary=el('summary',{},'Speaker reference · optional extra recording');details.ontoggle=()=>{n._audioRefOpen=details.open;};details.append(summary,el('p',{},'Use 8–20 seconds of clean speech from the same actor where possible. LongCat needs the exact words alongside the recording. Keep the total reference under 25 seconds.'));
@@ -74,6 +92,35 @@ function mount(n){
     const times=el('div',{className:'zura-audio-row'});times.append(number(n,'reference_start','Reference IN'),number(n,'reference_end','Reference OUT (0 = end)'));trim.append(times,text(n,'source_reference_transcript','Exact words in the trimmed source','Only needed when you trim the original reference.'));sourceControls.append(trim);
     const updateReferenceMode=()=>{sourceControls.hidden=get(n,'reference_mode')==='Extra reference only';};
     details.append(choice(n,'reference_mode','Reference to use',updateReferenceMode),sourceControls);updateReferenceMode();root.append(details);
+   }else if(select){
+    root.append(el('p',{},'Select what to remove from the original, then what to insert from the replacement. Click Update final audio in the next node.'));
+    const preview=n._audioPreview||n.properties.zuraAudioPreview;
+    const originalPanel=el('section',{ariaLabel:'Original section'});root.append(originalPanel);originalPanel.append(el('h4',{},'1. Original � remove this section'));
+    let sourcePreview=preview;
+    if(!sourcePreview){let upstream=n.getInputNode?.(n.inputs.findIndex(i=>i.name==='edit'));if(upstream?.subgraph)upstream=upstream.getInputNode?.(upstream.inputs.findIndex(i=>i.name==='edit'));
+     if(upstream?.comfyClass==='ZuraAudioDialogueSource'&&get(upstream,'source')){const originalInfo=await post('info',{source:get(upstream,'source')});if(mine!==revision)return;sourcePreview={source:get(upstream,'source'),source_duration:originalInfo.duration,source_peaks:originalInfo.peaks,source_words:upstream.properties.zuraAudioWords||[],source_selection:[get(upstream,'word_start'),get(upstream,'word_end')]};}}
+    const originalDispose=sourcePreview?timeline(originalPanel,{file:sourcePreview.source,duration:sourcePreview.source_duration,peaks:sourcePreview.source_peaks},n,true,status,sourcePreview.source_words||[],{keys:['original_start','original_end'],fallback:sourcePreview.source_selection,prefix:'Original selection'}):()=>{};dispose=originalDispose;
+    if(!sourcePreview)originalPanel.append(el('p',{},'Choose original audio in the first node.'));
+    if(preview){
+     const replacementPanel=el('section',{ariaLabel:'Replacement section'});root.append(replacementPanel);
+     replacementPanel.append(el('h4',{},'2. Replacement · insert this section'));
+     info={file:preview.take,duration:preview.take_duration,peaks:preview.take_peaks};const replacementDispose=timeline(replacementPanel,info,n,false,status,preview.words||[],{prefix:'Replacement selection'});dispose=()=>{originalDispose();replacementDispose();};status.textContent=preview.notice||'Choose both sections, then Update final audio.';
+     const transcribe=el('button',{},'Transcribe take with Parakeet');root.append(transcribe);transcribe.onclick=async()=>{transcribe.disabled=true;try{preview.words=(await post('transcribe',{source:preview.take})).words;await n._audioRefresh();}catch(e){status.textContent=e.message;}finally{transcribe.disabled=false;}};
+    }else root.append(el('p',{},'Press Run once to generate the phrase and load its waveform here.'));
+    root.append(choice(n,'selection_mode','Replacement selection'));
+   }else if(output){
+    const preview=n._audioPreview||n.properties.zuraAudioPreview;
+    if(preview&&preview.status==='Blended'&&!n.properties.zuraAudioPending){
+     root.append(el('p',{},'Ready to listen and download. This is the original audio with the selected words blended in.'));
+     const audio=el('audio',{src:media(preview.file),controls:true,preload:'metadata'});audio.style.width='100%';dispose=finalWaveform(root,preview,audio);
+     const name=String(get(n,'project')||'Dialogue_Edit').replace(/[^a-zA-Z0-9_-]+/g,'_')+'.wav';root.append(el('a',{className:'zura-audio-download',href:media(preview.file),download:name,ariaLabel:'Download finished WAV'},'Download WAV'));
+     status.textContent=`Applied replacement: ${preview.selection[0].toFixed(3)}–${preview.selection[1].toFixed(3)} seconds in the generated take.`;
+    }else{
+     root.append(el('p',{role:'status'},preview?'Settings changed. Click Update final audio to apply both selections.':'Choose both sections in the previous node, then click Update final audio.'));
+    }
+    const apply=el('button',{type:'button'},'Update final audio');apply.onclick=async()=>{apply.disabled=true;status.textContent='Applying the two sections…';try{await app.queuePrompt(0,1);}catch(e){status.textContent=e.message;}finally{apply.disabled=false;}};root.append(apply);
+    root.append(el('p',{},'This applies your selections. The saved voice take is reused unless its phrase, voice reference, pace or seed changes.'));
+    root.append(choice(n,'timing','Timing'),number(n,'fade_ms','Blend at each edge · milliseconds'),text(n,'project','Output label','Dialogue_Edit'));
    }else{
     const preview=n._audioPreview||n.properties.zuraAudioPreview;const row=el('div',{className:'zura-audio-row'}),take=el('button',{},'Replacement take'),final=el('button',{},'Finished audio');take.setAttribute('aria-pressed',tab==='take');final.setAttribute('aria-pressed',tab==='final');row.append(take,final);root.append(row);take.onclick=()=>n._audioRefresh('take');final.onclick=()=>n._audioRefresh('final');
     if(preview){status.textContent=preview.status+(preview.notice?' · '+preview.notice:'');
@@ -88,8 +135,8 @@ function mount(n){
    }
   }catch(e){status.textContent=e.message;}root.append(status);
  };
- const configured=n.onConfigure;n.onConfigure=function(data){configured?.call(this,data);queueMicrotask(()=>{const p=n.properties.zuraAudioPreview;if(!source&&get(n,'selection_mode')==='Auto changed words'&&p?.selection){set(n,'generated_start',p.selection[0]);set(n,'generated_end',p.selection[1]);}n._audioRefresh();});};
- const executed=n.onExecuted;n.onExecuted=function(message){executed?.call(this,message);const p=message?.zura_audio_dialogue?.[0];if(p){n._audioPreview=p;n.properties.zuraAudioPreview=p;if(get(n,'selection_mode')==='Auto changed words'&&p.selection){set(n,'generated_start',p.selection[0]);set(n,'generated_end',p.selection[1]);}n._audioRefresh();}};
+ const configured=n.onConfigure;n.onConfigure=function(data){configured?.call(this,data);queueMicrotask(()=>{const p=n.properties.zuraAudioPreview;n._audioHydrating=true;if(!source&&get(n,'selection_mode')==='Auto changed words'&&p?.selection){set(n,'generated_start',p.selection[0]);set(n,'generated_end',p.selection[1]);}n._audioHydrating=false;n._audioRefresh();});};
+ const executed=n.onExecuted;n.onExecuted=function(message){executed?.call(this,message);const p=message?.zura_audio_dialogue?.[0];if(p){if(output)n.properties.zuraAudioPending=false;n._audioPreview=p;n.properties.zuraAudioPreview=p;if(get(n,'selection_mode')==='Auto changed words'&&p.selection){set(n,'generated_start',p.selection[0]);set(n,'generated_end',p.selection[1]);}n._audioRefresh();}};
  const removed=n.onRemoved;n.onRemoved=function(){dispose();removed?.call(this);};queueMicrotask(()=>n._audioRefresh());
 }
 
@@ -110,4 +157,4 @@ function direction(n){
  embeddedWidget(n,'audio_direction','zuraAudioDirection',root,600,340);n.setSize([Math.max(420,n.size[0]),Math.max(780,n.size[1])]);
 }
 
-app.registerExtension({name:'Zura.AudioDialogueEditor',nodeCreated(n){if(['ZuraAudioDialogueSource','ZuraAudioDialogueFinish'].includes(n.comfyClass))mount(n);else{const previous=n.onConfigure;n.onConfigure=function(data){previous?.call(this,data);queueMicrotask(()=>direction(n));};queueMicrotask(()=>direction(n));}}});
+app.registerExtension({name:'Zura.AudioDialogueEditor',nodeCreated(n){if(['ZuraAudioDialogueSource','ZuraAudioDialogueFinish','ZuraAudioDialogueSelect','ZuraAudioDialogueOutput'].includes(n.comfyClass))mount(n);else{const previous=n.onConfigure;n.onConfigure=function(data){previous?.call(this,data);queueMicrotask(()=>direction(n));};queueMicrotask(()=>direction(n));}}});

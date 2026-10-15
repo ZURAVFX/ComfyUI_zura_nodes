@@ -40,7 +40,8 @@ class ReleaseTests(unittest.TestCase):
             if voice[0]['type'] == 'ZuraLongCatVoice':
                 self.assertEqual(voice[0]['widgets_values_named']['reference_transcript'], '')
             else:
-                self.assertEqual(len(data['nodes']), 3)
+                self.assertEqual(len(data['nodes']), 4)
+                self.assertTrue({'ZuraAudioDialogueSelect','ZuraAudioDialogueOutput'} <= {n['type'] for n in data['nodes']})
                 source = next(n for n in data['nodes'] if n['type'] == 'ZuraAudioDialogueSource')
                 for index in (0, 1, 6, 7):
                     self.assertEqual(source['widgets_values'][index], '')

@@ -140,11 +140,12 @@ def transcribe(path):
     target = cache / (digest.hexdigest()+'.json')
     if target.is_file():
         return json.loads(target.read_text(encoding='utf-8'))
-    env = {k:v for k,v in os.environ.items() if k not in ('PYTHONHOME','PYTHONPATH','VIRTUAL_ENV','CONDA_PREFIX')}
+    env = {k:v for k,v in os.environ.items() if k not in ('PYTHONHOME','PYTHONPATH','PYTHONEXECUTABLE','__PYVENV_LAUNCHER__','VIRTUAL_ENV','CONDA_PREFIX','CONDA_DEFAULT_ENV')}
     env.update(HF_HUB_OFFLINE='1', TRANSFORMERS_OFFLINE='1')
     try:
         process = subprocess.run([python, str(Path(__file__).with_name('audio_parakeet.py')), '--input', str(path),
             '--models', models, '--output', str(target)], capture_output=True, text=True, env=env, timeout=300,
+            cwd=str(Path(__file__).resolve().parent),
             **({'creationflags':subprocess.CREATE_NO_WINDOW} if os.name=='nt' else {}))
     except OSError as error:
         raise RuntimeError(f'Cannot start the installed Parakeet Python ({python}): {error}') from error
@@ -277,6 +278,60 @@ class ZuraAudioDialogueTake:
         return audio,{**edit,'take':report}
 
 
+class ZuraAudioDialogueSelect:
+    CATEGORY='Zura/audio editing'
+    FUNCTION='select'
+    RETURN_TYPES=('AUDIO','ZURA_AUDIO_EDIT')
+    RETURN_NAMES=('replacement_take','selected_edit')
+    DESCRIPTION='Choose words in the generated take. Press Run again to apply a changed selection; the unchanged LongCat take is reused.'
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {'required':{
+            'generated_audio':('AUDIO',),'edit':('ZURA_AUDIO_EDIT',),
+            'selection_mode':(['Auto changed words','Manual IN/OUT'],),
+            'generated_start':('FLOAT',{'default':0.,'min':0.,'step':.001}),
+            'generated_end':('FLOAT',{'default':.5,'min':0.,'step':.001}),
+            'original_start':('FLOAT',{'default':-1.,'min':-1.,'step':.001}),
+            'original_end':('FLOAT',{'default':-1.,'min':-1.,'step':.001}),
+        }}
+
+    def select(self,generated_audio,edit,selection_mode,generated_start,generated_end,original_start=-1.,original_end=-1.):
+        source=local_path(edit['source'])
+        if identity(source)!=edit['identity']:raise ValueError('The source changed. Load its waveform again.')
+        original,source_rate=decode(source)
+        source_selection=[edit['word_start'] if original_start<0 else original_start,
+                          edit['word_end'] if original_end<0 else original_end]
+        bounds(*source_selection,len(original),source_rate,'Original')
+        wav=generated_audio['waveform']
+        if wav.ndim!=3 or wav.shape[0]!=1 or not wav.shape[-1]:raise ValueError('Use one nonempty generated take.')
+        audio=wav[0].detach().float().cpu().numpy().T
+        if not np.isfinite(audio).all():raise ValueError('The generated take contains invalid samples.')
+        rate=int(generated_audio['sample_rate'])
+        if rate<=0:raise ValueError('The generated take needs a valid sample rate.')
+        digest=hashlib.sha256(json.dumps([rate,list(audio.shape)]).encode()+audio.tobytes()).hexdigest()
+        directory=Path(folder_paths.get_output_directory())/'zura_voice'/'dialogue_takes'/digest
+        directory.mkdir(parents=True,exist_ok=True)
+        path=directory/'replacement_take.wav'
+        if not path.is_file():sf.write(path,audio,rate,subtype='FLOAT')
+        words=[];source_words=[];notice='';selection=[generated_start,generated_end]
+        try:source_words=transcribe(source)
+        except (ValueError,RuntimeError):pass
+        try:
+            words=transcribe(path)
+            if selection_mode=='Auto changed words':selection=list(changed_range(edit['source_transcript'],edit['take']['script'],words))
+        except (ValueError,RuntimeError,KeyError) as error:
+            if selection_mode=='Auto changed words':notice=str(error)
+        if not notice:bounds(*selection,len(audio),rate,'Replacement')
+        selected={**edit,'word_start':source_selection[0],'word_end':source_selection[1],
+                  'generated_selection':selection,'selection_error':notice}
+        preview={'take':str(path),'take_duration':len(audio)/rate,'take_peaks':peaks(audio),
+                 'words':words,'selection':selection,'status':'Select replacement words' if notice else 'Selection ready',
+                 'notice':notice,'source':str(source),'source_duration':len(original)/source_rate,
+                 'source_peaks':peaks(original),'source_words':source_words,'source_selection':source_selection}
+        return {'ui':{'zura_audio_dialogue':[preview]},'result':(generated_audio,selected)}
+
+
 class ZuraAudioDialogueFinish:
     CATEGORY='Zura/audio editing'
     FUNCTION='finish'
@@ -325,7 +380,25 @@ class ZuraAudioDialogueFinish:
         (directory/'edit_receipt.json').write_text(json.dumps(receipt,indent=2),encoding='utf-8')
         preview={'file':str(final),'take':str(takefile),'duration':len(result)/rate,'take_duration':len(generated)/rate,
                  'peaks':peaks(result),'take_peaks':peaks(generated),'words':words,'selection':selection,'status':receipt['status'],'notice':notice}
+        if not notice:
+            preview['output_selection']=[edit['word_start'],edit['word_start']+receipt['output_replacement_samples']/rate]
         return {'ui':{'zura_audio_dialogue':[preview]},'result':({'waveform':torch.from_numpy(result.T.copy())[None],'sample_rate':rate},json.dumps(receipt))}
+
+
+class ZuraAudioDialogueOutput(ZuraAudioDialogueFinish):
+    DESCRIPTION='Run to blend the selected words into the original audio, then listen and download here. Selection or blend changes reuse the unchanged LongCat take.'
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        inputs=super().INPUT_TYPES()['required']
+        return {'required':{k:v for k,v in inputs.items() if k not in ('selection_mode','generated_start','generated_end')}}
+
+    def finish(self,generated_audio,edit,timing,fade_ms,project):
+        if edit.get('selection_error'):
+            raise ValueError('Select replacement words on the waveform, then press Run. '+edit['selection_error'])
+        if 'generated_selection' not in edit:raise ValueError('Connect Select Replacement Words before Final Audio.')
+        start,end=edit['generated_selection']
+        return super().finish(generated_audio,edit,'Manual IN/OUT',start,end,timing,fade_ms,project)
 
 
 def register_routes(server):
@@ -352,7 +425,9 @@ def register_routes(server):
         except Exception as error:return web.json_response({'error':str(error)},status=400)
 
 
-NODE_CLASS_MAPPINGS={c.__name__:c for c in (ZuraAudioDialogueSource,ZuraLongCatDialogueVoice,ZuraAudioDialogueTake,ZuraAudioDialogueFinish)}
+NODE_CLASS_MAPPINGS={c.__name__:c for c in (ZuraAudioDialogueSource,ZuraLongCatDialogueVoice,ZuraAudioDialogueTake,ZuraAudioDialogueSelect,ZuraAudioDialogueFinish,ZuraAudioDialogueOutput)}
 NODE_DISPLAY_NAME_MAPPINGS={'ZuraAudioDialogueSource':'Zura · Select Audio Words',
     'ZuraLongCatDialogueVoice':'Zura · LongCat Retained Take','ZuraAudioDialogueTake':'Zura · Attach Audio Take',
-    'ZuraAudioDialogueFinish':'Zura · Blend Audio Words'}
+    'ZuraAudioDialogueSelect':'Zura · Select Replacement Words',
+    'ZuraAudioDialogueOutput':'Zura · Final Audio',
+    'ZuraAudioDialogueFinish':'Zura · Blend Audio Words (combined editor)'}

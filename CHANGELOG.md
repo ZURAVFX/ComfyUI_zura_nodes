@@ -1,5 +1,13 @@
 # Release notes
 
+## 1.3.17
+
+- Select the original and replacement sections together on two labelled waveforms.
+- Separate final audio node with highlighted insert, playback, Download WAV and Update final audio.
+- Reuse the retained LongCat take for cut and blend changes; hide stale final previews.
+- Refuse final export when automatic selection fails, and retain the combined editor for older workflows.
+
+
 ## 1.3.16
 
 - Adds a direct Download WAV action for successfully blended audio.
