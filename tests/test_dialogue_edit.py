@@ -135,6 +135,21 @@ class DialogueTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError,'inside'):
             dialogue.selection_data(json.dumps(data),meta)
 
+    def test_guessed_mouth_requires_lip_placement_before_sampling(self):
+        meta={'identity':'new','width':360,'height':640}
+        data={'identity':'new','box':[4,54,349,329],
+              'mouth':[178.5,267.85,34.9,26.32]}
+        with self.assertRaisesRegex(ValueError,'actual lips'):
+            dialogue.selection_data(json.dumps(data),meta)
+        data['mouth_confirmed']=True
+        dialogue.selection_data(json.dumps(data),meta)
+        # Hand-placed legacy selections stay usable; explicit invalidation wins.
+        data.pop('mouth_confirmed');data['mouth'][1]=300
+        dialogue.selection_data(json.dumps(data),meta)
+        data['mouth_confirmed']=False
+        with self.assertRaisesRegex(ValueError,'actual lips'):
+            dialogue.selection_data(json.dumps(data),meta)
+
     def test_face_tracking_follows_translation_both_directions(self):
         rng=np.random.default_rng(8)
         image=np.zeros((180,220,3),np.uint8);image[30:110,45:125]=rng.integers(0,256,(80,80,3),dtype=np.uint8)

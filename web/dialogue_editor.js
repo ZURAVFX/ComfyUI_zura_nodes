@@ -42,7 +42,16 @@ function syncSourceTiming(source){
   }
 }
 
-export function waveform(canvas,peaks,duration,getRange,setRange,seek,getPlayhead=()=>0,commit=()=>{}){
+function mouthSelectionConfirmed(selection,box){
+  if(selection.mouth_confirmed===false||!selection.mouth)return false;
+  const [x,y,w,h]=box,guess=[x+w*.5,y+h*.65,Math.max(3,w*.1),Math.max(3,h*.08)];
+  return selection.mouth_confirmed===true||!selection.mouth.every((v,i)=>Math.abs(v-guess[i])<=.01);
+}
+function shiftReplacement(range,edge,value,duration,length){
+  const start=Math.max(0,Math.min(duration-length,edge?value-length:value));
+  return [start,start+length];
+}
+export function waveform(canvas,peaks,duration,getRange,setRange,seek,getPlayhead=()=>0,commit=()=>{},getLockedDuration=()=>null){
   const ctx=canvas.getContext('2d');let active=null;
   const draw=()=>{
     const [start,end]=getRange(),w=canvas.width,h=canvas.height,top=25,bottom=h-24,mid=(top+bottom)/2;
@@ -58,7 +67,7 @@ export function waveform(canvas,peaks,duration,getRange,setRange,seek,getPlayhea
   const time=e=>Math.max(0,Math.min(duration,(e.clientX-canvas.getBoundingClientRect().left)/canvas.getBoundingClientRect().width*duration));
   function hit(e){const t=time(e),[a,b]=getRange(),radius=14/canvas.getBoundingClientRect().width*duration;return Math.min(Math.abs(t-a),Math.abs(t-b))<=radius?(Math.abs(t-a)<Math.abs(t-b)?0:1):null;}
   canvas.onpointerdown=e=>{e.preventDefault();e.stopPropagation();active=hit(e);canvas.setPointerCapture(e.pointerId);if(active===null){seek(time(e));draw();}else canvas.style.cursor='grabbing';};
-  canvas.onpointermove=e=>{e.stopPropagation();if(active===null){canvas.style.cursor=hit(e)===null?'crosshair':'ew-resize';return;}const range=[...getRange()],t=time(e);range[active]=active?Math.max(range[0]+.001,t):Math.min(range[1]-.001,t);setRange(range);seek(t);draw();};
+  canvas.onpointermove=e=>{e.stopPropagation();if(active===null){canvas.style.cursor=hit(e)===null?'crosshair':'ew-resize';return;}const range=[...getRange()],t=time(e);const length=getLockedDuration();if(length!==null){setRange(shiftReplacement(range,active,t,duration,length));}else{range[active]=active?Math.max(range[0]+.001,t):Math.min(range[1]-.001,t);setRange(range);}seek(t);draw();};
   canvas.onpointerup=canvas.onpointercancel=e=>{e.stopPropagation();if(active!==null)commit();active=null;canvas.style.cursor='crosshair';if(canvas.hasPointerCapture(e.pointerId))canvas.releasePointerCapture(e.pointerId);};
   draw();return draw;
 }
@@ -100,11 +109,11 @@ async function picker(node,generated=false,host=null){
     .zura-dialogue-inline .zura-dialogue-actions{margin-top:10px}.zura-dialogue-inline .zura-dialogue-status{color:#9eecd7}
   `;shade.append(style);
   panel.append(el('h2',{},generated?'Select replacement words':'Select words and face'));
-  panel.append(el('p',{},generated?'Mark only the replacement words. These times refer to the last generated face clip.':'Draw the face crop, place the mouth, then drag IN and OUT to isolate the words.'));
+  panel.append(el('p',{},generated?'Mark only the replacement words. These times refer to the last generated face clip.':'1. Draw a face crop. 2. Click the actual lips and size the amber oval to cover them. 3. Select the words below.'));
   let timing;
   if(generated){
     const label=el('label',{},'Replacement timing');timing=el('select',{ariaLabel:'Replacement timing'});
-    timing.append(el('option',{value:'source'},'Match original timing (no retiming)'),el('option',{value:'manual'},'Choose replacement IN/OUT (no retiming)'));
+    timing.append(el('option',{value:'source'},'Use original timestamps'),el('option',{value:'manual'},'Move replacement selection'));
     timing.value=timingMode(node);label.append(timing);panel.append(label);
     timing.onchange=()=>{node.properties.zuraDialogueTimingMode=timing.value;write(node,'timing_mode',timing.value);if(timing.value==='source'){const r=sourceRange(node);if(r){range=r;redraw();commit();}}};
   }
@@ -113,11 +122,12 @@ async function picker(node,generated=false,host=null){
   panel.append(row);row.append(picture,tools);picture.append(video,overlay);
   let selection={};try{selection=JSON.parse(read(node,'selection')||'{}');}catch{}
   let box=selection.box||[0,0,info.width,info.height],mouth=selection.mouth||[info.width/2,info.height*.66,info.width*.08,info.height*.06],frame=selection.frame||0;
-  let mode='crop',drag=null;const ctx=overlay.getContext('2d');
-  const paint=()=>{ctx.clearRect(0,0,overlay.width,overlay.height);if(generated)return;ctx.lineWidth=Math.max(2,info.width/350);ctx.strokeStyle='#65e4c0';ctx.strokeRect(...box);ctx.strokeStyle='#ffcb75';ctx.beginPath();ctx.ellipse(...mouth,0,0,Math.PI*2);ctx.stroke();ctx.fillStyle='#65e4c0';ctx.font=`${Math.max(16,info.width/45)}px system-ui`;ctx.fillText('FACE CROP',box[0]+8,box[1]+24);};
-  const cropButton=el('button',{},'Draw face crop'),mouthButton=el('button',{},'Place mouth centre');
+  let mouthConfirmed=mouthSelectionConfirmed(selection,box),mode='crop',drag=null,placingMouth=false;const ctx=overlay.getContext('2d');
+  const paint=()=>{ctx.clearRect(0,0,overlay.width,overlay.height);if(generated)return;ctx.lineWidth=Math.max(2,info.width/350);ctx.strokeStyle='#65e4c0';ctx.strokeRect(...box);ctx.strokeStyle=mouthConfirmed?'#ffcb75':'#ff8075';ctx.fillStyle=mouthConfirmed?'#ffcb7528':'#ff807518';ctx.beginPath();ctx.ellipse(...mouth,0,0,Math.PI*2);ctx.fill();ctx.stroke();ctx.beginPath();ctx.moveTo(mouth[0]-5,mouth[1]);ctx.lineTo(mouth[0]+5,mouth[1]);ctx.moveTo(mouth[0],mouth[1]-5);ctx.lineTo(mouth[0],mouth[1]+5);ctx.stroke();ctx.fillStyle='#65e4c0';ctx.font=`${Math.max(16,info.width/45)}px system-ui`;ctx.fillText('FACE CROP',box[0]+8,box[1]+24);};
+  const cropButton=el('button',{},'1 · Draw face crop'),mouthButton=el('button',{},'2 · Place mouth on lips'),mouthNote=el('p');mouthNote.style.cssText='margin:0;font:12px/1.5 system-ui';
+  function updateMouthNote(){mouthNote.textContent=mouthConfirmed?'Amber oval = replaced pixels. Cover both lips, including open-mouth movement.':'Mouth placement required. Click the lips; a crop alone cannot locate them.';mouthNote.style.color=mouthConfirmed?'#ffd498':'#ffaba3';}
   function setMode(value){mode=value;cropButton.setAttribute('aria-pressed',value==='crop');mouthButton.setAttribute('aria-pressed',value==='mouth');if(value==='mouth')video.currentTime=frame;}
-  if(!generated){tools.append(cropButton,mouthButton);cropButton.onclick=()=>setMode('crop');mouthButton.onclick=()=>setMode('mouth');setMode('crop');}
+  if(!generated){tools.append(cropButton,mouthButton,mouthNote);updateMouthNote();cropButton.onclick=()=>setMode('crop');mouthButton.onclick=()=>setMode('mouth');setMode('crop');}
   const number=(label,value,callback,step=.001)=>{const wrap=el('label',{},label),input=el('input',{type:'number',value,min:'0',step:String(step)});wrap.append(input);input.oninput=()=>{if(input.value==='')return;const n=Number(input.value);if(Number.isFinite(n))callback(n);};return {wrap,input};};
   const radiusX=number('Mouth radius X (source pixels)',mouth[2],v=>{mouth[2]=Math.max(1,v);paint();commit();},1),radiusY=number('Mouth radius Y (source pixels)',mouth[3],v=>{mouth[3]=Math.max(1,v);paint();commit();},1);
   if(!generated)tools.append(radiusX.wrap,radiusY.wrap);
@@ -134,12 +144,13 @@ async function picker(node,generated=false,host=null){
   range=range||[Number(read(node,startName)),Number(read(node,endName))];range=[Math.max(0,Math.min(info.duration-.001,range[0])),Math.min(info.duration,range[1])];range[1]=Math.max(range[0]+.001,range[1]);
   const wave=el('canvas',{className:'zura-dialogue-wave',width:1400,height:126,ariaLabel:generated?'Generated speech timeline, drag IN and OUT handles':'Source speech timeline, drag IN and OUT handles'});panel.append(wave);
   const times=el('div',{className:'zura-dialogue-times'});panel.append(times);
-  const start=number('Selection IN (seconds)',range[0],v=>{range[0]=Math.max(0,Math.min(range[1]-.001,v));redraw();commit();}),end=number('Selection OUT (seconds)',range[1],v=>{range[1]=Math.min(info.duration,Math.max(range[0]+.001,v));redraw();commit();});times.append(start.wrap,end.wrap);
+  const replacementLength=()=>generated?(sourceRange(node)?.reduce((a,b)=>b-a)??range[1]-range[0]):null;
+  const start=number('Selection IN (seconds)',range[0],v=>{if(generated)range=shiftReplacement(range,0,v,info.duration,replacementLength());else range[0]=Math.max(0,Math.min(range[1]-.001,v));redraw();commit();}),end=number('Selection OUT (seconds)',range[1],v=>{if(generated)range=shiftReplacement(range,1,v,info.duration,replacementLength());else range[1]=Math.min(info.duration,Math.max(range[0]+.001,v));redraw();commit();});times.append(start.wrap,end.wrap);
   let contextA,contextB,contextNote;
   if(!generated){contextA=number('Context IN (seconds)',read(node,'context_start'),commit);contextB=number('Context OUT (seconds)',Math.min(info.duration,read(node,'context_end')),commit);const details=el('details'),summary=el('summary',{},'Context range');summary.style.cssText='cursor:pointer;padding:10px 0';const contextTimes=el('div',{className:'zura-dialogue-times'});contextTimes.append(contextA.wrap,contextB.wrap);details.append(summary,contextTimes);panel.append(details);}
   if(!generated){contextNote=el('p');contextNote.style.cssText='color:#bacbdb;font:13px/1.5 system-ui';panel.append(contextNote);updateContextNote();}
   function updateContextNote(){if(!contextNote)return;try{const [a,b]=contextWindow(info.fps,info.frames,range[0],range[1],Number(contextA.input.value),Number(contextB.input.value));const count=Math.ceil((b-a-1)/8)*8+1;contextNote.textContent=`Processing ${ (a/info.fps).toFixed(3)}–${(b/info.fps).toFixed(3)} s · ${count} padded frames. Long context is bounded automatically; selected words keep their original timing.`;}catch(error){contextNote.textContent=error.message;}}
-  const redrawWave=waveform(wave,generated?node._dialoguePreview.peaks:info.peaks,generated?node._dialoguePreview.duration:info.duration,()=>range,r=>{range=r;redraw();},t=>{video.pause();video.currentTime=t;},()=>video.currentTime,commit);
+  const redrawWave=waveform(wave,generated?node._dialoguePreview.peaks:info.peaks,generated?node._dialoguePreview.duration:info.duration,()=>range,r=>{range=r;redraw();},t=>{video.pause();video.currentTime=t;},()=>video.currentTime,commit,replacementLength);
   function redraw(){start.input.value=range[0].toFixed(3);end.input.value=range[1].toFixed(3);redrawWave();}
   function commit(){updateContextNote();save.onclick();}
   let stopAt=null;playWord.onclick=()=>{video.currentTime=range[0];stopAt=range[1];startPlayback();};
@@ -148,9 +159,24 @@ async function picker(node,generated=false,host=null){
   video.ontimeupdate=()=>{scrub.value=video.currentTime;redrawWave();status.textContent=`${video.currentTime.toFixed(3)} s · ${info.width} × ${info.height}`;if(stopAt!==null&&video.currentTime>=stopAt){video.pause();stopAt=null;}};
   video.onloadedmetadata=()=>{video.currentTime=Math.min(frame,info.duration);paint();};
   const point=e=>{const r=overlay.getBoundingClientRect();return [Math.round(Math.max(0,Math.min(info.width,(e.clientX-r.left)/r.width*info.width))),Math.round(Math.max(0,Math.min(info.height,(e.clientY-r.top)/r.height*info.height)))];};
-  if(!generated){overlay.onpointerdown=e=>{video.pause();overlay.setPointerCapture(e.pointerId);const p=point(e);if(mode==='mouth'){mouth[0]=p[0];mouth[1]=p[1];}else{drag=p;frame=video.currentTime;}paint();};
-    overlay.onpointermove=e=>{if(!drag)return;const p=point(e);box=[Math.min(drag[0],p[0]),Math.min(drag[1],p[1]),Math.max(1,Math.abs(p[0]-drag[0])),Math.max(1,Math.abs(p[1]-drag[1]))];paint();};
-    overlay.onpointerup=()=>{if(drag){mouth=[box[0]+box[2]*.5,box[1]+box[3]*.65,Math.max(3,box[2]*.1),Math.max(3,box[3]*.08)];radiusX.input.value=mouth[2].toFixed(0);radiusY.input.value=mouth[3].toFixed(0);}drag=null;paint();commit();};}
+  if(!generated){
+    const moveMouth=p=>{mouth[0]=p[0];mouth[1]=p[1];mouthConfirmed=true;updateMouthNote();};
+    overlay.onpointerdown=e=>{e.preventDefault();video.pause();overlay.setPointerCapture(e.pointerId);const p=point(e);
+      if(Math.abs(video.currentTime-frame)>.5/info.fps)mouthConfirmed=false;
+      frame=video.currentTime;
+      if(mode==='mouth'){placingMouth=true;moveMouth(p);}else drag=p;paint();};
+    overlay.onpointermove=e=>{if(placingMouth){moveMouth(point(e));paint();return;}if(!drag)return;const p=point(e);box=[Math.min(drag[0],p[0]),Math.min(drag[1],p[1]),Math.max(1,Math.abs(p[0]-drag[0])),Math.max(1,Math.abs(p[1]-drag[1]))];paint();};
+    overlay.onpointerup=e=>{
+      if(drag){
+        const [x,y,w,h]=box;
+        if(!(x<=mouth[0]&&mouth[0]<=x+w&&y<=mouth[1]&&mouth[1]<=y+h))mouthConfirmed=false;
+        if(!mouthConfirmed){mouth=[x+w*.5,y+h*.65,Math.max(3,w*.1),Math.max(3,h*.08)];setMode('mouth');}
+        radiusX.input.value=mouth[2].toFixed(0);radiusY.input.value=mouth[3].toFixed(0);
+      }
+      drag=null;placingMouth=false;if(overlay.hasPointerCapture(e.pointerId))overlay.releasePointerCapture(e.pointerId);updateMouthNote();paint();commit();
+    };
+    overlay.onpointercancel=()=>{drag=null;placingMouth=false;paint();};
+  }
   else overlay.style.pointerEvents='none';
   const actions=el('div',{className:'zura-dialogue-actions'}),cancel=el('button',{},'Cancel'),save=el('button',{className:'primary'},host?'Apply selection':'Use selection');if(!host){actions.append(cancel,save);panel.append(actions);}
   const close=()=>{cancelAnimationFrame(animation);video.pause();video.removeAttribute('src');video.load();shade.remove();};cancel.onclick=close;
@@ -165,8 +191,8 @@ async function picker(node,generated=false,host=null){
       node.properties.zuraDialogueTimingMode=mode;write(node,'timing_mode',mode);timing.value=mode;
     }
     write(node,startName,range[0]);write(node,endName,range[1]);
-    if(!generated){write(node,'context_start',Number(contextA.input.value));write(node,'context_end',Number(contextB.input.value));write(node,'selection',JSON.stringify({box,mouth,frame,identity:info.identity}));}
-    if(host){status.textContent='Selection saved';}else close();
+    if(!generated){write(node,'context_start',Number(contextA.input.value));write(node,'context_end',Number(contextB.input.value));write(node,'selection',JSON.stringify({box,mouth,frame,identity:info.identity,mouth_confirmed:mouthConfirmed}));}
+    if(!generated&&!mouthConfirmed){status.textContent='Place the mouth on the lips before Run.';return;}if(host){status.textContent='Selection saved';}else close();
   };
   if(host){host.replaceChildren(shade);host._dialogueDispose=close;}else document.body.append(shade);paint();redraw();
 }
@@ -210,7 +236,7 @@ function mountNodeEditor(node){
       body.style.background='#18212d';const preview=node._dialoguePreview;
       if(!preview){const p=el('p',{},'The finished video appears here after Run. Only the selected words and mouth region are replaced.');p.style.cssText='padding:16px;color:#cad8e7;font:14px system-ui;line-height:1.6';body.append(p);return;}
       const video=el('video',{src:media(preview.file),controls:true,playsInline:true,preload:'metadata'});video.style.cssText='display:block;width:100%;max-height:450px;background:#080d13;object-fit:contain';
-      const caption=el('p',{},preview.retimed===false?'Original timing preserved. Use Replacement words to move the replacement selection, then Run again. No video or audio retiming is applied.':'This preview predates the timing safeguard. Run again with Match original timing.');caption.style.cssText='padding:0 14px;color:#cad8e7;font:13px system-ui;line-height:1.5';body.append(video,caption);
+      const caption=el('p',{},preview.retimed===false?'Preview the speech and lips. If the generated delivery starts earlier or later, open Replacement words and drag either handle to move the selection, then Run again. Both handles move together; duration stays unchanged.':'This preview predates the timing safeguard. Check the replacement selection and Run again.');caption.style.cssText='padding:0 14px;color:#cad8e7;font:13px system-ui;line-height:1.5';body.append(video,caption);
       const download=el('a',{href:media(preview.file),download:preview.file.split('/').pop().replace(' [output]','')},'Download finished video');download.style.cssText='display:inline-block;margin:0 14px 16px;color:#9eecd7';body.append(download);
       body._dialogueDispose=()=>{video.pause();video.removeAttribute('src');video.load();};
     }
@@ -241,7 +267,7 @@ function decorateRender(node){
   const label=el('label',{},'Replacement phrase');label.style.cssText='display:grid;gap:8px;font-weight:600';
   const text=el('textarea',{value:state.sentence,ariaLabel:'Replacement phrase',placeholder:'Type the full phrase as it should be spoken.',rows:4});text.style.cssText='box-sizing:border-box;width:100%;min-height:120px;resize:vertical;font:17px/1.5 system-ui;padding:12px;background:#101721;color:#f0f5fa;border:1px solid #83bda9;border-radius:7px';
   text.oninput=()=>{state.sentence=text.value;apply();};label.append(text);root.append(label);
-  const help=el('p',{},'Type the full phrase, including the replacement words. This gives the model delivery context. Only the words selected on the timelines and their mouth movement are inserted.');help.style.cssText='font-weight:400;line-height:1.6;color:#bacbdb';root.append(help);
+  const help=el('p',{},'Type the full dialogue for the processing context, including unchanged words. Keep its length and pace close to the original. Preview Replacement words after Run and align the desired speech. Only that selection and its mouth movement are inserted.');help.style.cssText='font-weight:400;line-height:1.6;color:#bacbdb';root.append(help);
   const seedLabel=el('label',{},'Seed');seedLabel.style.cssText='display:grid;gap:8px;margin-top:14px';const input=el('input',{type:'number',min:0,step:1,value:seed.value,ariaLabel:'Dialogue seed'});input.style.cssText='font:14px system-ui;background:#101721;color:#f0f5fa;border:1px solid #61768c;border-radius:6px;padding:8px;width:100%;box-sizing:border-box';
   input.onchange=()=>{if(Number.isSafeInteger(Number(input.value))){seed.value=Number(input.value);seed.callback?.(seed.value);node.graph?.setDirtyCanvas(true,true);}};seedLabel.append(input);root.append(seedLabel);
   const sizeWidget=()=>widget((app.rootGraph||app.graph)._nodes.find(n=>n.comfyClass==='ZuraDialogueSource'),'render_size');
@@ -259,7 +285,7 @@ function decorateRender(node){
   crop.onchange=()=>{const w=cropWidget();if(w){w.value=crop.value==='tracked';w.callback?.(w.value);node.graph?.setDirtyCanvas(true,true);}};
   cropLabel.append(crop);root.append(cropLabel);
   requestAnimationFrame(()=>{quality.value=String(sizeWidget()?.value||512);crop.value=cropWidget()?.value?'tracked':'fixed';});
-  const note=el('p',{},'The face fits the selected longest edge automatically, with padding to preserve its proportions. LTX uses 8 base steps + 3 refinement steps, then downsamples into the original. Long context ranges are bounded around your selected words. Larger detail uses more memory. The finished video keeps its original size and timing.');note.style.cssText='line-height:1.6;color:#bacbdb';root.append(note);
+  const note=el('p',{},'The face fits the selected longest edge automatically, with padding to preserve its proportions. LTX uses 8 base steps + 3 refinement steps, then downsamples into the original. Long context ranges are bounded around your selected words. Larger detail uses more memory. The finished video keeps its original size and timing. This LTX 2.5 INT8 + Dub-It 2.3 combination is experimental: voice identity and dialogue timing can vary between takes.');note.style.cssText='line-height:1.6;color:#bacbdb';root.append(note);
   for(const event of ['pointerdown','pointerup','click','dblclick','keydown','wheel'])root.addEventListener(event,e=>e.stopPropagation());
   embeddedWidget(node,'dialogue_direction','zuraDialogueDirection',root,640,300);
   node.setSize([Math.max(340,node.size[0]),Math.max(960,node.size[1])]);

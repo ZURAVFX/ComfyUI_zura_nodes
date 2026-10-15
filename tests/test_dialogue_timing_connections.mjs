@@ -25,3 +25,16 @@ for(const fps of [24,25,30,29.97,23.976023976023978]){
 assert.throws(()=>contextWindow(30,1950,1,12,0,65),/shorter takes/);
 assert.deepEqual(Array.from(contextWindow(30,300,1,1.5,0,2)),[0,60]);
 console.log('Automatic context windows retain selected frames and match backend rounding.');
+const mouthCode=js.match(/function mouthSelectionConfirmed\(selection,box\)\{[\s\S]*?\n\}/)[0];
+const confirmed=vm.runInNewContext(`(${mouthCode})`);
+const box=[4,54,349,329],mouth=[178.5,267.85,34.9,26.32];
+assert.equal(confirmed({mouth},box),false);
+assert.equal(confirmed({mouth,mouth_confirmed:true},box),true);
+assert.equal(confirmed({mouth:[178,300,35,26]},box),true);
+assert.equal(confirmed({mouth:[178,300,35,26],mouth_confirmed:false},box),false);
+const shiftCode=js.match(/function shiftReplacement\(range,edge,value,duration,length\)\{[\s\S]*?\n\}/)[0];
+const shift=vm.runInNewContext(`(${shiftCode})`);
+for(const [edge,value,expected] of [[0,2,[2,3]],[1,4,[3,4]],[0,-1,[0,1]],[1,7,[4,5]]]){
+ const range=Array.from(shift([1,2],edge,value,5,1));assert.deepEqual(range,expected);assert.equal(range[1]-range[0],1);
+}
+console.log('Old crop guesses need lip placement; replacement handles shift together without retiming.');
