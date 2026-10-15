@@ -48,13 +48,48 @@ class DialogueTests(unittest.TestCase):
     def test_ltx_geometry_pads_up_and_bounds_local_profile(self):
         self.assertEqual(dialogue.ltx_geometry(512,430,430,68),(512,512,73))
         self.assertEqual(dialogue.ltx_geometry(385,430,300,9),(448,320,9))
-        for n in range(1,122):
+        for n in range(1,242):
             w,h,count=dialogue.ltx_geometry(384,430,430,n)
             self.assertGreaterEqual(count,n)
             self.assertEqual((count-1)%8,0)
             self.assertEqual(w%64,0);self.assertEqual(h%64,0)
-        for values in [(512,200,600,68),(512,430,430,122),(float('nan'),430,430,68)]:
+        for values in [(769,200,600,68),(512,430,430,242),(float('nan'),430,430,68)]:
             with self.assertRaises(ValueError):dialogue.ltx_geometry(*values)
+
+    def test_portrait_and_landscape_fit_each_detail_without_stretching(self):
+        for edge in (384,512,640,768):
+            for cw,ch in [(254,262),(339,367),(200,600),(600,200),(50,1000),(1000,50)]:
+                w,h,count=dialogue.ltx_geometry(edge,cw,ch,135)
+                self.assertEqual(max(w,h),edge)
+                self.assertEqual(w%64,0);self.assertEqual(h%64,0)
+                self.assertEqual(count,137)
+                yy,xx=np.mgrid[:ch,:cw]
+                crop=np.stack([xx/cw,yy/ch,(xx+yy)/(cw+ch)],axis=-1).astype(np.float32)
+                padded,fit=dialogue.fit_reference(crop,w,h)
+                self.assertEqual(padded.shape[1]*h,padded.shape[0]*w)
+                self.assertGreaterEqual(padded.shape[0],ch);self.assertGreaterEqual(padded.shape[1],cw)
+                generated=cv2.resize(padded,(w*2,h*2),interpolation=cv2.INTER_LINEAR)
+                restored=dialogue.restore_face(generated,fit,cw,ch)
+                np.testing.assert_allclose(restored,crop,atol=.02)
+
+    def test_long_context_is_bounded_and_keeps_all_selected_frames(self):
+        for fps in (24,25,30,29.97):
+            meta={'fps':fps,'frames':round(65*fps)}
+            # The reported failure had 33 seconds of context around four seconds of speech.
+            first,last=dialogue.context_window(meta,29.223,33.666,27,60.435)
+            self.assertLessEqual(last-first,241)
+            self.assertLessEqual(first,29.223*fps)
+            self.assertGreaterEqual(last,33.666*fps)
+            _,_,count=dialogue.ltx_geometry(768,254,262,last-first)
+            self.assertGreaterEqual(count,last-first);self.assertLessEqual(count,241)
+        self.assertEqual(dialogue.context_window({'fps':30,'frames':300},1,1.5,0,2),(0,60))
+        for a,b in [(0,.5),(64,65)]:
+            first,last=dialogue.context_window({'fps':30,'frames':1950},a,b,0,65)
+            self.assertGreaterEqual(first,0);self.assertLessEqual(last,1950)
+        with self.assertRaisesRegex(ValueError,'No words were removed or retimed'):
+            dialogue.context_window({'fps':30,'frames':1950},1,12,0,65)
+        with self.assertRaisesRegex(ValueError,'No words were removed or retimed'):
+            dialogue.context_window({'fps':60,'frames':3900},29.223,33.666,27,60.435)
 
     def test_wrong_generation_geometry_and_time_are_rejected(self):
         edit={'meta':{'fps':30},'generation':{'frames':73,'width':1024,'height':1024}}

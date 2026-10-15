@@ -4,7 +4,7 @@ import { api } from "../../scripts/api.js";
 const media = source => api.apiURL('/zura/dialogue/media?source='+encodeURIComponent(source));
 const widget = (node,name) => node?.widgets?.find(w=>w.name===name);
 const read = (node,name) => widget(node,name)?.value;
-const write = (node,name,value) => { const w=widget(node,name);if(w){w.value=value;w.callback?.(value);}node.graph?.setDirtyCanvas(true,true);if(node.comfyClass==='ZuraDialogueSource'&&['word_start','word_end','context_start'].includes(name))syncSourceTiming(node); };
+const write = (node,name,value) => { const w=widget(node,name);if(w){w.value=value;w.callback?.(value);}node.graph?.setDirtyCanvas(true,true);if(node.comfyClass==='ZuraDialogueSource'&&['word_start','word_end','context_start','context_end'].includes(name))syncSourceTiming(node); };
 const el = (tag,attrs={},text='') => {const e=document.createElement(tag);Object.assign(e,attrs);e.textContent=text;return e;};
 
 function connectedSource(node){
@@ -18,11 +18,21 @@ function connectedSource(node){
   return null;
 }
 const timingMode=node=>read(node,'timing_mode')||node.properties?.zuraDialogueTimingMode||'source';
+function contextWindow(fps,frames,start,end,contextStart,contextEnd){
+  let first=Math.floor(contextStart*fps),last=Math.min(frames,Math.ceil(contextEnd*fps));
+  const a=Math.floor(start*fps),b=Math.min(frames,Math.ceil(end*fps));
+  if(b-a>241)throw new Error(`Selected words exceed ${(241/fps).toFixed(2)}s. Split them into shorter takes.`);
+  if(last-first>241){const margin=Math.min(Math.floor(.75*fps+.5),Math.floor((241-(b-a))/2));first=Math.max(first,a-margin);last=Math.min(last,b+margin);}
+  return [first,last];
+}
 function sourceRange(node){
   const source=connectedSource(node);if(!source)return null;
   const fps=source.properties?.zuraDialogueInfo?.fps;
   const context=Number(read(source,'context_start'))||0;
-  const offset=fps?Math.floor(context*fps)/fps:context;
+  let offset=fps?Math.floor(context*fps)/fps:context;
+  if(fps&&source.properties.zuraDialogueInfo.frames){
+    try{offset=contextWindow(fps,source.properties.zuraDialogueInfo.frames,Number(read(source,'word_start')),Number(read(source,'word_end')),context,Number(read(source,'context_end')))[0]/fps;}catch{return null;}
+  }
   return [Number(read(source,'word_start'))-offset,Number(read(source,'word_end'))-offset];
 }
 function syncSourceTiming(source){
@@ -65,7 +75,7 @@ async function picker(node,generated=false,host=null){
   if(!source)throw new Error(generated?'Run the workflow once to preview the generated words.':'Choose a local video first.');
   const response=await api.fetchApi('/zura/dialogue/info',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({source})});
   const info=await response.json();if(!response.ok)throw new Error(info.error);
-  if(!generated){node.properties.zuraDialogueInfo={fps:info.fps};syncSourceTiming(node);}
+  if(!generated){node.properties.zuraDialogueInfo={fps:info.fps,frames:info.frames};syncSourceTiming(node);}
   const shade=el('div',{className:host?'zura-dialogue-inline':'zura-dialogue-shade'}),panel=el('section',{className:'zura-dialogue-panel'});shade.append(panel);
   const style=el('style');style.textContent=`
     .zura-dialogue-shade{position:fixed;inset:0;z-index:100000;background:#05080dd9;display:grid;place-items:center;font:14px system-ui;color:#e3eaf2}
@@ -125,11 +135,13 @@ async function picker(node,generated=false,host=null){
   const wave=el('canvas',{className:'zura-dialogue-wave',width:1400,height:126,ariaLabel:generated?'Generated speech timeline, drag IN and OUT handles':'Source speech timeline, drag IN and OUT handles'});panel.append(wave);
   const times=el('div',{className:'zura-dialogue-times'});panel.append(times);
   const start=number('Selection IN (seconds)',range[0],v=>{range[0]=Math.max(0,Math.min(range[1]-.001,v));redraw();commit();}),end=number('Selection OUT (seconds)',range[1],v=>{range[1]=Math.min(info.duration,Math.max(range[0]+.001,v));redraw();commit();});times.append(start.wrap,end.wrap);
-  let contextA,contextB;
+  let contextA,contextB,contextNote;
   if(!generated){contextA=number('Context IN (seconds)',read(node,'context_start'),commit);contextB=number('Context OUT (seconds)',Math.min(info.duration,read(node,'context_end')),commit);const details=el('details'),summary=el('summary',{},'Context range');summary.style.cssText='cursor:pointer;padding:10px 0';const contextTimes=el('div',{className:'zura-dialogue-times'});contextTimes.append(contextA.wrap,contextB.wrap);details.append(summary,contextTimes);panel.append(details);}
+  if(!generated){contextNote=el('p');contextNote.style.cssText='color:#bacbdb;font:13px/1.5 system-ui';panel.append(contextNote);updateContextNote();}
+  function updateContextNote(){if(!contextNote)return;try{const [a,b]=contextWindow(info.fps,info.frames,range[0],range[1],Number(contextA.input.value),Number(contextB.input.value));const count=Math.ceil((b-a-1)/8)*8+1;contextNote.textContent=`Processing ${ (a/info.fps).toFixed(3)}–${(b/info.fps).toFixed(3)} s · ${count} padded frames. Long context is bounded automatically; selected words keep their original timing.`;}catch(error){contextNote.textContent=error.message;}}
   const redrawWave=waveform(wave,generated?node._dialoguePreview.peaks:info.peaks,generated?node._dialoguePreview.duration:info.duration,()=>range,r=>{range=r;redraw();},t=>{video.pause();video.currentTime=t;},()=>video.currentTime,commit);
   function redraw(){start.input.value=range[0].toFixed(3);end.input.value=range[1].toFixed(3);redrawWave();}
-  function commit(){save.onclick();}
+  function commit(){updateContextNote();save.onclick();}
   let stopAt=null;playWord.onclick=()=>{video.currentTime=range[0];stopAt=range[1];startPlayback();};
   const scrub=el('input',{type:'range',min:0,max:info.duration,step:.001,value:frame,ariaLabel:'Video preview position'});panel.append(scrub);
   scrub.oninput=()=>{video.currentTime=Number(scrub.value);stopAt=null;};
@@ -209,6 +221,7 @@ function mountNodeEditor(node){
   if(source){
     const file=widget(node,'source'),previous=file.callback;file.callback=function(v){previous?.call(this,v);write(node,'selection','{}');node._dialogueRefresh();};
     hide(node,['selection','word_start','word_end','context_start','context_end','render_size','stabilize_crop']);
+    const executed=node.onExecuted;node.onExecuted=function(message){executed?.call(this,message);const info=message.zura_dialogue_source?.[0];if(info){node.properties.zuraDialogueInfo={fps:info.fps,frames:info.frames};node.properties.zuraDialoguePrepared=info;syncSourceTiming(node);}};
   }else{
     hide(node,['generated_word_start','generated_word_end','timing_mode']);
     const executed=node.onExecuted;node.onExecuted=function(message){executed?.call(this,message);if(message.zura_dialogue?.[0]){node._dialoguePreview=message.zura_dialogue[0];node.properties.zuraDialoguePreview=node._dialoguePreview;node._dialogueRefresh();}};
@@ -234,7 +247,7 @@ function decorateRender(node){
   const sizeWidget=()=>widget((app.rootGraph||app.graph)._nodes.find(n=>n.comfyClass==='ZuraDialogueSource'),'render_size');
   const qualityLabel=el('label',{},'Face detail');qualityLabel.style.cssText='display:grid;gap:8px;margin-top:14px';
   const quality=el('select',{ariaLabel:'Face detail'});quality.style.cssText=input.style.cssText;
-  for(const [value,title] of [[384,'Preview · 384 → 768'],[512,'Quality · 512 → 1024']])quality.append(el('option',{value},title));
+  for(const [value,title] of [[384,'Preview · up to 768 px'],[512,'Quality · up to 1024 px'],[640,'High detail · up to 1280 px'],[768,'Maximum detail · up to 1536 px']])quality.append(el('option',{value},title));
   quality.value=String(sizeWidget()?.value||512);
   quality.onchange=()=>{const w=sizeWidget();if(w){w.value=Number(quality.value);w.callback?.(w.value);node.graph?.setDirtyCanvas(true,true);}};
   qualityLabel.append(quality);root.append(qualityLabel);
@@ -246,7 +259,7 @@ function decorateRender(node){
   crop.onchange=()=>{const w=cropWidget();if(w){w.value=crop.value==='tracked';w.callback?.(w.value);node.graph?.setDirtyCanvas(true,true);}};
   cropLabel.append(crop);root.append(cropLabel);
   requestAnimationFrame(()=>{quality.value=String(sizeWidget()?.value||512);crop.value=cropWidget()?.value?'tracked':'fixed';});
-  const note=el('p',{},'LTX 2.5 INT8 + Dub-It. 8 base steps + 3 refinement steps. Quality renders the face at 1024 pixels, then downsamples into the source. The finished video keeps its original size and timing.');note.style.cssText='line-height:1.6;color:#bacbdb';root.append(note);
+  const note=el('p',{},'The face fits the selected longest edge automatically, with padding to preserve its proportions. LTX uses 8 base steps + 3 refinement steps, then downsamples into the original. Long context ranges are bounded around your selected words. Larger detail uses more memory. The finished video keeps its original size and timing.');note.style.cssText='line-height:1.6;color:#bacbdb';root.append(note);
   for(const event of ['pointerdown','pointerup','click','dblclick','keydown','wheel'])root.addEventListener(event,e=>e.stopPropagation());
   embeddedWidget(node,'dialogue_direction','zuraDialogueDirection',root,640,300);
   node.setSize([Math.max(340,node.size[0]),Math.max(960,node.size[1])]);

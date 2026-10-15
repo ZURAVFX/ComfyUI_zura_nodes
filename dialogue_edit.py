@@ -57,19 +57,69 @@ def peaks(audio, bins=1400):
     return [float(mono[a:b].max(initial=0)) for a, b in zip(edges[:-1], edges[1:])]
 
 
+MAX_CONTEXT_FRAMES = 241
+
+
+def context_window(meta, word_start, word_end, context_start, context_end):
+    """Keep short requested contexts; bound long ones without dropping selected frames."""
+    fps = meta['fps']
+    first = math.floor(context_start*fps)
+    last = min(meta['frames'], math.ceil(context_end*fps))
+    selected_first = math.floor(word_start*fps)
+    selected_last = min(meta['frames'], math.ceil(word_end*fps))
+    if selected_last-selected_first > MAX_CONTEXT_FRAMES:
+        raise ValueError(f'The selected words exceed {MAX_CONTEXT_FRAMES/fps:.2f} seconds at the original frame rate. '
+                         'Split this replacement into shorter selections. No words were removed or retimed.')
+    if last-first > MAX_CONTEXT_FRAMES:
+        # At most 0.75 s of delivery context per side. Share the available budget
+        # equally; retain every selected frame even near a requested boundary.
+        margin = min(math.floor(.75*fps+.5), (MAX_CONTEXT_FRAMES-(selected_last-selected_first))//2)
+        first = max(first, selected_first-margin)
+        last = min(last, selected_last+margin)
+    return first, last
+
+
 def ltx_geometry(render_size, crop_width, crop_height, frames):
     """Bound this local two-stage profile; never round away source frames."""
     if not all(math.isfinite(v) and v > 0 for v in (render_size, crop_width, crop_height, frames)):
         raise ValueError('Resolution, crop size and frame count must be positive finite values.')
-    width = math.ceil(render_size/64)*64
-    height = max(64, math.ceil(width*crop_height/crop_width/64)*64)
+    edge = math.ceil(render_size/64)*64
+    scale = edge/max(crop_width, crop_height)
+    width = min(edge, max(64, math.ceil(crop_width*scale/64)*64))
+    height = min(edge, max(64, math.ceil(crop_height*scale/64)*64))
     count = math.ceil((frames-1)/8)*8+1
     # These are workstation-profile limits, not claims about LTX model limits.
-    if max(width, height) > 512:
-        raise ValueError('This quality profile supports up to 1024 pixels after refinement. Use a smaller render size or a squarer face crop.')
-    if count > 121:
-        raise ValueError('This local profile supports up to 121 padded frames per context. Shorten the context around the selected words.')
+    if edge > 768:
+        raise ValueError('Select a face detail size up to 1536 pixels after refinement.')
+    if count > MAX_CONTEXT_FRAMES:
+        raise ValueError('The prepared context exceeds 241 frames. Split the selected words into shorter takes.')
     return width, height, count
+
+
+def fit_reference(crop, width, height):
+    """Letterbox at native resolution, leaving the model to resize its guide."""
+    h, w = crop.shape[:2]
+    # Integral multiples give an exact target aspect without stretching faces.
+    unit = math.gcd(width, height)
+    aw, ah = width//unit, height//unit
+    multiple = math.ceil(max(w/aw, h/ah))
+    cw, ch = aw*multiple, ah*multiple
+    left, top = (cw-w)//2, (ch-h)//2
+    padded = cv2.copyMakeBorder(crop, top, ch-h-top, left, cw-w-left, cv2.BORDER_REPLICATE)
+    return padded, dict(left=left, top=top, width=w, height=h, canvas_width=cw, canvas_height=ch)
+
+
+def restore_face(frame, fit, width, height):
+    """Remove guide padding, then integrate supersampled pixels into the native crop."""
+    if fit:
+        fh, fw = frame.shape[:2]
+        # Remove padding at the generated pixel density before a single area downsample.
+        x0 = round(fit['left']*fw/fit['canvas_width']); y0 = round(fit['top']*fh/fit['canvas_height'])
+        x1 = round((fit['left']+fit['width'])*fw/fit['canvas_width'])
+        y1 = round((fit['top']+fit['height'])*fh/fit['canvas_height'])
+        frame = frame[y0:y1, x0:x1]
+    interpolation = cv2.INTER_AREA if frame.shape[1]>=width and frame.shape[0]>=height else cv2.INTER_CUBIC
+    return cv2.resize(frame, (width, height), interpolation=interpolation)
 
 
 def validate_generated(edit, shape, generated_start, generated_end):
@@ -210,7 +260,7 @@ class ZuraDialogueSource:
             'context_start': ('FLOAT', {'default':0, 'min':0, 'step':.001}),
             'context_end': ('FLOAT', {'default':2.266667, 'min':0, 'step':.001}),
             'selection': ('STRING', {'default':'{}', 'multiline':False}),
-            'render_size': ('INT', {'default':512, 'min':128, 'max':512, 'step':64, 'tooltip':'Base face width. The second LTX stage doubles this; the source video keeps its original size.'}),
+            'render_size': ('INT', {'default':512, 'min':128, 'max':768, 'step':64, 'tooltip':'Base longest edge. The face fits automatically; refinement doubles this up to 1536. Output retains the source size.'}),
             'track_face': ('BOOLEAN', {'default':True}),
         }, 'optional': {'stabilize_crop': ('BOOLEAN', {'default':False, 'tooltip':'Optional moving reference crop. Fixed reference crops are the tested default; mouth tracking still follows the speaker.'})}}
     RETURN_TYPES = ('IMAGE','AUDIO','INT','FLOAT','INT','INT','ZURA_DIALOGUE_EDIT')
@@ -230,7 +280,7 @@ class ZuraDialogueSource:
         if not (0 <= context_start <= word_start < word_end <= context_end <= meta['duration']+.001):
             raise ValueError('The word must be inside the context range, and the context inside the clip.')
         box, mouth, reference = selection_data(selection,meta)
-        fps = meta['fps']; first = math.floor(context_start*fps); last = min(meta['frames'], math.ceil(context_end*fps))
+        fps = meta['fps']; first, last = context_window(meta,word_start,word_end,context_start,context_end)
         width,height,count = ltx_geometry(render_size,box[2],box[3],last-first)
         cap = cv2.VideoCapture(str(path)); cap.set(cv2.CAP_PROP_POS_FRAMES,first); frames=[]
         try:
@@ -248,6 +298,7 @@ class ZuraDialogueSource:
             native_w,native_h=round(w),round(h)
             transform = np.array([[native_w/w,0,-left*native_w/w],[0,native_h/h,-top*native_h/h]],np.float32)
             crop = cv2.warpAffine(frame,transform,(native_w,native_h),flags=cv2.INTER_CUBIC,borderMode=cv2.BORDER_REPLICATE)
+            crop, guide_fit = fit_reference(crop,width,height)
             crops.append(cv2.cvtColor(crop,cv2.COLOR_BGR2RGB));origins.append([left,top])
         crops.extend([crops[-1]]*(count-len(crops)))
         audio = read_audio(path); a=round(first/fps*48000); b=round((first+count)/fps*48000)
@@ -255,9 +306,12 @@ class ZuraDialogueSource:
         edit = dict(source=source,identity=meta['identity'],meta=meta,box=box.tolist(),mouth=mouth.tolist(),
                     centres=centres.tolist(),origins=origins,first=first,last=last,word_start=word_start,word_end=word_end,
                     generation=dict(width=width*2,height=height*2,frames=count,base_width=width,base_height=height),
+                    guide_fit=guide_fit,requested_context=[context_start,context_end],
                     crop_mode='tracked' if stabilize_crop else 'fixed')
-        return (torch.from_numpy(np.stack(crops).astype(np.float32)/255),
-                {'waveform':torch.from_numpy(reference_audio.T.copy()).unsqueeze(0),'sample_rate':48000},count,fps,width,height,edit)
+        result = (torch.from_numpy(np.stack(crops).astype(np.float32)/255),
+                  {'waveform':torch.from_numpy(reference_audio.T.copy()).unsqueeze(0),'sample_rate':48000},count,fps,width,height,edit)
+        return {'ui':{'zura_dialogue_source':[dict(fps=fps,frames=meta['frames'],context=[first/fps,last/fps],
+                    generation=edit['generation'],source_range=[word_start,word_end])]},'result':result}
 
 
 class ZuraDialogueFinish:
@@ -335,8 +389,7 @@ class ZuraDialogueFinish:
                     g=(generated[min(round(j),len(generated)-1)] if temporal_resampling=='nearest'
                        else (1-mix)*generated[j0]+mix*generated[min(j0+1,len(generated)-1)])
                     # Integrate the supersampled face once; avoid cubic ringing on reduction.
-                    interpolation=cv2.INTER_AREA if generated.shape[2]>=w and generated.shape[1]>=h else cv2.INTER_CUBIC
-                    g=cv2.cvtColor(cv2.resize(g,(w,h),interpolation=interpolation),cv2.COLOR_RGB2BGR)*255
+                    g=cv2.cvtColor(restore_face(g,edit.get('guide_fit'),w,h),cv2.COLOR_RGB2BGR)*255
                     local=i-edit['first'];jg=np.clip(round(j) if temporal_resampling=='nearest' else j,0,len(track)-1)
                     source_centre=track[local];gen_centre=np.array([np.interp(jg,np.arange(len(track)),track[:,k]-origins[:,k]) for k in (0,1)])
                     left,top=np.round(origins[local]).astype(int);desired=source_centre-[left,top];delta=desired-gen_centre
@@ -355,7 +408,8 @@ class ZuraDialogueFinish:
         receipt=dict(source_word=[start,end],generated_word=[generated_word_start,generated_word_end],
                      requested_generated_word=requested_range,timing_mode=timing_mode,retimed=False,
                      changed_frames=changed,audio_gain_db=20*math.log10(max(gain,1e-8)),fps=fps,frames=meta['frames'],
-                     generated_geometry=edit.get('generation'),crop_mode=edit.get('crop_mode'),
+                     generated_geometry=edit.get('generation'),guide_fit=edit.get('guide_fit'),
+                     requested_context=edit.get('requested_context'),effective_context=[edit['first']/fps,edit['last']/fps],crop_mode=edit.get('crop_mode'),
                      temporal_resampling=temporal_resampling,export_verified=verified,audio_samples=target_samples,
                      original_samples_preserved_outside_word=True,source_identity=meta['identity'],
                      note='Pixels outside selected frames and mouth mask are preserved before H264 encoding. PCM audio preserves samples outside the word; AAC is lossy.')
