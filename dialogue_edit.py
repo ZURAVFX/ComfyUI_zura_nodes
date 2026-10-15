@@ -168,6 +168,12 @@ def selection_data(value, meta):
         raise ValueError('Keep the face crop inside the video.')
     if mouth[2] <= 0 or mouth[3] <= 0 or not (x <= mouth[0] <= x+w and y <= mouth[1] <= y+h):
         raise ValueError('Place the mouth region inside the selected face crop.')
+    # Old pickers silently guessed a mouth at 65% of an arbitrary crop. A crop
+    # may include hair, chest or background, so that is not a lip detector.
+    guessed = np.allclose(mouth, [x+w*.5, y+h*.65, max(3,w*.1), max(3,h*.08)], rtol=0, atol=.01)
+    if value.get('mouth_confirmed') is False or (guessed and value.get('mouth_confirmed') is not True):
+        raise ValueError('Place the mouth centre on the actual lips in Select words and face. '
+                         'The old automatic crop guess is not a confirmed mouth selection.')
     return box, mouth, float(value.get('frame', 0))
 
 
@@ -326,7 +332,7 @@ class ZuraDialogueFinish:
             'filename_prefix':('STRING',{'default':'dialogue/euros'}),
         },'optional':{
             'temporal_resampling':(['blend','nearest'],{'default':'nearest','tooltip':'Nearest keeps a single mouth pose per output frame. Blend interpolates adjacent generated frames.'}),
-            'timing_mode':(['source','manual'],{'default':'source','tooltip':'Source follows the original timestamps. Manual allows an offset with equal duration. Neither mode retimes video or audio.'}),
+            'timing_mode':(['source','manual'],{'default':'source','tooltip':'Source uses original timestamps; it does not align generated speech. Preview the replacement and move its range if the delivery differs. Neither mode retimes video or audio.'}),
         }}
     RETURN_TYPES = ('VIDEO',)
     FUNCTION = 'finish'
