@@ -170,7 +170,7 @@
           "version": "7.8"
         },
         "cnr_id": "comfyui-zura-nodes",
-        "ver": "1.3.14"
+        "ver": "1.3.15"
       },
       "widgets_values": [
         "",
@@ -292,7 +292,7 @@
           "version": "7.8"
         },
         "cnr_id": "comfyui-zura-nodes",
-        "ver": "1.3.14"
+        "ver": "1.3.15"
       },
       "widgets_values": [
         1.165,
@@ -919,7 +919,9 @@
                 "input_ue_unconnectable": {},
                 "version": "7.8"
               },
-              "zuraStudioPacket": 0
+              "zuraStudioPacket": 0,
+              "cnr_id": "comfyui-zura-nodes",
+              "ver": "1.3.15"
             },
             "widgets_values": [
               "[\"100/0\",\"100/1\",\"100/2\",\"100/3\",\"100/4\",\"100/5\",\"100/6\"]"
@@ -1052,7 +1054,9 @@
                 "input_ue_unconnectable": {},
                 "version": "7.8"
               },
-              "zuraStudioPacket": 1
+              "zuraStudioPacket": 1,
+              "cnr_id": "comfyui-zura-nodes",
+              "ver": "1.3.15"
             },
             "widgets_values": [
               "[\"1/0\"]"
@@ -1197,7 +1201,9 @@
                 "input_ue_unconnectable": {},
                 "version": "7.8"
               },
-              "zuraStudioPacket": 2
+              "zuraStudioPacket": 2,
+              "cnr_id": "comfyui-zura-nodes",
+              "ver": "1.3.15"
             },
             "widgets_values": [
               "[\"2/0\"]"
@@ -1319,7 +1325,9 @@
                 "input_ue_unconnectable": {},
                 "version": "7.8"
               },
-              "zuraStudioPacket": 3
+              "zuraStudioPacket": 3,
+              "cnr_id": "comfyui-zura-nodes",
+              "ver": "1.3.15"
             },
             "widgets_values": [
               "[\"3/0\"]"
@@ -1442,7 +1450,9 @@
                 "input_ue_unconnectable": {},
                 "version": "7.8"
               },
-              "zuraStudioPacket": 4
+              "zuraStudioPacket": 4,
+              "cnr_id": "comfyui-zura-nodes",
+              "ver": "1.3.15"
             },
             "widgets_values": [
               "[\"4/0\"]"
@@ -1587,7 +1597,9 @@
                 "input_ue_unconnectable": {},
                 "version": "7.8"
               },
-              "zuraStudioPacket": 5
+              "zuraStudioPacket": 5,
+              "cnr_id": "comfyui-zura-nodes",
+              "ver": "1.3.15"
             },
             "widgets_values": [
               "[\"5/0\"]"
@@ -1647,7 +1659,9 @@
                 "input_ue_unconnectable": {},
                 "version": "7.8"
               },
-              "zuraStudioPacket": 5
+              "zuraStudioPacket": 5,
+              "cnr_id": "comfyui-zura-nodes",
+              "ver": "1.3.15"
             },
             "widgets_values": [
               "1/0"
@@ -1770,7 +1784,9 @@
                 "input_ue_unconnectable": {},
                 "version": "7.8"
               },
-              "zuraStudioPacket": 6
+              "zuraStudioPacket": 6,
+              "cnr_id": "comfyui-zura-nodes",
+              "ver": "1.3.15"
             },
             "widgets_values": [
               "[\"30/0\"]"
@@ -1899,7 +1915,9 @@
                 "input_ue_unconnectable": {},
                 "version": "7.8"
               },
-              "zuraStudioPacket": 7
+              "zuraStudioPacket": 7,
+              "cnr_id": "comfyui-zura-nodes",
+              "ver": "1.3.15"
             },
             "widgets_values": [
               "[\"6/0\"]"
@@ -1959,7 +1977,9 @@
                 "input_ue_unconnectable": {},
                 "version": "7.8"
               },
-              "zuraStudioPacket": 7
+              "zuraStudioPacket": 7,
+              "cnr_id": "comfyui-zura-nodes",
+              "ver": "1.3.15"
             },
             "widgets_values": [
               "2/0"
@@ -2090,7 +2110,9 @@
                 "input_ue_unconnectable": {},
                 "version": "7.8"
               },
-              "zuraStudioPacket": 8
+              "zuraStudioPacket": 8,
+              "cnr_id": "comfyui-zura-nodes",
+              "ver": "1.3.15"
             },
             "widgets_values": [
               "[\"7/0\"]"
@@ -2150,7 +2172,9 @@
                 "input_ue_unconnectable": {},
                 "version": "7.8"
               },
-              "zuraStudioPacket": 8
+              "zuraStudioPacket": 8,
+              "cnr_id": "comfyui-zura-nodes",
+              "ver": "1.3.15"
             },
             "widgets_values": [
               "2/0"
@@ -2302,7 +2326,9 @@
                 "input_ue_unconnectable": {},
                 "version": "7.8"
               },
-              "zuraStudioPacket": 9
+              "zuraStudioPacket": 9,
+              "cnr_id": "comfyui-zura-nodes",
+              "ver": "1.3.15"
             },
             "widgets_values": [
               "[\"8/0\",\"8/1\"]"
@@ -2362,7 +2388,9 @@
                 "input_ue_unconnectable": {},
                 "version": "7.8"
               },
-              "zuraStudioPacket": 9
+              "zuraStudioPacket": 9,
+              "cnr_id": "comfyui-zura-nodes",
+              "ver": "1.3.15"
             },
             "widgets_values": [
               "6/0"
@@ -2422,7 +2450,9 @@
                 "input_ue_unconnectable": {},
                 "version": "7.8"
               },
-              "zuraStudioPacket": 9
+              "zuraStudioPacket": 9,
+              "cnr_id": "comfyui-zura-nodes",
+              "ver": "1.3.15"
             },
             "widgets_values": [
               "7/0"
@@ -2482,7 +2512,9 @@
                 "input_ue_unconnectable": {},
                 "version": "7.8"
               },
-              "zuraStudioPacket": 9
+              "zuraStudioPacket": 9,
+              "cnr_id": "comfyui-zura-nodes",
+              "ver": "1.3.15"
             },
             "widgets_values": [
               "100/3"
@@ -2604,7 +2636,9 @@
                 "input_ue_unconnectable": {},
                 "version": "7.8"
               },
-              "zuraStudioPacket": 10
+              "zuraStudioPacket": 10,
+              "cnr_id": "comfyui-zura-nodes",
+              "ver": "1.3.15"
             },
             "widgets_values": [
               "[\"13/0\"]"
@@ -2664,7 +2698,9 @@
                 "input_ue_unconnectable": {},
                 "version": "7.8"
               },
-              "zuraStudioPacket": 10
+              "zuraStudioPacket": 10,
+              "cnr_id": "comfyui-zura-nodes",
+              "ver": "1.3.15"
             },
             "widgets_values": [
               "100/1"
@@ -2724,7 +2760,9 @@
                 "input_ue_unconnectable": {},
                 "version": "7.8"
               },
-              "zuraStudioPacket": 10
+              "zuraStudioPacket": 10,
+              "cnr_id": "comfyui-zura-nodes",
+              "ver": "1.3.15"
             },
             "widgets_values": [
               "4/0"
@@ -2884,7 +2922,9 @@
                 "input_ue_unconnectable": {},
                 "version": "7.8"
               },
-              "zuraStudioPacket": 11
+              "zuraStudioPacket": 11,
+              "cnr_id": "comfyui-zura-nodes",
+              "ver": "1.3.15"
             },
             "widgets_values": [
               "[\"11/0\"]"
@@ -2944,7 +2984,9 @@
                 "input_ue_unconnectable": {},
                 "version": "7.8"
               },
-              "zuraStudioPacket": 11
+              "zuraStudioPacket": 11,
+              "cnr_id": "comfyui-zura-nodes",
+              "ver": "1.3.15"
             },
             "widgets_values": [
               "100/4"
@@ -3004,7 +3046,9 @@
                 "input_ue_unconnectable": {},
                 "version": "7.8"
               },
-              "zuraStudioPacket": 11
+              "zuraStudioPacket": 11,
+              "cnr_id": "comfyui-zura-nodes",
+              "ver": "1.3.15"
             },
             "widgets_values": [
               "100/5"
@@ -3064,7 +3108,9 @@
                 "input_ue_unconnectable": {},
                 "version": "7.8"
               },
-              "zuraStudioPacket": 11
+              "zuraStudioPacket": 11,
+              "cnr_id": "comfyui-zura-nodes",
+              "ver": "1.3.15"
             },
             "widgets_values": [
               "100/2"
@@ -3317,7 +3363,9 @@
                 "input_ue_unconnectable": {},
                 "version": "7.8"
               },
-              "zuraStudioPacket": 12
+              "zuraStudioPacket": 12,
+              "cnr_id": "comfyui-zura-nodes",
+              "ver": "1.3.15"
             },
             "widgets_values": [
               "[\"12/0\",\"12/1\",\"12/2\"]"
@@ -3377,7 +3425,9 @@
                 "input_ue_unconnectable": {},
                 "version": "7.8"
               },
-              "zuraStudioPacket": 12
+              "zuraStudioPacket": 12,
+              "cnr_id": "comfyui-zura-nodes",
+              "ver": "1.3.15"
             },
             "widgets_values": [
               "8/0"
@@ -3437,7 +3487,9 @@
                 "input_ue_unconnectable": {},
                 "version": "7.8"
               },
-              "zuraStudioPacket": 12
+              "zuraStudioPacket": 12,
+              "cnr_id": "comfyui-zura-nodes",
+              "ver": "1.3.15"
             },
             "widgets_values": [
               "8/1"
@@ -3497,7 +3549,9 @@
                 "input_ue_unconnectable": {},
                 "version": "7.8"
               },
-              "zuraStudioPacket": 12
+              "zuraStudioPacket": 12,
+              "cnr_id": "comfyui-zura-nodes",
+              "ver": "1.3.15"
             },
             "widgets_values": [
               "3/0"
@@ -3557,7 +3611,9 @@
                 "input_ue_unconnectable": {},
                 "version": "7.8"
               },
-              "zuraStudioPacket": 12
+              "zuraStudioPacket": 12,
+              "cnr_id": "comfyui-zura-nodes",
+              "ver": "1.3.15"
             },
             "widgets_values": [
               "11/0"
@@ -3617,7 +3673,9 @@
                 "input_ue_unconnectable": {},
                 "version": "7.8"
               },
-              "zuraStudioPacket": 12
+              "zuraStudioPacket": 12,
+              "cnr_id": "comfyui-zura-nodes",
+              "ver": "1.3.15"
             },
             "widgets_values": [
               "100/0"
@@ -3767,7 +3825,9 @@
                 "input_ue_unconnectable": {},
                 "version": "7.8"
               },
-              "zuraStudioPacket": 13
+              "zuraStudioPacket": 13,
+              "cnr_id": "comfyui-zura-nodes",
+              "ver": "1.3.15"
             },
             "widgets_values": [
               "[\"14/0\",\"14/1\"]"
@@ -3827,7 +3887,9 @@
                 "input_ue_unconnectable": {},
                 "version": "7.8"
               },
-              "zuraStudioPacket": 13
+              "zuraStudioPacket": 13,
+              "cnr_id": "comfyui-zura-nodes",
+              "ver": "1.3.15"
             },
             "widgets_values": [
               "12/0"
@@ -3887,7 +3949,9 @@
                 "input_ue_unconnectable": {},
                 "version": "7.8"
               },
-              "zuraStudioPacket": 13
+              "zuraStudioPacket": 13,
+              "cnr_id": "comfyui-zura-nodes",
+              "ver": "1.3.15"
             },
             "widgets_values": [
               "12/1"
@@ -3947,7 +4011,9 @@
                 "input_ue_unconnectable": {},
                 "version": "7.8"
               },
-              "zuraStudioPacket": 13
+              "zuraStudioPacket": 13,
+              "cnr_id": "comfyui-zura-nodes",
+              "ver": "1.3.15"
             },
             "widgets_values": [
               "13/0"
@@ -4099,7 +4165,9 @@
                 "input_ue_unconnectable": {},
                 "version": "7.8"
               },
-              "zuraStudioPacket": 14
+              "zuraStudioPacket": 14,
+              "cnr_id": "comfyui-zura-nodes",
+              "ver": "1.3.15"
             },
             "widgets_values": [
               "[\"15/0\"]"
@@ -4159,7 +4227,9 @@
                 "input_ue_unconnectable": {},
                 "version": "7.8"
               },
-              "zuraStudioPacket": 14
+              "zuraStudioPacket": 14,
+              "cnr_id": "comfyui-zura-nodes",
+              "ver": "1.3.15"
             },
             "widgets_values": [
               "4/0"
@@ -4219,7 +4289,9 @@
                 "input_ue_unconnectable": {},
                 "version": "7.8"
               },
-              "zuraStudioPacket": 14
+              "zuraStudioPacket": 14,
+              "cnr_id": "comfyui-zura-nodes",
+              "ver": "1.3.15"
             },
             "widgets_values": [
               "100/2"
@@ -4279,7 +4351,9 @@
                 "input_ue_unconnectable": {},
                 "version": "7.8"
               },
-              "zuraStudioPacket": 14
+              "zuraStudioPacket": 14,
+              "cnr_id": "comfyui-zura-nodes",
+              "ver": "1.3.15"
             },
             "widgets_values": [
               "100/3"
@@ -4401,7 +4475,9 @@
                 "input_ue_unconnectable": {},
                 "version": "7.8"
               },
-              "zuraStudioPacket": 15
+              "zuraStudioPacket": 15,
+              "cnr_id": "comfyui-zura-nodes",
+              "ver": "1.3.15"
             },
             "widgets_values": [
               "[\"16/0\"]"
@@ -4461,7 +4537,9 @@
                 "input_ue_unconnectable": {},
                 "version": "7.8"
               },
-              "zuraStudioPacket": 15
+              "zuraStudioPacket": 15,
+              "cnr_id": "comfyui-zura-nodes",
+              "ver": "1.3.15"
             },
             "widgets_values": [
               "12/2"
@@ -4521,7 +4599,9 @@
                 "input_ue_unconnectable": {},
                 "version": "7.8"
               },
-              "zuraStudioPacket": 15
+              "zuraStudioPacket": 15,
+              "cnr_id": "comfyui-zura-nodes",
+              "ver": "1.3.15"
             },
             "widgets_values": [
               "15/0"
@@ -4661,7 +4741,9 @@
                 "input_ue_unconnectable": {},
                 "version": "7.8"
               },
-              "zuraStudioPacket": 16
+              "zuraStudioPacket": 16,
+              "cnr_id": "comfyui-zura-nodes",
+              "ver": "1.3.15"
             },
             "widgets_values": [
               "[\"17/0\"]"
@@ -4721,7 +4803,9 @@
                 "input_ue_unconnectable": {},
                 "version": "7.8"
               },
-              "zuraStudioPacket": 16
+              "zuraStudioPacket": 16,
+              "cnr_id": "comfyui-zura-nodes",
+              "ver": "1.3.15"
             },
             "widgets_values": [
               "5/0"
@@ -4781,7 +4865,9 @@
                 "input_ue_unconnectable": {},
                 "version": "7.8"
               },
-              "zuraStudioPacket": 16
+              "zuraStudioPacket": 16,
+              "cnr_id": "comfyui-zura-nodes",
+              "ver": "1.3.15"
             },
             "widgets_values": [
               "14/0"
@@ -4841,7 +4927,9 @@
                 "input_ue_unconnectable": {},
                 "version": "7.8"
               },
-              "zuraStudioPacket": 16
+              "zuraStudioPacket": 16,
+              "cnr_id": "comfyui-zura-nodes",
+              "ver": "1.3.15"
             },
             "widgets_values": [
               "14/1"
@@ -4965,7 +5053,9 @@
                 "input_ue_unconnectable": {},
                 "version": "7.8"
               },
-              "zuraStudioPacket": 17
+              "zuraStudioPacket": 17,
+              "cnr_id": "comfyui-zura-nodes",
+              "ver": "1.3.15"
             },
             "widgets_values": [
               "[\"18/0\"]"
@@ -5087,7 +5177,9 @@
                 "input_ue_unconnectable": {},
                 "version": "7.8"
               },
-              "zuraStudioPacket": 18
+              "zuraStudioPacket": 18,
+              "cnr_id": "comfyui-zura-nodes",
+              "ver": "1.3.15"
             },
             "widgets_values": [
               "[\"19/0\"]"
@@ -5214,7 +5306,9 @@
                 "input_ue_unconnectable": {},
                 "version": "7.8"
               },
-              "zuraStudioPacket": 19
+              "zuraStudioPacket": 19,
+              "cnr_id": "comfyui-zura-nodes",
+              "ver": "1.3.15"
             },
             "widgets_values": [
               "[\"20/0\"]"
@@ -5358,7 +5452,9 @@
                 "input_ue_unconnectable": {},
                 "version": "7.8"
               },
-              "zuraStudioPacket": 20
+              "zuraStudioPacket": 20,
+              "cnr_id": "comfyui-zura-nodes",
+              "ver": "1.3.15"
             },
             "widgets_values": [
               "[\"21/0\"]"
@@ -5418,7 +5514,9 @@
                 "input_ue_unconnectable": {},
                 "version": "7.8"
               },
-              "zuraStudioPacket": 20
+              "zuraStudioPacket": 20,
+              "cnr_id": "comfyui-zura-nodes",
+              "ver": "1.3.15"
             },
             "widgets_values": [
               "18/0"
@@ -5478,7 +5576,9 @@
                 "input_ue_unconnectable": {},
                 "version": "7.8"
               },
-              "zuraStudioPacket": 20
+              "zuraStudioPacket": 20,
+              "cnr_id": "comfyui-zura-nodes",
+              "ver": "1.3.15"
             },
             "widgets_values": [
               "17/0"
@@ -5538,7 +5638,9 @@
                 "input_ue_unconnectable": {},
                 "version": "7.8"
               },
-              "zuraStudioPacket": 20
+              "zuraStudioPacket": 20,
+              "cnr_id": "comfyui-zura-nodes",
+              "ver": "1.3.15"
             },
             "widgets_values": [
               "19/0"
@@ -5598,7 +5700,9 @@
                 "input_ue_unconnectable": {},
                 "version": "7.8"
               },
-              "zuraStudioPacket": 20
+              "zuraStudioPacket": 20,
+              "cnr_id": "comfyui-zura-nodes",
+              "ver": "1.3.15"
             },
             "widgets_values": [
               "20/0"
@@ -5658,7 +5762,9 @@
                 "input_ue_unconnectable": {},
                 "version": "7.8"
               },
-              "zuraStudioPacket": 20
+              "zuraStudioPacket": 20,
+              "cnr_id": "comfyui-zura-nodes",
+              "ver": "1.3.15"
             },
             "widgets_values": [
               "16/0"
@@ -5790,7 +5896,9 @@
                 "input_ue_unconnectable": {},
                 "version": "7.8"
               },
-              "zuraStudioPacket": 21
+              "zuraStudioPacket": 21,
+              "cnr_id": "comfyui-zura-nodes",
+              "ver": "1.3.15"
             },
             "widgets_values": [
               "[\"22/0\",\"22/1\"]"
@@ -5850,7 +5958,9 @@
                 "input_ue_unconnectable": {},
                 "version": "7.8"
               },
-              "zuraStudioPacket": 21
+              "zuraStudioPacket": 21,
+              "cnr_id": "comfyui-zura-nodes",
+              "ver": "1.3.15"
             },
             "widgets_values": [
               "21/0"
@@ -6009,7 +6119,9 @@
                 "input_ue_unconnectable": {},
                 "version": "7.8"
               },
-              "zuraStudioPacket": 22
+              "zuraStudioPacket": 22,
+              "cnr_id": "comfyui-zura-nodes",
+              "ver": "1.3.15"
             },
             "widgets_values": [
               "[\"23/0\",\"23/1\",\"23/2\"]"
@@ -6069,7 +6181,9 @@
                 "input_ue_unconnectable": {},
                 "version": "7.8"
               },
-              "zuraStudioPacket": 22
+              "zuraStudioPacket": 22,
+              "cnr_id": "comfyui-zura-nodes",
+              "ver": "1.3.15"
             },
             "widgets_values": [
               "12/0"
@@ -6129,7 +6243,9 @@
                 "input_ue_unconnectable": {},
                 "version": "7.8"
               },
-              "zuraStudioPacket": 22
+              "zuraStudioPacket": 22,
+              "cnr_id": "comfyui-zura-nodes",
+              "ver": "1.3.15"
             },
             "widgets_values": [
               "12/1"
@@ -6189,7 +6305,9 @@
                 "input_ue_unconnectable": {},
                 "version": "7.8"
               },
-              "zuraStudioPacket": 22
+              "zuraStudioPacket": 22,
+              "cnr_id": "comfyui-zura-nodes",
+              "ver": "1.3.15"
             },
             "widgets_values": [
               "22/0"
@@ -6372,7 +6490,9 @@
                 "input_ue_unconnectable": {},
                 "version": "7.8"
               },
-              "zuraStudioPacket": 23
+              "zuraStudioPacket": 23,
+              "cnr_id": "comfyui-zura-nodes",
+              "ver": "1.3.15"
             },
             "widgets_values": [
               "[]"
@@ -6432,7 +6552,9 @@
                 "input_ue_unconnectable": {},
                 "version": "7.8"
               },
-              "zuraStudioPacket": 23
+              "zuraStudioPacket": 23,
+              "cnr_id": "comfyui-zura-nodes",
+              "ver": "1.3.15"
             },
             "widgets_values": [
               "3/0"
@@ -6492,7 +6614,9 @@
                 "input_ue_unconnectable": {},
                 "version": "7.8"
               },
-              "zuraStudioPacket": 23
+              "zuraStudioPacket": 23,
+              "cnr_id": "comfyui-zura-nodes",
+              "ver": "1.3.15"
             },
             "widgets_values": [
               "23/2"
@@ -6614,7 +6738,9 @@
                 "input_ue_unconnectable": {},
                 "version": "7.8"
               },
-              "zuraStudioPacket": 24
+              "zuraStudioPacket": 24,
+              "cnr_id": "comfyui-zura-nodes",
+              "ver": "1.3.15"
             },
             "widgets_values": [
               "[\"25/0\"]"
@@ -6674,7 +6800,9 @@
                 "input_ue_unconnectable": {},
                 "version": "7.8"
               },
-              "zuraStudioPacket": 24
+              "zuraStudioPacket": 24,
+              "cnr_id": "comfyui-zura-nodes",
+              "ver": "1.3.15"
             },
             "widgets_values": [
               "4/0"
@@ -6734,7 +6862,9 @@
                 "input_ue_unconnectable": {},
                 "version": "7.8"
               },
-              "zuraStudioPacket": 24
+              "zuraStudioPacket": 24,
+              "cnr_id": "comfyui-zura-nodes",
+              "ver": "1.3.15"
             },
             "widgets_values": [
               "22/1"
@@ -6864,7 +6994,9 @@
                 "input_ue_unconnectable": {},
                 "version": "7.8"
               },
-              "zuraStudioPacket": 25
+              "zuraStudioPacket": 25,
+              "cnr_id": "comfyui-zura-nodes",
+              "ver": "1.3.15"
             },
             "widgets_values": [
               "[\"31/0\"]"
@@ -6924,7 +7056,9 @@
                 "input_ue_unconnectable": {},
                 "version": "7.8"
               },
-              "zuraStudioPacket": 25
+              "zuraStudioPacket": 25,
+              "cnr_id": "comfyui-zura-nodes",
+              "ver": "1.3.15"
             },
             "widgets_values": [
               "23/2"
@@ -6984,7 +7118,9 @@
                 "input_ue_unconnectable": {},
                 "version": "7.8"
               },
-              "zuraStudioPacket": 25
+              "zuraStudioPacket": 25,
+              "cnr_id": "comfyui-zura-nodes",
+              "ver": "1.3.15"
             },
             "widgets_values": [
               "30/0"
@@ -7044,7 +7180,9 @@
                 "input_ue_unconnectable": {},
                 "version": "7.8"
               },
-              "zuraStudioPacket": 25
+              "zuraStudioPacket": 25,
+              "cnr_id": "comfyui-zura-nodes",
+              "ver": "1.3.15"
             },
             "widgets_values": [
               "3/0"
@@ -7297,7 +7435,9 @@
                 "input_ue_unconnectable": {},
                 "version": "7.8"
               },
-              "zuraStudioPacket": 26
+              "zuraStudioPacket": 26,
+              "cnr_id": "comfyui-zura-nodes",
+              "ver": "1.3.15"
             },
             "widgets_values": [
               "[\"34/0\",\"34/1\",\"34/2\"]"
@@ -7357,7 +7497,9 @@
                 "input_ue_unconnectable": {},
                 "version": "7.8"
               },
-              "zuraStudioPacket": 26
+              "zuraStudioPacket": 26,
+              "cnr_id": "comfyui-zura-nodes",
+              "ver": "1.3.15"
             },
             "widgets_values": [
               "23/0"
@@ -7417,7 +7559,9 @@
                 "input_ue_unconnectable": {},
                 "version": "7.8"
               },
-              "zuraStudioPacket": 26
+              "zuraStudioPacket": 26,
+              "cnr_id": "comfyui-zura-nodes",
+              "ver": "1.3.15"
             },
             "widgets_values": [
               "23/1"
@@ -7477,7 +7621,9 @@
                 "input_ue_unconnectable": {},
                 "version": "7.8"
               },
-              "zuraStudioPacket": 26
+              "zuraStudioPacket": 26,
+              "cnr_id": "comfyui-zura-nodes",
+              "ver": "1.3.15"
             },
             "widgets_values": [
               "3/0"
@@ -7537,7 +7683,9 @@
                 "input_ue_unconnectable": {},
                 "version": "7.8"
               },
-              "zuraStudioPacket": 26
+              "zuraStudioPacket": 26,
+              "cnr_id": "comfyui-zura-nodes",
+              "ver": "1.3.15"
             },
             "widgets_values": [
               "31/0"
@@ -7597,7 +7745,9 @@
                 "input_ue_unconnectable": {},
                 "version": "7.8"
               },
-              "zuraStudioPacket": 26
+              "zuraStudioPacket": 26,
+              "cnr_id": "comfyui-zura-nodes",
+              "ver": "1.3.15"
             },
             "widgets_values": [
               "100/0"
@@ -7756,7 +7906,9 @@
                 "input_ue_unconnectable": {},
                 "version": "7.8"
               },
-              "zuraStudioPacket": 27
+              "zuraStudioPacket": 27,
+              "cnr_id": "comfyui-zura-nodes",
+              "ver": "1.3.15"
             },
             "widgets_values": [
               "[\"35/0\",\"35/1\",\"35/2\"]"
@@ -7816,7 +7968,9 @@
                 "input_ue_unconnectable": {},
                 "version": "7.8"
               },
-              "zuraStudioPacket": 27
+              "zuraStudioPacket": 27,
+              "cnr_id": "comfyui-zura-nodes",
+              "ver": "1.3.15"
             },
             "widgets_values": [
               "34/0"
@@ -7876,7 +8030,9 @@
                 "input_ue_unconnectable": {},
                 "version": "7.8"
               },
-              "zuraStudioPacket": 27
+              "zuraStudioPacket": 27,
+              "cnr_id": "comfyui-zura-nodes",
+              "ver": "1.3.15"
             },
             "widgets_values": [
               "34/1"
@@ -7936,7 +8092,9 @@
                 "input_ue_unconnectable": {},
                 "version": "7.8"
               },
-              "zuraStudioPacket": 27
+              "zuraStudioPacket": 27,
+              "cnr_id": "comfyui-zura-nodes",
+              "ver": "1.3.15"
             },
             "widgets_values": [
               "22/1"
@@ -8058,7 +8216,9 @@
                 "input_ue_unconnectable": {},
                 "version": "7.8"
               },
-              "zuraStudioPacket": 28
+              "zuraStudioPacket": 28,
+              "cnr_id": "comfyui-zura-nodes",
+              "ver": "1.3.15"
             },
             "widgets_values": [
               "[\"36/0\"]"
@@ -8118,7 +8278,9 @@
                 "input_ue_unconnectable": {},
                 "version": "7.8"
               },
-              "zuraStudioPacket": 28
+              "zuraStudioPacket": 28,
+              "cnr_id": "comfyui-zura-nodes",
+              "ver": "1.3.15"
             },
             "widgets_values": [
               "34/2"
@@ -8178,7 +8340,9 @@
                 "input_ue_unconnectable": {},
                 "version": "7.8"
               },
-              "zuraStudioPacket": 28
+              "zuraStudioPacket": 28,
+              "cnr_id": "comfyui-zura-nodes",
+              "ver": "1.3.15"
             },
             "widgets_values": [
               "35/2"
@@ -8318,7 +8482,9 @@
                 "input_ue_unconnectable": {},
                 "version": "7.8"
               },
-              "zuraStudioPacket": 29
+              "zuraStudioPacket": 29,
+              "cnr_id": "comfyui-zura-nodes",
+              "ver": "1.3.15"
             },
             "widgets_values": [
               "[\"37/0\"]"
@@ -8378,7 +8544,9 @@
                 "input_ue_unconnectable": {},
                 "version": "7.8"
               },
-              "zuraStudioPacket": 29
+              "zuraStudioPacket": 29,
+              "cnr_id": "comfyui-zura-nodes",
+              "ver": "1.3.15"
             },
             "widgets_values": [
               "5/0"
@@ -8438,7 +8606,9 @@
                 "input_ue_unconnectable": {},
                 "version": "7.8"
               },
-              "zuraStudioPacket": 29
+              "zuraStudioPacket": 29,
+              "cnr_id": "comfyui-zura-nodes",
+              "ver": "1.3.15"
             },
             "widgets_values": [
               "35/0"
@@ -8498,7 +8668,9 @@
                 "input_ue_unconnectable": {},
                 "version": "7.8"
               },
-              "zuraStudioPacket": 29
+              "zuraStudioPacket": 29,
+              "cnr_id": "comfyui-zura-nodes",
+              "ver": "1.3.15"
             },
             "widgets_values": [
               "35/1"
@@ -8625,7 +8797,9 @@
                 "input_ue_unconnectable": {},
                 "version": "7.8"
               },
-              "zuraStudioPacket": 30
+              "zuraStudioPacket": 30,
+              "cnr_id": "comfyui-zura-nodes",
+              "ver": "1.3.15"
             },
             "widgets_values": [
               "[\"38/0\"]"
@@ -8769,7 +8943,9 @@
                 "input_ue_unconnectable": {},
                 "version": "7.8"
               },
-              "zuraStudioPacket": 31
+              "zuraStudioPacket": 31,
+              "cnr_id": "comfyui-zura-nodes",
+              "ver": "1.3.15"
             },
             "widgets_values": [
               "[\"39/0\"]"
@@ -8829,7 +9005,9 @@
                 "input_ue_unconnectable": {},
                 "version": "7.8"
               },
-              "zuraStudioPacket": 31
+              "zuraStudioPacket": 31,
+              "cnr_id": "comfyui-zura-nodes",
+              "ver": "1.3.15"
             },
             "widgets_values": [
               "18/0"
@@ -8889,7 +9067,9 @@
                 "input_ue_unconnectable": {},
                 "version": "7.8"
               },
-              "zuraStudioPacket": 31
+              "zuraStudioPacket": 31,
+              "cnr_id": "comfyui-zura-nodes",
+              "ver": "1.3.15"
             },
             "widgets_values": [
               "37/0"
@@ -8949,7 +9129,9 @@
                 "input_ue_unconnectable": {},
                 "version": "7.8"
               },
-              "zuraStudioPacket": 31
+              "zuraStudioPacket": 31,
+              "cnr_id": "comfyui-zura-nodes",
+              "ver": "1.3.15"
             },
             "widgets_values": [
               "19/0"
@@ -9009,7 +9191,9 @@
                 "input_ue_unconnectable": {},
                 "version": "7.8"
               },
-              "zuraStudioPacket": 31
+              "zuraStudioPacket": 31,
+              "cnr_id": "comfyui-zura-nodes",
+              "ver": "1.3.15"
             },
             "widgets_values": [
               "38/0"
@@ -9069,7 +9253,9 @@
                 "input_ue_unconnectable": {},
                 "version": "7.8"
               },
-              "zuraStudioPacket": 31
+              "zuraStudioPacket": 31,
+              "cnr_id": "comfyui-zura-nodes",
+              "ver": "1.3.15"
             },
             "widgets_values": [
               "36/0"
@@ -9191,7 +9377,9 @@
                 "input_ue_unconnectable": {},
                 "version": "7.8"
               },
-              "zuraStudioPacket": 32
+              "zuraStudioPacket": 32,
+              "cnr_id": "comfyui-zura-nodes",
+              "ver": "1.3.15"
             },
             "widgets_values": [
               "[\"40/0\"]"
@@ -9251,7 +9439,9 @@
                 "input_ue_unconnectable": {},
                 "version": "7.8"
               },
-              "zuraStudioPacket": 32
+              "zuraStudioPacket": 32,
+              "cnr_id": "comfyui-zura-nodes",
+              "ver": "1.3.15"
             },
             "widgets_values": [
               "39/0"
@@ -9390,7 +9580,9 @@
                 "input_ue_unconnectable": {},
                 "version": "7.8"
               },
-              "zuraStudioPacket": 33
+              "zuraStudioPacket": 33,
+              "cnr_id": "comfyui-zura-nodes",
+              "ver": "1.3.15"
             },
             "widgets_values": [
               "[\"41/2\"]"
@@ -9450,7 +9642,9 @@
                 "input_ue_unconnectable": {},
                 "version": "7.8"
               },
-              "zuraStudioPacket": 33
+              "zuraStudioPacket": 33,
+              "cnr_id": "comfyui-zura-nodes",
+              "ver": "1.3.15"
             },
             "widgets_values": [
               "34/0"
@@ -9510,7 +9704,9 @@
                 "input_ue_unconnectable": {},
                 "version": "7.8"
               },
-              "zuraStudioPacket": 33
+              "zuraStudioPacket": 33,
+              "cnr_id": "comfyui-zura-nodes",
+              "ver": "1.3.15"
             },
             "widgets_values": [
               "34/1"
@@ -9570,7 +9766,9 @@
                 "input_ue_unconnectable": {},
                 "version": "7.8"
               },
-              "zuraStudioPacket": 33
+              "zuraStudioPacket": 33,
+              "cnr_id": "comfyui-zura-nodes",
+              "ver": "1.3.15"
             },
             "widgets_values": [
               "40/0"
@@ -9764,7 +9962,9 @@
                 "input_ue_unconnectable": {},
                 "version": "7.8"
               },
-              "zuraStudioPacket": 34
+              "zuraStudioPacket": 34,
+              "cnr_id": "comfyui-zura-nodes",
+              "ver": "1.3.15"
             },
             "widgets_values": [
               "[\"42/0\"]"
@@ -9824,7 +10024,9 @@
                 "input_ue_unconnectable": {},
                 "version": "7.8"
               },
-              "zuraStudioPacket": 34
+              "zuraStudioPacket": 34,
+              "cnr_id": "comfyui-zura-nodes",
+              "ver": "1.3.15"
             },
             "widgets_values": [
               "3/0"
@@ -9884,7 +10086,9 @@
                 "input_ue_unconnectable": {},
                 "version": "7.8"
               },
-              "zuraStudioPacket": 34
+              "zuraStudioPacket": 34,
+              "cnr_id": "comfyui-zura-nodes",
+              "ver": "1.3.15"
             },
             "widgets_values": [
               "41/2"
@@ -9943,7 +10147,9 @@
                 "input_ue_unconnectable": {},
                 "version": "7.8"
               },
-              "zuraStudioPacket": 35
+              "zuraStudioPacket": 35,
+              "cnr_id": "comfyui-zura-nodes",
+              "ver": "1.3.15"
             },
             "widgets_values": [
               "[]"
@@ -10003,7 +10209,9 @@
                 "input_ue_unconnectable": {},
                 "version": "7.8"
               },
-              "zuraStudioPacket": 35
+              "zuraStudioPacket": 35,
+              "cnr_id": "comfyui-zura-nodes",
+              "ver": "1.3.15"
             },
             "widgets_values": [
               "42/0"
@@ -10063,7 +10271,9 @@
                 "input_ue_unconnectable": {},
                 "version": "7.8"
               },
-              "zuraStudioPacket": 35
+              "zuraStudioPacket": 35,
+              "cnr_id": "comfyui-zura-nodes",
+              "ver": "1.3.15"
             },
             "widgets_values": [
               "25/0"
@@ -10123,7 +10333,9 @@
                 "input_ue_unconnectable": {},
                 "version": "7.8"
               },
-              "zuraStudioPacket": 35
+              "zuraStudioPacket": 35,
+              "cnr_id": "comfyui-zura-nodes",
+              "ver": "1.3.15"
             },
             "widgets_values": [
               "100/6"
