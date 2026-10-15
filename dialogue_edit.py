@@ -152,20 +152,41 @@ def track_points(frames, reference, box, mouth, enabled):
     return centres
 
 
-def blend_audio(original, generated, start, end, generated_start, generated_end, fade_ms=12, rate=48000):
+def resolve_timing(edit, generated_start, generated_end, timing_mode='source'):
+    """Use one second of generated performance per second of source, always."""
+    duration = edit['word_end']-edit['word_start']
+    if timing_mode == 'source':
+        generated_start = edit['word_start']-edit['first']/edit['meta']['fps']
+    elif timing_mode == 'manual':
+        if not all(math.isfinite(v) for v in (generated_start, generated_end)):
+            raise ValueError('Choose finite replacement IN and OUT times.')
+        if abs((generated_end-generated_start)-duration) > 1/edit['meta']['fps']+1e-6:
+            raise ValueError('Replacement and original selections must have the same duration. '
+                             'Adjust their IN/OUT points or use Match original timing. Video is never retimed.')
+    else:
+        raise ValueError('Choose source or manual replacement timing.')
+    return generated_start, generated_start+duration
+
+
+def blend_audio(original, generated, start, end, generated_start, generated_end, fade_ms=12, rate=48000, allow_retime=True):
     if not (0 <= start < end <= len(original)/rate + 1/rate):
         raise ValueError('The word range must be inside the source audio.')
     if not (0 <= generated_start < generated_end <= len(generated)/rate + 1/rate):
         raise ValueError('The generated word range must be inside the generated audio.')
     a, b = round(start*rate), round(end*rate)
     piece = generated[round(generated_start*rate):round(generated_end*rate)]
-    tempo = (generated_end-generated_start)/(end-start)
-    filters = []
-    while tempo > 2: filters.append('atempo=2'); tempo /= 2
-    while tempo < .5: filters.append('atempo=0.5'); tempo *= 2
-    filters += [f'atempo={tempo:.12f}', 'apad']
-    raw = ffmpeg('-f','f32le','-ar',rate,'-ac',2,'-i','pipe:0','-af',','.join(filters),'-t',(end-start),'-f','f32le','pipe:1',data=piece.astype(np.float32).tobytes())
-    piece = np.frombuffer(raw,np.float32).reshape(-1,2).copy()[:b-a]
+    if allow_retime:
+        tempo = (generated_end-generated_start)/(end-start)
+        filters = []
+        while tempo > 2: filters.append('atempo=2'); tempo /= 2
+        while tempo < .5: filters.append('atempo=0.5'); tempo *= 2
+        filters += [f'atempo={tempo:.12f}', 'apad']
+        raw = ffmpeg('-f','f32le','-ar',rate,'-ac',2,'-i','pipe:0','-af',','.join(filters),'-t',(end-start),'-f','f32le','pipe:1',data=piece.astype(np.float32).tobytes())
+        piece = np.frombuffer(raw,np.float32).reshape(-1,2).copy()[:b-a]
+    else:
+        if abs((generated_end-generated_start)-(end-start)) > 1/rate+1e-8:
+            raise ValueError('Video speech replacement requires matching durations; retiming is disabled.')
+        piece = piece[:b-a].copy()
     piece = np.pad(piece,((0,max(0,b-a-len(piece))),(0,0)))
     rms = lambda v: float(np.sqrt(np.mean(v.astype(np.float64)**2)))
     gain = rms(original[a:b])/max(rms(piece),1e-8)
@@ -249,17 +270,22 @@ class ZuraDialogueFinish:
             'audio_fade_ms':('FLOAT',{'default':12,'min':0,'max':100,'step':1}),
             'mouth_feather':('FLOAT',{'default':.24,'min':.01,'max':1,'step':.01}),
             'filename_prefix':('STRING',{'default':'dialogue/euros'}),
-        },'optional':{'temporal_resampling':(['blend','nearest'],{'default':'blend','tooltip':'Blend keeps the original artist timing treatment. Nearest retains one mouth pose per frame but can change cadence.'})}}
+        },'optional':{
+            'temporal_resampling':(['blend','nearest'],{'default':'nearest','tooltip':'Nearest keeps a single mouth pose per output frame. Blend interpolates adjacent generated frames.'}),
+            'timing_mode':(['source','manual'],{'default':'source','tooltip':'Source follows the original timestamps. Manual allows an offset with equal duration. Neither mode retimes video or audio.'}),
+        }}
     RETURN_TYPES = ('VIDEO',)
     FUNCTION = 'finish'
     CATEGORY = 'Zura/Dialogue'
     OUTPUT_NODE = True
 
     def finish(self, edit, generated_frames, generated_audio, generated_word_start, generated_word_end,
-               audio_fade_ms, mouth_feather, filename_prefix, temporal_resampling='blend'):
+               audio_fade_ms, mouth_feather, filename_prefix, temporal_resampling='nearest', timing_mode='source'):
         path=local_path(edit['source']);meta=inspect(path)
         if meta['identity'] != edit['identity']: raise ValueError('Source changed after preparation. Run the source stage again.')
         fps=meta['fps'];start,end=edit['word_start'],edit['word_end'];rate=48000
+        requested_range=[generated_word_start,generated_word_end]
+        generated_word_start,generated_word_end=resolve_timing(edit,generated_word_start,generated_word_end,timing_mode)
         validate_generated(edit,generated_frames.shape,generated_word_start,generated_word_end)
         if temporal_resampling not in ('nearest','blend'):
             raise ValueError('Choose nearest or blend temporal resampling.')
@@ -282,7 +308,7 @@ class ZuraDialogueFinish:
         original_audio=read_audio(path)
         target_samples=round(meta['frames']/fps*rate)
         original_audio=np.pad(original_audio[:target_samples],((0,max(0,target_samples-len(original_audio))),(0,0)))
-        soundtrack,gain=blend_audio(original_audio,raw,start,end,generated_word_start,generated_word_end,audio_fade_ms,rate)
+        soundtrack,gain=blend_audio(original_audio,raw,start,end,generated_word_start,generated_word_end,audio_fade_ms,rate,allow_retime=False)
         pcm=Path(str(base)+'.wav')
         ffmpeg('-f','f32le','-ar',rate,'-ac',2,'-i','pipe:0','-c:a','pcm_f32le',pcm,data=soundtrack.tobytes())
         generated_pcm=base.parent/(base.name+'_generated.wav')
@@ -304,7 +330,7 @@ class ZuraDialogueFinish:
                 if not ok: raise ValueError('Source decoding stopped before the last frame.')
                 t=(i+.5)/fps
                 if start<=t<end:
-                    tg=generated_word_start+(t-start)/(end-start)*(generated_word_end-generated_word_start)
+                    tg=generated_word_start+(t-start)
                     j=max(0,min(len(generated)-1,tg*fps-.5));j0=int(j);mix=j-j0
                     g=(generated[min(round(j),len(generated)-1)] if temporal_resampling=='nearest'
                        else (1-mix)*generated[j0]+mix*generated[min(j0+1,len(generated)-1)])
@@ -327,6 +353,7 @@ class ZuraDialogueFinish:
             if proc.poll() is None:proc.kill();proc.wait()
         verified=verify_export(final,meta)
         receipt=dict(source_word=[start,end],generated_word=[generated_word_start,generated_word_end],
+                     requested_generated_word=requested_range,timing_mode=timing_mode,retimed=False,
                      changed_frames=changed,audio_gain_db=20*math.log10(max(gain,1e-8)),fps=fps,frames=meta['frames'],
                      generated_geometry=edit.get('generation'),crop_mode=edit.get('crop_mode'),
                      temporal_resampling=temporal_resampling,export_verified=verified,audio_samples=target_samples,
@@ -334,7 +361,8 @@ class ZuraDialogueFinish:
                      note='Pixels outside selected frames and mouth mask are preserved before H264 encoding. PCM audio preserves samples outside the word; AAC is lossy.')
         Path(str(base)+'.json').write_text(json.dumps(receipt,indent=2),encoding='utf-8')
         relative=lambda p:str(p.relative_to(output_root)).replace('\\','/')+' [output]'
-        ui={'file':relative(final),'generated_video':relative(generated_video),'generated_audio':relative(generated_pcm),'duration':len(raw)/rate,'peaks':peaks(raw)}
+        ui={'file':relative(final),'generated_video':relative(generated_video),'generated_audio':relative(generated_pcm),'duration':len(raw)/rate,'peaks':peaks(raw),
+            'source_range':[start,end],'generated_range':[generated_word_start,generated_word_end],'context_offset':edit['first']/fps,'timing_mode':timing_mode,'retimed':False}
         return {'ui':{'zura_dialogue':[ui]},'result':(InputImpl.VideoFromFile(str(final)),)}
 
 

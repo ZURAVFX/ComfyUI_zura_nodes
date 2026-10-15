@@ -21,6 +21,30 @@ dialogue = importlib.import_module('ComfyUI_zura_nodes.dialogue_edit')
 
 
 class DialogueTests(unittest.TestCase):
+    def test_source_timing_ignores_stale_half_second_selection(self):
+        edit={'word_start':.964,'word_end':1.973,'first':0,'meta':{'fps':30}}
+        self.assertEqual(dialogue.resolve_timing(edit,0,.5),(.964,1.973))
+        edit.update(first=15)
+        np.testing.assert_allclose(dialogue.resolve_timing(edit,0,.5),(.464,1.473))
+
+    def test_manual_timing_refuses_stretch_and_keeps_exact_source_duration(self):
+        edit={'word_start':.964,'word_end':1.973,'first':0,'meta':{'fps':30}}
+        with self.assertRaisesRegex(ValueError,'same duration'):
+            dialogue.resolve_timing(edit,0,.5,'manual')
+        np.testing.assert_allclose(dialogue.resolve_timing(edit,1,2,'manual'),(1,2.009))
+        for mode in ['fit','unknown']:
+            with self.assertRaises(ValueError):dialogue.resolve_timing(edit,0,.5,mode)
+
+    def test_video_audio_splice_uses_exact_samples_without_tempo_processing(self):
+        rate=48000;rng=np.random.default_rng(9)
+        original=rng.normal(0,.1,(rate*2,2)).astype(np.float32)
+        generated=rng.normal(0,.1,(rate*2,2)).astype(np.float32)
+        with patch.object(dialogue,'ffmpeg',side_effect=AssertionError('No tempo filter for video')):
+            out,gain=dialogue.blend_audio(original,generated,.75,1.25,.5,1,0,rate,allow_retime=False)
+        np.testing.assert_array_equal(out[:36000],original[:36000])
+        np.testing.assert_array_equal(out[60000:],original[60000:])
+        np.testing.assert_allclose(out[36000:60000],generated[24000:48000]*gain)
+
     def test_ltx_geometry_pads_up_and_bounds_local_profile(self):
         self.assertEqual(dialogue.ltx_geometry(512,430,430,68),(512,512,73))
         self.assertEqual(dialogue.ltx_geometry(385,430,300,9),(448,320,9))
