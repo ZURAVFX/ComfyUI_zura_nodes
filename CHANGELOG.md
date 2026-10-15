@@ -2,6 +2,7 @@
 
 ## 1.3.24
 
+- Correct face-crop overlay alignment at every graph zoom. Keep crop drawing active until the artist chooses the mouth tool; preserve the old crop after an accidental click and restore it on cancelled drags. Refuse drawing on an unloaded or out-of-reference video frame.
 - Video speech editing now recognises source words with local Parakeet and fills the full phrase automatically. Original selections and changed words have separate visual highlights. Existing drafts survive delayed transcription, refreshes and reference changes.
 - Split the first node into Clip and face / Select words views. Added draggable reference IN/OUT, a word waveform zoomed to the reference, and click, drag, Shift-click and keyboard transcript selection. No sampling settings or native graph ports changed.
 - Draw the mouth oval directly on the video; reset its size relative to the face crop. Reject dot-sized masks and reference frames outside the effective processing clip before sampling, instead of silently clamping the tracking anchor.

@@ -156,9 +156,9 @@ def validate_source_cadence(path, meta):
 def selection_data(value, meta):
     value = json.loads(value)
     if 'box' not in value or 'mouth' not in value:
-        raise ValueError('Open Select words and face, draw a face crop and place the mouth region.')
+        raise ValueError('Open Clip and face, draw a face crop and place the mouth region.')
     if value.get('identity') and value['identity'] != meta['identity']:
-        raise ValueError('The source changed. Reopen Select words and face and select it again.')
+        raise ValueError('The source changed. Reopen Clip and face and select it again.')
     box = np.asarray(value['box'], dtype=float)
     mouth = np.asarray(value['mouth'], dtype=float)
     if box.shape != (4,) or mouth.shape != (4,) or not np.isfinite(np.r_[box, mouth]).all():
@@ -175,8 +175,8 @@ def selection_data(value, meta):
     # may include hair, chest or background, so that is not a lip detector.
     guessed = np.allclose(mouth, [x+w*.5, y+h*.65, max(3,w*.1), max(3,h*.08)], rtol=0, atol=.01)
     if value.get('mouth_confirmed') is False or (guessed and value.get('mouth_confirmed') is not True):
-        raise ValueError('Place the mouth centre on the actual lips in Select words and face. '
-                         'The old automatic crop guess is not a confirmed mouth selection.')
+        raise ValueError('In Clip and face, choose Draw mouth area and place the oval over the actual lips '
+                         'on a paused frame inside Reference IN/OUT. The mouth selection is not confirmed.')
     return box, mouth, float(value.get('frame', 0))
 
 

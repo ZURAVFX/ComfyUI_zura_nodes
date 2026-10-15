@@ -1,6 +1,7 @@
 import { app } from "../../scripts/app.js";
 import { api } from "../../scripts/api.js";
 import { transcriptWords, wordsInRange, phraseEditor, wordSelector, transcriptStyle } from './dialogue_transcript.js';
+import { sizePreviewOverlay, bindPreviewDrag } from './dialogue_face_picker.js';
 
 const media = source => api.apiURL('/zura/dialogue/media?source='+encodeURIComponent(source));
 const widget = (node,name) => node?.widgets?.find(w=>w.name===name);
@@ -106,7 +107,8 @@ async function picker(node,generated=false,host=null){
     .zura-dialogue-panel h2{font-size:18px;margin:0 0 7px}.zura-dialogue-panel h3{margin-top:18px}
     .zura-dialogue-picture{position:relative;background:#080d13;min-width:0;flex:1;border-radius:6px;overflow:hidden;line-height:0;max-width:100%}
     .zura-dialogue-picture video{display:block;width:100%;max-height:290px;object-fit:contain}
-    .zura-dialogue-picture canvas{position:absolute;touch-action:none}
+    .zura-dialogue-picture canvas{position:absolute;touch-action:none;cursor:crosshair;user-select:none}
+    .zura-dialogue-picture canvas:focus-visible{outline:2px solid #a4f0d6;outline-offset:-2px}
     .zura-dialogue-row{display:flex;gap:10px;align-items:start}.zura-dialogue-tools{width:135px;flex-shrink:0;display:grid;gap:8px}
     .zura-dialogue-tools button{font-size:12px}.zura-dialogue-tools button[aria-pressed=true]{background:#28584d;border-color:#9de8cf}
     .zura-dialogue-panel .zura-mouth-note{font-size:11px;line-height:1.5;margin:0}
@@ -132,14 +134,15 @@ async function picker(node,generated=false,host=null){
   let selection={};try{selection=JSON.parse(read(node,'selection')||'{}');}catch{}
   let box=selection.box||[0,0,info.width,info.height],mouth=selection.mouth||defaultMouth(box),frame=Number(selection.frame)||0;
   let mouthConfirmed=mouthSelectionConfirmed(selection,box)&&mouthSizeValid(mouth,box),mode='crop',drag=null,placingMouth=false,snapshot=null;
-  const video=el('video',{src:media(source),controls:false,playsInline:true,preload:'auto'}),picture=el('div',{className:'zura-dialogue-picture'}),overlay=el('canvas',{width:info.width,height:info.height,ariaLabel:'Draw face crop or mouth area'}),tools=el('div',{className:'zura-dialogue-tools'}),row=el('div',{className:'zura-dialogue-row'});
+  const video=el('video',{src:media(source),controls:false,playsInline:true,preload:'auto'}),picture=el('div',{className:'zura-dialogue-picture'}),overlay=el('canvas',{width:info.width,height:info.height,tabIndex:0,ariaLabel:'Draw face crop or mouth area'}),tools=el('div',{className:'zura-dialogue-tools'}),row=el('div',{className:'zura-dialogue-row'});
   picture.append(video,overlay);row.append(picture);if(!generated)row.append(tools);panel.append(row);
   // Overlay the actual rendered picture, including portrait/letterboxed previews.
-  function sizeOverlay(){const r=video.getBoundingClientRect(),ratio=info.width/info.height,w=Math.min(r.width,r.height*ratio),h=w/ratio;overlay.style.cssText=`left:${(r.width-w)/2}px;top:${(r.height-h)/2}px;width:${w}px;height:${h}px`;}
+  function sizeOverlay(){sizePreviewOverlay(video,overlay,info.width,info.height);}
   const resizeObserver=new ResizeObserver(sizeOverlay);resizeObserver.observe(video);
   const status=el('p',{className:'zura-transcript-status',role:'status'}),mouthNote=el('p',{className:'zura-mouth-note'}),ctx=overlay.getContext('2d');
   const cropButton=el('button',{type:'button'},'Draw face crop'),mouthButton=el('button',{type:'button'},'Draw mouth area'),resetMouth=el('button',{type:'button'},'Reset mouth size');
-  function anchorValid(){if(generated)return true;try{const[a,b]=contextWindow(info.fps,info.frames,...range,...reference);return frame*info.fps>=a-.5&&frame*info.fps<b;}catch{return false;}}
+  function frameInsideReference(time){if(generated)return true;try{const[a,b]=contextWindow(info.fps,info.frames,...range,...reference);return time*info.fps>=a-.5&&time*info.fps<b;}catch{return false;}}
+  function anchorValid(){return frameInsideReference(frame);}
   function updateMouthNote(){const valid=mouthConfirmed&&mouthSizeValid(mouth,box)&&anchorValid();mouthNote.textContent=!anchorValid()?'Reference frame is outside this clip. Pause inside it and draw the mouth again.':!mouthSizeValid(mouth,box)?'Mouth area is too small. Reset its size, then place it over both lips.':valid?'Amber oval: replaced mouth area. Include both lips and open-mouth movement.':'Pause on a clear face. Click the lips or drag around the whole mouth.';mouthNote.style.color=valid?'#ffe1a4':'#ffc1b8';}
   function setMode(value){mode=value;cropButton.setAttribute('aria-pressed',value==='crop');mouthButton.setAttribute('aria-pressed',value==='mouth');}
   function paint(){sizeOverlay();ctx.clearRect(0,0,overlay.width,overlay.height);if(generated)return;ctx.lineWidth=Math.max(2,info.width/350);ctx.strokeStyle='#91e7cb';ctx.strokeRect(...box);ctx.strokeStyle=mouthConfirmed&&anchorValid()?'#ffcb75':'#ff9c90';ctx.fillStyle='#ffcb7528';ctx.beginPath();ctx.ellipse(...mouth,0,0,Math.PI*2);ctx.fill();ctx.stroke();ctx.beginPath();ctx.moveTo(mouth[0]-5,mouth[1]);ctx.lineTo(mouth[0]+5,mouth[1]);ctx.moveTo(mouth[0],mouth[1]-5);ctx.lineTo(mouth[0],mouth[1]+5);ctx.stroke();}
@@ -192,15 +195,18 @@ async function picker(node,generated=false,host=null){
     }
   }
   const point=e=>{const r=overlay.getBoundingClientRect();return [Math.round(Math.max(0,Math.min(info.width,(e.clientX-r.left)/r.width*info.width))),Math.round(Math.max(0,Math.min(info.height,(e.clientY-r.top)/r.height*info.height)))];};
+  let disposeDrawing=()=>{};
   if(!generated){
-    overlay.onpointerdown=e=>{e.preventDefault();video.pause();overlay.setPointerCapture(e.pointerId);snapshot={box:[...box],mouth:[...mouth],frame,confirmed:mouthConfirmed};drag=point(e);placingMouth=mode==='mouth';frame=video.currentTime;if(placingMouth){if(!mouthSizeValid(mouth,box))mouth=defaultMouth(box);mouth[0]=drag[0];mouth[1]=drag[1];mouthConfirmed=true;}paint();};
-    overlay.onpointermove=e=>{if(!drag)return;const p=point(e);if(placingMouth){if(Math.hypot(p[0]-drag[0],p[1]-drag[1])>8){mouth=[(p[0]+drag[0])/2,(p[1]+drag[1])/2,Math.max(1,Math.abs(p[0]-drag[0])/2),Math.max(1,Math.abs(p[1]-drag[1])/2)];}}else box=[Math.min(drag[0],p[0]),Math.min(drag[1],p[1]),Math.max(1,Math.abs(p[0]-drag[0])),Math.max(1,Math.abs(p[1]-drag[1]))];paint();};
-    overlay.onpointerup=e=>{if(!drag)return;
-      if(!placingMouth&&(box[2]<32||box[3]<32)){box=snapshot.box;mouth=snapshot.mouth;frame=snapshot.frame;mouthConfirmed=snapshot.confirmed;status.textContent='Drag a crop around the whole face. A click keeps the previous crop.';}
-      else if(!placingMouth){const[x,y,w,h]=box;mouthConfirmed=snapshot.confirmed&&Math.abs(frame-snapshot.frame)<=.5/info.fps&&x<=mouth[0]&&mouth[0]<=x+w&&y<=mouth[1]&&mouth[1]<=y+h&&mouthSizeValid(mouth,box);if(!mouthConfirmed)mouth=defaultMouth(box);setMode('mouth');}
-      if(placingMouth&&!mouthSizeValid(mouth,box)){mouthConfirmed=false;status.textContent='Mouth area is too small. Draw around both lips or reset its size.';}
-      drag=null;placingMouth=false;if(overlay.hasPointerCapture(e.pointerId))overlay.releasePointerCapture(e.pointerId);redraw();commit();};
-    overlay.onpointercancel=()=>{if(snapshot){box=snapshot.box;mouth=snapshot.mouth;frame=snapshot.frame;mouthConfirmed=snapshot.confirmed;}drag=null;placingMouth=false;redraw();};
+    disposeDrawing=bindPreviewDrag(overlay,{
+      start(e){video.pause();stopAt=null;if(video.seeking||!video.videoWidth){status.textContent='Wait for the paused video frame to load before drawing.';return false;}if(!frameInsideReference(video.currentTime)){status.textContent='This frame is outside the reference clip. Play reference clip, pause on a clear face, then draw here.';return false;}snapshot={box:[...box],mouth:[...mouth],frame,confirmed:mouthConfirmed};drag=point(e);placingMouth=mode==='mouth';frame=video.currentTime;if(placingMouth){if(!mouthSizeValid(mouth,box))mouth=defaultMouth(box);mouth[0]=drag[0];mouth[1]=drag[1];mouthConfirmed=true;}paint();},
+      move(e){const p=point(e);if(placingMouth){if(Math.hypot(p[0]-drag[0],p[1]-drag[1])>8){mouth=[(p[0]+drag[0])/2,(p[1]+drag[1])/2,Math.max(1,Math.abs(p[0]-drag[0])/2),Math.max(1,Math.abs(p[1]-drag[1])/2)];}}else box=[Math.min(drag[0],p[0]),Math.min(drag[1],p[1]),Math.max(1,Math.abs(p[0]-drag[0])),Math.max(1,Math.abs(p[1]-drag[1]))];paint();},
+      finish(){let message='';
+        if(!placingMouth&&(box[2]<32||box[3]<32)){box=snapshot.box;mouth=snapshot.mouth;frame=snapshot.frame;mouthConfirmed=snapshot.confirmed;message='Drag a crop around the whole face. A click keeps the previous crop.';}
+        else if(!placingMouth){const[x,y,w,h]=box;mouthConfirmed=snapshot.confirmed&&Math.abs(frame-snapshot.frame)<=.5/info.fps&&x<=mouth[0]&&mouth[0]<=x+w&&y<=mouth[1]&&mouth[1]<=y+h&&mouthSizeValid(mouth,box);if(!mouthConfirmed)mouth=defaultMouth(box);message='Face crop saved. Draw again to adjust it, or choose Draw mouth area. Escape cancels a drag.';}
+        if(placingMouth&&!mouthSizeValid(mouth,box)){mouthConfirmed=false;message='Mouth area is too small. Draw around both lips or reset its size.';}
+        drag=null;snapshot=null;placingMouth=false;redraw();commit();if(message)status.textContent=message;},
+      cancel(){if(snapshot){box=snapshot.box;mouth=snapshot.mouth;frame=snapshot.frame;mouthConfirmed=snapshot.confirmed;}drag=null;snapshot=null;placingMouth=false;redraw();}
+    });
   }
   async function startPlayback(){try{await video.play();}catch(error){if(error.name!=='AbortError')status.textContent='Preview could not play: '+error.message;}}
   function playRange(bounds){video.currentTime=bounds[0];stopAt=bounds[1];startPlayback();}
@@ -216,7 +222,7 @@ async function picker(node,generated=false,host=null){
   retry.onclick=recognise;
   function editorTab(value){if(generated)return;node.properties.zuraDialogueEditorTab=value;referencePanel.hidden=value!=='reference';wordPanel.hidden=value!=='words';tools.hidden=value==='words';overlay.style.pointerEvents=value==='words'?'none':'';referenceTab.setAttribute('aria-pressed',value==='reference');wordsTab.setAttribute('aria-pressed',value==='words');requestAnimationFrame(paint);}
   referenceTab.onclick=()=>editorTab('reference');wordsTab.onclick=()=>editorTab('words');editorTab(node.properties.zuraDialogueEditorTab||'reference');
-  const close=()=>{alive=false;cancelAnimationFrame(animation);resizeObserver.disconnect();video.pause();video.removeAttribute('src');video.load();shade.remove();};
+  const close=()=>{alive=false;disposeDrawing();cancelAnimationFrame(animation);resizeObserver.disconnect();video.pause();video.removeAttribute('src');video.load();shade.remove();};
   if(host){host.replaceChildren(shade);host._dialogueDispose=close;}else{const done=el('button',{type:'button'},'Done');done.onclick=()=>{commit();close();};panel.append(done);document.body.append(shade);}
   rebuildWordWave();redraw();recognise();
 }

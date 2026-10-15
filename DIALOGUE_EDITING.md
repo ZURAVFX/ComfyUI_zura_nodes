@@ -67,4 +67,6 @@ The reference waveform spans the original clip; the word waveform zooms into the
 
 To place the mouth, click its centre to keep the current size or drag a rectangle around both lips to draw a new oval. **Reset mouth size** restores a useful size relative to the face crop. An accidental tiny crop drag retains the prior crop. Dot-sized mouth masks and face reference frames outside the effective reference clip are rejected before sampling. Choose a clear paused frame inside the reference interval, then place the mouth there. These safeguards prevent invalid selections; they do not guarantee generated speech or lip-sync quality.
 
+**Draw face crop** stays active so you can redraw it from either direction. Choose **Draw mouth area** explicitly when the crop is ready. The overlay follows the displayed video at any graph zoom, including portrait and letterboxed footage. Escape or an interrupted drag restores the previous selection. Drawing waits for a loaded paused frame and refuses a frame outside the effective reference interval.
+
 No models, sampling schedules, precision settings, crop-following controls or retiming behaviour changed in this UI update. Refresh the frontend after updating; restart ComfyUI once for the Python validation changes.
