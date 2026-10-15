@@ -122,7 +122,8 @@ def parakeet_config():
     if config.is_file():
         data = json.loads(config.read_text(encoding='utf-8-sig'))
         return str(Path(data['python']).expanduser()), str(Path(data['models']).expanduser())
-    root = Path(os.environ.get('LOCALAPPDATA', str(Path.home()))) / 'ParakeetRuntime'
+    local = Path.home() / 'AppData' / 'Local' if os.name == 'nt' else Path.home()
+    root = Path(os.environ.get('LOCALAPPDATA') or local) / 'ParakeetRuntime'
     python = root / 'Scripts' / 'python.exe'
     if python.is_file() and (root/'models'/'parakeet-tdt-0.6b-v3-int8').is_dir():
         return str(python), str(root/'models')
@@ -141,9 +142,12 @@ def transcribe(path):
         return json.loads(target.read_text(encoding='utf-8'))
     env = {k:v for k,v in os.environ.items() if k not in ('PYTHONHOME','PYTHONPATH','VIRTUAL_ENV','CONDA_PREFIX')}
     env.update(HF_HUB_OFFLINE='1', TRANSFORMERS_OFFLINE='1')
-    process = subprocess.run([python, str(Path(__file__).with_name('audio_parakeet.py')), '--input', str(path),
-        '--models', models, '--output', str(target)], capture_output=True, text=True, env=env, timeout=300,
-        **({'creationflags':subprocess.CREATE_NO_WINDOW} if os.name=='nt' else {}))
+    try:
+        process = subprocess.run([python, str(Path(__file__).with_name('audio_parakeet.py')), '--input', str(path),
+            '--models', models, '--output', str(target)], capture_output=True, text=True, env=env, timeout=300,
+            **({'creationflags':subprocess.CREATE_NO_WINDOW} if os.name=='nt' else {}))
+    except OSError as error:
+        raise RuntimeError(f'Cannot start the installed Parakeet Python ({python}): {error}') from error
     if process.returncode or not target.is_file():
         raise RuntimeError('Parakeet could not read this take: '+process.stderr[-1200:])
     return json.loads(target.read_text(encoding='utf-8'))
