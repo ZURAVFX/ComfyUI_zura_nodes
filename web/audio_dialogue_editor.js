@@ -95,7 +95,7 @@ function mount(n){
    }else if(select){
     root.append(el('p',{},'Select what to remove from the original, then what to insert from the replacement. Click Update final audio in the next node.'));
     const preview=n._audioPreview||n.properties.zuraAudioPreview;
-    const originalPanel=el('section',{ariaLabel:'Original section'});root.append(originalPanel);originalPanel.append(el('h4',{},'1. Original · remove this section'));
+    const originalPanel=el('section',{ariaLabel:'Original section'});root.append(originalPanel);originalPanel.append(el('h4',{},'1. Original - remove this section'));
     let sourcePreview=preview;
     if(!sourcePreview){let upstream=n.getInputNode?.(n.inputs.findIndex(i=>i.name==='edit'));if(upstream?.subgraph)upstream=upstream.getInputNode?.(upstream.inputs.findIndex(i=>i.name==='edit'));
      if(upstream?.comfyClass==='ZuraAudioDialogueSource'&&get(upstream,'source')){const originalInfo=await post('info',{source:get(upstream,'source')});if(mine!==revision)return;sourcePreview={source:get(upstream,'source'),source_duration:originalInfo.duration,source_peaks:originalInfo.peaks,source_words:upstream.properties.zuraAudioWords||[],source_selection:[get(upstream,'word_start'),get(upstream,'word_end')]};}}
