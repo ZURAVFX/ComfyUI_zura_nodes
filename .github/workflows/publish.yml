@@ -142,7 +142,7 @@ jobs:
           for filename in ('Zura_LongCat_Word_Edit.json', 'Zura_Single_Word_Dub.json'):
               text = Path('workflows', filename).read_text(encoding='utf-8')
               graph = json.loads(text)
-              assert len(graph['nodes']) == 3 and graph['definitions']['subgraphs']
+              assert len(graph['nodes']) == (4 if filename == 'Zura_LongCat_Word_Edit.json' else 3) and graph['definitions']['subgraphs']
               assert not any(item in text for item in ('ComfyUI-Shared', 'C:\\\\Users', 'ellio', 'pound_euro_original', 'zuraAudioPreview', 'zuraDialoguePreview', 'base64,'))
           for asset in ('qwen_voice_design.py', 'setup_voice_design.py', 'VOICE_DESIGN.md',
                         'Setup_Voice_Design_Windows.cmd', 'voice_design_runtime/qwen_voice_worker.py',
@@ -164,6 +164,7 @@ jobs:
       - name: Run regression checks
         run: |
           python -m unittest discover -s tests -p 'test_audio_dialogue.py'
+          python -m unittest discover -s tests -p 'test_audio_split_editor.py'
           python -m unittest discover -s tests -p 'test_dialogue_edit.py'
           python -m compileall -q __init__.py klein_look.py multicam_v3.py multicam_v4_clean.py h3_single_angle.py idv2v_control.py
           python -m unittest discover -s tests -p 'test_v2_*.py'

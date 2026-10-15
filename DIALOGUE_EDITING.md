@@ -9,11 +9,13 @@ The templates contain no recordings, personal reference files or generated takes
 
 ## Audio only: LongCat
 
-1. Open **Zura LongCat Word Edit**. In **Select Audio Words**, choose a local audio file.
-2. Click **Transcribe with Parakeet**, or type the original full phrase. Click a word to select it; Shift-click extends the selection. Drag IN and OUT directly on the waveform for precise joins.
-3. In **Full replacement phrase**, type the complete revised sentence, including the unchanged words. Keep pace at 1 to start. **Change seed** changes the seed; it does not start generation. Click ComfyUI **Run** to generate that performance. Keep the current take if you like it.
-4. With Parakeet available, **Auto changed words** finds one continuous changed phrase in the generated take. Listen to the **Replacement take**. Click its words or drag its handles to override the selection; this switches to **Manual IN/OUT**. Run again to blend the revised selection.
-5. **Finished audio** plays the composite. **Download WAV** saves the blended result and appears only after a successful blend. The generated full sentence is retained separately. Edit handles reuse the same LongCat take, including after a ComfyUI restart. Changing phrase, reference, pace or seed generates another take.
+1. Choose your original audio and transcribe it with Parakeet, or type its complete transcript. Add an optional speaker reference and its exact transcript here.
+2. In **Generate replacement phrase**, type the full revised sentence. **Change seed** only changes the seed. Click ComfyUI **Run** once to generate a take and load the two waveforms.
+3. In **Choose both sections**, select the original words to remove on the upper waveform, then the replacement words to insert on the lower waveform. Click a word, Shift-click to extend, or drag the IN and OUT handles. Listen to each selection before applying it. The selected words appear below each waveform.
+4. Click **Update final audio** in the separate **Final audio** node. It applies both selections and reuses the retained voice take. Listen to the final waveform, where the inserted interval is highlighted, then click **Download WAV**.
+5. Moving either selection or changing the edge blend invalidates the old final preview until you update it. Phrase, reference, pace or seed changes create a new take; selection changes keep the current take, including after a ComfyUI restart.
+
+The older combined editor remains available for existing workflows. The supplied template uses the clearer four-stage layout.
 
 The source node's **Speaker reference** section accepts optional extra audio and its exact transcript. Use **Source and extra reference** to add it, or **Extra reference only** to use a cleaner recording instead. Prefer 8–20 seconds of clean speech from one speaker, without music or overlap. Combined references are limited to 25 seconds to leave room for synthesis. Very short references are accepted but can give a weaker match. If you trim the source reference range, fill in its separate trimmed-reference transcript; the original full phrase remains available for word matching.
 
@@ -31,7 +33,7 @@ Parakeet is optional. Manual waveform editing works without it. For local word b
 {"python":"/absolute/path/to/python", "models":"/absolute/path/to/models"}
 ```
 
-The model directory must contain `parakeet-tdt-0.6b-v3-int8/` and `silero-vad/`. Alternatively set `ZURA_PARAKEET_CONFIG` to the configuration file. Windows also recognises an existing `%LOCALAPPDATA%/ParakeetRuntime` installation. Inference uses installed assets with offline mode enabled. If recognition fails or is ambiguous, the editor keeps the source unchanged and asks for a manual selection; it does not guess which words to replace. Check recognised words and timings by ear.
+The model directory must contain `parakeet-tdt-0.6b-v3-int8/` and `silero-vad/`. Alternatively set `ZURA_PARAKEET_CONFIG` to the configuration file. Windows also recognises an existing `%LOCALAPPDATA%/ParakeetRuntime` installation. Inference uses installed assets with offline mode enabled. If recognition fails or is ambiguous, the selection editor asks for a manual selection and the final node refuses to export a misleading finished result. Check recognised words and timings by ear.
 
 Speaker references, transcripts and generated takes stay in local run folders. Do not publish these folders with a workflow or commit local configuration.
 
