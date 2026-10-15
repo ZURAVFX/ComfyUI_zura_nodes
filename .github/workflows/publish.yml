@@ -164,6 +164,8 @@ jobs:
         run: |
           python -m unittest discover -s tests -p 'test_template_catalogue.py'
           node tests/test_audio_editor_connections.mjs
+          node tests/test_dialogue_timing_connections.mjs
+          node tests/test_dialogue_transcript.mjs
           python -m unittest discover -s tests -p 'test_audio_dialogue.py'
           python -m unittest discover -s tests -p 'test_audio_split_editor.py'
           python -m unittest discover -s tests -p 'test_dialogue_edit.py'

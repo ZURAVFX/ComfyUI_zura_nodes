@@ -168,6 +168,9 @@ def selection_data(value, meta):
         raise ValueError('Keep the face crop inside the video.')
     if mouth[2] <= 0 or mouth[3] <= 0 or not (x <= mouth[0] <= x+w and y <= mouth[1] <= y+h):
         raise ValueError('Place the mouth region inside the selected face crop.')
+    if mouth[2] < max(2,w*.04) or mouth[3] < max(2,h*.04):
+        raise ValueError('The mouth area is too small to replace the lips. '
+                         'Use Reset mouth size, then draw the amber oval around both lips.')
     # Old pickers silently guessed a mouth at 65% of an arbitrary crop. A crop
     # may include hair, chest or background, so that is not a lip detector.
     guessed = np.allclose(mouth, [x+w*.5, y+h*.65, max(3,w*.1), max(3,h*.08)], rtol=0, atol=.01)
@@ -287,6 +290,9 @@ class ZuraDialogueSource:
             raise ValueError('The word must be inside the context range, and the context inside the clip.')
         box, mouth, reference = selection_data(selection,meta)
         fps = meta['fps']; first, last = context_window(meta,word_start,word_end,context_start,context_end)
+        if not math.isfinite(reference) or not first-.5 <= reference*fps < last:
+            raise ValueError('The face reference frame is outside the effective reference clip. '
+                             'Pause inside Reference IN/OUT and draw the mouth on that frame again.')
         width,height,count = ltx_geometry(render_size,box[2],box[3],last-first)
         cap = cv2.VideoCapture(str(path)); cap.set(cv2.CAP_PROP_POS_FRAMES,first); frames=[]
         try:
