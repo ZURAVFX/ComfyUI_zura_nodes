@@ -134,6 +134,16 @@ jobs:
                         'longcat_runtime/text.py', 'longcat_runtime/requirements.txt'):
               assert Path(asset).is_file(), f'Missing LongCat release asset: {asset}'
           assert not list(Path('.').rglob('longcat.local.json*'))
+          for asset in ('audio_dialogue.py', 'audio_parakeet.py', 'dialogue_edit.py',
+                        'dialogue_signals.py', 'web/audio_dialogue_editor.js',
+                        'web/dialogue_editor.js', 'DIALOGUE_EDITING.md'):
+              assert Path(asset).is_file(), f'Missing dialogue editor asset: {asset}'
+          assert not list(Path('.').rglob('parakeet.local.json*'))
+          for filename in ('Zura_LongCat_Word_Edit.json', 'Zura_Single_Word_Dub.json'):
+              text = Path('workflows', filename).read_text(encoding='utf-8')
+              graph = json.loads(text)
+              assert len(graph['nodes']) == 3 and graph['definitions']['subgraphs']
+              assert not any(item in text for item in ('ComfyUI-Shared', 'C:\\\\Users', 'ellio', 'pound_euro_original', 'zuraAudioPreview', 'zuraDialoguePreview', 'base64,'))
           for asset in ('qwen_voice_design.py', 'setup_voice_design.py', 'VOICE_DESIGN.md',
                         'Setup_Voice_Design_Windows.cmd', 'voice_design_runtime/qwen_voice_worker.py',
                         'voice_design_runtime/requirements.txt'):
@@ -153,6 +163,8 @@ jobs:
         run: npm install --prefix "$GITHUB_WORKSPACE/../ui-check" --ignore-scripts --no-audit --no-fund linkedom@0.18.13
       - name: Run regression checks
         run: |
+          python -m unittest discover -s tests -p 'test_audio_dialogue.py'
+          python -m unittest discover -s tests -p 'test_dialogue_edit.py'
           python -m compileall -q __init__.py klein_look.py multicam_v3.py multicam_v4_clean.py h3_single_angle.py idv2v_control.py
           python -m unittest discover -s tests -p 'test_v2_*.py'
           python -m unittest discover -s tests -p 'test_media_source_boundaries.py'
