@@ -76,9 +76,9 @@ server routes are separate, so both can stay installed.
 ## Local speech (v1.1.0)
 
 **Zura LongCat Voice** adds local LongCat-AudioDiT 3.5B voice cloning and text-to-speech.
-Open `workflows/Zura_LongCat_Voice_Clone.json`: **Load Audio -> Zura LongCat Voice -> Preview Audio**.
+Open `workflows/Audio - Clone a Voice (LongCat).json`: **Load Audio -> Zura LongCat Voice -> Preview Audio**.
 Supply one authorised speaker recording, its exact transcript, and the new script.
-The separate `Zura_LongCat_Text_to_Speech.json` needs no reference recording.
+The separate `Audio - Text to Speech (LongCat).json` needs no reference recording.
 
 Pace and seed are the artist controls. Every run saves a 24-bit WAV, float master,
 script, settings and individual long-script chunks under `output/zura_voice`.
@@ -96,14 +96,18 @@ Both designed-TTS routes are included. Choose by the result, not a forced model 
 
 | Workflow | Use |
 | --- | --- |
-| [Qwen Direct](workflows/Zura_Voice_Design_Qwen_Direct.json) | Describe a voice and its delivery, enter a script; Qwen makes the finished speech. |
-| [Qwen to LongCat](workflows/Zura_Voice_Design_Qwen_to_LongCat.json) | Design a short reference with Qwen, then have LongCat speak a different final script. |
-| [LongCat Voice Clone](workflows/Zura_LongCat_Voice_Clone.json) | Reuse an approved real or designed voice recording with its exact transcript. |
+| [Qwen Direct](<workflows/Audio - Design a Voice (Qwen).json>) | Describe a voice and its delivery, enter a script; Qwen makes the finished speech. |
+| [Qwen to LongCat](<workflows/Audio - Design a Voice (Qwen to LongCat).json>) | Design a short reference with Qwen, then have LongCat speak a different final script. |
+| [LongCat Voice Clone](<workflows/Audio - Clone a Voice (LongCat).json>) | Reuse an approved real or designed voice recording with its exact transcript. |
 
 Run `Setup_Voice_Design_Windows.cmd` once for Qwen, and `Setup_LongCat_Windows.cmd`
 for the LongCat routes. Environments are isolated; generation uses local weights
 without hosted speech requests. No voice recordings or weights are in this repository.
 See [VOICE_DESIGN.md](VOICE_DESIGN.md) for the team guide, reference reuse and limits.
+
+## Template catalogue
+
+Open **Browse Templates > Zura Nodes**. Names begin with Audio, Video, Image, Utility or Reference. Start with **Audio - Replace Speech (LongCat)** or **Video - Replace Speech (LTX INT8)** for dialogue edits. See [all templates and setup requirements](TEMPLATES.md). Audition copies and the experimental AnyAngle graph are excluded from the public catalogue.
 
 ## Nodes
 
@@ -126,7 +130,7 @@ See [VOICE_DESIGN.md](VOICE_DESIGN.md) for the team guide, reference reuse and l
 | **Clean relight · multicam V4** | Optional Klein start-frame relight and Wan IDV2V motion-guided render, passing through the original source audio. When Look is off, it returns the H3 result without loading the image/video models. |
 | **Zura · Match Mouth Motion** and **Zura · Person Motion Control** | Pre-generation control helpers for the V4 relight path. They are not a post-render performer composite. |
 
-Start with [the simple single-camera example](workflows/Zura_H3_Single_Camera.json)
+Start with [the simple single-camera example](<workflows/Video - Change Camera (H3).json>)
 to change the camera on a short performance. It uses the same local Qwen Edit
 2511 four-step camera previews and H3 CrossView-Warp path as the advanced
 multicam workflow. The source loads once, is decoded at 24 fps, and supplies
@@ -142,33 +146,9 @@ caches its camera stills, so the render pass reuses them. There is no Gaussian
 reconstruction or Qwen Image 2.1 stage in this example. **Delivery shape and size**
 crops/resizes the finished frames; it does not change the H3 generation resolution.
 
-[The AnyAngle single-camera example](workflows/Zura_H3_AnyAngle_Single_Camera.json)
-is a separate experimental option for manual 3D camera positioning. Load a video,
-open **AnyAngle Studio**, read the
-upstream frame, reconstruct it, rotate the camera and apply that view. Then
-run the graph. The Gaussian-splat preview is a camera-position guide;
-Qwen Image Edit makes the actual target still, and H3 renders the original
-performance from that view. The workflow loads the source video only once.
-AnyAngle Studio and its reconstruction weights are a separate third-party
-installation; see the [upstream instructions](https://github.com/T8mars/Comfyui-Qwen-Image-2.1-MultiAngle-T8).
-The package does not install or download those weights automatically.
+The experimental AnyAngle example is no longer bundled in the public templates. Existing saved graphs and node classes remain supported.
 
-Zura adds an English interface to the installed **T8 AnyAngle Studio v1.5.7**
-editor. Its launch button reminds you when no camera has been applied. In Studio,
-choose **Read connected image → Reconstruct 3D**, adjust the camera, then click
-**Apply to node** before running the workflow. Closing Studio without applying
-does not save the new camera. This is a presentation layer, not a bundled fork:
-T8 remains a separate dependency, and prompts, saved names, model paths and
-camera snapshots are left unchanged. Unrecognised diagnostics from newer T8
-versions remain in their original language rather than being guessed at.
-
-After updating, refresh ComfyUI and reopen the corrected example. Version 1.2.2
-fixes an obsolete seed-control field that could load `fixed` into H3's `steps`.
-Intact older saves migrate automatically. If a graph was saved after its prompt
-was truncated by that mismatch, reopen the corrected example or restore the
-original prompt and numeric steps; the missing text cannot be recovered.
-
-For several cuts, use [the advanced multicam example](workflows/Zura_H3_Multicam_Advanced.json).
+For several cuts, use [the advanced multicam example](<workflows/Video - Multicam (H3 Advanced).json>).
 Choose angles and timing in the planning section before enabling the H3
 render. Its stage subgraphs keep model setup apart from artist controls.
 The examples use `example_performance.mp4` as a placeholder; select your own
@@ -193,7 +173,7 @@ input from any LoadImage node.
 
 ## Example workflow
 
-`workflows/Zura_Wan_2.2_Character_Replacement_Workflow.json` is the example
+`workflows/Video - Replace a Character (Wan 2.2).json` is the example
 graph titled **Zura Wan 2.2 Character Replacement Workflow (Face, Head, Body or
 Full Character Replacement)**, showing all four nodes wired
 together, including driving-clip, mask-check and raw-mask preview nodes. The
@@ -363,7 +343,7 @@ separately and retain their own licences.
 
 ## Additional workflow
 
-`workflows/Zura_Gemma_4_Prompt_Enhancer.json` is a compact Gemma 4 prompt
+`workflows/Utility - Improve a Prompt (Gemma 4).json` is a compact Gemma 4 prompt
 enhancement workflow for everyday use. Its optional image input is the
 placeholder `example_reference.png`; no reference image is included in the
 node pack. It expects the matching Gemma model and the ComfyUI installation
@@ -374,11 +354,11 @@ that provides the prompt-enhancer subgraph used by the workflow.
 The pack also includes three reference workflows with their original graph
 layouts preserved:
 
-- `workflows/Zura_SAM3_Text_Prompt_Masking_Roto.json` — SAM 3 text-prompt
+- `workflows/Reference - Mask and Roto (SAM3).json` — SAM 3 text-prompt
   masking and roto preview.
-- `workflows/Zura_MiniMax_H3_Head_Face_Swap.json` — MiniMax H3 head and face
+- `workflows/Reference - Head and Face Swap (H3).json` — MiniMax H3 head and face
   replacement with SAM 3 masking.
-- `workflows/Zura_MiniMax_H3_Ref2Vid_Speedboosts.json` — MiniMax H3 reference
+- `workflows/Reference - Speedboost Comparison (H3).json` — MiniMax H3 reference
   to video with the supplied speed-boost and LoRA branches.
 
 These files contain placeholder media names only. The source images and videos
@@ -388,9 +368,9 @@ inside each graph.
 
 ### Starting images in node view
 
-- [Build a starting frame](workflows/Zura_Build_Starting_Frame.json): source opening image, one appearance reference and an editable prompt.
-- [Build with three references](workflows/Zura_Build_Starting_Frame_3_References.json): three separate native image-conditioning inputs.
-- [Use a finished frame](workflows/Zura_Use_Finished_Starting_Frame.json): load and preview without generation.
+- [Build a starting frame](<workflows/Image - Build a Starting Frame.json>): source opening image, one appearance reference and an editable prompt.
+- [Build with three references](<workflows/Image - Build a Starting Frame (3 References).json>): three separate native image-conditioning inputs.
+- [Use a finished frame](<workflows/Image - Use a Finished Starting Frame.json>): load and preview without generation.
 
 Open the native subgraphs for sampling and model controls. These starting-image
 workflows run without a Studio project. For video, Studio's **Graph view** exports
