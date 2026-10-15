@@ -11,9 +11,9 @@ The templates contain no recordings, personal reference files or generated takes
 
 1. Open **Zura LongCat Word Edit**. In **Select Audio Words**, choose a local audio file.
 2. Click **Transcribe with Parakeet**, or type the original full phrase. Click a word to select it; Shift-click extends the selection. Drag IN and OUT directly on the waveform for precise joins.
-3. In **Full replacement phrase**, type the complete revised sentence, including the unchanged words. Keep pace at 1 to start. Change the seed or press **New take** for another performance, then click ComfyUI **Run**.
+3. In **Full replacement phrase**, type the complete revised sentence, including the unchanged words. Keep pace at 1 to start. **Change seed** changes the seed; it does not start generation. Click ComfyUI **Run** to generate that performance. Keep the current take if you like it.
 4. With Parakeet available, **Auto changed words** finds one continuous changed phrase in the generated take. Listen to the **Replacement take**. Click its words or drag its handles to override the selection; this switches to **Manual IN/OUT**. Run again to blend the revised selection.
-5. **Finished audio** plays the composite. The generated full sentence is retained separately. Edit handles reuse the same LongCat take, including after a ComfyUI restart. Changing phrase, reference, pace or seed generates another take.
+5. **Finished audio** plays the composite. **Download WAV** saves the blended result and appears only after a successful blend. The generated full sentence is retained separately. Edit handles reuse the same LongCat take, including after a ComfyUI restart. Changing phrase, reference, pace or seed generates another take.
 
 The source node's **Speaker reference** section accepts optional extra audio and its exact transcript. Use **Source and extra reference** to add it, or **Extra reference only** to use a cleaner recording instead. Prefer 8–20 seconds of clean speech from one speaker, without music or overlap. Combined references are limited to 25 seconds to leave room for synthesis. Very short references are accepted but can give a weaker match. If you trim the source reference range, fill in its separate trimmed-reference transcript; the original full phrase remains available for word matching.
 

@@ -1,5 +1,12 @@
 # Release notes
 
+## 1.3.16
+
+- Adds a direct Download WAV action for successfully blended audio.
+- Hides original-reference trim controls when only the additional recording is used.
+- Clarifies that changing the take requires Run and shows immediate feedback.
+- Recognises the standard Windows Parakeet runtime when LOCALAPPDATA is absent, with clearer launch errors.
+
 ## 1.3.13
 
 - Adds **Viewport to final** for turning a grey 3D blockout into a finished
