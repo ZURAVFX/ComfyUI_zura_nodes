@@ -1,5 +1,11 @@
 # Release notes
 
+## 1.3.19
+
+- Save the four-stage LongCat editor with manual IN/OUT selection as the default.
+- Clear the example actor dialogue and test cuts from the tracked LTX INT8 template.
+- Both dialogue templates remain available through ComfyUI Browse Templates.
+
 ## 1.3.18
 
 - Fix OUT handles at the end of audio: a half-millisecond rounding tolerance snaps to the final sample.

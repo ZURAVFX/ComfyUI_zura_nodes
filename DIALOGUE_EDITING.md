@@ -15,7 +15,7 @@ The templates contain no recordings, personal reference files or generated takes
 4. Click **Update final audio** in the separate **Final audio** node. It applies both selections and reuses the retained voice take. Listen to the final waveform, where the inserted interval is highlighted, then click **Download WAV**.
 5. Moving either selection or changing the edge blend invalidates the old final preview until you update it. Phrase, reference, pace or seed changes create a new take; selection changes keep the current take, including after a ComfyUI restart.
 
-The older combined editor remains available for existing workflows. The supplied template uses the clearer four-stage layout.
+The older combined editor remains available for existing workflows. The supplied template uses the clearer four-stage layout and starts with Manual IN/OUT selection. Both templates appear in ComfyUI Browse Templates under the ZuraNodes pack.
 
 The source node's **Speaker reference** section accepts optional extra audio and its exact transcript. Use **Source and extra reference** to add it, or **Extra reference only** to use a cleaner recording instead. Prefer 8–20 seconds of clean speech from one speaker, without music or overlap. Combined references are limited to 25 seconds to leave room for synthesis. Very short references are accepted but can give a weaker match. If you trim the source reference range, fill in its separate trimmed-reference transcript; the original full phrase remains available for word matching.
 
