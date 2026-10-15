@@ -24,18 +24,32 @@ class ReleaseTests(unittest.TestCase):
             self.assertTrue((ROOT / name).is_file(), name)
 
     def test_templates_have_registered_node_and_no_voice_data(self):
-        for path in (ROOT / 'workflows').glob('Zura_LongCat_*.json'):
+        paths = list((ROOT / 'workflows').glob('Zura_LongCat_*.json'))
+        self.assertEqual({p.name for p in paths}, {
+            'Zura_LongCat_Text_to_Speech.json', 'Zura_LongCat_Voice_Clone.json',
+            'Zura_LongCat_Word_Edit.json'})
+        for path in paths:
             raw = path.read_text(encoding='utf-8')
             data = json.loads(raw)
-            voice = [n for n in data['nodes'] if n['type'] == 'ZuraLongCatVoice']
+            nested = [node for graph in (data.get('definitions') or {}).get('subgraphs', [])
+                      for node in graph['nodes']]
+            voice = [n for n in data['nodes'] + nested
+                     if n['type'] in ('ZuraLongCatVoice', 'ZuraLongCatDialogueVoice')]
             self.assertEqual(len(voice), 1)
             self.assertEqual(voice[0]['properties']['cnr_id'], 'comfyui-zura-nodes')
-            self.assertEqual(voice[0]['widgets_values_named']['reference_transcript'], '')
+            if voice[0]['type'] == 'ZuraLongCatVoice':
+                self.assertEqual(voice[0]['widgets_values_named']['reference_transcript'], '')
+            else:
+                self.assertEqual(len(data['nodes']), 3)
+                source = next(n for n in data['nodes'] if n['type'] == 'ZuraAudioDialogueSource')
+                for index in (0, 1, 6, 7):
+                    self.assertEqual(source['widgets_values'][index], '')
+                self.assertNotIn('zuraAudioPreview', raw)
+                self.assertNotIn('zuraAudioWords', raw)
             self.assertNotRegex(raw.lower(), r'c:\\\\users\\\\|/users/|/home/|data:audio/|base64,')
             for node in data['nodes']:
                 if node['type'] == 'LoadAudio':
                     self.assertEqual(node['widgets_values_named']['audio'], '')
-        self.assertEqual(len(list((ROOT / 'workflows').glob('Zura_LongCat_*.json'))), 2)
 
     def test_machine_config_is_excluded(self):
         for name in ('.gitignore', '.comfyignore'):
