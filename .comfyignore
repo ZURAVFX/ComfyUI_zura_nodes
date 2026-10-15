@@ -51,7 +51,23 @@ artist_studio/latentsync_vendor/models/*
 !/web/
 !/web/**
 !/workflows/
-!/workflows/**
+/workflows/*
+!/workflows/Audio - Replace Speech (LongCat).json
+!/workflows/Audio - Clone a Voice (LongCat).json
+!/workflows/Audio - Text to Speech (LongCat).json
+!/workflows/Audio - Design a Voice (Qwen).json
+!/workflows/Audio - Design a Voice (Qwen to LongCat).json
+!/workflows/Video - Replace Speech (LTX INT8).json
+!/workflows/Video - Change Camera (H3).json
+!/workflows/Video - Multicam (H3 Advanced).json
+!/workflows/Video - Replace a Character (Wan 2.2).json
+!/workflows/Image - Build a Starting Frame.json
+!/workflows/Image - Build a Starting Frame (3 References).json
+!/workflows/Image - Use a Finished Starting Frame.json
+!/workflows/Utility - Improve a Prompt (Gemma 4).json
+!/workflows/Reference - Mask and Roto (SAM3).json
+!/workflows/Reference - Head and Face Swap (H3).json
+!/workflows/Reference - Speedboost Comparison (H3).json
 
 # LongCat machine configuration is never distributed.
 longcat.local.json*

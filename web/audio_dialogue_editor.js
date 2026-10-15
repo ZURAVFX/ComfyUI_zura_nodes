@@ -4,6 +4,15 @@ import {waveform,embeddedWidget} from './dialogue_editor.js';
 
 const field=(n,k)=>n.widgets?.find(w=>w.name===k);
 const get=(n,k)=>field(n,k)?.value;
+// Nodes are configured before they are attached to their parent graph.
+// Read the parent link explicitly: getInputNode can resolve through an
+// uninitialised native subgraph while a clean template is loading.
+function connectedInput(n,name){
+ const graph=n?.graph,input=n?.inputs?.find(i=>i.name===name);
+ if(!graph||input?.link==null)return null;
+ const links=graph.links,link=links?.get?.(input.link)||links?.[input.link];
+ return link?graph.getNodeById?.(link.origin_id)||null:null;
+}
 function pending(n){
  const graph=app.rootGraph||n.graph;
  for(const target of graph?._nodes||[]){if(target.comfyClass==='ZuraAudioDialogueOutput'){target.properties.zuraAudioPending=true;target._audioRefresh?.();}}
@@ -97,7 +106,7 @@ function mount(n){
     const preview=n._audioPreview||n.properties.zuraAudioPreview;
     const originalPanel=el('section',{ariaLabel:'Original section'});root.append(originalPanel);originalPanel.append(el('h4',{},'1. Original - remove this section'));
     let sourcePreview=preview;
-    if(!sourcePreview){let upstream=n.getInputNode?.(n.inputs.findIndex(i=>i.name==='edit'));if(upstream?.subgraph)upstream=upstream.getInputNode?.(upstream.inputs.findIndex(i=>i.name==='edit'));
+    if(!sourcePreview){let upstream=connectedInput(n,'edit');if(upstream?.subgraph)upstream=connectedInput(upstream,'edit');
      if(upstream?.comfyClass==='ZuraAudioDialogueSource'&&get(upstream,'source')){const originalInfo=await post('info',{source:get(upstream,'source')});if(mine!==revision)return;sourcePreview={source:get(upstream,'source'),source_duration:originalInfo.duration,source_peaks:originalInfo.peaks,source_words:upstream.properties.zuraAudioWords||[],source_selection:[get(upstream,'word_start'),get(upstream,'word_end')]};}}
     const originalDispose=sourcePreview?timeline(originalPanel,{file:sourcePreview.source,duration:sourcePreview.source_duration,peaks:sourcePreview.source_peaks},n,true,status,sourcePreview.source_words||[],{keys:['original_start','original_end'],fallback:sourcePreview.source_selection,prefix:'Original selection'}):()=>{};dispose=originalDispose;
     if(!sourcePreview)originalPanel.append(el('p',{},'Choose original audio in the first node.'));
@@ -137,6 +146,7 @@ function mount(n){
  };
  const configured=n.onConfigure;n.onConfigure=function(data){configured?.call(this,data);queueMicrotask(()=>{const p=n.properties.zuraAudioPreview;n._audioHydrating=true;if(!source&&get(n,'selection_mode')==='Auto changed words'&&p?.selection){set(n,'generated_start',p.selection[0]);set(n,'generated_end',p.selection[1]);}n._audioHydrating=false;n._audioRefresh();});};
  const executed=n.onExecuted;n.onExecuted=function(message){executed?.call(this,message);const p=message?.zura_audio_dialogue?.[0];if(p){if(output)n.properties.zuraAudioPending=false;n._audioPreview=p;n.properties.zuraAudioPreview=p;if(get(n,'selection_mode')==='Auto changed words'&&p.selection){set(n,'generated_start',p.selection[0]);set(n,'generated_end',p.selection[1]);}n._audioRefresh();}};
+ const added=n.onAdded;n.onAdded=function(...args){added?.apply(this,args);queueMicrotask(()=>n._audioRefresh());};
  const removed=n.onRemoved;n.onRemoved=function(){dispose();removed?.call(this);};queueMicrotask(()=>n._audioRefresh());
 }
 

@@ -95,7 +95,7 @@ Path(tokenizer,'zura_source_revision.txt').write_text(tokenizer_revision)
         if target.exists():
             shutil.copy2(target, target.with_name(target.name + ".backup-" + str(time.time_ns())))
         target.write_text(json.dumps(config, indent=2), encoding="utf-8")
-    print(f"Ready. Machine settings: {target}\nRestart ComfyUI and open Zura_LongCat_Voice_Clone.json.")
+    print(f"Ready. Machine settings: {target}\nRestart ComfyUI and open Audio - Clone a Voice (LongCat).json.")
 
 
 if __name__ == "__main__":

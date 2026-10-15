@@ -15,7 +15,7 @@ ROOT = Path(__file__).resolve().parents[1]
 SPEC = importlib.util.spec_from_file_location('voice_design_setup_test', ROOT/'setup_voice_design.py')
 SETUP = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(SETUP)
-WORKFLOWS = ('Zura_Voice_Design_Qwen_Direct.json', 'Zura_Voice_Design_Qwen_to_LongCat.json')
+WORKFLOWS = ('Audio - Design a Voice (Qwen).json', 'Audio - Design a Voice (Qwen to LongCat).json')
 
 
 class ReleaseTests(unittest.TestCase):

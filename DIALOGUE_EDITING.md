@@ -2,8 +2,8 @@
 
 Two separate native ComfyUI workflows keep the editing controls inside the nodes:
 
-* `workflows/Zura_LongCat_Word_Edit.json`: audio only, using local LongCat voice cloning.
-* `workflows/Zura_Single_Word_Dub.json`: video and sound, using a tracked face crop and LTX Dub-It.
+* `workflows/Audio - Replace Speech (LongCat).json`: audio only, using local LongCat voice cloning.
+* `workflows/Video - Replace Speech (LTX INT8).json`: video and sound, using a tracked face crop and LTX Dub-It.
 
 The templates contain no recordings, personal reference files or generated takes. Use a current ComfyUI frontend with native subgraphs. Restart ComfyUI and refresh the browser after updating the pack.
 

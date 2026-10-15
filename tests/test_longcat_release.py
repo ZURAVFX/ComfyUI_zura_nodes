@@ -24,10 +24,10 @@ class ReleaseTests(unittest.TestCase):
             self.assertTrue((ROOT / name).is_file(), name)
 
     def test_templates_have_registered_node_and_no_voice_data(self):
-        paths = list((ROOT / 'workflows').glob('Zura_LongCat_*.json'))
+        paths = list((ROOT / 'workflows').glob('Audio - * (LongCat).json'))
         self.assertEqual({p.name for p in paths}, {
-            'Zura_LongCat_Text_to_Speech.json', 'Zura_LongCat_Voice_Clone.json',
-            'Zura_LongCat_Word_Edit.json'})
+            'Audio - Text to Speech (LongCat).json', 'Audio - Clone a Voice (LongCat).json',
+            'Audio - Replace Speech (LongCat).json'})
         for path in paths:
             raw = path.read_text(encoding='utf-8')
             data = json.loads(raw)

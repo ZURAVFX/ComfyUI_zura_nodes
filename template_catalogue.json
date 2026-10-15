@@ -1,0 +1,101 @@
+{
+  "schema": 1,
+  "templates": [
+    {
+      "file": "Audio - Replace Speech (LongCat).json",
+      "category": "Audio",
+      "description": "Select original and replacement waveform sections, then blend the new words into the source.",
+      "previous_file": "Zura_LongCat_Word_Edit.json"
+    },
+    {
+      "file": "Audio - Clone a Voice (LongCat).json",
+      "category": "Audio",
+      "description": "Generate speech from an existing voice reference and its exact transcript.",
+      "previous_file": "Zura_LongCat_Voice_Clone.json"
+    },
+    {
+      "file": "Audio - Text to Speech (LongCat).json",
+      "category": "Audio",
+      "description": "Generate speech without a voice reference.",
+      "previous_file": "Zura_LongCat_Text_to_Speech.json"
+    },
+    {
+      "file": "Audio - Design a Voice (Qwen).json",
+      "category": "Audio",
+      "description": "Describe a voice and generate speech directly with Qwen.",
+      "previous_file": "Zura_Voice_Design_Qwen_Direct.json"
+    },
+    {
+      "file": "Audio - Design a Voice (Qwen to LongCat).json",
+      "category": "Audio",
+      "description": "Design a Qwen voice reference, then speak the final script with LongCat.",
+      "previous_file": "Zura_Voice_Design_Qwen_to_LongCat.json"
+    },
+    {
+      "file": "Video - Replace Speech (LTX INT8).json",
+      "category": "Video",
+      "description": "Replace selected speech and mouth movement with the tracked 512 to 1024 face crop.",
+      "previous_file": "Zura_Single_Word_Dub.json"
+    },
+    {
+      "file": "Video - Change Camera (H3).json",
+      "category": "Video",
+      "description": "Plan one camera angle for a short performance, then render with the original audio.",
+      "previous_file": "Zura_H3_Single_Camera.json"
+    },
+    {
+      "file": "Video - Multicam (H3 Advanced).json",
+      "category": "Video",
+      "description": "Plan several camera intervals and render the selected cuts.",
+      "previous_file": "Zura_H3_Multicam_Advanced.json"
+    },
+    {
+      "file": "Video - Replace a Character (Wan 2.2).json",
+      "category": "Video",
+      "description": "Select the performer and replacement scope, then render in bounded chunks.",
+      "previous_file": "Zura_Wan_2.2_Character_Replacement_Workflow.json"
+    },
+    {
+      "file": "Image - Build a Starting Frame.json",
+      "category": "Image",
+      "description": "Build an opening image with one appearance reference.",
+      "previous_file": "Zura_Build_Starting_Frame.json"
+    },
+    {
+      "file": "Image - Build a Starting Frame (3 References).json",
+      "category": "Image",
+      "description": "Build an opening image with three appearance references.",
+      "previous_file": "Zura_Build_Starting_Frame_3_References.json"
+    },
+    {
+      "file": "Image - Use a Finished Starting Frame.json",
+      "category": "Image",
+      "description": "Load a finished opening image without generating a new one.",
+      "previous_file": "Zura_Use_Finished_Starting_Frame.json"
+    },
+    {
+      "file": "Utility - Improve a Prompt (Gemma 4).json",
+      "category": "Utility",
+      "description": "Expand a prompt, optionally guided by an image.",
+      "previous_file": "Zura_Gemma_4_Prompt_Enhancer.json"
+    },
+    {
+      "file": "Reference - Mask and Roto (SAM3).json",
+      "category": "Reference",
+      "description": "Imported reference graph for text-prompt masking and roto.",
+      "previous_file": "Zura_SAM3_Text_Prompt_Masking_Roto.json"
+    },
+    {
+      "file": "Reference - Head and Face Swap (H3).json",
+      "category": "Reference",
+      "description": "Imported reference graph for H3 replacement with SAM3 masking.",
+      "previous_file": "Zura_MiniMax_H3_Head_Face_Swap.json"
+    },
+    {
+      "file": "Reference - Speedboost Comparison (H3).json",
+      "category": "Reference",
+      "description": "Imported reference graph comparing H3 acceleration and LoRA branches.",
+      "previous_file": "Zura_MiniMax_H3_Ref2Vid_Speedboosts.json"
+    }
+  ]
+}

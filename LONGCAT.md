@@ -4,7 +4,7 @@ Local LongCat-AudioDiT 3.5B voice cloning and text-to-speech, available in Zura 
 
 ## Daily use
 
-Open `workflows/Zura_LongCat_Voice_Clone.json` in ComfyUI:
+Open `workflows/Audio - Clone a Voice (LongCat).json` in ComfyUI:
 
 **Load Audio -> Zura LongCat Voice -> Preview Audio**
 
@@ -20,7 +20,7 @@ The templates contain no personal recording, reference transcript or machine-spe
 
 ## Text-to-speech without a recording
 
-Open `workflows/Zura_LongCat_Text_to_Speech.json`, enter a script and project label, and Run. No reference branch is needed.
+Open `workflows/Audio - Text to Speech (LongCat).json`, enter a script and project label, and Run. No reference branch is needed.
 
 Unconditioned TTS does not promise a stable speaker across scripts or long-script chunks. To keep a consistent voice, generate a short sample, then use that WAV and its actual spoken transcript in the cloning workflow. This is speech synthesis, not speech-to-speech performance transfer, singing or a dialogue engine. The upstream model is documented for English and Chinese.
 
