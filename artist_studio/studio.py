@@ -40,8 +40,8 @@ DEFAULTS = {"engine": "local", "background": "keep", "scope": "person", "prompt"
             "start": 0.0, "duration": 2.0, "size": 512, "performer": -1,
             "margin": 20, "pitch": False, "seed": 42, "render_size": 0, "h3_preset": "preview_quality", "h3_steps": 0, "h3_attention": "native", "remove_text": False,
             "resolution": 1280, "delivery_mode": "native", "quality": "fast", "audio_id": "", "audio_start": 0.0, "length_mode": "custom", "lip_sync": False, "refine_lips": False,
-            "finished_frame_position": "first", "finished_frame_number": 1,
-            "subject_mode": "auto", "workflow_mode": "swap", "edit_area": "mask", "mask_method": "auto", "mask_prompt": "person", "mask_points": []}
+            "finished_frame_position": "first", "finished_frame_number": 1, "h3_viewport_direct": False,
+            "subject_mode": "auto", "preserve_people": False, "workflow_mode": "swap", "edit_area": "mask", "mask_method": "auto", "mask_prompt": "person", "mask_points": []}
 PREP_KEYS = ("start", "duration", "size", "scope", "performer", "margin", "pitch")
 
 
@@ -85,7 +85,7 @@ def clean_config(value):
     for key, options in [("engine", ("local", "h3", "wan", "seedance")), ("background", ("keep", "restyle")),
                          ("quality", ("fast", "detailed")),
                          ("length_mode", ("custom", "original")),
-                         ("workflow_mode", ("motion", "swap", "viewport")),
+                         ("workflow_mode", ("motion", "swap", "viewport", "relight")),
                          ("subject_mode", ("auto", "people", "objects")),
                          ("finished_frame_position", ("first", "last", "frame")),
                          ("mask_method", ("auto", "text", "points")),
@@ -106,8 +106,14 @@ def clean_config(value):
         raise ValueError("Choose a whole frame number starting at 1.")
     if c["engine"] not in ("local", "h3") and c["finished_frame_position"] != "first":
         raise ValueError("Timed finished-frame references are supported by LTX and H3. Select First frame or switch models.")
+    if c["workflow_mode"] == "relight" and c["engine"] != "h3":
+        raise ValueError("Relight currently supports MiniMax H3. Choose H3 for this task.")
+    c["preserve_people"] = bool(c["preserve_people"])
+    if c["preserve_people"] and (c["engine"] != "h3" or c["workflow_mode"] != "motion"):
+        raise ValueError("Keep original people currently supports H3 scene transformation only.")
     c["viewport_render"] = c["workflow_mode"] == "viewport"
-    c["edit_area"] = "mask" if c["workflow_mode"] == "swap" else "scene"
+    c["h3_viewport_direct"] = bool(c["h3_viewport_direct"])
+    c["edit_area"] = "mask" if c["workflow_mode"] == "swap" or c["preserve_people"] else "scene"
     if c["engine"] == "local" and c["edit_area"] == "mask" and c["finished_frame_position"] != "first":
         raise ValueError("Timed LTX finished frames currently require a whole-scene task. Masked edits use the first frame.")
     # The visible task choice is the sole source of scene/mask routing.
@@ -125,6 +131,8 @@ def clean_config(value):
         raise ValueError("Choose an uploaded reference audio track.")
     c["lip_sync"] = bool(c["lip_sync"]) and bool(c["audio_id"])
     c["refine_lips"] = bool(c["refine_lips"]) and c["lip_sync"]
+    if c["preserve_people"] and c["lip_sync"]:
+        raise ValueError("Keep original people preserves their facial performance. Turn it off to inject replacement speech.")
     if c["length_mode"] == "original":
         c["start"] = 0.0
     for key, low, high in [("size", 256, 960), ("performer", -1, 63), ("margin", 0, 128), ("seed", 0, 2**53 - 1)]:
@@ -164,6 +172,19 @@ def clean_config(value):
     return c
 
 
+def require_relight_direction(config):
+    """Allow an empty draft UI state, but never submit an undirected relight."""
+    if config.get("workflow_mode") == "relight" and not (config.get("image_prompt") or config.get("prompt")):
+        raise ValueError("Describe the lighting you want for this shot.")
+
+
+def h3_viewport_direct(project):
+    """Use reviewed source motion and appearance images without inventing an opening."""
+    c = project.get("config") or {}
+    return (c.get("workflow_mode") == "viewport" and c.get("engine") == "h3"
+            and bool(c.get("h3_viewport_direct")) and project.get("look_mode") != "ready")
+
+
 def _viewport_project(project):
     """Expose the single shared viewport flag and ordered reference roles to model builders."""
     result = copy.copy(project)
@@ -178,7 +199,7 @@ def _viewport_project(project):
     references = list(project.get("references", []))
     # Generated looks become a native first-frame guide only in this graph
     # snapshot. Preserve the artist's saved Build from references choice.
-    if (viewport and config.get("engine") == "h3" and project.get("look_mode") != "ready"
+    if (viewport and config.get("engine") == "h3" and not h3_viewport_direct(project) and project.get("look_mode") != "ready"
             and project.get("opening_input") and project.get("opening_key")
             and project.get("opening_approval") == project.get("opening_key")):
         result["look_mode"] = "ready"
@@ -206,14 +227,24 @@ def h3_generation_resolution(config):
     return int(config.get("resolution", config.get("size", 512)))
 
 
-def h3_render_rasters(project, long_edge):
-    """Mirror the reviewed-shot loader's diffusion canvas and encoded raster."""
+def h3_render_rasters(project, long_edge, *, delivery=False):
+    """Mirror the selected route's actual model canvas and encoded raster."""
     import av
     source = check_asset(project["source"])
     with av.open(str(source)) as container:
         stream = container.streams.video[0]
         width, height = int(stream.width), int(stream.height)
-    from .enhancement import h3_dimensions
+    from .enhancement import h3_dimensions, target_dimensions
+    c = project.get("config") or {}
+    if c.get("workflow_mode") == "viewport" or project.get("viewport_render"):
+        if delivery:
+            output = target_dimensions(width, height, long_edge)
+            return {"width": output[0], "height": output[1]}, {"width": output[0], "height": output[1]}
+        # GenjSelectClip preserves undersized sources; the viewport adapter
+        # replicates borders to a 32-pixel canvas and crops them after decode.
+        scale = min(1.0, long_edge / max(width, height))
+        w, h = max(2, round(width * scale / 2) * 2), max(2, round(height * scale / 2) * 2)
+        return {"width": ((w + 31) // 32) * 32, "height": ((h + 31) // 32) * 32}, {"width": w, "height": h}
     model, output = h3_dimensions(width, height, long_edge)
     return {"width": model[0], "height": model[1]}, {"width": output[0], "height": output[1]}
 
@@ -295,19 +326,26 @@ def prep_key(project):
     if project["config"].get("length_mode") == "original":
         settings["length_mode"] = "original"
     c = project["config"]
+    if c.get("workflow_mode") == "relight" and not c.get("remove_text"):
+        settings["relight_text_protection"] = 1
     # Bind new reviews to the cut-aware native tracking recipe. Remembered
     # inactive click/text controls still cannot alter a scene selection.
-    if c.get("edit_area", "mask") != "scene" and c.get("mask_method", "auto") in ("auto", "text"):
+    if c.get("preserve_people"):
+        # Inactive performer/click controls do not change the all-person protection mask.
+        settings.update(preserve_people=True, tracking_recipe=2, person_boundary_recipe=1)
+        for key in ("scope", "performer", "margin"):
+            settings.pop(key)
+    if c.get("edit_area", "mask") != "scene" and (c.get("preserve_people") or c.get("mask_method", "auto") in ("auto", "text")):
         settings["tracking_recipe"] = 2
     if c.get("edit_area", "mask") == "scene":
         settings["edit_area"] = "scene"
         for key in ("scope", "performer", "margin"):
             settings.pop(key)
-    elif c.get("mask_method", "auto") == "text":
+    elif not c.get("preserve_people") and c.get("mask_method", "auto") == "text":
         settings.update(mask_method="text", mask_prompt=c.get("mask_prompt", ""))
         for key in ("scope", "performer"):
             settings.pop(key)
-    elif c.get("mask_method", "auto") == "points":
+    elif not c.get("preserve_people") and c.get("mask_method", "auto") == "points":
         settings.update(mask_method="points", mask_points=c.get("mask_points", []))
         for key in ("scope", "performer"):
             settings.pop(key)
@@ -455,6 +493,9 @@ def ltx25_phase_graph(project, phase):
 
 def build_graph(project, stage, use_cache=True, run_id=None):
     """Fill known native node inputs; no new subgraph interfaces are fabricated."""
+    require_relight_direction(project.get("config", {}))
+    if project.get("config", {}).get("workflow_mode") == "relight" and project["config"].get("engine") != "h3":
+        raise ValueError("Relight currently supports MiniMax H3. Choose H3 for this task.")
     if stage.startswith("ltx25_") and stage != "ltx25_cleanup":
         return ltx25_phase_graph(project, stage.removeprefix("ltx25_"))
     if stage == "ltx25_cleanup":
@@ -472,6 +513,8 @@ def build_graph(project, stage, use_cache=True, run_id=None):
     if stage == "h3":
         from .h3 import build_h3_graph
         return build_h3_graph(_viewport_project(project), use_cache=use_cache)
+    if stage == "design" and h3_viewport_direct(project):
+        raise ValueError("Choose Build starting frame to generate an opening, or generate video using references directly.")
     if stage == "h3_enhance":
         from .enhancement import build_graph as enhancement_graph
         return enhancement_graph(project, project.get("h3_enhancement_base"), run_id=run_id)
@@ -479,6 +522,10 @@ def build_graph(project, stage, use_cache=True, run_id=None):
         from .wan import build_wan_graph
         return build_wan_graph(_viewport_project(project), use_cache=use_cache)
     if stage == "design" and project.get("look_mode") == "ready":
+        if project.get("config", {}).get("workflow_mode") == "relight":
+            raise ValueError("Relight requires Build from references to create and review a lighting frame from your prompt.")
+        if project.get("config", {}).get("preserve_people"):
+            raise ValueError("Keep original people currently requires Build from references so the opening can be registered to the protected source.")
         assert_approved(project)
         asset = project.get("starting_asset")
         if not asset:
@@ -492,7 +539,10 @@ def build_graph(project, stage, use_cache=True, run_id=None):
     c = project["config"]
     if stage != "prepare":
         assert_approved(project)
-        check_asset(project["character"])
+        if project.get("character"):
+            check_asset(project["character"])
+        elif c.get("workflow_mode") != "relight":
+            raise ValueError("Add an appearance reference image.")
     for node in graph.values():
         typ, inputs = node["class_type"], node["inputs"]
         if typ == "GenjLoadReviewedShot":
@@ -517,13 +567,40 @@ def build_graph(project, stage, use_cache=True, run_id=None):
         graph["9"]["inputs"]["performer"] = c["performer"]
         graph["12"]["inputs"]["expand"] = c["margin"]
         graph["18"]["inputs"]["pitch_vocals"] = c["pitch"]
-        if c["edit_area"] == "scene":
+        if c.get("preserve_people"):
+            # Detect all visible people as a joint protection track, not just the largest performer.
+            # Native SAM defaults to one detection per category. Explicitly
+            # request all visible people before forming the protection union.
+            graph["7"]["inputs"]["text"] = "person:20"
+            graph["8"]["inputs"]["individual_masks"] = False
+            graph["9"]["inputs"]["performer"] = -1
+        elif c["edit_area"] == "scene":
             # One full-frame mask is generated for every real source frame.
-            # No SAM detector/tracker runs when the artist chooses no mask.
+            # Whole-scene edits skip subject tracking. Relight additionally
+            # protects detected lettering unless its removal was requested.
+            relight_text = c.get("workflow_mode") == "relight" and not c.get("remove_text")
+            if relight_text:
+                graph["zura_relight_sam"] = graph.pop("6")
+                graph["zura_relight_sam"]["_meta"] = {"title": "Detect source lettering to keep"}
             for key in ("6", "7", "8", "9", "10", "11"):
-                graph.pop(key)
+                graph.pop(key, None)
             graph["12"] = {"class_type": "ZuraWholeSceneMask", "inputs": {"images": ["4", 0]},
                            "_meta": {"title": "Whole scene · no selection mask"}}
+            if relight_text:
+                graph["zura_relight_text_prompt"] = {"class_type": "CLIPTextEncode", "inputs": {
+                    "clip": ["zura_relight_sam", 1], "text": "text:20"}}
+                graph["zura_relight_text_detect"] = {"class_type": "SAM3_Detect", "inputs": {
+                    "model": ["zura_relight_sam", 0], "image": ["4", 0],
+                    "conditioning": ["zura_relight_text_prompt", 0], "threshold": 0.5,
+                    "refine_iterations": 0, "individual_masks": False},
+                    "_meta": {"title": "Find lettering in every source frame"}}
+                graph["zura_relight_text_margin"] = {"class_type": "GrowMask", "inputs": {
+                    "mask": ["zura_relight_text_detect", 0], "expand": 5, "tapered_corners": True}}
+                graph["zura_relight_edit_mask"] = {"class_type": "InvertMask", "inputs": {
+                    "mask": ["zura_relight_text_margin", 0]},
+                    "_meta": {"title": "Relight scene · protect source lettering"}}
+                for target in ("17", "20"):
+                    graph[target]["inputs"]["mask"] = ["zura_relight_edit_mask", 0]
         elif c["mask_method"] == "text":
             if not c["mask_prompt"]:
                 raise ValueError("Describe the area to change before preparing the mask.")
@@ -543,7 +620,7 @@ def build_graph(project, stage, use_cache=True, run_id=None):
             graph["8"]["inputs"].update(positive_coords=["zura_mask_points", 0],
                                             negative_coords=["zura_mask_points", 1], individual_masks=False)
             graph["9"]["inputs"]["performer"] = -1
-        if c["edit_area"] != "scene" and c["mask_method"] in ("auto", "text"):
+        if c["edit_area"] != "scene" and (c.get("preserve_people") or c["mask_method"] in ("auto", "text")):
             # ComfyUI pairs each segment and its first frame through the visible
             # native detector/tracker. The join restores the original timeline.
             graph["zura_split_tracking_shots"] = {"class_type": "ZuraSplitTrackingShots",
@@ -556,7 +633,18 @@ def build_graph(project, stage, use_cache=True, run_id=None):
                 "_meta": {"title": "Rejoin tracked shots · keep every source frame"}}
             graph["12"]["inputs"]["mask"] = ["zura_join_tracking_masks", 0]
             graph["20"]["inputs"]["tracking_coverage"] = ["zura_join_tracking_masks", 1]
-        if c.get("remove_text") and c["edit_area"] != "scene":
+        if c.get("preserve_people"):
+            # Keep the complete tracked silhouette, including soft edge pixels,
+            # without carrying a band of the old surroundings into the new look.
+            # Replacement margin expands an editable subject; it must not expand
+            # protected people when the editable region is their surroundings.
+            graph["12"]["inputs"]["expand"] = 0
+            graph["12"]["_meta"] = {"title": "Original people · exact tracked silhouette"}
+            graph["zura_edit_surroundings"] = {"class_type": "InvertMask", "inputs": {"mask": ["12", 0]},
+                "_meta": {"title": "Change surroundings · protect original people"}}
+            graph["17"]["inputs"]["mask"] = ["zura_edit_surroundings", 0]
+            graph["20"]["inputs"]["mask"] = ["zura_edit_surroundings", 0]
+        if c.get("remove_text") and c["edit_area"] != "scene" and not c.get("preserve_people"):
             graph["text_prompt"] = {"class_type": "CLIPTextEncode", "inputs": {"clip": ["6", 1], "text": "text:20"}}
             graph["text_detect"] = {"class_type": "SAM3_Detect", "inputs": {
                 "model": ["6", 0], "image": ["4", 0], "conditioning": ["text_prompt", 0],
@@ -570,7 +658,8 @@ def build_graph(project, stage, use_cache=True, run_id=None):
             if "zura_split_tracking_shots" in graph:
                 graph["text_removal"]["inputs"]["tracking_segments"] = ["zura_split_tracking_shots", 2]
     elif stage == "design":
-        graph["121"]["inputs"]["image"] = project["character"]["file"]
+        if project.get("character"):
+            graph["121"]["inputs"]["image"] = project["character"]["file"]
         for key in ("92:111", "92:85"):
             graph[key]["inputs"]["resolution_steps"] = 16
         if c["edit_area"] == "scene":
@@ -610,13 +699,32 @@ def build_graph(project, stage, use_cache=True, run_id=None):
                 "Match the face and hairstyle. Keep the original body, clothing, pose, head angle, expression, "
                 "camera framing, background, objects and lighting unchanged. Return one complete scene. "
                 "Do not add text or extra people.")
+        if c.get("preserve_people"):
+            graph["127"]["inputs"]["value"] = (
+                "Change only the surroundings outside the reviewed protected people, using the references for scene appearance. "
+                "Keep every original person's identity, face, apparent age, expression, hair, clothing, body, pose and position unchanged. "
+                "Do not use a person in an appearance reference as a replacement. Preserve the source camera framing, "
+                "perspective, scene layout and ground contact. Return one complete scene with no extra people.")
+        if c.get("workflow_mode") == "relight":
+            graph["127"]["inputs"]["value"] = (
+                "Relight the first image only. Keep every person\'s identity, apparent age, face, expression, "
+                "clothes, materials, object shapes, scene layout, camera framing and perspective unchanged. "
+                "Change only illumination: light direction, intensity, colour, shadows, highlights and exposure. "
+                "Additional images, if provided, describe lighting only, never replacement characters or objects. "
+                "Return the same scene under the requested lighting, with no new or removed elements.")
         image_direction = c.get("image_prompt") or c["prompt"]
         if image_direction:
             graph["127"]["inputs"]["value"] += " Additional appearance direction: " + image_direction
         if c.get("remove_text"):
             graph["127"]["inputs"]["value"] += " Remove all on-screen captions, subtitles, title banners and lettering. Fill their former areas naturally with the scene or clothing."
         from .appearance import add_design_references
-        add_design_references(graph, (project.get("references") or [project["character"]])[:3], check_asset)
+        references = project.get("references") or ([project["character"]] if project.get("character") else [])
+        if c.get("workflow_mode") == "relight" and not references:
+            # Source composition is already the first ReferenceLatent. Do not
+            # load the video filename through an image loader for the absent second image.
+            graph["92:103"]["inputs"].update(positive=["92:128", 0], negative=["92:126", 0])
+        else:
+            add_design_references(graph, references[:3], check_asset, lighting_only=c.get("workflow_mode") == "relight")
         if c.get("workflow_mode") == "viewport":
             role_names = {"auto": "visual reference", "environment": "environment", "character": "character",
                           "object": "object", "detail": "detail", "style": "style"}
@@ -627,7 +735,7 @@ def build_graph(project, stage, use_cache=True, run_id=None):
             graph["127"]["inputs"]["value"] += (
                 " Map each image to the scene element it depicts: " + role_text +
                 " Preserve distinct characters as distinct designs; do not copy a character sheet into the frame.")
-        if c["edit_area"] == "mask":
+        if c["edit_area"] == "mask" or (c.get("workflow_mode") == "relight" and not c.get("remove_text")):
             # Register the approved opening look to the real source before
             # video inference. Only the selected region may change; this is
             # never a post-generation paste of the original performer.
@@ -659,6 +767,9 @@ def build_graph(project, stage, use_cache=True, run_id=None):
                 "_meta": {"title": "Opening look · change only the reviewed area"}}
             graph["122"]["inputs"]["images"] = ["zura_masked_look", 0]
         graph["122"]["inputs"]["filename_prefix"] = "genj/studio_images/" + project["id"]
+        if c.get("workflow_mode") == "relight" and not references:
+            from .h3 import reachable_graph
+            graph = reachable_graph(graph, ["122"])
     elif stage in ("background", "restyle"):
         if project.get("opening_approval") != project.get("opening_key") or not project.get("opening_input"):
             raise ValueError("Check the character preview and choose Animate this look first.")
@@ -816,17 +927,18 @@ def editable_graph(project, stage="auto"):
     p["config"] = clean_config(p["config"])
     if stage == "auto":
         stage = ("prepare" if not p.get("approval") or p["approval"] != prep_key(p) else
-                 "animate" if p.get("opening_input") and p["config"]["engine"] != "seedance" else
+                 "animate" if (p.get("opening_input") or h3_viewport_direct(p)) and p["config"]["engine"] != "seedance" else
                  "design" if p["config"]["engine"] != "seedance" else "draft")
     if stage == "animate":
         # Opening the animation stage accepts the visible
         # opening for this exported snapshot. The saved Studio state is untouched.
-        if not p.get("opening_input"):
+        if not p.get("opening_input") and not h3_viewport_direct(p):
             raise ValueError("Create the character preview before opening its animation graph.")
-        p["opening_approval"] = p["opening_key"]
+        if not h3_viewport_direct(p):
+            p["opening_approval"] = p["opening_key"]
         stage = (p["config"]["engine"] if p["config"]["engine"] in ("h3", "wan") else
                  "background" if p["config"]["background"] == "keep" else "restyle")
-    if stage == "h3" and p.get("opening_input"):
+    if stage == "h3" and p.get("opening_input") and not h3_viewport_direct(p):
         p["opening_approval"] = p["opening_key"]
     if stage == "wan":
         from .wan_speech import enabled, guide_ready
@@ -1295,7 +1407,7 @@ class Studio:
                                expected_fps=24, expected_audio_tracks=tracks)
         if actual["frames"] > 120:
             raise ValueError("The H3 base render is longer than this Studio route supports.")
-        delivery_raster = h3_render_rasters(p, 1920)[1]
+        delivery_raster = h3_render_rasters(p, 1920, delivery=True)[1]
         p["h3_enhancement_base"] = {
             "asset": copy.deepcopy(asset), "sha256": sha(path),
             "generation_key": generation_key(p), "generation_resolution": action.get("generation_resolution"),
@@ -1596,7 +1708,7 @@ class Studio:
             if any(prior[key] != config[key] for key in ("finished_frame_position", "finished_frame_number")):
                 p["opening_approval"] = None
                 p.pop("ltx25_run", None)
-            if prior["image_prompt"] != config["image_prompt"] or (prior["prompt"] != config["prompt"] and not config["image_prompt"]):
+            if prior["h3_viewport_direct"] != config["h3_viewport_direct"] or prior["workflow_mode"] != config["workflow_mode"] or prior["image_prompt"] != config["image_prompt"] or (prior["prompt"] != config["prompt"] and not config["image_prompt"]):
                 p.update(opening_input=None, opening_key=None, opening_url=None, opening_approval=None)
             p["phase"] = ("opening" if p.get("opening_input") and p["config"]["engine"] in ("local", "h3", "wan")
                           else "approved" if p.get("approval") else "review" if p.get("review") else "new")
@@ -1623,7 +1735,7 @@ class Studio:
             self.store.save(p)
             return p
         if stage == "animate":
-            if not p.get("opening_input"):
+            if not p.get("opening_input") and not h3_viewport_direct(p):
                 raise ValueError("Create the character preview first.")
             stage = (p["config"]["engine"] if p["config"]["engine"] in ("h3", "wan")
                      else "background" if p["config"]["background"] == "keep" else "restyle")
@@ -1650,7 +1762,7 @@ class Studio:
                 if not available["model_ready"]:
                     message += " Run " + available.get("setup_command", SETUP_COMMAND) + " and restart ComfyUI."
                 raise ValueError(message)
-        if approve_opening:
+        if approve_opening and not h3_viewport_direct(p):
             p["opening_approval"] = p["opening_key"]
         auth = {k: body.get(k) for k in ("auth_token_comfy_org", "api_key_comfy_org") if body.get(k)}
         if stage in ("draft", "final") and not auth:
@@ -1750,7 +1862,7 @@ class Studio:
             action["generation_resolution"] = 1280
             action["generation_raster"] = base.get("generation_raster")
             action["base_output_raster"] = base.get("output_raster")
-            action["output_raster"] = h3_render_rasters(p, 1920)[1]
+            action["output_raster"] = h3_render_rasters(p, 1920, delivery=True)[1]
             action["expected_frames"] = base.get("frames")
             action["audio_mode"] = base.get("audio_mode")
             action["label"] = "Enhanced 1080p"
@@ -1991,9 +2103,11 @@ def register():
         if source.get("asset_kind") != "video":
             raise ValueError("Choose a source video.")
         from .appearance import resolve_appearance
-        appearance = resolve_appearance(body, studio.store.load, check_asset)
+        config = clean_config(body.get("config", {}))
+        require_relight_direction(config)
+        appearance = resolve_appearance({**body, "config": config}, studio.store.load, check_asset)
         p = {"id": uuid.uuid4().hex, "kind": "project", "name": source["name"], "source": source,
-             **appearance, "config": clean_config(body.get("config", {})), "phase": "new",
+             **appearance, "config": config, "phase": "new",
              "actions": [], "results": [], "created": time.time()}
         studio.configure(p, p["config"])
         return web.json_response(public_project(p))

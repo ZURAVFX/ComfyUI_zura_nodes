@@ -88,11 +88,19 @@ def cache_key(project):
         stamps[key] = [name, stamp.st_size, stamp.st_mtime_ns]
     c = project["config"]
     generation_resolution = 1280 if c.get("delivery_mode") == "enhanced1080" else c.get("resolution")
-    data = {"version": 6, "motion": "native_depth_control", "review": project["review"], "character": project["character"]["sha"],
+    data = {"version": 6, "motion": "native_depth_control", "review": project["review"], "character": (project.get("character") or {}).get("sha"),
             "opening": project["opening_key"], "settings": {**{k: c.get(k) for k in ("size", "scope", "prompt", "pitch")},
                                                                 "resolution": generation_resolution},
             "audio": (project.get("audio") or {}).get("sha"), "audio_start": c.get("audio_start", 0),
             "lip_sync": c.get("lip_sync", False), "preview": False, "encoders": stamps}
+    if c.get("workflow_mode") == "relight":
+        data["workflow_mode"] = "relight"
+        if not c.get("remove_text"):
+            data["relight_text_protection"] = 1
+    if c.get("preserve_people"):
+        data["preserve_people"] = True
+    if c.get("workflow_mode") == "relight" or c.get("preserve_people"):
+        data["source_reference_grid"] = 1
     if project.get("look_mode") == "ready" and project.get("starting_asset"):
         position = c.get("finished_frame_position", "first")
         # The first-frame cache already represents the same approved opening.
@@ -404,7 +412,10 @@ class GenjH3ViewportFrameData:
         padded = F.pad(images.permute(0, 3, 1, 2),
                        (left, target_width - width - left, top, target_height - height - top),
                        mode="replicate").permute(0, 2, 3, 1)
-        return (padded, target_width, target_height, valid_length(count), count,
+        reference_count = valid_length(count)
+        if reference_count > count:
+            padded = torch.cat((padded, padded[-1:].expand(reference_count - count, -1, -1, -1)))
+        return (padded, target_width, target_height, reference_count, count,
                 left, top, width, height)
 
 
@@ -420,7 +431,7 @@ H3_VIEWPORT_ROLES = {
 
 def build_h3_viewport_graph(project):
     """Build a local reference-to-video graph for a complete viewport scene."""
-    from .studio import assert_approved, check_asset
+    from .studio import assert_approved, check_asset, h3_generation_resolution
 
     if not project.get("viewport_render"):
         raise ValueError("Choose Viewport render mode before starting this H3 route.")
@@ -428,6 +439,8 @@ def build_h3_viewport_graph(project):
     c = project["config"]
     if c["engine"] != "h3":
         raise ValueError("Choose MiniMax H3 before starting a viewport render.")
+    if c.get("refine_lips"):
+        raise ValueError("Optional lip refinement is not available for viewport renders. Use H3's native audio guidance instead.")
     source = project.get("source")
     if not source:
         raise ValueError("Upload the viewport blockout video first.")
@@ -501,6 +514,10 @@ def build_h3_viewport_graph(project):
                    "use the viewport video to guide motion and camera movement between frames.")
     if c.get("remove_text"):
         prompt += " Remove all on-screen text, subtitles, labels and interface overlays. Rebuild their former areas as part of the finished scene."
+    if project.get("audio"):
+        prompt += (" <Audio 1> is the selected replacement speech. Synchronize visible speaking characters' mouth movements and facial performance to its words and timing."
+                   if c.get("lip_sync") else
+                   " <Audio 1> is the selected music or sound-design track. Keep the source visual performance and do not invent dialogue or talking mouth movements.")
 
     graph = {}
 
@@ -509,11 +526,20 @@ def build_h3_viewport_graph(project):
         return [identity, 0]
 
     source_video = node("h3_viewport_source", "LoadVideo", file=source["file"])
+    audio_inputs = {}
+    if project.get("audio"):
+        check_asset(project["audio"])
+        audio_inputs = {"audio": node("h3_viewport_audio", "LoadAudio", audio=project["audio"]["file"]),
+                        "audio_start_seconds": c.get("audio_start", 0.0)}
     selected = node("h3_viewport_clip", "GenjSelectClip", video=source_video,
                     start_seconds=c["start"], duration_seconds=c["duration"],
-                    long_edge=c.get("resolution", c["size"]),
-                    use_original_length=original_length)
+                    long_edge=h3_generation_resolution(c),
+                    use_original_length=original_length, **audio_inputs)
     node("h3_viewport_data", "GenjH3ViewportFrameData", video=selected)
+    selected_audio = None
+    if audio_inputs:
+        node("h3_viewport_components", "GetVideoComponents", video=selected)
+        selected_audio = ["h3_viewport_components", 1]
     image_refs = {}
     for index, reference in enumerate(references):
         image_refs[f"ref_images.ref_image_{index}"] = node(
@@ -535,12 +561,18 @@ def build_h3_viewport_graph(project):
     positive = node("h3_references", "MiniMaxH3ReferenceToVideo", clip=clip, vae=vae,
                     audio_vae=audio_vae, prompt=prompt, width=width, height=height,
                     length=length, ref_image_size="match", **image_refs,
+                    **({"ref_audios.ref_audio_0": selected_audio} if selected_audio else {}),
                     **{"ref_videos.ref_video_0": ["h3_viewport_data", 0]})
     latent = ["h3_references", 1]
     if finished_frame_index is not None:
         positive = node("h3_finished_frame", "MiniMaxH3AddGuide", positive=positive, latent=latent,
                         vae=vae, image=[f"h3_viewport_image_{finished_reference_index + 1}", 0],
                         frame_idx=finished_frame_index)
+    if selected_audio:
+        positive = node("h3_viewport_speech", "MiniMaxH3AddGuide", positive=positive, latent=latent,
+                        audio_vae=audio_vae, audio=selected_audio, frame_idx=0)
+        latent = node("h3_locked_audio", "ZuraH3LockReferenceAudio", latent=latent,
+                      audio_vae=audio_vae, audio=selected_audio)
     guider = node("h3_guider", "BasicGuider", model=model, conditioning=positive)
     noise = node("h3_noise", "RandomNoise", noise_seed=c["seed"])
     sigmas = node("h3_schedule", "BasicScheduler", model=model, scheduler="simple",
@@ -554,10 +586,13 @@ def build_h3_viewport_graph(project):
     cropped = node("h3_crop", "ImageCrop", image=trimmed,
                    width=["h3_viewport_data", 7], height=["h3_viewport_data", 8],
                    x=["h3_viewport_data", 5], y=["h3_viewport_data", 6])
-    video = node("h3_video", "CreateVideo", images=cropped, fps=24.0)
+    video = node("h3_video", "CreateVideo", images=cropped, fps=24.0,
+                 **({"audio": selected_audio} if selected_audio else {}))
+    enhanced_delivery = c.get("delivery_mode") == "enhanced1080"
     node("h3_export", "GenjRestoreSoundtrack", video=video,
          clip_details=["h3_viewport_clip", 1],
-         take_name="studio_" + project["id"][:8] + "_h3_viewport")
+         take_name="studio_" + project["id"][:8] + ("_h3_base" if enhanced_delivery else "_h3_viewport"),
+         **({"output_subfolder": "studio_intermediate"} if enhanced_delivery else {}))
     return graph
 
 
@@ -677,9 +712,11 @@ class ZuraH3PreserveBackground:
 
     @classmethod
     def INPUT_TYPES(cls):
-        return {"required": {"latent": ("LATENT",), "source_latent": ("LATENT",), "mask": ("MASK",)}}
+        return {"required": {"latent": ("LATENT",), "source_latent": ("LATENT",), "mask": ("MASK",)},
+                "optional": {"protect_unedited_regions": ("BOOLEAN", {"default": False,
+                    "tooltip": "Protect the union of unedited pixels across each VAE chunk. Keep original people or source lettering while changing the surrounding pixels."})}}
 
-    def preserve(self, latent, source_latent, mask):
+    def preserve(self, latent, source_latent, mask, protect_unedited_regions=False):
         from comfy.nested_tensor import NestedTensor
         samples = latent.get("samples")
         if not isinstance(samples, NestedTensor) or len(samples.tensors) != 2:
@@ -693,12 +730,19 @@ class ZuraH3PreserveBackground:
         if mask.shape != (frames,height*16,width*16) or height % 2 or width % 2 or not torch.isfinite(mask).all():
             raise ValueError("The approved mask must match the padded H3 source video.")
         pixel = (mask > .5).float()
-        spatial = F.max_pool2d(pixel[:,None],16,16)[:,0]
-        # Each native VAE chunk spans 17 frames. Its causal history can mix a
-        # moving edge into later tokens, so retain every edit within that chunk.
+        # Ordinary replacement expands the EDIT union to retain brief moving
+        # edges. People or lettering protection needs the opposite guarantee:
+        # any protected pixel locks its entire spatial patch and temporal chunk.
+        # Pool the complement as protection, then invert only after all unions.
+        pool_pixels = 1 - pixel if protect_unedited_regions else pixel
+        spatial = F.max_pool2d(pool_pixels[:,None],16,16)[:,0]
+        # Each native VAE chunk spans 17 frames; causal history can mix edges
+        # into later tokens. Every token in the chunk shares that union.
         temporal = torch.stack([spatial[(k//5)*17:min((k//5+1)*17,frames)].amax(0)
                                 for k in range(tokens)])[None,None]
         patches = F.max_pool3d(temporal,(1,2,2),(1,2,2))
+        if protect_unedited_regions:
+            patches = 1 - patches
         video_mask = patches.repeat_interleave(2,-2).repeat_interleave(2,-1).expand(video.shape)
         previous = latent.get("noise_mask")
         audio_mask = previous.tensors[1] if isinstance(previous,NestedTensor) and len(previous.tensors)==2 else torch.ones_like(audio)
@@ -756,17 +800,31 @@ def build_h3_graph(project, use_cache=True, preserve_background=True):
     if project.get("viewport_render"):
         return build_h3_viewport_graph(project)
     from . import verify_review
-    from .studio import assert_approved, check_asset
+    from .studio import assert_approved, check_asset, require_relight_direction
 
     assert_approved(project)
     c = project["config"]
+    require_relight_direction(c)
     if c["engine"] != "h3":
         raise ValueError("Choose MiniMax H3 before starting an H3 take.")
     if c["background"] != "keep":
         raise ValueError("H3 currently keeps the original background. Choose LTX for scene restyling.")
     if project.get("opening_approval") != project.get("opening_key") or not project.get("opening_input"):
         raise ValueError("Check the character preview and choose Animate this look first.")
-    check_asset(project["character"])
+    if c.get("preserve_people") and project.get("look_mode") == "ready":
+        raise ValueError("Keep original people currently requires Build from references so the opening can be registered to the protected source.")
+    if c.get("preserve_people") and not preserve_background:
+        raise ValueError("Keep original people requires native source preservation during sampling.")
+    relight = c.get("workflow_mode") == "relight"
+    if relight:
+        if project.get("look_mode") == "ready":
+            raise ValueError("Relight requires Build from references to create and review a lighting frame from your prompt.")
+        if c.get("remove_text"):
+            preserve_background = False
+        elif not preserve_background:
+            raise ValueError("Relight with source lettering requires native source preservation during sampling.")
+    else:
+        check_asset(project["character"])
     check_asset(project["opening_input"])
     _, manifest = verify_review(project["review"])
     preset = c["h3_preset"]
@@ -802,6 +860,25 @@ def build_h3_graph(project, use_cache=True, preserve_background=True):
             "<Audio 1> supplies the original performance and speech timing. Follow the source gestures and speech. " +
             ("Preserve the background, objects and lighting outside the selected area. " if c.get("edit_area") != "scene" else "") +
             "Do not reproduce a reference collage or add extra people. " + c["prompt"])
+    if c.get("preserve_people"):
+        prompt = (
+            "<Picture 1> is the approved scene. <Video 1> supplies the original scene, people and performance. "
+            "Change only the surroundings outside the protected people to match the approved scene. "
+            "<Picture 2> provides environment appearance details only; never replace people from a reference image. "
+            "Retain every original person's identity, apparent age, face, hair, clothing, body, changing pose and facial performance. "
+            "The reviewed edit mask excludes the original people. Preserve their source pixels through native latent conditioning. "
+            "Depth control supplies source geometry, layout, camera movement, object positions and ground contact. "
+            "<Audio 1> supplies the original performance and speech timing. Follow the source gestures and speech. " + c["prompt"])
+    if relight:
+        prompt = (
+            "<Picture 1> is the approved relit version of this same source scene. "
+            "<Video 1> is the original scene and performance. Change only lighting to match <Picture 1> "
+            "throughout the complete frame: light direction, intensity, colour, shadows, highlights and exposure. "
+            "Retain the original people and their identities, apparent age, facial details, clothes and materials. "
+            "Retain all objects, geometry, scene layout, camera movement, framing and source body and facial performance. "
+            "The depth control preserves the source geometry and movement. Do not replace, add or remove any subject or object. "
+            "<Audio 1> supplies the original performance and speech timing. Follow the source gestures and speech. "
+            + (c.get("image_prompt") or c["prompt"]))
     if c.get("remove_text"):
         prompt += " Remove all masked title banners, captions and subtitles completely. Fill them with clean background or character clothing. Do not reproduce any on-screen text overlays."
     if project.get("audio") and c.get("lip_sync"):
@@ -863,7 +940,8 @@ def build_h3_graph(project, use_cache=True, preserve_background=True):
                             on_true=["h3_text_background_composite", 0])
         model_mask = ["h3_text_background_mask", 1]
     node("h3_opening", "LoadImage", image=project["opening_input"]["file"])
-    node("h3_character", "LoadImage", image=project["character"]["file"])
+    if not relight:
+        node("h3_character", "LoadImage", image=project["character"]["file"])
     opening = node("h3_opening_size", "ImageScale", image=["h3_opening", 0], upscale_method="lanczos",
                    width=["h3_pad", 3], height=["h3_pad", 4], crop="disabled")
     model = node("h3_model", "UNETLoader", unet_name=H3_MODELS["h3"][1], weight_dtype="default")
@@ -889,11 +967,21 @@ def build_h3_graph(project, use_cache=True, preserve_background=True):
     # A native prompt source keeps the artist control in Your inputs and lets
     # the reference stage receive its inputs in a single ordered hand-off.
     prompt_input = node("h3_prompt", "PrimitiveStringMultiline", value=prompt)
+    reference_inputs = {"ref_images.ref_image_0": opening, "ref_audios.ref_audio_0": ["h3_pad", 2]}
+    if relight or c.get("preserve_people"):
+        # References have their own temporal grid, independent of the trained
+        # 124-frame target context. Keep every real frame, then only enough
+        # repeated tail frames to satisfy the native 17k+5 reference contract.
+        # Passing the real count directly would make the native node floor it
+        # to the preceding grid point and discard the end of the performance.
+        reference_inputs["ref_videos.ref_video_0"] = node(
+            "h3_source_reference", "GetImageRangeFromBatch", images=model_source,
+            start_index=0, num_frames=valid_length(count))
+    if not relight:
+        reference_inputs["ref_images.ref_image_1"] = ["h3_character", 0]
     positive = node("h3_references", "MiniMaxH3ReferenceToVideo", clip=clip, vae=vae, audio_vae=audio_vae,
                     prompt=prompt_input, width=["h3_pad", 3], height=["h3_pad", 4], length=["h3_pad", 5],
-                    ref_image_size="match", **{"ref_images.ref_image_0": opening,
-                    "ref_images.ref_image_1": ["h3_character", 0],
-                    "ref_audios.ref_audio_0": ["h3_pad", 2]})
+                    ref_image_size="match", **reference_inputs)
     latent = ["h3_references", 1]
     if finished_frame_index is not None and finished_frame_index != 0:
         positive = node("h3_finished_frame", "MiniMaxH3AddGuide", positive=positive, latent=latent,
@@ -909,7 +997,8 @@ def build_h3_graph(project, use_cache=True, preserve_background=True):
     if preserve_background:
         source_latent = node("h3_source_latent", "VAEEncode", pixels=model_source, vae=vae)
         latent = node("h3_preserve_background", "ZuraH3PreserveBackground", latent=latent,
-                      source_latent=source_latent, mask=model_mask)
+                      source_latent=source_latent, mask=model_mask,
+                      **({"protect_unedited_regions": True} if c.get("preserve_people") or relight else {}))
     # Keep the actual selected soundtrack fixed in both original-performance
     # and replacement-dialogue modes, including valid silence for silent clips.
     latent = node("h3_locked_audio", "ZuraH3LockReferenceAudio", latent=latent,

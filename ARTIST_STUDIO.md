@@ -10,11 +10,23 @@ Open **Zura Studio** in ComfyUI, choose a workflow, then drop a source video.
 Its thumbnail confirms the upload.
 
 - **Motion transfer** rebuilds the full frame around the source movement.
+  With H3, **Keep original people** edits the surroundings while protecting
+  the people and their original facial performance. Build the look from
+  references; replacement audio can change the soundtrack, but cannot animate
+  the protected mouths.
 - **Object swap** changes a selected person or object and keeps the surrounding
   shot as the guide.
 - **Viewport to final** turns a grey 3D blockout into a finished whole scene.
   H3 is recommended. LTX remains experimental; Wan is available in the other
   editing modes.
+- **Relight** uses H3 to change illumination while retaining the source scene.
+  Describe the lighting; lighting reference images are optional. Review the
+  generated lighting frame before animating. This is generative lighting
+  guidance, so inspect the result for identity, material and temporal changes.
+
+Relight and Keep original people are candidate features awaiting visual render
+qualification. Keep original people also requires the updated Zura node loaded
+after a normal ComfyUI restart. They are not covered by the earlier approvals.
 
 Choose **Starting look**:
 
@@ -40,9 +52,13 @@ Mask. **Start over** clears uploads, settings and stale frontend state and
 returns to Source. It cancels only the current Studio shot when necessary;
 saved shots and their output files stay in your local library.
 
-In **Viewport to final** with MiniMax H3, the video and look references go
-straight to H3, so it skips a separate generated starting frame. Choose
-**Use finished frame** when you want to supply a composed image as well.
+In **Viewport to final** with MiniMax H3, **Use references directly** is the
+recommended starting point. Review the source motion, then generate using
+the blockout video and up to nine look references without an image-generation
+stage. This is the artist-approved blockout route. **Build starting frame**
+lets you generate, review and regenerate a scene image first; check its camera
+carefully before animating. **Use finished frame** accepts your own composed
+image. Saved shots keep their previous choice.
 
 Each viewport route uses its model's own guidance: LTX reads the raw blockout
 with its Layout-to-Render adapter and H3 receives the source as a reference video.
@@ -407,6 +423,13 @@ selection correction. Missing selections are flagged for review rather than
 filled with an invented mask. Point selections retain their original tracking
 path. Text-removal locations are held within each tracked shot, so a title in
 one shot does not select its former location in a later shot.
+
+For different object categories, separate descriptions with commas, for example
+`microphone, chair`. SAM treats each as a separate category; a phrase such as
+`microphone and chair` can select only one. Review both regions before continuing.
+The H3 Keep original people option requests up to 20 people for its joint
+protection mask; detection can still miss small or occluded people, so inspect
+the full selection preview.
 
 These selection changes require a fresh mask review for an older project;
 the saved source, character and previous renders remain available.

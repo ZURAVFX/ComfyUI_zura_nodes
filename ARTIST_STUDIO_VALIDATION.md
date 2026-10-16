@@ -1,5 +1,114 @@
 # Zura Studio validation
 
+## Candidate mode qualification, 16 October 2026
+
+The artist approved the earlier H3 train viewport results. Wan and LTX viewport
+results were rejected for this scene; they are not equivalent approved choices.
+The newer H3 route that generates and approves a starting frame still needs its
+own completed video test. Approval of direct-reference results does not cover it.
+Three matched starting-frame diagnostics failed to preserve the exterior camera:
+stronger prompting, a Klein consistency adapter, and a Klein depth-reference
+adapter all produced interior views. None has become a production default.
+Entering H3 Viewport now recommends the previously approved direct-reference
+path. Artists can still choose to build and approve a starting frame or upload
+a finished frame. Direct mode requires the real source-motion review before
+rendering; it does not fabricate an opening image. A fresh two-second 1280 by
+720 test completed in 168 seconds, but showed an unwanted exterior/interior
+camera jump. Its different seed, prompt, ordered references and reference roles
+do not reproduce the previously approved example. It does not qualify the new
+configuration for camera retention. The original approved source and reference
+hashes have been matched locally for a controlled comparison.
+
+Relight has completed source preparation and local lighting-frame generation.
+The generated still retains the original adult, clothes, microphone and room
+with the requested warm/cool illumination.
+The normal-context diagnostic was deliberately cancelled for excessive runtime;
+it produced no completed video and provides no speedup or quality comparison.
+A shorter native temporal context completed a two-second 720 by 1280 video
+with 48 frames at 24 fps and two seconds of audio, in 240 seconds total
+(155 seconds sampling). Sampled frames retain the person, clothing, room and
+gestures with the requested lighting. The existing title disappears after the
+opening frame despite text removal being off, a known preservation defect.
+Artist review is pending. This shorter context is below H3's documented
+training range and has not changed the approved production defaults. The
+cancelled longer run is not a completed benchmark for a speedup comparison.
+
+Single-object preparation selected the microphone correctly. Its generated
+starting image and completed two-second 720 by 1280 H3 video replace the
+microphone with a white branded design, retaining the speaker, gestures, room
+and captions in the sampled frames. Delivery has 48 frames at 24 fps and two
+seconds of audio; total execution was 324 seconds. This is a successful short
+integration test, not a guarantee for arbitrary objects, occlusion or duration.
+A combined description using “and” missed the second object. The corrected,
+comma-separated native category test selected both microphone and chair across
+the sampled frames; its starting image changes both. The completed two-second
+multi-object video retains both changes, the original person, gestures and
+captions across eight sampled frames. Delivery is 48 frames at 24 fps with
+two seconds of audio; total execution was 323 seconds.
+
+A whole-scene and character replacement also completed a two-second 720 by
+1280 video, with 48 frames at 24 fps and two seconds of audio, in 316 seconds.
+Across eight sampled frames, the adult replacement, clothing and conservatory
+environment remain consistent while following the source gestures. Original
+captions are not retained by this whole-scene generation test.
+
+Keep original people has graph and tensor regression coverage, including
+multi-person detection and protection of moving regions. Its first generated
+still exposed a dark source-background halo around the protected person. The
+preparation now keeps the tight, complete tracked silhouette without adding
+the ordinary replacement margin. Old expanded-mask reviews are invalidated.
+The corrected still has been inspected: the original person is retained in
+the requested train interior without the earlier thick source-background
+halo. Its GPU animation test is queued; a clean still does not qualify the
+moving boundary.
+These candidates are not qualified release modes yet.
+
+After the lettering and silhouette corrections, the complete native CPU
+regression run passed 697 tests in 48 seconds. Including the direct viewport
+route, a subsequent full run passed 702 tests in 41 seconds. The final added
+direct-action guard also passed in the six-test focused viewport suite.
+All 14 Studio JavaScript test files passed. These checks do not establish
+video appearance or replace browser visual inspection. Test recordings,
+reference assets, project records and generated media remain outside the repo.
+All 26 focused scene-only and Relight tests also passed.
+
+## Viewport audio and delivery corrections, 17 October 2026
+
+The direct H3 viewport builder previously ignored replacement audio and
+sampled Enhanced 1080p at a 1920-pixel long edge. It now selects the replacement
+track at the requested audio offset, supplies the selected audio to H3's
+native reference and guide inputs, locks its audio latent, and exports that
+track. Enhanced delivery samples at a 1280-pixel long edge and saves its base
+to the internal enhancement folder. Original-audio conditioning is unchanged.
+Unsupported optional post-generation lip refinement is hidden and rejected
+for viewport renders; native H3 speech guidance remains available.
+
+The complete native CPU regression suite passed 707 tests in 46 seconds after
+these builder corrections. All 14 Studio JavaScript test files passed, with
+a further focused check for the viewport refinement control. These results
+verify wiring and control behaviour, not the visual quality of replacement
+speech on a viewport character. That combination still needs a render test.
+
+The enhancement handoff now accepts an opening-free direct viewport project,
+checks its actual reference assets, and binds all reference hashes and roles
+to the enhancement record. Viewport raster bookkeeping follows its real
+no-upscale selection and 32-pixel padding, including smaller source videos;
+the enhanced final delivery still targets 1080p. Preparation already records
+the selected soundtrack and offset for final restoration. After these fixes,
+the final complete CPU suite passed 711 tests in 47 seconds. The focused
+enhancement tests exercise the actual viewport tensor-padding adapter.
+
+Subsequent source-reference corrections passed 57 focused tests. Relight and
+protected-people H3 now trim only the repeated source-reference tail to the
+next native frame-grid length; a 48-frame source uses 56 reference frames
+while its 124-frame target, control, masks and audio conditioning are unchanged.
+The earlier expensive 124-reference-frame diagnostic was deliberately cancelled;
+the replacement tests are queued, so no measured speed gain is claimed yet.
+The viewport adapter now pads its actual reference images to that native grid
+as well. Previously, native reference encoding could discard the final real
+frames. This adapter correction needs a normal reload and a fresh render;
+the already-running direct-reference test uses the preceding loaded adapter.
+
 ## Timed finished-frame references, 13 October 2026
 
 H3 and whole-scene LTX now accept First, Last or a 1-based output frame number.

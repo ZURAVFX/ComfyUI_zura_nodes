@@ -33,13 +33,18 @@ def generation_key(project):
     config = dict(project["config"])
     values = {
         "source": project["source"]["sha"],
-        "character": project["character"]["sha"],
+        "character": (project.get("character") or {}).get("sha"),
         "review": project.get("review"),
         "prepared_key": project.get("prepared_key"),
         "opening": project.get("opening_key"),
         "audio": (project.get("audio") or {}).get("sha"),
         "config": config,
     }
+    if config.get("workflow_mode") == "viewport" or project.get("viewport_render"):
+        from .studio import _viewport_project
+        values["viewport_references"] = [
+            {"sha": asset.get("sha"), "role": asset.get("role"), "viewport_role": asset.get("viewport_role")}
+            for asset in _viewport_project(project)["viewport_references"]]
     return hashlib.sha256(json.dumps(values, sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest()
 
 
@@ -197,8 +202,17 @@ def build_graph(project, base_record, *, run_id=None):
         raise ValueError("The H3 base render no longer matches this approved shot and settings. Create a new take.")
     assert_approved(project)
     check_asset(project["source"])
-    check_asset(project["character"])
-    check_asset(project["opening_input"])
+    if config.get("workflow_mode") == "viewport" or project.get("viewport_render"):
+        from .studio import _viewport_project
+        references = _viewport_project(project)["viewport_references"]
+        if not 1 <= len(references) <= 9:
+            raise ValueError("H3 viewport enhancement needs the original one to nine appearance references.")
+        for asset in references:
+            check_asset(asset)
+    else:
+        if config.get("workflow_mode") != "relight" or project.get("character"):
+            check_asset(project["character"])
+        check_asset(project["opening_input"])
     base_path = checked_output_path(base_record.get("asset"), expected_subfolder="genj/studio_intermediate")
     if digest_file(base_path) != base_record.get("sha256"):
         raise ValueError("The H3 base render changed after it was prepared. Create a new take.")

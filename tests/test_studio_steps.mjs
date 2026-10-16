@@ -14,6 +14,11 @@ for(const [name,value] of Object.entries({scope:"person",prompt:"",length_mode:"
 for(const name of ["pitch","remove_text","lip_sync","refine_lips"])fields[name]={checked:false};
 const ui=Object.create(proto);ui.config={size:512};ui.$=id=>fields[id];ui.container={querySelector:selector=>({value:selector.includes("gs-workflow")?"viewport":"h3"})};
 assert.equal(ui.readConfig().h3_steps,16);assert.equal(ui.readConfig().finished_frame_number,49);assert.equal(ui.readConfig().finished_frame_position,"frame");
+ui.audio={id:"selected-audio"};fields["audio-mode"].value="reference";
+fields.lip_sync.checked=true;fields.refine_lips.checked=true;
+assert.equal(ui.readConfig().lip_sync,true);
+assert.equal(ui.readConfig().refine_lips,false,"Viewport keeps native speech guidance without offering unsupported post-refinement");
+fields["audio-mode"].value="original";
 fields.finished_frame_position.value="last";
 ui.container={querySelector:selector=>({value:selector.includes("gs-workflow")?"swap":"local"})};
 assert.equal(ui.readConfig().finished_frame_position,"first","Masked LTX switches back to first-frame conditioning");

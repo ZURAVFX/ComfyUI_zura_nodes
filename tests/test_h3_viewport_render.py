@@ -86,7 +86,7 @@ class H3ViewportRenderTests(unittest.TestCase):
     def test_viewport_frame_data_enforces_local_h3_frame_contract(self):
         data = h3.GenjH3ViewportFrameData()
         frames, width, height, length, real, crop_x, crop_y, crop_width, crop_height = data.prepare(Video())
-        self.assertEqual(tuple(frames.shape), (120, 64, 64, 3))
+        self.assertEqual(tuple(frames.shape), (124, 64, 64, 3))
         self.assertEqual((width, height, length, real), (64, 64, 124, 120))
         self.assertEqual((crop_x, crop_y, crop_width, crop_height), (0, 14, 64, 36))
         for options, message in [
@@ -95,6 +95,24 @@ class H3ViewportRenderTests(unittest.TestCase):
         ]:
             with self.subTest(options=options), self.assertRaisesRegex(ValueError, message):
                 data.prepare(Video(**options))
+
+    def test_reference_padding_retains_every_real_frame_and_only_repeats_the_tail(self):
+        for count, expected in ((5, 5), (48, 56), (120, 124)):
+            with self.subTest(count=count):
+                video = Video(count=count, width=32, height=32)
+                source = torch.arange(count, dtype=torch.float32)[:, None, None, None].expand(count, 32, 32, 3)
+                video.components.images = source
+                frames, width, height, length, real, *crop = h3.GenjH3ViewportFrameData().prepare(video)
+                self.assertEqual((len(frames), length, real), (expected, expected, count))
+                self.assertTrue(torch.equal(frames[:count], source))
+                self.assertTrue(torch.equal(frames[count:], source[-1:].expand(expected - count, -1, -1, -1)))
+                self.assertEqual((width, height, *crop), (32, 32, 0, 0, 32, 32))
+                # The installed reference encoder floors to this grid. Padding
+                # prevents it silently dropping the last real source frames.
+                native_count = len(frames)
+                while native_count % 17 != 5:
+                    native_count -= 1
+                self.assertGreaterEqual(native_count, count)
 
     def test_graph_uses_one_source_video_and_ordered_look_reference_roles(self):
         project = self.project()
