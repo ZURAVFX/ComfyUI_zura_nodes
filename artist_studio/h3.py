@@ -96,7 +96,7 @@ def cache_key(project):
     if c.get("workflow_mode") == "relight":
         data["workflow_mode"] = "relight"
         if not c.get("remove_text"):
-            data["relight_text_protection"] = 1
+            data["relight_text_protection"] = 2
     if c.get("preserve_people"):
         data["preserve_people"] = True
     if c.get("workflow_mode") == "relight" or c.get("preserve_people"):
@@ -704,6 +704,9 @@ class ZuraH3PreserveBackground:
 
     Video encoding remains a visible native VAEEncode node. This adapter only
     aligns the reviewed mask with H3's temporal bins and 32-pixel DiT patches.
+    Causal caption timing avoids locking regions before their text appears,
+    but the VAE mixes a whole chunk and can still leave lighting boundaries.
+    Neither timing setting guarantees exact decoded lettering or colours.
     """
 
     CATEGORY = "Zura/Artist Studio"
@@ -714,9 +717,11 @@ class ZuraH3PreserveBackground:
     def INPUT_TYPES(cls):
         return {"required": {"latent": ("LATENT",), "source_latent": ("LATENT",), "mask": ("MASK",)},
                 "optional": {"protect_unedited_regions": ("BOOLEAN", {"default": False,
-                    "tooltip": "Protect the union of unedited pixels across each VAE chunk. Keep original people or source lettering while changing the surrounding pixels."})}}
+                    "tooltip": "Protect the union of unedited pixels across each VAE chunk. Keep original people or source lettering while changing the surrounding pixels."}),
+                             "protection_timing": (["chunk", "causal"], {"default": "chunk",
+                                 "tooltip": "Chunk protects moving subjects conservatively. Causal prevents future captions from locking earlier empty areas; H3 VAE decoding can still mix pixels within a chunk."})}}
 
-    def preserve(self, latent, source_latent, mask, protect_unedited_regions=False):
+    def preserve(self, latent, source_latent, mask, protect_unedited_regions=False, protection_timing="chunk"):
         from comfy.nested_tensor import NestedTensor
         samples = latent.get("samples")
         if not isinstance(samples, NestedTensor) or len(samples.tensors) != 2:
@@ -729,16 +734,28 @@ class ZuraH3PreserveBackground:
         frames = sum((1,4,4,4,4)[k % 5] for k in range(tokens))
         if mask.shape != (frames,height*16,width*16) or height % 2 or width % 2 or not torch.isfinite(mask).all():
             raise ValueError("The approved mask must match the padded H3 source video.")
+        if protection_timing not in ("chunk", "causal"):
+            raise ValueError("Choose chunk or causal protection timing.")
         pixel = (mask > .5).float()
         # Ordinary replacement expands the EDIT union to retain brief moving
         # edges. People or lettering protection needs the opposite guarantee:
-        # any protected pixel locks its entire spatial patch and temporal chunk.
-        # Pool the complement as protection, then invert only after all unions.
+        # any protected pixel locks its entire spatial patch in the selected
+        # temporal context. Pool protection, then invert after all unions.
         pool_pixels = 1 - pixel if protect_unedited_regions else pixel
         spatial = F.max_pool2d(pool_pixels[:,None],16,16)[:,0]
-        # Each native VAE chunk spans 17 frames; causal history can mix edges
-        # into later tokens. Every token in the chunk shares that union.
-        temporal = torch.stack([spatial[(k//5)*17:min((k//5+1)*17,frames)].amax(0)
+        # Each native VAE chunk spans 17 frames. Conservative protection
+        # shares the full union; Relight captions use past context only.
+        def temporal_end(k):
+            start = (k // 5) * 17
+            if protect_unedited_regions and protection_timing == "causal":
+                # Each encoded chunk has frame bins 1,4,4,4,4. Retain past
+                # caption context, without locking empty areas before a caption
+                # exists. The bidirectional VAE decoder can still blend within
+                # its chunk: this is conditioning, not an exact RGB guarantee.
+                return min(start + 1 + 4 * (k % 5), frames)
+            return min(start + 17, frames)
+
+        temporal = torch.stack([spatial[(k//5)*17:temporal_end(k)].amax(0)
                                 for k in range(tokens)])[None,None]
         patches = F.max_pool3d(temporal,(1,2,2),(1,2,2))
         if protect_unedited_regions:
@@ -998,7 +1015,8 @@ def build_h3_graph(project, use_cache=True, preserve_background=True):
         source_latent = node("h3_source_latent", "VAEEncode", pixels=model_source, vae=vae)
         latent = node("h3_preserve_background", "ZuraH3PreserveBackground", latent=latent,
                       source_latent=source_latent, mask=model_mask,
-                      **({"protect_unedited_regions": True} if c.get("preserve_people") or relight else {}))
+                      **({"protect_unedited_regions": True} if c.get("preserve_people") or relight else {}),
+                      **({"protection_timing": "causal"} if relight else {}))
     # Keep the actual selected soundtrack fixed in both original-performance
     # and replacement-dialogue modes, including valid silence for silent clips.
     latent = node("h3_locked_audio", "ZuraH3LockReferenceAudio", latent=latent,

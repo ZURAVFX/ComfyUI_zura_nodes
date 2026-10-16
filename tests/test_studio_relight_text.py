@@ -7,6 +7,8 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
+import torch
+
 import test_studio_relight as relight
 import test_h3_frame_anchors as anchors
 
@@ -59,15 +61,42 @@ class RelightTextTests(unittest.TestCase):
         self.assertEqual(g['zura_masked_look']['inputs']['destination'], ['zura_look_source', 0])
         self.assertEqual(g['zura_look_mask_video']['inputs']['video'], ['123', 1])
 
-    def test_source_lock_reaches_sampler_and_protects_temporal_union(self):
+    def test_source_lock_reaches_sampler_with_causal_caption_protection(self):
         g = anchors.H3FinishedFrameAnchorTests().build_normal(self.project())
         lock = g['h3_preserve_background']['inputs']
         self.assertTrue(lock['protect_unedited_regions'])
+        self.assertEqual(lock['protection_timing'], 'causal')
         self.assertEqual(lock['mask'], ['h3_pad', 1])
         self.assertEqual(g['h3_source_latent']['class_type'], 'VAEEncode')
         self.assertEqual(g['h3_source_latent']['inputs']['pixels'], ['h3_pad', 0])
         self.assertEqual(g['h3_locked_audio']['inputs']['latent'], ['h3_preserve_background', 0])
         self.assertEqual(g['h3_sample']['inputs']['latent_image'], ['h3_locked_audio', 0])
+
+    def test_future_subtitle_does_not_lock_empty_opening_hoodie(self):
+        from comfy.nested_tensor import NestedTensor
+        video = torch.randn(1, 24, 7, 4, 6)
+        audio = torch.randn(1, 32, 2, 36)
+        latent = {'samples': NestedTensor((torch.zeros_like(video), audio))}
+        edit = torch.ones(22, 64, 96)
+        edit[:, 4:8, 4:8] = 0       # Persistent title.
+        edit[7:10, 36:40, 36:40] = 0  # Subtitle appears after the first two bins.
+        edit[20, 45:49, 80:84] = 0  # New caption in the second chunk.
+        adapter = h3.ZuraH3PreserveBackground()
+        result = adapter.preserve(latent, {'samples': video}, edit,
+                                  protect_unedited_regions=True, protection_timing='causal')[0]
+        noise = result['noise_mask'].tensors[0]
+        self.assertTrue(torch.all(noise[:, :, :5, :2, :2] == 0), 'Persistent title stays protected')
+        self.assertTrue(torch.all(noise[:, :, :2, 2:, 2:4] == 1), 'Future subtitle cannot lock opening hoodie')
+        self.assertTrue(torch.all(noise[:, :, 2:5, 2:, 2:4] == 0), 'Caption is protected in its bin and later context')
+        self.assertTrue(torch.all(noise[:, :, 5, 2:, 4:] == 1), 'A later chunk does not lock its empty first frame')
+        self.assertTrue(torch.all(noise[:, :, 6, 2:, 4:] == 0), 'Second chunk caption reaches its temporal bin')
+        self.assertIs(result['samples'].tensors[0], video)
+        self.assertTrue(torch.all(result['noise_mask'].tensors[1] == 1))
+        conservative = adapter.preserve(latent, {'samples': video}, edit, protect_unedited_regions=True)[0]
+        self.assertTrue(torch.all(conservative['noise_mask'].tensors[0][:, :, :5, 2:, 2:4] == 0),
+                        'Existing moving-person chunk protection remains the default')
+        with self.assertRaisesRegex(ValueError, 'protection timing'):
+            adapter.preserve(latent, {'samples': video}, edit, protection_timing='future')
 
     def test_uploaded_finished_frame_cannot_skip_lighting_frame_review(self):
         p = self.project()

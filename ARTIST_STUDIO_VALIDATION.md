@@ -15,6 +15,13 @@ area. It is not a qualified final result. Protected-people animation and the
 controlled approved-recipe viewport comparison remain in the shared queue.
 No final release has been published from these candidate changes.
 
+The Relight-only correction now limits caption protection to past/current
+frame bins, so future subtitles cannot lock empty hoodie regions in the first
+latent token. Existing conservative moving-person protection is unchanged.
+Seventeen focused tests passed, including actual mask tensors. This requires
+a normal node reload and another video; H3's bidirectional VAE may still mix
+lighting across a chunk, so tensor checks do not establish a clean result.
+
 ## Candidate mode qualification, 16 October 2026
 
 The artist approved the earlier H3 train viewport results. Wan and LTX viewport
