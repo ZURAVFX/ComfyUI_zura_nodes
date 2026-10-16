@@ -3,7 +3,8 @@
 ## Merged candidate checks, 17 October 2026
 
 The candidate incorporates the current public dialogue tools and template
-catalogue. All 741 native CPU tests passed in 48 seconds, and all 26
+catalogue. After the caption-timing correction and generic viewport wording,
+all 742 native CPU tests passed in 55 seconds, and all 26
 JavaScript test files passed. Standalone dialogue test stubs are scoped so
 they do not replace native Comfy modules in later tests.
 
@@ -11,14 +12,23 @@ The corrected normal-context Relight test completed 48 frames at 720 by 1280,
 24 fps, with the selected two-second soundtrack in 448 seconds. Eight sampled
 frames retain the title and changing subtitles. However, the opening frame
 contains a visible old-lighting patch on the hoodie in the caption protection
-area. It is not a qualified final result. Protected-people animation and the
-controlled approved-recipe viewport comparison remain in the shared queue.
+area. It is not a qualified final result. Protected-people animation also
+completed in 464 seconds, but the environment changes only in the opening
+frame and returns to the original room. A comparison without the original
+appearance-video reference is queued, retaining native masked source and depth
+conditioning for the people and movement. The controlled approved-recipe
+viewport comparison completed in 285 seconds. Its 48-frame, 1280 by 720 output
+keeps the train exterior and continuous push-in across eight sampled frames,
+without the earlier interior cut. Artist review is pending. This uses the
+previously loaded adapter; temporal-tail padding still needs its own reload
+and render check.
 No final release has been published from these candidate changes.
 
 The Relight-only correction now limits caption protection to past/current
 frame bins, so future subtitles cannot lock empty hoodie regions in the first
 latent token. Existing conservative moving-person protection is unchanged.
-Seventeen focused tests passed, including actual mask tensors. This requires
+Twenty-six focused Relight, scene-only and anchor tests passed, including
+actual mask tensors. This requires
 a normal node reload and another video; H3's bidirectional VAE may still mix
 lighting across a chunk, so tensor checks do not establish a clean result.
 
@@ -957,3 +967,5 @@ The navy/violet three-panel layout follows the supplied artist-approved design d
 Graph conversion leaves native Load Image inputs visible and restores exact selected filenames through the native preview callback. Multiple references, colon-ID remapping and equivalent compiled render inputs pass offline tests. Full Python regression: 637 tests pass; six JavaScript suites and module syntax checks pass. The fresh static review resolved its responsive cascade, recovery-test and ready-frame navigation findings. Live browser visual and preview lifecycle verification remains unavailable, so static checks do not imply visual approval.
 
 H3 Detailed uses 40 steps versus the approved Fast Turbo route's eight. Native Match reference sizing is already used; reducing reference detail is not assumed lossless. No fresh multi-reference timing benchmark is claimed. An idle test-server model release was requested after verifying its queue empty; the active Desktop instance was not interrupted.
+
+Viewport instructions and clip-limit errors now refer to arbitrary subjects and objects, without assuming a train scene or cap reference. The artist's own prompt still supplies the scene and visual style.

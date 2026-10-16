@@ -404,7 +404,7 @@ class GenjH3ViewportFrameData:
         if abs(float(components.frame_rate) - 24) > 0.001:
             raise ValueError("Prepare the viewport clip at 24 fps before using H3.")
         if not 5 <= count <= 120:
-            raise ValueError("Local H3 viewport renders currently support 0.21–5 seconds per take. Select a five-second section of the train scene.")
+            raise ValueError("Local H3 viewport renders currently support 0.21–5 seconds per take. Choose a section up to five seconds long.")
         # Preserve the full camera frame with a tiny replicated border rather
         # than cropping or stretching common 16:9 sizes such as 1280x720.
         target_width, target_height = ceil(width / 32) * 32, ceil(height / 32) * 32
@@ -457,7 +457,7 @@ def build_h3_viewport_graph(project):
     selected_seconds = available if original_length else min(c["duration"], available - start)
     selected_frames = max(1, int(selected_seconds * 24 + 1e-6))
     if not 5 <= selected_frames <= 120:
-        raise ValueError("Local H3 viewport renders currently support 0.21–5 seconds per take. Select a five-second section of the train scene.")
+        raise ValueError("Local H3 viewport renders currently support 0.21–5 seconds per take. Choose a section up to five seconds long.")
     references = list(project.get("viewport_references") or [])
     finished_frame_index = _finished_frame_index(project, selected_frames)
     finished_reference_index = None
@@ -504,8 +504,8 @@ def build_h3_viewport_graph(project):
         + " ".join(role_lines) + " "
         "Build one coherent final scene from the references. Keep distinct character designs distinct, place each "
         "reference on its corresponding subject, and do not turn the reference images into a collage or add duplicate people. "
-        "Retain the source camera movement, parallax, train movement, geometry and timing throughout the shot. "
-        "Use the cap/logo reference for its visible small details without inventing or replacing the mark. "
+        "Retain the source camera movement, parallax, subject and object motion, geometry and timing throughout the shot. "
+        "Preserve the visible design details and marks supplied by the references without inventing extra details. "
         + str(c.get("prompt", "")).strip()
     ).strip()
     if finished_frame_index is not None:
