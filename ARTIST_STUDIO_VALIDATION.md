@@ -1,5 +1,20 @@
 # Zura Studio validation
 
+## Merged candidate checks, 17 October 2026
+
+The candidate incorporates the current public dialogue tools and template
+catalogue. All 741 native CPU tests passed in 48 seconds, and all 26
+JavaScript test files passed. Standalone dialogue test stubs are scoped so
+they do not replace native Comfy modules in later tests.
+
+The corrected normal-context Relight test completed 48 frames at 720 by 1280,
+24 fps, with the selected two-second soundtrack in 448 seconds. Eight sampled
+frames retain the title and changing subtitles. However, the opening frame
+contains a visible old-lighting patch on the hoodie in the caption protection
+area. It is not a qualified final result. Protected-people animation and the
+controlled approved-recipe viewport comparison remain in the shared queue.
+No final release has been published from these candidate changes.
+
 ## Candidate mode qualification, 16 October 2026
 
 The artist approved the earlier H3 train viewport results. Wan and LTX viewport
