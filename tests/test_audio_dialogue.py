@@ -12,12 +12,26 @@ import v2_bootstrap
 import numpy as np
 import torch
 
-if 'comfy.model_management' not in sys.modules:
-    sys.modules.setdefault('comfy',types.ModuleType('comfy'))
-    sys.modules['comfy.model_management']=types.ModuleType('comfy.model_management')
-    utils=types.ModuleType('comfy.utils');utils.ProgressBar=object;sys.modules['comfy.utils']=utils
-
-m=importlib.import_module('ComfyUI_zura_nodes.audio_dialogue')
+if importlib.util.find_spec('comfy') is not None:
+    # Native differential tests share this interpreter. Import the installed
+    # implementation in CPU mode instead of replacing an unimported submodule.
+    import comfy.cli_args
+    comfy.cli_args.args.cpu = True
+    m=importlib.import_module('ComfyUI_zura_nodes.audio_dialogue')
+else:
+    comfy = types.ModuleType('comfy')
+    comfy.__path__ = []
+    management = types.ModuleType('comfy.model_management')
+    utils = types.ModuleType('comfy.utils')
+    utils.ProgressBar = object
+    comfy.model_management = management
+    comfy.utils = utils
+    # Keep standalone import support without leaking incomplete Comfy modules
+    # into unrelated tests discovered later in the same process.
+    with patch.dict(sys.modules, {'comfy': comfy,
+                                'comfy.model_management': management,
+                                'comfy.utils': utils}):
+        m=importlib.import_module('ComfyUI_zura_nodes.audio_dialogue')
 
 
 class AudioDialogueTests(unittest.TestCase):

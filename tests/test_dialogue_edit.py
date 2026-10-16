@@ -15,9 +15,10 @@ try:
 except ImportError:
     api = types.ModuleType('comfy_api.latest')
     api.InputImpl = types.SimpleNamespace(VideoFromFile=lambda path: path)
-    sys.modules['comfy_api.latest'] = api
-
-dialogue = importlib.import_module('ComfyUI_zura_nodes.dialogue_edit')
+    with patch.dict(sys.modules, {'comfy_api.latest': api}):
+        dialogue = importlib.import_module('ComfyUI_zura_nodes.dialogue_edit')
+else:
+    dialogue = importlib.import_module('ComfyUI_zura_nodes.dialogue_edit')
 
 
 class DialogueTests(unittest.TestCase):
