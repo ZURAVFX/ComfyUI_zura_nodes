@@ -129,7 +129,7 @@ Path(sys.argv[3]).write_text(json.dumps({'path':model,'revision':sys.argv[2]}),e
         target.write_text(json.dumps(data, indent=2), encoding='utf-8')
         read_config(target)
     print('VoiceDesign ready. Machine configuration:', target)
-    print('Restart ComfyUI. Open Zura_Voice_Design_Qwen_Direct.json or Zura_Voice_Design_Qwen_to_LongCat.json.')
+    print('Restart ComfyUI. Open Audio - Design a Voice (Qwen).json or Audio - Design a Voice (Qwen to LongCat).json.')
 
 
 if __name__ == '__main__':

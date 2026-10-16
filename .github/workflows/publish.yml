@@ -77,8 +77,8 @@ jobs:
                         'setup_speech.py', 'Setup_Speech_Windows.cmd',
                         'setup_wan_speech.py', 'Setup_Wan_Speech_Windows.cmd',
                         'setup_h3_enhancement.py', 'Setup_H3_Enhancement_Windows.cmd',
-                        'workflows/Zura_Build_Starting_Frame.json', 'workflows/Zura_Build_Starting_Frame_3_References.json',
-                        'workflows/Zura_Use_Finished_Starting_Frame.json',
+                        'workflows/Image - Build a Starting Frame.json', 'workflows/Image - Build a Starting Frame (3 References).json',
+                        'workflows/Image - Use a Finished Starting Frame.json',
                         'ARTIST_STUDIO.md', 'ARTIST_STUDIO_VALIDATION.md', 'Open_Zura_Studio.url'):
               assert Path(asset).is_file(), f'Missing artist studio asset: {asset}'
           for asset in ('artist_studio/ltx25.py', 'artist_studio/opening.py', 'artist_studio/appearance.py', 'artist_studio/hardware.py', 'INSTALL_STUDIO.md',
@@ -102,9 +102,8 @@ jobs:
               assert Path(asset).is_file(), f'Missing bounded Studio release asset: {asset}'
           for graph in Path('artist_studio/graphs').glob('*.json'):
               assert json.loads(graph.read_text()), f'Invalid native graph: {graph}'
-          for filename in ('Zura_H3_Single_Camera.json',
-                           'Zura_H3_AnyAngle_Single_Camera.json',
-                           'Zura_H3_Multicam_Advanced.json'):
+          for filename in ('Video - Change Camera (H3).json',
+                           'Video - Multicam (H3 Advanced).json'):
               text = Path('workflows', filename).read_text(encoding='utf-8')
               workflow = json.loads(text)
               assert workflow.get('nodes') and workflow.get('definitions', {}).get('subgraphs')
@@ -112,18 +111,18 @@ jobs:
               assert '2026-09-18' not in text
               assert not any(item in text for item in ('ComfyUI-Shared', 'C:\\\\Users', 'ellio'))
               assert not any(ext in text.lower() for ext in ('data:image/', 'data:video/', 'base64,'))
-          workflow = json.loads(Path('workflows/Zura_Wan_2.2_Character_Replacement_Workflow.json').read_text())
+          workflow = json.loads(Path('workflows/Video - Replace a Character (Wan 2.2).json').read_text())
           expected = {'TrendStudioV2DrivingClip', 'TrendStudioV2MaskPerformer', 'TrendStudioV2Render', 'TrendStudioV2Speed'}
           assert expected <= {n['type'] for n in workflow['nodes']}
-          prompt_workflow = json.loads(Path('workflows/Zura_Gemma_4_Prompt_Enhancer.json').read_text())
+          prompt_workflow = json.loads(Path('workflows/Utility - Improve a Prompt (Gemma 4).json').read_text())
           prompt_text = json.dumps(prompt_workflow)
           assert 'example_reference.png' in prompt_text
           assert '00.png' not in prompt_text
           assert not any(ext in prompt_text.lower() for ext in ('data:image/', 'data:video/', 'base64,'))
           for filename, placeholders in {
-              'Zura_SAM3_Text_Prompt_Masking_Roto.json': ('example_source.mp4',),
-              'Zura_MiniMax_H3_Head_Face_Swap.json': ('example_driving_video.mp4', 'example_character.png'),
-              'Zura_MiniMax_H3_Ref2Vid_Speedboosts.json': ('example_reference.png',),
+              'Reference - Mask and Roto (SAM3).json': ('example_source.mp4',),
+              'Reference - Head and Face Swap (H3).json': ('example_driving_video.mp4', 'example_character.png'),
+              'Reference - Speedboost Comparison (H3).json': ('example_reference.png',),
           }.items():
               text = Path('workflows', filename).read_text(encoding='utf-8')
               assert all(item in text for item in placeholders)
@@ -134,6 +133,17 @@ jobs:
                         'longcat_runtime/text.py', 'longcat_runtime/requirements.txt'):
               assert Path(asset).is_file(), f'Missing LongCat release asset: {asset}'
           assert not list(Path('.').rglob('longcat.local.json*'))
+          for asset in ('audio_dialogue.py', 'audio_parakeet.py', 'dialogue_edit.py',
+                        'dialogue_signals.py', 'web/audio_dialogue_editor.js',
+                        'web/dialogue_editor.js', 'web/dialogue_transcript.js',
+                        'web/dialogue_face_picker.js', 'DIALOGUE_EDITING.md'):
+              assert Path(asset).is_file(), f'Missing dialogue editor asset: {asset}'
+          assert not list(Path('.').rglob('parakeet.local.json*'))
+          for filename in ('Audio - Replace Speech (LongCat).json', 'Video - Replace Speech (LTX INT8).json'):
+              text = Path('workflows', filename).read_text(encoding='utf-8')
+              graph = json.loads(text)
+              assert len(graph['nodes']) == (4 if filename == 'Audio - Replace Speech (LongCat).json' else 3) and graph['definitions']['subgraphs']
+              assert not any(item in text for item in ('ComfyUI-Shared', 'C:\\\\Users', 'ellio', 'pound_euro_original', 'zuraAudioPreview', 'zuraDialoguePreview', 'base64,'))
           for asset in ('qwen_voice_design.py', 'setup_voice_design.py', 'VOICE_DESIGN.md',
                         'Setup_Voice_Design_Windows.cmd', 'voice_design_runtime/qwen_voice_worker.py',
                         'voice_design_runtime/requirements.txt'):
@@ -153,6 +163,14 @@ jobs:
         run: npm install --prefix "$GITHUB_WORKSPACE/../ui-check" --ignore-scripts --no-audit --no-fund linkedom@0.18.13
       - name: Run regression checks
         run: |
+          python -m unittest discover -s tests -p 'test_template_catalogue.py'
+          node tests/test_audio_editor_connections.mjs
+          node tests/test_dialogue_timing_connections.mjs
+          node tests/test_dialogue_transcript.mjs
+          node tests/test_dialogue_face_picker.mjs
+          python -m unittest discover -s tests -p 'test_audio_dialogue.py'
+          python -m unittest discover -s tests -p 'test_audio_split_editor.py'
+          python -m unittest discover -s tests -p 'test_dialogue_edit.py'
           python -m compileall -q __init__.py klein_look.py multicam_v3.py multicam_v4_clean.py h3_single_angle.py idv2v_control.py
           python -m unittest discover -s tests -p 'test_v2_*.py'
           python -m unittest discover -s tests -p 'test_media_source_boundaries.py'

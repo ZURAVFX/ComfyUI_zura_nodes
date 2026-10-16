@@ -24,18 +24,33 @@ class ReleaseTests(unittest.TestCase):
             self.assertTrue((ROOT / name).is_file(), name)
 
     def test_templates_have_registered_node_and_no_voice_data(self):
-        for path in (ROOT / 'workflows').glob('Zura_LongCat_*.json'):
+        paths = list((ROOT / 'workflows').glob('Audio - * (LongCat).json'))
+        self.assertEqual({p.name for p in paths}, {
+            'Audio - Text to Speech (LongCat).json', 'Audio - Clone a Voice (LongCat).json',
+            'Audio - Replace Speech (LongCat).json'})
+        for path in paths:
             raw = path.read_text(encoding='utf-8')
             data = json.loads(raw)
-            voice = [n for n in data['nodes'] if n['type'] == 'ZuraLongCatVoice']
+            nested = [node for graph in (data.get('definitions') or {}).get('subgraphs', [])
+                      for node in graph['nodes']]
+            voice = [n for n in data['nodes'] + nested
+                     if n['type'] in ('ZuraLongCatVoice', 'ZuraLongCatDialogueVoice')]
             self.assertEqual(len(voice), 1)
             self.assertEqual(voice[0]['properties']['cnr_id'], 'comfyui-zura-nodes')
-            self.assertEqual(voice[0]['widgets_values_named']['reference_transcript'], '')
+            if voice[0]['type'] == 'ZuraLongCatVoice':
+                self.assertEqual(voice[0]['widgets_values_named']['reference_transcript'], '')
+            else:
+                self.assertEqual(len(data['nodes']), 4)
+                self.assertTrue({'ZuraAudioDialogueSelect','ZuraAudioDialogueOutput'} <= {n['type'] for n in data['nodes']})
+                source = next(n for n in data['nodes'] if n['type'] == 'ZuraAudioDialogueSource')
+                for index in (0, 1, 6, 7):
+                    self.assertEqual(source['widgets_values'][index], '')
+                self.assertNotIn('zuraAudioPreview', raw)
+                self.assertNotIn('zuraAudioWords', raw)
             self.assertNotRegex(raw.lower(), r'c:\\\\users\\\\|/users/|/home/|data:audio/|base64,')
             for node in data['nodes']:
                 if node['type'] == 'LoadAudio':
                     self.assertEqual(node['widgets_values_named']['audio'], '')
-        self.assertEqual(len(list((ROOT / 'workflows').glob('Zura_LongCat_*.json'))), 2)
 
     def test_machine_config_is_excluded(self):
         for name in ('.gitignore', '.comfyignore'):

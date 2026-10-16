@@ -6,9 +6,9 @@ Both designed-TTS routes are included in Zura Nodes 1.2.0. Keep whichever take w
 
 | Workflow file | What it does |
 | --- | --- |
-| `Zura_Voice_Design_Qwen_Direct.json` | Written voice description + final script → Qwen VoiceDesign → finished audio. |
-| `Zura_Voice_Design_Qwen_to_LongCat.json` | Qwen creates a short reference; LongCat uses it to speak a separate final script. |
-| `Zura_LongCat_Voice_Clone.json` | Use an approved existing real or designed voice recording, its transcript and a new script. |
+| `Audio - Design a Voice (Qwen).json` | Written voice description + final script → Qwen VoiceDesign → finished audio. |
+| `Audio - Design a Voice (Qwen to LongCat).json` | Qwen creates a short reference; LongCat uses it to speak a separate final script. |
+| `Audio - Clone a Voice (LongCat).json` | Use an approved existing real or designed voice recording, its transcript and a new script. |
 
 The existing reference-free LongCat TTS workflow is also retained. It does not accept a written speaker description. See [LONGCAT.md](LONGCAT.md).
 
@@ -32,7 +32,7 @@ LongCat receives the generated recording and its transcript, not the written voi
 
 Within the same graph, changing only LongCat's final script reuses Qwen's cached reference when that cached result is still available. Keep Qwen's description, reference passage, language, seed and project label unchanged. Change its seed to create another reference. A ComfyUI restart or cache eviction may require regeneration.
 
-For permanent campaign reuse, keep the approved Qwen run folder, especially `master_float32.wav`, `voice.wav`, `script.txt` and `voice_description.txt`. On later projects open **Zura_LongCat_Voice_Clone.json**, load the approved WAV, paste its exact spoken transcript, and enter the new script. Qwen is not needed for those subsequent renders. This also avoids depending on in-session caching or reproducibility across software versions.
+For permanent campaign reuse, keep the approved Qwen run folder, especially `master_float32.wav`, `voice.wav`, `script.txt` and `voice_description.txt`. On later projects open **Audio - Clone a Voice (LongCat).json**, load the approved WAV, paste its exact spoken transcript, and enter the new script. Qwen is not needed for those subsequent renders. This also avoids depending on in-session caching or reproducibility across software versions.
 
 Use a short, clean reference. Start with 8–20 seconds. LongCat's combined reference/generation window is 60 seconds; leave room for the new speech. Long scripts in the LongCat path are split and saved as individual chunks as well as a joined version.
 

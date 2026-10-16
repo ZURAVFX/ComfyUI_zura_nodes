@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Add H3 Relight with a generated lighting frame for review, plus scene transformation with original people protected during sampling.
+- Offer H3 viewport references directly alongside generated or supplied finished frames. Correct replacement-audio routing, enhanced-delivery sizing and reference-grid padding.
+- Keep candidate visual qualification and known camera-retention limitations documented separately from CPU test results.
+
 - Add a visible H3 sampling-step control, saved with each shot and passed to both native H3 schedulers. Preserve legacy 8/40 defaults and label custom counts unbenchmarked.
 
 
@@ -23,6 +27,53 @@
   refinement sampler and full-canvas guide encoding, with fresh cache keys.
 - H3's viewport example is artist-approved. Wan and LTX's earlier viewport
   integration renders were rejected; successful execution was not approval.
+## 1.3.24
+
+- Correct face-crop overlay alignment at every graph zoom. Keep crop drawing active until the artist chooses the mouth tool; preserve the old crop after an accidental click and restore it on cancelled drags. Refuse drawing on an unloaded or out-of-reference video frame.
+- Video speech editing now recognises source words with local Parakeet and fills the full phrase automatically. Original selections and changed words have separate visual highlights. Existing drafts survive delayed transcription, refreshes and reference changes.
+- Split the first node into Clip and face / Select words views. Added draggable reference IN/OUT, a word waveform zoomed to the reference, and click, drag, Shift-click and keyboard transcript selection. No sampling settings or native graph ports changed.
+- Draw the mouth oval directly on the video; reset its size relative to the face crop. Reject dot-sized masks and reference frames outside the effective processing clip before sampling, instead of silently clamping the tracking anchor.
+- Qualified CPU tests, live native graph export/reload and neutral selection tracking. Generation quality remains model-dependent; this release does not claim a new voice or lip-sync model qualification.
+
+## 1.3.23
+
+- Keep a confirmed mouth placement when redrawing its face crop. Show the replaced area and guide placement on the actual lips. Reject the old automatic crop guess before sampling.
+- Move replacement IN and OUT together, retaining the original selection duration without retiming. Describe original timestamps as an initial selection rather than automatic speech alignment.
+- State the experimental LTX 2.5 / Dub-It 2.3 compatibility in the artist controls. A neutral tracked INT8 GPU regression test changed the spoken word and final mouth poses; voice identity across other clips remains unqualified.
+
+## 1.3.22
+
+- Fit portrait and landscape face crops automatically inside the selected detail size. Preserve face proportions with native-resolution padding and remove it before compositing.
+- Add 1280 and 1536 pixel detail options alongside 768 and 1024. These are longest-edge limits; the finished video retains its original dimensions.
+- Bound long context ranges around the selected words automatically, with valid 8n+1 frame padding and a 241-frame local limit. Keep every selected frame and the original playback speed.
+- Display the effective context and padded frame count in the source editor. Preparation was checked on the reported clip at all four detail settings; larger GPU renders remain unqualified.
+
+## 1.3.19
+
+- Save the four-stage LongCat editor with manual IN/OUT selection as the default.
+- Clear the example actor dialogue and test cuts from the tracked LTX INT8 template.
+- Both dialogue templates remain available through ComfyUI Browse Templates.
+
+## 1.3.18
+
+- Fix OUT handles at the end of audio: a half-millisecond rounding tolerance snaps to the final sample.
+- Keep larger out-of-range selections invalid, and pass sample-aligned cuts from the selection editor to the final blend.
+
+
+## 1.3.17
+
+- Select the original and replacement sections together on two labelled waveforms.
+- Separate final audio node with highlighted insert, playback, Download WAV and Update final audio.
+- Reuse the retained LongCat take for cut and blend changes; hide stale final previews.
+- Refuse final export when automatic selection fails, and retain the combined editor for older workflows.
+
+
+## 1.3.16
+
+- Adds a direct Download WAV action for successfully blended audio.
+- Hides original-reference trim controls when only the additional recording is used.
+- Clarifies that changing the take requires Run and shows immediate feedback.
+- Recognises the standard Windows Parakeet runtime when LOCALAPPDATA is absent, with clearer launch errors.
 
 ## 1.3.13
 

@@ -34,7 +34,7 @@ def reachable_nodes(graph):
 
 class TestCameraWorkflows(unittest.TestCase):
     def test_classic_single_camera_has_one_whole_clip_selection(self):
-        graph = workflow("Zura_H3_Single_Camera.json")
+        graph = workflow("Video - Change Camera (H3).json")
         nodes = graph["nodes"]
         self.assertEqual(sum(node["type"] == "VHS_LoadVideo" for node in nodes), 1)
         gallery = next(node for node in nodes if node["type"] == "ZuraAngleGalleryV3")
@@ -48,7 +48,7 @@ class TestCameraWorkflows(unittest.TestCase):
         self.assertEqual((seconds["id"], output), (duration["id"], "seconds"))
 
     def test_classic_renderer_preserves_warp_and_original_audio_route(self):
-        graph = workflow("Zura_H3_Single_Camera.json")
+        graph = workflow("Video - Change Camera (H3).json")
         render = next(node for node in graph["nodes"] if node["type"] == "ZuraH3MulticamV3")
         settings = render["properties"]["zura_widget_values"]
         self.assertEqual(settings["steps"], 16)
@@ -67,7 +67,7 @@ class TestCameraWorkflows(unittest.TestCase):
                              if node["type"] == "ZuraAngleGalleryV3")["pos"][0], render["pos"][0])
 
     def test_classic_root_widgets_are_canonical_without_seed_control_drift(self):
-        graph = workflow("Zura_H3_Single_Camera.json")
+        graph = workflow("Video - Change Camera (H3).json")
         for node in graph["nodes"]:
             settings = node.get("properties", {}).get("zura_widget_values")
             if settings:
@@ -79,8 +79,8 @@ class TestCameraWorkflows(unittest.TestCase):
                     self.assertEqual(len(node["widgets_values"]), len(names))
 
     def test_classic_uses_approved_local_preview_and_h3_recipe(self):
-        graph = workflow("Zura_H3_Single_Camera.json")
-        advanced = workflow("Zura_H3_Multicam_Advanced.json")
+        graph = workflow("Video - Change Camera (H3).json")
+        advanced = workflow("Video - Multicam (H3 Advanced).json")
         by_name = {stage["name"]: stage for stage in advanced["definitions"]["subgraphs"]}
         active = list(reachable_nodes(graph))
         classes = {node["type"] for node in active}
@@ -105,44 +105,8 @@ class TestCameraWorkflows(unittest.TestCase):
                     self.assertEqual(recipe(stage), recipe(expected))
                     self.assertEqual(stage["links"], expected["links"])
 
-    def test_single_angle_render_controls_survive_frontend_reload(self):
-        graph = workflow("Zura_H3_AnyAngle_Single_Camera.json")
-        render = next(node for node in graph["nodes"]
-                      if node["type"] == "ZuraH3SingleAngle")
-        # The seed schema explicitly disables the extra seed-control widget.
-        # ComfyUI reloads positional values before preparing an API prompt;
-        # stale "fixed" here shifts steps into a string and prompt into an int.
-        expected_names = ("seed", "steps", "prompt")
-        positional = render["widgets_values"]
-        self.assertEqual(len(positional), len(expected_names))
-        self.assertEqual(dict(zip(expected_names, positional)),
-                         render["widgets_values_named"])
-        self.assertIs(type(positional[0]), int)
-        self.assertIs(type(positional[1]), int)
-        self.assertGreaterEqual(positional[1], 1)
-        self.assertLessEqual(positional[1], 60)
-        self.assertIsInstance(positional[2], str)
-
-    def test_single_angle_has_one_source_and_correct_qwen_sockets(self):
-        graph = workflow("Zura_H3_AnyAngle_Single_Camera.json")
-        root_types = [node["type"] for node in graph["nodes"]]
-        self.assertEqual(root_types.count("VHS_LoadVideo"), 1)
-        self.assertEqual(root_types.count("AnyAngleStudioT8"), 1)
-        self.assertEqual(root_types.count("ZuraH3SingleAngle"), 1)
-
-        stages = {stage["name"]: stage for stage in graph["definitions"]["subgraphs"]}
-        self.assertIn("Prepare camera target", stages)
-        qwen = next(node for node in stages["Prepare camera target"]["nodes"]
-                    if node["type"] == "TextEncodeQwenImage21")
-        sockets = {item["name"]: item.get("link") for item in qwen["inputs"]}
-        self.assertIsNotNone(sockets["images.image_2"])
-        self.assertIsNotNone(sockets["vae"])
-        self.assertIsNotNone(sockets["prompt"])
-        self.assertIsNone(sockets["resolution"])
-        self.assertEqual(qwen["widgets_values_named"]["resolution"], 1024)
-
     def test_advanced_graph_has_a_planning_stage_before_rendering(self):
-        graph = workflow("Zura_H3_Multicam_Advanced.json")
+        graph = workflow("Video - Multicam (H3 Advanced).json")
         nodes = graph["nodes"]
         by_type = {node["type"]: node for node in nodes}
         self.assertEqual(sum(node["type"] == "VHS_LoadVideo" for node in nodes), 1)
