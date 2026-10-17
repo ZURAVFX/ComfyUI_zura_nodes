@@ -24,13 +24,52 @@ previously loaded adapter; temporal-tail padding still needs its own reload
 and render check.
 No final release has been published from these candidate changes.
 
-The Relight-only correction now limits caption protection to past/current
-frame bins, so future subtitles cannot lock empty hoodie regions in the first
+The Relight-only correction limits caption protection to past/current frame
+bins, so future subtitles cannot lock empty hoodie regions in the first
 latent token. Existing conservative moving-person protection is unchanged.
 Twenty-six focused Relight, scene-only and anchor tests passed, including
-actual mask tensors. This requires
-a normal node reload and another video; H3's bidirectional VAE may still mix
-lighting across a chunk, so tensor checks do not establish a clean result.
+actual mask tensors. All six candidate runtime files were then installed
+after verifying the shared queue was empty, followed by a normal Manager
+restart. The live node schema includes the new timing control, and the served
+Studio script matches the candidate file hash.
+
+The reloaded causal-caption test completed in 449 seconds. Eight sampled
+frames retain the title and changing subtitles without the earlier opening
+hoodie patch. However, the requested illumination fades substantially after
+the opening frame. This is still a failed Relight quality gate. A diagnostic
+without the original appearance-video reference is queued; native source,
+depth, masks and selected audio remain connected. No production reference
+route has been changed on the strength of this diagnostic.
+
+The protected-person comparison without the appearance-video reference kept
+the new environment through the video, but introduced a thick source-background
+halo around the moving person. That is also a failed quality gate. A separate
+tighter latent-mask comparison is queued before changing production settings.
+
+Real HTTP project creation, reload and preparation-graph export passed for
+Relight without look references and direct-reference H3 viewport mode. The
+source video and all five selected viewport references also passed byte-hash
+checks through Comfy's media endpoint. These checks submit no GPU work and
+do not replace the outstanding browser visual review.
+
+## Official recipe review, 17 October 2026
+
+The current [LTX Layout-to-Render recipe](https://docs.ltx.io/open-source-model/vfx-post-production/layout-to-render)
+was compared with Studio's implementation. Both use the dedicated adapter at
+strength 1 in two stages, raw layout conditioning, an appearance reference at
+RoPE position -1, CFG 1 and a 2x latent upscale. Studio preserves the selected
+duration by padding then trimming instead of shortening the source, uses a
+quantised model stack, and uses smaller decode tiles and temporal overlap for
+the local memory budget. These are qualification differences, not evidence
+that changing them would solve the rejected geometry and camera behaviour.
+H3 remains the recommended viewport route. No new LTX quality claim follows
+from this source review.
+
+The current [H3 Character Swap adapter card](https://huggingface.co/akatz-ai/MiniMax-H3-Character-Swap-LoRA)
+recommends V1.5 and documents a different accompanying Turbo checkpoint from
+Studio's DMD Turbo. Studio's current H3 graph loads neither character-swap
+version. A source recommendation does not establish a measured improvement
+in Studio; neither adapter is presented as an already-tested default here.
 
 ## Candidate mode qualification, 16 October 2026
 
