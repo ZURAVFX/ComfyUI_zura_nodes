@@ -118,7 +118,7 @@ class RelightTests(unittest.TestCase):
                 self.assertEqual(native_count, reference_count)
                 self.assertEqual(native_reference[:count], list(range(count)))
 
-    def test_reference_grid_recipe_is_bound_into_relight_and_people_caches(self):
+    def test_source_reference_and_person_boundary_recipes_invalidate_only_their_caches(self):
         import json
         original_dumps = json.dumps
         with tempfile.TemporaryDirectory() as temp:
@@ -131,7 +131,8 @@ class RelightTests(unittest.TestCase):
                         patch.object(h3.json, 'dumps', wraps=original_dumps) as dumps:
                     h3.cache_key(project)
                 payload = dumps.call_args.args[0]
-                self.assertEqual(payload.get('source_reference_grid'), 1 if mode == 'relight' or preserve else None)
+                self.assertEqual(payload.get('source_reference_grid'), 1 if mode == 'relight' else None)
+                self.assertEqual(payload.get('person_conditioning_recipe'), 2 if preserve else None)
 
     def test_other_h3_routes_keep_existing_background_lock(self):
         graph = anchors.H3FinishedFrameAnchorTests().build_normal(anchors.H3FinishedFrameAnchorTests().base_project())

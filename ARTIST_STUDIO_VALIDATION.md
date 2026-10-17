@@ -41,10 +41,19 @@ without the original appearance-video reference is queued; native source,
 depth, masks and selected audio remain connected. No production reference
 route has been changed on the strength of this diagnostic.
 
-The protected-person comparison without the appearance-video reference kept
-the new environment through the video, but introduced a thick source-background
-halo around the moving person. That is also a failed quality gate. A separate
-tighter latent-mask comparison is queued before changing production settings.
+The first protected-person comparison without the appearance-video reference
+kept the new environment through the video, but introduced a thick source-background
+halo around the moving person. That comparison failed the quality gate.
+The tighter latent-mask comparison completed in 327 seconds, delivering 48
+frames at 720 by 1280, 24 fps, with the selected two-second soundtrack. Across
+eight sampled frames, the replacement train environment persists and the
+original person, clothes and gestures remain stable without the former thick
+halo. Artist review is pending. The tested conditioning path is now used by
+Keep original people: native source, depth and latent conditioning remain,
+the redundant original-room appearance reference is removed, and moving
+boundary patches can regenerate. A distinct conditioning recipe invalidates
+older caches. Relight and ordinary replacement retain their existing settings.
+This is generative boundary reconstruction, not a pixel-exact person cutout.
 
 Real HTTP project creation, reload and preparation-graph export passed for
 Relight without look references and direct-reference H3 viewport mode. The

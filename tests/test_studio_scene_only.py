@@ -103,11 +103,15 @@ class SceneOnlyTests(unittest.TestCase):
                 patch.object(h3, 'cache_key', return_value='c'*64):
             g = h3.build_h3_graph(p, use_cache=False)
             self.assertEqual(g['h3_preserve_background']['inputs']['mask'], ['h3_pad', 1])
-            self.assertTrue(g['h3_preserve_background']['inputs']['protect_unedited_regions'])
+            self.assertFalse(g['h3_preserve_background']['inputs']['protect_unedited_regions'],
+                             'Regenerate moving boundary patches instead of locking an old-room halo')
             self.assertEqual(g['h3_inpaint']['inputs']['mask'], ['h3_pad', 1])
-            self.assertEqual(g['h3_references']['inputs']['ref_videos.ref_video_0'], ['h3_source_reference', 0])
-            self.assertEqual(g['h3_source_reference']['inputs'],
-                             {'images': ['h3_pad', 0], 'start_index': 0, 'num_frames': 56})
+            self.assertNotIn('ref_videos.ref_video_0', g['h3_references']['inputs'],
+                             'Original-room appearance reference overrode the approved replacement')
+            self.assertNotIn('h3_source_reference', g)
+            self.assertEqual(g['h3_inpaint']['inputs']['source_video'], ['h3_pad', 0])
+            self.assertIn('control_video', g['h3_inpaint']['inputs'])
+            self.assertNotIn('<Video 1>', g['h3_prompt']['inputs']['value'])
             self.assertIn('Retain every original person', g['h3_prompt']['inputs']['value'])
             with self.assertRaisesRegex(ValueError, 'native source preservation'):
                 h3.build_h3_graph(p, use_cache=False, preserve_background=False)

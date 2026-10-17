@@ -99,7 +99,8 @@ def cache_key(project):
             data["relight_text_protection"] = 2
     if c.get("preserve_people"):
         data["preserve_people"] = True
-    if c.get("workflow_mode") == "relight" or c.get("preserve_people"):
+        data["person_conditioning_recipe"] = 2
+    if c.get("workflow_mode") == "relight":
         data["source_reference_grid"] = 1
     if project.get("look_mode") == "ready" and project.get("starting_asset"):
         position = c.get("finished_frame_position", "first")
@@ -879,11 +880,11 @@ def build_h3_graph(project, use_cache=True, preserve_background=True):
             "Do not reproduce a reference collage or add extra people. " + c["prompt"])
     if c.get("preserve_people"):
         prompt = (
-            "<Picture 1> is the approved scene. <Video 1> supplies the original scene, people and performance. "
+            "<Picture 1> is the approved scene. Native masked source and depth conditioning supply the original people and performance. "
             "Change only the surroundings outside the protected people to match the approved scene. "
             "<Picture 2> provides environment appearance details only; never replace people from a reference image. "
             "Retain every original person's identity, apparent age, face, hair, clothing, body, changing pose and facial performance. "
-            "The reviewed edit mask excludes the original people. Preserve their source pixels through native latent conditioning. "
+            "The reviewed edit mask excludes the original people. Retain their appearance through native latent conditioning while regenerating moving boundaries. "
             "Depth control supplies source geometry, layout, camera movement, object positions and ground contact. "
             "<Audio 1> supplies the original performance and speech timing. Follow the source gestures and speech. " + c["prompt"])
     if relight:
@@ -985,7 +986,7 @@ def build_h3_graph(project, use_cache=True, preserve_background=True):
     # the reference stage receive its inputs in a single ordered hand-off.
     prompt_input = node("h3_prompt", "PrimitiveStringMultiline", value=prompt)
     reference_inputs = {"ref_images.ref_image_0": opening, "ref_audios.ref_audio_0": ["h3_pad", 2]}
-    if relight or c.get("preserve_people"):
+    if relight:
         # References have their own temporal grid, independent of the trained
         # 124-frame target context. Keep every real frame, then only enough
         # repeated tail frames to satisfy the native 17k+5 reference contract.
@@ -1015,7 +1016,7 @@ def build_h3_graph(project, use_cache=True, preserve_background=True):
         source_latent = node("h3_source_latent", "VAEEncode", pixels=model_source, vae=vae)
         latent = node("h3_preserve_background", "ZuraH3PreserveBackground", latent=latent,
                       source_latent=source_latent, mask=model_mask,
-                      **({"protect_unedited_regions": True} if c.get("preserve_people") or relight else {}),
+                      **({"protect_unedited_regions": bool(relight)} if c.get("preserve_people") or relight else {}),
                       **({"protection_timing": "causal"} if relight else {}))
     # Keep the actual selected soundtrack fixed in both original-performance
     # and replacement-dialogue modes, including valid silence for silent clips.
