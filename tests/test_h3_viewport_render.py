@@ -64,10 +64,29 @@ class H3ViewportRenderTests(unittest.TestCase):
                 return False
         return Container()
 
+    def test_custom_steps_reach_viewport_sampler_in_both_modes(self):
+        for quality, steps in (("fast", 12), ("detailed", 16)):
+            project = self.project()
+            project["config"] = studio.clean_config({**project["config"], "quality": quality, "h3_steps": steps})
+            with patch.object(studio, "assert_approved"), patch.object(studio, "check_asset"), \
+                    patch("av.open", return_value=self.media_container(15)):
+                graph = h3.build_h3_graph(project, use_cache=False)
+            self.assertEqual(graph["h3_schedule"]["inputs"]["steps"], steps)
+            self.assertEqual(graph["h3_references"]["inputs"]["ref_image_size"], "match")
+
+    def test_step_defaults_and_validation(self):
+        self.assertEqual(h3.sampling_steps({}, True), 8)
+        self.assertEqual(h3.sampling_steps({}, False), 40)
+        for bad in (True, 3, 81, 12.5, "bad"):
+            with self.subTest(value=bad), self.assertRaises(ValueError):
+                studio.clean_config({"h3_steps": bad})
+        for good in (4, 12, 80):
+            self.assertEqual(studio.clean_config({"h3_steps": good})["h3_steps"], good)
+
     def test_viewport_frame_data_enforces_local_h3_frame_contract(self):
         data = h3.GenjH3ViewportFrameData()
         frames, width, height, length, real, crop_x, crop_y, crop_width, crop_height = data.prepare(Video())
-        self.assertEqual(tuple(frames.shape), (120, 64, 64, 3))
+        self.assertEqual(tuple(frames.shape), (124, 64, 64, 3))
         self.assertEqual((width, height, length, real), (64, 64, 124, 120))
         self.assertEqual((crop_x, crop_y, crop_width, crop_height), (0, 14, 64, 36))
         for options, message in [
@@ -76,6 +95,24 @@ class H3ViewportRenderTests(unittest.TestCase):
         ]:
             with self.subTest(options=options), self.assertRaisesRegex(ValueError, message):
                 data.prepare(Video(**options))
+
+    def test_reference_padding_retains_every_real_frame_and_only_repeats_the_tail(self):
+        for count, expected in ((5, 5), (48, 56), (120, 124)):
+            with self.subTest(count=count):
+                video = Video(count=count, width=32, height=32)
+                source = torch.arange(count, dtype=torch.float32)[:, None, None, None].expand(count, 32, 32, 3)
+                video.components.images = source
+                frames, width, height, length, real, *crop = h3.GenjH3ViewportFrameData().prepare(video)
+                self.assertEqual((len(frames), length, real), (expected, expected, count))
+                self.assertTrue(torch.equal(frames[:count], source))
+                self.assertTrue(torch.equal(frames[count:], source[-1:].expand(expected - count, -1, -1, -1)))
+                self.assertEqual((width, height, *crop), (32, 32, 0, 0, 32, 32))
+                # The installed reference encoder floors to this grid. Padding
+                # prevents it silently dropping the last real source frames.
+                native_count = len(frames)
+                while native_count % 17 != 5:
+                    native_count -= 1
+                self.assertGreaterEqual(native_count, count)
 
     def test_graph_uses_one_source_video_and_ordered_look_reference_roles(self):
         project = self.project()
@@ -136,12 +173,12 @@ class H3ViewportRenderTests(unittest.TestCase):
         self.assertNotIn("h3_viewport_source", graph)
         self.assertNotIn("h3_viewport_control", graph)
 
-    def test_graph_view_exports_direct_h3_route_without_reviewed_shot_rewiring(self):
+    def test_explicit_graph_view_exports_direct_h3_route_without_reviewed_shot_rewiring(self):
         project = self.project()
         project["approval"] = studio.prep_key(project)
         with patch.object(studio, "assert_approved"), patch.object(studio, "check_asset"), \
                 patch("av.open", return_value=self.media_container(15)):
-            graph, stage = studio.editable_graph(project, "auto")
+            graph, stage = studio.editable_graph(project, "h3")
         self.assertEqual(stage, "h3")
         self.assertIn("h3_viewport_source", graph)
         self.assertNotIn("zura_audio_selection", graph)

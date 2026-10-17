@@ -36,13 +36,13 @@ def resolve_appearance(body, load_asset, check_asset):
             references.append(asset)
             seen.add(identity)
     starting = image(body.get("starting_image")) if mode == "ready" else None
-    if mode == "build" and not references:
+    if mode == "build" and not references and body.get("config", {}).get("workflow_mode") != "relight":
         raise ValueError("Add at least one reference image to build your starting frame.")
     return {"look_mode": mode, "references": references, "starting_asset": starting,
             "character": copy.deepcopy(references[0] if references else starting)}
 
 
-def add_design_references(graph, references, check_asset):
+def add_design_references(graph, references, check_asset, *, lighting_only=False):
     """Append genuine per-image ReferenceLatent nodes; never make a collage."""
     references = references or []
     if len(references) > 3:
@@ -65,7 +65,11 @@ def add_design_references(graph, references, check_asset):
                 "conditioning": previous, "latent": [prefix + "_encode", 0]}}
         positive, negative = [prefix + "_positive", 0], [prefix + "_negative", 0]
     graph["92:103"]["inputs"].update(positive=positive, negative=negative)
-    if len(references) > 1:
+    if lighting_only:
+        graph["127"]["inputs"]["value"] += (
+            " Image 1 is the unchanged source scene. All additional images guide lighting only. "
+            "Do not borrow their identities, objects, materials or layout.")
+    elif len(references) > 1:
         prompt = graph["127"]["inputs"]["value"]
         prompt = prompt.replace("the second image", "the appearance reference images")
         prompt = prompt.replace("second image's", "appearance references'")

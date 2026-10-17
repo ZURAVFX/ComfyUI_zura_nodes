@@ -1,9 +1,267 @@
 # Zura Studio validation
 
+## Merged candidate checks, 17 October 2026
+
+The candidate incorporates the current public dialogue tools and template
+catalogue. After the caption-timing correction and generic viewport wording,
+all 742 native CPU tests passed in 55 seconds, and all 26
+JavaScript test files passed. Standalone dialogue test stubs are scoped so
+they do not replace native Comfy modules in later tests.
+
+The corrected normal-context Relight test completed 48 frames at 720 by 1280,
+24 fps, with the selected two-second soundtrack in 448 seconds. Eight sampled
+frames retain the title and changing subtitles. However, the opening frame
+contains a visible old-lighting patch on the hoodie in the caption protection
+area. It is not a qualified final result. Protected-people animation also
+completed in 464 seconds, but the environment changes only in the opening
+frame and returns to the original room. Subsequent comparisons removed the
+original appearance-video reference while retaining native masked source and
+depth conditioning for the people and movement. The controlled approved-recipe
+viewport comparison completed in 285 seconds. Its 48-frame, 1280 by 720 output
+keeps the train exterior and continuous push-in across eight sampled frames,
+without the earlier interior cut. Artist review is pending. After the node
+reload, the final temporal-tail adapter and generic viewport wording also
+completed a two-second 1280 by 720 video in 346 seconds. Eight sampled frames
+retain the train exterior and the source push-in through the final frame;
+there is no interior cut. All 48 selected source frames are retained in the
+56-frame native reference grid. This final-adapter result also awaits artist
+review; reference order and this short scene remain part of its qualification.
+No final release has been published from these candidate changes.
+
+The Relight-only correction limits caption protection to past/current frame
+bins, so future subtitles cannot lock empty hoodie regions in the first
+latent token. Existing conservative moving-person protection is unchanged.
+Twenty-six focused Relight, scene-only and anchor tests passed, including
+actual mask tensors. All six candidate runtime files were then installed
+after verifying the shared queue was empty, followed by a normal Manager
+restart. The live node schema includes the new timing control, and the served
+Studio script matches the candidate file hash.
+
+The reloaded causal-caption test completed in 449 seconds. Eight sampled
+frames retain the title and changing subtitles without the earlier opening
+hoodie patch. However, the requested illumination fades substantially after
+the opening frame. That comparison failed the Relight quality gate.
+
+The final Relight comparison completed in 317 seconds: 48 frames at 720 by
+1280, 24 fps, with the selected two-second soundtrack. Across eight sampled
+frames, warm amber and cool blue lighting persist while the person, room and
+gestures remain stable. The title and changing subtitles remain, but their
+protected background can leave darker patches around the text. Artist review
+is pending. The successful recipe is adopted: remove the redundant original
+appearance-video reference, retain native source, depth, masks, lighting-frame
+and audio conditioning, and invalidate earlier Relight caches. The production
+graph matches the successful render except for its output filename. Thirty-one
+focused Relight, scene-only and anchor tests passed. This short example does
+not establish arbitrary lighting, caption or long-duration reliability.
+
+The first protected-person comparison without the appearance-video reference
+kept the new environment through the video, but introduced a thick source-background
+halo around the moving person. That comparison failed the quality gate.
+The tighter latent-mask comparison completed in 327 seconds, delivering 48
+frames at 720 by 1280, 24 fps, with the selected two-second soundtrack. Across
+eight sampled frames, the replacement train environment persists and the
+original person, clothes and gestures remain stable without the former thick
+halo. Artist review is pending. The tested conditioning path is now used by
+Keep original people: native source, depth and latent conditioning remain,
+the redundant original-room appearance reference is removed, and moving
+boundary patches can regenerate. A distinct conditioning recipe invalidates
+older caches. Ordinary replacement retains its existing settings.
+This is generative boundary reconstruction, not a pixel-exact person cutout.
+The adopted production graph matches the successful video's conditioning
+inputs; only corrected prompt reference wording and the output filename differ.
+All 742 CPU tests passed again in 49 seconds after this change, and a fresh
+read-only review found no route-isolation or cache-invalidation issue.
+
+Real HTTP project creation, reload and preparation-graph export passed for
+Relight without look references and direct-reference H3 viewport mode. The
+source video and all five selected viewport references also passed byte-hash
+checks through Comfy's media endpoint. These checks submit no GPU work and
+do not replace the outstanding browser visual review.
+
+After adopting the final Relight recipe, all 742 native CPU tests passed in
+41 seconds. The H3 builder and measured hardware guidance were installed only
+after checking the entire shared queue was empty, then ComfyUI restarted through
+Manager. Live animation-graph exports passed for Relight and Keep original
+people: both retain source, depth and latent conditioning without the redundant
+appearance-video reference, with the expected separate boundary policies.
+Installed file hashes match the candidate. These checks queued no GPU work;
+temporary test records were removed without changing existing projects.
+
+The final onboarding audit found that viewport readiness reused the regular
+LTX scene checks and omitted its actual adapter. Separate LTX/H3 viewport
+checklists now follow their own models and native nodes; regular H3 also
+checks its mandatory depth preprocessor and frame-range node. Five tests
+exercise the registered status handler with missing adapters and detectors.
+The UI selects the matching route and does not inherit readiness from an
+unrelated route. The install guide lists the omitted LTX adapters and VAE,
+gated access, H3 depth setup and the GitHub ZIP fallback during Registry review.
+
+A two-second Relight run with text removal completed in 278 seconds, but
+distorted title lettering returned after the opening. Whole-frame H3 preparation
+had skipped text detection, leaving the caption structure in its depth guide.
+The corrected preparation records text regions while keeping the full-frame
+mask, and old reviews are invalidated. Its completed 48-frame preparation
+detected text in every frame. Source video, full-frame mask and opening-frame
+hashes match the earlier comparison, isolating the depth-guide correction.
+The corrected video completed in 280 seconds: 48 frames at 720 by 1280,
+24 fps, with the selected two-second soundtrack. Eight sampled frames retain
+the warm amber and cool blue lighting, person and gestures without the earlier
+hallucinated title or subtitles. This is a short sampled inspection, not a
+guarantee for every text region or a replacement for artist review. After this
+fix, all 749 native CPU tests passed in 44 seconds and all 27 JavaScript test
+files passed. The three-file onboarding and text-preparation update was then
+installed after checking that the entire shared queue was idle, with a backup
+and normal Manager restart. Live status reports the separate viewport model
+checklists; installed files and the served Studio script match the candidate
+hashes. Actual Relight preparation and animation exports include text detection
+and cleaned-depth conditioning. Keep original people retains its separate
+33-node conditioning path. These checks submitted no GPU work and removed only
+their unchanged temporary records. A real browser interface review and clean
+public product capture remain outstanding.
+
+## Official recipe review, 17 October 2026
+
+The current [LTX Layout-to-Render recipe](https://docs.ltx.io/open-source-model/vfx-post-production/layout-to-render)
+was compared with Studio's implementation. Both use the dedicated adapter at
+strength 1 in two stages, raw layout conditioning, an appearance reference at
+RoPE position -1, CFG 1 and a 2x latent upscale. Studio preserves the selected
+duration by padding then trimming instead of shortening the source, uses a
+quantised model stack, and uses smaller decode tiles and temporal overlap for
+the local memory budget. These are qualification differences, not evidence
+that changing them would solve the rejected geometry and camera behaviour.
+H3 remains the recommended viewport route. No new LTX quality claim follows
+from this source review.
+
+The current [H3 Character Swap adapter card](https://huggingface.co/akatz-ai/MiniMax-H3-Character-Swap-LoRA)
+recommends V1.5 and documents a different accompanying Turbo checkpoint from
+Studio's DMD Turbo. Studio's current H3 graph loads neither character-swap
+version. A source recommendation does not establish a measured improvement
+in Studio; neither adapter is presented as an already-tested default here.
+
+## Candidate mode qualification, 16 October 2026
+
+The artist approved the earlier H3 train viewport results. Wan and LTX viewport
+results were rejected for this scene; they are not equivalent approved choices.
+The newer H3 route that generates and approves a starting frame still needs its
+own completed video test. Approval of direct-reference results does not cover it.
+Three matched starting-frame diagnostics failed to preserve the exterior camera:
+stronger prompting, a Klein consistency adapter, and a Klein depth-reference
+adapter all produced interior views. None has become a production default.
+Entering H3 Viewport now recommends the previously approved direct-reference
+path. Artists can still choose to build and approve a starting frame or upload
+a finished frame. Direct mode requires the real source-motion review before
+rendering; it does not fabricate an opening image. A fresh two-second 1280 by
+720 test completed in 168 seconds, but showed an unwanted exterior/interior
+camera jump. Its different seed, prompt, ordered references and reference roles
+do not reproduce the previously approved example. It does not qualify the new
+configuration for camera retention. The original approved source and reference
+hashes have been matched locally for a controlled comparison.
+
+Relight has completed source preparation and local lighting-frame generation.
+The generated still retains the original adult, clothes, microphone and room
+with the requested warm/cool illumination.
+The normal-context diagnostic was deliberately cancelled for excessive runtime;
+it produced no completed video and provides no speedup or quality comparison.
+A shorter native temporal context completed a two-second 720 by 1280 video
+with 48 frames at 24 fps and two seconds of audio, in 240 seconds total
+(155 seconds sampling). Sampled frames retain the person, clothing, room and
+gestures with the requested lighting. The existing title disappears after the
+opening frame despite text removal being off, a known preservation defect.
+Artist review is pending. This shorter context is below H3's documented
+training range and has not changed the approved production defaults. The
+cancelled longer run is not a completed benchmark for a speedup comparison.
+
+Single-object preparation selected the microphone correctly. Its generated
+starting image and completed two-second 720 by 1280 H3 video replace the
+microphone with a white branded design, retaining the speaker, gestures, room
+and captions in the sampled frames. Delivery has 48 frames at 24 fps and two
+seconds of audio; total execution was 324 seconds. This is a successful short
+integration test, not a guarantee for arbitrary objects, occlusion or duration.
+A combined description using “and” missed the second object. The corrected,
+comma-separated native category test selected both microphone and chair across
+the sampled frames; its starting image changes both. The completed two-second
+multi-object video retains both changes, the original person, gestures and
+captions across eight sampled frames. Delivery is 48 frames at 24 fps with
+two seconds of audio; total execution was 323 seconds.
+
+A whole-scene and character replacement also completed a two-second 720 by
+1280 video, with 48 frames at 24 fps and two seconds of audio, in 316 seconds.
+Across eight sampled frames, the adult replacement, clothing and conservatory
+environment remain consistent while following the source gestures. Original
+captions are not retained by this whole-scene generation test.
+
+Keep original people has graph and tensor regression coverage, including
+multi-person detection and protection of moving regions. Its first generated
+still exposed a dark source-background halo around the protected person. The
+preparation now keeps the tight, complete tracked silhouette without adding
+the ordinary replacement margin. Old expanded-mask reviews are invalidated.
+The corrected still has been inspected: the original person is retained in
+the requested train interior without the earlier thick source-background
+halo. Its GPU animation test is queued; a clean still does not qualify the
+moving boundary.
+These candidates are not qualified release modes yet.
+
+After the lettering and silhouette corrections, the complete native CPU
+regression run passed 697 tests in 48 seconds. Including the direct viewport
+route, a subsequent full run passed 702 tests in 41 seconds. The final added
+direct-action guard also passed in the six-test focused viewport suite.
+All 14 Studio JavaScript test files passed. These checks do not establish
+video appearance or replace browser visual inspection. Test recordings,
+reference assets, project records and generated media remain outside the repo.
+All 26 focused scene-only and Relight tests also passed.
+
+## Viewport audio and delivery corrections, 17 October 2026
+
+The direct H3 viewport builder previously ignored replacement audio and
+sampled Enhanced 1080p at a 1920-pixel long edge. It now selects the replacement
+track at the requested audio offset, supplies the selected audio to H3's
+native reference and guide inputs, locks its audio latent, and exports that
+track. Enhanced delivery samples at a 1280-pixel long edge and saves its base
+to the internal enhancement folder. Original-audio conditioning is unchanged.
+Unsupported optional post-generation lip refinement is hidden and rejected
+for viewport renders; native H3 speech guidance remains available.
+
+The complete native CPU regression suite passed 707 tests in 46 seconds after
+these builder corrections. All 14 Studio JavaScript test files passed, with
+a further focused check for the viewport refinement control. These results
+verify wiring and control behaviour, not the visual quality of replacement
+speech on a viewport character. That combination still needs a render test.
+
+The enhancement handoff now accepts an opening-free direct viewport project,
+checks its actual reference assets, and binds all reference hashes and roles
+to the enhancement record. Viewport raster bookkeeping follows its real
+no-upscale selection and 32-pixel padding, including smaller source videos;
+the enhanced final delivery still targets 1080p. Preparation already records
+the selected soundtrack and offset for final restoration. After these fixes,
+the final complete CPU suite passed 711 tests in 47 seconds. The focused
+enhancement tests exercise the actual viewport tensor-padding adapter.
+
+Subsequent source-reference corrections passed 57 focused tests. Relight and
+protected-people H3 now trim only the repeated source-reference tail to the
+next native frame-grid length; a 48-frame source uses 56 reference frames
+while its 124-frame target, control, masks and audio conditioning are unchanged.
+The earlier expensive 124-reference-frame diagnostic was deliberately cancelled;
+the replacement tests are queued, so no measured speed gain is claimed yet.
+The viewport adapter now pads its actual reference images to that native grid
+as well. Previously, native reference encoding could discard the final real
+frames. This adapter correction needs a normal reload and a fresh render;
+the already-running direct-reference test uses the preceding loaded adapter.
+
+## Timed finished-frame references, 13 October 2026
+
+H3 and whole-scene LTX now accept First, Last or a 1-based output frame number.
+LTX places a single still using native guide conditioning in both sampling
+stages, removes guide latents before caching, and excludes temporal padding
+from the Last selection. Generated scene plates retain their earlier untimed
+appearance role. The native single-image resolver preserves arbitrary frame
+indices. H3 uses its native keyframe guide. Wan Animate and masked LTX do not
+offer arbitrary timed stills on their current routes. These changes are
+structurally tested; no new GPU render or visual approval is claimed.
+
 ## Viewport guide comparison, 13 October 2026
 
-The supplied train blockout is 15 seconds at 1920 × 1080. A five-second
-LTX 2.5 Layout-to-Render run generated 113 frames at 24 fps and 1920 × 1080.
+The supplied train blockout is 15 seconds at 1920 Ã— 1080. A five-second
+LTX 2.5 Layout-to-Render run generated 113 frames at 24 fps and 1920 Ã— 1080.
 A second run added the LTX 2.3 Union Control depth guide at the same output
 size. Both completed. In this scene, the raw Layout route kept the exterior
 train composition closer to its reference. The depth-guided result softened
@@ -20,7 +278,7 @@ conditioning. The local H3 route separately connects the blockout as a
 reference video.
 
 The same blockout was also run through all three local viewport routes at
-1280 × 720. Each returned exactly 120 frames at 24 fps (five seconds). LTX
+1280 Ã— 720. Each returned exactly 120 frames at 24 fps (five seconds). LTX
 pads its generation guide to the model's required frame count, then trims the
 decoded result back to the exact selected interval. These were integration
 tests, not artist sign-offs. The files and source media remain local and are
@@ -46,7 +304,7 @@ project identifiers and media remain outside the public repository.
 A separate LTX 2.5 audio-to-video diagnostic completed native preparation,
 refinement sampling and decoding as three jobs, preserving the native video
 noise mask across the cache boundary. Its delivered five-second video contains
-120 frames at 24 fps and 1408 × 2560. The artist likes its appearance. This
+120 frames at 24 fps and 1408 Ã— 2560. The artist likes its appearance. This
 diagnostic conditions on an opening image and selected audio, however, and does
 not retain the source video's body performance or camera motion. Complete frame
 review also found mouth opening before measured audio activity and limited
@@ -55,7 +313,7 @@ workflow or included among the six accepted release examples.
 
 A separate motion-guided refinement completed native preparation, sampling and
 decode using the saved body-guided first-stage video and selected-audio
-refinement. The artist accepts its exact five-second, 120-frame 1408 × 2560
+refinement. The artist accepts its exact five-second, 120-frame 1408 Ã— 2560
 selected-speech output for this release, bringing accepted examples to seven
 of nine. Complete frame review finds improved source gesture preservation and
 broadly coherent identity, with soft moving hands and early mouth closure
@@ -64,14 +322,14 @@ replacement retain separate qualification scopes.
 
 The artist subsequently accepts the exact five-second LTX silent example,
 bringing accepted examples to eight of nine. It delivers 120 frames at 24 fps
-and 1408 × 2560, with no audio track. Complete frame review finds coherent
+and 1408 Ã— 2560, with no audio track. Complete frame review finds coherent
 identity and retained source gestures; moving hand detail remains soft.
 
 The artist also accepts the exact five-second original-performance LTX example.
 It uses source facial landmarks and frozen original audio, followed by native
 refinement and decode. All 120 face and body frames were reviewed. Native
 CreateVideo receives the original soundtrack directly, preserving the
-1408 × 2560 output raster; the earlier downscaled diagnostic is not this
+1408 Ã— 2560 output raster; the earlier downscaled diagnostic is not this
 accepted example. Moving hand detail remains soft. This sign-off covers the
 exact prototype video rather than longer continuation or Studio integration.
 
@@ -87,7 +345,7 @@ The revised automatic pipeline separates text, motion/audio preparation,
 first sampling, upscaling, refinement and decode into six native phases.
 Each new take gets its own files automatically; repeated requests retain the
 same run. A fresh ordinary Studio run subsequently completed all six phases
-and automatic handoffs, delivering 120 frames at 24 fps, 1080 × 1920, with
+and automatic handoffs, delivering 120 frames at 24 fps, 1080 Ã— 1920, with
 the original audio track and the previously approved opening image unchanged.
 All 120 body and face frames were screened: the adult character is coherent,
 the source gestures remain visible and moving hand detail is soft. This is
@@ -142,7 +400,7 @@ opening-frame registration and the independent tracked performer mask.
 Automatic and described selections now reset the visible native SAM detector
 and tracker at camera cuts, then rejoin their masks in source-frame order. A
 native full-length Prepare test completed all 570 frames at 24 fps, with a
-288 × 512 selection raster and two independently tracked shots. The performer
+288 Ã— 512 selection raster and two independently tracked shots. The performer
 remained selected through the cut and all final 93 frames, where the previous
 continuous tracker had lost its mask. All 570 overview frames and native-size
 cut and tail examples were inspected. There were no near-empty masks or
@@ -163,7 +421,7 @@ inputs were preserved, with zero measured unrelated wire crossings. This is
 separate from Desktop or mobile visual testing.
 
 H3's automatic background-text cleanup completed a native five-second render
-at 24 fps and 720 × 1280. All 120 repaired-area and face crops were inspected:
+at 24 fps and 720 Ã— 1280. All 120 repaired-area and face crops were inspected:
 the repaired background was materially steadier, with slight softness, while
 visible articulation and body gestures remained. This is a local review;
 artist acceptance of this exact repaired take is pending. The native LaMa path
@@ -174,9 +432,9 @@ The artist clarified that the earlier title defect is a fading or colour-changin
 repair region, rather than returning text. The new repair is materially steadier
 in the inspected take; its remaining softness and artist acceptance are still open.
 
-A native 1080 × 1920 H3 delivery test was interrupted before completing its first
+A native 1080 Ã— 1920 H3 delivery test was interrupted before completing its first
 sampling step after system memory commitment reached 99.3% on a machine with
-16 GB GPU memory and 64 GB RAM. Its internal generation raster was 1088 × 1920.
+16 GB GPU memory and 64 GB RAM. Its internal generation raster was 1088 Ã— 1920.
 This attempt establishes a practical memory limit for that configuration, with
 no completed 1080p video or quality pass.
 
@@ -190,7 +448,7 @@ unsuitable as a validated native 1080p route on that machine.
 A separately labelled enhanced-1080p comparison completed all 120 native
 framewise upscale batches from the working 720p H3 original-audio take.
 Both learned-enhancement and plain-resize deliveries contain 120 frames at
-24 fps and 1080 × 1920. Their source AAC packet payloads were copied unchanged.
+24 fps and 1080 Ã— 1920. Their source AAC packet payloads were copied unchanged.
 All paired native face and repaired-area crops and body overviews were inspected.
 Learned enhancement gives modestly sharper facial and fabric detail, with
 remaining softness. The repaired area stayed materially steady in the inspected
@@ -200,12 +458,12 @@ new speech performance. Artist acceptance of that comparison is pending.
 The automatic Studio route separately completed a selected-audio test from one
 launch: fresh matching reference preparation, 720p H3 generation, idle-safe model
 release and all 120 framewise enhancement jobs. It recorded one final result at
-1080 × 1920, 24 fps and five seconds, with the selected soundtrack. The 720p
+1080 Ã— 1920, 24 fps and five seconds, with the selected soundtrack. The 720p
 intermediate was not displayed as a finished 1080p take. All 120 delivered face,
 repaired-area and body views were inspected. No conspicuous repaired-panel
 colour flash, fading rectangle or replacement-character discontinuity was
 identified. Open-mouth detail remains soft; audiovisual review of the final
-words around 2.5–2.9 seconds was subsequently accepted by the artist in the
+words around 2.5â€“2.9 seconds was subsequently accepted by the artist in the
 exact final five-second example. Soundtrack
 correlation checks fidelity and mux timing, not phoneme synchrony. The same
 automatic route also completed original-audio and genuinely silent tests, each
@@ -240,7 +498,7 @@ All 120 face frames were inspected with no obvious double-image blend at the
 join. Artist feedback on the earlier 41-frame diagnostic is positive; acceptance
 of the new 81-frame take and longer clips remains separate.
 
-A separate five-second Wan original-audio take also completed at 720 × 1280
+A separate five-second Wan original-audio take also completed at 720 Ã— 1280
 and 24 fps. All 120 native face and repaired-area crops, plus body overviews,
 were inspected. Mouth changes, blinks and head movement broadly followed the
 source, with no obvious jump at the 81-frame continuation boundary. The title
@@ -248,10 +506,10 @@ repair appeared steady through the source title fade. Fast-moving hands remain
 soft. Original soundtrack delivery was checked; exact speech and performance
 acceptance by the artist is pending.
 
-A native 1080 × 1920 Wan test using 81-frame windows was interrupted before
+A native 1080 Ã— 1920 Wan test using 81-frame windows was interrupted before
 its first completed sampling step under sustained system-memory pressure.
 The separate 41-frame-window comparison completed in about 25 minutes on the
-same 16 GB GPU and 64 GB RAM machine, with the same 1088 × 1920 internal raster
+same 16 GB GPU and 64 GB RAM machine, with the same 1088 Ã— 1920 internal raster
 and conditioning. All 120 native delivered face and repaired-title-area crops
 and body overviews were inspected: replacement identity remained coherent,
 with no obvious double-image blend at the three window joins. The former title
@@ -265,7 +523,7 @@ Both cached and inline graph builders use this policy without another artist
 control. Fifteen focused builder, recipe and provenance checks passed.
 
 Matching five-second Wan selected-speech and silent-source tests also completed
-at 1080 × 1920, 24 fps and 120 frames using 41-frame windows. All delivered face,
+at 1080 Ã— 1920, 24 fps and 120 frames using 41-frame windows. All delivered face,
 repaired-area and body frames were inspected independently, including the three
 joins. Character identity and broad gestures remained coherent, with soft fast
 hand movement and no conspicuous top-repair colour flash or hard join seam.
@@ -300,7 +558,7 @@ masked video and fixed-audio checks passed, which establishes preserved latent
 context rather than a valid replacement. This recipe is rejected and is not
 included in the public Studio builder.
 
-A separate five-second LTX 2.5 Union-pose comparison completed at 720 × 1280
+A separate five-second LTX 2.5 Union-pose comparison completed at 720 Ã— 1280
 and 24 fps. The lossless source pose sequence was inspected before sampling;
 all 120 delivered face and title-area crops and body overviews were then
 reviewed. Replacement identity and broad hand gestures remained coherent,
@@ -360,7 +618,7 @@ optional mouth finish use that same selected track. Studio rebuilds mismatched
 guides automatically; an edited standalone graph reports what needs rebuilding.
 
 Unsupported H3 and Wan speech intervals are rejected before tracking or
-reference encoding. H3 remains limited to 0.21–5 seconds in the current Studio
+reference encoding. H3 remains limited to 0.21â€“5 seconds in the current Studio
 route, and Wan replacement speech to 30 seconds. Original-length selection still
 uses the actual source duration, with these limits explained before preparation.
 
@@ -377,7 +635,7 @@ Both root and internal layouts have zero measured wire crossings. Browser and
 physical phone testing remain unavailable.
 
 A new original-performance Wan render completed with two native continuation
-windows: 48 delivered frames at 24 fps, 1280 × 720 and one original audio track.
+windows: 48 delivered frames at 24 fps, 1280 Ã— 720 and one original audio track.
 Inspected frames retained the replacement character through the source body
 motion. This mannequin-source test does not establish human mouth accuracy or
 long-clip quality.
@@ -408,8 +666,8 @@ An ordinary Studio animation action completed the full cold route: memory
 acknowledgement, speech generation, verified guide storage, another memory
 acknowledgement, motion preparation, a final acknowledgement and rendering.
 No manual prompt IDs, external performance composite or mouth finishing pass
-was used. The guide contained 125 frames at 25 fps and 480 × 640; the finished
-video contained 120 frames at 24 fps and 720 × 1280, with one selected audio
+was used. The guide contained 125 frames at 25 fps and 480 Ã— 640; the finished
+video contained 120 frames at 24 fps and 720 Ã— 1280, with one selected audio
 track. This five-second sample includes leading and trailing silence, rather
 than five seconds of continuous speech. The final render took 467 seconds on
 the test machine, in addition to guide generation and preparation.
@@ -465,7 +723,7 @@ not establish rendering quality.
 
 A separate five-second H3 test of the fixed-audio method completed with the
 installed Pixaroma node, compatible Ref2VA turbo LoRA and eight sampling steps:
-720 × 1280, 120 frames at 24 fps, one selected audio track and no mouth finish.
+720 Ã— 1280, 120 frames at 24 fps, one selected audio track and no mouth finish.
 A matched five-second test then completed with the installed Zura adapter itself,
 with the same dimensions, frame count and selected soundtrack. The user accepted
 the speech-lock method, then reported opening colour shift, movement edges and
@@ -488,7 +746,7 @@ browser rendering or video quality.
 
 A further five-second H3 render completed with native source-video encoding,
 background noise masking, held caption regions and cleaned depth guidance. It
-delivered 120 frames at 24 fps, 720 × 1280 and the selected audio, with no mouth
+delivered 120 frames at 24 fps, 720 Ã— 1280 and the selected audio, with no mouth
 finish or post-generation RGB composite. Inspected frames at the start, through
 the shot and at the end showed no returning caption panels. The static upper
 wall's opening-frame change fell from 1.816 to 0.409 mean absolute RGB units;
@@ -504,7 +762,7 @@ its separate audio-driven guide before generation. Native H3/LTX speech no longe
 requires the optional mouth-correction models.
 
 Two fresh local renders used replacement audio with no mouth finish: LTX at
-1080 × 1920 and H3 at 720 × 1280 with 40 Euler steps. Both delivered 48 frames
+1080 Ã— 1920 and H3 at 720 Ã— 1280 with 40 Euler steps. Both delivered 48 frames
 at 24 fps, two seconds and one correctly aligned selected audio track. H3 used
 124 frames of internal context, separate image references, native audio guidance
 and depth ControlNet strength 1.0 without a duplicate video reference.
@@ -576,13 +834,13 @@ local ComfyUI origin remains unavailable to browser control.
 
 | Route | Executed output | Result and limits |
 | --- | --- | --- |
-| Wan 2.2 Fast | 720 × 1280, 48 frames at 24 fps, 2 seconds | Native pose/face control, approved opening latent reference, isolated character CLIP Vision reference and approved background mask. Two windows, six steps each. Visible hand gesture transfers; hat, jacket and overall appearance remain consistent. Title and subtitle overlays are absent in all 48 inspected frames. Original audio is restored. Exact lip synchronisation and identity similarity were not measured. |
-| LTX 2.5 | 1080 × 1920, 48 frames at 24 fps, 2 seconds | Corrected image-to-video conditioning and source registration. Appearance and text removal passed visual inspection. Motion transfer is understated; exact performance matching was not measured. |
-| MiniMax H3 | 288 × 512, 48 frames at 24 fps, 2 seconds, 40 steps | Native depth control with separate opening and character references executed and restored audio. The user rejected its quality: motion was nearly static. H3 remains experimental. Higher resolution and longer graph settings are supported but were not quality-validated by a new GPU render. |
+| Wan 2.2 Fast | 720 Ã— 1280, 48 frames at 24 fps, 2 seconds | Native pose/face control, approved opening latent reference, isolated character CLIP Vision reference and approved background mask. Two windows, six steps each. Visible hand gesture transfers; hat, jacket and overall appearance remain consistent. Title and subtitle overlays are absent in all 48 inspected frames. Original audio is restored. Exact lip synchronisation and identity similarity were not measured. |
+| LTX 2.5 | 1080 Ã— 1920, 48 frames at 24 fps, 2 seconds | Corrected image-to-video conditioning and source registration. Appearance and text removal passed visual inspection. Motion transfer is understated; exact performance matching was not measured. |
+| MiniMax H3 | 288 Ã— 512, 48 frames at 24 fps, 2 seconds, 40 steps | Native depth control with separate opening and character references executed and restored audio. The user rejected its quality: motion was nearly static. H3 remains experimental. Higher resolution and longer graph settings are supported but were not quality-validated by a new GPU render. |
 | Seedance | Mocked orchestration and credential checks | No paid draft or final render was performed. The native accepted-final node outputs 1080p; this is explicit in its paid action label and result metadata. |
 
-The Wan test generated natively at 704 × 1280, then exported at the source
-aspect ratio of 720 × 1280. Native video execution took 320.226 seconds;
+The Wan test generated natively at 704 Ã— 1280, then exported at the source
+aspect ratio of 720 Ã— 1280. Native video execution took 320.226 seconds;
 preparation took 81.375 seconds and is reusable. Original-source audio correlation
 at zero lag was 0.999993. The run used the supplied Wan checkpoint, native
 FP8 fast loader, relight/realism LoRAs and both Fast-mode acceleration LoRAs.
@@ -618,7 +876,7 @@ portable test instance on 8188. Existing saved reviews and looks were preserved.
 A new native Wan 720p test rendered all 48 frames in one pass, using the new
 81-frame window setting and native join mode. All frames were inspected: hat,
 jacket, speech and hand movement remain visible; text is absent; the former
-1.5–1.7 second cross-fade is absent. Original audio correlation is 0.999993.
+1.5â€“1.7 second cross-fade is absent. Original audio correlation is 0.999993.
 Execution took 487.518 seconds in Desktop's current dynamic-memory mode.
 
 The user reported missing lip sync in the earlier LTX tests. Those tests do not
@@ -641,11 +899,11 @@ An HD mask bottleneck in the original native square max-pooling took about
 12 minutes 47 seconds before sampling. The revised path uses native Mask Fix
 with the same rectangular dilation radius and threshold. Regression checks
 match the original at mask borders and threshold values; a synthetic 49-frame
-1088 × 1920 mask batch with radius 30 processed in 0.907 seconds. No blur, hole
+1088 Ã— 1920 mask batch with radius 30 processed in 0.907 seconds. No blur, hole
 filling or mask-area reduction is introduced. The slow attempt was interrupted
 and is not recorded as a completed render.
 
-Two new 1080 × 1920 LTX tests each exported 48 frames at 24 fps, with two seconds
+Two new 1080 Ã— 1920 LTX tests each exported 48 frames at 24 fps, with two seconds
 of source audio and zero-lag audio correlation 0.999993. The reference-token
 attempt took 206.117 seconds; the final native fixed-audio path took 187.814
 seconds. Appearance and text removal remain usable, but both fail the speech
@@ -755,7 +1013,7 @@ because Codex's saved browser setting rejects the local ComfyUI origin.
 ## Full-length Wan qualification, 11 October 2026
 
 A native original-performance render delivered all 570 frames at 24 fps,
-720 × 1280, including a camera cut. Bounded preparation and rendering completed
+720 Ã— 1280, including a camera cut. Bounded preparation and rendering completed
 within the monitored memory reserves using the saved loading policy. Every
 frame and section boundary was inspected. Original audio packets and decoded
 audio match the delivered source prefix; the omitted final 6 ms is a near-silent
@@ -786,3 +1044,34 @@ require a new plan. All 29 focused planner checks and 21 integration/provenance
 checks pass. These native execution and identity checks supplement the existing
 frontend save/reload tests; they do not establish Desktop or mobile visual
 interface readiness.
+## Viewport artist review, 13 October 2026
+
+The artist approved the five-second H3 train viewport result. The equivalent
+Wan and LTX results were rejected. Wan did not retain the scene or camera;
+LTX retained the crude blockout character shape and showed severe warping.
+Successful execution of those two routes is not visual qualification. Their
+viewport quality remains unresolved; earlier performance-edit approvals apply
+only to those separate workflows. New viewport recipes require fresh renders
+and artist review before being presented as qualified.
+
+After this review, the artist agreed to remove Wan from viewport mode. H3 is
+the recommended viewport route; Wan's approved performance-edit routes remain
+available. LTX's official-recipe retry retained the crude character, and adding
+interior appearance keyframes restored the character but did not resolve
+warping between keyframes. Those diagnostic retries are not artist-approved.
+
+### Progress and subject UX verification
+
+The full Python regression suite passes 636 tests. JavaScript stage-progress, subject debounce/stale reply, artist graph and Wan graph checks pass. A real local CPU YOLOv10 probe detects the performer in four of five sampled source frames. Explicit LTX object Canny routing is graph-tested; it has not yet received a new artist quality approval.
+
+The design detector reports three source-less image warnings on intentionally hidden upload/starting-frame placeholders. Their source is assigned from the uploaded media before display. No placeholder is intentionally shown. Live browser visual checks remain unavailable because the browser tool rejects the local ComfyUI address; responsive CSS and behaviour checks do not substitute for visual approval.
+
+### Artist editor redesign and recovery
+
+The navy/violet three-panel layout follows the supplied artist-approved design direction while retaining actual model resolution options, original/custom audio, masks and native graph access. Source footage previews before preparation. Oversized original-length selection exposes an enabled trim-recovery action, including before look assets exist; behavioural tests confirm it returns before project creation or queue submission. Cancel run is beside live progress and delegates to the existing prompt-scoped cancellation endpoint.
+
+Graph conversion leaves native Load Image inputs visible and restores exact selected filenames through the native preview callback. Multiple references, colon-ID remapping and equivalent compiled render inputs pass offline tests. Full Python regression: 637 tests pass; six JavaScript suites and module syntax checks pass. The fresh static review resolved its responsive cascade, recovery-test and ready-frame navigation findings. Live browser visual and preview lifecycle verification remains unavailable, so static checks do not imply visual approval.
+
+H3 Detailed uses 40 steps versus the approved Fast Turbo route's eight. Native Match reference sizing is already used; reducing reference detail is not assumed lossless. No fresh multi-reference timing benchmark is claimed. An idle test-server model release was requested after verifying its queue empty; the active Desktop instance was not interrupted.
+
+Viewport instructions and clip-limit errors now refer to arbitrary subjects and objects, without assuming a train scene or cap reference. The artist's own prompt still supplies the scene and visual style.

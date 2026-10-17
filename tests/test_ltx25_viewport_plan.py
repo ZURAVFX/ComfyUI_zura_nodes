@@ -55,6 +55,22 @@ class ViewportPlanTests(unittest.TestCase):
         self.assertEqual(five_second["delivered_frames"], 120)
         self.assertEqual(five_second["trimmed_tail_frames"], 0)
 
+    def test_official_sampling_and_reference_encoding_recipe(self):
+        project, kwargs = viewport_inputs()
+        plan = plan_module.build_plan(project, **kwargs)
+        self.assertEqual(plan["basis"]["recipe_version"], 2)
+        for phase, sigmas in (("stage1", plan_module.STAGE1_SIGMAS),
+                              ("refine", plan_module.STAGE2_SIGMAS)):
+            graph = plan["phases"][phase]
+            self.assertEqual(graph["sampler"]["inputs"]["sampler_name"], "euler_ancestral")
+            self.assertEqual(graph["sigmas"]["inputs"]["sigmas"], sigmas)
+            self.assertEqual(graph["guider"]["inputs"]["cfg"], 1)
+            for guide in ("layout_guide", "appearance_guide"):
+                self.assertFalse(graph[guide]["inputs"]["use_tiled_encode"])
+        old_basis = copy.deepcopy(plan["basis"])
+        old_basis.pop("recipe_version")
+        self.assertNotEqual(plan["key"], plan_module.digest(old_basis))
+
     def test_wrong_adapter_and_unqualified_speech_fail_explicitly(self):
         project, kwargs = viewport_inputs()
         kwargs["scenario"] = "replacement"

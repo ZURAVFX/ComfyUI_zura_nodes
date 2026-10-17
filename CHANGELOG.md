@@ -1,5 +1,32 @@
 # Release notes
 
+## Unreleased
+
+- Add H3 Relight with a generated lighting frame for review, plus scene transformation with original people protected during sampling.
+- Offer H3 viewport references directly alongside generated or supplied finished frames. Correct replacement-audio routing, enhanced-delivery sizing and reference-grid padding.
+- Keep candidate visual qualification and known camera-retention limitations documented separately from CPU test results.
+
+- Add a visible H3 sampling-step control, saved with each shot and passed to both native H3 schedulers. Preserve legacy 8/40 defaults and label custom counts unbenchmarked.
+
+
+- Rebuild Studio around source/look, real preview and shot-settings panels with the user-approved navy/violet styling.
+- Make oversized original-length recovery actionable without queuing a render, and expose Cancel run beside live progress.
+- Preserve visible native image loaders and their exact file paths when opening an editable graph.
+- Explain H3 Fast 8-step versus Detailed 40-step costs, retaining reference detail and explicit quality choices.
+
+
+- Show native sampling steps, stage progress, elapsed time and measured stage estimates; unknown loading stages remain indeterminate.
+- Simplify Studio controls and keep progress below the preview on mobile.
+- Add local CPU subject checks and manual People / Objects overrides. Explicit LTX objects use Canny guidance; Wan Animate explains its human-performance requirement.
+
+
+- Recommend H3 for Viewport to final and select it when entering that mode.
+- Remove Wan from viewport choices after the whole-scene quality review;
+  preserve its motion-transfer, swap and speech routes.
+- Mark LTX viewport quality experimental. Match the official ancestral
+  refinement sampler and full-canvas guide encoding, with fresh cache keys.
+- H3's viewport example is artist-approved. Wan and LTX's earlier viewport
+  integration renders were rejected; successful execution was not approval.
 ## 1.3.24
 
 - Correct face-crop overlay alignment at every graph zoom. Keep crop drawing active until the artist chooses the mouth tool; preserve the old crop after an accidental click and restore it on cancelled drags. Refuse drawing on an unloaded or out-of-reference video frame.

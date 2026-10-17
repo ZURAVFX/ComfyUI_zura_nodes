@@ -1,6 +1,58 @@
 // Native subgraph authoring and port-aware layout for Studio's editable copies.
 // ELK computes geometry; ComfyUI creates/serializes all nodes and subgraphs.
 import { routeFixedPorts } from "./graph_routing.js";
+
+const routedCanvases=new WeakSet();
+// Comfy's default splines bow outside the paths checked by the layout router.
+// Scope orthogonal drawing to these graphs, including their native subgraphs.
+// Restore the canvas setting even if drawing fails; never write user settings.
+export function installArtistLinkRendering(app) {
+  const canvas=app.canvas;
+  if(!canvas?.drawConnections || routedCanvases.has(canvas))return;
+  const original=canvas.drawConnections;
+  canvas.drawConnections=function(...args){
+    const graph=args[2]||this.graph;
+    const marked=graph?.extra?.zuraStudio?.nativeSubgraphs || graph?.rootGraph?.extra?.zuraStudio?.nativeSubgraphs;
+    if(!marked || this.links_render_mode===-1)return original.apply(this,args);
+    const previous=this.links_render_mode;
+    try{this.links_render_mode=1;return original.apply(this,args);}
+    finally{this.links_render_mode=previous;}
+  };
+  routedCanvases.add(canvas);
+}
+
+// Native loader nodes own their upload controls and asynchronous preview state.
+// Keep them on the canvas: converting/promoting just the filename widget loses
+// the linked upload/preview lifecycle on some Comfy frontend versions.
+export function visibleArtistInputs(nodes) {
+  return new Set([...nodes].filter(n=>n.type==="LoadImage"));
+}
+
+export async function initialiseArtistImages(graph, apiGraph) {
+  const nodes=[...(graph._nodes||[])], taken=new Set(Object.keys(apiGraph).filter(id=>!id.includes(":")));
+  const mapped=new Map();
+  for(const id of Object.keys(apiGraph)){
+    let local=id;
+    if(id.includes(":")){local=id.replaceAll(":","_");while(taken.has(local))local+="_";taken.add(local);}
+    mapped.set(id,local);
+  }
+  const loaders=[];
+  for(const [id,data] of Object.entries(apiGraph)){
+    if(data.class_type!=="LoadImage"||typeof data.inputs?.image!=="string")continue;
+    const node=nodes.find(n=>String(n.id)===mapped.get(id));
+    const widget=node?.widgets?.find(w=>w.name==="image");
+    if(!node||node.type!=="LoadImage"||!widget)throw new Error("A reference image is missing from the editable graph.");
+    widget.value=data.inputs.image;loaders.push({node,widget,value:data.inputs.image});
+  }
+  // Let native onNodeCreated's initial preview callback finish before refreshing
+  // the selected value. No custom thumbnail or image network request is added.
+  if(typeof requestAnimationFrame==="function")await new Promise(resolve=>requestAnimationFrame(resolve));
+  for(const {node,widget,value} of loaders){
+    await widget.callback?.call(widget,value);
+    node.graph?.setDirtyCanvas?.(true,true);
+  }
+  return loaders.map(({node})=>node);
+}
 export async function promptFingerprint(prompt) {
   prompt=expandStageSignals(prompt);
   const memo=new Map(), active=new Set();
@@ -93,13 +145,35 @@ function promote(host,names) {
   host.subgraph.inputNode.arrange();host.expandToFitContent?.();
 }
 
+// Rebuild a newly created interface through native APIs in destination order.
+// Existing media links and newly promoted controls otherwise get interleaved.
+function orderStageInputs(host) {
+  const sub=host.subgraph;
+  const entries=[...sub.inputs].map((input,index)=>{
+    const targets=[...sub.links.values()].filter(l=>String(l.origin_id)===String(sub.inputNode.id)&&l.origin_slot===index)
+      .map(l=>({node:sub.getNodeById(l.target_id),slot:l.target_slot}));
+    const outside=host.inputs[index]?.link;
+    const link=outside==null?null:host.graph.links.get(outside);
+    return {input,targets,origin:link&&host.graph.getNodeById(link.origin_id),output:link?.origin_slot,index};
+  });
+  const destination=e=>Math.min(...e.targets.map(t=>(t.node.properties?.zuraStudioPacket??0)*1000+t.slot));
+  const sorted=[...entries].sort((a,b)=>destination(a)-destination(b)||a.index-b.index);
+  if(sorted.every((e,i)=>e===entries[i]))return;
+  for(const {input} of [...entries].reverse())sub.removeInput(input);
+  for(const e of sorted){
+    const input=sub.addInput(e.input.name,e.input.type);
+    for(const t of e.targets)if(!input.connect(t.node.inputs[t.slot],t.node))throw new Error("Could not restore an artist control connection.");
+    if(e.origin&&!e.origin.connect(e.output,host,sub.inputs.indexOf(input)))throw new Error("Could not restore a reference connection.");
+  }
+}
+
 function fold(graph,items,title,controls=new Set()) {
   if(!items.size)return null;
   const made=graph.convertToSubgraph(items);
   if(!made?.node)throw new Error("ComfyUI could not create the native subgraph.");
   made.node.title=title;made.subgraph.name=title;
   made.node.color="#313647";made.node.bgcolor="#1d2230";
-  promote(made.node,controls);return made.node;
+  promote(made.node,controls);if(controls.size)orderStageInputs(made.node);return made.node;
 }
 
 export function layoutInput(graph) {
@@ -114,7 +188,9 @@ export function layoutInput(graph) {
       slots.forEach((slot,index)=>{
         const point=n.getSlotPosition?.(index,input)||n.getConnectionPos(input,index);
         ports.push({id:`${n.id}:${input?"in":"out"}:${index}`,width:0,height:0,
-          x:input?0:width,y:Math.max(30,point[1]-n.pos[1]+30),
+          // ELK ports sit on the outside boundary. Native sockets are inset;
+          // restore their exact endpoints after applying the node positions.
+          x:input?0:width,y:point[1]-n.pos[1]+30,
           layoutOptions:{"elk.port.side":side}});
       });
     }
@@ -152,6 +228,22 @@ export function crossingCount(layout) {
   return count;
 }
 
+export function nativeWireLayout(graph,layout) {
+  const nodes=new Map((graph._nodes||[]).map(n=>[String(n.id),n]));
+  for(const n of [graph.inputNode,graph.outputNode])if(n)nodes.set(String(n.id),n);
+  const endpoint=id=>{
+    const [,nodeId,direction,slot]=String(id).match(/^(.*):(in|out):(\d+)$/)||[];
+    const n=nodes.get(nodeId),index=Number(slot),input=direction==="in";
+    if(!n)throw new Error("A routed wire is missing its native node.");
+    const p=n===graph.inputNode||n===graph.outputNode?n.slots[index].pos:
+      n.getSlotPosition?.(index,input)||n.getConnectionPos(input,index);
+    return {x:p[0],y:p[1]};
+  };
+  return {...layout,edges:layout.edges.map(e=>({...e,sections:e.sections.map((s,i,all)=>({...s,
+    ...(i===0?{startPoint:endpoint(e.sources[0])}:{}),
+    ...(i===all.length-1?{endPoint:endpoint(e.targets[0])}:{})}))}))};
+}
+
 export function trimStageSignals(node) {
   let keys;
   try { keys=JSON.parse(node.widgets?.find(w=>w.name==="keys")?.value||"[]"); } catch { return; }
@@ -180,6 +272,7 @@ async function arrange(graph,elk) {
   for(const n of [graph.inputNode,graph.outputNode])if(n)nodes.set(String(n.id),n);
   for(const item of best.children||[]){const n=nodes.get(item.id),io=n===graph.inputNode||n===graph.outputNode;
     n.setPos?.(item.x,item.y+(io?0:30));if(!n.setPos)n.pos=[item.x,item.y+(io?0:30)];if(io)n.arrange();}
+  best=nativeWireLayout(graph,best);
   for(const e of best.edges||[]){const link=graph.links.get(Number(e.id))||graph.links.get(e.id);if(!link)continue;
     for(const s of e.sections||[])for(const point of s.bendPoints||[])graph.createReroute([point.x,point.y],link);
   }
@@ -209,6 +302,8 @@ export function stagePlan(graph) {
 export async function tidyArtistGraph(app,apiGraph,stage,ElkClass) {
   const graph=app.rootGraph||app.graph;
   if(!graph?.convertToSubgraph)throw new Error("Update ComfyUI to use native Studio subgraphs.");
+  await initialiseArtistImages(graph,apiGraph);
+  const visibleInputs=visibleArtistInputs(graph._nodes||[]);
   const before=(await app.graphToPrompt()).output;
   const elk=new ElkClass();let crossings=0;
   const {chunks,links,byId}=stagePlan(graph),owner=new Map();
@@ -254,11 +349,12 @@ export async function tidyArtistGraph(app,apiGraph,stage,ElkClass) {
     let group=stages.at(-1);if(!group||group.name!==c.name){group={name:c.name,nodes:[]};stages.push(group);}group.nodes.push(...c.nodes);
   }
   for(let i=0;i<stages.length;i++){
-    const group=stages[i],host=fold(graph,new Set(group.nodes),`${String(i+1).padStart(2,"0")} · ${names[group.name]}`,group.name==="Models"?new Set():controls);
+    const group=stages[i],host=fold(graph,new Set(group.nodes.filter(n=>!visibleInputs.has(n))),`${String(i+1).padStart(2,"0")} · ${names[group.name]}`,group.name==="Models"?new Set():controls);
+    if(!host)continue;
     // Group actual cloned inner nodes; never refold existing subgraph hosts.
     const packets=new Map();
     for(const n of host.subgraph.nodes){const key=n.properties.zuraStudioPacket;delete n.properties.zuraStudioPacket;if(!packets.has(key))packets.set(key,new Set());packets.get(key).add(n);}
-    for(const items of packets.values()){
+    for(const items of packets.size>1?packets.values():[]){
       const title=[...items].find(n=>!["ZuraStudioSignals","ZuraStudioReadSignal"].includes(n.type))?.title||"Stage hand-off";
       for(const n of items){n._setConcreteSlots?.();n.arrange?.();}
       // Native boundary ports follow selection order: incoming signals first,
@@ -275,10 +371,13 @@ export async function tidyArtistGraph(app,apiGraph,stage,ElkClass) {
     }
     crossings+=await arrange(host.subgraph,elk);
   }
+  for(const n of visibleInputs)delete n.properties.zuraStudioPacket;
   const rootCrossings=await arrange(graph,elk);crossings+=rootCrossings;
   const after=(await app.graphToPrompt()).output;
   if(await promptFingerprint(before)!==await promptFingerprint(after))throw new Error("Native graph conversion changed the render inputs. The original editable graph will be restored.");
+  if(rootCrossings)throw new Error("The main graph still contains intersecting wires. It has not replaced your current workflow.");
   // Exercise the native serializer now; no hand-authored subgraph definitions.
   graph.serialize();graph.extra??={};graph.extra.zuraStudio={stage,nativeSubgraphs:true,wireCrossings:crossings,rootWireCrossings:rootCrossings};
+  installArtistLinkRendering(app);
   app.canvas?.setDirty(true,true);app.canvas?.fitView?.();return {crossings};
 }

@@ -45,5 +45,14 @@ class HardwareGuidanceTests(unittest.TestCase):
         self.assertIsNone(result["hardware"]["vram_gib"])
         self.assertIn("seedance", result["model_guidance"])
 
+    def test_h3_speed_is_qualified_by_sampling_recipe(self):
+        guide = hardware.guidance({"vram_gib": 16})["h3"]
+        self.assertEqual(guide["recommended_quality"], "fast")
+        self.assertEqual(guide["quality_guidance"]["fast"]["sampling_steps"], 8)
+        self.assertEqual(guide["quality_guidance"]["detailed"]["sampling_steps"], 40)
+        self.assertIn("not separately benchmarked", guide["quality_guidance"]["fast"]["reference_speed"])
+        self.assertIn("No measured time guarantee", guide["quality_guidance"]["detailed"]["reference_speed"])
+        self.assertIn("every sampling step", guide["speed_warning"])
+
 if __name__ == "__main__":
     unittest.main()
