@@ -95,13 +95,12 @@ def cache_key(project):
             "lip_sync": c.get("lip_sync", False), "preview": False, "encoders": stamps}
     if c.get("workflow_mode") == "relight":
         data["workflow_mode"] = "relight"
+        data["relight_conditioning_recipe"] = 2
         if not c.get("remove_text"):
             data["relight_text_protection"] = 2
     if c.get("preserve_people"):
         data["preserve_people"] = True
         data["person_conditioning_recipe"] = 2
-    if c.get("workflow_mode") == "relight":
-        data["source_reference_grid"] = 1
     if project.get("look_mode") == "ready" and project.get("starting_asset"):
         position = c.get("finished_frame_position", "first")
         # The first-frame cache already represents the same approved opening.
@@ -890,7 +889,7 @@ def build_h3_graph(project, use_cache=True, preserve_background=True):
     if relight:
         prompt = (
             "<Picture 1> is the approved relit version of this same source scene. "
-            "<Video 1> is the original scene and performance. Change only lighting to match <Picture 1> "
+            "The native source-video and depth controls provide the original scene and performance. Change only lighting to match <Picture 1> "
             "throughout the complete frame: light direction, intensity, colour, shadows, highlights and exposure. "
             "Retain the original people and their identities, apparent age, facial details, clothes and materials. "
             "Retain all objects, geometry, scene layout, camera movement, framing and source body and facial performance. "
@@ -986,15 +985,6 @@ def build_h3_graph(project, use_cache=True, preserve_background=True):
     # the reference stage receive its inputs in a single ordered hand-off.
     prompt_input = node("h3_prompt", "PrimitiveStringMultiline", value=prompt)
     reference_inputs = {"ref_images.ref_image_0": opening, "ref_audios.ref_audio_0": ["h3_pad", 2]}
-    if relight:
-        # References have their own temporal grid, independent of the trained
-        # 124-frame target context. Keep every real frame, then only enough
-        # repeated tail frames to satisfy the native 17k+5 reference contract.
-        # Passing the real count directly would make the native node floor it
-        # to the preceding grid point and discard the end of the performance.
-        reference_inputs["ref_videos.ref_video_0"] = node(
-            "h3_source_reference", "GetImageRangeFromBatch", images=model_source,
-            start_index=0, num_frames=valid_length(count))
     if not relight:
         reference_inputs["ref_images.ref_image_1"] = ["h3_character", 0]
     positive = node("h3_references", "MiniMaxH3ReferenceToVideo", clip=clip, vae=vae, audio_vae=audio_vae,

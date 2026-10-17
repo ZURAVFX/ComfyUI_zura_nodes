@@ -24,9 +24,12 @@ Its thumbnail confirms the upload.
   generated lighting frame before animating. This is generative lighting
   guidance, so inspect the result for identity, material and temporal changes.
 
-Relight and Keep original people are candidate features awaiting visual render
-qualification. Keep original people also requires the updated Zura node loaded
-after a normal ComfyUI restart. They are not covered by the earlier approvals.
+Keep original people passed a short scene-replacement render; artist review
+is pending. Moving boundaries are reconstructed generatively, so inspect hair,
+hands and occlusions. Relight passed a short lighting-consistency render;
+artist review is pending. Preserving subtitles can leave darker patches around
+their text. The updated conditioning requires a normal ComfyUI restart after updating
+Zura Nodes. See the [render evidence and limits](ARTIST_STUDIO_VALIDATION.md).
 
 Choose **Starting look**:
 

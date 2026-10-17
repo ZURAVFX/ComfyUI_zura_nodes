@@ -19,7 +19,7 @@ def guidance(hardware):
             "quality_guidance": {
                 "fast": {
                     "sampling_steps": 8,
-                    "reference_speed": "Fast: 8-step Turbo. Previous 5-second Enhanced 1080p examples took about 10 minutes; viewport scenes with several references are not separately benchmarked",
+                    "reference_speed": "Fast: 8-step Turbo. Measured examples: 5 seconds Enhanced 1080p took about 10 minutes; 2 seconds of 720p viewport with five references took 5 minutes 46 seconds. Longer multi-reference clips are not separately benchmarked",
                     "description": "Recommended for the first take; uses the approved accelerated H3 adapter",
                 },
                 "detailed": {

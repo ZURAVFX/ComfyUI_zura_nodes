@@ -14,14 +14,18 @@ frames retain the title and changing subtitles. However, the opening frame
 contains a visible old-lighting patch on the hoodie in the caption protection
 area. It is not a qualified final result. Protected-people animation also
 completed in 464 seconds, but the environment changes only in the opening
-frame and returns to the original room. A comparison without the original
-appearance-video reference is queued, retaining native masked source and depth
-conditioning for the people and movement. The controlled approved-recipe
+frame and returns to the original room. Subsequent comparisons removed the
+original appearance-video reference while retaining native masked source and
+depth conditioning for the people and movement. The controlled approved-recipe
 viewport comparison completed in 285 seconds. Its 48-frame, 1280 by 720 output
 keeps the train exterior and continuous push-in across eight sampled frames,
-without the earlier interior cut. Artist review is pending. This uses the
-previously loaded adapter; temporal-tail padding still needs its own reload
-and render check.
+without the earlier interior cut. Artist review is pending. After the node
+reload, the final temporal-tail adapter and generic viewport wording also
+completed a two-second 1280 by 720 video in 346 seconds. Eight sampled frames
+retain the train exterior and the source push-in through the final frame;
+there is no interior cut. All 48 selected source frames are retained in the
+56-frame native reference grid. This final-adapter result also awaits artist
+review; reference order and this short scene remain part of its qualification.
 No final release has been published from these candidate changes.
 
 The Relight-only correction limits caption protection to past/current frame
@@ -36,10 +40,19 @@ Studio script matches the candidate file hash.
 The reloaded causal-caption test completed in 449 seconds. Eight sampled
 frames retain the title and changing subtitles without the earlier opening
 hoodie patch. However, the requested illumination fades substantially after
-the opening frame. This is still a failed Relight quality gate. A diagnostic
-without the original appearance-video reference is queued; native source,
-depth, masks and selected audio remain connected. No production reference
-route has been changed on the strength of this diagnostic.
+the opening frame. That comparison failed the Relight quality gate.
+
+The final Relight comparison completed in 317 seconds: 48 frames at 720 by
+1280, 24 fps, with the selected two-second soundtrack. Across eight sampled
+frames, warm amber and cool blue lighting persist while the person, room and
+gestures remain stable. The title and changing subtitles remain, but their
+protected background can leave darker patches around the text. Artist review
+is pending. The successful recipe is adopted: remove the redundant original
+appearance-video reference, retain native source, depth, masks, lighting-frame
+and audio conditioning, and invalidate earlier Relight caches. The production
+graph matches the successful render except for its output filename. Thirty-one
+focused Relight, scene-only and anchor tests passed. This short example does
+not establish arbitrary lighting, caption or long-duration reliability.
 
 The first protected-person comparison without the appearance-video reference
 kept the new environment through the video, but introduced a thick source-background
@@ -52,14 +65,27 @@ halo. Artist review is pending. The tested conditioning path is now used by
 Keep original people: native source, depth and latent conditioning remain,
 the redundant original-room appearance reference is removed, and moving
 boundary patches can regenerate. A distinct conditioning recipe invalidates
-older caches. Relight and ordinary replacement retain their existing settings.
+older caches. Ordinary replacement retains its existing settings.
 This is generative boundary reconstruction, not a pixel-exact person cutout.
+The adopted production graph matches the successful video's conditioning
+inputs; only corrected prompt reference wording and the output filename differ.
+All 742 CPU tests passed again in 49 seconds after this change, and a fresh
+read-only review found no route-isolation or cache-invalidation issue.
 
 Real HTTP project creation, reload and preparation-graph export passed for
 Relight without look references and direct-reference H3 viewport mode. The
 source video and all five selected viewport references also passed byte-hash
 checks through Comfy's media endpoint. These checks submit no GPU work and
 do not replace the outstanding browser visual review.
+
+After adopting the final Relight recipe, all 742 native CPU tests passed in
+41 seconds. The H3 builder and measured hardware guidance were installed only
+after checking the entire shared queue was empty, then ComfyUI restarted through
+Manager. Live animation-graph exports passed for Relight and Keep original
+people: both retain source, depth and latent conditioning without the redundant
+appearance-video reference, with the expected separate boundary policies.
+Installed file hashes match the candidate. These checks queued no GPU work;
+temporary test records were removed without changing existing projects.
 
 ## Official recipe review, 17 October 2026
 

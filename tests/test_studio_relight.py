@@ -84,9 +84,9 @@ class RelightTests(unittest.TestCase):
         self.assertIn('h3_source_latent', graph)
         self.assertTrue(graph['h3_preserve_background']['inputs']['protect_unedited_regions'])
         references = graph['h3_references']['inputs']
-        self.assertEqual(references['ref_videos.ref_video_0'], ['h3_source_reference', 0])
-        self.assertEqual(graph['h3_source_reference']['inputs'],
-                         {'images': ['h3_pad', 0], 'start_index': 0, 'num_frames': 56})
+        self.assertNotIn('ref_videos.ref_video_0', references,
+                         'The original lighting reference pulled illumination back after the opening')
+        self.assertNotIn('h3_source_reference', graph)
         self.assertNotIn('ref_images.ref_image_1', references)
         self.assertEqual(graph['h3_depth']['inputs']['image'], ['h3_pad', 0])
         self.assertEqual(graph['h3_first_frame']['inputs']['image'], ['h3_opening_size', 0])
@@ -96,27 +96,19 @@ class RelightTests(unittest.TestCase):
         self.assertIn('Change only lighting', prompt)
         self.assertNotIn('<Picture 2>', prompt)
         self.assertNotIn('replacement character', prompt)
+        self.assertNotIn('<Video 1>', prompt)
 
-    def test_source_reference_uses_its_native_grid_without_shortening_target(self):
-        for count, reference_count in ((48, 56), (5, 5), (120, 124)):
+    def test_native_motion_source_retained_without_appearance_video_reference(self):
+        for count in (48, 5, 120):
             with self.subTest(count=count):
                 graph = anchors.H3FinishedFrameAnchorTests().build_normal(self.project(), frames=count)
-                self.assertEqual(graph['h3_source_reference']['inputs']['num_frames'], reference_count)
+                self.assertNotIn('h3_source_reference', graph)
+                self.assertNotIn('ref_videos.ref_video_0', graph['h3_references']['inputs'])
                 self.assertEqual(graph['h3_references']['inputs']['length'], ['h3_pad', 5])
                 self.assertEqual(graph['h3_depth']['inputs']['image'], ['h3_pad', 0])
                 self.assertEqual(graph['h3_inpaint']['inputs']['source_video'], ['h3_pad', 0])
                 self.assertEqual(graph['h3_inpaint']['inputs']['mask'], ['h3_pad', 1])
                 self.assertEqual(graph['h3_locked_audio']['inputs']['audio'], ['h3_pad', 2])
-                # Mimic the native reference node's flooring contract. The
-                # trimmed reference must still include the last real frame.
-                padded_source = list(range(count)) + [count - 1] * (124 - count)
-                reference = padded_source[:reference_count]
-                native_count = len(reference)
-                while native_count % 17 != 5:
-                    native_count -= 1
-                native_reference = reference[:native_count]
-                self.assertEqual(native_count, reference_count)
-                self.assertEqual(native_reference[:count], list(range(count)))
 
     def test_source_reference_and_person_boundary_recipes_invalidate_only_their_caches(self):
         import json
@@ -131,7 +123,8 @@ class RelightTests(unittest.TestCase):
                         patch.object(h3.json, 'dumps', wraps=original_dumps) as dumps:
                     h3.cache_key(project)
                 payload = dumps.call_args.args[0]
-                self.assertEqual(payload.get('source_reference_grid'), 1 if mode == 'relight' else None)
+                self.assertNotIn('source_reference_grid', payload)
+                self.assertEqual(payload.get('relight_conditioning_recipe'), 2 if mode == 'relight' else None)
                 self.assertEqual(payload.get('person_conditioning_recipe'), 2 if preserve else None)
 
     def test_other_h3_routes_keep_existing_background_lock(self):
