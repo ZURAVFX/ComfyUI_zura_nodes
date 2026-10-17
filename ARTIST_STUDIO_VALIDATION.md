@@ -109,9 +109,15 @@ the warm amber and cool blue lighting, person and gestures without the earlier
 hallucinated title or subtitles. This is a short sampled inspection, not a
 guarantee for every text region or a replacement for artist review. After this
 fix, all 749 native CPU tests passed in 44 seconds and all 27 JavaScript test
-files passed. The three-file onboarding and text-preparation update is staged
-for installation once the entire shared queue is idle. A real browser interface
-review and clean public product capture remain outstanding.
+files passed. The three-file onboarding and text-preparation update was then
+installed after checking that the entire shared queue was idle, with a backup
+and normal Manager restart. Live status reports the separate viewport model
+checklists; installed files and the served Studio script match the candidate
+hashes. Actual Relight preparation and animation exports include text detection
+and cleaned-depth conditioning. Keep original people retains its separate
+33-node conditioning path. These checks submitted no GPU work and removed only
+their unchanged temporary records. A real browser interface review and clean
+public product capture remain outstanding.
 
 ## Official recipe review, 17 October 2026
 
