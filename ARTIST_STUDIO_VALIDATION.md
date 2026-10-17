@@ -103,9 +103,15 @@ The corrected preparation records text regions while keeping the full-frame
 mask, and old reviews are invalidated. Its completed 48-frame preparation
 detected text in every frame. Source video, full-frame mask and opening-frame
 hashes match the earlier comparison, isolating the depth-guide correction.
-The corrected video comparison is pending. After this fix, all 749 native CPU
-tests passed in 44 seconds and all 27 JavaScript test files passed. A real
-browser interface review and clean public product capture remain outstanding.
+The corrected video completed in 280 seconds: 48 frames at 720 by 1280,
+24 fps, with the selected two-second soundtrack. Eight sampled frames retain
+the warm amber and cool blue lighting, person and gestures without the earlier
+hallucinated title or subtitles. This is a short sampled inspection, not a
+guarantee for every text region or a replacement for artist review. After this
+fix, all 749 native CPU tests passed in 44 seconds and all 27 JavaScript test
+files passed. The three-file onboarding and text-preparation update is staged
+for installation once the entire shared queue is idle. A real browser interface
+review and clean public product capture remain outstanding.
 
 ## Official recipe review, 17 October 2026
 
