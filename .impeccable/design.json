@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-10-13T00:00:00Z",
+  "generatedAt": "2026-10-17T00:52:27.505718+00:00",
   "title": "Design System: Zura Studio",
   "extensions": {
     "motion": [
@@ -21,7 +21,15 @@
       }
     ]
   },
-  "components": [],
+  "components": [
+    {
+      "name": "Clip length",
+      "kind": "custom",
+      "description": "Visible source/custom selection with native buttons and selected, disabled and focus states.",
+      "html": "<div class=\"gs-length-choice\" role=\"group\" aria-label=\"Clip length\"><button type=\"button\" aria-pressed=\"false\">Use source</button><button type=\"button\" aria-pressed=\"true\">Custom</button></div>",
+      "css": ":host{--gs-bg:#080c13;--gs-panel:#101620;--gs-line:#303b50;--gs-muted:#b4bfd2;--gs-accent:#7846f7;--gs-ink:#ffffff;--gs-accent-bright:#a28aff;--gs-accent-soft:#d0bfff;--gs-selected:#241b48;--gs-input:#131c29;--gs-focus:#b8a4ff;font:14px \"Segoe UI\",system-ui,sans-serif;}\n.gs-length-choice{display:flex;gap:4px;padding:4px;background:#0b111b;border:1px solid var(--gs-line);border-radius:8px}\n.gs-length-choice button{flex:1;min-width:0;min-height:40px;padding:8px;color:#d0d8e8;background:transparent;border:1px solid transparent;border-radius:5px;font:inherit;cursor:pointer}\n.gs-length-choice button[aria-pressed=true]{background:var(--gs-selected);border-color:var(--gs-accent-bright);color:#f6f0ff}\n.gs-length-choice button:hover:not(:disabled){background:#352163;color:#fff}\n.gs-length-choice button:focus-visible{outline:2px solid var(--gs-focus);outline-offset:2px}\n.gs-length-choice button:disabled{opacity:.55;cursor:not-allowed}"
+    }
+  ],
   "narrative": {
     "northStar": "Real media first, clear controls around it",
     "overview": "A deep navy editing workspace with overhead light, violet actions and the supplied Zura mark. Source, look and prompt sit beside the real preview; shot settings and the next action remain together.",
@@ -36,6 +44,11 @@
       {
         "name": "Honest progress",
         "body": "Never present a current-stage percentage as whole-job completion. Show measured remaining time as an estimate.",
+        "section": "components"
+      },
+      {
+        "name": "Visible clip-length choices",
+        "body": "Use source and Custom remain visible buttons. An oversized source offers actionable trimming recovery. Theme remaining native option menus for legibility.",
         "section": "components"
       }
     ],

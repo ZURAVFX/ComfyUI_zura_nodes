@@ -4,7 +4,7 @@ Zura Studio is included in the official **Zura Nodes** ComfyUI pack. The pack is
 
 ## Install the pack
 
-For the simplest install, open **ComfyUI Manager → Install Custom Nodes**, search for **Zura Nodes**, and install the entry published by **ZURAVFX**. Manager installs the pack's Python requirements for you. Restart ComfyUI, then click **Zura Studio** in the sidebar.
+When an approved version is available, open **ComfyUI Manager → Install Custom Nodes**, search for **Zura Nodes**, and install the entry published by **ZURAVFX**. Manager installs the pack's Python requirements for you. If the release is still awaiting Registry review or Manager cannot install it, use the official GitHub ZIP below. Restart ComfyUI, then click **Zura Studio** in the sidebar.
 
 If Manager is unavailable, download the current ZIP from the official [Zura Nodes GitHub Releases](https://github.com/ZURAVFX/ComfyUI_zura_nodes/releases). Extract it to `ComfyUI/custom_nodes/ComfyUI_zura_nodes` so that `requirements.txt` is directly inside that folder.
 
@@ -32,12 +32,21 @@ Download only the engine you plan to try first. Put every file under the matchin
 - `text_encoders/gemma4-12b-with-proj-ltx-2.5-nvfp4.safetensors` is a community conversion by [DmitryDB](https://huggingface.co/DmitryDB/LTX-2.5-ComfyUI-Quants/blob/main/text_encoders/gemma4-12b-with-proj-ltx-2.5-nvfp4.safetensors), not an official Lightricks quantisation.
 - Install [comfyui_controlnet_aux](https://github.com/Fannovel16/comfyui_controlnet_aux) for body-motion guidance; its included detector files are `ckpts/yzd-v/DWPose/yolox_l.onnx` and `ckpts/hr16/DWPose-TorchScript-BatchSize5/dw-ll_ucoco_384_bs5.torchscript.pt`.
 
+Add the files for the LTX route you intend to use:
+
+- **Object swap / masked editing:** `vae/ltx-2.5-video-vae-bf16.safetensors` from the [official LTX 2.5 DiffVAE files](https://huggingface.co/Lightricks/LTX-2.5/blob/main/vae/ltx-2.5-video-vae-bf16.safetensors), plus `loras/ltx-2.3-22b-ic-lora-in-outpainting-0.9.safetensors` from the [official In-Outpainting adapter](https://huggingface.co/Lightricks/LTX-2.3-22b-IC-LoRA-In-Outpainting). This route requests the DiffVAE; the similarly named ConvVAE above does not replace it.
+- **Viewport to final (experimental):** `loras/ltx-2.5-22b-ic-lora-layout-to-render-1.0.safetensors` from the [official Layout-to-Render adapter](https://huggingface.co/Lightricks/LTX-2.5-22b-IC-LoRA-Layout-To-Render). This route uses the ConvVAE above and raw blockout frames. It does not need the Union adapter or DWPose detectors. H3 remains the recommended viewport engine.
+
+These adapter repositories can require access approval. Sign in to Hugging Face, review and accept their displayed terms if you agree, then download the exact named file to `models/loras/`.
+
 **MiniMax H3** files:
 
 - Official Comfy-Org files: [`minimax_h3_ref2va_pruned_int8_convrot.safetensors`](https://huggingface.co/Comfy-Org/MiniMax-H3/blob/main/diffusion_models/minimax_h3_ref2va_pruned_int8_convrot.safetensors), [`qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors`](https://huggingface.co/Comfy-Org/MiniMax-H3/blob/main/text_encoders/qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors), [`minimax_h3_video_vae_int8_convrot.safetensors`](https://huggingface.co/Comfy-Org/MiniMax-H3/blob/main/vae/minimax_h3_video_vae_int8_convrot.safetensors), [`minimax_h3_audio_vae_fp32.safetensors`](https://huggingface.co/Comfy-Org/MiniMax-H3/blob/main/vae/minimax_h3_audio_vae_fp32.safetensors), and [`minimax_h3_fun_controlnet_union_2.0_pruned_int8_convrot.safetensors`](https://huggingface.co/Comfy-Org/MiniMax-H3/blob/main/model_patches/minimax_h3_fun_controlnet_union_2.0_pruned_int8_convrot.safetensors).
 - H3 fast sampling uses [`minimax_h3_dmd_ref2va_8step_turbo_pruned.safetensors`](https://huggingface.co/drbaph/MiniMax-H3-Turbo-Lora-ComfyUI/blob/main/experimental/minimax_h3_dmd_ref2va_8step_turbo_pruned.safetensors), a community LoRA, not a Comfy-Org file.
 
 Accept the H3 community licence and any terms shown before downloading. The H3 turbo LoRA has separate community licensing.
+
+**Motion transfer, Object swap and Relight** also require [comfyui_controlnet_aux](https://github.com/Fannovel16/comfyui_controlnet_aux) for `DepthAnythingV2Preprocessor`. Its first use can download `depth_anything_v2_vitl.pth` into that pack's checkpoint cache; allow internet access and time for this download. The direct H3 **Viewport to final** route uses the source video instead of this depth pass and does not require the H3 FunControl model. It does use ComfyUI-KJNodes for its frame-range node. The Studio checklist distinguishes these routes.
 
 **Wan 2.2 Animate** files:
 

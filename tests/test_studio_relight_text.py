@@ -46,7 +46,10 @@ class RelightTextTests(unittest.TestCase):
         with patch.object(studio, 'check_asset'), patch.object(studio, 'assert_approved'):
             prepare = studio.build_graph(p, 'prepare')
             design = studio.build_graph(p, 'design', use_cache=False)
-        self.assertEqual(prepare['20']['inputs']['mask'], ['12', 0])
+        self.assertEqual(prepare['12']['class_type'], 'ZuraWholeSceneMask')
+        self.assertEqual(prepare['text_removal']['inputs']['performer_mask'], ['12', 0])
+        self.assertEqual(prepare['20']['inputs']['mask'], ['text_removal', 0])
+        self.assertEqual(prepare['20']['inputs']['clip_details'], ['text_removal', 1])
         self.assertNotIn('zura_relight_text_detect', prepare)
         self.assertNotIn('zura_masked_look', design)
         graph = anchors.H3FinishedFrameAnchorTests().build_normal(p)

@@ -326,6 +326,8 @@ def prep_key(project):
     if project["config"].get("length_mode") == "original":
         settings["length_mode"] = "original"
     c = project["config"]
+    if c.get("remove_text") and c.get("engine") == "h3" and c.get("edit_area") == "scene":
+        settings["h3_scene_text_regions"] = 1
     if c.get("workflow_mode") == "relight" and not c.get("remove_text"):
         settings["relight_text_protection"] = 1
     # Bind new reviews to the cut-aware native tracking recipe. Remembered
@@ -403,6 +405,32 @@ def ltx25_detector_paths():
     roots = folder_paths.get_folder_paths("custom_nodes")
     return {name: next((Path(root) / relative for root in roots if (Path(root) / relative).is_file()), None)
             for name, relative in LTX25_DETECTORS.items()}
+
+
+def ltx25_viewport_readiness(node_mappings):
+    """Check the raw-layout graph, independently of the human-pose route."""
+    from .ltx25 import VIEWPORT_MODELS
+    categories = {"model": "diffusion_models", "video_vae": "vae", "audio_vae": "vae",
+                  "union": "loras", "upscaler": "latent_upscale_models"}
+    files = [{"folder": categories[key], "filename": name,
+              "ready": bool(folder_paths.get_full_path(categories[key], name))}
+             for key, name in VIEWPORT_MODELS.items()]
+    text = "gemma4-12b-with-proj-ltx-2.5-nvfp4.safetensors"
+    files.append({"folder": "text_encoders", "filename": text,
+                  "ready": bool(folder_paths.get_full_path("text_encoders", text))})
+    required_nodes = (
+        "CLIPLoader", "CLIPTextEncode", "GenjSaveTextConditioning", "GenjLoadTextConditioning",
+        "GenjLoadReviewedShot", "GenjLTXFramePad", "GetVideoComponents", "ImageFromBatch",
+        "ImageScale", "SaveImage", "VHS_LoadImagesPath", "ZuraSaveVideoLatentData",
+        "ZuraLoadVideoLatentData", "LTXVConditioning", "VAELoader", "UNETLoader",
+        "LTXICLoRALoaderModelOnly", "EmptyLTXVLatentVideo", "LoadImage", "LTXAddVideoICLoRAGuide",
+        "LTXVEmptyLatentAudio", "LTXVConcatAVLatent", "CFGGuider", "RandomNoise",
+        "KSamplerSelect", "ManualSigmas", "SamplerCustomAdvanced", "LTXVSeparateAVLatent",
+        "LTXVCropGuides", "LatentUpscaleModelLoader", "LTXVLatentUpsampler", "VAEDecodeTiled",
+        "TrimAudioDuration", "CreateVideo", "SaveVideo")
+    missing = [name for name in required_nodes if name not in node_mappings]
+    return {"ready": all(item["ready"] for item in files) and not missing,
+            "model_files": files, "missing_nodes": missing}
 
 
 def _ltx25_model_pin(path):
@@ -582,7 +610,10 @@ def build_graph(project, stage, use_cache=True, run_id=None):
             if relight_text:
                 graph["zura_relight_sam"] = graph.pop("6")
                 graph["zura_relight_sam"]["_meta"] = {"title": "Detect source lettering to keep"}
+            keep_text_detector = c.get("remove_text") and c.get("engine") == "h3"
             for key in ("6", "7", "8", "9", "10", "11"):
+                if key == "6" and keep_text_detector:
+                    continue
                 graph.pop(key, None)
             graph["12"] = {"class_type": "ZuraWholeSceneMask", "inputs": {"images": ["4", 0]},
                            "_meta": {"title": "Whole scene · no selection mask"}}
@@ -644,7 +675,7 @@ def build_graph(project, stage, use_cache=True, run_id=None):
                 "_meta": {"title": "Change surroundings · protect original people"}}
             graph["17"]["inputs"]["mask"] = ["zura_edit_surroundings", 0]
             graph["20"]["inputs"]["mask"] = ["zura_edit_surroundings", 0]
-        if c.get("remove_text") and c["edit_area"] != "scene" and not c.get("preserve_people"):
+        if c.get("remove_text") and (c["edit_area"] != "scene" or c["engine"] == "h3") and not c.get("preserve_people"):
             graph["text_prompt"] = {"class_type": "CLIPTextEncode", "inputs": {"clip": ["6", 1], "text": "text:20"}}
             graph["text_detect"] = {"class_type": "SAM3_Detect", "inputs": {
                 "model": ["6", 0], "image": ["4", 0], "conditioning": ["text_prompt", 0],
@@ -653,8 +684,10 @@ def build_graph(project, stage, use_cache=True, run_id=None):
                 "performer_mask": ["12", 0], "text_mask": ["text_detect", 0],
                 "text_boxes": ["text_detect", 1], "clip_details": ["3", 1], "padding": 5}}
             graph["17"]["inputs"]["mask"] = ["text_removal", 0]
-            graph["20"]["inputs"].update(mask=["text_removal", 0], clip_details=["text_removal", 1],
-                                        performer_mask=["zura_join_tracking_masks", 0] if "zura_join_tracking_masks" in graph else ["11", 0])
+            graph["20"]["inputs"].update(mask=["text_removal", 0], clip_details=["text_removal", 1])
+            if c["edit_area"] != "scene":
+                graph["20"]["inputs"]["performer_mask"] = (["zura_join_tracking_masks", 0]
+                    if "zura_join_tracking_masks" in graph else ["11", 0])
             if "zura_split_tracking_shots" in graph:
                 graph["text_removal"]["inputs"]["tracking_segments"] = ["zura_split_tracking_shots", 2]
     elif stage == "design":
@@ -1949,10 +1982,16 @@ def register():
             "depth_control": ("loras", "ltx-2.3-22b-ic-lora-union-control-ref0.5.safetensors"),
         }
         models = {key: bool(folder_paths.get_full_path(folder, name)) for key, (folder, name) in required.items()}
-        from .h3 import H3_MODELS, H3_NATIVE_NODES, text_cleanup_readiness
+        from .h3 import (H3_MODELS, H3_NATIVE_NODES, H3_VIEWPORT_MODELS,
+                         H3_VIEWPORT_NATIVE_NODES, text_cleanup_readiness)
         import nodes
         h3_models = {key: bool(folder_paths.get_full_path(folder, name)) for key, (folder, name) in H3_MODELS.items()}
         missing_h3_nodes = [name for name in H3_NATIVE_NODES if name not in nodes.NODE_CLASS_MAPPINGS]
+        missing_h3_viewport_nodes = [name for name in H3_VIEWPORT_NATIVE_NODES
+                                     if name not in nodes.NODE_CLASS_MAPPINGS]
+        h3_viewport_ready = (all(h3_models[key] for key in H3_VIEWPORT_MODELS)
+                             and not missing_h3_viewport_nodes)
+        ltx_viewport = ltx25_viewport_readiness(nodes.NODE_CLASS_MAPPINGS)
         from .wan import WAN_MODELS, WAN_NATIVE_NODES
         missing_ltx_nodes = [name for name in ("LTXVModalityGuidance", "SolidMask", "SetLatentNoiseMask",
                                               "MaskFix+", "ThresholdMask", "ComfyMathExpression")
@@ -1981,7 +2020,9 @@ def register():
             "wan_speech": wan_speech_readiness(),
             "engine_ready": {"local": all(models[key] for key in masked_keys) and not missing_ltx_nodes,
                              "local_scene": all(models[key] for key in scene_keys) and all(detectors.values()) and not missing_ltx_scene_nodes,
+                             "local_viewport": ltx_viewport["ready"],
                              "h3": all(h3_models.values()) and not missing_h3_nodes,
+                             "h3_viewport": h3_viewport_ready,
                              "h3_enhanced1080": all(h3_models.values()) and not missing_h3_nodes and h3_enhancement["ready"],
                              "wan": all(wan_models.values()) and not missing_wan_nodes},
             "engine_quality": {"local": "Reviewed five-second whole-scene examples; masked speech and longer continuation remain experimental",
@@ -1989,7 +2030,12 @@ def register():
                                "wan": "Native source performance or an audio-driven face guide; review head turns and speech timing"},
             "missing_ltx_nodes": missing_ltx_nodes,
             "missing_ltx_scene_nodes": missing_ltx_scene_nodes,
+            "missing_ltx_viewport_nodes": ltx_viewport["missing_nodes"],
+            "missing_h3_viewport_nodes": missing_h3_viewport_nodes,
             "model_files": {
+                "local_viewport": ltx_viewport["model_files"],
+                "h3_viewport": [{"folder": folder, "filename": name, "ready": h3_models[key]}
+                                for key, (folder, name) in H3_VIEWPORT_MODELS.items()],
                 "local_scene": [{"folder": folder, "filename": name, "ready": models[key]}
                                 for key, (folder, name) in required.items() if key in scene_keys] +
                                [{"path": "custom_nodes/" + relative.as_posix(), "ready": detectors[key] is not None}

@@ -20,7 +20,16 @@ H3_MODELS = {
     "h3_turbo": ("loras", "minimax_h3_dmd_ref2va_8step_turbo_pruned.safetensors"),
 }
 H3_NATIVE_NODES = ("MiniMaxH3ReferenceToVideo", "MiniMaxH3AddGuide",
-                   "MiniMaxH3FunControlNetApply", "MiniMaxH3SigmaShift")
+                   "MiniMaxH3FunControlNetApply", "MiniMaxH3SigmaShift",
+                   "DepthAnythingV2Preprocessor", "GetImageRangeFromBatch")
+H3_VIEWPORT_MODELS = {key: value for key, value in H3_MODELS.items() if key != "h3_control"}
+H3_VIEWPORT_NATIVE_NODES = ("MiniMaxH3ReferenceToVideo", "MiniMaxH3AddGuide",
+                            "MiniMaxH3SigmaShift", "GetImageRangeFromBatch",
+                            "LoadVideo", "LoadAudio", "GenjSelectClip", "GenjH3ViewportFrameData",
+                            "GetVideoComponents", "LoadImage", "UNETLoader", "LoraLoaderModelOnly",
+                            "CLIPLoader", "VAELoader", "ZuraH3LockReferenceAudio", "BasicGuider",
+                            "RandomNoise", "BasicScheduler", "KSamplerSelect", "SamplerCustomAdvanced",
+                            "VAEDecode", "ImageCrop", "CreateVideo", "GenjRestoreSoundtrack")
 H3_TEXT_CLEANUP_NODES = ("LoadLaMaModel", "LaMaInpaint", "LazySwitchKJ")
 H3_PRESETS = ("preview_fast", "preview_quality", "take_fast", "take_quality")
 

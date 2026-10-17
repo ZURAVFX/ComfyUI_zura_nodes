@@ -66,6 +66,30 @@ class RelightTests(unittest.TestCase):
         self.assertFalse(any(n['class_type'] == 'LoadImage' and n['inputs'].get('image') == 'source.mp4'
                              for n in graph.values()))
 
+    def test_whole_frame_text_removal_records_regions_for_depth_cleanup(self):
+        project = self.project()
+        project['config']['remove_text'] = True
+        with patch.object(studio, 'check_asset'):
+            graph = studio.build_graph(project, 'prepare', use_cache=False)
+        self.assertIn('6', graph, 'Keep the native text detector for whole-frame H3 edits')
+        self.assertEqual(graph['12']['class_type'], 'ZuraWholeSceneMask')
+        self.assertEqual(graph['text_removal']['inputs']['performer_mask'], ['12', 0])
+        self.assertEqual(graph['20']['inputs']['clip_details'], ['text_removal', 1])
+        self.assertNotIn('performer_mask', graph['20']['inputs'], 'There is no tracked person in a whole-frame review')
+        referenced = {link[0] for node in graph.values() for link in node['inputs'].values()
+                      if isinstance(link, list) and len(link) == 2 and isinstance(link[0], str)}
+        self.assertFalse(referenced - graph.keys(), 'Preparation must not reference removed tracking nodes')
+
+    def test_whole_frame_text_metadata_invalidates_old_reviews_only_for_h3(self):
+        project = self.project()
+        project['config']['remove_text'] = True
+        original = studio.canonical
+        for engine in ('h3', 'local'):
+            project['config']['engine'] = engine
+            with patch.object(studio, 'canonical', wraps=original) as encode:
+                studio.prep_key(project)
+            self.assertEqual(encode.call_args.args[0].get('h3_scene_text_regions'), 1 if engine == 'h3' else None)
+
     def test_optional_lighting_references_do_not_add_replacement_direction(self):
         project = self.project()
         project['references'] = [{'file': 'lighting-a.png'}, {'file': 'lighting-b.png'}]

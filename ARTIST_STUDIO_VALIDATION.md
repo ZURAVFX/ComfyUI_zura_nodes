@@ -87,6 +87,26 @@ appearance-video reference, with the expected separate boundary policies.
 Installed file hashes match the candidate. These checks queued no GPU work;
 temporary test records were removed without changing existing projects.
 
+The final onboarding audit found that viewport readiness reused the regular
+LTX scene checks and omitted its actual adapter. Separate LTX/H3 viewport
+checklists now follow their own models and native nodes; regular H3 also
+checks its mandatory depth preprocessor and frame-range node. Five tests
+exercise the registered status handler with missing adapters and detectors.
+The UI selects the matching route and does not inherit readiness from an
+unrelated route. The install guide lists the omitted LTX adapters and VAE,
+gated access, H3 depth setup and the GitHub ZIP fallback during Registry review.
+
+A two-second Relight run with text removal completed in 278 seconds, but
+distorted title lettering returned after the opening. Whole-frame H3 preparation
+had skipped text detection, leaving the caption structure in its depth guide.
+The corrected preparation records text regions while keeping the full-frame
+mask, and old reviews are invalidated. Its completed 48-frame preparation
+detected text in every frame. Source video, full-frame mask and opening-frame
+hashes match the earlier comparison, isolating the depth-guide correction.
+The corrected video comparison is pending. After this fix, all 749 native CPU
+tests passed in 44 seconds and all 27 JavaScript test files passed. A real
+browser interface review and clean public product capture remain outstanding.
+
 ## Official recipe review, 17 October 2026
 
 The current [LTX Layout-to-Render recipe](https://docs.ltx.io/open-source-model/vfx-post-production/layout-to-render)

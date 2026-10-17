@@ -740,7 +740,7 @@ class ArtistStudio {
       wan:"This saved shot used Wan, which is no longer available for viewport renders. Choose H3.",
       seedance:"Paid generation using Comfy credits."
     }[this.config.engine] || "";
-    if(relight)this.$("engine-hint").textContent="H3 keeps the shot as a video guide and uses your approved lighting frame.";
+    if(relight)this.$("engine-hint").textContent=this.config.remove_text?"Relight from your approved lighting frame; remove source lettering.":"Relight from your approved lighting frame. Keeping lettering can leave darker patches around it.";
     const unsupportedSubject=this.config.engine==="wan" && this.config.subject_mode==="objects";
     if(this.config.engine==="wan" && content.kind==="objects")this.$("engine-hint").textContent="Wan is people-focused. H3 or LTX may suit objects and scenery better. Choose People if detection missed someone.";
     this.$("output-note").textContent=this.config.engine==="seedance"?"The draft uses your selected resolution and clip length. Finishing an accepted draft is a separate paid 1080p step.":this.config.engine==="h3"&&this.config.delivery_mode==="enhanced1080"?"H3 creates motion at 720p, then enhances each frame to 1080p. The approved original or selected soundtrack is restored once.":this.config.engine==="h3"?"Native H3 renders at the selected size. Native 1080p is a separate, memory-intensive render.":"Keeps your video's shape. Renders the length you choose from the original footage.";
@@ -983,16 +983,18 @@ class ArtistStudio {
     const textCleanup=engine==="h3" && this.config.remove_text && this.config.edit_area!=="scene";
     const cleanupReady=!textCleanup || this.modelStatus.h3_text_cleanup?.ready!==false;
     const enhancementRequested=engine==="h3"&&this.config.delivery_mode==="enhanced1080";
-    const route=engine==="local"&&this.config.edit_area==="scene"?"local_scene":engine;
-    const baseReady=this.modelStatus.engine_ready?.[route] ?? (engine==="local" && this.modelStatus.ready);
+    const viewport=this.config.workflow_mode==="viewport";
+    const route=viewport&&engine==="local"?"local_viewport":viewport&&engine==="h3"?"h3_viewport":engine==="local"&&this.config.edit_area==="scene"?"local_scene":engine;
+    const baseReady=this.modelStatus.engine_ready?.[route] ?? (route==="local" && this.modelStatus.ready);
     const enhancementReady=!enhancementRequested || this.modelStatus.h3_enhancement?.ready===true;
     const ready=(engine==="seedance" || baseReady) && enhancementReady && (!speech || this.modelStatus.wan_speech?.ready) && cleanupReady;
     const enhancementStatus=this.modelStatus.h3_enhancement || {};
     const enhancementSetupCommand=enhancementStatus.setup_command || "Setup_H3_Enhancement_Windows.cmd";
-    this.$("models").textContent=engine==="seedance"?"Uses Comfy credits":ready?(engine==="h3"?(enhancementRequested?"H3 · Enhanced 1080p ready":"H3 · 720p ready; native 1080p unqualified"):engine==="wan"?(speech?"Wan + speech models ready":"Wan models ready"):route==="local_scene"?"LTX 2.5 · whole-scene models ready":"LTX · masked route experimental"):!cleanupReady?"Text cleanup setup needed":enhancementRequested&&!baseReady?"H3 model setup needs attention":enhancementRequested&&!enhancementStatus.ready?(!enhancementStatus.model_ready?`Run ${enhancementSetupCommand}`:"1080p enhancement nodes setup needed"):speech && !this.modelStatus.wan_speech?.ready?"Wan speech setup needed":"Model setup needs attention";
+    this.$("models").textContent=engine==="seedance"?"Uses Comfy credits":ready?(engine==="h3"?(enhancementRequested?"H3 · Enhanced 1080p ready":"H3 · 720p ready; native 1080p unqualified"):engine==="wan"?(speech?"Wan + speech models ready":"Wan models ready"):route==="local_viewport"?"LTX 2.5 · experimental viewport ready":route==="local_scene"?"LTX 2.5 · whole-scene models ready":"LTX · masked route experimental"):!cleanupReady?"Text cleanup setup needed":enhancementRequested&&!baseReady?"H3 model setup needs attention":enhancementRequested&&!enhancementStatus.ready?(!enhancementStatus.model_ready?`Run ${enhancementSetupCommand}`:"1080p enhancement nodes setup needed"):speech && !this.modelStatus.wan_speech?.ready?"Wan speech setup needed":"Model setup needs attention";
     this.$("models").classList.toggle("needs-attention",!ready);
     const files=this.modelStatus.model_files?.[route]||[];
-    const missingNodes=this.modelStatus[route==="local_scene"?"missing_ltx_scene_nodes":engine==="local"?"missing_ltx_nodes":engine==="h3"?"missing_h3_nodes":"missing_wan_nodes"]||[];
+    const missingNodeField={local:"missing_ltx_nodes",local_scene:"missing_ltx_scene_nodes",local_viewport:"missing_ltx_viewport_nodes",h3:"missing_h3_nodes",h3_viewport:"missing_h3_viewport_nodes",wan:"missing_wan_nodes"}[route];
+    const missingNodes=this.modelStatus[missingNodeField]||[];
     this.$("model-checklist").innerHTML=engine==="seedance"?'<p class="gs-note">Uses the paid provider. Check credits and cost before rendering.</p>':files.map(item=>`<p class="gs-note">${item.ready?"Ready":"Missing"}: <code>${escape(item.path||`models/${item.folder}/${item.filename}`)}</code></p>`).join("")+(missingNodes.length?`<p class="gs-note">Missing nodes: ${missingNodes.map(escape).join(", ")}. Install the matching packs listed in the setup guide, then restart ComfyUI.</p>`:"<p class=\"gs-note\">Required native node checks passed. Optional speech or enhancement has its own setup.</p>");
   }
   async poll() {
