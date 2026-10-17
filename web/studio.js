@@ -1,6 +1,6 @@
 import { app } from "../../scripts/app.js";
 import { api } from "../../scripts/api.js";
-import { tidyArtistGraph, trimStageSignals } from "./artist_graph.js";
+import { tidyArtistGraph, trimStageSignals, installArtistLinkRendering } from "./artist_graph.js";
 import { attachWanGraphControls } from "./wan_graph.js";
 import { stageProgress } from "./studio_progress.js";
 import { ContentDetection } from "./studio_content.js";
@@ -509,13 +509,15 @@ class ArtistStudio {
       const stage=this.$("graph-stage").value;
       const id=this.project.id,exported=await request(`/projects/${id}/graph?stage=${encodeURIComponent(stage)}`);if(epoch!==this.resetEpoch||this.project?.id!==id)return;
       if(typeof app.loadApiJson!=="function")throw new Error("Update the ComfyUI frontend to open editable API graphs.");
-      await app.loadApiJson(exported.graph,`${exported.name} · ${crypto.randomUUID().slice(0,8)}.json`);
+      const originalGraph=(app.rootGraph||app.graph)?.serialize?.();
+      if(!originalGraph || typeof app.loadGraphData!=="function")throw new Error("Update ComfyUI to open Graph view without replacing your current workflow.");
       try {
+        await app.loadApiJson(exported.graph,`${exported.name} · ${crypto.randomUUID().slice(0,8)}.json`);
         await import("./vendor/elk.bundled.js");
         await tidyArtistGraph(app,exported.graph,exported.stage,window.ELK);
       } catch(e) {
-        await app.loadApiJson(exported.graph,`${exported.name} · editable.json`);
-        app.extensionManager?.toast?.add({severity:"warn",summary:"Zura graph view",detail:e.message+" The original editable graph has been restored.",life:10000});
+        await app.loadGraphData(originalGraph);
+        throw new Error("Could not arrange this stage into an artist graph. Your previous workflow has been restored. "+e.message);
       }
       attachWanGraphControls(app,{projectId:exported.project_id,stage:exported.stage,
         context:exported.context,progress:exported.progress,request,tidy:tidyWanStage});
@@ -1030,6 +1032,7 @@ class ArtistStudio {
 app.registerExtension({
   name:"Zura.Artist.Studio",
   afterConfigureGraph(missingNodeTypes,configuredApp){
+    installArtistLinkRendering(configuredApp||app);
     attachWanGraphControls(configuredApp||app,{request,tidy:tidyWanStage});
   },
   beforeRegisterNodeDef(nodeType,nodeData){
@@ -1040,6 +1043,7 @@ app.registerExtension({
     }
   },
   async setup(){
+    installArtistLinkRendering(app);
     const css=document.createElement("link");css.rel="stylesheet";css.href=new URL("./studio.css",import.meta.url).href;document.head.appendChild(css);
     const studio=new ArtistStudio();
     studio.container.querySelector(".gs-zura-mark").src=new URL("./assets/zura-logo.png",import.meta.url).href;
