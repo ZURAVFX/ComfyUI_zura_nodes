@@ -92,6 +92,22 @@ class ConditioningCacheTests(unittest.TestCase):
         self.assertEqual(restored["samples"].tensors[1].shape, (1, 32, 2, 207))
         self.assertEqual(restored["samples"].tensors[0].device.type, "cpu")
 
+    def test_planning_reuses_validation_but_execution_still_loads_strictly(self):
+        self.save()
+        with patch.object(h3, "_read_conditioning_cache", wraps=h3._read_conditioning_cache) as reader:
+            self.assertTrue(h3.cache_valid(self.key, expected_frames=124))
+            self.assertTrue(h3.cache_valid(self.key, expected_frames=124))
+            self.assertFalse(h3.cache_valid(self.key, expected_frames=56))
+            self.assertEqual(reader.call_count, 1)
+            h3.GenjLoadH3Conditioning().load(self.key)
+            self.assertEqual(reader.call_count, 2)
+
+    def test_planning_validation_invalidates_after_cache_replacement(self):
+        self.save()
+        self.assertTrue(h3.cache_valid(self.key))
+        self.path.write_bytes(b"broken reference cache")
+        self.assertFalse(h3.cache_valid(self.key))
+
     def test_missing_empty_truncated_and_malformed_are_not_selected_or_deleted(self):
         self.assertFalse(h3.cache_valid(self.key))
         neighbour = Path(self.tmp.name) / "other_references.pt"

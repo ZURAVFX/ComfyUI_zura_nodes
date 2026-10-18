@@ -67,11 +67,16 @@ def digest(value):
 
 
 def file_digest(path):
-    result = hashlib.sha256()
-    with Path(path).open("rb") as stream:
-        for block in iter(lambda: stream.read(8 * 1024 * 1024), b""):
-            result.update(block)
-    return result.hexdigest()
+    if not __package__:
+        # Keep the pure planner usable by standalone tooling without importing
+        # ComfyUI's package initialiser. Studio uses the shared bounded cache.
+        result = hashlib.sha256()
+        with Path(path).open("rb") as stream:
+            for block in iter(lambda: stream.read(8 * 1024 * 1024), b""):
+                result.update(block)
+        return result.hexdigest()
+    from .file_cache import digest_file
+    return digest_file(path)
 
 
 def _sha(value, label):

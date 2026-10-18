@@ -7,22 +7,32 @@ export function durationLabel(seconds) {
 }
 
 export function stageProgress(progress, fallback={}) {
-  const p=progress||{}, queued=p.state==="queued" || (!progress && fallback.state==="queued");
-  const percent=typeof p.stage_percent==="number" && Number.isFinite(p.stage_percent)
+  // A phase handoff can arrive before the next native progress snapshot. Never
+  // carry the previous sampler's percentage or ETA into the next model load.
+  const stale=progress && ((progress.action_id && fallback.actionId && progress.action_id!==fallback.actionId)
+    || (progress.action_stage && fallback.stage && progress.action_stage!==fallback.stage));
+  const p=stale?{}:progress||{};
+  const queued=p.state==="queued" || fallback.state==="queued";
+  const waiting=fallback.state==="waiting" || p.state==="waiting";
+  const preparing=waiting || p.state==="preparing" || stale;
+  const active=!queued && !preparing;
+  const percent=active && typeof p.stage_percent==="number" && Number.isFinite(p.stage_percent)
     ?Math.max(0,Math.min(100,p.stage_percent)):null;
   const remaining=typeof p.stage_remaining_seconds==="number" && Number.isFinite(p.stage_remaining_seconds)
     ?Math.max(0,p.stage_remaining_seconds):null;
   const elapsed=typeof p.stage_elapsed_seconds==="number" && Number.isFinite(p.stage_elapsed_seconds)
     ?Math.max(0,p.stage_elapsed_seconds):null;
-  const steps=Number.isInteger(p.step)&&Number.isInteger(p.total_steps)&&p.total_steps>0
+  const steps=active && Number.isInteger(p.step)&&Number.isInteger(p.total_steps)&&p.total_steps>0
     ?`Step ${Math.max(0,p.step)} of ${p.total_steps}`:null;
-  const title=p.stage_label || fallback.label || "Preparing your shot";
+  const title=fallback.label || p.stage_label || "Preparing your shot";
+  const activity=p.stage_label && p.stage_label!==title?p.stage_label:null;
   const detail=queued
     ?(Number.isInteger(p.queue_position)&&p.queue_position>0?`Queue position ${p.queue_position}`:"Waiting in the ComfyUI queue")
+    :waiting?"Switching models…"
     :p.state==="complete"?"Stage complete"
-    :remaining!==null && p.eta_confidence==="measured"?`About ${durationLabel(remaining)} left in this stage`
-    :fallback.state==="waiting"?"Waiting for the previous model to unload"
-    :"Estimating time for this stage…";
+    :preparing?(activity || "Loading and preparing…")
+    :remaining!==null && p.eta_confidence==="measured"?[activity,`About ${durationLabel(remaining)} left in this step`].filter(Boolean).join(" · ")
+    :activity || (percent!==null?"Processing · estimating time…":"Loading and preparing…");
   return {title,detail,percent:queued?null:percent,
-    meta:[steps,elapsed!==null && !queued?`${durationLabel(elapsed)} elapsed`:null].filter(Boolean).join(" · ")};
+    meta:[steps,elapsed>0 && !queued?`${durationLabel(elapsed)} elapsed`:null].filter(Boolean).join(" · ")};
 }

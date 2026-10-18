@@ -35,11 +35,15 @@ def root():
 
 
 def digest_file(path):
-    h = hashlib.sha256()
-    with Path(path).open("rb") as f:
-        for block in iter(lambda: f.read(8 * 1024 * 1024), b""):
-            h.update(block)
-    return h.hexdigest()
+    if not globals().get("__package__"):
+        # Standalone adapter consumers have no package context or shared cache.
+        h = hashlib.sha256()
+        with Path(path).open("rb") as stream:
+            for block in iter(lambda: stream.read(8 * 1024 * 1024), b""):
+                h.update(block)
+        return h.hexdigest()
+    from .file_cache import digest_file as cached_digest
+    return cached_digest(path)
 
 
 def source_path(video):

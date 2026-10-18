@@ -55,6 +55,10 @@ Uploads show the actual thumbnail and filename. Finished-frame and reference-bui
 
 The progress bar represents the current stage only. Unknown progress is indeterminate. Remaining time is labelled as an estimate and appears only after measured timing is available. Cancel run remains beside live progress. An oversized source selection enables Choose clip length, which suggests a valid custom interval and focuses the seconds field without queuing generation.
 
+Progress keeps the artist's operation in the heading and the current native processing step beneath it. Model handoffs, queue waits and model loading clear previous sampling percentages, step counts and time estimates immediately. Measured remaining time describes the active step, rather than promising a finish time for the entire shot.
+
+Change camera angle is an H3 preview task with its own angle preset and optional direction prompt. References are optional, or the artist can upload a finished camera still. One primary action creates that still; the artist reviews it before video generation. This route hides masks, replacement audio and fixed sampler settings. It requires source audio, labels its preview status, and asks the artist to check the middle and end for camera drift.
+
 State transitions use short ease-out changes. Indeterminate progress conveys ongoing work. Reduced-motion preferences disable animation and transitions.
 
 ## Do's and Don'ts

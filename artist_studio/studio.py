@@ -18,7 +18,7 @@ from PIL import Image
 
 import folder_paths
 
-from .availability import require_verified_setup, head_swap_setup
+from .availability import require_verified_setup, head_swap_setup, camera_setup
 
 HERE = Path(__file__).parent
 STAGES = {
@@ -44,16 +44,14 @@ DEFAULTS = {"engine": "local", "background": "keep", "scope": "person", "prompt"
             "margin": 20, "pitch": False, "seed": 42, "render_size": 0, "h3_preset": "preview_quality", "h3_steps": 0, "h3_attention": "native", "remove_text": False,
             "resolution": 1280, "delivery_mode": "native", "quality": "fast", "audio_id": "", "audio_start": 0.0, "length_mode": "custom", "lip_sync": False, "refine_lips": False,
             "finished_frame_position": "first", "finished_frame_number": 1, "h3_viewport_direct": False, "h3_head_swap": False,
+            "camera_preset": "Left three-quarter", "camera_prompt": "", "camera_width": 768, "camera_height": 448,
             "subject_mode": "auto", "preserve_people": False, "workflow_mode": "swap", "edit_area": "mask", "mask_method": "auto", "mask_prompt": "person", "mask_points": []}
 PREP_KEYS = ("start", "duration", "size", "scope", "performer", "margin", "pitch")
 
 
 def sha(path):
-    h = hashlib.sha256()
-    with Path(path).open("rb") as f:
-        for chunk in iter(lambda: f.read(8 * 1024 * 1024), b""):
-            h.update(chunk)
-    return h.hexdigest()
+    from .file_cache import file_digest
+    return file_digest(path)
 
 
 def canonical(value):
@@ -88,7 +86,7 @@ def clean_config(value):
     for key, options in [("engine", ("local", "h3", "wan", "wan2", "seedance")), ("background", ("keep", "restyle")),
                          ("quality", ("fast", "detailed")),
                          ("length_mode", ("custom", "original")),
-                         ("workflow_mode", ("motion", "swap", "viewport", "relight")),
+                         ("workflow_mode", ("motion", "swap", "viewport", "relight", "camera")),
                          ("subject_mode", ("auto", "people", "objects")),
                          ("finished_frame_position", ("first", "last", "frame")),
                          ("mask_method", ("auto", "text", "points")),
@@ -156,6 +154,15 @@ def clean_config(value):
         raise ValueError("This saved output setting is invalid. Choose an output resolution.")
     c["prompt"] = str(c["prompt"]).strip()[:5000]
     c["image_prompt"] = str(c["image_prompt"]).strip()[:5000]
+    c["camera_prompt"] = str(c["camera_prompt"]).strip()[:5000]
+    from .h3_camera import PRESETS as CAMERA_PRESETS
+    if c["camera_preset"] not in CAMERA_PRESETS:
+        raise ValueError("Choose a valid camera angle.")
+    for key in ("camera_width", "camera_height"):
+        raw = c[key]
+        c[key] = int(raw)
+        if isinstance(raw, bool) or float(raw) != c[key] or not 128 <= c[key] <= 1280 or c[key] % 32:
+            raise ValueError("Choose camera dimensions from 128 to 1280, in multiples of 32.")
     c["mask_prompt"] = str(c["mask_prompt"]).strip()[:500]
     from .mask_selection import clean_points
     c["mask_points"] = clean_points(c["mask_points"], require_positive=False)
@@ -260,6 +267,20 @@ class Store:
     def __init__(self, root=None):
         self.root = Path(root or Path(folder_paths.get_output_directory()) / "genj" / "studio")
         self.root.mkdir(parents=True, exist_ok=True)
+        self._records = {}
+
+    def _read(self, path):
+        stat = path.stat()
+        stamp = (stat.st_size, stat.st_mtime_ns, stat.st_ctime_ns)
+        cached = self._records.get(path)
+        if cached is not None and cached[0] == stamp:
+            return cached[1]
+        value = json.loads(path.read_text(encoding="utf8"))
+        self._records[path] = (stamp, value)
+        # Keep polling bounded even in a workspace with years of saved shots.
+        while len(self._records) > 128 or sum(record[0][0] for record in self._records.values()) > 16 * 1024**2:
+            self._records.pop(next(iter(self._records)))
+        return value
 
     def save(self, project):
         project["updated"] = time.time()
@@ -275,15 +296,15 @@ class Store:
     def load(self, identity):
         if not re.fullmatch(r"[a-f0-9]{32}", identity or ""):
             raise ValueError("Choose a saved shot or create a new one.")
-        return json.loads((self.root / (identity + ".json")).read_text(encoding="utf8"))
+        return copy.deepcopy(self._read(self.root / (identity + ".json")))
 
-    def list(self):
+    def list(self, active_only=False):
         result = []
         for path in self.root.glob("*.json"):
             try:
-                p = json.loads(path.read_text(encoding="utf8"))
-                if p.get("kind") == "project":
-                    result.append(p)
+                p = self._read(path)
+                if p.get("kind") == "project" and (not active_only or p.get("phase") == "working"):
+                    result.append(copy.deepcopy(p))
             except (ValueError, OSError):
                 logging.warning("Zura Studio: could not read a saved project record")
         return sorted(result, key=lambda p: p["updated"], reverse=True)
@@ -300,6 +321,10 @@ def check_asset(asset):
 def validate_selection(project):
     """Reject unsupported timelines before mask tracking or reference encoding."""
     c = project["config"]
+    if camera_setup(c):
+        from .h3_camera import selected_frame_count
+        selected_frame_count(project, check_asset)
+        return
     wan2 = c["engine"] == "wan2"
     h3 = c["engine"] == "h3"
     ltx_scene = c["engine"] == "local" and c.get("edit_area") == "scene"
@@ -536,6 +561,13 @@ def ltx25_phase_graph(project, phase):
 
 
 def build_graph(project, stage, use_cache=True, run_id=None):
+    if camera_setup(project["config"]):
+        from .h3_camera import build_studio_graph, build_studio_still_graph
+        if stage == "design":
+            return build_studio_still_graph(project, check_asset)
+        if stage == "h3":
+            return build_studio_graph(project, check_asset)
+        raise ValueError("Create the camera frame before generating video.")
     """Fill known native node inputs; no new subgraph interfaces are fabricated."""
     require_relight_direction(project.get("config", {}))
     if project.get("config", {}).get("workflow_mode") == "relight" and project["config"].get("engine") != "h3":
@@ -981,6 +1013,11 @@ def editable_graph(project, stage="auto"):
     """Export a snapshot without queuing, spending credits or changing approvals."""
     p = copy.deepcopy(project)
     p["config"] = clean_config(p["config"])
+    if camera_setup(p["config"]):
+        camera_stage = ("h3" if p.get("opening_input") else "design") if stage == "auto" else ("h3" if stage == "animate" else stage)
+        if camera_stage == "h3":
+            p["opening_approval"] = p.get("opening_key")
+        return build_graph(p, camera_stage), camera_stage
     if head_swap_setup(p["config"]):
         if stage not in ("auto", "animate", "h3"):
             raise ValueError("Head & face uses your portrait directly. Open its H3 graph.")
@@ -1187,13 +1224,19 @@ class Studio:
 
     async def watch(self):
         while True:
-            await asyncio.sleep(2)
+            # Short active handoffs; idle projects do not need a fast poll.
+            await asyncio.sleep(.5 if getattr(self, "_watch_active", False) else 2)
+            active = False
             async with self.lock:
-                for p in self.store.list():
+                for p in self.store.list(active_only=True):
+                    if p.get("phase") != "working":
+                        continue
+                    active = True
                     try:
                         self.collect(p)
                     except Exception:
                         logging.exception("Zura Studio: could not collect a project result")
+            self._watch_active = active
 
     def schedule_resume(self, identity, action_id):
         """Schedule a handoff once while repeated collector polls are running."""
@@ -1258,9 +1301,13 @@ class Studio:
             if running or pending:
                 return p
             if not action.get("cleanup_requested"):
+                from .memory_policy import release_policy
+                policy = release_policy(p)
+                action["memory_policy"] = policy
                 action["cleanup_requested"] = time.time()
                 queue.set_flag("unload_models", True)
-                queue.set_flag("free_memory", True)
+                if policy["purge_cache"]:
+                    queue.set_flag("free_memory", True)
                 self.store.save(p)
                 return p
             flags = queue.get_flags(reset=False)
@@ -1438,6 +1485,8 @@ class Studio:
             pass
         project["progress"] = self.progress_adapter.project_progress(
             self.server, self.server_address, action, queue_position)
+        if isinstance(project["progress"], dict):
+            project["progress"].update(action_id=action.get("id"), action_stage=action.get("stage"))
 
     def _collect_h3_base(self, p, action, history):
         """Keep the 720p H3 file internal and hand it to the enhancer."""
@@ -1615,6 +1664,7 @@ class Studio:
             return self.advance_wan_cleanup(p)
         history = self.server.prompt_queue.get_history(action["id"]).get(action["id"])
         if not history:
+            before = (action.get("state"), action.get("absent_since"), p.get("phase"), p.get("error"))
             if action["state"] == "interrupted":
                 running, pending = self.server.prompt_queue.get_current_queue_volatile()
                 if any(item[1] == action["id"] for item in running + pending):
@@ -1639,7 +1689,9 @@ class Studio:
                     p["error"] = "ComfyUI restarted or this job is no longer in its queue. It has not been resubmitted. Check the Comfy job before repeating a paid render."
             else:
                 action.pop("absent_since", None)
-            self.store.save(p)
+            after = (action.get("state"), action.get("absent_since"), p.get("phase"), p.get("error"))
+            if after != before:
+                self.store.save(p)
             return p
         status = history["status"]
         if status.get("status_str") != "success":
@@ -1712,7 +1764,7 @@ class Studio:
                                        expected_width=action.get("base_output_raster", {}).get("width"),
                                        expected_height=action.get("base_output_raster", {}).get("height"),
                                        expected_fps=24)
-                item.update(label=("H3 · Head & face" if action.get("h3_preset") == "head_face_8step" else "Native H3 · 1080p" if action.get("resolution") == 1920
+                item.update(label=("H3 · Camera angle" if action.get("h3_preset") == "camera_ref2va_8step" else "H3 · Head & face" if action.get("h3_preset") == "head_face_8step" else "Native H3 · 1080p" if action.get("resolution") == 1920
                                    else "H3 · 720p"),
                             delivery_mode=action.get("delivery_mode", "native"),
                             generation_resolution=action.get("generation_resolution"),
@@ -1774,7 +1826,8 @@ class Studio:
             if any(prior[key] != config[key] for key in ("finished_frame_position", "finished_frame_number")):
                 p["opening_approval"] = None
                 p.pop("ltx25_run", None)
-            if prior["h3_viewport_direct"] != config["h3_viewport_direct"] or prior["workflow_mode"] != config["workflow_mode"] or prior["image_prompt"] != config["image_prompt"] or (prior["prompt"] != config["prompt"] and not config["image_prompt"]):
+            if (prior["h3_viewport_direct"] != config["h3_viewport_direct"] or prior["workflow_mode"] != config["workflow_mode"] or prior["image_prompt"] != config["image_prompt"] or (prior["prompt"] != config["prompt"] and not config["image_prompt"])
+                    or any(prior[k] != config[k] for k in ("camera_preset", "camera_prompt", "camera_width", "camera_height"))):
                 p.update(opening_input=None, opening_key=None, opening_url=None, opening_approval=None)
             p["phase"] = ("opening" if p.get("opening_input") and p["config"]["engine"] in ("local", "h3", "wan", "wan2")
                           else "approved" if p.get("approval") else "review" if p.get("review") else "new")
@@ -1796,7 +1849,9 @@ class Studio:
                 return p
             if h3_viewport_direct(p):
                 raise ValueError("This workflow uses references directly, without a starting frame.")
-            if p.get("review") and p.get("prepared_key") == prep_key(p):
+            if camera_setup(p["config"]):
+                stage = "design"
+            elif p.get("review") and p.get("prepared_key") == prep_key(p):
                 # Preparation is internal to creating the look. The artist
                 # reviews both the frame and tracked selection before Animate.
                 await self.action(p, "approve", body)
@@ -1894,13 +1949,15 @@ class Studio:
         if stage == "h3" and p["config"].get("delivery_mode") == "enhanced1080":
             next_stage = "wan_cleanup"
         prompt_id = str(uuid.uuid4())
-        graph = (build_graph(p, stage, run_id=prompt_id) if stage == "h3_enhance"
-                 else build_graph(p, stage))
+        # File validation and conditioning inspection must not freeze Comfy's
+        # websocket, progress or upload endpoints while preparing a prompt.
+        graph = (await asyncio.to_thread(build_graph, p, stage, run_id=prompt_id) if stage == "h3_enhance"
+                 else await asyncio.to_thread(build_graph, p, stage))
         if stage in ("background", "restyle") and "genj_cached_text" not in graph:
             cache_key, info = text_cache_info(graph, stage)
             next_stage, stage = stage, "video_text"
             graph = text_graph(info, cache_key)
-        elif stage == "h3" and _needs_h3_reference_stage(p, graph):
+        elif stage == "h3" and not camera_setup(p["config"]) and _needs_h3_reference_stage(p, graph):
             from .h3 import cache_key as h3_cache_key, reference_graph
             next_stage, stage = stage, "h3_references"
             graph = reference_graph(graph, h3_cache_key(p))
@@ -1931,7 +1988,13 @@ class Studio:
             action["h3_preset"] = p["config"]["h3_preset"]
             action["delivery_mode"] = p["config"].get("delivery_mode", "native")
             action["generation_resolution"] = h3_generation_resolution(p["config"])
-            if stage == "h3" and head_swap_setup(p["config"]):
+            if stage == "h3" and camera_setup(p["config"]):
+                from .h3_camera import selected_frame_count
+                raster = {"width": p["config"]["camera_width"], "height": p["config"]["camera_height"]}
+                action.update(resolution=max(raster.values()), generation_resolution=max(raster.values()),
+                              h3_preset="camera_ref2va_8step", expected_frames=selected_frame_count(p, check_asset),
+                              generation_raster=raster, base_output_raster=raster, label="H3 · Camera angle")
+            elif stage == "h3" and head_swap_setup(p["config"]):
                 from .h3_head_swap import selected_frame_count
                 action.update(resolution=1024, generation_resolution=1024,
                               h3_preset="head_face_8step", expected_frames=selected_frame_count(p, check_asset))
@@ -2074,12 +2137,14 @@ def register():
         head_swap = head_swap_readiness(nodes.NODE_CLASS_MAPPINGS, folder_paths.get_full_path)
         from .wan_animate2 import readiness as wan2_readiness
         wan2 = wan2_readiness(nodes.NODE_CLASS_MAPPINGS, folder_paths.get_full_path)
+        from .h3_camera import readiness as camera_readiness
+        camera = camera_readiness(nodes.NODE_CLASS_MAPPINGS, folder_paths.get_full_path)
         return web.json_response({**hardware_snapshot(), "models": models, "h3_models": h3_models, "wan_models": wan_models, "speech": readiness(),
             "h3_text_cleanup": text_cleanup_readiness(),
-            "h3_head_swap": head_swap, "wan2": wan2,
+            "h3_head_swap": head_swap, "wan2": wan2, "h3_camera": camera,
             "h3_attention_backends": h3_attention_capabilities(nodes.NODE_CLASS_MAPPINGS),
             "wan_speech": wan_speech_readiness(),
-            "engine_ready": {"wan2": wan2["ready"], "local": all(models[key] for key in masked_keys) and not missing_ltx_nodes,
+            "engine_ready": {"h3_camera": camera["ready"], "wan2": wan2["ready"], "local": all(models[key] for key in masked_keys) and not missing_ltx_nodes,
                              "local_scene": all(models[key] for key in scene_keys) and all(detectors.values()) and not missing_ltx_scene_nodes,
                              "local_viewport": ltx_viewport["ready"],
                              "h3": all(h3_models.values()) and not missing_h3_nodes,

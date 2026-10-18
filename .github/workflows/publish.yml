@@ -169,7 +169,6 @@ jobs:
           node tests/test_dialogue_transcript.mjs
           node tests/test_dialogue_face_picker.mjs
           python -m unittest discover -s tests -p 'test_audio_dialogue.py'
-          python -m unittest discover -s tests -p 'test_audio_split_editor.py'
           python -m unittest discover -s tests -p 'test_dialogue_edit.py'
           python -m compileall -q __init__.py klein_look.py multicam_v3.py multicam_v4_clean.py h3_single_angle.py idv2v_control.py
           python -m unittest discover -s tests -p 'test_v2_*.py'
@@ -194,6 +193,8 @@ jobs:
           python -m unittest discover -s tests -p 'test_studio_audio_modes.py'
           python -m unittest discover -s tests -p 'test_studio_selection_limits.py'
           python -m unittest discover -s tests -p 'test_studio_create_look.py'
+          python -m unittest discover -s tests -p 'test_file_cache.py'
+          python -m unittest discover -s tests -p 'test_studio_runtime_efficiency.py'
           python -m unittest discover -s tests -p 'test_wan_animate2_studio.py'
           python -m unittest discover -s tests -p 'test_studio_mask_*.py'
           python -m unittest discover -s tests -p 'test_save_review_masks.py'
@@ -276,7 +277,8 @@ jobs:
           import sys
           # Native interfaces and tiny synthetic CPU fixtures only. Each leaf
           # gets its own interpreter so its Comfy stubs cannot leak to others.
-          patterns = ('test_bounded_video_audio.py', 'test_wan_bounded_guard.py',
+          patterns = ('test_audio_split_editor.py', 'test_h3_camera.py',
+                      'test_bounded_video_audio.py', 'test_wan_bounded_guard.py',
                       'test_wan_parts_graph.py', 'test_wan_preparation_parts.py',
                       'test_wan_preparation_windows.py', 'test_wan_preparation_merge.py',
                       'test_wan_streaming.py', 'test_wan_graph.py', 'test_wan_graph_integration.py',
