@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Zura Studio | ZURA VFX</title>
+<meta name="description" content="Transform video, replace characters and take grey viewport renders towards finished shots in ComfyUI with Zura Studio.">
+<meta name="theme-color" content="#ffffff">
+<meta property="og:title" content="Zura Studio | ZURA VFX">
+<meta property="og:description" content="Transform video, replace characters and take grey viewport renders towards finished shots in ComfyUI.">
+<meta property="og:type" content="website">
+<link rel="icon" type="image/png" href="zura-logo.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{--canvas:#fff;--ink:#111;--muted:#686868;--well:#e8e8e8;--line:#d2d2d2;--blue:#5f6fff;--page-pad:clamp(18px,3vw,48px);--max:1240px;--header:76px}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth;min-width:320px}
+body{margin:0;background:var(--canvas);color:var(--ink);font-family:"Inter Tight",Inter,Arial,sans-serif;font-size:16px;line-height:1.4;letter-spacing:0;-webkit-font-smoothing:antialiased}
+a{color:inherit;text-decoration:none}
+h1,h2,h3,p{margin:0}
+h1,h2,h3,strong{font-weight:600}
+::selection{background:var(--blue);color:var(--ink)}
+a:focus-visible{outline:2px solid var(--blue);outline-offset:4px}
+.shell{width:min(100%,var(--max));margin-inline:auto;padding-inline:var(--page-pad)}
+.skip-link{position:fixed;top:12px;left:12px;z-index:100;background:var(--ink);color:#fff;padding:10px 14px;transform:translateY(-160%)}
+.skip-link:focus{transform:translateY(0)}
+.site-header{position:sticky;top:0;z-index:5;background:#fffffff2;backdrop-filter:blur(14px);border-bottom:1px solid var(--line)}
+.site-header__inner{display:flex;align-items:center;justify-content:space-between;gap:24px;height:var(--header);width:min(100%,var(--max));margin-inline:auto;padding-inline:var(--page-pad)}
+.brand{display:inline-flex;align-items:center;gap:11px;font-size:1.05rem;font-weight:700;white-space:nowrap}
+.brand img{width:38px;height:38px;object-fit:contain;mix-blend-mode:multiply}
+.brand span{font-weight:500;color:var(--muted);margin-left:7px}
+.site-nav{display:flex;align-items:center;gap:clamp(18px,2.6vw,38px);font-size:.88rem}
+.site-nav a{padding:6px 0;border-bottom:1px solid transparent}
+.site-nav a:hover{color:var(--ink);border-color:var(--blue)}
+.intro{padding:clamp(56px,7vw,104px) 0 clamp(46px,6vw,78px)}
+.kicker{color:var(--muted);text-transform:uppercase;font-size:.76rem;letter-spacing:.04em}
+.intro h1{margin:18px 0 0;font-size:clamp(2.9rem,7.4vw,6.7rem);line-height:.94;max-width:14ch}
+.lede{margin-top:22px;max-width:62ch;color:#303030;font-size:clamp(1.02rem,1.5vw,1.25rem)}
+.actions{display:flex;flex-wrap:wrap;gap:12px;margin-top:28px}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:10px;min-height:48px;padding:0 18px;border:1px solid var(--line);background:var(--canvas);font:inherit;font-weight:600;transition:border-color .16s,background-color .16s,color .16s}
+.btn:hover{border-color:var(--blue);background:var(--well);color:var(--ink)}
+.btn--primary{background:var(--ink);border-color:var(--ink);color:#fff}
+.btn--primary:hover{background:#000;border-color:#000;color:#fff}
+.band{border-top:1px solid var(--line);padding:clamp(46px,6vw,86px) 0}
+.band h2{font-size:clamp(1.9rem,3.6vw,3.25rem);line-height:1.05;max-width:24ch}
+.band .lede{margin-top:15px}
+.rows,.steps{list-style:none;margin:clamp(28px,3.6vw,46px) 0 0;padding:0;border-top:1px solid var(--line)}
+.rows li{display:grid;grid-template-columns:52px minmax(0,1fr) minmax(0,1.35fr);gap:clamp(14px,2vw,30px);align-items:baseline;padding:21px 12px;border-bottom:1px solid var(--line)}
+.rows .n{color:var(--muted);font-size:.8rem}
+.rows .t{font-weight:600;font-size:clamp(1.06rem,1.7vw,1.42rem)}
+.rows .d{color:#444;font-size:.96rem}
+.steps{counter-reset:s}
+.steps li{counter-increment:s;display:grid;grid-template-columns:52px minmax(0,1fr);gap:clamp(14px,2vw,30px);padding:20px 12px;border-bottom:1px solid var(--line)}
+.steps li::before{content:counter(s,decimal-leading-zero);color:var(--ink);font-weight:600;font-size:.9rem}
+.steps .t{font-weight:600;font-size:clamp(1.02rem,1.6vw,1.3rem)}
+.steps .d{color:#444;font-size:.96rem;margin-top:5px;max-width:68ch}
+.note{margin-top:clamp(30px,4vw,52px);border-left:2px solid var(--blue);padding:12px 16px 12px 20px;max-width:74ch;color:#333}
+.note b{display:block;margin-bottom:6px}
+.site-footer{border-top:1px solid var(--line);margin-top:clamp(54px,7vw,100px)}
+.site-footer__inner{width:min(100%,var(--max));margin-inline:auto;padding:clamp(32px,4vw,50px) var(--page-pad);display:flex;flex-wrap:wrap;gap:20px 40px;justify-content:space-between;align-items:flex-end}
+.site-footer__name{font-weight:600;color:var(--ink)}
+.site-footer p{color:var(--muted);font-size:.84rem;margin-top:5px}
+.site-footer nav{display:flex;flex-wrap:wrap;gap:22px;font-size:.86rem}
+.site-footer nav a:hover{color:var(--ink);text-decoration:underline;text-decoration-color:var(--blue)}
+@media(max-width:820px){:root{--header:64px}.rows li{grid-template-columns:36px minmax(0,1fr);gap:8px 16px}.rows .d{grid-column:2}.steps li{grid-template-columns:36px minmax(0,1fr);gap:8px 16px}}
+@media(max-width:520px){.site-nav{gap:16px;font-size:.82rem}.intro h1{max-width:12ch}.actions .btn{width:100%}.site-footer nav{gap:14px 20px}}
+@media(max-width:370px){.brand{gap:7px;font-size:.98rem}.brand img{width:32px;height:32px}.brand span{margin-left:3px}.site-nav{gap:12px;font-size:.78rem}}
+@media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}*,*::before,*::after{transition:none!important}}
+</style>
+</head>
+<body>
+<a class="skip-link" href="#main">Skip to content</a>
+<header class="site-header">
+  <div class="site-header__inner">
+    <a class="brand" href="https://zuravfx.com" aria-label="ZURA VFX home"><img src="zura-logo.png" alt=""><span>ZURA</span> Studio</a>
+    <nav class="site-nav" aria-label="Page navigation">
+      <a href="https://registry.comfy.org/nodes/comfyui-zura-nodes">Install</a>
+      <a href="https://github.com/ZURAVFX/ComfyUI_zura_nodes">GitHub</a>
+    </nav>
+  </div>
+</header>
+<main id="main">
+  <div class="shell">
+    <section class="intro">
+      <p class="kicker">Zura Nodes · Video tools for ComfyUI</p>
+      <h1>Transform footage. Keep control of the shot.</h1>
+      <p class="lede">Zura Studio brings video-to-video work into ComfyUI. Carry motion into a new look, replace characters, or take a grey viewport render towards a finished scene.</p>
+      <div class="actions">
+        <a class="btn btn--primary" href="https://registry.comfy.org/nodes/comfyui-zura-nodes">Install with ComfyUI Manager</a>
+        <a class="btn" href="https://github.com/ZURAVFX/ComfyUI_zura_nodes/releases/latest">Get the latest release</a>
+      </div>
+    </section>
+
+    <section class="band" aria-labelledby="modes-title">
+      <h2 id="modes-title">Choose the change you want to make.</h2>
+      <p class="lede">Start with a source clip, then guide the result with a prompt, reference images and a reviewed selection.</p>
+      <ul class="rows">
+        <li><span class="n">01</span><span class="t">Character performance</span><span class="d">Use Wan, H3 or LTX to follow a source performance with a new character. Choose original audio, uploaded replacement dialogue or silent footage.</span></li>
+        <li><span class="n">02</span><span class="t">Head &amp; face</span><span class="d">H3 uses a portrait and the original facial performance, then blends a tracked face crop back into the source. Original audio, up to two seconds.</span></li>
+        <li><span class="n">03</span><span class="t">Viewport to final</span><span class="d">Turn a grey 3D blockout into a finished scene. MiniMax H3 is the tested local starting point for this mode.</span></li>
+        <li><span class="n">04</span><span class="t">Editable graphs</span><span class="d">Switch from Studio to native nodes with your loaded media. Keep prompts, clip controls and generated results available for inspection.</span></li>
+      </ul>
+      <div class="note"><b>Keep the graph within reach.</b> Studio guides the shot setup and review. Switch to Graph view whenever you want to inspect or edit the native ComfyUI workflow.</div>
+    </section>
+
+    <section class="band" aria-labelledby="workflow-title">
+      <h2 id="workflow-title">A short path from source to render.</h2>
+      <ol class="steps">
+        <li><div><span class="t">Add a video and choose a mode</span><p class="d">See the source preview, then choose Character performance or Viewport to final.</p></div></li>
+        <li><div><span class="t">Set the look and review the guidance</span><p class="d">Use a finished frame or add look references and a prompt. Check the mask or depth guidance before you build.</p></div></li>
+        <li><div><span class="t">Choose a local model and render</span><p class="d">Set the clip length and resolution for that model, then compare the result with your source and adjust the graph if needed.</p></div></li>
+      </ol>
+    </section>
+
+    <section class="band" id="install" aria-labelledby="install-title">
+      <h2 id="install-title">Install the tool. Choose your model.</h2>
+      <p class="lede">Zura Studio is included in the Zura Nodes ComfyUI pack. The pack and video model weights are separate downloads.</p>
+      <ol class="steps">
+        <li><div><span class="t">Install Zura Nodes</span><p class="d">In ComfyUI Manager, search for “Zura Nodes” and install the listing published by ZURAVFX. If the listing is awaiting review, use the source ZIP on the official GitHub Releases page. The install guide explains folder placement and Python requirements.</p></div></li>
+        <li><div><span class="t">Restart ComfyUI</span><p class="d">After installing, restart ComfyUI and open Zura Studio from its sidebar. The install guide has the manual steps and requirements.</p></div></li>
+        <li><div><span class="t">Set up one model first</span><p class="d">Choose an engine in Studio and follow the model setup guide. Weights are downloaded separately; some are large or have their own access terms.</p></div></li>
+      </ol>
+      <div class="actions">
+        <a class="btn btn--primary" href="https://github.com/ZURAVFX/ComfyUI_zura_nodes/releases/latest">Get the latest release</a>
+        <a class="btn" href="https://github.com/ZURAVFX/ComfyUI_zura_nodes/blob/main/INSTALL_STUDIO.md">Read install and model setup</a>
+        <a class="btn" href="https://github.com/ZURAVFX/ComfyUI_zura_nodes/issues">Report a problem</a>
+      </div>
+      <div class="note"><b>Generative video changes details.</b> Keep a reviewed source and check the result. Models can alter scene geometry, identity and camera movement; results depend on the model, prompt and footage. <a href="https://github.com/ZURAVFX/ComfyUI_zura_nodes/blob/main/ARTIST_STUDIO_VALIDATION.md">Read the tested limits.</a></div>
+    </section>
+  </div>
+</main>
+<footer class="site-footer">
+  <div class="site-footer__inner">
+    <div><p class="site-footer__name">Elliot McKenzie / Zura</p><p>Motion designer, VFX artist &amp; production technologist</p></div>
+    <nav aria-label="Footer navigation">
+      <a href="https://zuravfx.com/work/">Work</a><a href="https://zuravfx.com/about/">About</a><a href="https://zuravfx.com/products/">Tools + Downloads</a><a href="https://zuravfx.com/contact/">Contact</a>
+    </nav>
+    <p>© 2026</p>
+  </div>
+</footer>
+</body>
+</html>

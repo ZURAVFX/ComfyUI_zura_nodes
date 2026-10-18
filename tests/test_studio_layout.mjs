@@ -1,0 +1,25 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import vm from 'node:vm';
+const source=fs.readFileSync(new URL('../web/studio.js',import.meta.url),'utf8').replace(/^import .*;\r?\n/gm,'').split('app.registerExtension({')[0];
+const context={ContentDetection:class{},document:{createElement:()=>({setAttribute(){}})}};
+vm.createContext(context);vm.runInContext(source+'\nthis.Studio=ArtistStudio;',context);
+context.Studio.prototype.bind=()=>{};context.Studio.prototype.syncForm=()=>{};
+const html=new context.Studio().container.innerHTML;
+const ids=[...html.matchAll(/\bid="([^"]+)"/g)].map(match=>match[1]);
+assert.equal(ids.length,new Set(ids).size,'Moved panels must not duplicate IDs or controls');
+for(const [,target] of html.matchAll(/\bfor="([^"]+)"/g))assert.ok(ids.includes(target),`Label target ${target} exists`);
+for(const id of ['gs-source','gs-source-thumb','gs-source-poster','gs-ready','gs-character','gs-prompt','gs-resolution','gs-duration','gs-start','gs-audio','gs-voice-script','gs-select-points','gs-exit','gs-live-cancel'])assert.ok(ids.includes(id),`${id} retained`);
+assert.deepEqual([...html.matchAll(/data-step="(\d)"/g)].map(match=>match[1]),['0','1','2','3']);
+assert.ok(html.includes('<aside class="gs-controls">'));
+assert.ok(html.includes('<aside class="gs-settings">'));
+assert.ok(html.includes('<main class="gs-main">'));
+assert.ok(html.includes('id="gs-player" controls playsinline'));
+assert.ok(html.includes('id="gs-working-progress" class="gs-loading-bar is-indeterminate" role="progressbar"'));
+assert.ok(html.includes('id="gs-live-cancel" type="button"'));
+assert.ok(!html.includes('iframe'),'Preview remains native local media');
+console.log('Studio panel DOM preserves unique labelled controls, native previews, four stages and accessible live cancel/progress.');
+
+assert.ok(html.includes('data-length-mode="original" aria-pressed="false"'));
+assert.ok(html.includes('data-length-mode="custom" aria-pressed="true"'));
+assert.ok(html.includes('id="gs-length_mode" hidden aria-hidden="true" tabindex="-1"'),'Native clip popup is removed from visible and keyboard navigation');

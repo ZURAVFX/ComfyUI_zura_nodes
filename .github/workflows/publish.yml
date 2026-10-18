@@ -177,6 +177,10 @@ jobs:
           python -m unittest discover -s tests -p 'test_studio_hardware.py'
           python -m compileall -q artist_studio wan_artist.py
           python -m unittest discover -s tests -p 'test_artist_studio.py'
+          python -m unittest discover -s tests -p 'test_h3_head_swap.py'
+          python -m unittest discover -s tests -p 'test_h3_head_studio.py'
+          python -m unittest discover -s tests -p 'test_studio_availability.py'
+          python -m unittest discover -s tests -p 'test_studio_upload.py'
           python -m unittest discover -s tests -p 'test_h3_viewport_render.py'
           python -m unittest discover -s tests -p 'test_ltx25_viewport_plan.py'
           python -m unittest discover -s tests -p 'test_wan_viewport_mode.py'
@@ -189,6 +193,8 @@ jobs:
           python -m unittest discover -s tests -p 'test_studio_speech.py'
           python -m unittest discover -s tests -p 'test_studio_audio_modes.py'
           python -m unittest discover -s tests -p 'test_studio_selection_limits.py'
+          python -m unittest discover -s tests -p 'test_studio_create_look.py'
+          python -m unittest discover -s tests -p 'test_wan_animate2_studio.py'
           python -m unittest discover -s tests -p 'test_studio_mask_*.py'
           python -m unittest discover -s tests -p 'test_save_review_masks.py'
           python -m unittest discover -s tests -p 'test_studio_wan_fast_recipe.py'
@@ -221,6 +227,9 @@ jobs:
           node tests/test_anyangle_english.mjs
           node tests/test_artist_graph.mjs
           node tests/test_wan_graph.mjs
+          node tests/test_studio_upload.mjs
+          node tests/test_studio_upload_dom.mjs
+          node tests/test_studio_reset.mjs
       - name: Prepare qualified native Comfy CPU interfaces
         env:
           COMFYUI_ROOT: ${{ runner.temp }}/zura-native-comfy

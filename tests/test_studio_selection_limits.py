@@ -24,7 +24,7 @@ class SelectionLimitsTests(unittest.TestCase):
 
     def container(self, frames, stream_duration=True):
         stream = types.SimpleNamespace(duration=frames if stream_duration else None, time_base=Fraction(1, 24))
-        container = types.SimpleNamespace(streams=types.SimpleNamespace(video=[stream]),
+        container = types.SimpleNamespace(streams=types.SimpleNamespace(video=[stream], audio=[]),
                                          duration=round(frames / 24 * studio.av.time_base))
         cm = Mock()
         cm.__enter__ = Mock(return_value=container)

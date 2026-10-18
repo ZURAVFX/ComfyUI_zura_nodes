@@ -30,6 +30,31 @@ def inputs(scenario="replacement"):
 
 
 class NativePlanTests(unittest.TestCase):
+    def test_objects_use_native_edges_without_people_detectors(self):
+        project, kwargs = inputs("silent")
+        project["config"]["subject_mode"] = "objects"
+        for name in ("bbox_detector", "pose_estimator"):
+            kwargs["models"].pop(name)
+            kwargs["model_pins"].pop(name)
+        plan = plan_module.build_plan(project, **kwargs)
+        guide = plan["phases"]["motion"]["pose"]
+        self.assertEqual(guide, {"class_type": "Canny", "inputs": {
+            "image": ["source_components", 0], "low_threshold": .1, "high_threshold": .2}})
+        self.assertEqual(plan["basis"]["guide_type"], "canny_objects")
+        self.assertEqual(set(plan["basis"]["models"]), {
+            "model", "video_vae", "audio_vae", "union", "upscaler"})
+        self.assertNotIn("facial", plan["basis"]["positive"])
+        self.assertNotIn("anatomy", plan["basis"]["negative"])
+        self.assertFalse(any(n["class_type"] == "DWPreprocessor"
+                             for g in plan["phases"].values() for n in g.values()))
+
+    def test_auto_and_people_preserve_approved_graphs(self):
+        project, kwargs = inputs()
+        original = plan_module.build_plan(project, **kwargs)
+        for mode in ("auto", "people"):
+            project["config"]["subject_mode"] = mode
+            self.assertEqual(original, plan_module.build_plan(project, **kwargs))
+
     def test_missing_audio_and_wrong_silent_selection(self):
         project, kwargs = inputs()
         project.pop("audio")

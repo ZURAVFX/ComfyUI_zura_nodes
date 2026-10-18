@@ -1,12 +1,22 @@
 # Zura nodes (ComfyUI_zura_nodes)
 
-**Zura Studio** is the guided scene-editing interface in the official Zura Nodes pack. Choose Motion transfer, Object swap, or Viewport to final for a grey 3D blockout. Add a prompt and look references, choose a mask when you want to limit the edit, then select LTX 2.5, MiniMax H3, Wan 2.2 Animate or optional paid Seedance. The models share one review flow, resolution selector and clip-length control. See [Zura Studio](ARTIST_STUDIO.md). H3 supports up to five seconds; LTX supports up to five seconds for regular shots and fifteen seconds for Viewport to final. Camera retention while changing an environment and masked LTX speech remain experimental; see [tested limits](ARTIST_STUDIO_VALIDATION.md).
+**Zura Studio** is the guided video interface in the official Zura Nodes pack. **Character performance** offers Wan, MiniMax H3 and LTX 2.5, with approved original-performance, uploaded replacement-dialogue and silent-footage routes. Wan offers precise masked replacement; H3 uses character/performance guidance; LTX recreates the whole frame. **Viewport to final** currently offers H3. A separate **H3 → Head & face** option uses your first portrait directly, keeps original audio and composites a tracked face crop into the source. It is qualified for up to two seconds. See [approved workflows](docs/APPROVED_WORKFLOWS.md) and [installation](INSTALL_STUDIO.md).
 
 **Word replacement:** edit audio with LongCat or video with a tracked LTX Dub-It face crop. Both native workflows provide waveform selection and a full replacement phrase inside the nodes, then blend only the chosen words into the source. Extra speaker references are optional for LongCat. See [Dialogue editing](DIALOGUE_EDITING.md) for setup, timing controls and tested limits.
 
-**New here?** In ComfyUI Manager, search for **Zura Nodes**, install the pack and restart ComfyUI. You can also download the current [release ZIP](https://github.com/ZURAVFX/ComfyUI_zura_nodes/releases). Model weights are separate downloads; the short [installation and model guide](INSTALL_STUDIO.md) lists the files and steps.
+**New here?** In ComfyUI Manager, search for **Zura Nodes** and install an approved version. If Registry review is pending or Manager cannot install it, use the official [release ZIP](https://github.com/ZURAVFX/ComfyUI_zura_nodes/releases). Restart ComfyUI after installation. Model weights are separate downloads; the short [installation and model guide](INSTALL_STUDIO.md) lists the files and steps.
 
-To open the complete studio, start ComfyUI and click **Zura Studio**. On a default local installation, use `Open_Zura_Studio.url` or open `http://127.0.0.1:8188/?zura=1`. All four models share the same project and review flow. The standalone Wan test graph is only a diagnostic example.
+For **Viewport to final**, use H3: its train example was artist-approved. LTX and Wan viewport routes are excluded from Studio after rejected results.
+
+H3 offers optional **Comfy Kitchen** and experimental **Sage + Sol** attention under **More controls**. See [measured speed comparisons and setup](H3_SPEED.md). Native remains the default for existing shots.
+
+After generation, choose **Compare before / after** or **Compare** on any take. Drag the divider to reveal the final render against the selected source clip, with synchronised playback, seeking and fullscreen. Only the finished render plays audio.
+
+H3 viewport recommends **Use references directly**: review the source movement, then render with up to nine look images without generating a starting frame. Alternatively, choose **Build from references**, use **Starting frame prompt** and **Regenerate frame**, then **Animate this look**. That path adds a native first-frame guide and leaves up to eight extra reference slots. Its image prompt is separate from the video prompt; leave it blank to reuse video direction. The generated-frame path remains less qualified than the tested direct-reference route.
+
+Object editing, Relight and protected-person background editing remain development work and are not selectable in the current Studio.
+
+To open the complete studio, start ComfyUI and click **Zura Studio**. On a default local installation, use `Open_Zura_Studio.url` or open `http://127.0.0.1:8188/?zura=1`. The available local models share saved projects and editable graph access. The standalone Wan test graph is only a diagnostic example.
 
 Studio shows your GPU memory and RAM, a model-specific starting size and clip length, and a collapsible checklist of missing model files. These are measured examples on an RTX 4080 with 16 GB VRAM and 64 GB RAM, not minimum specifications or guaranteed render times:
 
@@ -14,8 +24,8 @@ Studio shows your GPU memory and RAM, a model-specific starting size and clip le
 | --- | --- | --- | --- |
 | Wan 2.2 | Keep original acting, gestures and cuts; optional audio-driven speech | Native 1080p: about 25–28 minutes, with preparation and new speech guidance extra | Custom clips up to 30 seconds; original length is processed in sections. A 23.75-second 720p example was accepted with detail loss between sections. |
 | MiniMax H3 | Expressive faces and replacement speech | 720p enhanced to 1080p: about 10 minutes, with opening design and selection extra | Up to five seconds. Native 1080p remains unqualified on the tested 16 GB GPU. |
-| LTX 2.5 | Fast short scene changes; its Layout-to-Render adapter is designed for grey viewport blockouts | Motion-guided whole-scene 1080p: about 3 minutes 23 seconds, with opening design and selection extra | Up to five seconds in regular shots and fifteen seconds in Viewport to final. Masked speech and camera retention while replacing the environment remain experimental. |
-| Seedance | Optional paid generation | Unbenchmarked; provider queue and cost apply | Check the provider's supported clip length and displayed price. |
+| LTX 2.5 | Short character/performance recreation with body-motion guidance | Motion-guided whole-scene 1080p: about 3 minutes 23 seconds, with opening design and selection extra | Up to five seconds. No precise output mask; viewport mode is excluded. |
+
 
 All three local routes were tested on the same 16 GB GPU / 64 GB RAM system. LTX's observed GPU peak was about 15.6 GB; exact Wan/H3 peaks and lower-memory systems are unqualified. An exact maximum resolution cannot be calculated from VRAM alone. Start with a short test on your own system. Voice cloning creates a separate audio track which the selected video model can use to guide the face.
 
@@ -382,3 +392,9 @@ guides the starting image when you build one from references.
 
 Choose **Motion transfer** to rebuild the scene around the source movement, or
 **Object swap** to mask a person or object and preserve the rest of the shot.
+
+### Simpler character flow
+
+Upload the video and character references, describe the starting look, then select **Create starting frame**. Tracking runs automatically. Review or regenerate the frame, inspect the selection, then choose video settings and **Generate video**.
+
+**Wan Animate 2** is a separate **Character + background** choice for whole-frame motion transfer. It uses its native distilled recipe, without a spatial mask. This new local integration is setup-gated and not yet visually qualified. See [setup and limits](docs/WAN_ANIMATE2.md).

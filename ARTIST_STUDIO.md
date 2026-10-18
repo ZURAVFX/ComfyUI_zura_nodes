@@ -10,28 +10,63 @@ Open **Zura Studio** in ComfyUI, choose a workflow, then drop a source video.
 Its thumbnail confirms the upload.
 
 - **Motion transfer** rebuilds the full frame around the source movement.
+  With H3, **Keep original people** edits the surroundings while protecting
+  the people and their original facial performance. Build the look from
+  references; replacement audio can change the soundtrack, but cannot animate
+  the protected mouths.
 - **Object swap** changes a selected person or object and keeps the surrounding
   shot as the guide.
-- **Viewport to final** turns a grey 3D blockout into a finished scene. Leave
-  the mask off to change the full frame, or add a mask to limit the edit to the
-  selected area.
+- **Viewport to final** turns a grey 3D blockout into a finished whole scene.
+  H3 is recommended. LTX remains experimental; Wan is available in the other
+  editing modes.
+- **Relight** uses H3 to change illumination while retaining the source scene.
+  Describe the lighting; lighting reference images are optional. Review the
+  generated lighting frame before animating. This is generative lighting
+  guidance, so inspect the result for identity, material and temporal changes.
+
+Keep original people passed a short scene-replacement render; artist review
+is pending. Moving boundaries are reconstructed generatively, so inspect hair,
+hands and occlusions. Relight passed a short lighting-consistency render;
+artist review is pending. Preserving subtitles can leave darker patches around
+their text. The updated conditioning requires a normal ComfyUI restart after updating
+Zura Nodes. See the [render evidence and limits](ARTIST_STUDIO_VALIDATION.md).
 
 Choose **Starting look**:
 
 - **Build from references:** add one to three images of people, objects,
   materials or environments. Describe the change if needed. All references
   guide the creation of one starting frame; they are not pasted into a collage.
-- **Use finished frame:** upload an already-composed opening image. This skips
+- **Use finished frame:** upload an already-composed image. This skips
   image generation. Extra appearance references are optional; the first is the
   separate appearance input for video routes that support it.
 
-In **Viewport to final** with MiniMax H3, the video and look references go
-straight to H3, so it skips a separate generated starting frame. Choose
-**Use finished frame** when you want to supply a composed image as well.
+For a finished image, **Frame position** offers First, Last or Frame number
+with H3 and whole-scene LTX. Frame numbers start at 1 in the selected **24 fps
+output clip**, rather than in the untrimmed source. Last means the final
+delivered frame, excluding internal model padding. These are native timed
+conditioning guides, not a promise of pixel-perfect reconstruction. One timed
+finished image is supported; additional images remain appearance references.
+Wan Animate and masked LTX edits retain their existing reference behaviour.
+Timed H3/LTX paths have structural and native-node tests; their visual quality
+has not yet been qualified with a new render.
+
+Whole-frame reviews open on **Guidance**. You can still switch to Original or
+Mask. **Start over** clears uploads, settings and stale frontend state and
+returns to Source. It cancels only the current Studio shot when necessary;
+saved shots and their output files stay in your local library.
+
+In **Viewport to final** with MiniMax H3, **Use references directly** is the
+recommended starting point. Review the source motion, then generate using
+the blockout video and up to nine look references without an image-generation
+stage. This is the artist-approved blockout route. **Build starting frame**
+lets you generate, review and regenerate a scene image first; check its camera
+carefully before animating. **Use finished frame** accepts your own composed
+image. Saved shots keep their previous choice.
 
 Each viewport route uses its model's own guidance: LTX reads the raw blockout
-with its Layout-to-Render adapter, H3 receives the source as a reference video,
-and Wan prepares pose guidance. Zura does not add a blanket Canny or depth
+with its Layout-to-Render adapter and H3 receives the source as a reference video.
+Wan's human pose route did not retain whole-scene blockout motion and is no
+longer offered for viewport renders. Zura does not add a blanket Canny or depth
 pass. In the tested LTX scene, adding depth softened the image and shifted
 details, so the raw layout remains the default.
 
@@ -55,8 +90,7 @@ storage paths and node IDs remain compatible; public names use Zura branding.
 The workflow choice controls what changes. **Motion transfer** rebuilds the
 whole frame around source movement. **Object swap** changes the selected area
 and uses the rest of the shot as a guide. **Viewport to final** uses the grey
-render as the camera and layout guide. Leave its mask off to change the whole
-scene, or add one to limit the change to that area. The model routes differ,
+render as the camera and layout guide for the whole scene. The model routes differ,
 so check the result for camera movement, contact and scene consistency.
 
 For a masked edit, expand the selection settings for automatic person selection,
@@ -393,6 +427,13 @@ filled with an invented mask. Point selections retain their original tracking
 path. Text-removal locations are held within each tracked shot, so a title in
 one shot does not select its former location in a later shot.
 
+For different object categories, separate descriptions with commas, for example
+`microphone, chair`. SAM treats each as a separate category; a phrase such as
+`microphone and chair` can select only one. Review both regions before continuing.
+The H3 Keep original people option requests up to 20 people for its joint
+protection mask; detection can still miss small or occluded people, so inspect
+the full selection preview.
+
 These selection changes require a fresh mask review for an older project;
 the saved source, character and previous renders remain available.
 
@@ -403,3 +444,11 @@ multicam, camera, audio and voice regression suites were rerun. Live render
 results and limitations are recorded separately in `ARTIST_STUDIO_VALIDATION.md`.
 DOM interaction checks are separate from browser visual checks, which remain
 unavailable because of the saved local-origin browser permission.
+
+### Progress and subject guidance
+
+Studio shows the active stage, elapsed time and native sampling steps where available. Once several steps have completed, it estimates the remaining time for that stage. Loading, encoding, decoding and saving use an indeterminate bar when ComfyUI reports no measurable total. Queue position is separate from render progress; this is not a whole-job completion estimate.
+
+More controls includes Auto, People and Objects & scenery. Auto samples five frames locally on CPU using an already-installed optional YOLOv10 detector. Detection is advisory, and missing detectors or grey viewport figures return an uncertain result. Explicit Objects uses Canny with LTX's existing Union adapter, avoiding pose estimation; H3 retains its native scene controls. Wan Animate requires a human performance. Auto and People preserve the previously validated human routes.
+
+H3 shot settings expose Sampling mode and H3 sampling steps directly. Turbo recommends eight steps; Standard defaults to 40. You can set an integer count from four to 80 for the next render. Changing mode restores its default count. Custom counts are unbenchmarked and extra steps do not guarantee better quality. The step count does not change a render that is already running.

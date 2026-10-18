@@ -33,7 +33,19 @@ def _chunk_frames_for_resolution(resolution):
     return 41 if int(resolution) == 1920 else 81
 
 
+def _reject_viewport(project):
+    config = project.get("config") or {}
+    if config.get("subject_mode") == "objects":
+        raise ValueError("Wan Animate needs a human performance. Choose H3 or LTX for objects and scenery.")
+    if (project.get("viewport_render") or config.get("viewport_render") or
+            config.get("workflow_mode") == "viewport"):
+        raise ValueError(
+            "Wan is not available for viewport-to-final. Choose H3 for this mode; "
+            "LTX viewport-to-final is experimental.")
+
+
 def cache_key(project):
+    _reject_viewport(project)
     import folder_paths
     from .studio import canonical
     stamps = {}
@@ -70,6 +82,8 @@ def cache_key(project):
 
 
 def build_wan_graph(project, use_cache=True, *, cache_key_override=None, preparation_controls=None):
+    # Fail before preparation or loading assets, including saved graph requests.
+    _reject_viewport(project)
     from .studio import assert_approved, check_asset
     assert_approved(project)
     c = dict(project["config"])

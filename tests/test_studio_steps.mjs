@@ -1,0 +1,37 @@
+import assert from "node:assert/strict";
+import fs from "node:fs";
+import vm from "node:vm";
+const source=fs.readFileSync(new URL("../web/studio.js",import.meta.url),"utf8").replace(/^import .*;\r?\n/gm,"").split("app.registerExtension({")[0];
+const context={ContentDetection:class{},document:{createElement:()=>({setAttribute(){}})}};
+vm.createContext(context);vm.runInContext(source+"\nthis.Studio=ArtistStudio;",context);
+const proto=context.Studio.prototype;
+proto.bind=()=>{};proto.syncForm=()=>{};
+const html=new context.Studio().container.innerHTML;
+assert.ok(html.includes('id="gs-h3_steps" type="number" min="4" max="80"'));
+assert.ok(html.indexOf('id="gs-h3_steps"')<html.indexOf('summary>More controls'),'Step count is a primary setting, not hidden in advanced controls');
+const fields={};
+for(const [name,value] of Object.entries({scope:"person",prompt:"",length_mode:"custom",mask_method:"auto",mask_prompt:"person",subject_mode:"auto",finished_frame_position:"frame",finished_frame_number:49,start:0,duration:3,performer:-1,margin:20,seed:42,audio_start:0,"audio-mode":"original",resolution:1280,quality:"detailed",h3_steps:16}))fields[name]={value};
+for(const name of ["pitch","remove_text","lip_sync","refine_lips"])fields[name]={checked:false};
+const ui=Object.create(proto);ui.config={size:512};ui.$=id=>fields[id];ui.container={querySelector:selector=>({value:selector.includes("gs-workflow")?"viewport":"h3"})};
+assert.equal(ui.readConfig().h3_steps,16);assert.equal(ui.readConfig().finished_frame_number,49);assert.equal(ui.readConfig().finished_frame_position,"frame");
+ui.audio={id:"selected-audio"};fields["audio-mode"].value="reference";
+fields.lip_sync.checked=true;fields.refine_lips.checked=true;
+assert.equal(ui.readConfig().lip_sync,false,"Viewport keeps original audio without enabling unqualified replacement speech");
+assert.equal(ui.readConfig().audio_id, "");
+assert.equal(ui.readConfig().refine_lips,false,"Viewport keeps native speech guidance without offering unsupported post-refinement");
+fields["audio-mode"].value="original";
+fields.finished_frame_position.value="last";
+ui.container={querySelector:selector=>({value:selector.includes("gs-workflow")?"swap":"local"})};
+assert.equal(ui.readConfig().workflow_mode,"motion","The character task routes LTX to the approved whole-scene body-guided pipeline");
+assert.equal(ui.readConfig().edit_area,"scene");
+assert.equal(ui.readConfig().finished_frame_position,"last","LTX whole-scene references retain their explicit anchor");
+for(const engine of ["wan","h3","local"]){
+  ui.container={querySelector:selector=>({value:selector.includes("gs-workflow")?"swap":engine})};
+  fields["audio-mode"].value="reference";fields.lip_sync.checked=true;
+  const config=ui.readConfig();assert.equal(config.audio_id,"selected-audio");assert.equal(config.lip_sync,true);
+  assert.equal(config.refine_lips,false);assert.equal(config.workflow_mode,engine==="local"?"motion":"swap");
+}
+assert.ok(source.includes('["gs-engine","gs-workflow"].includes(input.name))this.syncForm()'),'Task switches synchronise the displayed anchor selection');
+fields.h3_steps.value=12;fields.quality.value="fast";
+assert.equal(ui.readConfig().h3_steps,12);assert.equal(ui.readConfig().h3_preset,"take_fast");
+console.log("Visible H3 numeric steps preserve the selected count for both sampling modes.");
