@@ -21,7 +21,7 @@ for(const scenario of ['relight','preserve']){
   await ui.primaryRecipe();
   assert.equal(calls[0].path,'/zura/studio/projects','Prepare creates a new project carrying the changed look mode');
   assert.equal(calls[0].body.look_mode,'build');assert.equal(calls[0].body.config.workflow_mode,config.workflow_mode);assert.equal(calls[0].body.config.preserve_people,config.preserve_people);
-  assert.deepEqual(calls[0].body.references,['scene-ref']);assert.deepEqual(actions,['prepare']);
+  assert.deepEqual(calls[0].body.references,['scene-ref']);assert.deepEqual(actions,['create_look']);
 }
 const running=Object.create(context.Studio.prototype);running.project={id:'active',phase:'working',look_mode:'ready'};running.lookMode='ready';
 assert.equal(running.useGeneratedLook(),false);assert.equal(running.project.id,'active');assert.equal(running.lookMode,'ready','A running job is never discarded by draft normalisation');

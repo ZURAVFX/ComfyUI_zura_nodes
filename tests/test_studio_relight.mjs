@@ -25,10 +25,10 @@ ui.config={...config,workflow_mode:'swap'};for(const model of ['local','h3','wan
 assert.equal(ui.hasLook(),false,'Other modes still require appearance images');ui.references=[{id:'ref'}];assert.equal(ui.hasLook(),true);ui.references=[];
 mode='relight';ui.config=config;response={id:'relight-shot',phase:'new',config};
 const actions=[];ui.run=async stage=>actions.push(stage);
-await ui.primaryRecipe();assert.deepEqual(actions,['prepare']);assert.deepEqual(calls[0].body.references,[],'Project creation sends no fabricated character asset');
+await ui.primaryRecipe();assert.deepEqual(actions,['create_look']);assert.deepEqual(calls[0].body.references,[],'Project creation sends no fabricated character asset');
 assert.equal(calls[0].body.config.workflow_mode,'relight');
 calls.length=0;actions.length=0;response={id:'relight-shot',phase:'review',review:'review',prepared_key:'review',config};ui.project=response;
-await ui.primaryRecipe();assert.deepEqual(actions,['approve','design'],'Relight reviews source then generates lighting frame');
+await ui.primaryRecipe();assert.deepEqual(actions,['create_look'],'Relight reviews source then generates lighting frame');
 actions.length=0;response={...response,phase:'opening',approval:'review',opening_input:{file:'lighting.png'}};ui.project=response;
 await ui.primaryRecipe();assert.deepEqual(actions,['animate'],'Relight animation requires the generated lighting frame review');
 ui.lookMode='ready';ui.readyAsset=null;assert.equal(ui.hasLook(),false);ui.readyAsset={id:'ready'};assert.equal(ui.hasLook(),false,'Relight always creates its reviewed lighting frame');

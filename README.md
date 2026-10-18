@@ -392,3 +392,9 @@ guides the starting image when you build one from references.
 
 Choose **Motion transfer** to rebuild the scene around the source movement, or
 **Object swap** to mask a person or object and preserve the rest of the shot.
+
+### Simpler character flow
+
+Upload the video and character references, describe the starting look, then select **Create starting frame**. Tracking runs automatically. Review or regenerate the frame, inspect the selection, then choose video settings and **Generate video**.
+
+**Wan Animate 2** is a separate **Character + background** choice for whole-frame motion transfer. It uses its native distilled recipe, without a spatial mask. This new local integration is setup-gated and not yet visually qualified. See [setup and limits](docs/WAN_ANIMATE2.md).

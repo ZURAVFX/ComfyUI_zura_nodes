@@ -2,6 +2,8 @@
 
 ## 1.3.24 - 18 October 2026
 
+- Simplified character flow: source and references → starting frame → video settings → result. Tracking and image generation share one action; frame regeneration and selection review remain available.
+- Added the separate Wan Animate 2 full-frame character/background integration with setup checks and native distilled sampling. Its local quality/speed remain unqualified.
 - Restore approved Wan, H3 and LTX character-performance routes, including original audio, uploaded replacement dialogue and silent footage. Keep rejected viewport routes and unqualified object/lighting modes out of Studio.
 - Add the artist-approved H3 Head & face recipe: direct portrait, original audio, eight-step Kitchen sampling and tracked crop compositing, up to two seconds.
 - Fix the upload lock caused by rebuilding model-status elements during rendering. Keep busy-state cleanup, responsive large-file uploads, source thumbnails and explicit errors.

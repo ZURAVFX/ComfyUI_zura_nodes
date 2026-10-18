@@ -11,6 +11,7 @@ const ROOT = "/zura/studio";
 const defaults = {engine:"wan", background:"keep", scope:"person", prompt:"", image_prompt:"", start:0, duration:2, size:512, performer:-1, margin:20, pitch:false, seed:42, render_size:0, h3_head_swap:false, h3_preset:"take_fast", h3_steps:0, h3_attention:"native", remove_text:false, resolution:1280, delivery_mode:"native", quality:"fast", audio_id:"", audio_start:0, length_mode:"custom", lip_sync:false, refine_lips:false, workflow_mode:"swap", preserve_people:false, edit_area:"mask", mask_method:"auto", mask_prompt:"person", mask_points:[],subject_mode:"people",finished_frame_position:"first",finished_frame_number:1};
 // Keep saved experimental projects readable without silently converting their recipe.
 function verifiedSetup(c={}) {
+  if(c.engine==="wan2")return c.workflow_mode==="motion" && c.edit_area==="scene" && !["audio_id","lip_sync","refine_lips","preserve_people","remove_text","h3_head_swap"].some(k=>c[k]);
   if(c.h3_head_swap)return c.engine==="h3" && c.workflow_mode==="swap" && c.scope==="head" && !c.audio_id && !c.lip_sync && !c.remove_text && c.delivery_mode!=="enhanced1080";
   if(c.workflow_mode==="viewport")return c.engine==="h3" && c.edit_area==="scene"
     && !c.preserve_people && !c.refine_lips && !c.audio_id && !c.lip_sync;
@@ -114,7 +115,8 @@ class ArtistStudio {
         <fieldset><legend>Generate with</legend><div class="gs-segment">
           <label><input type="radio" name="gs-engine" value="local" checked/><span>LTX 2.5 <small>Local</small></span></label>
           <label><input type="radio" name="gs-engine" value="h3"/><span>MiniMax H3 <small>Local</small></span></label>
-          <label><input type="radio" name="gs-engine" value="wan"/><span>Wan 2.2 <small>Local</small></span></label>
+          <label><input type="radio" name="gs-engine" value="wan"/><span>Wan 2.2 <small>Keep background</small></span></label>
+          <label><input type="radio" name="gs-engine" value="wan2"/><span>Wan Animate 2 <small>Character + background</small></span></label>
           <label><input type="radio" name="gs-engine" value="seedance"/><span>Seedance <small>Paid</small></span></label>
         </div><p id="gs-engine-hint" class="gs-note"></p>
           <details class="gs-advanced gs-model-help"><summary>Model guide & setup</summary><div class="gs-advanced-body">
@@ -127,7 +129,7 @@ class ArtistStudio {
           <details class="gs-advanced"><summary>Installed files & nodes</summary><div class="gs-advanced-body" id="gs-model-checklist"></div></details>
           </div></details>
         </fieldset>
-        <div class="gs-two"><label id="gs-quality-setting"><span class="gs-label">Resolution</span><select id="gs-resolution"><option value="512">512 px · small test</option><option value="768">768 px</option><option value="1280">720p · HD</option><option value="1920">1080p · Full HD</option><option value="1920-enhanced">1080p · Enhanced after H3</option></select></label>
+        <div id="gs-video-options"><div class="gs-two"><label id="gs-quality-setting"><span class="gs-label">Resolution</span><select id="gs-resolution"><option value="512">512 px · small test</option><option value="768">768 px</option><option value="1280">720p · HD</option><option value="1920">1080p · Full HD</option><option value="1920-enhanced">1080p · Enhanced after H3</option></select></label>
           </div><div class="gs-clip-length"><span class="gs-label">Clip length</span><select id="gs-length_mode" hidden aria-hidden="true" tabindex="-1"><option value="original">Original clip length</option><option value="custom" selected>Custom length</option></select><div class="gs-length-choice" role="group" aria-label="Clip length"><button type="button" data-length-mode="original" aria-pressed="false">Use source</button><button type="button" data-length-mode="custom" aria-pressed="true">Custom</button></div><label id="gs-duration-setting"><span class="gs-label">Seconds</span><input id="gs-duration" type="number" min="0.25" max="30" step="0.25" value="2"/></label></div>
         <label id="gs-trim-start"><span class="gs-label">Start at <small>seconds</small></span><input id="gs-start" type="number" min="0" max="86400" step="0.1" value="0"/></label>
         <details class="gs-advanced"><summary>Output, speed and memory</summary><div class="gs-advanced-body"><p class="gs-note" id="gs-output-note"></p><div class="gs-note" id="gs-system-guidance" aria-live="polite"><p id="gs-hardware-note">Checking this system…</p><p id="gs-limit-note"></p><p id="gs-speed-note"></p><p id="gs-memory-note"></p><p>Measured on an RTX 4080 with 16 GB VRAM and 64 GB RAM. Other systems vary.</p></div></div></details>
@@ -164,16 +166,22 @@ class ArtistStudio {
             <p id="gs-voice-note" class="gs-note">Uses local Zura LongCat. Your sample and words stay on this computer.</p>
           </div></details></div>
         </div></details>
+        </div>
+        <section id="gs-image-editor" class="gs-image-editor" hidden><label for="gs-image_prompt" class="gs-label">Starting frame prompt</label><textarea id="gs-image_prompt" rows="2" maxlength="5000" placeholder="Describe appearance and lighting, or leave blank to reuse the video prompt" aria-label="Image generation prompt"></textarea><div><span>Optional. Leave blank to use your video prompt.</span><button id="gs-redesign" class="gs-quiet" type="button">Regenerate frame</button></div></section>
         <div class="gs-action-area"><button id="gs-primary" class="gs-primary" disabled>Prepare shot ${icon("arrow")}</button><p id="gs-action-note" aria-live="polite">Add a video and starting look.</p><button id="gs-starting-image" class="gs-quiet" hidden>Replace starting frame</button><input class="gs-file" id="gs-opening-file" type="file" accept="image/png,image/jpeg,image/webp" aria-label="Starting image"/><button id="gs-cancel" class="gs-quiet gs-cancel" hidden>Stop this job</button></div>
       </aside>
       <main class="gs-main">
-        <div class="gs-preview-heading"><div><h2 id="gs-preview-title">Your performance, a new character</h2><p id="gs-preview-description">Upload the shot you want to transform. We’ll follow its motion and keep the original soundtrack.</p></div><div id="gs-preview-tabs" class="gs-tabs" hidden><button data-view="mask" class="active">Mask</button><button data-view="guide">Guidance</button><button data-view="source">Original</button></div></div>
-        <section id="gs-image-editor" class="gs-image-editor" hidden><label for="gs-image_prompt" class="gs-label">Starting frame prompt</label><textarea id="gs-image_prompt" rows="2" maxlength="5000" placeholder="Describe appearance and lighting, or leave blank to reuse the video prompt" aria-label="Image generation prompt"></textarea><div><span>Image direction only. Video motion uses the video prompt.</span><button id="gs-redesign" class="gs-quiet" type="button">Regenerate frame</button></div></section>
+        <div class="gs-preview-heading"><div><h2 id="gs-preview-title">Your performance, a new character</h2><p id="gs-preview-description">Upload the shot you want to transform. We’ll follow its motion and keep the original soundtrack.</p></div><div id="gs-preview-tabs" class="gs-tabs" hidden><button data-view="look" hidden>Starting frame</button><button data-view="mask" class="active">Selection</button><button data-view="guide">Guidance</button><button data-view="source">Original</button></div></div>
         <button id="gs-compare-toggle" class="gs-quiet gs-compare-launch" type="button" hidden>Compare before / after</button><section id="gs-comparison" class="gs-comparison" aria-label="Compare source and final render" hidden></section><div class="gs-canvas" id="gs-canvas"><div class="gs-empty" id="gs-empty">${icon("frames")}<h3>Your shot starts here</h3><p>Add a video and a starting look in the controls.</p></div><video id="gs-player" controls playsinline preload="metadata" hidden></video><img id="gs-opening" alt="Starting frame for this shot" hidden/><div id="gs-working" class="gs-working" hidden><div class="gs-progress-heading"><strong id="gs-working-title">Preparing your shot</strong><div class="gs-progress-actions"><span id="gs-working-percent"></span><button id="gs-live-cancel" type="button" class="gs-stop">Cancel run</button></div></div><div id="gs-working-progress" class="gs-loading-bar is-indeterminate" role="progressbar" aria-label="Current stage progress" aria-valuemin="0" aria-valuemax="100"><div id="gs-working-fill"></div></div><div class="gs-progress-caption"><span id="gs-working-detail" role="status" aria-live="polite">Estimating time for this stage…</span><span id="gs-working-meta"></span></div></div></div>
         <div id="gs-message" class="gs-message" role="status" aria-live="polite" hidden></div>
         <section class="gs-results" id="gs-results" hidden><div class="gs-section-heading"><h2>Your takes</h2><span>Your selected soundtrack is restored automatically.</span></div><div id="gs-takes"></div></section>
         <section class="gs-library"><div class="gs-section-heading"><h2>Recent shots</h2><button id="gs-refresh" class="gs-quiet">Refresh</button></div><div id="gs-library-list"><p class="gs-note">Your shots are saved on this computer. You can return to them later.</p></div></section>
       </main></div>`;
+    if(this.container.querySelector){
+      const look=this.container.querySelector(".gs-look"),clip=this.container.querySelector(".gs-clip-length");
+      look.before(clip,this.$("trim-start"));
+      look.appendChild(this.$("image-editor"));
+    }
     this.bind();this.syncForm();
   }
   compareTake(url) {
@@ -217,9 +225,9 @@ class ArtistStudio {
   }
   selectWorkflow() {
     if(["swap","motion"].includes(this.config.workflow_mode)){
-      if(!["wan","h3","local"].includes(this.config.engine))this.config.engine="wan";
-      this.config.workflow_mode=this.config.engine==="local"?"motion":"swap";
-      this.config.edit_area=this.config.engine==="local"?"scene":"mask";this.config.subject_mode="people";
+      if(!["wan","h3","local","wan2"].includes(this.config.engine))this.config.engine="wan";
+      this.config.workflow_mode=["local","wan2"].includes(this.config.engine)?"motion":"swap";
+      this.config.edit_area=["local","wan2"].includes(this.config.engine)?"scene":"mask";this.config.subject_mode="people";
       this.config.mask_method="auto";this.config.preserve_people=false;this.config.refine_lips=false;
       return;
     }
@@ -251,7 +259,7 @@ class ArtistStudio {
     c.workflow_mode=this.container.querySelector('input[name="gs-workflow"]:checked').value;
     const selectedEngine=this.container.querySelector('input[name="gs-engine"]:checked').value;
     // One character task, retaining each proven pipeline's native scene/mask contract.
-    if(c.workflow_mode==="swap" && selectedEngine==="local")c.workflow_mode="motion";
+    if(c.workflow_mode==="swap" && ["local","wan2"].includes(selectedEngine))c.workflow_mode="motion";
     c.viewport_render=c.workflow_mode==="viewport";
     c.edit_area=c.workflow_mode==="swap"?"mask":"scene";
     for (const key of ["start","duration","performer","margin","seed","audio_start","finished_frame_number"]) c[key]=Number(this.$(key).value);
@@ -281,7 +289,9 @@ class ArtistStudio {
     c.background=(c.engine==="local" || c.engine==="seedance") && c.edit_area==="scene"?"restyle":"keep";
     c.pitch=this.$("pitch").checked; c.remove_text=this.$("remove_text").checked;
     c.lip_sync=c.workflow_mode!=="viewport" && reference && !c.preserve_people && this.$("lip_sync").checked;
-    c.refine_lips=false; return this.headSwapConfig(c);
+    c.refine_lips=false;
+    if(c.engine==="wan2")Object.assign(c,{resolution:832,quality:"fast",audio_id:"",audio_start:0,lip_sync:false,refine_lips:false,remove_text:false,pitch:false,preserve_people:false,h3_head_swap:false,delivery_mode:"native",scope:"person"});
+    return this.headSwapConfig(c);
   }
   chooseClipLength(mode) {
     if(this.busy || this.project?.phase==="working" || !["original","custom"].includes(mode))return;
@@ -292,11 +302,11 @@ class ArtistStudio {
   bind() {
     this.container.querySelectorAll("[data-length-mode]").forEach(button=>button.onclick=()=>this.chooseClipLength(button.dataset.lengthMode));
     this.container.querySelectorAll("[data-step]").forEach(button=>button.onclick=()=>{
-      const targets=[this.$("source-drop"),this.container.querySelector(".gs-look"),this.$("canvas"),this.container.querySelector(".gs-settings")];
+      const targets=[this.$("source-drop"),this.container.querySelector(".gs-look"),this.container.querySelector(".gs-settings"),this.$("canvas")];
       const target=targets[Number(button.dataset.step)];target?.scrollIntoView({block:"nearest",behavior:"instant"});
       if(Number(button.dataset.step)===0)this.$("source").focus();
-      if(Number(button.dataset.step)===1)this.$(this.lookMode==="ready"?"ready":this.config.workflow_mode==="relight"?"prompt":"character").focus();
-      if(Number(button.dataset.step)===3)this.$("primary").focus();
+      if(Number(button.dataset.step)===1)this.$(this.lookMode==="ready"?"ready":"image_prompt").focus();
+      if(Number(button.dataset.step)===2)this.$("primary").focus();
     });
     this.$("prompt").addEventListener("input",()=>{if(this.config.workflow_mode==="relight"&&!this.busy)this.render();});
     this.$("compare-toggle").onclick=()=>this.compareTake();
@@ -335,6 +345,7 @@ class ArtistStudio {
       this.$("voice-note").textContent="Creating speech in ComfyUI. The track will be selected automatically.";
     });
     this.$("redesign").onclick=()=>this.perform(async(epoch)=>{
+      if(!this.project?.approval || !this.project?.opening_input || this.project.phase==="working")return;
       this.config={...this.readConfig(),seed:Math.floor(Math.random()*2**48)};this.syncForm();
       const id=this.project.id,updated=await request(`/projects/${id}/config`,this.configBody(this.config));if(epoch!==this.resetEpoch)return;if(this.project?.id!==id)return;this.project=updated;
       await this.run("design");if(epoch!==this.resetEpoch)return;
@@ -641,11 +652,17 @@ class ArtistStudio {
       }
       const p=this.project;
       if(this.headSwap())return this.run("h3");
-      if(!p.review || p.phase==="new" || p.prepared_key!==p.approval && p.phase!=="review")return this.run("prepare");
+      if(!p.review || p.phase==="new" || p.prepared_key!==p.approval && p.phase!=="review")return this.run(this.directViewport()?"prepare":"create_look");
+      if(p.phase==="review" && !this.directViewport() && this.config.engine!=="seedance")return this.run("create_look");
       if(p.phase==="review"){
         await this.run("approve");
         if(epoch!==this.resetEpoch)return;
         if(this.directViewport())return this.run("h3");
+        if(this.lookMode==="ready" && this.config.engine!=="seedance"){
+          const updated=await request(`/projects/${p.id}/opening`,{asset_id:this.readyAsset.id});
+          if(epoch===this.resetEpoch && this.project?.id===p.id)this.project=updated;
+          return;
+        }
         if(this.config.engine!=="seedance" && this.lookMode!=="ready"){await this.run("design");if(epoch!==this.resetEpoch)return;}
         return;
       }
@@ -662,6 +679,7 @@ class ArtistStudio {
   defaultReviewPreview(project,wholeScene) {
     if(!project?.review)return;
     const key=project.id+":"+(project.prepared_key || project.review);
+    if(project.phase==="opening" && this.openingPreviewKey!==project.opening_key){this.openingPreviewKey=project.opening_key;this.preview="look";return;}
     if(key===this.reviewPreviewKey)return;
     this.reviewPreviewKey=key;this.preview=wholeScene?"guide":"mask";
   }
@@ -674,7 +692,7 @@ class ArtistStudio {
       const allowed=["swap","viewport"].includes(input.value);input.closest("label").hidden=!allowed;input.disabled=!allowed || this.busy || this.project?.phase==="working";
     });
     this.container.querySelectorAll('input[name="gs-engine"]').forEach(input=>{
-      const allowed=viewport?input.value==="h3":["wan","h3","local"].includes(input.value);
+      const allowed=viewport?input.value==="h3":["wan","h3","local","wan2"].includes(input.value);
       input.closest("label").hidden=!allowed;input.disabled=!allowed || this.busy || this.project?.phase==="working";
     });
     for(const id of ["mask_method","subject_mode"]){const input=this.$(id);input.closest("label").hidden=true;}
@@ -690,10 +708,10 @@ class ArtistStudio {
     }
     const help=this.container.querySelector(".gs-model-help");
     const modelSegment=this.container.querySelector('.gs-settings fieldset .gs-segment');
-    if(modelSegment)modelSegment.style.gridTemplateColumns=viewport?"1fr":"repeat(3,minmax(0,1fr))";
+    if(modelSegment)modelSegment.style.gridTemplateColumns=viewport?"1fr":"repeat(2,minmax(0,1fr))";
     const helpKey=(head?"head:":viewport?"viewport:":"character:")+this.config.engine;
     if(help && help.dataset.verified!==helpKey){
-      const text=head?"Swap the head and face from your first portrait reference. Tracks a face crop, follows the original facial landmarks and audio, then blends it back into the source. Tested at two seconds, eight steps with Comfy Kitchen. Review identity and the blend on each shot.":viewport?(this.config.engine==="h3"
+      const text=this.config.engine==="wan2"?"Transfer a character’s body, hands and facial movement while generating a new background. Full-frame only: no edit mask. Distilled 10-step LCM with CPU INT8 pose cache, up to 81 frames at 24 fps and 480p-class output. Local quality and speed have not been approved yet.":head?"Swap the head and face from your first portrait reference. Tracks a face crop, follows the original facial landmarks and audio, then blends it back into the source. Tested at two seconds, eight steps with Comfy Kitchen. Review identity and the blend on each shot.":viewport?(this.config.engine==="h3"
         ?"Turn a grey viewport into a finished scene. H3 reads the camera move and animation from your video, with up to nine appearance references. Start with a two-second shot; maximum five seconds. Original audio is kept when present."
         :"LTX 2.5 Layout-to-Render uses the viewport for layout and a finished scene image for appearance. Preview route: check camera movement and body shapes before a longer render. Original audio is kept when present; new speech is not enabled here.")
         :this.config.engine==="h3"?"Guided character replacement with native audio-driven facial performance. Uses your reviewed selection and depth as guidance; surroundings may change. Original audio, new dialogue and silent footage use the approved pipeline. Short examples qualified at five seconds; Enhanced 1080p samples at 720p then enhances."
@@ -743,6 +761,16 @@ class ArtistStudio {
       this.$("quality-setting").hidden=false;
       this.$("remove_text").closest("label").hidden=false;
       this.$("pitch").closest("label").hidden=false;
+    }
+    if(this.config.engine==="wan2"){
+      for(const id of ["selection-options","audio-settings","sampling-setting","h3-steps-setting","quality-setting"])this.$(id).hidden=true;
+      this.$("remove_text").closest("label").hidden=true;this.$("pitch").closest("label").hidden=true;
+      this.$("engine-hint").textContent="Character + background · preview integration · 480p-class · 10 distilled steps";
+      this.$("selection-note").textContent="Recreates the character and background. No selection mask.";
+      this.$("duration").max="3.375";
+      if(this.project?.opening_input && !this.modelStatus?.engine_ready?.wan2 && this.project?.phase!=="working"){
+        this.$("primary").disabled=true;this.$("action-note").textContent="Wan Animate 2 setup needed. Open About this workflow → Installed files & nodes.";
+      }
     }
     if(!verifiedSetup(this.config) && this.project?.phase!=="working"){
       this.$("primary").disabled=true;this.$("primary").textContent="Start a new shot";
@@ -993,7 +1021,7 @@ class ArtistStudio {
     this.$("new").innerHTML=icon(this.resetting?"frames":"reset")+(this.resetting?" Stopping…":" Start over");
     this.$("speech-setting").hidden=!activeReference || preservePeople;
     if(viewport){this.config.refine_lips=false;this.$("refine_lips").checked=false;}
-    this.$("refine-lips-setting").hidden=viewport || preservePeople || !activeReference || !this.config.lip_sync || !["wan","h3","local"].includes(this.config.engine);
+    this.$("refine-lips-setting").hidden=viewport || preservePeople || !activeReference || !this.config.lip_sync || !["wan","h3","local","wan2"].includes(this.config.engine);
     this.$("audio-note").textContent=activeReference?(this.config.lip_sync?
       (this.config.engine==="wan"?("Creates a speech-driven facial performance, then Wan renders it with the original body motion."+(this.config.refine_lips?" Adds the optional lip refinement pass.":" Review timing, head turns and expression.")):
       ["h3","local"].includes(this.config.engine)?
@@ -1037,12 +1065,12 @@ class ArtistStudio {
     this.container.querySelectorAll('input[name="gs-look"]').forEach(choice=>choice.disabled=working || this.busy || (preservePeople || relight) && choice.value==="ready");
     if(this.config.length_mode==="original"){this.$("start").value=0;this.$("start").disabled=true;}
     const btn=this.$("primary"),hasAssets=!!this.source && this.hasLook();
-    let label="Prepare shot",note=relight?"Add a video and describe its new lighting.":"Add a video and starting look.";
-    if(hasAssets)note=wholeScene?"We’ll prepare the complete scene and its motion guidance.":"We’ll track your selection and show the mask before generation.";
-    if(p?.phase==="review"){label=this.lookMode==="ready"?"Use selection & starting frame":wholeScene?"Use whole scene & build look":"Use selection & build look";note="Check the selection throughout the clip before continuing.";}
+    let label=this.directViewport()?"Prepare motion guidance":this.lookMode==="ready"?"Review finished frame":"Create starting frame",note=!this.source?"Add a source video to begin.":"Add reference images or a finished frame on the left.";
+    if(hasAssets)note=this.directViewport()?"Review the source motion before generating the video.":"We’ll prepare the source and create the starting frame. Review it before generating video.";
+    if(p?.phase==="review"){label=this.lookMode==="ready"?"Review finished frame":"Create starting frame";note="Source preparation is ready. Next, create and review your starting frame.";}
     else if(p?.approval && phase!=="new"){
       if(this.config.engine!=="seedance"){
-        label=p.opening_input?(phase==="done"?"Generate another take":"Animate this look"):(this.lookMode==="ready"?"Use starting frame":"Build starting frame");
+        label=p.opening_input?(phase==="done"?"Generate another take":"Generate video"):(this.lookMode==="ready"?"Use starting frame":"Create starting frame");
         note=p.opening_input?"Check the look, pose, ground contact and camera framing. Then animate this look locally.":"We’ll create the opening frame automatically from your reference image.";
         if(this.config.engine==="h3" && p.opening_input)note=viewport?"H3 anchors the approved starting frame and uses your viewport video for camera and motion guidance.":"H3 uses this opening frame and your character image separately, with the approved mask and original performance.";
         if(this.config.engine==="wan" && p.opening_input)note="Wan uses your approved look, character reference, motion and mask. Preparation runs automatically.";
@@ -1074,10 +1102,10 @@ class ArtistStudio {
     const invalidH3Length=this.config.engine==="h3" && Number.isFinite(sourceSeconds) && sourceSeconds>0 && (selectedFrames<5 || selectedFrames>120);
     const invalidWanSpeechLength=this.config.engine==="wan" && activeReference && this.config.lip_sync && selectedFrames>720;
     const invalidLtxLength=this.config.engine==="local"&&wholeScene&&Number.isFinite(sourceSeconds)&&sourceSeconds>0&&selectedFrames>(viewport?360:120);
-    const invalidLength=invalidH3Length || invalidWanSpeechLength || invalidLtxLength;
+    const invalidLength=invalidH3Length || invalidWanSpeechLength || invalidLtxLength || (this.config.engine==="wan2" && Number.isFinite(sourceSeconds) && (selectedFrames<5 || selectedFrames>81));
     const missingSelection=!wholeScene && !preservePeople && (method==="text"?!this.config.mask_prompt.trim():method==="points"?!points.some(p=>p.include):false);
     if(missingSelection && !working && !this.busy){label=method==="text"?"Describe the area":"Select on opening frame";note=method==="text"?"Describe the area to change before preparing the shot.":"Add at least one include point on the opening frame.";}
-    if(invalidLength && !working && !this.busy){label="Choose clip length";note=invalidH3Length?(viewport?"H3 viewport renders support 0.21 to 5 seconds. Choose a custom length.":"H3 currently supports 0.21 to 5 seconds. Choose a custom length, or switch to Wan."):invalidLtxLength?`LTX ${viewport?"viewport renders support up to 15 seconds":"whole-scene shots support up to 5 seconds"}. Choose a shorter length.`:"Wan replacement speech currently supports up to 30 seconds. Choose a custom length.";}
+    if(invalidLength && !working && !this.busy){label="Choose clip length";note=this.config.engine==="wan2"?"Wan Animate 2 supports 0.21 to 3.375 seconds. Choose a custom length.":invalidH3Length?(viewport?"H3 viewport renders support 0.21 to 5 seconds. Choose a custom length.":"H3 currently supports 0.21 to 5 seconds. Choose a custom length, or switch to Wan."):invalidLtxLength?`LTX ${viewport?"viewport renders support up to 15 seconds":"whole-scene shots support up to 5 seconds"}. Choose a shorter length.`:"Wan replacement speech currently supports up to 30 seconds. Choose a custom length.";}
     const enhancementStatus=this.modelStatus?.h3_enhancement || {};
     const enhancementSetupCommand=enhancementStatus.setup_command || "Setup_H3_Enhancement_Windows.cmd";
     const enhancementUnavailable=this.config.engine==="h3"&&this.config.delivery_mode==="enhanced1080"&&this.modelStatus&&(!this.modelStatus.engine_ready?.h3||!enhancementStatus.ready);
@@ -1093,16 +1121,17 @@ class ArtistStudio {
     else this.$("action-note").classList.remove("is-warning");
     btn.innerHTML=escape(label)+icon(working?"frames":"arrow");btn.disabled=working || this.busy || (!recoverLength && (!hasAssets || missingSelection || (reference && !this.audio) || enhancementUnavailable || unsupportedViewport || unsupportedRelight || unsupportedSubject));
     this.$("action-note").textContent=note;this.$("cancel").hidden=!working;this.$("cancel").disabled=this.busy;
-    this.$("image-editor").hidden=this.directViewport() || working || this.lookMode==="ready" || this.config.engine==="seedance" || !hasAssets;
-    this.$("redesign").hidden=false;
-    this.$("redesign").textContent=p?.opening_input?"Regenerate frame":"Generate starting frame";
-    this.$("redesign").disabled=this.busy || !p?.approval;
+    this.$("image-editor").hidden=this.directViewport() || working || this.lookMode==="ready" || this.config.engine==="seedance" || !hasAssets || ["done","draft"].includes(phase);
+    this.$("video-options").hidden=!p?.opening_input && !this.directViewport() && !this.headSwap();
+    this.$("redesign").hidden=!p?.opening_input;
+    this.$("redesign").textContent="Regenerate starting frame";
+    this.$("redesign").disabled=this.busy || !p?.approval || !p?.opening_input;
     this.$("starting-image").hidden=this.directViewport() || preservePeople || working || !p || this.config.engine==="seedance" || phase==="new";
     this.$("starting-image").disabled=this.busy;
     this.$("working").hidden=!working;
     this.$("live-cancel").disabled=!working || this.busy;
     const latestAction=p?.actions?.at(-1),stage=latestAction?.stage;
-    const stageLabels={prepare:"Finding and tracking the performer",design:"Creating your character preview",video_text:"Preparing the video prompt",h3_references:"Preparing the character and performance references",wan_speech:"Creating your facial performance",wan_prepare:"Preparing Wan motion and character",wan:"Replacing the performer with Wan 2.2",background:"Replacing the performer",restyle:"Restyling your shot",h3:"Replacing the performer with MiniMax H3",h3_enhance:"Enhancing the H3 frames to 1080p",draft:"Generating the Seedance draft",final:"Rendering the accepted take at 1080p"};
+    const stageLabels={prepare:"Finding and tracking the performer",design:"Creating your character preview",video_text:"Preparing the video prompt",h3_references:"Preparing the character and performance references",wan_speech:"Creating your facial performance",wan_prepare:"Preparing Wan motion and character",wan:"Replacing the performer with Wan 2.2",background:"Replacing the performer",restyle:"Restyling your shot",h3:"Replacing the performer with MiniMax H3",h3_enhance:"Enhancing the H3 frames to 1080p",wan2:"Animating character and background with Wan Animate 2",draft:"Generating the Seedance draft",final:"Rendering the accepted take at 1080p"};
     if(preservePeople)Object.assign(stageLabels,{prepare:"Protecting the original people",design:"Creating the new surroundings",h3:"Changing the surroundings"});
     if(relight)Object.assign(stageLabels,{prepare:"Preparing source movement",design:"Creating the lighting frame",h3_references:"Preparing lighting and video guidance",h3:"Relighting your shot"});
     if(viewport){stageLabels.prepare="Preparing viewport guidance";stageLabels.design="Creating the finished scene image";stageLabels.h3="Rendering the viewport with H3";stageLabels.restyle="Rendering the viewport with LTX";}
@@ -1119,7 +1148,8 @@ class ArtistStudio {
     else progressBar.setAttribute("aria-valuenow",String(progress.percent));
     this.$("working-fill").style.width=progress.percent===null?"":`${progress.percent}%`;
     this.defaultReviewPreview(p,wholeScene);
-    this.$("preview-tabs").hidden=!p?.review || phase==="opening" || phase==="done" || phase==="draft";
+    this.$("preview-tabs").hidden=!p?.review || phase==="done" || phase==="draft";
+    this.$("preview-tabs").querySelector('[data-view="look"]').hidden=!p?.opening_input;
     this.$("preview-tabs").querySelectorAll("button").forEach(b=>b.classList.toggle("active",b.dataset.view===this.preview));
     let video=this.source?.url,opening=null,title=this.source?"Your source video":"Create a new look",description=this.source?"Video loaded. Choose what changes and add your starting look.":"Start with footage or a viewport render.";
     if(p?.review){video=({mask:p.mask_url,guide:p.guide_url||p.selected_url,source:p.selected_url})[this.preview];title="Check the selection";description=wholeScene?"The whole frame is selected. Review the source movement and framing before creating the look.":this.config.remove_text?"Watch the full clip. The orange mask should cover the selected area and all titles and subtitles you want removed.":"Watch the full clip. Make sure the orange mask covers the selected area throughout the shot.";}
@@ -1127,7 +1157,7 @@ class ArtistStudio {
     if(p?.review && relight){title="Review the source";description="Keep this composition and performance. Next, create a lighting frame to review.";}
     if(p?.review && !wholeScene && p.tracking_coverage?.cut_reselection_requires_review)description+=" Check that the correct person or object stays selected after each camera cut.";
     if(p?.review && !wholeScene && p.tracking_coverage?.near_empty_frames)description+=" The selection is missing in part of the clip. Check whether the subject has left the picture or the mask needs correcting.";
-    if(phase==="opening"){opening=p.opening_url;video=null;title=this.lookMode==="ready"?"Review your finished frame":"Review your starting frame";description=relight?"Check the lighting. Subjects, objects and composition should match the source.":"Check the appearance and framing before animation.";if(relight)title="Review your lighting frame";}
+    if(phase==="opening" && this.preview==="look"){opening=p.opening_url;video=null;title=this.lookMode==="ready"?"Review your finished frame":"Review your starting frame";description=relight?"Check the lighting. Subjects, objects and composition should match the source.":"Check the appearance and framing before animation.";if(relight)title="Review your lighting frame";}
     if((phase==="draft" || phase==="done") && p.results?.length){video=p.results.at(-1).url;title=phase==="draft"?"Review your draft":"Your finished take";description="The selected soundtrack is restored. Watch the entire take before keeping it.";}
     this.$("preview-title").textContent=title;this.$("preview-description").textContent=description;
     const player=this.$("player"),image=this.$("opening");player.hidden=!video;image.hidden=!opening;
@@ -1140,7 +1170,10 @@ class ArtistStudio {
     if(!canCompare || this.compareProject!==p?.id){this.compareActive=false;this.comparison?.hide();}
     this.$("canvas").hidden=!!this.compareActive;
     if(this.compareActive)this.comparison.show(p.selected_url || this.source.url,this.compareResult || video,p.selected_url?0:(p.config?.start || 0));
-    const step=!this.source?0:!this.hasLook()?1:!p?.review || phase==="review" || phase==="opening"?2:3;
+    const hasFrame=!!p?.opening_input,direct=this.directViewport()||this.headSwap();
+    const step=!hasAssets?0:!hasFrame&&!direct?1:phase==="done"||phase==="draft"?3:2;
+    const stageNames=["Source","Starting frame","Video","Result"],stageNotes=["Video & references","Create & review","Settings & generation","Compare & download"];
+    this.container.querySelectorAll("[data-step]").forEach(e=>{const index=Number(e.dataset.step);e.querySelector("strong").textContent=stageNames[index];e.querySelector("small").textContent=stageNotes[index];e.hidden=direct&&index===1;});
     this.container.querySelectorAll("[data-step]").forEach(e=>{const current=Number(e.dataset.step)===step;e.classList.toggle("active",current);e.classList.toggle("complete",Number(e.dataset.step)<step);if(current)e.setAttribute("aria-current","step");else e.removeAttribute("aria-current");});
     if(p?.error)this.message(p.error,true);
     const results=p?.results || [];this.$("results").hidden=!results.length;
@@ -1148,7 +1181,7 @@ class ArtistStudio {
     if(this.resultFingerprint!==fingerprint){
       this.resultFingerprint=fingerprint;
       this.$("takes").innerHTML=results.slice().reverse().map((item,i)=>{
-        const label=item.label || ({wan:"Wan 2.2",h3:"MiniMax H3",h3_enhance:"Enhanced H3",draft:"Seedance draft",final:"Seedance final",background:"LTX · original background",restyle:"LTX · scene restyle"})[item.stage] || "Take";
+        const label=item.label || ({wan2:"Wan Animate 2",wan:"Wan 2.2",h3:"MiniMax H3",h3_enhance:"Enhanced H3",draft:"Seedance draft",final:"Seedance final",background:"LTX · original background",restyle:"LTX · scene restyle"})[item.stage] || "Take";
         const raster=item.output_raster?.width&&item.output_raster?.height?`${item.output_raster.width} × ${item.output_raster.height}`:item.resolution?`${item.resolution}px`:"";
         return `<article class="gs-take"><video src="${escape(item.url)}" controls playsinline preload="metadata"></video><div><span>${escape(label+(raster?` · ${raster}`:"")+(item.duration?` · ${item.duration}s`:""))}</span><button class="gs-quiet" type="button" data-compare-result="${escape(item.url)}">Compare</button><a href="${escape(item.url)}" download="zura-take-${results.length-i}.mp4">${icon("download")} Download</a></div></article>`;
       }).join("");
@@ -1180,12 +1213,13 @@ class ArtistStudio {
     const enhancementStatus=this.modelStatus.h3_enhancement || {};
     const enhancementSetupCommand=enhancementStatus.setup_command || "Setup_H3_Enhancement_Windows.cmd";
     this.$("models").textContent=engine==="seedance"?"Uses Comfy credits":ready?(engine==="h3"?(enhancementRequested?"H3 · Enhanced 1080p ready":"H3 · 720p ready; native 1080p unqualified"):engine==="wan"?(speech?"Wan + speech models ready":"Wan models ready"):route==="local_viewport"?"LTX 2.5 · experimental viewport ready":route==="local_scene"?"LTX 2.5 · whole-scene models ready":"LTX · masked route experimental"):!cleanupReady?"Text cleanup setup needed":enhancementRequested&&!baseReady?"H3 model setup needs attention":enhancementRequested&&!enhancementStatus.ready?(!enhancementStatus.model_ready?`Run ${enhancementSetupCommand}`:"1080p enhancement nodes setup needed"):speech && !this.modelStatus.wan_speech?.ready?"Wan speech setup needed":"Model setup needs attention";
+    if(engine==="wan2")this.$("models").textContent=baseReady?"Wan Animate 2 · full-frame setup ready":"Wan Animate 2 · setup needed";
     if(this.headSwap())this.$("models").textContent=baseReady?"H3 · Head & face ready":"Head & face setup needed";
     this.$("models").classList.toggle("needs-attention",!ready);
     const files=(this.headSwap()?this.modelStatus.h3_head_swap?.model_files:null)||this.modelStatus.model_files?.[route]||[];
-    const missingNodeField={h3_head_swap:"missing_h3_head_swap_nodes",local:"missing_ltx_nodes",local_scene:"missing_ltx_scene_nodes",local_viewport:"missing_ltx_viewport_nodes",h3:"missing_h3_nodes",h3_viewport:"missing_h3_viewport_nodes",wan:"missing_wan_nodes"}[route];
+    const missingNodeField={wan2:"missing_wan2_nodes",h3_head_swap:"missing_h3_head_swap_nodes",local:"missing_ltx_nodes",local_scene:"missing_ltx_scene_nodes",local_viewport:"missing_ltx_viewport_nodes",h3:"missing_h3_nodes",h3_viewport:"missing_h3_viewport_nodes",wan:"missing_wan_nodes"}[route];
     const missingNodes=(this.headSwap()?this.modelStatus.h3_head_swap?.missing_nodes:null)||this.modelStatus[missingNodeField]||[];
-    this.$("model-checklist").innerHTML=engine==="seedance"?'<p class="gs-note">Uses the paid provider. Check credits and cost before rendering.</p>':files.map(item=>`<p class="gs-note">${item.ready?"Ready":"Missing"}: <code>${escape(item.path||`models/${item.folder}/${item.filename}`)}</code></p>`).join("")+(missingNodes.length?`<p class="gs-note">Missing nodes: ${missingNodes.map(escape).join(", ")}. Install the matching packs listed in the setup guide, then restart ComfyUI.</p>`:"<p class=\"gs-note\">Required native node checks passed. Optional speech or enhancement has its own setup.</p>");
+    this.$("model-checklist").innerHTML=engine==="seedance"?'<p class="gs-note">Uses the paid provider. Check credits and cost before rendering.</p>':files.map(item=>`<p class="gs-note">${item.ready?"Ready":"Missing"}: <code>${escape(item.path||`models/${item.folder}/${item.filename}`)}</code>${!item.ready&&item.url?` · <a href="${escape(item.url)}" target="_blank" rel="noopener noreferrer">Download</a>`:""}</p>`).join("")+(missingNodes.length?`<p class="gs-note">Missing nodes: ${missingNodes.map(escape).join(", ")}. Install the matching packs listed in the setup guide, then restart ComfyUI.</p>`:"<p class=\"gs-note\">Required native node checks passed. Optional speech or enhancement has its own setup.</p>");
   }
   async poll() {
     if(this.container.isConnected&&!this.busy&&!this.voicePolling){

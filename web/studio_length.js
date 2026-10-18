@@ -4,8 +4,8 @@ export function clipLength(config,sourceDuration) {
   const seconds=original?source:Math.min(Number(config.duration),source-start);
   const frames=Math.max(1,Math.floor(seconds*24+1e-6));
   const viewport=config.workflow_mode==="viewport",scene=config.edit_area==="scene";
-  const maximum=config.engine==="h3"?5:config.engine==="local"&&scene?(viewport?15:5):config.engine==="wan"&&config.audio_id&&config.lip_sync?30:null;
-  const invalid=Number.isFinite(source)&&source>0&&(seconds<=0 || (config.engine==="h3"&&frames<5) || (maximum!==null&&frames>maximum*24));
+  const maximum=config.engine==="wan2"?81/24:config.engine==="h3"?5:config.engine==="local"&&scene?(viewport?15:5):config.engine==="wan"&&config.audio_id&&config.lip_sync?30:null;
+  const invalid=Number.isFinite(source)&&source>0&&(seconds<=0 || (["h3","wan2"].includes(config.engine)&&frames<5) || (maximum!==null&&frames>maximum*24));
   return {seconds,frames,maximum,invalid};
 }
 

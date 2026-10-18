@@ -160,6 +160,9 @@ html.genj-open,html.genj-open body{overflow:hidden!important;overscroll-behavior
 .gs-compare-divider svg{width:22px;height:22px}
 
 .gs-image-editor{padding:16px 18px;background:var(--gs-panel);border:1px solid var(--gs-line);border-radius:12px;margin:12px 0}
+.gs-look .gs-image-editor{padding:0;border:0;background:none;margin:20px 0 0}
+.gs-look .gs-image-editor>div{align-items:stretch;flex-direction:column}
+#gs-video-options{display:flex;flex-direction:column;gap:20px;min-width:0}
 .gs-image-editor>div{display:flex;gap:14px;justify-content:space-between;align-items:center;margin-top:10px}
 .gs-image-editor>div>span{color:var(--gs-muted);font-size:12px;line-height:1.4}
 #genj-studio .gs-image-editor textarea{min-height:76px;max-height:180px}

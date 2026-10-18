@@ -1,6 +1,6 @@
 # Approved Studio workflows
 
-Updated 18 October 2026. Local development state; no new release.
+Updated 18 October 2026 for Zura Nodes 1.3.24.
 
 Approvals belong to a particular workflow and example. Rejecting one model's
 viewport result does not revoke its separately approved character or audio work.
@@ -8,7 +8,7 @@ Keep this ledger when changing Studio availability.
 
 ## Character performance
 
-One task offers three model choices. Each keeps its own tested generation path.
+The approved character routes below keep their own tested generation paths. Wan Animate 2 is a separate full-frame option whose local quality and speed are not yet qualified.
 
 | Model | Original audio and acting | New dialogue drives facial performance | Silent footage | Preservation |
 | --- | --- | --- | --- | --- |

@@ -31,6 +31,7 @@ STAGES = {
     "h3": "06_H3_Character_Reference",
     "h3_enhance": "08_H3_Enhanced_1080p",
     "wan": "07_Wan_Character_Replacement",
+    "wan2": "Wan_Animate_2_Full_Frame",
     "wan_prepare": "07A_Wan_Motion_Preparation",
     "wan_merge": "07D_Wan_Finish_Motion",
     "wan_speech": "07B_Wan_Speech_Performance",
@@ -84,7 +85,7 @@ def clean_config(value):
     if "quality" in value or "resolution" in value:
         c["h3_preset"] = "take_fast" if c["quality"] == "fast" else "take_quality"
     from .h3 import H3_PRESETS
-    for key, options in [("engine", ("local", "h3", "wan", "seedance")), ("background", ("keep", "restyle")),
+    for key, options in [("engine", ("local", "h3", "wan", "wan2", "seedance")), ("background", ("keep", "restyle")),
                          ("quality", ("fast", "detailed")),
                          ("length_mode", ("custom", "original")),
                          ("workflow_mode", ("motion", "swap", "viewport", "relight")),
@@ -158,8 +159,8 @@ def clean_config(value):
     c["mask_prompt"] = str(c["mask_prompt"]).strip()[:500]
     from .mask_selection import clean_points
     c["mask_points"] = clean_points(c["mask_points"], require_positive=False)
-    c["resolution"] = int(c["resolution"])
-    if c["resolution"] not in ((1024,) if head_swap_setup(c) else (256, 512, 768, 960, 1280, 1920)):
+    c["resolution"] = 832 if c["engine"] == "wan2" else int(c["resolution"])
+    if c["resolution"] not in ((1024,) if head_swap_setup(c) else (832,) if c["engine"] == "wan2" else (256, 512, 768, 960, 1280, 1920)):
         if head_swap_setup(c):
             c["resolution"] = 1024
         else:
@@ -299,10 +300,11 @@ def check_asset(asset):
 def validate_selection(project):
     """Reject unsupported timelines before mask tracking or reference encoding."""
     c = project["config"]
+    wan2 = c["engine"] == "wan2"
     h3 = c["engine"] == "h3"
     ltx_scene = c["engine"] == "local" and c.get("edit_area") == "scene"
     wan_speech = c["engine"] == "wan" and bool(project.get("audio")) and c.get("lip_sync")
-    if not (h3 or ltx_scene or wan_speech):
+    if not (h3 or ltx_scene or wan_speech or wan2):
         return
     path = check_asset(project["source"])
     with av.open(str(path)) as container:
@@ -327,6 +329,8 @@ def validate_selection(project):
     if ltx_scene and frames > (360 if c.get("workflow_mode") == "viewport" else 120):
         limit = "15 seconds" if c.get("workflow_mode") == "viewport" else "5 seconds"
         raise ValueError(f"LTX whole-scene generation currently supports up to {limit}. Choose a shorter custom clip.")
+    if wan2 and (frames < 5 or frames > 81):
+        raise ValueError("Wan Animate 2 currently supports 0.21 to 3.375 seconds. Choose a shorter clip.")
     if wan_speech and frames > 720:
         raise ValueError("Wan replacement speech currently supports up to 30 seconds. Choose a shorter custom clip.")
 
@@ -541,6 +545,10 @@ def build_graph(project, stage, use_cache=True, run_id=None):
     if stage == "ltx25_cleanup":
         return {"ack": {"class_type": "PreviewAny", "inputs": {
             "source": "Zura LTX memory hand-off " + project["id"]}}}
+    if stage == "wan2":
+        assert_approved(project)
+        from .wan_animate2 import build_studio_graph
+        return build_studio_graph(project, check_asset)
     if stage == "wan_speech":
         from .wan_speech import build_graph as speech_graph
         return speech_graph(project)
@@ -988,7 +996,7 @@ def editable_graph(project, stage="auto"):
             raise ValueError("Create the character preview before opening its animation graph.")
         if not h3_viewport_direct(p):
             p["opening_approval"] = p["opening_key"]
-        stage = (p["config"]["engine"] if p["config"]["engine"] in ("h3", "wan") else
+        stage = (p["config"]["engine"] if p["config"]["engine"] in ("h3", "wan", "wan2") else
                  "background" if p["config"]["background"] == "keep" else "restyle")
     if stage == "h3" and p.get("opening_input") and not h3_viewport_direct(p):
         p["opening_approval"] = p["opening_key"]
@@ -1578,6 +1586,7 @@ class Studio:
             server_matches = action.get("server_address", self.server_address) == self.server_address
             auto_handoff = (action.get("stage") in ("video_text", "h3_references", "wan_prepare", "wan_speech", "wan_cleanup", "ltx25_cleanup") or
                             str(action.get("stage", "")).startswith("ltx25_") and action.get("stage") != "ltx25_decode")
+            auto_handoff = auto_handoff or (action.get("stage") == "prepare" and action.get("next_stage") == "create_look")
             if auto_handoff and server_matches:
                 self.schedule_resume(p["id"], action_id)
                 return p
@@ -1722,6 +1731,11 @@ class Studio:
                 p["phase"] = "done"
         action["state"] = "complete"
         p["error"] = None
+        if stage == "prepare" and action.get("next_stage") == "create_look":
+            p["phase"] = "working"
+            self.store.save(p)
+            self.schedule_resume(p["id"], action["id"])
+            return p
         self.store.save(p)
         return p
 
@@ -1762,7 +1776,7 @@ class Studio:
                 p.pop("ltx25_run", None)
             if prior["h3_viewport_direct"] != config["h3_viewport_direct"] or prior["workflow_mode"] != config["workflow_mode"] or prior["image_prompt"] != config["image_prompt"] or (prior["prompt"] != config["prompt"] and not config["image_prompt"]):
                 p.update(opening_input=None, opening_key=None, opening_url=None, opening_approval=None)
-            p["phase"] = ("opening" if p.get("opening_input") and p["config"]["engine"] in ("local", "h3", "wan")
+            p["phase"] = ("opening" if p.get("opening_input") and p["config"]["engine"] in ("local", "h3", "wan", "wan2")
                           else "approved" if p.get("approval") else "review" if p.get("review") else "new")
         self.store.save(p)
         return p
@@ -1772,6 +1786,25 @@ class Studio:
         approve_opening = stage == "animate"
         if p.get("actions") and p["actions"][-1]["state"] in ("waiting", "submitting", "queued", "running"):
             return p  # A double-click/reconnect never queues another job.
+        create_look = stage == "create_look"
+        if create_look:
+            require_verified_setup(p["config"], stage)
+            request_key = str(body.get("request_key", ""))
+            if not re.fullmatch(r"[a-f0-9-]{36}", request_key):
+                raise ValueError("Reload Zura Studio before continuing.")
+            if any(a.get("request_key") == request_key for a in p.get("actions", [])):
+                return p
+            if h3_viewport_direct(p):
+                raise ValueError("This workflow uses references directly, without a starting frame.")
+            if p.get("review") and p.get("prepared_key") == prep_key(p):
+                # Preparation is internal to creating the look. The artist
+                # reviews both the frame and tracked selection before Animate.
+                await self.action(p, "approve", body)
+                if p.get("look_mode") == "ready":
+                    return p
+                stage = "design"
+            else:
+                stage = "prepare"
         if stage == "approve":
             from . import verify_review
             if p.get("prepared_key") != prep_key(p):
@@ -1789,7 +1822,7 @@ class Studio:
         if stage == "animate":
             if not p.get("opening_input") and not h3_viewport_direct(p) and not head_swap_setup(p["config"]):
                 raise ValueError("Create the character preview first.")
-            stage = (p["config"]["engine"] if p["config"]["engine"] in ("h3", "wan")
+            stage = (p["config"]["engine"] if p["config"]["engine"] in ("h3", "wan", "wan2")
                      else "background" if p["config"]["background"] == "keep" else "restyle")
         if stage == "final":
             p["accepted_draft"] = p.get("draft_task")
@@ -1801,7 +1834,7 @@ class Studio:
             raise ValueError("Reload Zura Studio before continuing.")
         if any(a.get("request_key") == request_key for a in p.get("actions", [])):
             return p
-        if stage in ("prepare", "design", "h3", "wan", "wan_speech"):
+        if stage in ("prepare", "design", "h3", "wan", "wan2", "wan_speech"):
             validate_selection(p)
         if stage == "h3" and p["config"].get("delivery_mode") == "enhanced1080":
             from .enhancement import readiness as enhancement_readiness, SETUP_COMMAND, UPSCALE_MODEL
@@ -1824,7 +1857,7 @@ class Studio:
             needs_speech_model = stage in ("draft", "final") or p["config"].get("refine_lips")
             if needs_speech_model and not readiness()["ready"]:
                 raise ValueError("Install the local speech models with Setup_Speech_Windows.cmd, or untick Create a new facial performance to use this track as a soundtrack.")
-        next_stage = None
+        next_stage = "create_look" if create_look and stage == "prepare" else None
         if ltx25_scene_route(p, stage):
             # Request replay was rejected above. A new render owns fresh files;
             # subsequent native phases retain this persisted namespace.
@@ -2039,12 +2072,14 @@ def register():
         from .wan_speech import readiness as wan_speech_readiness
         from .h3_head_swap import readiness as head_swap_readiness
         head_swap = head_swap_readiness(nodes.NODE_CLASS_MAPPINGS, folder_paths.get_full_path)
+        from .wan_animate2 import readiness as wan2_readiness
+        wan2 = wan2_readiness(nodes.NODE_CLASS_MAPPINGS, folder_paths.get_full_path)
         return web.json_response({**hardware_snapshot(), "models": models, "h3_models": h3_models, "wan_models": wan_models, "speech": readiness(),
             "h3_text_cleanup": text_cleanup_readiness(),
-            "h3_head_swap": head_swap,
+            "h3_head_swap": head_swap, "wan2": wan2,
             "h3_attention_backends": h3_attention_capabilities(nodes.NODE_CLASS_MAPPINGS),
             "wan_speech": wan_speech_readiness(),
-            "engine_ready": {"local": all(models[key] for key in masked_keys) and not missing_ltx_nodes,
+            "engine_ready": {"wan2": wan2["ready"], "local": all(models[key] for key in masked_keys) and not missing_ltx_nodes,
                              "local_scene": all(models[key] for key in scene_keys) and all(detectors.values()) and not missing_ltx_scene_nodes,
                              "local_viewport": ltx_viewport["ready"],
                              "h3": all(h3_models.values()) and not missing_h3_nodes,
@@ -2059,7 +2094,8 @@ def register():
             "missing_ltx_scene_nodes": missing_ltx_scene_nodes,
             "missing_ltx_viewport_nodes": ltx_viewport["missing_nodes"],
             "missing_h3_viewport_nodes": missing_h3_viewport_nodes,
-            "model_files": {
+            "missing_wan2_nodes": wan2["missing_nodes"],
+            "model_files": {"wan2": wan2["model_files"],
                 "local_viewport": ltx_viewport["model_files"],
                 "h3_viewport": [{"folder": folder, "filename": name, "ready": h3_models[key]}
                                 for key, (folder, name) in H3_VIEWPORT_MODELS.items()],

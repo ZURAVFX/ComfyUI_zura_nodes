@@ -24,6 +24,9 @@ def head_swap_setup(config):
 
 
 def verified_setup(config):
+    if config.get("engine") == "wan2":
+        return (config.get("workflow_mode") == "motion" and config.get("edit_area") == "scene"
+                and not any(config.get(k) for k in ("audio_id", "lip_sync", "refine_lips", "preserve_people", "remove_text", "h3_head_swap")))
     if config.get("h3_head_swap"):
         return head_swap_setup(config)
     if viewport_setup(config):
@@ -48,10 +51,15 @@ def verified_setup(config):
 def require_verified_setup(config, stage=None):
     if not verified_setup(config):
         raise ValueError(UNAVAILABLE)
-    stages = {"auto", "prepare", "approve", "design", "animate"}
+    stages = {"auto", "prepare", "approve", "design", "animate", "create_look"}
     if head_swap_setup(config):
         if stage is not None and stage not in ("auto", "animate", "h3"):
             raise ValueError("Head & face uses your portrait directly. Choose its H3 animation graph.")
+        return
+    if config.get("engine") == "wan2":
+        stages.add("wan2")
+        if stage is not None and stage not in stages:
+            raise ValueError("Choose the Wan Animate 2 full-frame workflow.")
         return
     stages.update(({"h3"} if viewport_setup(config) else {"h3", "h3_enhance"}) if config["engine"] == "h3" else
                   {"background", "restyle"} if config["engine"] == "local" else

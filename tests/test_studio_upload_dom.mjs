@@ -139,3 +139,40 @@ await new Promise(resolve=>setTimeout(resolve,0));
 assert.equal(ui.config.h3_head_swap,false);assert.equal(ui.config.scope,'person');
 assert.equal(ui.$('audio-settings').hidden,false);assert.equal(ui.$('quality-setting').hidden,false);
 console.log('H3 head-swap actual-DOM opt-in, compatibility reset, audio/length gates, direct render, graph stages and full-character recovery pass.');
+
+// A single forward path: the image prompt belongs to Look, and video tuning
+// appears only after an actual frame exists. Selection remains inspectable.
+Object.assign(ui.config,{engine:'wan',workflow_mode:'swap',scope:'person',edit_area:'mask',h3_head_swap:false});
+ui.project=null;ui.lookMode='build';ui.syncForm();ui.render();
+assert.equal(ui.$('image-editor').closest('.gs-look'),ui.container.querySelector('.gs-look'));
+assert.equal(ui.$('image-editor').hidden,false);
+assert.equal(ui.$('redesign').hidden,true,'No duplicate first-frame action');
+assert.equal(ui.$('video-options').hidden,true);
+assert.match(ui.$('primary').textContent,/Create starting frame/);
+ui.project={id:'flow',phase:'opening',review:'shot',approval:'key',prepared_key:'key',opening_input:{file:'frame.png'},opening_key:'frame',opening_url:'/frame.png',mask_url:'/mask.mp4',guide_url:'/guide.mp4',selected_url:'/source.mp4',actions:[]};
+ui.render();
+assert.equal(ui.$('video-options').hidden,false);
+assert.equal(ui.$('opening').hidden,false);
+assert.match(ui.$('primary').textContent,/Generate video/);
+assert.equal(ui.$('redesign').hidden,false);
+ui.$('preview-tabs').querySelector('[data-view="mask"]').click();
+assert.equal(ui.$('player').src,'/mask.mp4');
+assert.equal(ui.$('opening').hidden,true);
+ui.$('preview-tabs').querySelector('[data-view="look"]').click();
+assert.equal(ui.$('opening').hidden,false);
+assert.match(ui.$('primary').textContent,/Generate video/);
+console.log('One starting-frame action, staged video controls and selection/frame review pass.');
+
+// The newer full-frame Wan model is an explicit choice, not the masked Wan recipe.
+ui.project=null;Object.assign(ui.config,{engine:'wan2',workflow_mode:'motion',edit_area:'scene',h3_head_swap:false});
+ui.syncForm();ui.render();
+const wan2=ui.container.querySelector('input[name="gs-engine"][value="wan2"]');
+assert.equal(wan2.closest('label').hidden,false);
+const wan2Config=ui.readConfig();
+assert.equal(wan2Config.engine,'wan2');assert.equal(wan2Config.workflow_mode,'motion');assert.equal(wan2Config.edit_area,'scene');assert.equal(wan2Config.resolution,832);
+assert.equal(ui.$('selection-options').hidden,true);assert.equal(ui.$('audio-settings').hidden,true);
+ui.project={id:'wan2',phase:'opening',review:'review',approval:'key',prepared_key:'key',opening_input:{file:'frame.png'},opening_key:'frame2',opening_url:'/frame.png',actions:[]};
+ui.render();assert.equal(ui.$('primary').disabled,true,'Missing Animate 2 weights must gate video generation');
+ui.modelStatus={...status,engine_ready:{...status.engine_ready,wan2:true}};ui.render();
+assert.equal(ui.$('primary').disabled,false);
+console.log('Wan Animate 2 visible full-frame option, safe payload and model setup gate pass.');

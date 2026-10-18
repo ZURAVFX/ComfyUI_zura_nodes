@@ -62,3 +62,8 @@ State transitions use short ease-out changes. Indeterminate progress conveys ong
 Keep native labelled inputs, keyboard focus outlines, current-step ARIA and progressbar semantics. Do not invent results, source imagery, account avatars or unsupported controls. Browser restrictions currently prevent visual verification; source and behavioural checks do not imply a completed browser review.
 
 Clip length uses visible Use source / Custom buttons with selected and focus states, instead of a native menu. Remaining native option popups have explicit dark surface and readable text colours.
+
+
+## Character creation flow
+
+Source contains the video, clip interval and appearance references. The optional first-frame prompt belongs beside those references. One main action creates the starting frame, including source preparation, without queuing animation. The centre previews the resulting frame and offers Selection / Guidance / Original tabs for inspection. Video resolution, sampling and audio controls appear after the frame exists. Regenerate is a secondary revision action available only for an existing frame. The main action then becomes Generate video. Direct-portrait and direct-viewport workflows retain their explicit shortcuts.

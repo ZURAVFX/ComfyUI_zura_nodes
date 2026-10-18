@@ -1,6 +1,6 @@
 # Install Zura Studio
 
-**Version 1.3.24:** Character performance offers Wan, MiniMax H3 and LTX 2.5, including the approved original-audio, replacement-dialogue and silent-footage paths. Wan offers precise masked replacement; H3 uses selection/depth guidance; LTX recreates the whole frame. Viewport to final offers H3. LTX viewport remains excluded after its separate rejected test. H3 Head & face is a separate two-second original-audio option. H3 Head & face is a separate two-second original-audio option. Download only the model for your chosen task. See [approved workflows](docs/APPROVED_WORKFLOWS.md) and the [current scope](docs/STUDIO_VERIFIED_SCOPE.md).
+**Version 1.3.24:** Character performance offers Wan, MiniMax H3 and LTX 2.5, including the approved original-audio, replacement-dialogue and silent-footage paths. Wan offers precise masked replacement; H3 uses selection/depth guidance; LTX recreates the whole frame. Viewport to final offers H3. LTX viewport remains excluded after its separate rejected test. H3 Head & face is a separate two-second original-audio option. Download only the model for your chosen task. See [approved workflows](docs/APPROVED_WORKFLOWS.md) and the [current scope](docs/STUDIO_VERIFIED_SCOPE.md).
 
 Zura Studio is included in the official **Zura Nodes** ComfyUI pack. The pack is code; video model weights are separate downloads and are not included.
 
@@ -17,6 +17,17 @@ python_embeded\python.exe -m pip install -r ComfyUI\custom_nodes\ComfyUI_zura_no
 ```
 
 For a virtual-environment install, use that installation's Python in place of `python_embeded\python.exe`. Restart ComfyUI after installation. Do not install a similarly named fork.
+
+## Create a character replacement
+
+1. Add your source video and character references. Choose the clip interval.
+2. Describe the first frame under **Starting frame prompt**, then select **Create starting frame**. Source tracking and frame creation run automatically with progress for each stage.
+3. Review the frame. Use **Selection** to inspect tracking, or **Regenerate starting frame** to revise the look.
+4. Choose video resolution, sampling and audio, then select **Generate video**. Use **Cancel run** to stop.
+
+A finished frame skips image generation. H3 **Head & face** uses the portrait directly; H3 direct viewport uses appearance references directly. These routes show their own controls.
+
+Wan Animate 2 is the separate **Character + background** engine choice. It regenerates the complete frame, without a spatial mask. See [its setup and limitations](docs/WAN_ANIMATE2.md); this local integration is not an artist-approved quality result yet.
 
 ## Choose an engine and download its weights
 
