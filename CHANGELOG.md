@@ -1,5 +1,12 @@
 # Release notes
 
+## 1.3.25 - 18 October 2026
+
+- Reduce Studio handoff overhead with bounded file and project-record caches, responsive graph preparation, and adaptive Comfy memory handoffs.
+- Clarify progress across model loading, preparation and sampling, with current-stage estimates.
+- Add a preview-only guided H3 camera-angle workflow with still review and original-audio preservation. Angle retention remains experimental.
+- Keep the private H3 character-swap experiment and all private test media out of the public release.
+
 ## 1.3.24 - 18 October 2026
 
 - Simplified character flow: source and references → starting frame → video settings → result. Tracking and image generation share one action; frame regeneration and selection review remain available.
