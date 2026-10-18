@@ -23,7 +23,17 @@ def head_swap_setup(config):
             and config.get("delivery_mode", "native") == "native")
 
 
+def camera_setup(config):
+    return (config.get("workflow_mode") == "camera" and config.get("engine") == "h3"
+            and config.get("edit_area") == "scene"
+            and config.get("delivery_mode", "native") == "native"
+            and not any(config.get(k) for k in
+                        ("audio_id", "lip_sync", "refine_lips", "preserve_people", "remove_text", "h3_head_swap")))
+
+
 def verified_setup(config):
+    if config.get("workflow_mode") == "camera":
+        return camera_setup(config)
     if config.get("engine") == "wan2":
         return (config.get("workflow_mode") == "motion" and config.get("edit_area") == "scene"
                 and not any(config.get(k) for k in ("audio_id", "lip_sync", "refine_lips", "preserve_people", "remove_text", "h3_head_swap")))
@@ -52,6 +62,10 @@ def require_verified_setup(config, stage=None):
     if not verified_setup(config):
         raise ValueError(UNAVAILABLE)
     stages = {"auto", "prepare", "approve", "design", "animate", "create_look"}
+    if camera_setup(config):
+        if stage is not None and stage not in ("auto", "design", "animate", "create_look", "h3"):
+            raise ValueError("Create and review the camera frame, then generate the video.")
+        return
     if head_swap_setup(config):
         if stage is not None and stage not in ("auto", "animate", "h3"):
             raise ValueError("Head & face uses your portrait directly. Choose its H3 animation graph.")

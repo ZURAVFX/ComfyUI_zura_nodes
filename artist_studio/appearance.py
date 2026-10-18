@@ -36,7 +36,7 @@ def resolve_appearance(body, load_asset, check_asset):
             references.append(asset)
             seen.add(identity)
     starting = image(body.get("starting_image")) if mode == "ready" else None
-    if mode == "build" and not references and body.get("config", {}).get("workflow_mode") != "relight":
+    if mode == "build" and not references and body.get("config", {}).get("workflow_mode") not in ("relight", "camera"):
         raise ValueError("Add at least one reference image to build your starting frame.")
     return {"look_mode": mode, "references": references, "starting_asset": starting,
             "character": copy.deepcopy(references[0] if references else starting)}

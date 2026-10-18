@@ -6,6 +6,8 @@ import json
 import pickle
 import re
 from pathlib import Path
+from collections import OrderedDict
+import threading
 
 import torch
 import torch.nn.functional as F
@@ -306,16 +308,37 @@ _CACHE_REBUILD_MESSAGE = (
     "Generate this take again in Zura Studio to rebuild them. Your approved shot and character look are kept."
 )
 
+# Only planning reuses a successful integrity/shape check. The execution node
+# still opens and strictly validates the actual tensor payload on every load.
+_VALIDATED_CACHE_FILES = OrderedDict()
+_VALIDATED_CACHE_LOCK = threading.RLock()
+_VALIDATED_CACHE_LIMIT = 64
+
 
 def cache_valid(key, expected_frames=None):
     """Read only CPU tensor data; invalid caches use Studio's native rebuild stage."""
+    from .file_cache import file_identity
     try:
+        identity = file_identity(cache_path(key))
+        with _VALIDATED_CACHE_LOCK:
+            frames = _VALIDATED_CACHE_FILES.get(identity)
+            if frames is not None:
+                if file_identity(cache_path(key)) != identity:
+                    return False
+                _VALIDATED_CACHE_FILES.move_to_end(identity)
+                return expected_frames is None or frames == expected_frames
         data = _read_conditioning_cache(key)
-        if expected_frames is not None:
-            video = data["latent"]["samples"]["genj_h3_nested_tensors"][0]
-            frames = 5 + 17 * ((video.shape[2] - 2) // 5)
-            if frames != expected_frames:
-                return False
+        video = data["latent"]["samples"]["genj_h3_nested_tensors"][0]
+        frames = 5 + 17 * ((video.shape[2] - 2) // 5)
+        if file_identity(cache_path(key)) != identity:
+            return False
+        with _VALIDATED_CACHE_LOCK:
+            _VALIDATED_CACHE_FILES[identity] = frames
+            _VALIDATED_CACHE_FILES.move_to_end(identity)
+            while len(_VALIDATED_CACHE_FILES) > _VALIDATED_CACHE_LIMIT:
+                _VALIDATED_CACHE_FILES.popitem(last=False)
+        if expected_frames is not None and frames != expected_frames:
+            return False
     except _CACHE_READ_ERRORS:
         return False
     return True
@@ -1039,8 +1062,8 @@ def build_h3_graph(project, use_cache=True, preserve_background=True):
     cached_digest = None
     if use_cache and cache_valid(key, expected_frames=max(124, valid_length(count))):
         try:
-            with cache_path(key).open("rb") as stream:
-                cached_digest = _cache_file_digest(stream)
+            from .file_cache import digest_file
+            cached_digest = digest_file(cache_path(key))
         except OSError:
             pass  # A disappearing file also needs the native reference rebuild.
     if cached_digest:

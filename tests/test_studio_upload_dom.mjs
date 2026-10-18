@@ -176,3 +176,74 @@ ui.render();assert.equal(ui.$('primary').disabled,true,'Missing Animate 2 weight
 ui.modelStatus={...status,engine_ready:{...status.engine_ready,wan2:true}};ui.render();
 assert.equal(ui.$('primary').disabled,false);
 console.log('Wan Animate 2 visible full-frame option, safe payload and model setup gate pass.');
+
+// Model handoffs must clear the previous sampler's metrics immediately. The
+// operation stays visible while the native substatus explains the current wait.
+ui.project={...ui.project,phase:'working',actions:[{id:'video-action',stage:'wan2',state:'running'}],progress:{action_id:'old-frame-action',action_stage:'design',state:'running',stage_label:'Sampling image',stage_percent:80,step:8,total_steps:10,stage_remaining_seconds:12,eta_confidence:'measured'}};
+ui.render();
+assert.equal(ui.$('working').hidden,false);
+assert.match(ui.$('working-title').textContent,/Generating video.*Wan Animate 2/);
+assert.equal(ui.$('working-percent').textContent,'');
+assert.equal(ui.$('working-progress').hasAttribute('aria-valuenow'),false);
+assert.equal(ui.$('working-progress').classList.contains('is-indeterminate'),true);
+assert.doesNotMatch(ui.$('working-meta').textContent,/Step/);
+assert.doesNotMatch(ui.$('working-detail').textContent,/left/);
+ui.project.progress={action_id:'video-action',action_stage:'wan2',state:'preparing',stage_label:'Loading inputs',stage_elapsed_seconds:9,stage_percent:80,step:8,total_steps:10,stage_remaining_seconds:12,eta_confidence:'measured'};
+ui.render();
+assert.equal(ui.$('working-detail').textContent,'Loading inputs');
+assert.equal(ui.$('working-percent').textContent,'');
+assert.equal(ui.$('working-meta').textContent,'9s elapsed');
+assert.equal(ui.$('live-cancel').hidden,false);
+assert.equal(ui.$('live-cancel').disabled,false);
+ui.project.progress={...ui.project.progress,state:'running',stage_label:'Generating video',stage_percent:25,step:2,total_steps:8,stage_remaining_seconds:30};
+ui.render();
+assert.equal(ui.$('working-percent').textContent,'25%');
+assert.equal(ui.$('working-progress').getAttribute('aria-valuenow'),'25');
+assert.match(ui.$('working-detail').textContent,/About 30s left in this step/);
+assert.match(ui.$('working-meta').textContent,/Step 2 of 8/);
+console.log('Actual-DOM image-to-video handoffs clear stale progress; loaders and live sampling remain distinct and cancellable.');
+
+// Camera direction is a separate guided task: no mask, no character required,
+// and animation waits for the camera still to exist and be reviewed.
+ui.project=null;ui.references=[];ui.character=null;ui.readyAsset=null;ui.lookMode='build';
+ui.source={...ui.source,has_audio:true,duration:2};
+Object.assign(ui.config,{engine:'wan',workflow_mode:'camera',audio_id:'stale-audio',lip_sync:true,remove_text:true});
+ui.modelStatus={...status,engine_ready:{...status.engine_ready,h3_camera:true}};
+ui.selectWorkflow();ui.syncForm();ui.render();
+assert.equal(ui.config.engine,'h3');
+assert.equal(ui.hasLook(),true,'A camera preset can create a still without appearance references');
+assert.equal(ui.$('camera-look').hidden,false);
+assert.equal(ui.$('selection-options').hidden,true);
+assert.equal(ui.$('audio-settings').hidden,true);
+assert.equal(ui.$('image-editor').hidden,true,'Camera direction replaces the generic image prompt');
+assert.equal(ui.$('video-options').hidden,true);
+assert.match(ui.$('primary').textContent,/Create camera still/);
+assert.match(ui.$('engine-hint').textContent,/preview mode/);
+for(const engine of ui.container.querySelectorAll('input[name="gs-engine"]'))assert.equal(engine.closest('label').hidden,engine.value!=='h3');
+ui.$('camera_preset').value='Custom prompt only';ui.render();
+assert.equal(ui.$('primary').disabled,true);
+ui.$('camera_prompt').value='A left profile view at eye level.';ui.$('camera_prompt').oninput();
+assert.equal(ui.$('primary').disabled,false);
+const cameraCalls=[];api.fetchApi=async(path,options)=>{
+  const body=options?.body?JSON.parse(options.body):{};cameraCalls.push({path,body});
+  if(path==='/zura/studio/projects')return {ok:true,json:async()=>({id:'camera-project',phase:'new',source:ui.source,config:body.config,references:[],actions:[]})};
+  if(path.endsWith('/config'))return {ok:true,json:async()=>({...ui.project,config:body.config})};
+  if(path.endsWith('/action'))return {ok:true,json:async()=>({...ui.project,phase:body.action==='animate'?'done':'opening',review:null,approval:null,prepared_key:null,opening_key:'camera-frame',opening_input:{file:'camera.png'},opening_url:'/camera.png',actions:[],results:[]})};
+  throw new Error('Unexpected camera request '+path);
+};
+await ui.primary();
+assert.equal(ui.$('message').hidden,true,ui.$('message').textContent);
+assert.equal(ui.$('opening').hidden,false,JSON.stringify(cameraCalls));
+assert.equal(ui.$('camera-regenerate').hidden,false);
+assert.match(ui.$('primary').textContent,/Generate video/);
+assert.match(ui.$('preview-title').textContent,/Review your camera still/);
+await ui.primary();
+assert.deepEqual(cameraCalls.map(c=>c.body.action).filter(Boolean),['create_look','animate']);
+const cameraConfig=cameraCalls[0].body.config;
+assert.equal(cameraConfig.camera_preset,'Custom prompt only');
+assert.equal(cameraConfig.camera_prompt,'A left profile view at eye level.');
+assert.equal(cameraConfig.edit_area,'scene');assert.equal(cameraConfig.audio_id,'');assert.equal(cameraConfig.lip_sync,false);assert.equal(cameraConfig.remove_text,false);
+ui.project=null;ui.source.has_audio=false;ui.render();
+assert.equal(ui.$('primary').disabled,true);
+assert.match(ui.$('action-note').textContent,/original audio track/);
+console.log('Camera actual-DOM optional references, presets, source-audio gate and still-review-before-video flow pass.');
