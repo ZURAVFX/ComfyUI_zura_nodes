@@ -13,7 +13,7 @@ function ui(phase='review'){
 }
 for(const phase of ['review','approved']){
   const value=ui(phase),actions=[];value.run=async stage=>actions.push(stage);
-  await value.primary();
+  await value.primaryRecipe();
   assert.deepEqual(actions,phase==='review'?['approve','h3']:['h3']);
   assert.equal(value.projectBody().look_mode,'build');assert.equal(value.projectBody().config.h3_viewport_direct,true);
 }

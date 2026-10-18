@@ -255,7 +255,7 @@ for(const engine of ['local','h3','wan','seedance']){
  fields['audio-mode'].value='reference';selected=ui.readConfig();assert.equal(selected.audio_id,'b'.repeat(32));assert.equal(selected.lip_sync,true);assert.equal(selected.audio_start,1.25);
  fields.lip_sync.checked=false;selected=ui.readConfig();assert.equal(selected.audio_id,'b'.repeat(32));assert.equal(selected.lip_sync,false);assert.equal(selected.refine_lips,false);
  ui.audio=null;let caught;ui.perform=async fn=>{try{await fn();}catch(e){caught=e.message;}};
- ui.primary().then(()=>assert.equal(caught,'Choose or create a reference audio track first.'));
+ ui.primaryRecipe().then(()=>assert.equal(caught,'Choose or create a reference audio track first.'));
 }
 proto.bind=function(){};proto.syncForm=function(){};
 const html=new context.Studio().container.innerHTML;

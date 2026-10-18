@@ -4,10 +4,10 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Zura Studio | ZURA VFX</title>
-<meta name="description" content="Transform video, swap scene elements and take grey viewport renders towards finished shots in ComfyUI with Zura Studio.">
+<meta name="description" content="Transform video, replace characters and take grey viewport renders towards finished shots in ComfyUI with Zura Studio.">
 <meta name="theme-color" content="#ffffff">
 <meta property="og:title" content="Zura Studio | ZURA VFX">
-<meta property="og:description" content="Transform video, swap scene elements and take grey viewport renders towards finished shots in ComfyUI.">
+<meta property="og:description" content="Transform video, replace characters and take grey viewport renders towards finished shots in ComfyUI.">
 <meta property="og:type" content="website">
 <link rel="icon" type="image/png" href="zura-logo.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -47,16 +47,16 @@ a:focus-visible{outline:2px solid var(--blue);outline-offset:4px}
 .band h2{font-size:clamp(1.9rem,3.6vw,3.25rem);line-height:1.05;max-width:24ch}
 .band .lede{margin-top:15px}
 .rows,.steps{list-style:none;margin:clamp(28px,3.6vw,46px) 0 0;padding:0;border-top:1px solid var(--line)}
-.rows li{display:grid;grid-template-columns:52px minmax(0,1fr) minmax(0,1.35fr);gap:clamp(14px,2vw,30px);align-items:baseline;padding:21px 0;border-bottom:1px solid var(--line)}
+.rows li{display:grid;grid-template-columns:52px minmax(0,1fr) minmax(0,1.35fr);gap:clamp(14px,2vw,30px);align-items:baseline;padding:21px 12px;border-bottom:1px solid var(--line)}
 .rows .n{color:var(--muted);font-size:.8rem}
 .rows .t{font-weight:600;font-size:clamp(1.06rem,1.7vw,1.42rem)}
 .rows .d{color:#444;font-size:.96rem}
 .steps{counter-reset:s}
-.steps li{counter-increment:s;display:grid;grid-template-columns:52px minmax(0,1fr);gap:clamp(14px,2vw,30px);padding:20px 0;border-bottom:1px solid var(--line)}
+.steps li{counter-increment:s;display:grid;grid-template-columns:52px minmax(0,1fr);gap:clamp(14px,2vw,30px);padding:20px 12px;border-bottom:1px solid var(--line)}
 .steps li::before{content:counter(s,decimal-leading-zero);color:var(--ink);font-weight:600;font-size:.9rem}
 .steps .t{font-weight:600;font-size:clamp(1.02rem,1.6vw,1.3rem)}
 .steps .d{color:#444;font-size:.96rem;margin-top:5px;max-width:68ch}
-.note{margin-top:clamp(30px,4vw,52px);border-left:2px solid var(--blue);padding:4px 0 4px 20px;max-width:74ch;color:#333}
+.note{margin-top:clamp(30px,4vw,52px);border-left:2px solid var(--blue);padding:12px 16px 12px 20px;max-width:74ch;color:#333}
 .note b{display:block;margin-bottom:6px}
 .site-footer{border-top:1px solid var(--line);margin-top:clamp(54px,7vw,100px)}
 .site-footer__inner{width:min(100%,var(--max));margin-inline:auto;padding:clamp(32px,4vw,50px) var(--page-pad);display:flex;flex-wrap:wrap;gap:20px 40px;justify-content:space-between;align-items:flex-end}
@@ -86,7 +86,7 @@ a:focus-visible{outline:2px solid var(--blue);outline-offset:4px}
     <section class="intro">
       <p class="kicker">Zura Nodes · Video tools for ComfyUI</p>
       <h1>Transform footage. Keep control of the shot.</h1>
-      <p class="lede">Zura Studio brings video-to-video work into ComfyUI. Carry motion into a new look, replace selected people or objects, or take a grey viewport render towards a finished scene.</p>
+      <p class="lede">Zura Studio brings video-to-video work into ComfyUI. Carry motion into a new look, replace characters, or take a grey viewport render towards a finished scene.</p>
       <div class="actions">
         <a class="btn btn--primary" href="https://registry.comfy.org/nodes/comfyui-zura-nodes">Install with ComfyUI Manager</a>
         <a class="btn" href="https://github.com/ZURAVFX/ComfyUI_zura_nodes/releases/latest">Get the latest release</a>
@@ -97,10 +97,10 @@ a:focus-visible{outline:2px solid var(--blue);outline-offset:4px}
       <h2 id="modes-title">Choose the change you want to make.</h2>
       <p class="lede">Start with a source clip, then guide the result with a prompt, reference images and a reviewed selection.</p>
       <ul class="rows">
-        <li><span class="n">01</span><span class="t">Motion transfer</span><span class="d">Use movement and framing from a reference clip to guide a new scene or character look. With H3, Keep original people changes the surroundings while protecting the source performance.</span></li>
-        <li><span class="n">02</span><span class="t">Object or character swap</span><span class="d">Select one or more areas to change. Skip the mask when you want the model to restyle the full frame.</span></li>
+        <li><span class="n">01</span><span class="t">Character performance</span><span class="d">Use Wan, H3 or LTX to follow a source performance with a new character. Choose original audio, uploaded replacement dialogue or silent footage.</span></li>
+        <li><span class="n">02</span><span class="t">Head &amp; face</span><span class="d">H3 uses a portrait and the original facial performance, then blends a tracked face crop back into the source. Original audio, up to two seconds.</span></li>
         <li><span class="n">03</span><span class="t">Viewport to final</span><span class="d">Turn a grey 3D blockout into a finished scene. MiniMax H3 is the tested local starting point for this mode.</span></li>
-        <li><span class="n">04</span><span class="t">Relight</span><span class="d">Describe the lighting and add optional references. Review the generated lighting frame, then use H3 to carry the change through the shot. Preserved lettering can leave darker patches around it.</span></li>
+        <li><span class="n">04</span><span class="t">Editable graphs</span><span class="d">Switch from Studio to native nodes with your loaded media. Keep prompts, clip controls and generated results available for inspection.</span></li>
       </ul>
       <div class="note"><b>Keep the graph within reach.</b> Studio guides the shot setup and review. Switch to Graph view whenever you want to inspect or edit the native ComfyUI workflow.</div>
     </section>
@@ -108,7 +108,7 @@ a:focus-visible{outline:2px solid var(--blue);outline-offset:4px}
     <section class="band" aria-labelledby="workflow-title">
       <h2 id="workflow-title">A short path from source to render.</h2>
       <ol class="steps">
-        <li><div><span class="t">Add a video and choose a mode</span><p class="d">See the source preview, then choose motion transfer, a masked swap, viewport to final or relighting.</p></div></li>
+        <li><div><span class="t">Add a video and choose a mode</span><p class="d">See the source preview, then choose Character performance or Viewport to final.</p></div></li>
         <li><div><span class="t">Set the look and review the guidance</span><p class="d">Use a finished frame or add look references and a prompt. Check the mask or depth guidance before you build.</p></div></li>
         <li><div><span class="t">Choose a local model and render</span><p class="d">Set the clip length and resolution for that model, then compare the result with your source and adjust the graph if needed.</p></div></li>
       </ol>

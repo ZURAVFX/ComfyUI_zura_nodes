@@ -18,10 +18,10 @@ Object.assign(studio,{busy:false,project:null,source:{duration:15},references:[]
   syncForm:()=>events.push('sync'),render:()=>events.push('render'),message:text=>events.push(text),
   $:()=>({scrollIntoView:()=>events.push('scroll'),focus:()=>events.push('focus'),select:()=>events.push('select')}),
   perform:()=>{throw new Error('Recovery must not create a project or queue a render');}});
-await studio.primary();
+await studio.primaryRecipe();
 assert.equal(studio.config.length_mode,'custom');assert.equal(studio.config.duration,5);
 assert.ok(events.includes('focus'));assert.ok(events.includes('select'));
-studio.busy=true;events.length=0;await studio.primary();assert.equal(events.length,0);
+studio.busy=true;events.length=0;await studio.primaryRecipe();assert.equal(events.length,0);
 console.log('Invalid source length recovers to editable bounded custom length, even without a look, and never queues generation.');
 
 context.Event=class{constructor(type,options){this.type=type;this.bubbles=options.bubbles;}};

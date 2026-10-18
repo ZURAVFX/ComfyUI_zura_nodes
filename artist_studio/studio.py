@@ -18,6 +18,8 @@ from PIL import Image
 
 import folder_paths
 
+from .availability import require_verified_setup, head_swap_setup
+
 HERE = Path(__file__).parent
 STAGES = {
     "prepare": "01_Prepare_and_Review",
@@ -40,7 +42,7 @@ DEFAULTS = {"engine": "local", "background": "keep", "scope": "person", "prompt"
             "start": 0.0, "duration": 2.0, "size": 512, "performer": -1,
             "margin": 20, "pitch": False, "seed": 42, "render_size": 0, "h3_preset": "preview_quality", "h3_steps": 0, "h3_attention": "native", "remove_text": False,
             "resolution": 1280, "delivery_mode": "native", "quality": "fast", "audio_id": "", "audio_start": 0.0, "length_mode": "custom", "lip_sync": False, "refine_lips": False,
-            "finished_frame_position": "first", "finished_frame_number": 1, "h3_viewport_direct": False,
+            "finished_frame_position": "first", "finished_frame_number": 1, "h3_viewport_direct": False, "h3_head_swap": False,
             "subject_mode": "auto", "preserve_people": False, "workflow_mode": "swap", "edit_area": "mask", "mask_method": "auto", "mask_prompt": "person", "mask_points": []}
 PREP_KEYS = ("start", "duration", "size", "scope", "performer", "margin", "pitch")
 
@@ -113,6 +115,7 @@ def clean_config(value):
         raise ValueError("Keep original people currently supports H3 scene transformation only.")
     c["viewport_render"] = c["workflow_mode"] == "viewport"
     c["h3_viewport_direct"] = bool(c["h3_viewport_direct"])
+    c["h3_head_swap"] = bool(c["h3_head_swap"])
     c["edit_area"] = "mask" if c["workflow_mode"] == "swap" or c["preserve_people"] else "scene"
     if c["engine"] == "local" and c["edit_area"] == "mask" and c["finished_frame_position"] != "first":
         raise ValueError("Timed LTX finished frames currently require a whole-scene task. Masked edits use the first frame.")
@@ -156,15 +159,18 @@ def clean_config(value):
     from .mask_selection import clean_points
     c["mask_points"] = clean_points(c["mask_points"], require_positive=False)
     c["resolution"] = int(c["resolution"])
-    if c["resolution"] not in (256, 512, 768, 960, 1280, 1920):
-        raise ValueError("Choose a supported output resolution.")
+    if c["resolution"] not in ((1024,) if head_swap_setup(c) else (256, 512, 768, 960, 1280, 1920)):
+        if head_swap_setup(c):
+            c["resolution"] = 1024
+        else:
+            raise ValueError("Choose a supported output resolution.")
     if c["delivery_mode"] not in ("native", "enhanced1080"):
         raise ValueError("Choose a supported H3 delivery mode.")
     # Older projects only stored an integer resolution. Preserve their 1920
     # setting as native H3; enhancement is opt-in through the explicit mode.
     if c["engine"] != "h3" or c["resolution"] != 1920:
         c["delivery_mode"] = "native"
-    if c["engine"] == "h3" and c["resolution"] not in (1280, 1920):
+    if c["engine"] == "h3" and not head_swap_setup(c) and c["resolution"] not in (1280, 1920):
         # H3 exposes one 720p generation option and two explicit 1080p
         # delivery options. Migrate old small-test selections to the supported
         # 720p base instead of keeping a hidden fourth choice in saved shots.
@@ -301,6 +307,7 @@ def validate_selection(project):
     path = check_asset(project["source"])
     with av.open(str(path)) as container:
         stream = container.streams.video[0]
+        source_has_audio = bool(container.streams.audio)
         available = (float(stream.duration * stream.time_base) if stream.duration is not None
                      else float((container.duration or 0) / av.time_base))
     if not math.isfinite(available) or available <= 0:
@@ -312,6 +319,11 @@ def validate_selection(project):
     frames = max(1, int(seconds * 24 + 1e-6))
     if h3 and not 5 <= frames <= 120:
         raise ValueError("H3 currently supports 0.21 to 5 seconds. Choose a shorter custom clip, or use Wan for a longer take.")
+    if head_swap_setup(c):
+        if frames > 48:
+            raise ValueError("Head & face is approved for up to two seconds. Choose a shorter custom clip.")
+        if not source_has_audio:
+            raise ValueError("Head & face currently requires a video with original audio. Use Full character for silent footage or new dialogue.")
     if ltx_scene and frames > (360 if c.get("workflow_mode") == "viewport" else 120):
         limit = "15 seconds" if c.get("workflow_mode") == "viewport" else "5 seconds"
         raise ValueError(f"LTX whole-scene generation currently supports up to {limit}. Choose a shorter custom clip.")
@@ -539,6 +551,9 @@ def build_graph(project, stage, use_cache=True, run_id=None):
         return {"ack": {"class_type": "PreviewAny", "inputs": {
             "source": f"Zura {label} memory hand-off " + project["id"]}}}
     if stage == "h3":
+        if head_swap_setup(project.get("config", {})):
+            from .h3_head_swap import build_studio_graph
+            return build_studio_graph(project, check_asset)
         from .h3 import build_h3_graph
         return build_h3_graph(_viewport_project(project), use_cache=use_cache)
     if stage == "design" and h3_viewport_direct(project):
@@ -950,7 +965,7 @@ def build_graph(project, stage, use_cache=True, run_id=None):
 
 def _needs_h3_reference_stage(project, graph):
     """Only legacy H3 needs a serialized reference-conditioning hand-off."""
-    return ("h3_cached" not in graph
+    return (not head_swap_setup(project.get("config", {})) and "h3_cached" not in graph
             and not _viewport_project(project).get("viewport_render", False))
 
 
@@ -958,6 +973,10 @@ def editable_graph(project, stage="auto"):
     """Export a snapshot without queuing, spending credits or changing approvals."""
     p = copy.deepcopy(project)
     p["config"] = clean_config(p["config"])
+    if head_swap_setup(p["config"]):
+        if stage not in ("auto", "animate", "h3"):
+            raise ValueError("Head & face uses your portrait directly. Open its H3 graph.")
+        return build_graph(p, "h3"), "h3"
     if stage == "auto":
         stage = ("prepare" if not p.get("approval") or p["approval"] != prep_key(p) else
                  "animate" if (p.get("opening_input") or h3_viewport_direct(p)) and p["config"]["engine"] != "seedance" else
@@ -1684,7 +1703,7 @@ class Studio:
                                        expected_width=action.get("base_output_raster", {}).get("width"),
                                        expected_height=action.get("base_output_raster", {}).get("height"),
                                        expected_fps=24)
-                item.update(label=("Native H3 · 1080p" if action.get("resolution") == 1920
+                item.update(label=("H3 · Head & face" if action.get("h3_preset") == "head_face_8step" else "Native H3 · 1080p" if action.get("resolution") == 1920
                                    else "H3 · 720p"),
                             delivery_mode=action.get("delivery_mode", "native"),
                             generation_resolution=action.get("generation_resolution"),
@@ -1768,7 +1787,7 @@ class Studio:
             self.store.save(p)
             return p
         if stage == "animate":
-            if not p.get("opening_input") and not h3_viewport_direct(p):
+            if not p.get("opening_input") and not h3_viewport_direct(p) and not head_swap_setup(p["config"]):
                 raise ValueError("Create the character preview first.")
             stage = (p["config"]["engine"] if p["config"]["engine"] in ("h3", "wan")
                      else "background" if p["config"]["background"] == "keep" else "restyle")
@@ -1795,7 +1814,7 @@ class Studio:
                 if not available["model_ready"]:
                     message += " Run " + available.get("setup_command", SETUP_COMMAND) + " and restart ComfyUI."
                 raise ValueError(message)
-        if approve_opening and not h3_viewport_direct(p):
+        if approve_opening and not h3_viewport_direct(p) and not head_swap_setup(p["config"]):
             p["opening_approval"] = p["opening_key"]
         auth = {k: body.get(k) for k in ("auth_token_comfy_org", "api_key_comfy_org") if body.get(k)}
         if stage in ("draft", "final") and not auth:
@@ -1879,7 +1898,11 @@ class Studio:
             action["h3_preset"] = p["config"]["h3_preset"]
             action["delivery_mode"] = p["config"].get("delivery_mode", "native")
             action["generation_resolution"] = h3_generation_resolution(p["config"])
-            if stage == "h3":
+            if stage == "h3" and head_swap_setup(p["config"]):
+                from .h3_head_swap import selected_frame_count
+                action.update(resolution=1024, generation_resolution=1024,
+                              h3_preset="head_face_8step", expected_frames=selected_frame_count(p, check_asset))
+            elif stage == "h3":
                 from . import verify_review
                 generation_raster, base_output_raster = h3_render_rasters(
                     p, action["generation_resolution"])
@@ -2014,8 +2037,11 @@ def register():
         h3_enhancement = h3_enhancement_readiness()
         from .speech import readiness
         from .wan_speech import readiness as wan_speech_readiness
+        from .h3_head_swap import readiness as head_swap_readiness
+        head_swap = head_swap_readiness(nodes.NODE_CLASS_MAPPINGS, folder_paths.get_full_path)
         return web.json_response({**hardware_snapshot(), "models": models, "h3_models": h3_models, "wan_models": wan_models, "speech": readiness(),
             "h3_text_cleanup": text_cleanup_readiness(),
+            "h3_head_swap": head_swap,
             "h3_attention_backends": h3_attention_capabilities(nodes.NODE_CLASS_MAPPINGS),
             "wan_speech": wan_speech_readiness(),
             "engine_ready": {"local": all(models[key] for key in masked_keys) and not missing_ltx_nodes,
@@ -2023,6 +2049,7 @@ def register():
                              "local_viewport": ltx_viewport["ready"],
                              "h3": all(h3_models.values()) and not missing_h3_nodes,
                              "h3_viewport": h3_viewport_ready,
+                             "h3_head_swap": head_swap["ready"],
                              "h3_enhanced1080": all(h3_models.values()) and not missing_h3_nodes and h3_enhancement["ready"],
                              "wan": all(wan_models.values()) and not missing_wan_nodes},
             "engine_quality": {"local": "Reviewed five-second whole-scene examples; masked speech and longer continuation remain experimental",
@@ -2071,49 +2098,59 @@ def register():
         path = Path(folder_paths.get_input_directory()) / relative
         path.parent.mkdir(parents=True, exist_ok=True)
         size = 0
+        digest = hashlib.sha256()
+        def write_chunk(f, chunk):
+            f.write(chunk)
+            digest.update(chunk)
         with path.open("wb") as f:
             while chunk := await part.read_chunk(1024 * 1024):
                 size += len(chunk)
                 if size > 2 * 1024**3:
                     raise ValueError("Use a source video smaller than 2 GB.")
-                f.write(chunk)
-        details = {}
-        if kind == "video":
-            with av.open(str(path)) as video:
-                if not video.streams.video:
-                    raise ValueError("This file contains no video. Choose a performance clip.")
-                stream = video.streams.video[0]
-                duration = float(stream.duration * stream.time_base) if stream.duration else float((video.duration or 0) / av.time_base)
-                if not math.isfinite(duration) or duration <= 0:
-                    raise ValueError("The clip length could not be read. Export an MP4 and upload it again.")
-                details = {"duration": duration, "width": stream.width, "height": stream.height}
-                frame = next(video.decode(video=0), None)
-                if frame is None:
-                    raise ValueError("The video has no readable frames. Export an MP4 and try again.")
-                thumbnail = frame.to_image()
-                thumbnail.thumbnail((480, 480))
-                thumbnail_path = path.parent / "thumbnail.jpg"
-                thumbnail.convert("RGB").save(thumbnail_path, quality=85)
-                details["thumbnail_file"] = thumbnail_path.relative_to(Path(folder_paths.get_input_directory())).as_posix()
-        elif kind == "audio":
-            with av.open(str(path)) as media:
-                if not media.streams.audio:
-                    raise ValueError("This file has no audio track.")
-                stream = media.streams.audio[0]
-                duration = float(stream.duration * stream.time_base) if stream.duration else float((media.duration or 0) / av.time_base)
-                if not math.isfinite(duration) or duration <= 0:
-                    raise ValueError("The audio length could not be read. Export a WAV and try again.")
-                details = {"duration": duration}
-            if suffix in supported["video"]:
-                from . import ffmpeg
-                extracted = path.with_suffix(".wav")
-                await asyncio.to_thread(ffmpeg, "-i", path, "-map", "0:a:0", "-vn", "-c:a", "pcm_f32le", extracted)
-                path, relative = extracted, str(Path(relative).with_suffix(".wav")).replace("\\", "/")
-        else:
-            with Image.open(path) as image:
-                image.verify()
+                await asyncio.to_thread(write_chunk, f, chunk)
+        def inspect_media():
+            details = {}
+            if kind == "video":
+                with av.open(str(path)) as video:
+                    if not video.streams.video:
+                        raise ValueError("This file contains no video. Choose a performance clip.")
+                    stream = video.streams.video[0]
+                    duration = float(stream.duration * stream.time_base) if stream.duration else float((video.duration or 0) / av.time_base)
+                    if not math.isfinite(duration) or duration <= 0:
+                        raise ValueError("The clip length could not be read. Export an MP4 and upload it again.")
+                    details = {"duration": duration, "width": stream.width, "height": stream.height,
+                               "has_audio": bool(video.streams.audio)}
+                    frame = next(video.decode(video=0), None)
+                    if frame is None:
+                        raise ValueError("The video has no readable frames. Export an MP4 and try again.")
+                    thumbnail = frame.to_image()
+                    thumbnail.thumbnail((480, 480))
+                    thumbnail_path = path.parent / "thumbnail.jpg"
+                    thumbnail.convert("RGB").save(thumbnail_path, quality=85)
+                    details["thumbnail_file"] = thumbnail_path.relative_to(Path(folder_paths.get_input_directory())).as_posix()
+            elif kind == "audio":
+                with av.open(str(path)) as media:
+                    if not media.streams.audio:
+                        raise ValueError("This file has no audio track.")
+                    stream = media.streams.audio[0]
+                    duration = float(stream.duration * stream.time_base) if stream.duration else float((media.duration or 0) / av.time_base)
+                    if not math.isfinite(duration) or duration <= 0:
+                        raise ValueError("The audio length could not be read. Export a WAV and try again.")
+                    details = {"duration": duration}
+            else:
+                with Image.open(path) as image:
+                    image.verify()
+            return details
+
+        details = await asyncio.to_thread(inspect_media)
+        if kind == "audio" and suffix in supported["video"]:
+            from . import ffmpeg
+            extracted = path.with_suffix(".wav")
+            await asyncio.to_thread(ffmpeg, "-i", path, "-map", "0:a:0", "-vn", "-c:a", "pcm_f32le", extracted)
+            path, relative = extracted, str(Path(relative).with_suffix(".wav")).replace("\\", "/")
         asset = {"id": identity, "kind": "asset", "asset_kind": kind, "file": relative,
-                 "sha": sha(path), "name": Path(part.filename).name, **details}
+                 "sha": (await asyncio.to_thread(sha, path)) if kind == "audio" and suffix in supported["video"] else digest.hexdigest(),
+                 "name": Path(part.filename).name, **details}
         studio.store.save(asset)
         return web.json_response(public_project(asset))
 
@@ -2121,9 +2158,7 @@ def register():
     @routes.post("/genj/studio/voice")
     @response
     async def create_voice_track(request):
-        from .voice import create_voice
-        async with studio.lock:
-            return web.json_response(await create_voice(studio, await request.json()))
+        raise ValueError("Voice creation is not available in the verified Studio. Upload an existing audio track instead.")
 
     @routes.get("/zura/studio/voice/{identity}")
     @routes.get("/genj/studio/voice/{identity}")
@@ -2150,6 +2185,7 @@ def register():
             raise ValueError("Choose a source video.")
         from .appearance import resolve_appearance
         config = clean_config(body.get("config", {}))
+        require_verified_setup(config)
         require_relight_direction(config)
         appearance = resolve_appearance({**body, "config": config}, studio.store.load, check_asset)
         p = {"id": uuid.uuid4().hex, "kind": "project", "name": source["name"], "source": source,
@@ -2171,6 +2207,7 @@ def register():
     async def export_project_graph(request):
         async with studio.lock:
             p = studio.store.load(request.match_info["identity"])
+            require_verified_setup(p["config"], request.query.get("stage", "auto"))
             payload = await asyncio.to_thread(graph_export_payload, p, request.query.get("stage", "auto"))
             return web.json_response(payload)
 
@@ -2181,6 +2218,7 @@ def register():
         body = await request.json()
         async with studio.lock:
             p = studio.store.load(request.match_info["identity"])
+            require_verified_setup(p["config"])
             payload = await asyncio.to_thread(wan_graph_plan_payload, p, body)
             return web.json_response(payload)
 
@@ -2191,6 +2229,7 @@ def register():
         async with studio.lock:
             p = studio.store.load(request.match_info["identity"])
             body = await request.json()
+            require_verified_setup(clean_config(body.get("config", {})))
             roles = body.get("reference_roles")
             if roles is not None:
                 from .appearance import REFERENCE_ROLES
@@ -2215,6 +2254,7 @@ def register():
         async with studio.lock:
             p = studio.store.load(request.match_info["identity"])
             body = await request.json()
+            require_verified_setup(p["config"], body.get("action"))
             p = await studio.action(p, body.get("action"), body)
             return web.json_response(public_project(p))
 

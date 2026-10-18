@@ -18,7 +18,7 @@ for(const scenario of ['relight','preserve']){
   assert.equal(oldProject.look_mode,'ready','Existing saved project and its approved image stay intact');assert.equal(oldProject.opening_input.file,'old-ready.png');
   assert.deepEqual(removed,['genj-studio-project']);
   const actions=[];ui.run=async action=>actions.push(action);
-  await ui.primary();
+  await ui.primaryRecipe();
   assert.equal(calls[0].path,'/zura/studio/projects','Prepare creates a new project carrying the changed look mode');
   assert.equal(calls[0].body.look_mode,'build');assert.equal(calls[0].body.config.workflow_mode,config.workflow_mode);assert.equal(calls[0].body.config.preserve_people,config.preserve_people);
   assert.deepEqual(calls[0].body.references,['scene-ref']);assert.deepEqual(actions,['prepare']);

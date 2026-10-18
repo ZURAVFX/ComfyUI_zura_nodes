@@ -16,12 +16,21 @@ const ui=Object.create(proto);ui.config={size:512};ui.$=id=>fields[id];ui.contai
 assert.equal(ui.readConfig().h3_steps,16);assert.equal(ui.readConfig().finished_frame_number,49);assert.equal(ui.readConfig().finished_frame_position,"frame");
 ui.audio={id:"selected-audio"};fields["audio-mode"].value="reference";
 fields.lip_sync.checked=true;fields.refine_lips.checked=true;
-assert.equal(ui.readConfig().lip_sync,true);
+assert.equal(ui.readConfig().lip_sync,false,"Viewport keeps original audio without enabling unqualified replacement speech");
+assert.equal(ui.readConfig().audio_id, "");
 assert.equal(ui.readConfig().refine_lips,false,"Viewport keeps native speech guidance without offering unsupported post-refinement");
 fields["audio-mode"].value="original";
 fields.finished_frame_position.value="last";
 ui.container={querySelector:selector=>({value:selector.includes("gs-workflow")?"swap":"local"})};
-assert.equal(ui.readConfig().finished_frame_position,"first","Masked LTX switches back to first-frame conditioning");
+assert.equal(ui.readConfig().workflow_mode,"motion","The character task routes LTX to the approved whole-scene body-guided pipeline");
+assert.equal(ui.readConfig().edit_area,"scene");
+assert.equal(ui.readConfig().finished_frame_position,"last","LTX whole-scene references retain their explicit anchor");
+for(const engine of ["wan","h3","local"]){
+  ui.container={querySelector:selector=>({value:selector.includes("gs-workflow")?"swap":engine})};
+  fields["audio-mode"].value="reference";fields.lip_sync.checked=true;
+  const config=ui.readConfig();assert.equal(config.audio_id,"selected-audio");assert.equal(config.lip_sync,true);
+  assert.equal(config.refine_lips,false);assert.equal(config.workflow_mode,engine==="local"?"motion":"swap");
+}
 assert.ok(source.includes('["gs-engine","gs-workflow"].includes(input.name))this.syncForm()'),'Task switches synchronise the displayed anchor selection');
 fields.h3_steps.value=12;fields.quality.value="fast";
 assert.equal(ui.readConfig().h3_steps,12);assert.equal(ui.readConfig().h3_preset,"take_fast");

@@ -1,10 +1,12 @@
 # Install Zura Studio
 
+**Version 1.3.24:** Character performance offers Wan, MiniMax H3 and LTX 2.5, including the approved original-audio, replacement-dialogue and silent-footage paths. Wan offers precise masked replacement; H3 uses selection/depth guidance; LTX recreates the whole frame. Viewport to final offers H3. LTX viewport remains excluded after its separate rejected test. H3 Head & face is a separate two-second original-audio option. H3 Head & face is a separate two-second original-audio option. Download only the model for your chosen task. See [approved workflows](docs/APPROVED_WORKFLOWS.md) and the [current scope](docs/STUDIO_VERIFIED_SCOPE.md).
+
 Zura Studio is included in the official **Zura Nodes** ComfyUI pack. The pack is code; video model weights are separate downloads and are not included.
 
 ## Install the pack
 
-When an approved version is available, open **ComfyUI Manager → Install Custom Nodes**, search for **Zura Nodes**, and install the entry published by **ZURAVFX**. Manager installs the pack's Python requirements for you. If the release is still awaiting Registry review or Manager cannot install it, use the official GitHub ZIP below. Restart ComfyUI, then click **Zura Studio** in the sidebar.
+When an approved version is available, open **ComfyUI Manager â†’ Install Custom Nodes**, search for **Zura Nodes**, and install the entry published by **ZURAVFX**. Manager installs the pack's Python requirements for you. If the release is still awaiting Registry review or Manager cannot install it, use the official GitHub ZIP below. Restart ComfyUI, then click **Zura Studio** in the sidebar.
 
 If Manager is unavailable, download the current ZIP from the official [Zura Nodes GitHub Releases](https://github.com/ZURAVFX/ComfyUI_zura_nodes/releases). Extract it to `ComfyUI/custom_nodes/ComfyUI_zura_nodes` so that `requirements.txt` is directly inside that folder.
 
@@ -74,3 +76,15 @@ These helpers are not run when the pack is installed. Read the prompts and licen
 
 Begin with a continuous, single-shot clip of up to five seconds and the lowest resolution that suits your review. H3 supports up to five seconds. LTX supports up to five seconds for regular shots and up to fifteen seconds in Viewport to final. Wan can process longer clips in sections; inspect joins and detail across sections. Camera changes while replacing an environment and masked LTX speech remain experimental. Generated models can alter scene details and do not guarantee exact camera or performance retention. See [tested limits](ARTIST_STUDIO_VALIDATION.md) before planning a longer or more complex shot.
 
+
+## H3 Head & face
+
+Choose Character performance, MiniMax H3, then Head & face. Upload a source video with audio and a portrait or character sheet as your first reference. Choose a clip up to two seconds. The portrait is used directly, without starting-image generation. This route keeps the source body and background through crop compositing. Use Full character for replacement dialogue or silent footage.
+
+Studio lists each missing model and native node in About this workflow. The exact model/adapter names and strengths are listed in [the head-swap recipe](docs/H3_HEAD_SWAP_DEV.md). In addition to the H3 encoders/VAEs and SAM checkpoint, it requires the NKD Basic Tools and Sigmas Curve nodes, MaskVidExperiments subject crop/uncrop, DW pose preprocessing, the LayerStyle batch-padding node and Comfy core background removal/Kitchen attention. Install missing node packs through Manager and restart; do not substitute similarly named weights.
+
+## H3 Head & face
+
+Choose Character performance, MiniMax H3, then Head & face. Upload a source video with audio and a portrait or character sheet as your first reference. Choose a clip up to two seconds. The portrait is used directly, without starting-image generation. This route keeps the source body and background through crop compositing. Use Full character for replacement dialogue or silent footage.
+
+Studio lists each missing model and native node in About this workflow. Exact model/adapter names and strengths are listed in [the head-swap recipe](docs/H3_HEAD_SWAP_DEV.md). In addition to the H3 encoders/VAEs and SAM checkpoint, it requires NKD Basic Tools and Sigmas Curve nodes, MaskVidExperiments subject crop/uncrop, DW pose preprocessing, the LayerStyle batch-padding node and Comfy core background removal/Kitchen attention. Install missing node packs through Manager and restart; do not substitute similarly named weights.

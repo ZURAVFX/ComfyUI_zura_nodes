@@ -5,7 +5,7 @@ if(!globalThis.crypto)Object.defineProperty(globalThis,'crypto',{value:webcrypto
 const routing=fs.readFileSync(new URL('../web/graph_routing.js',import.meta.url),'utf8');
 const routingUrl='data:text/javascript;base64,'+Buffer.from(routing).toString('base64');
 const js=fs.readFileSync(new URL('../web/artist_graph.js',import.meta.url),'utf8').replace('"./graph_routing.js"',JSON.stringify(routingUrl));
-const {promptFingerprint,expandStageSignals,crossingCount,trimStageSignals,visibleArtistInputs,initialiseArtistImages,layoutInput,nativeWireLayout,installArtistLinkRendering}=await import('data:text/javascript;base64,'+Buffer.from(js).toString('base64'));
+const {promptFingerprint,expandStageSignals,crossingCount,trimStageSignals,visibleArtistInputs,initialiseArtistImages,layoutInput,nativeWireLayout,installArtistLinkRendering,nudgeToClear}=await import('data:text/javascript;base64,'+Buffer.from(js).toString('base64'));
 const {routeFixedPorts}=await import(routingUrl);
 const original={image:{class_type:'LoadImage',inputs:{image:'example_character.png'}},render:{class_type:'Render',inputs:{image:['image',0],seed:42}}};
 const renamed={'10':{class_type:'LoadImage',inputs:{image:'example_character.png'}},'11':{class_type:'Render',inputs:{image:['10',0],seed:42}}};
@@ -75,4 +75,12 @@ canvas.drawConnections('context',[],plain);assert.equal(observed.at(-1)[0],2,'Ot
 canvas.links_render_mode=-1;canvas.drawConnections('context',[],marked);assert.equal(observed.at(-1)[0],-1,'Honour hidden-wire preference');
 const throwing={graph:marked,links_render_mode:2,drawConnections(){throw new Error('draw failed');}};
 installArtistLinkRendering({canvas:throwing});assert.throws(()=>throwing.drawConnections(),/draw failed/);assert.equal(throwing.links_render_mode,2);
+const nudged=nudgeToClear(fixed);
+assert.equal(crossingCount(nudged),0,'A sealed placement still clears after nudging one node');
+assert.deepEqual(nudged.children.map(n=>n.id).sort(),fixed.children.map(n=>n.id).sort(),'Nudging keeps every native node');
+assert.deepEqual(nudged.edges.map(e=>[e.id,e.sources,e.targets]).sort(),fixed.edges.map(e=>[e.id,e.sources,e.targets]).sort(),'Nudging never rewires native connections');
+for(const edge of nudged.edges)for(const section of edge.sections){const points=[section.startPoint,...section.bendPoints,section.endPoint];
+ for(let i=1;i<points.length;i++)assert(points[i].x===points[i-1].x||points[i].y===points[i-1].y,'Nudged wires stay orthogonal');}
+const alreadyClean=nudgeToClear(clean);
+assert.equal(crossingCount(alreadyClean),0,'A clear layout needs no nudge');
 console.log('Artist graph semantic checks and crossing detection passed.');

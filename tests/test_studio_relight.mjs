@@ -25,12 +25,12 @@ ui.config={...config,workflow_mode:'swap'};for(const model of ['local','h3','wan
 assert.equal(ui.hasLook(),false,'Other modes still require appearance images');ui.references=[{id:'ref'}];assert.equal(ui.hasLook(),true);ui.references=[];
 mode='relight';ui.config=config;response={id:'relight-shot',phase:'new',config};
 const actions=[];ui.run=async stage=>actions.push(stage);
-await ui.primary();assert.deepEqual(actions,['prepare']);assert.deepEqual(calls[0].body.references,[],'Project creation sends no fabricated character asset');
+await ui.primaryRecipe();assert.deepEqual(actions,['prepare']);assert.deepEqual(calls[0].body.references,[],'Project creation sends no fabricated character asset');
 assert.equal(calls[0].body.config.workflow_mode,'relight');
 calls.length=0;actions.length=0;response={id:'relight-shot',phase:'review',review:'review',prepared_key:'review',config};ui.project=response;
-await ui.primary();assert.deepEqual(actions,['approve','design'],'Relight reviews source then generates lighting frame');
+await ui.primaryRecipe();assert.deepEqual(actions,['approve','design'],'Relight reviews source then generates lighting frame');
 actions.length=0;response={...response,phase:'opening',approval:'review',opening_input:{file:'lighting.png'}};ui.project=response;
-await ui.primary();assert.deepEqual(actions,['animate'],'Relight animation requires the generated lighting frame review');
+await ui.primaryRecipe();assert.deepEqual(actions,['animate'],'Relight animation requires the generated lighting frame review');
 ui.lookMode='ready';ui.readyAsset=null;assert.equal(ui.hasLook(),false);ui.readyAsset={id:'ready'};assert.equal(ui.hasLook(),false,'Relight always creates its reviewed lighting frame');
 assert.equal(ui.projectBody().look_mode,'build');assert.equal(ui.projectBody().starting_image,undefined,'A stale finished frame cannot enter the Relight payload');
 response={id:'saved-relight',phase:'opening',source:{id:'saved-source',duration:2},config:{...config,engine:'local',edit_area:'mask'},look_mode:'build',references:[]};
@@ -38,7 +38,7 @@ ui.lastVideo=null;await ui.loadProject('saved-relight');
 assert.equal(ui.config.workflow_mode,'relight');assert.equal(ui.config.engine,'h3');assert.equal(ui.config.edit_area,'scene');assert.deepEqual(Array.from(ui.references),[],'Restoring a prompt-only project never inserts an undefined character');
 ui.$=id=>fields[id] || (fields[id]={value:'',removeAttribute(){}});
 ui.message=()=>{};ui.container={querySelector:()=>({click(){ui.returnedToSource=true;}})};
-await ui.reset();assert.equal(ui.config.workflow_mode,'motion');assert.equal(ui.config.prompt,'');assert.equal(ui.config.image_prompt,'');assert.equal(ui.lookMode,'build');assert.equal(ui.returnedToSource,true,'Start over exits Relight and returns to Source');
+await ui.reset();assert.equal(ui.config.workflow_mode,'swap');assert.equal(ui.config.prompt,'');assert.equal(ui.config.image_prompt,'');assert.equal(ui.lookMode,'build');assert.equal(ui.returnedToSource,true,'Start over exits Relight and returns to Source');
 assert.ok(code.includes('value="relight"/><span>Relight</span>'));assert.ok(code.includes('"Lighting prompt":"Video prompt"'));
 console.log('Relight prompt-only payload, explicit lighting-frame approval, supported-model gating and mode switching pass.');
 

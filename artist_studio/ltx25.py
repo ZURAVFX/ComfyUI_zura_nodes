@@ -496,7 +496,7 @@ def build_viewport_plan(project, *, scenario, timeline, models, text_encoder_inp
                 "Follow the guide camera movement, framing, timing, object placement and animation throughout. "
                 + str(c.get("prompt", "")).strip())
     negative = "flicker, sliding feet, warped anatomy, text, subtitles"
-    basis = {"schema": SCHEMA, "route": "viewport_layout_to_render", "recipe_version": 2,
+    basis = {"schema": SCHEMA, "route": "viewport_layout_to_render", "recipe_version": 3,
              "run_namespace": namespace,
              "scenario": scenario, "review": project["review"], "approval": approval_key,
              "opening_key": project["opening_key"], "source": source, "opening": look,
@@ -505,7 +505,7 @@ def build_viewport_plan(project, *, scenario, timeline, models, text_encoder_inp
              "delivery": delivery, "base": base, "native": native, "seed": seed,
              "positive": positive, "negative": negative, "models": copy.deepcopy(models),
              "model_pins": copy.deepcopy(model_pins), "encoder": copy.deepcopy(text_encoder_inputs),
-             "audio": {"generation": "silent", "delivery": scenario},
+             "audio": {"generation": "disabled", "delivery": scenario},
              "sigmas": [STAGE1_SIGMAS, STAGE2_SIGMAS]}
     if finished_anchor is not None:
         basis["finished_frame_index"] = finished_anchor
@@ -579,16 +579,15 @@ def build_viewport_plan(project, *, scenario, timeline, models, text_encoder_inp
         guided = node(g, "appearance_guide", "LTXAddVideoICLoRAGuide", positive=guided, negative=[guided[0], 1],
                       vae=vae, latent=[guided[0], 2], image=look_image, frame_idx=-1 if finished_anchor is None else finished_anchor, strength=1,
                       latent_downscale_factor=adapter_factor, crop="center", use_tiled_encode=False, tile_size=256, tile_overlap=64)
-        audio_vae = node(g, "audio_vae", "VAELoader", vae_name=models["audio_vae"])
-        audio = node(g, "zero_audio", "LTXVEmptyLatentAudio", frames_number=padded, frame_rate=fps, batch_size=1, audio_vae=audio_vae)
-        av = node(g, "concat", "LTXVConcatAVLatent", video_latent=[guided[0], 2], audio_latent=audio)
+        # The dedicated Layout-to-Render workflow samples video only. Adding
+        # the replacement-speech route's empty audio stream changes inference,
+        # even when that generated audio is discarded during delivery.
         guider = node(g, "guider", "CFGGuider", model=adapter, positive=guided, negative=[guided[0], 1], cfg=1)
         noise = node(g, "noise", "RandomNoise", noise_seed=seed)
         sampler = node(g, "sampler", "KSamplerSelect", sampler_name="euler_ancestral")
         sigmas = node(g, "sigmas", "ManualSigmas", sigmas=STAGE1_SIGMAS if phase == "stage1" else STAGE2_SIGMAS)
-        output = node(g, "sample", "SamplerCustomAdvanced", noise=noise, guider=guider, sampler=sampler, sigmas=sigmas, latent_image=av)
-        video = node(g, "separate", "LTXVSeparateAVLatent", av_latent=output)
-        cropped = node(g, "crop_guides", "LTXVCropGuides", positive=guided, negative=[guided[0], 1], latent=video)
+        output = node(g, "sample", "SamplerCustomAdvanced", noise=noise, guider=guider, sampler=sampler, sigmas=sigmas, latent_image=[guided[0], 2])
+        cropped = node(g, "crop_guides", "LTXVCropGuides", positive=guided, negative=[guided[0], 1], latent=output)
         save(g, phase, "stage1_video" if phase == "stage1" else "stage2_video", [cropped[0], 2])
 
     sample("stage1", base)
@@ -614,7 +613,7 @@ def build_viewport_plan(project, *, scenario, timeline, models, text_encoder_inp
          format="mp4", **{"format.codec": "h264", "format.codec.encoding": "re-encode", "format.codec.encoding.crf": 16.})
     return {"schema": SCHEMA, "key": key, "scenario": scenario, "basis": basis,
             "phases": {phase: phases[phase] for phase in PHASES}, "dependencies": dependencies, "artifacts": artifacts,
-            "scope": "whole_scene", "background_preservation": False, "generation_audio": "zero",
+            "scope": "whole_scene", "background_preservation": False, "generation_audio": "disabled",
             "delivery_audio": "original" if scenario == "original" else "none",
             "stage1_vae_sampling_split": False, "motion_preparation_split": True,
             "stage1_handoff": "Layout and appearance guides remain native and are cropped before caching.",

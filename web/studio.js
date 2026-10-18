@@ -8,7 +8,20 @@ import { clipLength, recoverClipLength } from "./studio_length.js";
 import { ShotComparison } from "./studio_compare.js";
 
 const ROOT = "/zura/studio";
-const defaults = {engine:"local", background:"keep", scope:"person", prompt:"", image_prompt:"", start:0, duration:2, size:512, performer:-1, margin:20, pitch:false, seed:42, render_size:0, h3_preset:"take_fast", h3_steps:0, h3_attention:"native", remove_text:false, resolution:1280, delivery_mode:"native", quality:"fast", audio_id:"", audio_start:0, length_mode:"custom", lip_sync:false, refine_lips:false, workflow_mode:"motion", preserve_people:false, edit_area:"mask", mask_method:"auto", mask_prompt:"person", mask_points:[],subject_mode:"auto",finished_frame_position:"first",finished_frame_number:1};
+const defaults = {engine:"wan", background:"keep", scope:"person", prompt:"", image_prompt:"", start:0, duration:2, size:512, performer:-1, margin:20, pitch:false, seed:42, render_size:0, h3_head_swap:false, h3_preset:"take_fast", h3_steps:0, h3_attention:"native", remove_text:false, resolution:1280, delivery_mode:"native", quality:"fast", audio_id:"", audio_start:0, length_mode:"custom", lip_sync:false, refine_lips:false, workflow_mode:"swap", preserve_people:false, edit_area:"mask", mask_method:"auto", mask_prompt:"person", mask_points:[],subject_mode:"people",finished_frame_position:"first",finished_frame_number:1};
+// Keep saved experimental projects readable without silently converting their recipe.
+function verifiedSetup(c={}) {
+  if(c.h3_head_swap)return c.engine==="h3" && c.workflow_mode==="swap" && c.scope==="head" && !c.audio_id && !c.lip_sync && !c.remove_text && c.delivery_mode!=="enhanced1080";
+  if(c.workflow_mode==="viewport")return c.engine==="h3" && c.edit_area==="scene"
+    && !c.preserve_people && !c.refine_lips && !c.audio_id && !c.lip_sync;
+  if(c.engine==="local" && c.workflow_mode==="motion")return c.edit_area==="scene"
+    && ["auto","people"].includes(c.subject_mode||"auto") && !c.preserve_people && !c.refine_lips;
+  return ["wan","h3"].includes(c.engine) && c.workflow_mode==="swap" && c.edit_area==="mask" && c.mask_method==="auto"
+    && ["person","head"].includes(c.scope) && ["auto","people"].includes(c.subject_mode||"auto")
+    && !c.preserve_people && !c.refine_lips;
+}
+const verifiedNotice="Choose Character performance with Wan, H3 or LTX, or Viewport to final with H3. Saved results are still available.";
+
 const icon = (name) => {
   const paths = {
     upload:'<path d="M12 16V3m-5 5 5-5 5 5M4 15v5h16v-5"/>',
@@ -54,9 +67,9 @@ class ArtistStudio {
       <nav class="gs-steps" aria-label="Shot stages"><button type="button" data-step="0" class="active"><strong>Source</strong><small>Add your video</small></button><i></i><button type="button" data-step="1"><strong>Look</strong><small>References & prompt</small></button><i></i><button type="button" data-step="2"><strong>Review</strong><small>Check and confirm</small></button><i></i><button type="button" data-step="3"><strong>Generate</strong><small>Create your video</small></button></nav>
       <div class="gs-workspace"><aside class="gs-controls">
         <div class="gs-control-heading"><h1>Create a shot</h1><button id="gs-new" class="gs-quiet gs-start-over" title="Clear this shot and return to Source. Saved shots and results stay available." aria-label="Start over">${icon("reset")} Start over</button></div>
-        <fieldset class="gs-workflow-choice"><legend>Choose a task</legend><div class="gs-segment" role="group" aria-label="Edit mode">
-          <label><input type="radio" name="gs-workflow" value="motion" checked/><span>Motion transfer</span></label>
-          <label><input type="radio" name="gs-workflow" value="swap"/><span>Object swap</span></label>
+        <fieldset class="gs-workflow-choice"><legend>What are you making?</legend><div class="gs-segment" role="group" aria-label="Edit mode">
+          <label><input type="radio" name="gs-workflow" value="motion" checked/><span>Whole-scene recreation</span></label>
+          <label><input type="radio" name="gs-workflow" value="swap"/><span>Character performance</span></label>
           <label><input type="radio" name="gs-workflow" value="viewport"/><span>Viewport to final</span></label>
           <label><input type="radio" name="gs-workflow" value="relight"/><span>Relight</span></label>
         </div></fieldset>
@@ -65,6 +78,7 @@ class ArtistStudio {
           <input class="gs-file" id="gs-source" type="file" accept="video/mp4,video/quicktime,video/webm,.mkv" aria-label="Source video"/>
           <span id="gs-content-badge" class="gs-content-badge" role="status" aria-live="polite" hidden></span>
         </div>
+        <label id="gs-head-replacement-setting" hidden><span class="gs-label">Replacement</span><select id="gs-head-replacement"><option value="character">Full character</option><option value="head">Head &amp; face</option></select><small id="gs-head-replacement-note"></small></label>
         <section class="gs-selection">
           <label id="gs-preserve-people-setting" class="gs-checkbox" hidden><input id="gs-preserve_people" type="checkbox"/><span>Keep original people</span></label>
           <p id="gs-selection-note" class="gs-note">Rebuild the shot using source movement as a guide. The scene may change.</p>
@@ -130,8 +144,8 @@ class ArtistStudio {
           <label><span class="gs-label">Room around the selection</span><input id="gs-margin" type="number" min="0" max="128" value="20"/><small>Leaves room for hair and clothing. Included in the mask preview.</small></label></div>
           <label><span class="gs-label">Seed</span><input id="gs-seed" type="number" min="0" max="9007199254740991" value="42"/></label>
           <label class="gs-checkbox"><input id="gs-pitch" type="checkbox"/><span>Shift guidance vocals +3 semitones<small>The finished video keeps your original soundtrack.</small></span></label>
-          <p class="gs-note">Wan handles camera cuts automatically. Use one continuous shot with LTX and H3.</p>
-          <label><span class="gs-label">Open in graph view</span><select id="gs-graph-stage"><option value="auto">Current stage</option><option value="prepare">Prepare and review</option><option value="design">Character preview</option><option value="animate">Animation · use this look</option><option value="h3">H3 base render</option><option value="h3_enhance">H3 1080p enhancement</option><option value="wan_speech">Wan speech performance</option><option value="draft">Seedance draft · paid when queued</option><option value="final">Seedance final · paid when queued</option></select><small>Opens an editable copy in a new ComfyUI tab. Graph edits stay in that workflow. Opening a graph does not start a render.</small></label>
+          <p class="gs-note">Wan handles camera cuts automatically. Check detail at section joins.</p>
+          <label><span class="gs-label">Open in graph view</span><select id="gs-graph-stage"><option value="auto">Current stage</option><option value="prepare">Prepare and review</option><option value="design">Character preview</option><option value="animate">Animation · use this look</option><option value="restyle">LTX character animation</option><option value="h3">H3 base render</option><option value="h3_enhance">H3 1080p enhancement</option><option value="wan_speech">Wan speech performance</option><option value="draft">Seedance draft · paid when queued</option><option value="final">Seedance final · paid when queued</option></select><small>Opens an editable copy in a new ComfyUI tab. Graph edits stay in that workflow. Opening a graph does not start a render.</small></label>
         </div></details>
         <details class="gs-advanced" id="gs-audio-settings"><summary id="gs-audio-summary">Audio · original performance</summary><div class="gs-advanced-body gs-upload-group"><label><span class="gs-label">Audio and performance</span><select id="gs-audio-mode"><option value="original">Original audio + performance</option><option value="reference">Reference audio + new performance</option></select></label>
           <p id="gs-audio-note" class="gs-note">Follows the original facial performance and keeps the video's audio. Silent videos work too.</p>
@@ -170,7 +184,13 @@ class ArtistStudio {
     this.comparison.show(source,result,p?.selected_url?0:(p?.config?.start || 0));this.render();
   }
   $(id) { return this.container.querySelector("#gs-" + id); }
+  headSwap() {return this.config?.h3_head_swap===true && this.config.engine==="h3" && this.config.workflow_mode==="swap";}
+  headSwapConfig(c) {
+    if(!c.h3_head_swap || c.engine!=="h3" || c.workflow_mode!=="swap"){c.h3_head_swap=false;return c;}
+    return {...c,scope:"head",edit_area:"mask",mask_method:"auto",subject_mode:"people",audio_id:"",audio_start:0,lip_sync:false,refine_lips:false,remove_text:false,pitch:false,preserve_people:false,delivery_mode:"native",resolution:1024,h3_steps:8,h3_attention:"kitchen",quality:"fast"};
+  }
   hasLook(){
+    if(this.headSwap())return this.references.length>0;
     if(this.config.workflow_mode==="relight"){
       const direction=String(this.$("image_prompt")?.value ?? this.config.image_prompt ?? "").trim() || String(this.$("prompt")?.value ?? this.config.prompt ?? "").trim();
       return !!direction && this.lookMode!=="ready";
@@ -196,10 +216,22 @@ class ArtistStudio {
     }
   }
   selectWorkflow() {
+    if(["swap","motion"].includes(this.config.workflow_mode)){
+      if(!["wan","h3","local"].includes(this.config.engine))this.config.engine="wan";
+      this.config.workflow_mode=this.config.engine==="local"?"motion":"swap";
+      this.config.edit_area=this.config.engine==="local"?"scene":"mask";this.config.subject_mode="people";
+      this.config.mask_method="auto";this.config.preserve_people=false;this.config.refine_lips=false;
+      return;
+    }
     if(!["viewport","relight"].includes(this.config.workflow_mode))return;
     this.config.engine="h3";this.config.resolution=1280;this.config.delivery_mode="native";
     this.config.quality="fast";this.config.h3_preset="take_fast";this.config.h3_steps=0;
-    if(this.config.workflow_mode==="viewport"){this.config.h3_viewport_direct=true;this.useGeneratedLook();}
+    if(this.config.workflow_mode==="viewport"){
+      this.config.h3_attention=this.modelStatus?.h3_attention_backends?.kitchen?"kitchen":"native";
+      this.config.h3_viewport_direct=true;this.config.edit_area="scene";this.config.subject_mode="auto";
+      this.config.preserve_people=false;this.config.audio_id="";this.config.audio_start=0;
+      this.config.lip_sync=false;this.config.refine_lips=false;this.pendingReference=false;this.useGeneratedLook();
+    }
     if(this.config.workflow_mode==="relight"){
       this.config.edit_area="scene";this.useGeneratedLook();
     }
@@ -217,11 +249,15 @@ class ArtistStudio {
     const c={...this.config};
     for (const key of ["scope","prompt","length_mode","mask_method","mask_prompt","subject_mode","finished_frame_position"]) c[key]=this.$(key).value;
     c.workflow_mode=this.container.querySelector('input[name="gs-workflow"]:checked').value;
+    const selectedEngine=this.container.querySelector('input[name="gs-engine"]:checked').value;
+    // One character task, retaining each proven pipeline's native scene/mask contract.
+    if(c.workflow_mode==="swap" && selectedEngine==="local")c.workflow_mode="motion";
     c.viewport_render=c.workflow_mode==="viewport";
     c.edit_area=c.workflow_mode==="swap"?"mask":"scene";
     for (const key of ["start","duration","performer","margin","seed","audio_start","finished_frame_number"]) c[key]=Number(this.$(key).value);
     const reference=this.$("audio-mode").value==="reference" && !!this.audio;
     c.audio_id=reference?this.audio.id:"";
+    if(c.workflow_mode==="viewport"){c.audio_id="";c.lip_sync=false;}
     if(!reference)c.audio_start=0;
     if(c.length_mode==="original")c.start=0;
     c.engine=c.workflow_mode==="relight"?"h3":this.container.querySelector('input[name="gs-engine"]:checked').value;
@@ -244,8 +280,8 @@ class ArtistStudio {
     c.size=this.config.size ?? 512;c.render_size=0;
     c.background=(c.engine==="local" || c.engine==="seedance") && c.edit_area==="scene"?"restyle":"keep";
     c.pitch=this.$("pitch").checked; c.remove_text=this.$("remove_text").checked;
-    c.lip_sync=reference && !c.preserve_people && this.$("lip_sync").checked;
-    c.refine_lips=c.workflow_mode!=="viewport" && c.lip_sync && this.$("refine_lips").checked; return c;
+    c.lip_sync=c.workflow_mode!=="viewport" && reference && !c.preserve_people && this.$("lip_sync").checked;
+    c.refine_lips=false; return this.headSwapConfig(c);
   }
   chooseClipLength(mode) {
     if(this.busy || this.project?.phase==="working" || !["original","custom"].includes(mode))return;
@@ -326,21 +362,27 @@ class ArtistStudio {
       reference.role=select.value;this.character=this.references[0] || this.readyAsset;
       this.perform(async(epoch)=>{if(this.project){const id=this.project.id,updated=await request(`/projects/${id}/config`,this.configBody(this.readConfig()));if(epoch!==this.resetEpoch)return;if(this.project?.id===id)this.project=updated;}this.render();});
     };
-    for (const type of ["source","character","ready","audio"]) {
-      this.$(type).onchange=e=>{const files=Array.from(e.target.files);e.target.value="";this.upload(type,type==="character"?files:files[0]);};
-      const drop=this.$(type+"-drop");
-      drop.ondragover=e=>{e.preventDefault();drop.classList.add("dragging");};
-      drop.ondragleave=()=>drop.classList.remove("dragging");
-      drop.ondrop=e=>{e.preventDefault();drop.classList.remove("dragging");this.upload(type,type==="character"?Array.from(e.dataTransfer.files):e.dataTransfer.files[0]);};
-    }
+    for (const type of ["source","character","ready","audio"])this.bindUpload(type);
     this.$("preview-tabs").querySelectorAll("button").forEach(button=>button.onclick=()=>{
       this.preview=button.dataset.view;this.render();
     });
     this.$("library-list").onclick=e=>{
       const button=e.target.closest("[data-project]");if(button)this.loadProject(button.dataset.project);
     };
+    this.$("head-replacement").onchange=()=>{
+      const head=this.$("head-replacement").value==="head";
+      return this.perform(async()=>{
+        if(head)this.preHeadConfig={...this.config};
+        else if(this.preHeadConfig){this.config={...this.preHeadConfig};this.preHeadConfig=null;}
+        else {this.config.resolution=1280;this.config.h3_steps=0;this.config.h3_attention="native";}
+        this.config.h3_head_swap=head;
+        if(head){this.lookMode="build";this.pendingReference=false;this.$("audio-mode").value="original";}
+        else {this.config.scope="person";this.$("scope").value="person";}
+        this.config=this.headSwapConfig(this.config);this.invalidateLook();this.syncForm();
+      });
+    };
     this.container.querySelectorAll("select,textarea,input:not([type=file])").forEach(input=>{
-      if(input.name==="gs-look"||input.id==="gs-image_prompt"||input.id==="gs-graph-stage"||input.id.startsWith("gs-voice-"))return;
+      if(input.id==="gs-head-replacement"||input.name==="gs-look"||input.id==="gs-image_prompt"||input.id==="gs-graph-stage"||input.id.startsWith("gs-voice-"))return;
       input.addEventListener("change",()=>input.id==="gs-prompt" && this.config.workflow_mode==="relight"?this.render():this.perform(async(epoch)=>{
         if(input.id==="gs-audio-mode"){
           this.pendingReference=input.value==="reference" && !this.audio;
@@ -367,9 +409,37 @@ class ArtistStudio {
   async perform(fn) {
     if(this.busy||this.resetting)return;
     const epoch=this.resetEpoch;
-    this.busy=true;this.message("");this.render();
-    try { await fn(epoch); } catch(e) { if(epoch===this.resetEpoch)this.message(e.message,true); }
-    finally { if(epoch===this.resetEpoch){this.busy=false;this.render();} }
+    this.busy=true;
+    try { this.message("");this.render();await fn(epoch); }
+    catch(e) { if(epoch===this.resetEpoch)this.message(e.message,true); }
+    finally {
+      if(epoch===this.resetEpoch){
+        this.busy=false;
+        try { this.render(); } catch(e) { this.message(e.message,true); }
+      }
+    }
+  }
+  bindUpload(type) {
+    const input=this.$(type),drop=this.$(type+"-drop");
+    input.onchange=e=>{
+      e.stopPropagation();
+      const files=Array.from(e.target.files||[]);e.target.value="";
+      return this.upload(type,type==="character"?files:files[0]);
+    };
+    drop.ondragover=e=>{
+      e.preventDefault();e.stopPropagation();
+      if(e.dataTransfer)e.dataTransfer.dropEffect="copy";
+      drop.classList.add("dragging");
+    };
+    drop.ondragleave=e=>{e.stopPropagation();drop.classList.remove("dragging");};
+    drop.ondrop=e=>{
+      // Studio owns its media drops. Do not let Comfy's graph/file importer
+      // process the same event after the local upload has started.
+      e.preventDefault();e.stopPropagation();drop.classList.remove("dragging");
+      let files=Array.from(e.dataTransfer?.files||[]);
+      if(!files.length)files=Array.from(e.dataTransfer?.items||[]).filter(item=>item.kind==="file").map(item=>item.getAsFile()).filter(Boolean);
+      return this.upload(type,type==="character"?files:files[0]);
+    };
   }
   async selectMaskPoints() {
     if(!this.source || this.project?.phase==="working")return;
@@ -439,15 +509,29 @@ class ArtistStudio {
   }
   async upload(type,file) {
     const files=Array.isArray(file)?file:[file];
-    if(!files.length || !files[0] || this.project?.phase==="working")return;
+    if(!files.length || !files[0]){this.message("No file was received. Click the upload area to choose it instead.",true);return;}
+    if(this.project?.phase==="working"){this.message("Cancel the current run before replacing its media.",true);return;}
+    if(this.busy || this.resetting){this.message("Wait for the current upload or update to finish, then try again.",true);return;}
+    if(files.some(file=>file.size>2*1024**3)){this.message("This file is larger than 2 GB. Export a smaller video or trim it before uploading.",true);return;}
     await this.perform(async(epoch)=>{
       if(type==="opening" && this.config.preserve_people)throw new Error("Regenerate the starting frame to keep the original people protected.");
       if(type==="opening" && !this.project)throw new Error("Prepare and review the shot before choosing a starting image.");
       if(type==="character" && this.references.length+files.length>9)throw new Error("Use up to nine reference images. Remove one before adding more.");
       for(const file of files){
       const form=new FormData();form.append("file",file);
-      this.message("Uploading to your local ComfyUI…");
-      const r=await api.fetchApi(`${ROOT}/upload?kind=${type==="source"?"video":type==="audio"?"audio":"image"}`,{method:"POST",body:form});
+      const started=Date.now(),controller=new AbortController();
+      const progress=()=>{if(epoch===this.resetEpoch)this.message(`Loading ${file.name} · ${(file.size/1024**2).toFixed(1)} MB · ${Math.floor((Date.now()-started)/1000)}s. Copying locally and reading preview…`);else controller.abort();};
+      progress();
+      const ticker=setInterval(progress,1000),timeout=setTimeout(()=>controller.abort(),300000);
+      let r;
+      try{
+        // Comfy's short default API timeout is intended for JSON requests,
+        // not large multipart uploads. Our controller bounds the whole upload.
+        r=await api.fetchApi(`${ROOT}/upload?kind=${type==="source"?"video":type==="audio"?"audio":"image"}`,{method:"POST",body:form,signal:controller.signal,timeoutMs:null});
+      }catch(error){
+        if(error.name==="AbortError")throw new Error("Loading was stopped or took longer than five minutes. Try a trimmed MP4 or choose the file again.");
+        throw error;
+      }finally{clearInterval(ticker);clearTimeout(timeout);}
       if(epoch!==this.resetEpoch)return;
       const asset=await r.json();if(!r.ok)throw new Error(asset.error || "The upload could not complete.");
       if(epoch!==this.resetEpoch)return;
@@ -525,8 +609,19 @@ class ArtistStudio {
     });
   }
   async primary() {
+    if(!verifiedSetup(this.config)){this.message(verifiedNotice,true);return;}
+    return this.primaryRecipe();
+  }
+  async primaryRecipe() {
     if(this.busy || this.project?.phase==="working")return;
     const selectedConfig=this.readConfig();
+    if(this.headSwap()){
+      const seconds=selectedConfig.length_mode==="original"?Number(this.source?.duration):Math.min(Number(selectedConfig.duration),Number(this.source?.duration)-selectedConfig.start);
+      if(this.source?.has_audio===false){this.message("Head & face needs a source video with its original audio track.",true);return;}
+      if(!this.modelStatus?.engine_ready?.h3_head_swap){this.message("Head & face setup is needed. Check About this workflow.",true);return;}
+      if(!Number.isFinite(seconds)||seconds<5/24||seconds>2){this.message("Choose a clip from 0.21 to 2 seconds for Head & face.",true);return;}
+      if(!this.references.length){this.message("Add a portrait reference first.",true);return;}
+    }
     if(clipLength(selectedConfig,this.source?.duration).invalid){
       this.config=recoverClipLength(selectedConfig,this.source.duration);this.syncForm();this.render();
       this.$("duration").scrollIntoView({block:"nearest",behavior:"instant"});this.$("duration").focus();this.$("duration").select();
@@ -545,6 +640,7 @@ class ArtistStudio {
         const id=this.project.id,updated=await request(`/projects/${id}/config`,this.configBody(this.config));if(epoch!==this.resetEpoch||this.project?.id!==id)return;this.project=updated;
       }
       const p=this.project;
+      if(this.headSwap())return this.run("h3");
       if(!p.review || p.phase==="new" || p.prepared_key!==p.approval && p.phase!=="review")return this.run("prepare");
       if(p.phase==="review"){
         await this.run("approve");
@@ -569,6 +665,91 @@ class ArtistStudio {
     if(key===this.reviewPreviewKey)return;
     this.reviewPreviewKey=key;this.preview=wholeScene?"guide":"mask";
   }
+  applyVerifiedSurface() {
+    const viewport=this.config.workflow_mode==="viewport",head=this.headSwap();
+    for(const selector of [".gs-workflow-choice .gs-segment",".gs-settings fieldset .gs-segment"]){
+      const segment=this.container.querySelector(selector);if(segment)segment.style.gridTemplateColumns="repeat(2,minmax(0,1fr))";
+    }
+    this.container.querySelectorAll('input[name="gs-workflow"]').forEach(input=>{
+      const allowed=["swap","viewport"].includes(input.value);input.closest("label").hidden=!allowed;input.disabled=!allowed || this.busy || this.project?.phase==="working";
+    });
+    this.container.querySelectorAll('input[name="gs-engine"]').forEach(input=>{
+      const allowed=viewport?input.value==="h3":["wan","h3","local"].includes(input.value);
+      input.closest("label").hidden=!allowed;input.disabled=!allowed || this.busy || this.project?.phase==="working";
+    });
+    for(const id of ["mask_method","subject_mode"]){const input=this.$(id);input.closest("label").hidden=true;}
+    this.$("mask-prompt-setting").hidden=true;this.$("mask-points-setting").hidden=true;
+    this.$("refine-lips-setting").hidden=true;
+    this.$("refine_lips").disabled=true;
+    this.$("audio-settings").hidden=viewport;
+    if(this.config.engine==="wan"){
+      const fast=this.$("quality").querySelector?.('option[value="fast"]'),detailed=this.$("quality").querySelector?.('option[value="detailed"]');
+      if(fast)fast.textContent="Fast · 6 steps";
+      if(detailed)detailed.textContent="Detailed · 40 steps";
+      this.$("quality-note").textContent=this.config.quality==="detailed"?"40 steps takes substantially longer. Fast is the tested starting point.":"6-step accelerated sampling. New speech also needs a facial-performance preparation stage.";
+    }
+    const help=this.container.querySelector(".gs-model-help");
+    const modelSegment=this.container.querySelector('.gs-settings fieldset .gs-segment');
+    if(modelSegment)modelSegment.style.gridTemplateColumns=viewport?"1fr":"repeat(3,minmax(0,1fr))";
+    const helpKey=(head?"head:":viewport?"viewport:":"character:")+this.config.engine;
+    if(help && help.dataset.verified!==helpKey){
+      const text=head?"Swap the head and face from your first portrait reference. Tracks a face crop, follows the original facial landmarks and audio, then blends it back into the source. Tested at two seconds, eight steps with Comfy Kitchen. Review identity and the blend on each shot.":viewport?(this.config.engine==="h3"
+        ?"Turn a grey viewport into a finished scene. H3 reads the camera move and animation from your video, with up to nine appearance references. Start with a two-second shot; maximum five seconds. Original audio is kept when present."
+        :"LTX 2.5 Layout-to-Render uses the viewport for layout and a finished scene image for appearance. Preview route: check camera movement and body shapes before a longer render. Original audio is kept when present; new speech is not enabled here.")
+        :this.config.engine==="h3"?"Guided character replacement with native audio-driven facial performance. Uses your reviewed selection and depth as guidance; surroundings may change. Original audio, new dialogue and silent footage use the approved pipeline. Short examples qualified at five seconds; Enhanced 1080p samples at 720p then enhances."
+        :this.config.engine==="local"?"Recreate a character using source body motion and a finished starting look. LTX regenerates the whole frame: surroundings may change and there is no precise edit mask. Supports original performance, replacement dialogue and silent footage. Start with up to five seconds."
+        :"Replace a person while following their original acting and keeping the surroundings. Wan is the choice for precise masked replacement. Upload a different voice track to create a speech performance. Longer clips can lose detail between sections.";
+      // Keep the installed-model checklist alive: updateModelStatus refreshes
+      // it after /status arrives and on every subsequent render.
+      let description=help.querySelector("[data-workflow-description]");
+      if(!description){
+        const body=help.querySelector(".gs-advanced-body");
+        for(const child of Array.from(body.children))if(child.matches("p.gs-note"))child.remove();
+        description=document.createElement("p");description.className="gs-note";description.dataset.workflowDescription="";
+        body.prepend(description);help.querySelector("summary").textContent="About this workflow";
+      }
+      description.textContent=text;help.dataset.verified=helpKey;
+    }
+    const voice=this.$("voice-mode");if(voice?.closest("details"))voice.closest("details").hidden=true;
+    const stages=head?["auto","h3"]:["auto","prepare","design","animate",...(this.config.engine==="h3"?["h3",...(!viewport?["h3_enhance"]:[])]:this.config.engine==="local"?["restyle"]:["wan_speech"])];
+    for(const option of this.$("graph-stage").options){
+      option.hidden=!stages.includes(option.value);
+      option.disabled=option.hidden || option.value==="wan_speech" && !(this.config.audio_id && this.config.lip_sync)
+        || option.value==="h3_enhance" && !(this.config.delivery_mode==="enhanced1080" && this.project?.h3_enhancement_ready);
+    }
+    if(this.$("graph-stage").selectedOptions[0]?.disabled)this.$("graph-stage").value="auto";
+    this.$("head-replacement-setting").hidden=viewport || this.config.engine!=="h3";
+    this.$("head-replacement").value=head?"head":"character";
+    this.$("head-replacement-note").textContent=head?"Original face performance · up to 2 seconds · source audio required":"Replace the full character using the approved guided workflow.";
+    this.container.querySelector(".gs-look-choice").hidden=head;
+    this.$("performer").closest(".gs-two").hidden=head;
+    if(head){
+      for(const id of ["selection-options","ready-group","image-editor","starting-image","audio-settings","sampling-setting","h3-steps-setting","h3-attention-setting","quality-setting","h3-setting"])this.$(id).hidden=true;
+      this.$("remove_text").closest("label").hidden=true;
+      this.$("pitch").closest("label").hidden=true;
+      this.$("selection-note").textContent="Track the head, keep the body and scene. Face selection and blending run automatically.";
+      this.$("look-note").textContent="Your first image is the portrait used directly. No starting-frame generation.";
+      this.$("character-label").textContent="Portrait reference";
+      this.$("engine-hint").textContent="Head & face · fixed 8-step recipe · source scaled to 1024 px long edge.";
+      this.$("duration").max="2";
+      this.$("output-note").textContent="Original audio and facial performance. Up to 2 seconds; 1024 px source long edge, with a tracked face crop.";
+      const working=this.project?.phase==="working",seconds=this.config.length_mode==="original"?Number(this.source?.duration):Math.min(Number(this.config.duration),Number(this.source?.duration)-Number(this.config.start));
+      let reason=!this.source?"Add a source video.":this.source.has_audio===false?"Head & face requires the original video audio track.":!this.references.length?"Add a portrait reference.":!Number.isFinite(seconds)||seconds<5/24||seconds>2?"Choose a custom clip from 0.21 to 2 seconds.":!this.modelStatus?.engine_ready?.h3_head_swap?"Head & face setup needed. Check About this workflow.":"Uses your first portrait, original speech and a tracked face crop.";
+      const ready=!!this.source && this.source.has_audio!==false && this.references.length>0 && Number.isFinite(seconds)&&seconds>=5/24&&seconds<=2&&!!this.modelStatus?.engine_ready?.h3_head_swap;
+      if(!working&&!this.busy){this.$("primary").innerHTML=escape(this.project?.phase==="done"?"Generate another head swap":"Generate head swap")+icon("arrow");this.$("primary").disabled=!ready;this.$("action-note").textContent=reason;}
+      this.$("limit-note").textContent="Head & face: 0.21 to 2 seconds. Original audio required.";
+      this.$("speed-note").textContent="Fixed eight-step recipe. Time depends on face crop size and model loading.";
+    }else{
+      this.$("quality-setting").hidden=false;
+      this.$("remove_text").closest("label").hidden=false;
+      this.$("pitch").closest("label").hidden=false;
+    }
+    if(!verifiedSetup(this.config) && this.project?.phase!=="working"){
+      this.$("primary").disabled=true;this.$("primary").textContent="Start a new shot";
+      this.$("action-note").textContent=verifiedNotice;
+      this.$("exit").disabled=true;
+    }else this.$("exit").disabled=this.busy;
+  }
   syncForm() {
     this.syncPreservedPeople();
     if(this.$("preserve_people"))this.$("preserve_people").checked=!!this.config.preserve_people;
@@ -584,7 +765,7 @@ class ArtistStudio {
     this.$("resolution").value=resolution;
     this.container.querySelector(`input[name="gs-engine"][value="${this.config.engine}"]`).checked=true;
     const workflow=this.config.workflow_mode || (this.config.edit_area==="scene"?"motion":"swap");
-    this.container.querySelector(`input[name="gs-workflow"][value="${workflow}"]`).checked=true;
+    this.container.querySelector(`input[name="gs-workflow"][value="${workflow==="motion"?"swap":workflow}"]`).checked=true;
     this.$("model-prompt").open=!!this.config.prompt;
     this.$("pitch").checked=this.config.pitch;
     this.$("remove_text").checked=!!this.config.remove_text;
@@ -673,9 +854,12 @@ class ArtistStudio {
     }catch(e){this.message(e.message,true);}
   }
   render() {
-    this.contentDetection.update(this.source,this.config);
+    try { return this.renderStudio(); } finally { this.applyVerifiedSurface(); }
+  }
+  renderStudio() {
+    this.contentDetection.update(this.source,{...this.config,subject_mode:"people"});
     const content=this.contentDetection.badge(this.config.subject_mode),contentBadge=this.$("content-badge");
-    contentBadge.hidden=!this.source;contentBadge.textContent=content.label;contentBadge.title=content.message;
+    contentBadge.hidden=!this.source || this.config.workflow_mode==="viewport";contentBadge.textContent=content.label;contentBadge.title=content.message;
     const workflow=this.config.workflow_mode || (this.config.edit_area==="scene"?"motion":"swap");
     const viewport=workflow==="viewport",relight=workflow==="relight",preservePeople=!!this.config.preserve_people,wholeScene=this.config.edit_area==="scene",method=this.config.mask_method;
     const wanChoice=this.container.querySelector('input[name="gs-engine"][value="wan"]');
@@ -689,6 +873,8 @@ class ArtistStudio {
     this.$("mask-prompt-setting").hidden=method!=="text";
     this.$("mask-points-setting").hidden=method!=="points";
     this.$("selection-note").textContent=preservePeople?"People and their original performance stay; change the surroundings.":relight?"Keep the scene, subjects and movement. Change the lighting across the whole shot.":viewport?"Finish the full grey viewport scene. No mask is used.":wholeScene?"Rebuild the shot using source movement as a guide. The scene may change.":"Replace the selected area and preserve the rest. Review the selection before continuing.";
+    if(!viewport && this.config.engine==="h3")this.$("selection-note").textContent="Selection and depth guide the character change. Surroundings may change; choose Wan for precise masked replacement.";
+    if(!viewport && this.config.engine==="local")this.$("selection-note").textContent="Recreate the character and performance across the whole frame. Surroundings may change; no edit mask is used.";
     this.$("ready-group").hidden=this.lookMode!=="ready";
     const readyChoice=this.container.querySelector('input[name="gs-look"][value="ready"]');
     const directChoice=this.container.querySelector('input[name="gs-look"][value="direct"]');
@@ -699,7 +885,7 @@ class ArtistStudio {
     if(this.directViewport() && this.$("graph-stage").value==="design")this.$("graph-stage").value="auto";
     readyChoice.disabled=relight || preservePeople;
     readyChoice.closest("label").hidden=relight || preservePeople;
-    this.$("look-note").textContent=relight&&this.lookMode!=="ready"?"Describe the lighting below. Optional images guide the light and colour.":this.lookMode==="ready"?"Use an already-composed frame. No image generation.":viewport&&this.config.engine==="h3"?"Build and approve a starting frame. H3 also receives the blockout video and your look references.":viewport?"Build one scene plate from your references. LTX and Wan use the first three for this plate.":"Combine up to three references into one starting frame.";
+    this.$("look-note").textContent=relight&&this.lookMode!=="ready"?"Describe the lighting below. Optional images guide the light and colour.":this.lookMode==="ready"?"Use an already-composed frame. No image generation.":viewport&&this.config.engine==="h3"?"Build and approve a starting frame. H3 also receives the blockout video and your look references.":viewport?"Build one scene plate from up to three references. Match the viewport composition; LTX uses this plate for appearance.":"Combine up to three references into one starting frame.";
     this.$("character-label").textContent=relight?"Lighting references · optional":this.lookMode==="ready"?"Appearance references · optional":"Reference images";
     if(this.directViewport())this.$("look-note").textContent="Recommended for blockouts. H3 uses your source camera and motion with up to nine look references. No starting frame is generated.";
     this.$("build-look-label").textContent=relight?"Create lighting reference":viewport&&this.config.engine==="h3"?"Build starting frame":"Build from references";
@@ -731,9 +917,9 @@ class ArtistStudio {
     this.$("quality-note").textContent=h3Quality&&this.config.quality==="detailed"?"Standard sampling can take tens of minutes with 16 GB VRAM. Set the step count below; more steps do not guarantee better quality.":"Fast is the tested starting point. Resolution and clip length stay as selected.";
     this.$("h3-setting").hidden=true;this.$("ltx-setting").hidden=true;
     this.$("engine-hint").textContent={
-      wan:"Best for people and retaining the original acting.",
-      h3:"Strong expressive faces and replacement speech.",
-      local:"Start here for objects, environments and short scene changes. Review motion for drift.",
+      wan:"Precise masked replacement. Retains original acting; can create a new speech performance.",
+      h3:"Expressive faces and native dubbing. Guided replacement; surroundings may change.",
+      local:"Body-guided character recreation and native dubbing. Regenerates the whole frame; up to five seconds.",
       seedance:"Paid generation using Comfy credits."
     }[this.config.engine] || "";
     if(viewport)this.$("engine-hint").textContent={
@@ -744,7 +930,7 @@ class ArtistStudio {
     }[this.config.engine] || "";
     if(relight)this.$("engine-hint").textContent=this.config.remove_text?"Relight from your approved lighting frame; remove source lettering.":"Relight from your approved lighting frame. Keeping lettering can leave darker patches around it.";
     const unsupportedSubject=this.config.engine==="wan" && this.config.subject_mode==="objects";
-    if(this.config.engine==="wan" && content.kind==="objects")this.$("engine-hint").textContent="Wan is people-focused. H3 or LTX may suit objects and scenery better. Choose People if detection missed someone.";
+    if(this.config.engine==="wan" && content.kind==="objects")this.$("engine-hint").textContent="Character performance is for people. Object replacement is not yet available in Studio.";
     this.$("output-note").textContent=this.config.engine==="seedance"?"The draft uses your selected resolution and clip length. Finishing an accepted draft is a separate paid 1080p step.":this.config.engine==="h3"&&this.config.delivery_mode==="enhanced1080"?"H3 creates motion at 720p, then enhances each frame to 1080p. The approved original or selected soundtrack is restored once.":this.config.engine==="h3"?"Native H3 renders at the selected size. Native 1080p is a separate, memory-intensive render.":"Keeps your video's shape. Renders the length you choose from the original footage.";
     for(const option of this.$("resolution").options){
       const h3=this.config.engine==="h3";
@@ -754,7 +940,7 @@ class ArtistStudio {
       if(option.value==="1280")option.textContent=h3?"720p · H3 base":"720p · HD";
       if(option.value==="1920")option.textContent=h3?"1080p · Native H3":"1080p · Full HD";
       if(option.value==="1920-enhanced"){
-        option.hidden=!h3;option.textContent="1080p · Enhanced H3";
+        option.hidden=!h3 || viewport;option.disabled=viewport;option.textContent="1080p · Enhanced H3";
       }
     }
     const timedFrames=this.config.engine==="h3" || this.config.engine==="local" && wholeScene;
@@ -880,7 +1066,7 @@ class ArtistStudio {
       else if(p?.approval){label=phase==="done"?"Generate another take":"Generate video";note="Use the reviewed blockout and your look references, without a generated starting frame.";}
     }
     if(working){label="Working on your shot";note="You can close this view and return later. The job is saved.";}
-    if(reference && !this.audio && !working){label="Choose reference audio";note="Upload a track or create a voice below Audio and performance.";}
+    if(reference && !this.audio && !working){label="Choose reference audio";note="Upload a track under Audio and performance.";}
     if(this.busy && !working)label="Please wait";
     const sourceSeconds=Number(this.source?.duration), start=this.config.length_mode==="original"?0:Number(this.config.start);
     const selectedSeconds=this.config.length_mode==="original"?sourceSeconds:Math.min(Number(this.config.duration),sourceSeconds-start);
@@ -899,8 +1085,8 @@ class ArtistStudio {
     const unsupportedRelight=relight && this.config.engine!=="h3";
     if(unsupportedRelight && !working){label="Choose MiniMax H3";note="Relight currently uses H3.";}
     const unsupportedViewport=viewport && this.config.engine==="wan";
-    if(unsupportedViewport && !working){label="Choose H3 or LTX";note="Wan is available for motion transfer and object swaps. H3 is recommended for viewport renders.";}
-    if(unsupportedSubject && !working){label="Choose H3 or LTX";note="This scene needs object or environment guidance. If a person was missed, choose People in More controls.";}
+    if(unsupportedViewport && !working){label="Choose H3";note="H3 is the approved viewport option. Character performance offers Wan, H3 and LTX.";}
+    if(unsupportedSubject && !working){label="Start a new shot";note=verifiedNotice;}
     this.$("trim-start").hidden=this.config.length_mode==="original";
     const recoverLength=invalidLength && !working && !this.busy;
     if(recoverLength){label="Choose clip length";this.$("action-note").classList.add("is-warning");}
@@ -919,6 +1105,7 @@ class ArtistStudio {
     const stageLabels={prepare:"Finding and tracking the performer",design:"Creating your character preview",video_text:"Preparing the video prompt",h3_references:"Preparing the character and performance references",wan_speech:"Creating your facial performance",wan_prepare:"Preparing Wan motion and character",wan:"Replacing the performer with Wan 2.2",background:"Replacing the performer",restyle:"Restyling your shot",h3:"Replacing the performer with MiniMax H3",h3_enhance:"Enhancing the H3 frames to 1080p",draft:"Generating the Seedance draft",final:"Rendering the accepted take at 1080p"};
     if(preservePeople)Object.assign(stageLabels,{prepare:"Protecting the original people",design:"Creating the new surroundings",h3:"Changing the surroundings"});
     if(relight)Object.assign(stageLabels,{prepare:"Preparing source movement",design:"Creating the lighting frame",h3_references:"Preparing lighting and video guidance",h3:"Relighting your shot"});
+    if(viewport){stageLabels.prepare="Preparing viewport guidance";stageLabels.design="Creating the finished scene image";stageLabels.h3="Rendering the viewport with H3";stageLabels.restyle="Rendering the viewport with LTX";}
     stageLabels.wan_cleanup=latestAction?.next_stage==="h3_enhance"?"Releasing H3 models before enhancement":"Preparing Wan";
     const progress=stageProgress(p?.progress,{state:latestAction?.state,label:stageLabels[stage]});
     this.$("working-title").textContent=progress.title;
@@ -986,17 +1173,18 @@ class ArtistStudio {
     const cleanupReady=!textCleanup || this.modelStatus.h3_text_cleanup?.ready!==false;
     const enhancementRequested=engine==="h3"&&this.config.delivery_mode==="enhanced1080";
     const viewport=this.config.workflow_mode==="viewport";
-    const route=viewport&&engine==="local"?"local_viewport":viewport&&engine==="h3"?"h3_viewport":engine==="local"&&this.config.edit_area==="scene"?"local_scene":engine;
+    const route=this.headSwap()?"h3_head_swap":viewport&&engine==="local"?"local_viewport":viewport&&engine==="h3"?"h3_viewport":engine==="local"&&this.config.edit_area==="scene"?"local_scene":engine;
     const baseReady=this.modelStatus.engine_ready?.[route] ?? (route==="local" && this.modelStatus.ready);
     const enhancementReady=!enhancementRequested || this.modelStatus.h3_enhancement?.ready===true;
     const ready=(engine==="seedance" || baseReady) && enhancementReady && (!speech || this.modelStatus.wan_speech?.ready) && cleanupReady;
     const enhancementStatus=this.modelStatus.h3_enhancement || {};
     const enhancementSetupCommand=enhancementStatus.setup_command || "Setup_H3_Enhancement_Windows.cmd";
     this.$("models").textContent=engine==="seedance"?"Uses Comfy credits":ready?(engine==="h3"?(enhancementRequested?"H3 · Enhanced 1080p ready":"H3 · 720p ready; native 1080p unqualified"):engine==="wan"?(speech?"Wan + speech models ready":"Wan models ready"):route==="local_viewport"?"LTX 2.5 · experimental viewport ready":route==="local_scene"?"LTX 2.5 · whole-scene models ready":"LTX · masked route experimental"):!cleanupReady?"Text cleanup setup needed":enhancementRequested&&!baseReady?"H3 model setup needs attention":enhancementRequested&&!enhancementStatus.ready?(!enhancementStatus.model_ready?`Run ${enhancementSetupCommand}`:"1080p enhancement nodes setup needed"):speech && !this.modelStatus.wan_speech?.ready?"Wan speech setup needed":"Model setup needs attention";
+    if(this.headSwap())this.$("models").textContent=baseReady?"H3 · Head & face ready":"Head & face setup needed";
     this.$("models").classList.toggle("needs-attention",!ready);
-    const files=this.modelStatus.model_files?.[route]||[];
-    const missingNodeField={local:"missing_ltx_nodes",local_scene:"missing_ltx_scene_nodes",local_viewport:"missing_ltx_viewport_nodes",h3:"missing_h3_nodes",h3_viewport:"missing_h3_viewport_nodes",wan:"missing_wan_nodes"}[route];
-    const missingNodes=this.modelStatus[missingNodeField]||[];
+    const files=(this.headSwap()?this.modelStatus.h3_head_swap?.model_files:null)||this.modelStatus.model_files?.[route]||[];
+    const missingNodeField={h3_head_swap:"missing_h3_head_swap_nodes",local:"missing_ltx_nodes",local_scene:"missing_ltx_scene_nodes",local_viewport:"missing_ltx_viewport_nodes",h3:"missing_h3_nodes",h3_viewport:"missing_h3_viewport_nodes",wan:"missing_wan_nodes"}[route];
+    const missingNodes=(this.headSwap()?this.modelStatus.h3_head_swap?.missing_nodes:null)||this.modelStatus[missingNodeField]||[];
     this.$("model-checklist").innerHTML=engine==="seedance"?'<p class="gs-note">Uses the paid provider. Check credits and cost before rendering.</p>':files.map(item=>`<p class="gs-note">${item.ready?"Ready":"Missing"}: <code>${escape(item.path||`models/${item.folder}/${item.filename}`)}</code></p>`).join("")+(missingNodes.length?`<p class="gs-note">Missing nodes: ${missingNodes.map(escape).join(", ")}. Install the matching packs listed in the setup guide, then restart ComfyUI.</p>`:"<p class=\"gs-note\">Required native node checks passed. Optional speech or enhancement has its own setup.</p>");
   }
   async poll() {

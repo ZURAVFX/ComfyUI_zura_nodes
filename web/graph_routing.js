@@ -14,6 +14,115 @@ function simplify(points){
   }return result;
 }
 
+export function crossingEdgeIds(layout){
+  const edges=(layout.edges||[]).map(e=>({id:e.id,source:e.sources?.[0],target:e.targets?.[0],segments:(e.sections||[]).flatMap(s=>{
+    const p=[s.startPoint,...s.bendPoints||[],s.endPoint];return p.slice(1).map((b,i)=>[p[i],b]);})}));
+  const involved=new Set();
+  for(let i=0;i<edges.length;i++)for(let j=i+1;j<edges.length;j++){
+    if(edges[i].source===edges[j].source||edges[i].target===edges[j].target)continue;
+    const between=(v,a,b)=>v>=Math.min(a,b)&&v<=Math.max(a,b);
+    const overlap=(a,b,c,d)=>Math.max(Math.min(a,b),Math.min(c,d))<=Math.min(Math.max(a,b),Math.max(c,d));
+    if(edges[i].segments.some(([a,b])=>edges[j].segments.some(([c,d])=>{
+      const av=a.x===b.x,cv=c.x===d.x;
+      if(av===cv)return av?a.x===c.x&&overlap(a.y,b.y,c.y,d.y):a.y===c.y&&overlap(a.x,b.x,c.x,d.x);
+      const v=av?[a,b]:[c,d],h=av?[c,d]:[a,b];
+      return between(v[0].x,h[0].x,h[1].x)&&between(h[0].y,v[0].y,v[1].y);
+    }))){
+      if(!involved.has(edges[i].id))involved.add(edges[i].id);
+      if(!involved.has(edges[j].id))involved.add(edges[j].id);
+    }
+  }
+  return [...involved];
+}
+
+// Targeted fallback: reroute ONE crossing wire around all others, which stay fixed.
+// Used when full multi-wire routing saturates (e.g. H3 viewport prompt wire).
+// Wires only; nodes, sockets and inference inputs are untouched.
+export function rerouteSingleEdge(layout, edgeId){
+  const target=layout.edges.find(e=>String(e.id)===String(edgeId));
+  if(!target||target.sections?.length!==1)return null;
+  const nodes=new Map(layout.children.map(n=>[n.id,n]));
+  const step=5,pad=280;
+  const minX=Math.floor((Math.min(...layout.children.map(n=>n.x))-pad)/step)*step;
+  const minY=Math.floor((Math.min(...layout.children.map(n=>n.y))-pad)/step)*step;
+  const width=Math.ceil((Math.max(...layout.children.map(n=>n.x+n.width))-minX+pad)/step)+1;
+  const height=Math.ceil((Math.max(...layout.children.map(n=>n.y+n.height))-minY+pad)/step)+1;
+  if(width*height>800000)return null;
+  const xy=p=>[Math.round((p.x-minX)/step),Math.round((p.y-minY)/step)];
+  const point=cell=>({x:minX+(cell%width)*step,y:minY+Math.floor(cell/width)*step});
+  const cell=p=>{const [x,y]=xy(p);return y*width+x;};
+  const blocked=new Uint8Array(width*height);
+  const wireBlocked=new Uint8Array(width*height);
+  for(const n of layout.children){const [a,b]=xy({x:n.x-10,y:n.y-10}),[c,d]=xy({x:n.x+n.width+10,y:n.y+n.height+10});
+    for(let y=Math.max(0,b);y<=Math.min(height-1,d);y++)for(let x=Math.max(0,a);x<=Math.min(width-1,c);x++)blocked[y*width+x]=1;
+  }
+  // Freeze every other wire as an obstacle (rasterize its centerline cells).
+  // Wires sharing the rerouted wire's source may share its trunk: the crossing
+  // check skips same-source pairs, so those cells stay open to this owner.
+  const owner=target.sources[0];
+  const frozenOwner=new Map();
+  for(const e of layout.edges){
+    if(String(e.id)===String(edgeId))continue;
+    for(const s of e.sections||[]){
+      const pts=[s.startPoint,...s.bendPoints||[],s.endPoint];
+      for(let i=1;i<pts.length;i++){
+        const [x1,y1]=xy(pts[i-1]),[x2,y2]=xy(pts[i]);
+        let x=x1,y=y1;
+        for(let guard=0;guard<10000;guard++){
+          if(x>=0&&x<width&&y>=0&&y<height){
+            const id=y*width+x;
+            if(e.sources[0]===owner){if(!blocked[id])frozenOwner.set(id,owner);}
+            else{blocked[id]=1;wireBlocked[id]=1;}
+          }
+          if(x!==x2)x+=Math.sign(x2-x);else if(y!==y2)y+=Math.sign(y2-y);else break;
+        }
+      }
+    }
+  }
+  const cellBlocked=id=>blocked[id]||(frozenOwner.has(id)&&frozenOwner.get(id)!==owner);
+  const s=target.sections[0];
+  const source=nodes.get(target.sources[0].replace(/:(?:in|out):\d+$/,"")),dest=nodes.get(target.targets[0].replace(/:(?:in|out):\d+$/,"") );
+  if(!source||!dest)return null;
+  const startC=cell({x:minX+Math.ceil((source.x+source.width+30-minX)/step)*step,y:s.startPoint.y});
+  const endC=cell({x:minX+Math.floor((dest.x-30-minX)/step)*step,y:s.endPoint.y});
+  const prefix=[s.startPoint,{x:minX+Math.ceil((source.x+source.width+30-minX)/step)*step,y:s.startPoint.y},point(startC)];
+  const suffix=[point(endC),{x:minX+Math.floor((dest.x-30-minX)/step)*step,y:s.endPoint.y},s.endPoint];
+  // Prefix/suffix stubs leave their own sockets, so they may cross the socket's
+  // own node-inflation band; they must not cut through frozen wires.
+  for(const path of [prefix,suffix])for(let i=1;i<path.length;i++){
+    const [x1,y1]=xy(path[i-1]),[x2,y2]=xy(path[i]);
+    let x=x1,y=y1;
+    for(let guard=0;guard<1000;guard++){
+      if(x>=0&&x<width&&y>=0&&y<height&&wireBlocked[y*width+x])return null;
+      if(x!==x2)x+=Math.sign(x2-x);else if(y!==y2)y+=Math.sign(y2-y);else break;
+    }
+  }
+  const heap=new Heap(),cost=new Map(),parents=new Map(),endPt=point(endC);
+  const hkey=(id)=>id;
+  heap.push({id:startC*4,score:0,g:0});cost.set(startC*4,0);
+  let found;
+  while(heap.items.length){
+    const cur=heap.pop();if(cur.g!==cost.get(hkey(cur.id)))continue;
+    const at=Math.floor(cur.id/4),dir=cur.id%4;if(at===endC){found=cur.id;break;}
+    const x=at%width,y=Math.floor(at/width);        for(const [dx,dy,nd] of [[1,0,0],[0,1,1],[-1,0,2],[0,-1,3]]){
+          const nx=x+dx,ny=y+dy;if(nx<0||nx>=width||ny<0||ny>=height)continue;
+          if(cellBlocked(ny*width+nx))continue;
+      const id=(ny*width+nx)*4+nd,g=cur.g+1+(dir===nd?0:.35);
+      if(g>=(cost.get(id)??Infinity))continue;
+      cost.set(id,g);parents.set(id,cur.id);
+      const p=point(ny*width+nx);
+      heap.push({id,g,score:g+(Math.abs(p.x-endPt.x)+Math.abs(p.y-endPt.y))/step});
+    }
+  }
+  if(found===undefined)return null;
+  const path=[];for(let id=found;id!==undefined;id=parents.get(id))path.push(point(Math.floor(id/4)));path.reverse();
+  const full=simplify([...prefix,...path,...suffix]);
+  const out={...layout,edges:layout.edges.map(e=>String(e.id)===String(edgeId)
+    ?{...e,sections:[{startPoint:full[0],bendPoints:full.slice(1,-1),endPoint:full.at(-1)}]}
+    :e)};
+  return out;
+}
+
 export function routeFixedPorts(layout){
   if(!(layout.edges?.length))return layout;
   const nodes=new Map(layout.children.map(n=>[n.id,n]));

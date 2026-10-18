@@ -11,9 +11,9 @@ const ui=Object.create(context.Studio.prototype),actions=[];
 Object.assign(ui,{source:{duration:3},references:[],project,lookMode:'build',resetEpoch:0,readConfig:()=>config,
   $:()=>({value:'original'}),perform:fn=>fn(0),syncForm(){},
   run:async stage=>{actions.push(stage);if(stage==='approve')project.approval='review';}});
-await ui.primary();assert.deepEqual(actions,['approve','design'],'H3 viewport does not skip starting image generation');
+await ui.primaryRecipe();assert.deepEqual(actions,['approve','design'],'H3 viewport does not skip starting image generation');
 actions.length=0;project.phase='opening';project.opening_input={file:'approved.png'};
-await ui.primary();assert.deepEqual(actions,['animate'],'Artist explicitly accepts visible starting frame before animation');
+await ui.primaryRecipe();assert.deepEqual(actions,['animate'],'Artist explicitly accepts visible starting frame before animation');
 assert.ok(code.includes('id="gs-image_prompt"'));assert.ok(code.includes('Regenerate frame'));
 assert.ok(code.includes('input.id==="gs-image_prompt"'),'Image edits are submitted with Generate, preventing blur/click double-action races');
 console.log('H3 viewport review → starting-frame generation → explicit animation approval passes.');

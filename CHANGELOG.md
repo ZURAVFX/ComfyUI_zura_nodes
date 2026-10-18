@@ -1,6 +1,14 @@
 # Release notes
 
-## Unreleased
+## 1.3.24 - 18 October 2026
+
+- Restore approved Wan, H3 and LTX character-performance routes, including original audio, uploaded replacement dialogue and silent footage. Keep rejected viewport routes and unqualified object/lighting modes out of Studio.
+- Add the artist-approved H3 Head & face recipe: direct portrait, original audio, eight-step Kitchen sampling and tracked crop compositing, up to two seconds.
+- Fix the upload lock caused by rebuilding model-status elements during rendering. Keep busy-state cleanup, responsive large-file uploads, source thumbnails and explicit errors.
+- Improve editable graph routing and preserve the current workflow when imports fail. Retain cancellation, reset, progress and source/render comparison.
+- Correct H3 temporal padding so head-swap exports keep every selected frame and the original soundtrack.
+
+## Earlier Studio development notes
 
 - Add H3 Relight with a generated lighting frame for review, plus scene transformation with original people protected during sampling.
 - Offer H3 viewport references directly alongside generated or supplied finished frames. Correct replacement-audio routing, enhanced-delivery sizing and reference-grid padding.
