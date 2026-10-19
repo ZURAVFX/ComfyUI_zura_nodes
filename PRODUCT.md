@@ -28,7 +28,7 @@ Native sampling progress may expose steps. Loading and other stages without meas
 
 The current direction is the user's Artify reference: a quiet charcoal canvas,
 compact tools and a persistent prompt plus primary action. Zura retains its
-actual logo and violet accent. A simple Home screen offers Image and Video.
+actual logo, with Artify-inspired lime actions and a saved dark/light theme. A simple Home screen offers Image and Video.
 Image contains three locally tested native recipes for 16 GB hardware. Video
 preserves approved shot routes with source/look controls and a collapsible
 settings section. Do not introduce decorative account controls, mock galleries,

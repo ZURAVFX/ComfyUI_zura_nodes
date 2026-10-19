@@ -2,6 +2,11 @@
 
 ## Unreleased - Image / Video Studio
 
+- Add saved dark/light appearances using neutral surfaces and Artify-inspired lime accents.
+- Add exact image width/height, swap, dimension validation and a memory notice above the tested size.
+- Add drag-and-drop native reference conditioning, numbered thumbnails, removal, reordering and explicit per-model limits.
+- Add Clear history and Undo without deleting output or reference files.
+
 - Add a simple Image / Video home screen and a charcoal, canvas-first workspace inspired by the supplied Artify reference, retaining Zura's logo and violet accent.
 - Add native Flux 3 Klein INT8, Flux 2 Klein 4B FP8 and Z-Image Turbo image generation, each rendered and inspected locally at 1024px on a 16 GB RTX 4080.
 - Keep a persistent image prompt and Generate button, local output gallery, downloads, reusable prompts/seeds, targeted cancellation and recovery of an active run.

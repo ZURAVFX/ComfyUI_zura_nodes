@@ -90,3 +90,7 @@ into Generation settings. The primary action moves to the prompt composer.
 Trimming has its own disclosure so the prompt remains visible. Native Graph
 view and saved shots remain accessible. The latest implementation and
 qualification limits are documented in docs/IMAGE_STUDIO.md.
+
+## Appearance update
+
+The user requested a closer match to Artify: neutral charcoal with acid-lime primary actions replaces the violet accent in Studio. A persistent header toggle offers a warm-white light appearance with dark text. `zura-studio-theme` saves the explicit choice in local browser storage. Image dimensions have labelled width/height fields and a swap action, alongside shape presets.
