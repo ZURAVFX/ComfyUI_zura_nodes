@@ -11,6 +11,15 @@
         ],
         "createdAt": "2026-10-19T19:47:31.290Z",
         "reason": "Agent: source, finished-frame and opening images remain hidden until real uploaded media is assigned; the logo receives its bundled asset URL during extension setup. Actual-DOM tests cover these runtime states."
+      },
+      {
+        "rule": "border-accent-on-rounded",
+        "value": "*",
+        "files": [
+          "web/studio.css"
+        ],
+        "createdAt": "2026-10-19T20:25:29.925Z",
+        "reason": "Agent: both current findings are the top/bottom rails of .gs-trim-selection, a square timeline range overlay with no border radius. These functional rails mark the selected video interval between draggable handles; they are not rounded cards. This rule exposes no narrower extractable value."
       }
     ]
   }
