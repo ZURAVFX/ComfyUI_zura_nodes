@@ -262,3 +262,36 @@ ui.project=null;ui.source.has_audio=false;ui.render();
 assert.equal(ui.$('primary').disabled,true);
 assert.match(ui.$('action-note').textContent,/original audio track/);
 console.log('Camera actual-DOM optional references, presets, source-audio gate and still-review-before-video flow pass.');
+
+// Step navigation must never scroll the fixed Studio shell or Comfy behind it.
+// Emulate a control below its panel and native focus's automatic ancestor scroll.
+window.matchMedia=()=>({matches:true});
+const controlPanel=ui.container.querySelector('.gs-controls');
+const lookPanel=ui.container.querySelector('.gs-look');
+const box=(top,height)=>({top,bottom:top+height,height});
+controlPanel.getBoundingClientRect=()=>box(100,500);
+lookPanel.getBoundingClientRect=()=>box(800,150);
+controlPanel.scrollTop=0;ui.container.scrollTop=0;document.body.scrollTop=0;
+const focused=[];
+const guardFocus=element=>element.focus=options=>{
+  if(!options?.preventScroll)ui.container.scrollTop=400;
+  focused.push(element);
+};
+guardFocus(ui.$('ready'));guardFocus(ui.$('source'));guardFocus(ui.$('camera_preset'));
+lookPanel.scrollIntoView=()=>{throw new Error('Ancestor-scrolling navigation is forbidden');};
+ui.container.querySelector('[data-step="1"]').onclick();
+assert.equal(controlPanel.scrollTop,350,'Only the reference panel scrolls to reveal the look section');
+assert.equal(ui.container.scrollTop,0,'Step navigation must keep the fixed shell at the top');
+assert.equal(document.body.scrollTop,0,'Comfy behind Studio must stay still');
+assert.ok(focused.length);
+// On mobile, the Studio shell intentionally scrolls, while the host stays fixed.
+window.matchMedia=()=>({matches:false});
+ui.container.getBoundingClientRect=()=>box(0,600);
+ui.revealControl(lookPanel,ui.$('ready'));
+assert.equal(ui.container.scrollTop,350);
+assert.equal(document.body.scrollTop,0);
+// Returning from a scrolled mobile layout must not reopen desktop midway down.
+window.matchMedia=()=>({matches:true});
+await ui.open();
+assert.equal(ui.container.scrollTop,0);
+console.log('Desktop step/focus navigation scrolls only its owning panel; mobile scroll and desktop reopening remain safe.');

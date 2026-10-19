@@ -139,11 +139,11 @@
 @media(max-width:600px){.gs-compare-controls{gap:8px;padding:10px;flex-wrap:wrap}.gs-compare-controls [data-seek]{order:5;flex-basis:100%}.gs-compare-stage{max-height:480px}.gs-compare-label{top:8px;font-size:11px}.gs-compare-label.is-result{left:8px}.gs-compare-label.is-source{right:8px}}
 
 /* The desktop shell never scrolls; only panels scroll their own content. */
-html.genj-open,html.genj-open body{overflow:hidden!important;overscroll-behavior:none}
+html.genj-open,html.genj-open body{overflow:clip!important;overscroll-behavior:none}
 @media(min-width:901px){
- #genj-studio{display:flex;flex-direction:column;overflow:hidden;height:100dvh}
+ #genj-studio{display:flex;flex-direction:column;overflow:clip;height:100dvh}
  .gs-top,.gs-steps{flex-shrink:0}
- .gs-workspace{flex:1;min-height:0;height:auto;width:100%;margin:0 auto;padding-bottom:16px;overflow:hidden}
+ .gs-workspace{flex:1;min-height:0;height:auto;width:100%;margin:0 auto;padding-bottom:16px;overflow:clip}
  .gs-controls,.gs-settings,.gs-main{overflow-y:auto;overscroll-behavior:contain;scrollbar-gutter:stable}
  .gs-main{position:static;align-self:stretch;max-height:none;padding-bottom:12px}
 }

@@ -199,6 +199,18 @@ class ArtistStudio {
     this.comparison.show(source,result,p?.selected_url?0:(p?.config?.start || 0));this.render();
   }
   $(id) { return this.container.querySelector("#gs-" + id); }
+  revealControl(target, focus=target) {
+    if(!target)return;
+    const desktop=window.matchMedia?.("(min-width: 901px)")?.matches ?? true;
+    const panel=desktop?target.closest(".gs-controls,.gs-settings,.gs-main"):this.container;
+    if(panel && panel!==target){
+      const bounds=panel.getBoundingClientRect(),item=target.getBoundingClientRect();
+      // Scroll only the owning panel. scrollIntoView also scrolls hidden ancestors.
+      if(item.top<bounds.top || item.height>bounds.height)panel.scrollTop+=item.top-bounds.top;
+      else if(item.bottom>bounds.bottom)panel.scrollTop+=item.bottom-bounds.bottom;
+    }
+    focus?.focus({preventScroll:true});
+  }
   headSwap() {return this.config?.h3_head_swap===true && this.config.engine==="h3" && this.config.workflow_mode==="swap";}
   headSwapConfig(c) {
     if(!c.h3_head_swap || c.engine!=="h3" || c.workflow_mode!=="swap"){c.h3_head_swap=false;return c;}
@@ -325,11 +337,9 @@ class ArtistStudio {
   bind() {
     this.container.querySelectorAll("[data-length-mode]").forEach(button=>button.onclick=()=>this.chooseClipLength(button.dataset.lengthMode));
     this.container.querySelectorAll("[data-step]").forEach(button=>button.onclick=()=>{
-      const targets=[this.$("source-drop"),this.container.querySelector(".gs-look"),this.container.querySelector(".gs-settings"),this.$("canvas")];
-      const target=targets[Number(button.dataset.step)];target?.scrollIntoView({block:"nearest",behavior:"instant"});
-      if(Number(button.dataset.step)===0)this.$("source").focus();
-      if(Number(button.dataset.step)===1)this.$(this.lookMode==="ready"?"ready":this.config.workflow_mode==="camera"?"camera_preset":"image_prompt").focus();
-      if(Number(button.dataset.step)===2)this.$("primary").focus();
+      const targets=[this.$("source-drop"),this.container.querySelector(".gs-look"),this.$("primary"),this.$("canvas")];
+      const controls=[this.$("source"),this.$(this.lookMode==="ready"?"ready":this.config.workflow_mode==="camera"?"camera_preset":"image_prompt"),this.$("primary"),null];
+      const step=Number(button.dataset.step);this.revealControl(targets[step],controls[step]);
     });
     this.$("prompt").addEventListener("input",()=>{if(this.config.workflow_mode==="relight"&&!this.busy)this.render();});
     this.$("compare-toggle").onclick=()=>this.compareTake();
@@ -661,7 +671,7 @@ class ArtistStudio {
     }
     if(clipLength(selectedConfig,this.source?.duration).invalid){
       this.config=recoverClipLength(selectedConfig,this.source.duration);this.syncForm();this.render();
-      this.$("duration").scrollIntoView({block:"nearest",behavior:"instant"});this.$("duration").focus();this.$("duration").select();
+      this.revealControl(this.$("duration"));this.$("duration").select();
       this.message("Choose the clip length, then prepare your shot.");return;
     }
     await this.perform(async(epoch)=>{
@@ -1267,6 +1277,7 @@ class ArtistStudio {
   async open() {
     if(!this.container.isConnected)document.body.appendChild(this.container);
     document.documentElement.classList.add("genj-open");this.render();
+    if(window.matchMedia?.("(min-width: 901px)")?.matches ?? true)this.container.scrollTop=0;
     try{
       this.modelStatus=await request("/status");this.syncForm();this.render();
     }catch(e){this.message(e.message,true);}

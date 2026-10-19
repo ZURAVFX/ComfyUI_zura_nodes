@@ -1,5 +1,11 @@
 # Release notes
 
+## 1.3.27 - 19 October 2026
+
+- Fix Studio jumping downwards and exposing blank space below its panels. Desktop navigation now scrolls only the relevant panel, with focus prevented from scrolling the outer shell.
+- Keep the desktop header and stage controls in place, retain mobile page scrolling and clear an old outer scroll offset when reopening Studio on desktop.
+- Add navigation regression coverage for panel scrolling, focus, mobile behaviour and desktop reopening.
+
 ## 1.3.26 - 19 October 2026
 
 - Integrate the artist-approved H3 CrossView camera recipe: Ref2VA INT8, matching 8-step Turbo adapter, CrossView LoRA at 0.8 and the approved still as the image guide and locked first frame.
