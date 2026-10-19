@@ -1,5 +1,12 @@
 # Release notes
 
+## 1.3.26 - 19 October 2026
+
+- Integrate the artist-approved H3 CrossView camera recipe: Ref2VA INT8, matching 8-step Turbo adapter, CrossView LoRA at 0.8 and the approved still as the image guide and locked first frame.
+- Guide camera changes through Source, Camera still, Review & render and Result. Keep one camera prompt, optional Person / Room references and one clear approval action.
+- Fix camera-still regeneration and require an updated still after changing the camera direction. Preserve original performance and audio, with no mask or geometry-warp pass.
+- Qualify a two-second 768 × 448, 24 fps local render and add graph-contract and interface regression coverage. Takes up to five seconds remain available but need review for drift.
+
 ## 1.3.25 - 18 October 2026
 
 - Reduce Studio handoff overhead with bounded file and project-record caches, responsive graph preparation, and adaptive Comfy memory handoffs.

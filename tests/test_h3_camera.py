@@ -25,6 +25,22 @@ class CameraGraphTests(unittest.TestCase):
         self.assertEqual(graph['shift']['inputs']['shift_audio'], 3.)
         self.assertNotIn('still_model', graph)
 
+    def test_approved_camera_route_anchors_the_still_without_geometry_warp(self):
+        graph = camera.build_graph(self.request(prompt='Keep the hat visible.'))
+        kinds = {n['class_type'] for n in graph.values()}
+        self.assertTrue(kinds.isdisjoint({'LoadMoGeModel', 'MoGeInference', 'CrossViewWarp'}))
+        self.assertEqual(graph['image_guide']['inputs']['image'], ['camera_size', 0])
+        self.assertEqual(graph['crossview_lora']['inputs']['strength_model'], .8)
+        self.assertEqual(graph['turbo']['inputs']['model'], ['model', 0])
+        self.assertEqual(graph['shift']['inputs']['model'], ['turbo', 0])
+        self.assertEqual(graph['crossview_lora']['inputs']['model'], ['shift', 0])
+        self.assertEqual(graph['attention']['inputs']['model'], ['crossview_lora', 0])
+        self.assertEqual(graph['references']['inputs']['ref_images.ref_image_0'], ['camera_size', 0])
+        self.assertTrue(graph['references']['inputs']['prompt'].startswith('crossview.'))
+        self.assertEqual(graph['start_encode']['inputs']['pixels'], ['camera_size', 0])
+        self.assertIn('Keep the hat visible.', graph['references']['inputs']['prompt'])
+        self.assertEqual(graph['audio_lock']['inputs']['latent'], ['start_lock', 0])
+
     def test_performance_audio_and_still_are_independent_native_guides(self):
         graph = camera.build_graph(self.request(start_seconds=1.5))
         refs = graph['references']['inputs']
@@ -82,8 +98,16 @@ class CameraGraphTests(unittest.TestCase):
         report = camera.readiness(dict.fromkeys(kinds), lambda folder,name: '/models/'+name)
         self.assertTrue(report['video']['ready'])
         self.assertFalse(report['still']['ready'])
-        self.assertFalse(report['quality_verified_locally'])
+        self.assertTrue(report['quality_verified_locally'])
+        self.assertEqual(report['verified_seconds'], 2)
         self.assertEqual(report['max_seconds'], 5)
+
+    def test_missing_crossview_adapter_blocks_video_only(self):
+        kinds = {n['class_type'] for n in camera.build_graph(self.request()).values()}
+        kinds.update(n['class_type'] for n in camera.build_still_graph(camera.CameraRequest('source.mp4')).values())
+        report = camera.readiness(dict.fromkeys(kinds), lambda folder, name: None if name == camera.MODELS['crossview'][1] else '/models/'+name)
+        self.assertTrue(report['still']['ready'])
+        self.assertFalse(report['video']['ready'])
 
     def test_graph_has_only_existing_dependencies(self):
         for graph in (camera.build_graph(self.request()), camera.build_still_graph(camera.CameraRequest('source.mp4'))):

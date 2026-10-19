@@ -259,6 +259,12 @@ class ArtistStudio {
     }
   }
   referenceRoles(){return this.references.map(a=>a.role||"auto");}
+  cameraStillDirty(){
+    const saved=this.project?.config;
+    return this.config.workflow_mode==="camera" && !!this.project?.opening_input && !!saved &&
+      (this.$("camera_prompt").value.trim()!==(saved.camera_prompt||"").trim() ||
+       this.$("camera_preset").value!==(saved.camera_preset||"Left three-quarter"));
+  }
   configBody(config){return {config,reference_roles:this.referenceRoles()};}
   projectBody(){const generatedOnly=this.config.workflow_mode==="relight" || this.config.preserve_people;return {source:this.source.id,character:this.character?.id,look_mode:generatedOnly?"build":this.lookMode,
     references:this.references.map(a=>a.id),reference_roles:this.references.map(a=>a.role||"auto"),starting_image:generatedOnly?undefined:this.readyAsset?.id,config:this.config};}
@@ -322,7 +328,7 @@ class ArtistStudio {
       const targets=[this.$("source-drop"),this.container.querySelector(".gs-look"),this.container.querySelector(".gs-settings"),this.$("canvas")];
       const target=targets[Number(button.dataset.step)];target?.scrollIntoView({block:"nearest",behavior:"instant"});
       if(Number(button.dataset.step)===0)this.$("source").focus();
-      if(Number(button.dataset.step)===1)this.$(this.lookMode==="ready"?"ready":"image_prompt").focus();
+      if(Number(button.dataset.step)===1)this.$(this.lookMode==="ready"?"ready":this.config.workflow_mode==="camera"?"camera_preset":"image_prompt").focus();
       if(Number(button.dataset.step)===2)this.$("primary").focus();
     });
     this.$("prompt").addEventListener("input",()=>{if(this.config.workflow_mode==="relight"&&!this.busy)this.render();});
@@ -364,7 +370,7 @@ class ArtistStudio {
       this.$("voice-note").textContent="Creating speech in ComfyUI. The track will be selected automatically.";
     });
     this.$("redesign").onclick=()=>this.perform(async(epoch)=>{
-      if(!this.project?.approval || !this.project?.opening_input || this.project.phase==="working")return;
+      if((!this.project?.approval && this.config.workflow_mode!=="camera") || !this.project?.opening_input || this.project.phase==="working")return;
       this.config={...this.readConfig(),seed:Math.floor(Math.random()*2**48)};this.syncForm();
       const id=this.project.id,updated=await request(`/projects/${id}/config`,this.configBody(this.config));if(epoch!==this.resetEpoch)return;if(this.project?.id!==id)return;this.project=updated;
       await this.run("design");if(epoch!==this.resetEpoch)return;
@@ -546,7 +552,8 @@ class ArtistStudio {
     await this.perform(async(epoch)=>{
       if(type==="opening" && this.config.preserve_people)throw new Error("Regenerate the starting frame to keep the original people protected.");
       if(type==="opening" && !this.project)throw new Error("Prepare and review the shot before choosing a starting image.");
-      if(type==="character" && this.references.length+files.length>9)throw new Error("Use up to nine reference images. Remove one before adding more.");
+      const referenceLimit=this.config.workflow_mode==="camera"?5:9;
+      if(type==="character" && this.references.length+files.length>referenceLimit)throw new Error(`Use up to ${referenceLimit} reference images. Remove one before adding more.`);
       for(const file of files){
       const form=new FormData();form.append("file",file);
       const started=Date.now(),controller=new AbortController();
@@ -787,14 +794,21 @@ class ArtistStudio {
       this.$("pitch").closest("label").hidden=false;
     }
     this.$("camera-look").hidden=!camera || this.lookMode==="ready";
+    this.$("model-prompt").hidden=camera;
+    const lookHeading=this.container.querySelector(".gs-look h2"),readyLabel=this.container.querySelector('input[name="gs-look"][value="ready"] + span');
+    if(lookHeading)lookHeading.textContent=camera?"New camera view":"Starting look";
+    if(readyLabel)readyLabel.textContent=camera?"Use camera still":"Use finished frame";
     if(camera){
-      this.$("build-look-label").textContent="Create camera still";
+      this.$("build-look-label").textContent="Create new angle";
       this.$("look-note").textContent=this.lookMode==="ready"?"Use your finished camera still, then animate the source performance.":"Choose an angle and create a still to review before animation.";
-      this.$("character-label").textContent="Appearance references · optional";
+      this.$("character-label").textContent="Identity & room references · optional";
       this.$("selection-note").textContent="Reframe the whole scene while following the source performance. No mask needed.";
-      this.$("engine-hint").textContent="Camera angle · preview mode · 768 × 448 · original audio required.";
+      this.$("engine-hint").textContent="H3 CrossView · 8 steps · original audio & performance";
       for(const id of ["selection-options","audio-settings","image-editor","frame-position-setting","frame-number-setting","quality-setting","sampling-setting","h3-steps-setting","h3-attention-setting"])this.$(id).hidden=true;
       this.$("remove_text").closest("label").hidden=true;this.$("pitch").closest("label").hidden=true;
+      this.$("starting-image").hidden=true;
+      this.$("redesign").disabled=this.busy || !this.project?.opening_input || this.project?.phase==="working";
+      this.$("video-options").hidden=!this.project?.opening_input || this.cameraStillDirty();
       const cameraStage=this.project?.opening_input||this.lookMode==="ready"?"video":"still";
       const unavailable=!!this.modelStatus && (this.modelStatus.h3_camera?.[cameraStage]?.ready ?? this.modelStatus.engine_ready?.h3_camera)===false;
       if(this.project?.phase!=="working" && !this.busy){
@@ -803,8 +817,12 @@ class ArtistStudio {
         else if(this.source&&!this.hasLook())this.$("action-note").textContent="Describe the camera angle, or choose a preset.";
       }
       this.$("duration").max="5";
-      this.$("output-note").textContent="768 × 448 video, eight sampling steps. Uses the source audio and performance; up to five seconds.";
+      this.$("output-note").textContent=`${this.config.camera_width||768} × ${this.config.camera_height||448} · 24 fps · up to 5 seconds. Approved on a 2-second test; longer takes need review.`;
       if(!this.project?.opening_input && !this.busy && this.project?.phase!=="working")this.$("primary").innerHTML=escape(this.lookMode==="ready"?"Review camera still":"Create camera still")+icon("arrow");
+      if(this.cameraStillDirty() && !this.busy && this.project?.phase!=="working"){
+        this.$("primary").innerHTML="Update camera still"+icon("arrow");
+        this.$("action-note").textContent="Your camera direction changed. Update and review the still before generating video.";
+      }
     }
     this.$("camera-regenerate").hidden=!camera || !this.project?.opening_input || this.lookMode==="ready";
     this.$("camera-regenerate").disabled=this.busy || this.project?.phase==="working";
@@ -972,10 +990,12 @@ class ArtistStudio {
     this.$("reference-upload-label").textContent=this.references.length?"Add images":"Drop one or more images";
     const readyImage=this.$("ready-image");readyImage.hidden=!this.readyAsset;
     if(this.readyAsset && readyImage.getAttribute("src")!==this.readyAsset.url)readyImage.src=this.readyAsset.url;
-    const referenceFingerprint=JSON.stringify(this.references.map(a=>[a.id,a.url,a.name,a.role,viewport]));
+    const referenceFingerprint=JSON.stringify([workflow,this.references.map(a=>[a.id,a.url,a.name,a.role])]);
     if(referenceFingerprint!==this.referenceFingerprint){
       this.referenceFingerprint=referenceFingerprint;
-      this.$("reference-gallery").innerHTML=this.references.map((a,i)=>`<figure><img src="${escape(a.url)}" alt="Reference ${i+1}: ${escape(a.name)}"/><figcaption title="${escape(a.name)}">Reference ${i+1}</figcaption>${viewport?`<label class="gs-reference-role-label"><span>Use as</span><select data-reference-role="${escape(a.id)}"><option value="auto" ${a.role==="auto"?"selected":""}>Auto</option><option value="environment" ${a.role==="environment"?"selected":""}>Environment</option><option value="character" ${a.role==="character"?"selected":""}>Character</option><option value="object" ${a.role==="object"?"selected":""}>Object</option><option value="detail" ${a.role==="detail"?"selected":""}>Detail</option><option value="style" ${a.role==="style"?"selected":""}>Style</option></select></label>`:""}<button class="gs-icon-button" data-remove-reference="${escape(a.id)}" aria-label="Remove reference ${i+1}">${icon("close")}</button></figure>`).join("");
+      const roleChoices=workflow==="camera"?[["character","Person"],["environment","Room"]]:[["auto","Auto"],["environment","Environment"],["character","Character"],["object","Object"],["detail","Detail"],["style","Style"]];
+      const selectedRole=a=>workflow==="camera"?(a.role==="environment"?"environment":"character"):(a.role||"auto");
+      this.$("reference-gallery").innerHTML=this.references.map((a,i)=>`<figure><img src="${escape(a.url)}" alt="Reference ${i+1}: ${escape(a.name)}"/><figcaption title="${escape(a.name)}">Reference ${i+1}</figcaption>${viewport||workflow==="camera"?`<label class="gs-reference-role-label"><span>Use as</span><select data-reference-role="${escape(a.id)}">${roleChoices.map(([value,label])=>`<option value="${value}" ${selectedRole(a)===value?"selected":""}>${label}</option>`).join("")}</select></label>`:""}<button class="gs-icon-button" data-remove-reference="${escape(a.id)}" aria-label="Remove reference ${i+1}">${icon("close")}</button></figure>`).join("");
     }
     this.$("select-points").disabled=!this.source || this.busy || this.project?.phase==="working";
     const points=this.config.mask_points||[];
@@ -1142,8 +1162,8 @@ class ArtistStudio {
       else if(p?.approval){label=phase==="done"?"Generate another take":"Generate video";note="Use the reviewed blockout and your look references, without a generated starting frame.";}
     }
     if(workflow==="camera" && hasAssets && !working){
-      label=p?.opening_input?(phase==="done"?"Generate another take":"Generate video"):(this.lookMode==="ready"?"Review camera still":"Create camera still");
-      note=p?.opening_input?"Review the angle and framing, then animate the original performance.":"Create a camera still to review before generating video.";
+      label=p?.opening_input?(phase==="done"?"Generate another take":"Use this angle & generate"):(this.lookMode==="ready"?"Review camera still":"Create camera still");
+      note=p?.opening_input?"Approve this view and generate video with the original acting and audio.":"Choose an angle or describe it. Review the still before generating video.";
     }
     if(working){label="Working on your shot";note="Progress and Cancel run are below the preview. You can return to this shot later.";}
     if(reference && !this.audio && !working){label="Choose reference audio";note="Upload a track under Audio and performance.";}
@@ -1229,7 +1249,7 @@ class ArtistStudio {
     if(this.compareActive)this.comparison.show(p.selected_url || this.source.url,this.compareResult || video,p.selected_url?0:(p.config?.start || 0));
     const hasFrame=!!p?.opening_input,direct=this.directViewport()||this.headSwap();
     const step=!hasAssets?0:!hasFrame&&!direct?1:phase==="done"||phase==="draft"?3:2;
-    const stageNames=["Source","Starting frame","Video","Result"],stageNotes=["Video & references","Create & review","Settings & generation","Compare & download"];
+    const stageNames=workflow==="camera"?["Source","Camera still","Review & render","Result"]:["Source","Starting frame","Video","Result"],stageNotes=workflow==="camera"?["Add your video","Choose a new angle","Approve the view","Compare & download"]:["Video & references","Create & review","Settings & generation","Compare & download"];
     this.container.querySelectorAll("[data-step]").forEach(e=>{const index=Number(e.dataset.step);e.querySelector("strong").textContent=stageNames[index];e.querySelector("small").textContent=stageNotes[index];e.hidden=direct&&index===1;});
     this.container.querySelectorAll("[data-step]").forEach(e=>{const current=Number(e.dataset.step)===step;e.classList.toggle("active",current);e.classList.toggle("complete",Number(e.dataset.step)<step);if(current)e.setAttribute("aria-current","step");else e.removeAttribute("aria-current");});
     if(p?.error)this.message(p.error,true);
@@ -1274,7 +1294,7 @@ class ArtistStudio {
     this.$("models").textContent=engine==="seedance"?"Uses Comfy credits":ready?(engine==="h3"?(enhancementRequested?"H3 · Enhanced 1080p ready":"H3 · 720p ready; native 1080p unqualified"):engine==="wan"?(speech?"Wan + speech models ready":"Wan models ready"):route==="local_viewport"?"LTX 2.5 · experimental viewport ready":route==="local_scene"?"LTX 2.5 · whole-scene models ready":"LTX · masked route experimental"):!cleanupReady?"Text cleanup setup needed":enhancementRequested&&!baseReady?"H3 model setup needs attention":enhancementRequested&&!enhancementStatus.ready?(!enhancementStatus.model_ready?`Run ${enhancementSetupCommand}`:"1080p enhancement nodes setup needed"):speech && !this.modelStatus.wan_speech?.ready?"Wan speech setup needed":"Model setup needs attention";
     if(engine==="wan2")this.$("models").textContent=baseReady?"Wan Animate 2 · full-frame setup ready":"Wan Animate 2 · setup needed";
     if(this.headSwap())this.$("models").textContent=baseReady?"H3 · Head & face ready":"Head & face setup needed";
-    if(camera)this.$("models").textContent=baseReady?"H3 · Camera preview ready":"Camera setup needed";
+    if(camera)this.$("models").textContent=baseReady?"H3 · Camera ready":"Camera setup needed";
     this.$("models").classList.toggle("needs-attention",!ready);
     const files=(camera?cameraStatus?.model_files:null)||(this.headSwap()?this.modelStatus.h3_head_swap?.model_files:null)||this.modelStatus.model_files?.[route]||[];
     const missingNodeField={wan2:"missing_wan2_nodes",h3_head_swap:"missing_h3_head_swap_nodes",local:"missing_ltx_nodes",local_scene:"missing_ltx_scene_nodes",local_viewport:"missing_ltx_viewport_nodes",h3:"missing_h3_nodes",h3_viewport:"missing_h3_viewport_nodes",wan:"missing_wan_nodes"}[route];

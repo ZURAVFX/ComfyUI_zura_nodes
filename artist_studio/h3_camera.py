@@ -22,6 +22,7 @@ PRESETS = {
 MODELS = {
     "h3": ("diffusion_models", "minimax_h3_ref2va_pruned_int8_convrot.safetensors"),
     "turbo": ("loras", "minimax_h3_dmd_ref2va_8step_turbo_pruned.safetensors"),
+    "crossview": ("loras", "MiniMax-H3_Ref2VA-LoRA-CrossView-Warp_v1_3500.safetensors"),
     "text": ("text_encoders", "qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors"),
     "video_vae": ("vae", "minimax_h3_video_vae_int8_convrot.safetensors"),
     "audio_vae": ("vae", "minimax_h3_audio_vae_fp32.safetensors"),
@@ -55,6 +56,8 @@ class CameraRequest:
     seed: int = 1052
     preset: str = "Left three-quarter"
     prompt: str = ""
+    camera_method: str = "crossview"
+    crossview_lora_strength: float = .8
     references: tuple = ()
     take_name: str = "zura_camera"
 
@@ -71,6 +74,10 @@ def _validate(r, video=False):
         raise ValueError("Camera width and height must be multiples of 32, from 128 to 4096.")
     if type(r.seed) is not int or not 0 <= r.seed <= 2**64 - 1:
         raise ValueError("Choose an unsigned 64-bit seed.")
+    if r.camera_method != "crossview":
+        raise ValueError("Choose a supported camera method.")
+    if type(r.crossview_lora_strength) not in (int, float) or not math.isfinite(r.crossview_lora_strength) or not 0. <= r.crossview_lora_strength <= 1.:
+        raise ValueError("CrossView LoRA strength must be between 0 and 1.")
     if r.preset not in PRESETS or not isinstance(r.prompt, str) or len(r.prompt) > 10000:
         raise ValueError("Choose a camera preset and a prompt up to 10,000 characters.")
     if r.preset == "Custom prompt only" and not r.prompt.strip() and not r.camera_image:
@@ -180,14 +187,19 @@ def build_graph(r):
     model = node("model", "UNETLoader", unet_name=MODELS["h3"][1], weight_dtype="default")
     model = node("turbo", "LoraLoaderModelOnly", model=model, lora_name=MODELS["turbo"][1], strength_model=1.)
     model = node("shift", "MiniMaxH3SigmaShift", model=model, shift_video=12., shift_audio=3.)
+    model = node("crossview_lora", "LoraLoaderModelOnly", model=model,
+                 lora_name=MODELS["crossview"][1], strength_model=float(r.crossview_lora_strength))
     model = node("attention", "ModelAttentionBackend", model=model, attention="comfy kitchen attention")
     clip = node("text", "CLIPLoader", clip_name=MODELS["text"][1], type="minimax", device="default")
     vae = node("video_vae", "VAELoader", vae_name=MODELS["video_vae"][1])
     audio_vae = node("audio_vae", "VAELoader", vae_name=MODELS["audio_vae"][1])
-    inputs = {"ref_images.ref_image_0": still, "ref_videos.ref_video_0": images, "ref_video_audios.ref_video_audio_0": audio}
+    inputs = {"ref_images.ref_image_0": still,
+              "ref_videos.ref_video_0": images,
+              "ref_video_audios.ref_video_audio_0": audio}
     inputs.update({f"ref_images.ref_image_{i}": image for i, image in enumerate(_refs(r, node), 1)})
+    video_prompt = "crossview. " + prompts(r)[1]
     positive = node("references", "MiniMaxH3ReferenceToVideo", clip=clip, vae=vae, audio_vae=audio_vae,
-                    prompt=prompts(r)[1], width=r.width, height=r.height, length=padded, ref_image_size="match", **inputs)
+                    prompt=video_prompt, width=r.width, height=r.height, length=padded, ref_image_size="match", **inputs)
     latent = ["references", 1]
     positive = node("image_guide", "MiniMaxH3AddGuide", positive=positive, latent=latent, vae=vae, image=still, frame_idx=0)
     positive = node("audio_guide", "MiniMaxH3AddGuide", positive=positive, latent=latent, audio_vae=audio_vae, audio=audio, frame_idx=0)
@@ -254,11 +266,13 @@ def build_studio_graph(project, check_asset):
 def readiness(node_mappings, get_full_path):
     sample = CameraRequest("source.mp4", camera_image="camera.png")
     graphs = {"video": build_graph(sample), "still": build_still_graph(CameraRequest("source.mp4"))}
-    result = {"presets": list(PRESETS), "max_seconds": 5, "fps": 24, "quality_verified_locally": False,
+    result = {"presets": list(PRESETS), "max_seconds": 5, "fps": 24, "quality_verified_locally": True,
+              "verified_seconds": 2, "recipe": "crossview_distilled_8step",
               "requires_original_audio": True, "default_width": 768, "default_height": 448}
     for stage, graph in graphs.items():
         files = []
-        for folder, filename in (MODELS if stage == "video" else STILL_MODELS).values():
+        model_entries = list(MODELS.values()) if stage == "video" else list(STILL_MODELS.values())
+        for folder, filename in model_entries:
             try:
                 ready = bool(get_full_path(folder, filename))
             except KeyError:

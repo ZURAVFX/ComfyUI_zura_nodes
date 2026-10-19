@@ -57,7 +57,7 @@ The progress bar represents the current stage only. Unknown progress is indeterm
 
 Progress keeps the artist's operation in the heading and the current native processing step beneath it. Model handoffs, queue waits and model loading clear previous sampling percentages, step counts and time estimates immediately. Measured remaining time describes the active step, rather than promising a finish time for the entire shot.
 
-Change camera angle is an H3 preview task with its own angle preset and optional direction prompt. References are optional, or the artist can upload a finished camera still. One primary action creates that still; the artist reviews it before video generation. This route hides masks, replacement audio and fixed sampler settings. It requires source audio, labels its preview status, and asks the artist to check the middle and end for camera drift.
+Change camera angle uses the approved H3 CrossView recipe with its own angle preset and direction prompt. Up to five optional references have Person or Room roles, or the artist can upload a finished camera still. One primary action creates the still; after review it becomes Use this angle & generate. Regeneration is a secondary action beside camera direction. Changing that direction requires a new still before video controls appear. The route hides masks, duplicate prompts, replacement audio and fixed sampler settings. It requires source audio and describes the approved two-second test separately from the supported five-second limit. Source / Camera still / Review & render / Result navigation reflects this flow.
 
 State transitions use short ease-out changes. Indeterminate progress conveys ongoing work. Reduced-motion preferences disable animation and transitions.
 

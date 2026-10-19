@@ -195,6 +195,7 @@ jobs:
           python -m unittest discover -s tests -p 'test_studio_create_look.py'
           python -m unittest discover -s tests -p 'test_file_cache.py'
           python -m unittest discover -s tests -p 'test_studio_runtime_efficiency.py'
+          python -m unittest discover -s tests -p 'test_h3_camera.py'
           python -m unittest discover -s tests -p 'test_wan_animate2_studio.py'
           python -m unittest discover -s tests -p 'test_studio_mask_*.py'
           python -m unittest discover -s tests -p 'test_save_review_masks.py'

@@ -1,6 +1,6 @@
 # Change camera angle
 
-Status: local integration test completed, artist quality review still required. A two-second test delivered 48 frames at 768 × 448 with original audio. The view moved towards the source framing later in the take, so this mode remains labelled Preview.
+Status: the artist-approved CrossView recipe is integrated in Studio. A two-second local integration test delivered 48 frames at 768 × 448 with original audio. See [Change camera angle](CAMERA_ANGLE.md) for the current guided flow and tested limits.
 
 A guided two-pass adaptation of the supplied distilled camera workflow. Choose a short source interval, select a camera preset or add direction, and optionally add identity or room references. Generate and review the camera still, or upload a finished still to skip the entire image model. Generate video only after approving that still. No segmentation pass or spatial mask is used.
 
@@ -10,4 +10,4 @@ Start with a two-second 768 × 448 test. The supplied workflow describes tests u
 
 Only the still stage loads the image model. Only the video stage loads H3. Uploading a finished still loads neither image encoders nor image diffusion weights. Optional references are bounded proportionally using the supplied workflow’s original image-size bounds. No model purge or forced unload is inserted by this adapter.
 
-The integration has CPU graph-contract coverage. New video output from this adapter has not yet received a local artist review. The user’s source paths, reference photographs and personal prompts are excluded from the shipped adapter.
+The integration has CPU graph-contract and interface coverage. The approved recipe also uses the CrossView Warp LoRA at 0.8 after the 12/3 sigma shift, without a geometry-warp preprocessing pass. The user's source paths, reference photographs and personal prompts are excluded from the shipped adapter.
