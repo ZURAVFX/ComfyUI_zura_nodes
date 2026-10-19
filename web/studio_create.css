@@ -23,7 +23,7 @@
 .zc-card-art i:nth-child(2){height:134px;background:linear-gradient(145deg,#d8cbb8,#ac9277 50%,#575344 51%,#a29579);transform:translateY(-8px) rotate(4deg)}
 .zc-card-art i:nth-child(3){transform:rotate(15deg);background:linear-gradient(155deg,#a1b8b1,#617d73 50%,#3c4945 51%,#788980)}
 .zc-video-art{background:#242427;gap:6px}
-.zc-video-art i,.zc-video-art i:nth-child(2),.zc-video-art i:nth-child(3){width:112px;height:94px;transform:skewY(-7deg);border-top:9px solid #101013;border-bottom:9px solid #101013;box-shadow:none}
+.zc-video-art i,.zc-video-art i:nth-child(2),.zc-video-art i:nth-child(3){width:112px;height:94px;transform:skewY(-7deg);border-top:9px solid #101013;border-bottom:9px solid #101013;border-radius:0;box-shadow:none}
 #genj-studio .zc-private{font-size:12px}
 .zc-image-page{display:grid;grid-template-columns:260px minmax(0,1fr);gap:28px;padding:12px 28px 24px;flex:1;min-height:0;width:100%;max-width:1920px;margin:auto}
 .zc-image-settings{padding:24px 20px;background:var(--gs-panel);border-radius:16px;overflow:auto;min-height:0;display:flex;flex-direction:column;gap:12px;scrollbar-width:thin}
