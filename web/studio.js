@@ -7,6 +7,7 @@ import { ContentDetection } from "./studio_content.js";
 import { clipLength, recoverClipLength } from "./studio_length.js";
 import { ShotComparison } from "./studio_compare.js";
 import { ClipTrimmer } from "./studio_trim.js";
+import { CreativeWorkspace } from "./studio_create.js";
 
 const ROOT = "/zura/studio";
 const defaults = {engine:"wan", background:"keep", scope:"person", prompt:"", image_prompt:"", start:0, duration:2, size:512, performer:-1, margin:20, pitch:false, seed:42, render_size:0, h3_head_swap:false, h3_preset:"take_fast", h3_steps:0, h3_attention:"native", remove_text:false, resolution:1280, delivery_mode:"native", quality:"fast", audio_id:"", audio_start:0, length_mode:"custom", lip_sync:false, refine_lips:false, workflow_mode:"swap", preserve_people:false, edit_area:"mask", mask_method:"auto", mask_prompt:"person", mask_points:[],subject_mode:"people",finished_frame_position:"first",finished_frame_number:1};
@@ -185,7 +186,7 @@ class ArtistStudio {
         <div id="gs-message" class="gs-message" role="status" aria-live="polite" hidden></div>
         <section class="gs-results" id="gs-results" hidden><div class="gs-section-heading"><h2>Your takes</h2><span>Your selected soundtrack is restored automatically.</span></div><div id="gs-takes"></div></section>
         <section class="gs-library"><div class="gs-section-heading"><h2>Recent shots</h2><button id="gs-refresh" class="gs-quiet">Refresh</button></div><div id="gs-library-list"><p class="gs-note">Your shots are saved on this computer. You can return to them later.</p></div></section>
-        </div><footer class="gs-composer" aria-label="Prompt and source range"><div id="gs-trim-controls"></div><section id="gs-trimmer" hidden aria-label="Source video trim timeline"></section><details id="gs-trim-precision" class="gs-advanced" hidden><summary>Precise timing</summary><div class="gs-two"></div></details><div id="gs-prompt-stage" class="gs-prompt-stage" role="group" aria-label="Prompt stage"><button type="button" data-prompt-stage="image">Image</button><button type="button" data-prompt-stage="video">Video</button></div><div id="gs-prompt-composer"></div></footer>
+        </div><footer class="gs-composer" aria-label="Prompt and source range"><div id="gs-trim-controls"></div><section id="gs-trimmer" hidden aria-label="Source video trim timeline"></section><details id="gs-trim-precision" class="gs-advanced" hidden><summary>Precise timing</summary><div class="gs-two"></div></details><div id="gs-prompt-stage" class="gs-prompt-stage" role="group" aria-label="Prompt stage"><button type="button" data-prompt-stage="image">Frame prompt</button><button type="button" data-prompt-stage="video">Motion prompt</button></div><div id="gs-prompt-composer"></div></footer>
       </main></div>`;
     if(this.container.querySelector){
       const clip=this.container.querySelector(".gs-clip-length");
@@ -201,6 +202,7 @@ class ArtistStudio {
       player.addEventListener("loadedmetadata",()=>{if(this.lastVideo===this.source?.url)player.currentTime=Math.min(this.trimSeekTime ?? this.trimTimeline.range.start,Math.max(0,this.source.duration-.001));});
     }
     this.bind();this.syncForm();
+    if(typeof CreativeWorkspace!=="undefined")this.creative=new CreativeWorkspace(this,api,app);
   }
   compareTake(url) {
     const p=this.project,source=p?.selected_url || this.source?.url,result=url || p?.results?.at(-1)?.url;
@@ -235,8 +237,9 @@ class ArtistStudio {
   updateFullscreenLabel(){const canvas=this.$("canvas");this.$("preview-fullscreen").querySelector("span").textContent=document.fullscreenElement===canvas || canvas.classList.contains("is-expanded")?"Exit fullscreen":"Fullscreen";}
   revealControl(target, focus=target) {
     if(!target)return;
+    for(let parent=target.parentElement;parent;parent=parent.parentElement)if(parent.tagName==="DETAILS")parent.open=true;
     const desktop=window.matchMedia?.("(min-width: 901px)")?.matches ?? true;
-    const panel=desktop?target.closest(".gs-controls,.gs-settings,.gs-preview-scroll,.gs-main"):this.container;
+    const panel=desktop?target.closest(this.creative?".gs-controls,.gs-preview-scroll,.gs-composer":".gs-controls,.gs-settings,.gs-preview-scroll,.gs-main"):this.container;
     if(panel && panel!==target){
       const bounds=panel.getBoundingClientRect(),item=target.getBoundingClientRect();
       // Scroll only the owning panel. scrollIntoView also scrolls hidden ancestors.
@@ -1338,6 +1341,7 @@ class ArtistStudio {
   async open() {
     if(!this.container.isConnected)document.body.appendChild(this.container);
     document.documentElement.classList.add("genj-open");this.render();
+    if(this.creative?.job)this.creative.startPolling();
     if(window.matchMedia?.("(min-width: 901px)")?.matches ?? true)this.container.scrollTop=0;
     try{
       this.modelStatus=await request("/status");this.syncForm();this.render();
@@ -1400,7 +1404,7 @@ class ArtistStudio {
     }catch(e){if(epoch===this.resetEpoch)this.message("Connection interrupted. Your job is saved. Reopen this view when ComfyUI reconnects.",true);}
     finally{if(epoch===this.resetEpoch)this.polling=false;}
   }
-  close(){this.comparison?.hide();this.trimTimeline?.close();this.$("canvas").classList.remove("is-expanded");if(document.fullscreenElement===this.$("canvas"))document.exitFullscreen?.().catch(()=>{});this.container.querySelectorAll("video,audio").forEach(media=>media.pause());this.container.remove();document.documentElement.classList.remove("genj-open");clearInterval(this.timer);}
+  close(){this.creative?.close();this.comparison?.hide();this.trimTimeline?.close();this.$("canvas").classList.remove("is-expanded");if(document.fullscreenElement===this.$("canvas"))document.exitFullscreen?.().catch(()=>{});this.container.querySelectorAll("video,audio").forEach(media=>media.pause());this.container.remove();document.documentElement.classList.remove("genj-open");clearInterval(this.timer);}
 }
 
 app.registerExtension({
@@ -1419,6 +1423,7 @@ app.registerExtension({
   async setup(){
     installArtistLinkRendering(app);
     const css=document.createElement("link");css.rel="stylesheet";css.href=new URL("./studio.css",import.meta.url).href;document.head.appendChild(css);
+    const createCss=document.createElement("link");createCss.rel="stylesheet";createCss.href=new URL("./studio_create.css",import.meta.url).href;document.head.appendChild(createCss);
     const studio=new ArtistStudio();
     studio.container.querySelector(".gs-zura-mark").src=new URL("./assets/zura-logo.png",import.meta.url).href;
     const button=document.createElement("button");button.id="genj-studio-launch";button.innerHTML=`<img class="gs-launch-logo" src="${new URL("./assets/zura-logo.png",import.meta.url).href}" alt="" width="24" height="24"/>Zura Studio`;button.title="Switch to Studio view";

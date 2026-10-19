@@ -26,4 +26,11 @@ Native sampling progress may expose steps. Loading and other stages without meas
 
 ## Approved design direction
 
-The user supplied and approved a dark navy/purple Zura editor composition: source and starting-look controls on the left, a large video preview and takes in the centre, shot settings and actions on the right, with a clear Source / Look / Review / Generate sequence. Adapt it to real app capabilities and smaller screens. Do not add mock accounts, decorative window controls or unsupported output options.
+The current direction is the user's Artify reference: a quiet charcoal canvas,
+compact tools and a persistent prompt plus primary action. Zura retains its
+actual logo and violet accent. A simple Home screen offers Image and Video.
+Image contains three locally tested native recipes for 16 GB hardware. Video
+preserves approved shot routes with source/look controls and a collapsible
+settings section. Do not introduce decorative account controls, mock galleries,
+paid generation, or unsupported output options. The previous navy three-column
+layout is superseded by this canvas-first composition.

@@ -71,3 +71,22 @@ Clip range uses Use source / Trim buttons and a source filmstrip with draggable 
 ## Character creation flow
 
 Source contains the video and appearance references. The central desktop workspace keeps its prompt composer visible below the media area, which scrolls independently. Image and video prompts keep distinct text; camera direction uses the same visible composer even with an uploaded camera still. One main action creates the starting frame, including source preparation, without queuing animation. The centre previews the resulting frame and offers Selection / Guidance / Original tabs for inspection. Camera stills do not require a mask-review record, and stills and videos can be expanded fullscreen. Video resolution, sampling and audio controls appear after the frame exists. Regenerate is a secondary revision action available only for an existing frame. The main action then becomes Generate video. Direct-portrait and direct-viewport workflows retain their explicit shortcuts.
+
+## October 2026 Image / Video overhaul
+
+The Artify reference supplied by the user supersedes the earlier three-column
+composition described above. `studio_create.css` is the new shell layer.
+Charcoal ground (#101013), slightly lighter tools (#19191e), composer (#222228),
+quiet borders (#33333d), Zura violet actions and the unchanged real logo replace
+the navy overhead glow. Typography remains the established system sans-serif.
+
+Home offers two clear choices. Image uses one compact model/shape sidebar, a
+real-output gallery, and a persistent prompt + Generate image composer. Small
+screens hide settings behind a labelled Settings button while keeping the
+composer visible. No stock gallery implies generated user results.
+
+Video keeps its proven stage logic and controls but folds model/quality/audio
+into Generation settings. The primary action moves to the prompt composer.
+Trimming has its own disclosure so the prompt remains visible. Native Graph
+view and saved shots remain accessible. The latest implementation and
+qualification limits are documented in docs/IMAGE_STUDIO.md.

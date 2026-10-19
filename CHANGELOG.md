@@ -1,5 +1,13 @@
 # Release notes
 
+## Unreleased - Image / Video Studio
+
+- Add a simple Image / Video home screen and a charcoal, canvas-first workspace inspired by the supplied Artify reference, retaining Zura's logo and violet accent.
+- Add native Flux 3 Klein INT8, Flux 2 Klein 4B FP8 and Z-Image Turbo image generation, each rendered and inspected locally at 1024px on a 16 GB RTX 4080.
+- Keep a persistent image prompt and Generate button, local output gallery, downloads, reusable prompts/seeds, targeted cancellation and recovery of an active run.
+- Preserve all approved video recipes while moving the primary action beside the prompt and collapsing generation settings and trimming into clear disclosures.
+- Add DOM coverage for workspace switching, model readiness, duplicate submission prevention, targeted cancellation, history and failure recovery.
+
 ## 1.3.27 - 19 October 2026
 
 - Add a source filmstrip with draggable trim handles, frame-level keyboard adjustments and optional precise timing. Submit the selected range once when a drag ends.

@@ -232,6 +232,7 @@ jobs:
           node tests/test_studio_upload.mjs
           node tests/test_studio_upload_dom.mjs
           node tests/test_studio_trim.mjs
+          node tests/test_studio_create.mjs
           node tests/test_studio_length.mjs
           node tests/test_studio_layout.mjs
           node tests/test_studio_reset.mjs
