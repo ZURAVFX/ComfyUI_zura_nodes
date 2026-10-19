@@ -169,3 +169,41 @@ html.genj-open,html.genj-open body{overflow:clip!important;overscroll-behavior:n
 .gs-image-editor button{white-space:nowrap;min-height:42px;padding:10px 16px;background:var(--gs-selected);border:1px solid var(--gs-accent-bright);border-radius:7px}
 @media(max-width:600px){.gs-image-editor>div{align-items:stretch;flex-direction:column}.gs-image-editor button{width:100%}}
 .gs-segment input:disabled+span{opacity:.4;cursor:not-allowed}
+
+/* Prompt stays in the workspace footer; media and history scroll above it. */
+.gs-composer{padding:14px 16px;background:var(--gs-panel);border:1px solid var(--gs-line);border-radius:10px;margin-top:12px;display:flex;flex-direction:column;gap:10px;min-width:0}
+.gs-composer .gs-label{margin-bottom:6px}.gs-composer .gs-clip-length>span{display:none}
+.gs-composer .gs-length-choice{max-width:310px}.gs-composer .gs-length-choice button{min-height:32px;padding:6px 12px}
+.gs-composer .gs-prompt-toggle,.gs-composer .gs-image-editor{padding:0;border:0;margin:0}
+#genj-studio .gs-composer textarea{min-height:66px;max-height:130px;resize:vertical}
+.gs-composer .gs-image-editor>div{margin-top:8px}.gs-composer .gs-image-editor>div>span{display:none}
+.gs-composer .gs-image-editor button{padding:8px 12px;min-height:36px;font-size:12px!important}
+.gs-prompt-stage{display:flex;gap:6px}.gs-prompt-stage button{padding:6px 12px;min-height:32px;border:1px solid transparent;background:transparent;color:var(--gs-muted);border-radius:5px;font:inherit;cursor:pointer}
+.gs-prompt-stage button[aria-pressed=true]{background:var(--gs-selected);border-color:var(--gs-accent-bright);color:var(--gs-ink)}
+.gs-trim-heading,.gs-trim-caption{display:flex;justify-content:space-between;gap:12px;font-size:12px;line-height:1.5}
+.gs-trim-heading{margin-bottom:7px}.gs-trim-caption{margin-top:7px;color:var(--gs-muted);flex-wrap:wrap}
+.gs-trim-heading output,.gs-trim-caption output{font-variant-numeric:tabular-nums;white-space:nowrap}
+.gs-trim-track{position:relative;height:52px;margin:0 28px;background:#283347;border-radius:4px;cursor:crosshair;touch-action:pan-y;isolation:isolate}
+.gs-trim-film{position:absolute;inset:0;display:flex;overflow:hidden;border-radius:4px;pointer-events:none}
+.gs-trim-film img{width:12.5%;height:100%;object-fit:cover;min-width:0}
+.gs-trim-shade{position:absolute;top:0;bottom:0;background:#080c13b8;pointer-events:none}
+.gs-trim-shade.is-before{left:0;width:var(--trim-in,0%)}.gs-trim-shade.is-after{left:var(--trim-out,100%);right:0}
+.gs-trim-selection{position:absolute;top:0;bottom:0;left:var(--trim-in,0%);right:calc(100% - var(--trim-out,100%));border-top:3px solid var(--gs-accent-bright);border-bottom:3px solid var(--gs-accent-bright);pointer-events:none}
+.gs-trim-handle{position:absolute;top:-4px;bottom:-4px;width:28px;transform:translateX(-50%);border:0;padding:0;background:transparent;cursor:ew-resize;touch-action:none;z-index:2}
+.gs-trim-handle.is-start{left:var(--trim-in,0%);transform:translateX(-100%)}.gs-trim-handle.is-end{left:var(--trim-out,100%);transform:none}
+.gs-trim-handle:before{content:"";display:block;margin:auto;width:12px;height:100%;border-radius:3px;background:var(--gs-accent-bright)}
+.gs-trim-handle.is-start:before{margin-right:0}.gs-trim-handle.is-end:before{margin-left:0}
+.gs-trim-handle:after{content:"";position:absolute;left:5px;top:21px;width:2px;height:16px;background:#171026;border-radius:1px}.gs-trim-handle.is-start:after{left:auto;right:5px}
+.gs-trim-handle:disabled{cursor:default}.gs-trim-playhead{position:absolute;top:-3px;bottom:-3px;width:2px;background:#fff;pointer-events:none;z-index:1}
+.gs-preview-fullscreen{position:absolute;right:14px;top:14px;z-index:4;display:flex;align-items:center;gap:8px;border:1px solid #71809a;border-radius:6px;background:#080c13e8;color:#fff;padding:10px 12px;font:inherit;cursor:pointer}
+.gs-canvas.is-camera-still>img{max-height:none}
+.gs-canvas:fullscreen,.gs-canvas.is-expanded{width:100%;height:100%;max-height:none;min-height:0;aspect-ratio:auto;border:0;border-radius:0;background:#05070c}
+.gs-canvas.is-expanded{position:fixed;inset:0;width:100vw;height:100dvh;z-index:2000}
+.gs-canvas:fullscreen>video,.gs-canvas:fullscreen>img,.gs-canvas.is-expanded>video,.gs-canvas.is-expanded>img{width:100%;height:100%;max-height:none;object-fit:contain}
+@media(min-width:901px){
+ .gs-main{display:flex;flex-direction:column;overflow:clip}
+ .gs-preview-scroll{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;scrollbar-gutter:stable;scrollbar-width:thin;scrollbar-color:#535f75 transparent}
+ .gs-composer{flex-shrink:0;max-height:50%;overflow-y:auto;overscroll-behavior:contain;scrollbar-width:thin}
+ .gs-canvas.is-camera-still:not(:fullscreen):not(.is-expanded){aspect-ratio:auto;height:calc(100dvh - 470px);min-height:280px}
+}
+@media(max-width:900px){.gs-preview-scroll{overflow:visible}.gs-composer{margin-top:16px}.gs-trim-caption>span{max-width:55%}.gs-trim-track{margin:0 44px}.gs-trim-handle{width:44px}.gs-preview-fullscreen{top:10px;right:10px;min-height:44px}}

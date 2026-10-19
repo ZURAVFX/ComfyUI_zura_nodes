@@ -6,6 +6,7 @@ import { stageProgress } from "./studio_progress.js";
 import { ContentDetection } from "./studio_content.js";
 import { clipLength, recoverClipLength } from "./studio_length.js";
 import { ShotComparison } from "./studio_compare.js";
+import { ClipTrimmer } from "./studio_trim.js";
 
 const ROOT = "/zura/studio";
 const defaults = {engine:"wan", background:"keep", scope:"person", prompt:"", image_prompt:"", start:0, duration:2, size:512, performer:-1, margin:20, pitch:false, seed:42, render_size:0, h3_head_swap:false, h3_preset:"take_fast", h3_steps:0, h3_attention:"native", remove_text:false, resolution:1280, delivery_mode:"native", quality:"fast", audio_id:"", audio_start:0, length_mode:"custom", lip_sync:false, refine_lips:false, workflow_mode:"swap", preserve_people:false, edit_area:"mask", mask_method:"auto", mask_prompt:"person", mask_points:[],subject_mode:"people",finished_frame_position:"first",finished_frame_number:1};
@@ -35,6 +36,7 @@ const icon = (name) => {
     plus:'<path d="M12 5v14M5 12h14"/>',
     reset:'<path d="M3 12a9 9 0 1 0 2.64-6.36L3 8m0-5v5h5"/>',
     close:'<path d="m6 6 12 12M6 18 18 6"/>',
+    expand:'<path d="M8 3H3v5m13-5h5v5M3 16v5h5m13-5v5h-5"/>',
   };
   return `<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">${paths[name] || paths.frames}</svg>`;
 };
@@ -99,7 +101,7 @@ class ArtistStudio {
           </div><p id="gs-look-note" class="gs-note">Add people, objects or scene references.</p>
           <div id="gs-camera-look" class="gs-upload-group" hidden>
             <label for="gs-camera_preset"><span class="gs-label">Camera angle</span><select id="gs-camera_preset"><option value="Natural medium">Natural medium</option><option value="Left three-quarter">Left three-quarter</option><option value="Right three-quarter">Right three-quarter</option><option value="Left profile">Left profile</option><option value="Right profile">Right profile</option><option value="Low-angle portrait">Low-angle portrait</option><option value="High-angle portrait">High-angle portrait</option><option value="Tight close-up">Tight close-up</option><option value="Environmental wide">Environmental wide</option><option value="Custom prompt only">Custom prompt</option></select></label>
-            <label for="gs-camera_prompt"><span class="gs-label">Camera direction <span class="gs-optional">Optional</span></span><textarea id="gs-camera_prompt" rows="3" maxlength="5000" placeholder="Keep the same person and setting. View from their left at eye level."></textarea></label>
+            <label id="gs-camera-direction-setting" for="gs-camera_prompt"><span class="gs-label">Camera prompt <span class="gs-optional">Optional</span></span><textarea id="gs-camera_prompt" rows="3" maxlength="5000" placeholder="Describe the new camera view, framing and details to keep."></textarea></label>
             <button id="gs-camera-regenerate" class="gs-quiet" type="button" hidden>Regenerate camera still</button>
           </div>
           <div id="gs-ready-group" class="gs-upload-group" hidden>
@@ -177,17 +179,26 @@ class ArtistStudio {
         <section id="gs-image-editor" class="gs-image-editor" hidden><label for="gs-image_prompt" class="gs-label">Starting frame prompt</label><textarea id="gs-image_prompt" rows="2" maxlength="5000" placeholder="Describe appearance and lighting, or leave blank to reuse the video prompt" aria-label="Image generation prompt"></textarea><div><span>Optional. Leave blank to use your video prompt.</span><button id="gs-redesign" class="gs-quiet" type="button">Regenerate frame</button></div></section>
         <div class="gs-action-area"><button id="gs-primary" class="gs-primary" disabled>Prepare shot ${icon("arrow")}</button><p id="gs-action-note" aria-live="polite">Add a video and starting look.</p><button id="gs-starting-image" class="gs-quiet" hidden>Replace starting frame</button><input class="gs-file" id="gs-opening-file" type="file" accept="image/png,image/jpeg,image/webp" aria-label="Starting image"/><button id="gs-cancel" class="gs-quiet gs-cancel" hidden>Stop this job</button></div>
       </aside>
-      <main class="gs-main">
+      <main class="gs-main"><div class="gs-preview-scroll">
         <div class="gs-preview-heading"><div><h2 id="gs-preview-title">Your performance, a new character</h2><p id="gs-preview-description">Upload the shot you want to transform. We’ll follow its motion and keep the original soundtrack.</p></div><div id="gs-preview-tabs" class="gs-tabs" hidden><button data-view="look" hidden>Starting frame</button><button data-view="mask" class="active">Selection</button><button data-view="guide">Guidance</button><button data-view="source">Original</button></div></div>
         <button id="gs-compare-toggle" class="gs-quiet gs-compare-launch" type="button" hidden>Compare before / after</button><section id="gs-comparison" class="gs-comparison" aria-label="Compare source and final render" hidden></section><div class="gs-canvas" id="gs-canvas"><div class="gs-empty" id="gs-empty">${icon("frames")}<h3>Your shot starts here</h3><p>Add a video and a starting look in the controls.</p></div><video id="gs-player" controls playsinline preload="metadata" hidden></video><img id="gs-opening" alt="Starting frame for this shot" hidden/><div id="gs-working" class="gs-working" hidden><div class="gs-progress-heading"><strong id="gs-working-title">Preparing your shot</strong><div class="gs-progress-actions"><span id="gs-working-percent"></span><button id="gs-live-cancel" type="button" class="gs-stop">Cancel run</button></div></div><div id="gs-working-progress" class="gs-loading-bar is-indeterminate" role="progressbar" aria-label="Current stage progress" aria-valuemin="0" aria-valuemax="100"><div id="gs-working-fill"></div></div><div class="gs-progress-caption"><span id="gs-working-detail" role="status" aria-live="polite">Estimating time for this stage…</span><span id="gs-working-meta"></span></div></div></div>
         <div id="gs-message" class="gs-message" role="status" aria-live="polite" hidden></div>
         <section class="gs-results" id="gs-results" hidden><div class="gs-section-heading"><h2>Your takes</h2><span>Your selected soundtrack is restored automatically.</span></div><div id="gs-takes"></div></section>
         <section class="gs-library"><div class="gs-section-heading"><h2>Recent shots</h2><button id="gs-refresh" class="gs-quiet">Refresh</button></div><div id="gs-library-list"><p class="gs-note">Your shots are saved on this computer. You can return to them later.</p></div></section>
+        </div><footer class="gs-composer" aria-label="Prompt and source range"><div id="gs-trim-controls"></div><section id="gs-trimmer" hidden aria-label="Source video trim timeline"></section><details id="gs-trim-precision" class="gs-advanced" hidden><summary>Precise timing</summary><div class="gs-two"></div></details><div id="gs-prompt-stage" class="gs-prompt-stage" role="group" aria-label="Prompt stage"><button type="button" data-prompt-stage="image">Image</button><button type="button" data-prompt-stage="video">Video</button></div><div id="gs-prompt-composer"></div></footer>
       </main></div>`;
     if(this.container.querySelector){
-      const look=this.container.querySelector(".gs-look"),clip=this.container.querySelector(".gs-clip-length");
-      look.before(clip,this.$("trim-start"));
-      look.appendChild(this.$("image-editor"));
+      const clip=this.container.querySelector(".gs-clip-length");
+      this.$("trim-controls").appendChild(clip);
+      this.$("trim-precision").querySelector(".gs-two").append(this.$("trim-start"),this.$("duration-setting"));
+      this.$("prompt-composer").append(this.$("model-prompt"),this.$("image-editor"),this.$("camera-direction-setting"));
+      const fullscreen=document.createElement("button");fullscreen.id="gs-preview-fullscreen";fullscreen.className="gs-preview-fullscreen";fullscreen.type="button";fullscreen.hidden=true;fullscreen.title="Expand preview. Press Escape to return.";fullscreen.innerHTML=icon("expand")+"<span>Fullscreen</span>";fullscreen.onclick=()=>this.expandPreview();this.$("canvas").appendChild(fullscreen);
+      this.$("canvas").onfullscreenchange=()=>this.updateFullscreenLabel();
+      this.trimTimeline=new ClipTrimmer(this.$("trimmer"),{onCommit:range=>this.setTrim(range),onSeek:time=>this.seekSource(time)});
+      const player=this.$("player");
+      player.addEventListener("timeupdate",()=>{if(this.lastVideo===this.source?.url){this.trimTimeline.setPlayhead(player.currentTime);if(!player.paused && player.currentTime>=this.trimTimeline.range.end)player.pause();}});
+      player.addEventListener("play",()=>{if(this.lastVideo===this.source?.url){const {start,end}=this.trimTimeline.range;if(player.currentTime<start || player.currentTime>=end)player.currentTime=start;}});
+      player.addEventListener("loadedmetadata",()=>{if(this.lastVideo===this.source?.url)player.currentTime=Math.min(this.trimSeekTime ?? this.trimTimeline.range.start,Math.max(0,this.source.duration-.001));});
     }
     this.bind();this.syncForm();
   }
@@ -199,10 +210,33 @@ class ArtistStudio {
     this.comparison.show(source,result,p?.selected_url?0:(p?.config?.start || 0));this.render();
   }
   $(id) { return this.container.querySelector("#gs-" + id); }
+  async setTrim(range){
+    return this.perform(async epoch=>{
+      this.config={...this.readConfig(),...range,length_mode:"custom",...(range.start!==this.config.start?{mask_points:[]}:{} )};
+      this.trimSeeking=false;this.syncForm();
+      if(this.project){const id=this.project.id,updated=await request(`/projects/${id}/config`,this.configBody(this.config));if(epoch!==this.resetEpoch)return;if(this.project?.id===id)this.project=updated;}
+      this.render();
+    });
+  }
+  seekSource(time){
+    if(!this.source)return;
+    this.trimSeekTime=time;
+    if(!this.trimSeeking){this.trimSeeking=true;this.preview="source";this.compareActive=false;this.render();}
+    const player=this.$("player");
+    if(player.readyState)player.currentTime=Math.max(0,Math.min(time,Math.max(0,this.source.duration-.001)));
+  }
+  async expandPreview(){
+    const canvas=this.$("canvas");
+    if(document.fullscreenElement===canvas){await document.exitFullscreen?.();return;}
+    if(canvas.classList.contains("is-expanded")){canvas.classList.remove("is-expanded");this.updateFullscreenLabel();return;}
+    try{if(!canvas.requestFullscreen)throw new Error("Fullscreen unavailable");await canvas.requestFullscreen();}
+    catch{canvas.classList.add("is-expanded");this.updateFullscreenLabel();}
+  }
+  updateFullscreenLabel(){const canvas=this.$("canvas");this.$("preview-fullscreen").querySelector("span").textContent=document.fullscreenElement===canvas || canvas.classList.contains("is-expanded")?"Exit fullscreen":"Fullscreen";}
   revealControl(target, focus=target) {
     if(!target)return;
     const desktop=window.matchMedia?.("(min-width: 901px)")?.matches ?? true;
-    const panel=desktop?target.closest(".gs-controls,.gs-settings,.gs-main"):this.container;
+    const panel=desktop?target.closest(".gs-controls,.gs-settings,.gs-preview-scroll,.gs-main"):this.container;
     if(panel && panel!==target){
       const bounds=panel.getBoundingClientRect(),item=target.getBoundingClientRect();
       // Scroll only the owning panel. scrollIntoView also scrolls hidden ancestors.
@@ -335,6 +369,8 @@ class ArtistStudio {
     select.value=mode;select.dispatchEvent(new Event("change",{bubbles:true}));
   }
   bind() {
+    this.container.querySelectorAll("[data-prompt-stage]").forEach(button=>button.onclick=()=>{this.promptStage=button.dataset.promptStage;this.render();});
+    this.container.addEventListener("keydown",event=>{if(event.key==="Escape"){this.$("canvas").classList.remove("is-expanded");this.updateFullscreenLabel();}});
     this.container.querySelectorAll("[data-length-mode]").forEach(button=>button.onclick=()=>this.chooseClipLength(button.dataset.lengthMode));
     this.container.querySelectorAll("[data-step]").forEach(button=>button.onclick=()=>{
       const targets=[this.$("source-drop"),this.container.querySelector(".gs-look"),this.$("primary"),this.$("canvas")];
@@ -410,7 +446,7 @@ class ArtistStudio {
     };
     for (const type of ["source","character","ready","audio"])this.bindUpload(type);
     this.$("preview-tabs").querySelectorAll("button").forEach(button=>button.onclick=()=>{
-      this.preview=button.dataset.view;this.render();
+      this.trimSeeking=false;this.preview=button.dataset.view;this.render();
     });
     this.$("library-list").onclick=e=>{
       const button=e.target.closest("[data-project]");if(button)this.loadProject(button.dataset.project);
@@ -601,7 +637,7 @@ class ArtistStudio {
       }else{
         this[type]=asset;this.project=null;localStorage.removeItem("genj-studio-project");this.lastVideo=null;
       }
-      if(type==="source"){this.config.duration=Math.min(2,asset.duration);this.config.start=0;this.config.mask_points=[];this.pointFrameStart=0;this.syncForm();}
+      if(type==="source"){this.trimSeeking=false;this.trimSeekTime=null;this.promptStage=null;this.config.duration=Math.min(2,asset.duration);this.config.start=0;this.config.mask_points=[];this.pointFrameStart=0;this.syncForm();}
       }
       this.message("");this.render();
     });
@@ -657,6 +693,7 @@ class ArtistStudio {
   }
   async primary() {
     if(!verifiedSetup(this.config)){this.message(verifiedNotice,true);return;}
+    this.trimSeeking=false;this.$("canvas")?.classList?.remove("is-expanded");
     return this.primaryRecipe();
   }
   async primaryRecipe() {
@@ -671,6 +708,7 @@ class ArtistStudio {
     }
     if(clipLength(selectedConfig,this.source?.duration).invalid){
       this.config=recoverClipLength(selectedConfig,this.source.duration);this.syncForm();this.render();
+      this.$("trim-precision").open=true;
       this.revealControl(this.$("duration"));this.$("duration").select();
       this.message("Choose the clip length, then prepare your shot.");return;
     }
@@ -714,13 +752,13 @@ class ArtistStudio {
     });
   }
   defaultReviewPreview(project,wholeScene) {
-    if(!project?.review)return;
-    const key=project.id+":"+(project.prepared_key || project.review);
-    if(project.phase==="opening"){
-      this.reviewPreviewKey=key;
-      if(this.openingPreviewKey!==project.opening_key){this.openingPreviewKey=project.opening_key;this.preview="look";}
+    if(project?.phase==="opening" && project.opening_input){
+      const openingKey=project.id+":"+(project.opening_key||project.opening_url||project.opening_input);
+      if(this.openingPreviewKey!==openingKey){this.openingPreviewKey=openingKey;this.preview="look";this.trimSeeking=false;this.promptStage=null;}
       return;
     }
+    if(!project?.review)return;
+    const key=project.id+":"+(project.prepared_key || project.review);
     if(key===this.reviewPreviewKey)return;
     this.reviewPreviewKey=key;this.preview=wholeScene?"guide":"mask";
   }
@@ -897,6 +935,7 @@ class ArtistStudio {
       :"Keeps the model’s default attention.";
   }
   async reset() {
+    this.trimSeeking=false;this.trimSeekTime=null;this.promptStage=null;this.trimTimeline?.close();this.$("canvas")?.classList?.remove("is-expanded");
     if(this.resetting)return false;
     const epoch=++this.resetEpoch,project=this.project;
     this.resetting=true;this.busy=true;this.message("");this.render();
@@ -929,6 +968,7 @@ class ArtistStudio {
     return true;
   }
   async loadProject(id) {
+    this.trimSeeking=false;this.trimSeekTime=null;this.promptStage=null;
     await this.perform(async()=>{
       const epoch=this.resetEpoch,project=await request("/projects/"+id);
       if(epoch!==this.resetEpoch)return;
@@ -958,7 +998,22 @@ class ArtistStudio {
     }catch(e){this.message(e.message,true);}
   }
   render() {
-    try { return this.renderStudio(); } finally { this.applyVerifiedSurface(); }
+    try { return this.renderStudio(); } finally { this.applyVerifiedSurface();this.renderComposer(); }
+  }
+  renderComposer(){
+    const camera=this.config.workflow_mode==="camera",working=this.project?.phase==="working";
+    const canImage=!this.headSwap() && !this.directViewport() && this.lookMode!=="ready";
+    const image=canImage && (this.promptStage?this.promptStage==="image":!this.project?.opening_input);
+    this.$("model-prompt").hidden=camera || image;
+    this.$("image-editor").hidden=camera || !image;
+    this.$("camera-direction-setting").hidden=!camera;
+    this.$("prompt-stage").hidden=camera || !canImage;
+    this.container.querySelectorAll("[data-prompt-stage]").forEach(button=>{button.setAttribute("aria-pressed",String(button.dataset.promptStage===(image?"image":"video")));});
+    this.$("prompt").placeholder="Describe the action, camera movement and details to keep.";
+    const info=clipLength(this.config,this.source?.duration);
+    this.trimTimeline?.update(this.source,this.config,{disabled:this.busy||working,maximum:info.maximum});
+    this.$("trim-controls").hidden=!this.source;
+    this.$("trim-precision").hidden=!this.source || this.config.length_mode==="original";
   }
   renderStudio() {
     this.contentDetection.update(this.source,{...this.config,subject_mode:"people"});
@@ -1115,7 +1170,7 @@ class ArtistStudio {
     originalOption.textContent="Use source"+(this.source?.duration?` (${Number(this.source.duration).toFixed(2)}s)`:"");
     this.container.querySelectorAll("[data-length-mode]").forEach(button=>{
       const original=button.dataset.lengthMode==="original";
-      button.textContent=original?"Use source"+(this.source?.duration?` · ${Number(this.source.duration).toFixed(1)}s`:""):"Custom";
+      button.textContent=original?"Use source"+(this.source?.duration?` · ${Number(this.source.duration).toFixed(1)}s`:""):"Trim";
       button.setAttribute("aria-pressed",String(button.dataset.lengthMode===this.config.length_mode));
       button.disabled=working || this.busy || original && !this.source;
     });
@@ -1231,7 +1286,9 @@ class ArtistStudio {
     else progressBar.setAttribute("aria-valuenow",String(progress.percent));
     this.$("working-fill").style.width=progress.percent===null?"":`${progress.percent}%`;
     this.defaultReviewPreview(p,wholeScene);
-    this.$("preview-tabs").hidden=!p?.review || phase==="done" || phase==="draft";
+    this.$("preview-tabs").hidden=!(p?.review || workflow==="camera"&&p?.opening_input) || phase==="done" || phase==="draft";
+    this.$("preview-tabs").querySelector('[data-view="look"]').textContent=workflow==="camera"?"Camera still":"Starting frame";
+    for(const view of ["mask","guide"])this.$("preview-tabs").querySelector(`[data-view="${view}"]`).hidden=workflow==="camera";
     this.$("preview-tabs").querySelector('[data-view="look"]').hidden=!p?.opening_input;
     this.$("preview-tabs").querySelectorAll("button").forEach(b=>b.classList.toggle("active",b.dataset.view===this.preview));
     let video=this.source?.url,opening=null,title=this.source?"Your source video":"Create a new look",description=this.source?"Video loaded. Choose what changes and add your starting look.":"Start with footage or a viewport render.";
@@ -1246,8 +1303,12 @@ class ArtistStudio {
       if(phase==="opening"&&this.preview==="look"){title="Review your camera still";description="Check the angle, identity and framing before generating video.";}
       else if(phase==="done"){description="Check the middle and end for camera drift and motion changes. The original audio is restored.";}
     }
+    if(this.trimSeeking && this.source){video=this.source.url;opening=null;title="Trim your source";description="Drag the edges to choose the range. Click the strip to find a frame.";}
     this.$("preview-title").textContent=title;this.$("preview-description").textContent=description;
     const player=this.$("player"),image=this.$("opening");player.hidden=!video;image.hidden=!opening;
+    image.alt=workflow==="camera"?"Changed camera view":"Starting frame for this shot";
+    const expand=this.$("preview-fullscreen");if(expand)expand.hidden=!video&&!opening;
+    this.$("canvas").classList.toggle("is-camera-still",workflow==="camera"&&!!opening);
     if(video && video!==this.lastVideo){player.src=video;player.load();this.lastVideo=video;}
     if(!video && this.lastVideo){player.pause();player.removeAttribute("src");player.load();this.lastVideo=null;}
     if(opening && image.getAttribute("src")!==opening)image.src=opening;
@@ -1339,7 +1400,7 @@ class ArtistStudio {
     }catch(e){if(epoch===this.resetEpoch)this.message("Connection interrupted. Your job is saved. Reopen this view when ComfyUI reconnects.",true);}
     finally{if(epoch===this.resetEpoch)this.polling=false;}
   }
-  close(){this.comparison?.hide();this.container.querySelectorAll("video,audio").forEach(media=>media.pause());this.container.remove();document.documentElement.classList.remove("genj-open");clearInterval(this.timer);}
+  close(){this.comparison?.hide();this.trimTimeline?.close();this.$("canvas").classList.remove("is-expanded");if(document.fullscreenElement===this.$("canvas"))document.exitFullscreen?.().catch(()=>{});this.container.querySelectorAll("video,audio").forEach(media=>media.pause());this.container.remove();document.documentElement.classList.remove("genj-open");clearInterval(this.timer);}
 }
 
 app.registerExtension({

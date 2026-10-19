@@ -51,7 +51,7 @@ jobs:
                         'multicam_v4_clean.py', 'h3_single_angle.py',
                         'idv2v_control.py', 'klein_look.py'):
               assert Path(asset).is_file(), f'Missing multicam release asset: {asset}'
-          for asset in ('wan_artist.py', 'web/studio.js', 'web/studio.css',
+          for asset in ('wan_artist.py', 'web/studio.js', 'web/studio.css', 'web/studio_trim.js',
                         'artist_studio/__init__.py', 'artist_studio/studio.py',
                         'artist_studio/h3.py', 'artist_studio/wan.py', 'artist_studio/wan_speech.py',
                         'artist_studio/mask_selection.py', 'artist_studio/text_removal.py',
@@ -231,6 +231,9 @@ jobs:
           node tests/test_wan_graph.mjs
           node tests/test_studio_upload.mjs
           node tests/test_studio_upload_dom.mjs
+          node tests/test_studio_trim.mjs
+          node tests/test_studio_length.mjs
+          node tests/test_studio_layout.mjs
           node tests/test_studio_reset.mjs
       - name: Prepare qualified native Comfy CPU interfaces
         env:

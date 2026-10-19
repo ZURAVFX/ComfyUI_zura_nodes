@@ -2,9 +2,9 @@
 
 Choose **Change camera angle** in Zura Studio to reframe a short performance with MiniMax H3 CrossView.
 
-1. Upload your source video and choose the clip interval. Start with two seconds. This route currently requires the original audio track.
+1. Upload your source video and drag the source timeline's start and end handles to choose the clip interval. Start with two seconds. Use **Precise timing** for numeric adjustments. This route currently requires the original audio track.
 2. Choose a camera angle and optionally describe the framing. Identity and room references are optional. You can also choose **Use camera still** to upload an image already composed from the desired viewpoint.
-3. Select **Create camera still**. Review the angle, identity, clothing and framing in the large preview. **Regenerate camera still** makes another version. Changing the camera direction requires an updated still before video generation.
+3. Select **Create camera still**. The changed angle opens in the main preview. Select **Fullscreen** to inspect the full image and press Escape to return. **Regenerate camera still** makes another version. The camera prompt remains visible in the bottom composer, including when using an uploaded still. Changing the camera direction requires an updated still before video generation.
 4. Select **Use this angle & generate** to approve the still and render the original performance from the new view. Compare the result with the source and download a take.
 
 The camera still and video are separate runs, so regenerating an image never queues a video. The approved still is saved and reused during animation. Graph view opens an editable copy of the current stage, with native processing nodes.

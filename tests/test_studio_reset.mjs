@@ -20,7 +20,7 @@ function makeStudio(fetchApi=async()=>({ok:true,json:async()=>({phase:"error"})}
     references:[{id:"ref"}],readyAsset:{id:"ready"},lookMode:"ready",referenceFingerprint:"old-ref",resultFingerprint:"old-results",reviewPreviewKey:"old-review",
     pointFrameStart:9,voicePolling:true,polling:true,busy:false,resetEpoch:0,resetting:false,activeDialog:null,modelStatus:{ready:true},
     container:{querySelector:selector=>selector==='[data-step="0"]'?{click(){ui.sourceClicked=true;}}:{click(){ui.sourceClicked=true;}}}});
-  ui.$=id=>fields.get(id) || (fields.set(id,{value:"",textContent:"",hidden:false,open:false,innerHTML:"",removeAttribute(){}}),fields.get(id));
+  ui.$=id=>fields.get(id) || (fields.set(id,{value:"",textContent:"",hidden:false,open:false,innerHTML:"",classList:{remove(){}},removeAttribute(){}}),fields.get(id));
   ui.syncForm=()=>{ui.synced=true;};ui.render=()=>{ui.rendered=(ui.rendered||0)+1;};ui.message=(text,error=false)=>{ui.lastMessage=text;ui.lastMessageError=error;};
   return {ui,fields,removed};
 }

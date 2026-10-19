@@ -1,0 +1,35 @@
+import assert from 'node:assert/strict';
+import {parseHTML} from '../../ui-check/node_modules/linkedom/esm/index.js';
+import {ClipTrimmer,trimRange,trimEdge,trimTime} from '../web/studio_trim.js';
+
+assert.deepEqual(trimRange({length_mode:'original',start:4,duration:2},15),{start:0,end:15,total:15});
+assert.deepEqual(trimRange({start:14,duration:4},15),{start:14,end:15,total:15});
+assert.equal(trimEdge({start:1,end:3,total:10},'start',9).start,2.75,'Handles cannot cross');
+assert.equal(trimEdge({start:1,end:3,total:10},'end',-2).end,1.25);
+assert.equal(trimEdge({start:1,end:3,total:10},'end',30).end,10,'Source duration bounds the end');
+assert.equal(trimEdge({start:1,end:3,total:10},'end',9,5).start,4,'The range stays within the model limit');
+assert.equal(trimEdge({start:1,end:3,total:10},'start',1.019).start,1,'Timing snaps to the pipeline frame rate');
+assert.equal(trimTime(61.5),'1:01.12');
+
+const {document,window}=parseHTML('<html><body><section id="trim"></section></body></html>');
+window.HTMLElement.prototype.focus=()=>{};
+const commits=[],seeks=[],host=document.querySelector('#trim');
+const trim=new ClipTrimmer(host,{onCommit:range=>commits.push(range),onSeek:time=>seeks.push(time)});
+trim.update({duration:10,url:'test.mp4'},{start:1,duration:2},{maximum:5});
+trim.track.getBoundingClientRect=()=>({left:0,width:1000});
+const handle=edge=>host.querySelector(`[data-edge="${edge}"]`);
+const pointer=(x,id=1)=>({clientX:x,pointerId:id,button:0,preventDefault(){},stopPropagation(){}});
+handle('end').onpointerdown(pointer(300));handle('end').onpointermove(pointer(400));
+assert.equal(commits.length,0,'Dragging does not submit a config request per move');
+assert.equal(trim.range.end,4);assert.equal(seeks.at(-1),4);
+handle('end').onpointerup(pointer(450));
+assert.deepEqual(commits,[{start:1,duration:3.5}],'Release commits the exact selected interval once');
+handle('start').onpointerdown(pointer(100));handle('start').onpointermove(pointer(200));handle('start').onpointercancel();
+assert.equal(trim.range.start,1,'Cancelled drags restore the existing range');assert.equal(commits.length,1);
+handle('start').onkeydown({key:'ArrowRight',preventDefault(){},stopPropagation(){}});
+assert.ok(Math.abs(trim.range.start-25/24)<1e-8,'Keyboard arrows make one-frame adjustments');
+trim.update({duration:10,url:'test.mp4'},{start:1,duration:2},{disabled:true,maximum:5});
+handle('start').onpointerdown(pointer(200));assert.equal(trim.drag,null,'Runs lock timeline edits');
+assert.equal(handle('start').disabled,true);
+trim.update(null,{});assert.equal(host.hidden,true);trim.close();
+console.log('Source trim handles, frame snapping, model/source limits, keyboard, cancellation and single-commit dragging pass.');

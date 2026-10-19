@@ -16,6 +16,7 @@ vm.createContext(context);vm.runInContext(source+'\nthis.Studio=ArtistStudio;',c
 const studio=Object.create(context.Studio.prototype),events=[];
 Object.assign(studio,{busy:false,project:null,source:{duration:15},references:[],readConfig:()=>original,
   syncForm:()=>events.push('sync'),render:()=>events.push('render'),message:text=>events.push(text),
+  revealControl:target=>target.focus({preventScroll:true}),
   $:()=>({scrollIntoView:()=>events.push('scroll'),focus:()=>events.push('focus'),select:()=>events.push('select')}),
   perform:()=>{throw new Error('Recovery must not create a project or queue a render');}});
 await studio.primaryRecipe();

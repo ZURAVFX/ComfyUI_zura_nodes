@@ -8,6 +8,7 @@ import {parseHTML} from '../../ui-check/node_modules/linkedom/esm/index.js';
 import {ContentDetection} from '../web/studio_content.js';
 import {clipLength,recoverClipLength} from '../web/studio_length.js';
 import {stageProgress} from '../web/studio_progress.js';
+import {ClipTrimmer} from '../web/studio_trim.js';
 
 const {document,window}=parseHTML('<html><body></body></html>');
 // linkedom does not implement browser select setters/selectedOptions or media
@@ -35,7 +36,7 @@ const api={apiURL:path=>path,fetchApi:async(path,options)=>{
   const file=options.body.get('file');
   return {ok:true,json:async()=>({id:'source-video',name:file.name,file:'genj_studio/test/source.mp4',duration:3,width:1280,height:720,thumbnail_url:'/view?test-thumbnail'})};
 }};
-const context={document,window,Event:window.Event,api,ContentDetection,clipLength,recoverClipLength,stageProgress,FormData,URLSearchParams,AbortController,setTimeout,clearTimeout,setInterval:()=>1,clearInterval(){},crypto:globalThis.crypto,localStorage:{getItem:()=>null,removeItem(){},setItem(){}}};
+const context={document,window,Event:window.Event,api,ContentDetection,clipLength,recoverClipLength,stageProgress,ClipTrimmer,FormData,URLSearchParams,AbortController,setTimeout,clearTimeout,setInterval:()=>1,clearInterval(){},crypto:globalThis.crypto,localStorage:{getItem:()=>null,removeItem(){},setItem(){}}};
 vm.createContext(context);vm.runInContext(source+'\nthis.Studio=ArtistStudio;',context);
 const ui=new context.Studio(),checklist=ui.$('model-checklist');
 await ui.open();
@@ -140,11 +141,11 @@ assert.equal(ui.config.h3_head_swap,false);assert.equal(ui.config.scope,'person'
 assert.equal(ui.$('audio-settings').hidden,false);assert.equal(ui.$('quality-setting').hidden,false);
 console.log('H3 head-swap actual-DOM opt-in, compatibility reset, audio/length gates, direct render, graph stages and full-character recovery pass.');
 
-// A single forward path: the image prompt belongs to Look, and video tuning
+// A single forward path: the image prompt stays in the bottom composer, and video tuning
 // appears only after an actual frame exists. Selection remains inspectable.
 Object.assign(ui.config,{engine:'wan',workflow_mode:'swap',scope:'person',edit_area:'mask',h3_head_swap:false});
 ui.project=null;ui.lookMode='build';ui.syncForm();ui.render();
-assert.equal(ui.$('image-editor').closest('.gs-look'),ui.container.querySelector('.gs-look'));
+assert.ok(ui.$('image-editor').closest('.gs-composer'),'Image prompt belongs to the persistent composer');
 assert.equal(ui.$('image-editor').hidden,false);
 assert.equal(ui.$('redesign').hidden,true,'No duplicate first-frame action');
 assert.equal(ui.$('video-options').hidden,true);
@@ -295,3 +296,50 @@ window.matchMedia=()=>({matches:true});
 await ui.open();
 assert.equal(ui.container.scrollTop,0);
 console.log('Desktop step/focus navigation scrolls only its owning panel; mobile scroll and desktop reopening remain safe.');
+
+// Camera has no mask-review record. Its changed angle must still own the preview.
+ui.trimSeeking=false;ui.promptStage=null;ui.lookMode='ready';ui.readyAsset={id:'camera-ready',url:'/ready.png'};
+Object.assign(ui.config,{engine:'h3',workflow_mode:'camera',edit_area:'scene'});
+ui.project={id:'camera-fullscreen',phase:'opening',review:null,opening_input:{file:'new-view.png'},opening_url:'/new-view.png',opening_key:'new-view',actions:[]};
+ui.syncForm();ui.render();
+assert.equal(ui.$('opening').hidden,false);assert.equal(ui.$('opening').getAttribute('src'),'/new-view.png');
+assert.equal(ui.$('player').hidden,true);
+assert.equal(ui.$('preview-tabs').hidden,false,'Camera review can switch between the changed still and original');
+assert.equal(ui.$('camera-direction-setting').hidden,false,'Uploading a camera still does not hide its prompt');
+assert.ok(ui.$('camera_prompt').closest('.gs-composer'));
+assert.equal(ui.$('preview-fullscreen').hidden,false);
+const canvas=ui.$('canvas');let expanded=0;
+canvas.requestFullscreen=async()=>{expanded++;document.fullscreenElement=canvas;canvas.onfullscreenchange();};
+document.exitFullscreen=async()=>{document.fullscreenElement=null;canvas.onfullscreenchange();};
+await ui.expandPreview();assert.equal(expanded,1);assert.match(ui.$('preview-fullscreen').textContent,/Exit fullscreen/);
+await ui.expandPreview();assert.equal(document.fullscreenElement,null);
+canvas.requestFullscreen=async()=>{throw new Error('Embedded fullscreen unavailable');};
+await ui.expandPreview();assert.equal(canvas.classList.contains('is-expanded'),true,'Embedded clients receive a full-window fallback');
+await ui.expandPreview();assert.equal(canvas.classList.contains('is-expanded'),false);
+
+// Exactly one main prompt is visible for each route, with separate image/video text.
+ui.lookMode='build';ui.project=null;
+for(const engine of ['wan','wan2','h3','local']){
+  Object.assign(ui.config,{engine,workflow_mode:engine==='local'||engine==='wan2'?'motion':'swap',edit_area:engine==='local'||engine==='wan2'?'scene':'mask',h3_head_swap:false});
+  ui.promptStage=null;ui.syncForm();ui.render();
+  assert.equal(ui.$('image-editor').hidden,false,engine+' image prompt');
+  ui.$('image_prompt').value='Keep the blue jacket.';
+  ui.container.querySelector('[data-prompt-stage="video"]').onclick();
+  assert.equal(ui.$('model-prompt').hidden,false,engine+' video prompt');
+  assert.equal(ui.$('image-editor').hidden,true);
+  ui.$('prompt').value='Preserve the gestures.';
+  assert.equal(ui.readConfig().prompt,'Preserve the gestures.');
+  assert.equal(ui.readConfig().image_prompt,'Keep the blue jacket.');
+}
+// Trim commits reuse the existing saved configuration, without queuing generation.
+const trimRequests=[];
+api.fetchApi=async(path,options)=>{const body=JSON.parse(options.body);trimRequests.push({path,body});return {ok:true,json:async()=>({...ui.project,config:body.config})};};
+ui.source={...ui.source,duration:60,url:'/source-long.mp4'};
+ui.project={id:'trim-project',phase:'new',config:{start:0},actions:[]};
+ui.config={...ui.readConfig(),start:0,duration:2,mask_points:[{x:.5,y:.5,include:true}]};ui.syncForm();
+await ui.setTrim({start:10.5,duration:2.5});
+assert.equal(trimRequests.length,1);assert.equal(trimRequests[0].path,'/zura/studio/projects/trim-project/config');
+assert.equal(trimRequests[0].body.config.start,10.5);assert.equal(trimRequests[0].body.config.duration,2.5);
+assert.equal(trimRequests[0].body.config.length_mode,'custom');assert.equal(trimRequests[0].body.config.mask_points.length,0);
+assert.equal(ui.$('start').value,'10.5');assert.equal(ui.$('duration').value,'2.5');
+console.log('Camera still/fullscreen, persistent stage-aware prompts and saved timeline range handoffs pass.');

@@ -2,6 +2,9 @@
 
 ## 1.3.27 - 19 October 2026
 
+- Add a source filmstrip with draggable trim handles, frame-level keyboard adjustments and optional precise timing. Submit the selected range once when a drag ends.
+- Keep a main prompt composer at the bottom of the desktop workspace for every generation route, with separate image/video text and a camera prompt that remains visible with uploaded stills.
+- Show the changed camera still directly without requiring a mask-review record, and add fullscreen viewing for camera stills and video results.
 - Fix Studio jumping downwards and exposing blank space below its panels. Desktop navigation now scrolls only the relevant panel, with focus prevented from scrolling the outer shell.
 - Keep the desktop header and stage controls in place, retain mobile page scrolling and clear an old outer scroll offset when reopening Studio on desktop.
 - Add navigation regression coverage for panel scrolling, focus, mobile behaviour and desktop reopening.
