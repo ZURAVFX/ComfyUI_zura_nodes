@@ -32,7 +32,7 @@ the same pixel budget. Custom dimensions up to 2048 per side are available; thes
 | Z-Image Turbo | BF16; Qwen3 4B; AE VAE; AuraFlow shift 3 | 9 | 40.0 s |
 
 All use Euler/simple, CFG 1, one image. Drag PNG, JPEG or WebP files onto the reference strip beside the prompt, or
-select Reference images. Flux 3 Klein supports up to 10 references; Flux 2 Klein
+select Reference images. You can also paste a copied image with Ctrl+V (Cmd+V on macOS) anywhere inside the Image workspace, including while the prompt is focused. Normal text pasting is unchanged. Flux 3 Klein supports up to 10 references; Flux 2 Klein
 supports 4. Z-Image Turbo remains text-only. Switching to an incompatible model
 retains the references and blocks generation until the mismatch is resolved.
 Thumbnails are numbered in conditioning order, with remove and move-earlier

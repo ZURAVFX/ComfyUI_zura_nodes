@@ -48,6 +48,14 @@ ui.show('video');assert.equal(studio.source.id,'private-source');assert.equal(st
 ui.show('image');assert.equal(ui.$('prompt').value,'Sunlit train carriage');
 await ui.uploadReferences([new File(['image fixture'],'ref.png',{type:'image/png'}),new File(['second image'],'second.png',{type:'image/png'})]);
 assert.equal(ui.references.length,2);assert.equal(ui.$('reference-list').querySelectorAll('img').length,2);
+let prevented=0,stopped=0;
+const paste={clipboardData:{items:[{kind:'file',type:'image/png',getAsFile:()=>new File(['clipboard fixture'],'image',{type:'image/png'})}]},preventDefault(){prevented++;},stopPropagation(){stopped++;}};
+await ui.root.onpaste(paste);assert.equal(ui.references.length,3);assert.equal(prevented,1);assert.equal(stopped,1);assert.equal(ui.references[2].name,'Pasted image.png');
+await ui.root.onpaste({clipboardData:{items:[{kind:'string',type:'text/plain'}]},preventDefault(){throw Error('Text paste intercepted');}});
+ui.show('video');await ui.root.onpaste(paste);assert.equal(prevented,1);assert.equal(ui.references.length,3);ui.show('image');
+ui.uploading=true;await ui.root.onpaste(paste);assert.equal(ui.references.length,3);assert.match(ui.$('message').textContent,/Wait/);ui.uploading=false;
+await ui.root.onpaste({clipboardData:{files:[new File(['fallback'],'fallback.webp',{type:'image/webp'})]},preventDefault(){},stopPropagation(){}});assert.equal(ui.references.length,4);
+
 assert.equal(buildImageGraph(ui.config()).references.inputs['images.image1'][0],'reference_2');
 const count=calls.filter(c=>c.path==='/upload/image').length;
 await ui.uploadReferences(Array.from({length:10},()=>new File(['x'],'extra.png',{type:'image/png'})));

@@ -62,6 +62,7 @@ export class CreativeWorkspace {
     drop.ondragover=e=>{e.preventDefault();e.stopPropagation();drop.classList.add("is-dragging");};
     drop.ondragleave=()=>drop.classList.remove("is-dragging");
     drop.ondrop=e=>{e.preventDefault();e.stopPropagation();drop.classList.remove("is-dragging");this.uploadReferences(Array.from(e.dataTransfer?.files||[]));};
+    this.root.onpaste=e=>this.pasteReferences(e);
     this.$("reference-list").onclick=e=>{if(this.job||this.uploading)return;const remove=e.target.closest("[data-remove-ref]"),move=e.target.closest("[data-move-ref]");if(remove)this.references.splice(Number(remove.dataset.removeRef),1);if(move){const i=Number(move.dataset.moveRef);[this.references[i-1],this.references[i]]=[this.references[i],this.references[i-1]];}this.save();this.render();};
     this.$("clear-references").onclick=()=>{this.references=[];this.save();this.render();};
     this.$("refresh").onclick=()=>this.loadModels();this.$("cancel").onclick=()=>this.cancel();
@@ -99,7 +100,7 @@ export class CreativeWorkspace {
     const max=m?.maxReferences||0;
     this.$("add-references").disabled=busy||!max||!m?.referenceReady||this.references.length>=max;
     this.$("clear-references").hidden=!this.references.length;this.$("clear-references").disabled=busy;
-    this.$("reference-hint").textContent=this.uploading?"Uploading references…":!max?"Text only. Choose Flux to use reference images.":!m?.referenceReady?"Update ComfyUI for reference image support.":`${this.references.length} / ${max} · Drop images here`+(this.references.length?" · Refer to Image 1, Image 2… in your prompt.":"")+(this.references.length>2?" · References resized to a 2 MP total.":"");
+    this.$("reference-hint").textContent=this.uploading?"Uploading references…":!max?"Text only. Choose Flux to use reference images.":!m?.referenceReady?"Update ComfyUI for reference image support.":`${this.references.length} / ${max} · Drop or paste images here (Ctrl+V)`+(this.references.length?" · Refer to Image 1, Image 2… in your prompt.":"")+(this.references.length>2?" · References resized to a 2 MP total.":"");
     if(this.references.length>max)this.$("reference-hint").textContent=`This model accepts ${max} references. Remove some or choose another model.`;
     const fingerprint=JSON.stringify([this.references,busy]);
     if(fingerprint!==this.referenceFingerprint){this.referenceFingerprint=fingerprint;this.$("reference-list").innerHTML=this.references.map((r,i)=>`<div class="zc-reference"><img src="${escape(this.api.apiURL('/view?'+new URLSearchParams({filename:r.filename,subfolder:r.subfolder||'',type:'input'})))}" alt="${escape(r.name||'Reference '+(i+1))}"/><span>Image ${i+1}</span><button type="button" data-remove-ref="${i}" aria-label="Remove reference ${i+1}" ${busy?'disabled':''}>×</button>${i?`<button type="button" class="zc-ref-move" data-move-ref="${i}" aria-label="Move reference ${i+1} earlier" ${busy?'disabled':''}>←</button>`:''}</div>`).join('');}
@@ -112,6 +113,20 @@ export class CreativeWorkspace {
   renderGallery(){
     this.$("image-empty").hidden=!!this.items.length;
     this.$("gallery").innerHTML=this.items.map((item,i)=>`<figure><a href="${escape(this.api.apiURL(view(item.file)))}" target="_blank" rel="noopener"><img src="${escape(this.api.apiURL(view(item.file)))}" alt="${escape(item.prompt)}" loading="lazy"/></a><figcaption><span>${escape(IMAGE_MODELS.find(m=>m.id===item.model)?.name||item.model)}${item.seconds?` · ${Math.round(item.seconds)}s`:""}</span><div><button type="button" data-reuse="${i}">Reuse prompt</button><a href="${escape(this.api.apiURL(view(item.file)))}" download="${escape(item.file.filename)}">Download</a></div></figcaption></figure>`).join("");
+  }
+  async pasteReferences(event){
+    if(this.mode!=="image")return;
+    const clipboard=event.clipboardData;
+    let files=Array.from(clipboard?.items||[]).filter(item=>item.kind==="file"&&item.type.startsWith("image/")).map(item=>item.getAsFile()).filter(Boolean);
+    if(!files.length)files=Array.from(clipboard?.files||[]).filter(file=>file.type.startsWith("image/"));
+    if(!files.length)return; // Leave normal prompt text pasting to the browser.
+    event.preventDefault();event.stopPropagation();
+    if(this.job||this.submitting||this.uploading){this.message("Wait for the current upload or generation to finish, then paste your image again.");return;}
+    files=files.map(file=>{
+      const extension={"image/png":"png","image/jpeg":"jpg","image/webp":"webp"}[file.type];
+      return extension&&!/\.(png|jpe?g|webp)$/i.test(file.name||"")?new File([file],`Pasted image.${extension}`,{type:file.type}):file;
+    });
+    await this.uploadReferences(files);
   }
   async uploadReferences(files){
     if(this.job||this.submitting||this.uploading||!files.length)return;
