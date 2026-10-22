@@ -1,0 +1,29 @@
+/* Shared Zura tokens: daisyUI supplies native control styling; Web Awesome
+   supplies tooltip behaviour. Neither library changes ComfyUI outside Studio. */
+#genj-studio[data-workspace]{
+ --color-base-100:var(--gs-panel);--color-base-200:var(--gs-input);--color-base-300:var(--gs-line);--color-base-content:var(--zc-text);
+ --color-primary:var(--gs-accent);--color-primary-content:#17180f;
+ --color-neutral:var(--zc-hover);--color-neutral-content:var(--zc-text);
+ --color-error:#e77e70;--color-error-content:#1b0805;
+ --radius-field:.625rem;--radius-selector:.5rem;--radius-box:1rem;--size-field:.25rem;--border:1px;--depth:0;--noise:0;
+ --wa-font-family-body:inherit;--wa-font-size-s:12px;--wa-line-height-normal:1.5;
+ --wa-tooltip-background-color:var(--zc-text);--wa-tooltip-content-color:var(--gs-bg);
+ --wa-tooltip-font-size:12px;--wa-tooltip-line-height:1.5;--wa-tooltip-border-radius:6px;
+ --wa-tooltip-border-width:0px;--wa-tooltip-border-style:solid;--wa-tooltip-border-color:transparent;--wa-tooltip-arrow-size:4px;
+ --wa-color-surface-raised:var(--gs-panel);--wa-color-surface-border:var(--gs-line);--wa-color-text-normal:var(--zc-text);--wa-color-text-quiet:var(--gs-muted);
+ --wa-color-neutral-fill-normal:var(--zc-hover);--wa-color-neutral-on-quiet:var(--zc-text);--wa-border-style:solid;--wa-border-width-s:1px;--wa-border-radius-s:6px;--wa-border-radius-m:8px;--wa-shadow-m:none;--wa-line-height-condensed:1.4;--wa-font-size-smaller:.875em;--wa-font-weight-semibold:600;--wa-transition-easing:ease;
+ --wa-transition-fast:120ms;--wa-transition-normal:180ms;
+}
+#genj-studio[data-workspace] wa-tooltip:not(:defined){display:none}
+#genj-studio[data-workspace] .zu-btn{min-height:40px;font-size:13px;font-weight:500;text-shadow:none;box-shadow:none;transition:background-color .15s,color .15s}
+#genj-studio[data-workspace] .zu-btn-primary{--zu-size:44px;min-height:44px;background:var(--color-primary);color:var(--color-primary-content);border:0}
+#genj-studio[data-workspace] .zu-btn:disabled{opacity:1;background:var(--gs-input);color:var(--gs-muted);cursor:not-allowed}
+#genj-studio[data-workspace] .zu-btn-ghost:not(:disabled){background:transparent;border-color:transparent;color:var(--zc-text)}
+#genj-studio[data-workspace] .zu-btn-ghost:not(:disabled):hover{background:var(--zc-hover);filter:none}
+#genj-studio[data-workspace] :is(.zu-select,.zu-input){min-height:40px;font-size:13px;box-shadow:none;outline-offset:3px}
+#genj-studio[data-workspace] :is(.zu-select,.zu-input):focus-visible{outline:2px solid var(--gs-focus)}
+#genj-studio[data-workspace] .zu-select{padding-inline:12px 32px}
+#genj-studio[data-workspace] [hidden]{display:none!important}
+#genj-studio[data-workspace] wa-tooltip::part(body){padding:8px 12px}
+@media(max-width:700px){#genj-studio[data-workspace] :is(.zu-btn,.zu-select,.zu-input){min-height:44px}#genj-studio[data-workspace] :is(.zu-select,.zu-input){font-size:16px}}
+@media(prefers-reduced-motion:reduce){#genj-studio[data-workspace]{--wa-transition-fast:0ms;--wa-transition-normal:0ms}#genj-studio[data-workspace] .zu-btn{transition:none}}

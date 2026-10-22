@@ -31,7 +31,19 @@ def camera_setup(config):
                         ("audio_id", "lip_sync", "refine_lips", "preserve_people", "remove_text", "h3_head_swap")))
 
 
+def relight_setup(config):
+    # Both validated relight backends use the approved H3 opening-frame stage.
+    # The selected backend only changes the video-generation route.
+    return (config.get("workflow_mode") == "relight" and config.get("engine") == "h3"
+            and config.get("relight_engine", "h3") in ("h3", "wan21")
+            and config.get("edit_area") == "scene"
+            and not any(config.get(k) for k in
+                        ("audio_id", "lip_sync", "refine_lips", "preserve_people", "h3_head_swap")))
+
+
 def verified_setup(config):
+    if config.get("workflow_mode") == "relight":
+        return relight_setup(config)
     if config.get("workflow_mode") == "camera":
         return camera_setup(config)
     if config.get("engine") == "wan2":
@@ -65,6 +77,11 @@ def require_verified_setup(config, stage=None):
     if camera_setup(config):
         if stage is not None and stage not in ("auto", "design", "animate", "create_look", "h3"):
             raise ValueError("Create and review the camera frame, then generate the video.")
+        return
+    if config.get("workflow_mode") == "relight":
+        route = "wan21_relight" if config.get("relight_engine", "h3") == "wan21" else "h3"
+        if stage is not None and stage not in ("auto", "prepare", "approve", "design", "animate", "create_look", route):
+            raise ValueError("Choose the selected Relight video graph.")
         return
     if head_swap_setup(config):
         if stage is not None and stage not in ("auto", "animate", "h3"):

@@ -10,6 +10,24 @@ def _friendly_node(class_type):
     """Translate common model nodes to short artist-facing stage labels."""
     name = str(class_type or "").split(".")[-1]
     low = name.lower()
+    if "depthanything" in low:
+        return "Building depth guidance"
+    if "genjh3framepad" in low:
+        return "Preparing H3 source frames"
+    if "genjloadreviewedshot" in low:
+        return "Preparing approved source video"
+    if "imagefrombatch" in low:
+        return "Selecting reference frames"
+    if "modelpatchloader" in low:
+        return "Loading H3 control model"
+    if "unetloader" in low:
+        return "Loading H3 video model"
+    if "cliploader" in low:
+        return "Loading H3 text encoder"
+    if "vaeloader" in low:
+        return "Loading H3 decoder"
+    if "loraloader" in low:
+        return "Loading H3 speed adapter"
     if any(token in low for token in ("textencode", "cliptext", "promptencode")):
         return "Preparing prompt"
     if "vaeencode" in low or "encodevideo" in low or "encodeimage" in low:
@@ -92,7 +110,10 @@ class ProgressEstimator:
                     remaining = max(0.0, (maximum - value) / rate)
                     confidence = "measured"
             if unknown_loader:
-                return {"state": "preparing", "stage_label": "Loading",
+                loading_label = str(label or "Loading")
+                if loading_label == "LoadImage":
+                    loading_label = "Loading"
+                return {"state": "preparing", "stage_label": loading_label,
                         "stage_percent": None, "stage_elapsed_seconds": elapsed,
                         "stage_remaining_seconds": None, "eta_confidence": "estimating",
                         "step": None, "total_steps": None, "queue_position": queue_position}

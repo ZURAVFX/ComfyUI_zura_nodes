@@ -19,10 +19,12 @@ Its thumbnail confirms the upload.
 - **Viewport to final** turns a grey 3D blockout into a finished whole scene.
   H3 is recommended. LTX remains experimental; Wan is available in the other
   editing modes.
-- **Relight** uses H3 to change illumination while retaining the source scene.
-  Describe the lighting; lighting reference images are optional. Review the
-  generated lighting frame before animating. This is generative lighting
-  guidance, so inspect the result for identity, material and temporal changes.
+- **Relight** changes the scene lighting while retaining the source composition.
+  MiniMax H3 is the short-clip route. Wan 2.1 is the chained route for longer
+  clips: fixed four-step sampling in 81-frame sections, at 720p-class output.
+  Both use a reviewed lighting frame and restore the original soundtrack. Check
+  joins on longer Wan clips and inspect the result for identity, material and
+  temporal changes.
 
 Keep original people passed a short scene-replacement render; artist review
 is pending. Moving boundaries are reconstructed generatively, so inspect hair,

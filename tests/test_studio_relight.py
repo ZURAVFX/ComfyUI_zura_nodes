@@ -41,6 +41,15 @@ class RelightTests(unittest.TestCase):
         self.assertFalse(config['viewport_render'])
         self.assertEqual(config['background'], 'keep')
 
+    def test_identity_lock_is_opt_in_and_confined_to_relight(self):
+        default = studio.clean_config({'engine': 'h3', 'workflow_mode': 'relight'})
+        self.assertFalse(default['preserve_identity'])
+        for workflow in ('motion', 'camera', 'viewport'):
+            with self.subTest(workflow=workflow):
+                config = studio.clean_config({'engine': 'h3', 'workflow_mode': workflow,
+                                              'preserve_identity': True})
+                self.assertFalse(config['preserve_identity'])
+
     def test_appearance_references_are_optional_only_for_relight(self):
         def not_called(_):
             self.fail('No image should be loaded for an empty reference list')
@@ -122,6 +131,22 @@ class RelightTests(unittest.TestCase):
         self.assertNotIn('replacement character', prompt)
         self.assertNotIn('<Video 1>', prompt)
 
+    def test_optional_identity_references_use_three_source_moments_and_change_the_cache_key(self):
+        project = self.project()
+        project['config']['preserve_identity'] = True
+        graph = anchors.H3FinishedFrameAnchorTests().build_normal(project, frames=48)
+        refs = graph['h3_references']['inputs']
+        self.assertEqual(refs['ref_images.ref_image_0'], ['h3_opening_size', 0])
+        self.assertEqual(refs['ref_images.ref_image_1'], ['h3_identity_ref_1', 0])
+        self.assertEqual(refs['ref_images.ref_image_2'], ['h3_identity_ref_2', 0])
+        self.assertEqual(refs['ref_images.ref_image_3'], ['h3_identity_ref_3', 0])
+        self.assertEqual(graph['h3_identity_ref_1']['inputs']['batch_index'], 0)
+        self.assertEqual(graph['h3_identity_ref_2']['inputs']['batch_index'], 24)
+        self.assertEqual(graph['h3_identity_ref_3']['inputs']['batch_index'], 47)
+        prompt = graph['h3_prompt']['inputs']['value']
+        self.assertIn('<Picture 2>, <Picture 3> and <Picture 4>', prompt)
+        self.assertIn('preserve this person\'s facial identity', prompt)
+
     def test_native_motion_source_retained_without_appearance_video_reference(self):
         for count in (48, 5, 120):
             with self.subTest(count=count):
@@ -150,6 +175,23 @@ class RelightTests(unittest.TestCase):
                 self.assertNotIn('source_reference_grid', payload)
                 self.assertEqual(payload.get('relight_conditioning_recipe'), 2 if mode == 'relight' else None)
                 self.assertEqual(payload.get('person_conditioning_recipe'), 2 if preserve else None)
+
+    def test_identity_reference_toggle_uses_a_separate_conditioning_cache(self):
+        import json
+        original_dumps = json.dumps
+        project = self.project()
+        with tempfile.TemporaryDirectory() as temp:
+            model = Path(temp) / 'encoder'
+            model.write_bytes(b'encoder')
+            payloads = []
+            for enabled in (False, True):
+                project['config']['preserve_identity'] = enabled
+                with patch('folder_paths.get_full_path', return_value=str(model)), \
+                        patch.object(h3.json, 'dumps', wraps=original_dumps) as dumps:
+                    h3.cache_key(project)
+                payloads.append(dumps.call_args.args[0])
+        self.assertNotIn('identity_reference_recipe', payloads[0])
+        self.assertEqual(payloads[1].get('identity_reference_recipe'), 1)
 
     def test_other_h3_routes_keep_existing_background_lock(self):
         graph = anchors.H3FinishedFrameAnchorTests().build_normal(anchors.H3FinishedFrameAnchorTests().base_project())

@@ -1,0 +1,606 @@
+{
+  "_zura_recipe": "wan21-relight-switchx-v1",
+  "graph": {
+    "wan21_reference": {
+      "inputs": {
+        "image": "zura_reference.png"
+      },
+      "class_type": "LoadImage",
+      "_meta": {
+        "title": "Reference image"
+      }
+    },
+    "272:386": {
+      "inputs": {
+        "value": 81
+      },
+      "class_type": "easy int",
+      "_meta": {
+        "title": "Inference window: 81 frames"
+      }
+    },
+    "272:392": {
+      "inputs": {
+        "remaining": [
+          "272:403:389",
+          0
+        ],
+        "initial_value1": [
+          "272:408:275:190",
+          0
+        ],
+        "initial_value2": [
+          "272:403:391",
+          0
+        ]
+      },
+      "class_type": "ForLoopOpen",
+      "_meta": {
+        "title": "Begin chained sections"
+      }
+    },
+    "272:401": {
+      "inputs": {
+        "flow_control": [
+          "272:392",
+          0
+        ],
+        "initial_value1": [
+          "272:405:399",
+          2
+        ],
+        "initial_value2": [
+          "272:405:400",
+          0
+        ]
+      },
+      "class_type": "ForLoopClose",
+      "_meta": {
+        "title": "Finish all chained sections"
+      }
+    },
+    "272:402": {
+      "inputs": {
+        "batch_index": 0,
+        "image": [
+          "272:401",
+          0
+        ],
+        "length": [
+          "272:403:388",
+          3
+        ]
+      },
+      "class_type": "ImageFromBatch",
+      "_meta": {
+        "title": "Exact source frame count"
+      }
+    },
+    "272:403:387": {
+      "inputs": {
+        "value": "(min(81,max(5,a))-1)//4*4+1",
+        "b": 0.0,
+        "a": [
+          "272:386",
+          0
+        ]
+      },
+      "class_type": "SimpleMath+",
+      "_meta": {
+        "title": "Valid Wan window: 5 to 81 frames"
+      }
+    },
+    "272:403:388": {
+      "inputs": {
+        "image": [
+          "wan21_source_frames",
+          0
+        ]
+      },
+      "class_type": "GetImageSizeAndCount",
+      "_meta": {
+        "title": "Selected video length"
+      }
+    },
+    "272:403:389": {
+      "inputs": {
+        "value": "max(1,(a-2)//(b-1)+1)",
+        "a": [
+          "272:403:388",
+          3
+        ],
+        "b": [
+          "272:403:387",
+          0
+        ]
+      },
+      "class_type": "SimpleMath+",
+      "_meta": {
+        "title": "Number of sections"
+      }
+    },
+    "272:403:390": {
+      "inputs": {
+        "value": "max(0,a-b)",
+        "a": [
+          "272:403:388",
+          3
+        ],
+        "b": [
+          "272:403:387",
+          0
+        ]
+      },
+      "class_type": "SimpleMath+",
+      "_meta": {
+        "title": "Last section starts here"
+      }
+    },
+    "272:403:391": {
+      "inputs": {
+        "value": 0
+      },
+      "class_type": "easy int",
+      "_meta": {
+        "title": "First section"
+      }
+    },
+    "272:404:393": {
+      "inputs": {
+        "value": "a*(b-1)",
+        "a": [
+          "272:392",
+          3
+        ],
+        "b": [
+          "272:403:387",
+          0
+        ]
+      },
+      "class_type": "SimpleMath+",
+      "_meta": {
+        "title": "Regular section start"
+      }
+    },
+    "272:404:394": {
+      "inputs": {
+        "value": "min(a,b)",
+        "a": [
+          "272:404:393",
+          0
+        ],
+        "b": [
+          "272:403:390",
+          0
+        ]
+      },
+      "class_type": "SimpleMath+",
+      "_meta": {
+        "title": "Anchor final section to video end"
+      }
+    },
+    "272:404:395": {
+      "inputs": {
+        "image": [
+          "wan21_source_frames",
+          0
+        ],
+        "batch_index": [
+          "272:404:394",
+          0
+        ],
+        "length": [
+          "272:403:387",
+          0
+        ]
+      },
+      "class_type": "ImageFromBatch",
+      "_meta": {
+        "title": "Source motion for this section"
+      }
+    },
+    "272:404:396": {
+      "inputs": {
+        "length": 1,
+        "image": [
+          "272:392",
+          2
+        ],
+        "batch_index": [
+          "272:404:394",
+          0
+        ]
+      },
+      "class_type": "ImageFromBatch",
+      "_meta": {
+        "title": "Generated frame at section start"
+      }
+    },
+    "272:405:397": {
+      "inputs": {
+        "image": [
+          "272:392",
+          2
+        ]
+      },
+      "class_type": "GetImageSizeAndCount",
+      "_meta": {
+        "title": "Frames already generated"
+      }
+    },
+    "272:405:398": {
+      "inputs": {
+        "value": "a-b",
+        "a": [
+          "272:405:397",
+          3
+        ],
+        "b": [
+          "272:404:394",
+          0
+        ]
+      },
+      "class_type": "SimpleMath+",
+      "_meta": {
+        "title": "Replace overlap without blending"
+      }
+    },
+    "272:405:399": {
+      "inputs": {
+        "overlap_side": "source",
+        "overlap_mode": "cut",
+        "source_images": [
+          "272:392",
+          2
+        ],
+        "overlap": [
+          "272:405:398",
+          0
+        ],
+        "new_images": [
+          "272:407:6",
+          0
+        ]
+      },
+      "class_type": "ImageBatchExtendWithOverlap",
+      "_meta": {
+        "title": "Join: keep newest overlap"
+      }
+    },
+    "272:405:400": {
+      "inputs": {
+        "value": "a+1",
+        "b": 0.0,
+        "a": [
+          "272:392",
+          3
+        ]
+      },
+      "class_type": "SimpleMath+",
+      "_meta": {
+        "title": "Next section"
+      }
+    },
+    "272:407:89": {
+      "inputs": {
+        "width": 720,
+        "height": 1280,
+        "upscale_method": "lanczos",
+        "keep_proportion": "crop",
+        "pad_color": "0, 0, 0",
+        "crop_position": "center",
+        "divisible_by": 16,
+        "device": "cpu",
+        "image": [
+          "272:404:395",
+          0
+        ]
+      },
+      "class_type": "ImageResizeKJv2",
+      "_meta": {
+        "title": "Resize Image v2"
+      }
+    },
+    "272:407:276:252": {
+      "inputs": {
+        "batch_size": 1,
+        "positive": [
+          "272:408:274:3",
+          0
+        ],
+        "negative": [
+          "272:408:274:4",
+          0
+        ],
+        "vae": [
+          "272:408:7",
+          0
+        ],
+        "width": [
+          "272:407:89",
+          1
+        ],
+        "height": [
+          "272:407:89",
+          2
+        ],
+        "length": [
+          "272:403:387",
+          0
+        ],
+        "clip_vision_output": [
+          "272:408:275:76",
+          0
+        ],
+        "start_image": [
+          "272:404:396",
+          0
+        ],
+        "ref_pad_image": [
+          "272:408:275:190",
+          0
+        ]
+      },
+      "class_type": "WanImageToVideo",
+      "_meta": {
+        "title": "WanImageToVideo"
+      }
+    },
+    "272:407:276:253": {
+      "inputs": {
+        "batch_size": 1,
+        "strength": 1,
+        "positive": [
+          "272:407:276:252",
+          0
+        ],
+        "negative": [
+          "272:407:276:252",
+          1
+        ],
+        "vae": [
+          "272:408:7",
+          0
+        ],
+        "width": [
+          "272:407:89",
+          1
+        ],
+        "height": [
+          "272:407:89",
+          2
+        ],
+        "length": [
+          "272:403:387",
+          0
+        ],
+        "control_video": [
+          "272:407:89",
+          0
+        ]
+      },
+      "class_type": "WanVaceToVideo",
+      "_meta": {
+        "title": "WanVaceToVideo"
+      }
+    },
+    "272:407:277:27": {
+      "inputs": {
+        "sampler_name": "er_sde"
+      },
+      "class_type": "KSamplerSelect",
+      "_meta": {
+        "title": "KSamplerSelect"
+      }
+    },
+    "272:407:277:18": {
+      "inputs": {
+        "scheduler": "simple",
+        "steps": 4,
+        "denoise": 1,
+        "model": [
+          "272:408:273:95",
+          0
+        ]
+      },
+      "class_type": "BasicScheduler",
+      "_meta": {
+        "title": "BasicScheduler"
+      }
+    },
+    "272:407:277:19": {
+      "inputs": {
+        "add_noise": true,
+        "noise_seed": 3,
+        "cfg": 1,
+        "model": [
+          "272:408:273:95",
+          0
+        ],
+        "positive": [
+          "272:407:276:253",
+          0
+        ],
+        "negative": [
+          "272:407:276:253",
+          1
+        ],
+        "sampler": [
+          "272:407:277:27",
+          0
+        ],
+        "sigmas": [
+          "272:407:277:18",
+          0
+        ],
+        "latent_image": [
+          "272:407:276:253",
+          2
+        ]
+      },
+      "class_type": "SamplerCustom",
+      "_meta": {
+        "title": "SamplerCustom"
+      }
+    },
+    "272:407:6": {
+      "inputs": {
+        "samples": [
+          "272:407:277:19",
+          0
+        ],
+        "vae": [
+          "272:408:7",
+          0
+        ]
+      },
+      "class_type": "VAEDecode",
+      "_meta": {
+        "title": "VAE Decode"
+      }
+    },
+    "272:408:273:242": {
+      "inputs": {
+        "unet_name": "wan_2.1_idv2v_int8_convrot.safetensors",
+        "weight_dtype": "default"
+      },
+      "class_type": "UNETLoader",
+      "_meta": {
+        "title": "Load Diffusion Model"
+      }
+    },
+    "272:408:273:243": {
+      "inputs": {
+        "sage_attention": "auto",
+        "allow_compile": false,
+        "model": [
+          "272:408:273:242",
+          0
+        ]
+      },
+      "class_type": "PathchSageAttentionKJ",
+      "_meta": {
+        "title": "Patch Sage Attention KJ"
+      }
+    },
+    "272:408:273:11": {
+      "inputs": {
+        "lora_name": "lightx2v_I2V_14B_480p_cfg_step_distill_rank64_bf16.safetensors",
+        "strength_model": 1,
+        "model": [
+          "272:408:273:243",
+          0
+        ]
+      },
+      "class_type": "LoraLoaderModelOnly",
+      "_meta": {
+        "title": "Load LoRA"
+      }
+    },
+    "272:408:273:95": {
+      "inputs": {
+        "shift": 5,
+        "model": [
+          "272:408:273:11",
+          0
+        ]
+      },
+      "class_type": "ModelSamplingSD3",
+      "_meta": {
+        "title": "ModelSamplingSD3"
+      }
+    },
+    "272:408:274:9": {
+      "inputs": {
+        "clip_name": "umt5_xxl_fp8_e4m3fn_scaled.safetensors",
+        "type": "wan",
+        "device": "default"
+      },
+      "class_type": "CLIPLoader",
+      "_meta": {
+        "title": "Load CLIP"
+      }
+    },
+    "272:408:274:3": {
+      "inputs": {
+        "text": "Keep the source performance and relight the scene to match the reference image.",
+        "clip": [
+          "272:408:274:9",
+          0
+        ]
+      },
+      "class_type": "CLIPTextEncode",
+      "_meta": {
+        "title": "CLIP Text Encode (Main Prompt)"
+      }
+    },
+    "272:408:274:4": {
+      "inputs": {
+        "text": "",
+        "clip": [
+          "272:408:274:9",
+          0
+        ]
+      },
+      "class_type": "CLIPTextEncode",
+      "_meta": {
+        "title": "CLIP Text Encode (Negative Prompt)"
+      }
+    },
+    "272:408:7": {
+      "inputs": {
+        "vae_name": "Wan2_1_VAE_bf16.safetensors"
+      },
+      "class_type": "VAELoader",
+      "_meta": {
+        "title": "Load VAE"
+      }
+    },
+    "272:408:275:190": {
+      "inputs": {
+        "width": 1280,
+        "height": 704,
+        "upscale_method": "lanczos",
+        "keep_proportion": "crop",
+        "pad_color": "0, 0, 0",
+        "crop_position": "top",
+        "divisible_by": 16,
+        "device": "cpu",
+        "image": [
+          "wan21_reference",
+          0
+        ]
+      },
+      "class_type": "ImageResizeKJv2",
+      "_meta": {
+        "title": "Resize Image v2"
+      }
+    },
+    "272:408:275:75": {
+      "inputs": {
+        "clip_name": "clip_vision_h.safetensors"
+      },
+      "class_type": "CLIPVisionLoader",
+      "_meta": {
+        "title": "Load CLIP Vision"
+      }
+    },
+    "272:408:275:76": {
+      "inputs": {
+        "crop": "none",
+        "clip_vision": [
+          "272:408:275:75",
+          0
+        ],
+        "image": [
+          "272:408:275:190",
+          0
+        ]
+      },
+      "class_type": "CLIPVisionEncode",
+      "_meta": {
+        "title": "CLIP Vision Encode"
+      }
+    }
+  }
+}

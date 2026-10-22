@@ -109,6 +109,8 @@ def cache_key(project):
         data["relight_conditioning_recipe"] = 2
         if not c.get("remove_text"):
             data["relight_text_protection"] = 2
+        if c.get("preserve_identity"):
+            data["identity_reference_recipe"] = 1
     if c.get("preserve_people"):
         data["preserve_people"] = True
         data["person_conditioning_recipe"] = 2
@@ -928,6 +930,11 @@ def build_h3_graph(project, use_cache=True, preserve_background=True):
             "The depth control preserves the source geometry and movement. Do not replace, add or remove any subject or object. "
             "<Audio 1> supplies the original performance and speech timing. Follow the source gestures and speech. "
             + (c.get("image_prompt") or c["prompt"]))
+        if c.get("preserve_identity"):
+            prompt += (
+                " <Picture 2>, <Picture 3> and <Picture 4> show the same original performer at early, middle and late moments. "
+                "Use these source-frame references only to preserve this person's facial identity, apparent age, hair and facial features. "
+                "Do not copy their original lighting, background, framing or pose from those references; follow the approved relit frame and source motion instead.")
     if c.get("remove_text"):
         prompt += " Remove all masked title banners, captions and subtitles completely. Fill them with clean background or character clothing. Do not reproduce any on-screen text overlays."
     if project.get("audio") and c.get("lip_sync"):
@@ -1013,10 +1020,34 @@ def build_h3_graph(project, use_cache=True, preserve_background=True):
     model = node("h3_inpaint", "MiniMaxH3FunControlNetApply", model=model, model_patch=patch,
                  vae=vae, strength=1.0, start_percent=0.0, end_percent=1.0,
                  source_video=model_source, mask=model_mask, control_video=depth)
+    live_preview_node = None
+    try:
+        import nodes
+        if "MiniMaxH3PreviewOverrideCS" in nodes.NODE_CLASS_MAPPINGS:
+            live_preview_node = "h3_live_preview_" + str(project["id"])
+    except (ImportError, AttributeError):
+        pass
+    if live_preview_node:
+        # Reuse the installed H3 Director's low-cost latent-RGB sampler preview.
+        # Its VAE-quality mode adds decode time and VRAM, so Studio keeps the fast
+        # approximation and labels it honestly in the canvas.
+        model = node(live_preview_node, "MiniMaxH3PreviewOverrideCS", model=model,
+                     decode="latent2rgb (fast)", preview_target="node", max_resolution=512,
+                     preview_frames=12, preview_fps=24.0, playback="true speed",
+                     webp_quality=60, every_n_steps=2, max_preview_overhead=10,
+                     suppress_default_preview=True)
     # A native prompt source keeps the artist control in Your inputs and lets
     # the reference stage receive its inputs in a single ordered hand-off.
     prompt_input = node("h3_prompt", "PrimitiveStringMultiline", value=prompt)
     reference_inputs = {"ref_images.ref_image_0": opening, "ref_audios.ref_audio_0": ["h3_pad", 2]}
+    if relight and c.get("preserve_identity"):
+        # Three evenly spaced stills give H3 identity context across the source
+        # performance without loading another detector or extracting a new model.
+        for slot, frame_index in enumerate(sorted({0, count // 2, count - 1}), start=1):
+            identity = f"h3_identity_ref_{slot}"
+            node(identity, "ImageFromBatch", image=["h3_pad", 0],
+                 batch_index=frame_index, length=1)
+            reference_inputs[f"ref_images.ref_image_{slot}"] = [identity, 0]
     if not relight:
         reference_inputs["ref_images.ref_image_1"] = ["h3_character", 0]
     positive = node("h3_references", "MiniMaxH3ReferenceToVideo", clip=clip, vae=vae, audio_vae=audio_vae,

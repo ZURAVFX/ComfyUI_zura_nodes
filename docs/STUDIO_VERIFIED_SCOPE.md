@@ -1,12 +1,16 @@
 # Current Studio scope
 
-18 October 2026. Local development only; nothing published.
+22 October 2026. Candidate scope for Zura Nodes 1.3.28; 1.3.27 is already published.
+
+Relight now offers two routes. MiniMax H3 creates the lighting frame and handles short relights. Wan 2.1 uses the artist-supplied Switch X recipe after the lighting frame is reviewed: fixed four-step sampling, 81-frame sections, source-matched framing up to a 1280-pixel long edge, 24 fps and restored original soundtrack. The recipe is checked against the running Comfy node schemas and private workflow paths/media are removed. Its parent workflow was artist-confirmed as working well; no new full Studio render is claimed for this integration. Review section joins on long clips.
+
+The Image workspace includes local model readiness, prompt-first generation, native reference conditioning, exact dimensions, saved themes and clearable generation history. These additions preserve existing approved video paths.
 
 Historical approval audit restored **Character performance** with Wan, H3 and LTX, alongside **Viewport to final** with H3. All three character engines retain their approved original-performance, replacement-dialogue and silent-footage paths. See [Approved workflows](APPROVED_WORKFLOWS.md) for the durable acceptance ledger and limitations.
 
 Wan provides precise masked replacement. H3 uses its original reviewed-mask/depth/audio-guided character recipe; surroundings can change. LTX uses the approved whole-scene body-guided character pipeline, not masked inpainting. The common character task dispatches to each native path without rewriting saved projects. H3 Enhanced 1080p remains available for full-character delivery. A separate **H3 → Head & face** choice was approved on 18 October: one portrait or character sheet, one performer, original audio and up to two seconds. It uses tracked crop compositing and the supplied eight-step recipe, preserving the source body and surroundings through compositing. It bypasses starting-image generation.
 
-The latest rejection applies specifically to LTX viewport-to-final. It does not invalidate the three approved LTX character/audio examples. LTX viewport remains hidden. The unapproved H3 maskless Character-Swap LoRA, arbitrary object editing, relighting, protected-person background editing and optional post-generation lip compositing stay excluded.
+The latest rejection applies specifically to LTX viewport-to-final. It does not invalidate the three approved LTX character/audio examples. LTX viewport remains hidden. The unapproved H3 maskless Character-Swap LoRA, arbitrary object editing, protected-person background editing and optional post-generation lip compositing stay excluded.
 
 H3 viewport still defaults to Kitchen when supported: the identical train workload took 348 seconds with native attention and 208 seconds with Kitchen. TeaCache remains a private experiment. This speed comparison does not alter the approved character recipes.
 
@@ -81,3 +85,10 @@ The artist selected **H3 character replacement without a mask** as the next prio
 Wan Animate 2 is now exposed separately as **Character + background**, at the artist's request. It follows Comfy's distilled whole-frame recipe and offers no arbitrary spatial edit mask. Its model setup, native graph and clip limits are checked; local visual quality and speed are still unqualified. It must not inherit the Wan 2.2 approvals. See [setup and current limits](WAN_ANIMATE2.md).
 
 References: [official Animate2](https://github.com/Wan-Video/Wan-Animate-2), [Comfy distilled blueprint](https://github.com/Comfy-Org/workflow_templates/blob/main/blueprints/motion_transfer_wan_animate_2_distilled.json), [native Comfy implementation](https://github.com/Comfy-Org/ComfyUI/blob/master/comfy_extras/nodes_wan.py).
+
+Historical note: H3 Relight was restored as an explicitly labelled preview on 20 October 2026. It uses original audio and requires review of the lighting frame before animation. The Wan 2.1 route above was added on 22 October.
+
+
+### Local UI and relight readiness checks (20 October 2026)
+
+The local UI uses bundled daisyUI controls and Web Awesome tooltips/actions, with Source, Look and Settings inspector panels and a bottom prompt composer. Relight hides character replacement controls; lighting prompt input refreshes readiness immediately without requiring references. Overlong H3 sources offer an enabled trim recovery action. DOM regression checks cover these states, upload recovery, native generation handoffs, theme persistence and image references. JavaScript syntax, component build and 23 backend availability/relight checks pass. Installed files were hash-verified. Live Comfy Desktop visual review remains outstanding; no new generation quality approval is claimed. These changes are local and unreleased.

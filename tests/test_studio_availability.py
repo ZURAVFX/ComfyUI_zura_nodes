@@ -36,10 +36,18 @@ class AvailabilityTests(unittest.TestCase):
                         with self.assertRaisesRegex(ValueError, "stage"):
                             require_verified_setup(config, stage)
 
+    def test_relight_original_audio_stages_are_available(self):
+        config = self.config(engine="h3", workflow_mode="relight", prompt="Warm sunset")
+        self.assertTrue(verified_setup(config))
+        for stage in ("prepare", "design", "create_look", "animate", "h3"):
+            require_verified_setup(config, stage)
+        self.assertFalse(verified_setup({**config, "audio_id": "voice"}))
+        self.assertFalse(verified_setup({**config, "engine": "wan"}))
+
     def test_masked_engines_and_unqualified_tasks_are_blocked(self):
         for extra in ({"engine": "local"}, {"engine": "seedance"},
                       {"workflow_mode": "motion"},
-                      {"engine": "h3", "workflow_mode": "relight"}, {"mask_method": "text"},
+                      {"mask_method": "text"},
                       {"mask_method": "points"}, {"refine_lips": True, "lip_sync": True, "audio_id": "a" * 32}, {"subject_mode": "objects"}):
             with self.subTest(extra=extra), self.assertRaisesRegex(ValueError, "not available in Studio"):
                 require_verified_setup(self.config(**extra))

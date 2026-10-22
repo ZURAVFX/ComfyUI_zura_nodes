@@ -318,10 +318,10 @@ await ui.expandPreview();assert.equal(canvas.classList.contains('is-expanded'),t
 await ui.expandPreview();assert.equal(canvas.classList.contains('is-expanded'),false);
 
 // Exactly one main prompt is visible for each route, with separate image/video text.
-ui.lookMode='build';ui.project=null;
+ui.lookMode='build';ui.project={id:'prompt-test',phase:'opening',review:'shot',approval:'key',prepared_key:'key',opening_input:{file:'frame.png'},opening_key:'frame',opening_url:'/frame.png',actions:[]};ui.render();
 for(const engine of ['wan','wan2','h3','local']){
   Object.assign(ui.config,{engine,workflow_mode:engine==='local'||engine==='wan2'?'motion':'swap',edit_area:engine==='local'||engine==='wan2'?'scene':'mask',h3_head_swap:false});
-  ui.promptStage=null;ui.syncForm();ui.render();
+  ui.promptStage='image';ui.syncForm();ui.render();
   assert.equal(ui.$('image-editor').hidden,false,engine+' image prompt');
   ui.$('image_prompt').value='Keep the blue jacket.';
   ui.container.querySelector('[data-prompt-stage="video"]').onclick();
@@ -331,6 +331,7 @@ for(const engine of ['wan','wan2','h3','local']){
   assert.equal(ui.readConfig().prompt,'Preserve the gestures.');
   assert.equal(ui.readConfig().image_prompt,'Keep the blue jacket.');
 }
+ui.project=null;ui.promptStage=null;ui.syncForm();ui.render();
 // Trim commits reuse the existing saved configuration, without queuing generation.
 const trimRequests=[];
 api.fetchApi=async(path,options)=>{const body=JSON.parse(options.body);trimRequests.push({path,body});return {ok:true,json:async()=>({...ui.project,config:body.config})};};

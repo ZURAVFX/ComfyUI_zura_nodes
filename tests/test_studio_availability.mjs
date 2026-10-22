@@ -17,14 +17,15 @@ const modes=['motion','swap','viewport','relight'].map(value=>({...field(),value
 const engines=['local','h3','wan','seedance'].map(value=>({...field(),value}));
 const fields=new Map();const ui=Object.create(context.Studio.prototype);
 ui.$=id=>fields.get(id)||(fields.set(id,field()),fields.get(id));
-const stages=['auto','prepare','design','animate','wan_speech','h3','h3_enhance','background','restyle','draft','final'].map(value=>({...field(),value}));
-Object.assign(ui.$('graph-stage'),{options:stages,selectedOptions:[stages[0]]});
+const stages=['auto','prepare','design','animate','wan_speech','h3','h3_enhance','background','restyle','wan21_relight','draft','final'].map(value=>({...field(),value}));
+Object.assign(ui.$('graph-stage'),{options:stages,selectedOptions:[stages[0]],querySelector:selector=>stages.find(stage=>selector.includes(stage.value))||null});
 Object.assign(ui,{config:good,container:{querySelectorAll:selector=>selector.includes('gs-workflow')?modes:engines,querySelector:selector=>selector===".gs-look-choice"?ui.lookChoice??={hidden:false}:null}});
 ui.applyVerifiedSurface();
-assert.deepEqual(modes.filter(m=>!m.label.hidden).map(m=>m.value),['swap','viewport']);
+assert.deepEqual(modes.filter(m=>!m.label.hidden).map(m=>m.value),['swap','viewport','relight']);
 assert.deepEqual(engines.filter(m=>!m.label.hidden).map(m=>m.value),['local','h3','wan']);
 assert.ok(engines.find(m=>m.value==='seedance').disabled);
 assert.ok(stages.filter(s=>['h3','h3_enhance','draft','final'].includes(s.value)).every(s=>s.hidden&&s.disabled));
+assert.ok(stages.find(s=>s.value==='wan21_relight').disabled,'Wan relight graph stays unavailable outside relight mode');
 for (const engine of ['h3']) {
   ui.config={...good,engine,workflow_mode:'viewport',edit_area:'scene',audio_id:'',lip_sync:false};
   assert.equal(context.allowed(ui.config),true);
@@ -64,3 +65,8 @@ assert.equal(stages.find(s=>s.value==='h3_enhance').disabled,true,'No enhancemen
 ui.project.h3_enhancement_ready=true;ui.applyVerifiedSurface();assert.equal(stages.find(s=>s.value==='h3_enhance').disabled,false);
 ui.config={...good};ui.applyVerifiedSurface();assert.equal(stages.find(s=>s.value==='wan_speech').disabled,true);
 ui.config.audio_id='voice';ui.config.lip_sync=true;ui.applyVerifiedSurface();assert.equal(stages.find(s=>s.value==='wan_speech').disabled,false);
+
+assert.equal(context.allowed({...good,engine:'h3',workflow_mode:'relight',edit_area:'scene'}),true);
+assert.equal(context.allowed({...good,engine:'h3',workflow_mode:'relight',edit_area:'scene',audio_id:'voice'}),false);
+fresh.config={...good,workflow_mode:'relight',h3_head_swap:true,audio_id:'old',lip_sync:true,h3_viewport_direct:true};fresh.selectWorkflow();
+assert.equal(context.allowed(fresh.config),true);assert.equal(fresh.config.h3_viewport_direct,false);

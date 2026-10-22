@@ -1,13 +1,13 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-10-17T00:52:27.505718+00:00",
+  "generatedAt": "2026-10-20T00:00:00+00:00",
   "title": "Design System: Zura Studio",
   "extensions": {
     "motion": [
       {
         "name": "control-state",
         "value": "0.18s ease-out",
-        "purpose": "Hover and selection feedback"
+        "purpose": "Quiet hover and selection feedback"
       }
     ],
     "breakpoints": [
@@ -23,42 +23,51 @@
   },
   "components": [
     {
+      "name": "Image prompt composer",
+      "kind": "custom",
+      "description": "Persistent prompt and reference tray with one primary generate action; exact dimensions and model selection remain in the optional settings panel.",
+      "html": "<form class=\"zc-image-composer\"><section class=\"zc-references\"><div class=\"zc-reference-list\"></div></section><label for=\"zc-prompt\">Your prompt</label><textarea id=\"zc-prompt\"></textarea><button class=\"gs-primary\">Generate image</button></form>",
+      "css": ".zc-image-composer{background:#222228;border:1px solid #33333d;border-radius:12px;padding:16px}.zc-image-composer textarea{width:100%;min-height:96px;background:#19191e;color:#f2f2f0;border:1px solid #33333d;border-radius:8px}.zc-image-composer .gs-primary{min-height:44px;background:#caff00;color:#17180f;border:0;border-radius:8px}"
+    },
+    {
       "name": "Clip length",
       "kind": "custom",
-      "description": "Visible source/custom selection with native buttons and selected, disabled and focus states.",
+      "description": "Visible Use source and Custom buttons with selected, disabled and focus states.",
       "html": "<div class=\"gs-length-choice\" role=\"group\" aria-label=\"Clip length\"><button type=\"button\" aria-pressed=\"false\">Use source</button><button type=\"button\" aria-pressed=\"true\">Custom</button></div>",
-      "css": ":host{--gs-bg:#080c13;--gs-panel:#101620;--gs-line:#303b50;--gs-muted:#b4bfd2;--gs-accent:#7846f7;--gs-ink:#ffffff;--gs-accent-bright:#a28aff;--gs-accent-soft:#d0bfff;--gs-selected:#241b48;--gs-input:#131c29;--gs-focus:#b8a4ff;font:14px \"Segoe UI\",system-ui,sans-serif;}\n.gs-length-choice{display:flex;gap:4px;padding:4px;background:#0b111b;border:1px solid var(--gs-line);border-radius:8px}\n.gs-length-choice button{flex:1;min-width:0;min-height:40px;padding:8px;color:#d0d8e8;background:transparent;border:1px solid transparent;border-radius:5px;font:inherit;cursor:pointer}\n.gs-length-choice button[aria-pressed=true]{background:var(--gs-selected);border-color:var(--gs-accent-bright);color:#f6f0ff}\n.gs-length-choice button:hover:not(:disabled){background:#352163;color:#fff}\n.gs-length-choice button:focus-visible{outline:2px solid var(--gs-focus);outline-offset:2px}\n.gs-length-choice button:disabled{opacity:.55;cursor:not-allowed}"
+      "css": ":host{--gs-bg:#101013;--gs-panel:#19191e;--gs-line:#33333d;--gs-muted:#a3a3aa;--gs-accent:#caff00;--gs-ink:#17180f;--gs-accent-bright:#dcff55;--gs-focus:#d7ff50;font:14px \"Segoe UI\",system-ui,sans-serif}.gs-length-choice{display:flex;gap:4px;padding:4px;background:#19191e;border:1px solid var(--gs-line);border-radius:8px}.gs-length-choice button{flex:1;min-width:0;min-height:40px;padding:8px;color:#f2f2f0;background:transparent;border:1px solid transparent;border-radius:5px;font:inherit;cursor:pointer}.gs-length-choice button[aria-pressed=true]{background:#292a21;border-color:var(--gs-accent-bright);color:#f2f2f0}.gs-length-choice button:hover:not(:disabled){background:#26262b}.gs-length-choice button:focus-visible{outline:2px solid var(--gs-focus);outline-offset:2px}.gs-length-choice button:disabled{opacity:.55;cursor:not-allowed}"
     }
   ],
   "narrative": {
-    "northStar": "Real media first, clear controls around it",
-    "overview": "A deep navy editing workspace with overhead light, violet actions and the supplied Zura mark. Source, look and prompt sit beside the real preview; shot settings and the next action remain together.",
+    "northStar": "A quiet canvas for making images and videos",
+    "overview": "The user-approved Artify direction uses a charcoal workspace, acid-lime primary action, compact tools, a persistent prompt and saved dark/light appearance. Image and Video are the clear starting choices; advanced controls stay available without dominating the canvas.",
     "keyCharacteristics": [
-      "Three-column editor",
-      "Actual media previews",
-      "Current-stage progress",
-      "Native graph access",
-      "Official supplied Zura logo"
+      "Simple Image and Video entry points",
+      "Persistent prompt and reference tray",
+      "Large preview canvas with compact settings",
+      "Saved dark and light themes",
+      "Native ComfyUI graph access"
     ],
     "rules": [
       {
         "name": "Honest progress",
-        "body": "Never present a current-stage percentage as whole-job completion. Show measured remaining time as an estimate.",
+        "body": "Show progress for the active stage only. Label estimated remaining time as an estimate and use indeterminate progress when a stage cannot report completion.",
         "section": "components"
       },
       {
-        "name": "Visible clip-length choices",
-        "body": "Use source and Custom remain visible buttons. An oversized source offers actionable trimming recovery. Theme remaining native option menus for legibility.",
+        "name": "Keep the prompt central",
+        "body": "The prompt and references remain together beside the primary generate action. Technical settings stay in the compact, optional settings surface.",
         "section": "components"
       }
     ],
     "dos": [
-      "Keep trimming recovery actionable",
-      "Retain native audio, masking and graph controls"
+      "Keep the preview and prompt in view",
+      "Retain native labels, keyboard focus and graph access",
+      "Show actual user media in references and results"
     ],
     "donts": [
-      "Do not fabricate previews or results",
-      "Do not imply unavailable browser verification"
+      "Do not fill the canvas with promotional text or placeholder cards",
+      "Do not imply unavailable browser verification",
+      "Do not hide the prompt behind advanced settings"
     ]
   }
 }

@@ -1,0 +1,95 @@
+Bundled license information:
+
+@lit/reactive-element/css-tag.js:
+  /**
+   * @license
+   * Copyright 2019 Google LLC
+   * SPDX-License-Identifier: BSD-3-Clause
+   */
+
+@lit/reactive-element/reactive-element.js:
+lit-html/lit-html.js:
+lit-element/lit-element.js:
+@lit/reactive-element/decorators/custom-element.js:
+@lit/reactive-element/decorators/property.js:
+@lit/reactive-element/decorators/state.js:
+@lit/reactive-element/decorators/event-options.js:
+@lit/reactive-element/decorators/base.js:
+@lit/reactive-element/decorators/query.js:
+@lit/reactive-element/decorators/query-all.js:
+@lit/reactive-element/decorators/query-async.js:
+@lit/reactive-element/decorators/query-assigned-nodes.js:
+lit-html/directive.js:
+  /**
+   * @license
+   * Copyright 2017 Google LLC
+   * SPDX-License-Identifier: BSD-3-Clause
+   */
+
+lit-html/is-server.js:
+  /**
+   * @license
+   * Copyright 2022 Google LLC
+   * SPDX-License-Identifier: BSD-3-Clause
+   */
+
+@awesome.me/webawesome/dist/chunks/chunk.DJLBC7Q4.js:
+@awesome.me/webawesome/dist/chunks/chunk.4ZAKP7NY.js:
+@awesome.me/webawesome/dist/chunks/chunk.MQODJ75V.js:
+@awesome.me/webawesome/dist/chunks/chunk.3NKIHICW.js:
+@awesome.me/webawesome/dist/chunks/chunk.PX3HMKF7.js:
+@awesome.me/webawesome/dist/chunks/chunk.ZWQCGLB5.js:
+@awesome.me/webawesome/dist/chunks/chunk.HS5AYC6E.js:
+@awesome.me/webawesome/dist/chunks/chunk.7VGCIHDG.js:
+@awesome.me/webawesome/dist/chunks/chunk.AOKMSJXD.js:
+@awesome.me/webawesome/dist/chunks/chunk.M45NRQFW.js:
+@awesome.me/webawesome/dist/chunks/chunk.S67PIWQL.js:
+@awesome.me/webawesome/dist/chunks/chunk.UEBQI7VV.js:
+@awesome.me/webawesome/dist/chunks/chunk.3H2FQERJ.js:
+@awesome.me/webawesome/dist/chunks/chunk.KNJT7KBU.js:
+@awesome.me/webawesome/dist/chunks/chunk.F25QOBDY.js:
+@awesome.me/webawesome/dist/chunks/chunk.L6CIKOFQ.js:
+@awesome.me/webawesome/dist/chunks/chunk.PZAN6FPN.js:
+@awesome.me/webawesome/dist/chunks/chunk.6RPNM7SD.js:
+@awesome.me/webawesome/dist/components/tooltip/tooltip.js:
+@awesome.me/webawesome/dist/chunks/chunk.2LXKNNNE.js:
+@awesome.me/webawesome/dist/chunks/chunk.4LIBWWJL.js:
+@awesome.me/webawesome/dist/chunks/chunk.Z6IK7DP4.js:
+@awesome.me/webawesome/dist/chunks/chunk.RPQJAXXR.js:
+@awesome.me/webawesome/dist/chunks/chunk.G5ZZIGWB.js:
+@awesome.me/webawesome/dist/chunks/chunk.GU5IUSXK.js:
+@awesome.me/webawesome/dist/chunks/chunk.YCTNB6J5.js:
+@awesome.me/webawesome/dist/chunks/chunk.RWNXKUCF.js:
+@awesome.me/webawesome/dist/chunks/chunk.JZGJWX35.js:
+@awesome.me/webawesome/dist/chunks/chunk.YDQCS2HK.js:
+@awesome.me/webawesome/dist/chunks/chunk.WDIIGUNP.js:
+@awesome.me/webawesome/dist/chunks/chunk.O74G5RVH.js:
+@awesome.me/webawesome/dist/chunks/chunk.HGBRCPUS.js:
+@awesome.me/webawesome/dist/chunks/chunk.KKI7M5DP.js:
+@awesome.me/webawesome/dist/chunks/chunk.YPRC5XZF.js:
+@awesome.me/webawesome/dist/chunks/chunk.UDRJMWVZ.js:
+@awesome.me/webawesome/dist/chunks/chunk.JAAVYFGY.js:
+@awesome.me/webawesome/dist/components/dropdown/dropdown.js:
+  /*! Copyright 2026 Fonticons, Inc. - https://webawesome.com/license */
+
+@lit/reactive-element/decorators/query-assigned-elements.js:
+  /**
+   * @license
+   * Copyright 2021 Google LLC
+   * SPDX-License-Identifier: BSD-3-Clause
+   */
+
+lit-html/directives/class-map.js:
+lit-html/directives/if-defined.js:
+  /**
+   * @license
+   * Copyright 2018 Google LLC
+   * SPDX-License-Identifier: BSD-3-Clause
+   */
+
+lit-html/directive-helpers.js:
+  /**
+   * @license
+   * Copyright 2020 Google LLC
+   * SPDX-License-Identifier: BSD-3-Clause
+   */

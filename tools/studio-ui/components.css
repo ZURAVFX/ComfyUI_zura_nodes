@@ -1,0 +1,9 @@
+@import "tailwindcss/theme.css";
+@import "tailwindcss/utilities.css" source(none);
+@source inline("zu-btn zu-btn-primary zu-btn-ghost zu-input zu-select zu-textarea");
+@plugin "daisyui" {
+ themes: false;
+ prefix: "zu-";
+ include: button, input, select, textarea;
+ logs: false;
+}

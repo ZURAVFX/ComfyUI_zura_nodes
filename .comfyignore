@@ -78,3 +78,7 @@ qwen_voice_design.local.json*
 
 # Local optional Parakeet interpreter and model paths.
 parakeet.local.json*
+
+# UI build sources are not runtime dependencies.
+/tools/
+/work/

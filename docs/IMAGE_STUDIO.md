@@ -75,7 +75,6 @@ Native Graph view remains available for both images and videos.
 
 ## Validation limits
 
-Native generation and DOM interaction tests pass. Live local browser visual
-verification was unavailable due to the browser tool's existing access block.
-The installed Desktop layout still needs a visual check at the user's window
+Native recipe and DOM interaction tests pass. The current changes still need a
+live visual check in the installed Comfy Desktop window at the user's display
 size before this overhaul is treated as visually approved.

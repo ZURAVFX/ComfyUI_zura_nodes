@@ -47,6 +47,20 @@ jobs:
           assert Path('LICENSE').is_file()
           assert Path('THIRD_PARTY_NOTICES.md').is_file()
           assert Path('web/v2_media_picker.js').is_file()
+          studio_loader = Path('web/studio.js').read_text(encoding='utf-8')
+          for asset in ('web/studio_create.js', 'web/studio_create.css',
+                        'web/studio_components.css',
+                        'web/vendor/studio-components.css',
+                        'web/vendor/studio-components.js',
+                        'web/vendor/studio-components.js.LEGAL.txt',
+                        'licenses/daisyui-LICENSE.txt',
+                        'licenses/tailwindcss-LICENSE.txt',
+                        'licenses/webawesome-LICENSE.md'):
+              assert Path(asset).is_file(), f'Missing Studio component release asset: {asset}'
+          for import_path in ('./studio_create.js', './studio_create.css',
+                              './studio_components.css', './vendor/studio-components.css',
+                              './vendor/studio-components.js'):
+              assert import_path in studio_loader, f'Studio does not load packaged UI asset: {import_path}'
           for asset in ('web/multicam_angle_gallery.js', 'web/anyangle_english.js', 'multicam_v3.py',
                         'multicam_v4_clean.py', 'h3_single_angle.py',
                         'idv2v_control.py', 'klein_look.py'):
@@ -82,6 +96,7 @@ jobs:
                         'ARTIST_STUDIO.md', 'ARTIST_STUDIO_VALIDATION.md', 'Open_Zura_Studio.url'):
               assert Path(asset).is_file(), f'Missing artist studio asset: {asset}'
           for asset in ('artist_studio/ltx25.py', 'artist_studio/opening.py', 'artist_studio/appearance.py', 'artist_studio/hardware.py', 'INSTALL_STUDIO.md',
+                        'artist_studio/wan21_relight.py', 'tests/test_wan21_relight.py',
                         'artist_studio/wan_parts.py', 'artist_studio/wan_graph.py', 'artist_studio/wan_graph_guard.py',
                         'artist_studio/h3_windows.py', 'artist_studio/h3_window_nodes.py',
                         'artist_studio/cut_tracking.py', 'wan_preparation_runtime.py',
@@ -179,6 +194,7 @@ jobs:
           python -m unittest discover -s tests -p 'test_h3_head_swap.py'
           python -m unittest discover -s tests -p 'test_h3_head_studio.py'
           python -m unittest discover -s tests -p 'test_studio_availability.py'
+          python -m unittest discover -s tests -p 'test_wan21_relight.py'
           python -m unittest discover -s tests -p 'test_studio_upload.py'
           python -m unittest discover -s tests -p 'test_h3_viewport_render.py'
           python -m unittest discover -s tests -p 'test_ltx25_viewport_plan.py'

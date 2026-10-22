@@ -33,8 +33,8 @@ class RelightTextTests(unittest.TestCase):
         self.assertEqual(detected['inputs']['refine_iterations'], 0)
         self.assertEqual(g['zura_relight_text_margin']['class_type'], 'GrowMask')
         self.assertEqual(g['zura_relight_edit_mask']['class_type'], 'InvertMask')
-        for target in ('17', '20'):
-            self.assertEqual(g[target]['inputs']['mask'], ['zura_relight_edit_mask', 0])
+        self.assertEqual(g['20']['class_type'], 'GenjSaveReview')
+        self.assertEqual(g['20']['inputs']['mask'], ['zura_relight_edit_mask', 0])
         # Empty native detections pass through grow/invert as an all-editable mask.
         # There is no detection-count gate that could reject a no-text clip.
         self.assertNotIn('text_removal', g)

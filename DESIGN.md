@@ -1,43 +1,36 @@
 ---
 colors:
-  background: "#080c13"
-  surface: "#101620"
-  border: "#303b50"
-  primary: "#7846f7"
-  foreground: "#f0f1f3"
-  muted: "#b4bfd2"
-  primary-hover: "#8150fa"
-  primary-soft: "#d0bfff"
-  primary-surface: "#241b48"
-  canvas: "#060a11"
-  warning-surface: "#211c37"
-  warning-border: "#55467a"
-  warning-text: "#d7cded"
-  shell-light: "#26334d"
-  panel-light: "#151d2b"
-  input: "#131c29"
-  input-light: "#172130"
-  control-border: "#62728c"
-  focus: "#b8a4ff"
-  selected-border: "#a28aff"
-  step-light: "#ac91ff"
-  step-violet: "#865cff"
-  step-ink: "#100b24"
-  action: "#743df7"
-  action-end: "#6734e9"
-  action-hover-end: "#7748f5"
-  ready: "#b9ed70"
+  background: "#101013"
+  surface: "#19191e"
+  composer: "#222228"
+  border: "#33333d"
+  primary: "#caff00"
+  foreground: "#f2f2f0"
+  muted: "#a3a3aa"
+  selected: "#292a21"
+  hover: "#26262b"
+  focus: "#d7ff50"
+  warning-indicator: "#edb977"
+  error: "#e77e70"
+  overlay-backdrop: "rgba(0,0,0,.73)"
+  floating-shadow: "rgba(0,0,0,.25)"
+  light-background: "#f5f5f1"
+  light-surface: "#ffffff"
+  light-input: "#f0f0eb"
+  light-border: "#dcdcd5"
+  light-foreground: "#202019"
+  light-muted: "#686861"
 ---
 
 # Zura Studio design system
 
 ## Overview
 
-Zura Studio is a local video editing workspace. The user-approved direction is a dark navy interface with violet actions, a large real-media preview and compact editing controls. The surface operates as an editor, with product clarity ahead of decoration.
+Zura Studio is a local creative workspace for image and video generation. The user-approved direction follows Artify: a quiet charcoal canvas, compact tools, a persistent bottom prompt and a single acid-lime primary action. Dark and light themes share the same layout and save the user's choice.
 
 ## Colors
 
-The CSS variables on `#genj-studio` define the palette above. Violet identifies the current stage, selection, focus and primary action. Text and controls use navy surfaces with a restrained overhead light across the shell. Elevated panels and inputs use tonal navy shading; active stages and selected controls use brighter violet. The primary button owns the strongest violet. The supplied Zura logo is used unchanged, displayed in silver on the dark header using CSS inversion and screen blending. Readiness retains a green dot beside its text label. Warnings explain the recovery beside the action they affect.
+The scoped CSS variables on `#genj-studio` define the palette above. Charcoal distinguishes the canvas, tools and prompt surface. Lime marks the primary action, selected model, current step and focus. The supplied Zura logo remains unchanged. Readiness uses a green status dot with a text label. Warnings explain the recovery beside the action they affect.
 
 ## Typography
 
@@ -45,9 +38,7 @@ Segoe UI with system sans-serif fallbacks. Base text is 14 px. Compact labels ar
 
 ## Layout
 
-Desktop uses three columns: source, references and prompt on the left; the actual source/review/result player and real takes in the centre; model, output, trimming, audio and generation on the right. Source, Look, Review and Generate navigation reflects real state and moves focus to relevant controls. Graph view remains in the header.
-
-Below 1241 px the controls and settings form the left column beside the preview. At 900 px and below the panels stack as source/look, preview, then settings. Mobile progress sits below the video rather than covering it.
+The app stays within the Comfy window. Video uses a compact inspector beside a large real-media canvas and a prompt composer at the bottom. Only the active inspector and long result lists scroll. Image generation keeps the canvas, optional settings rail, references and prompt together. Home offers clear Image and Video entry points. Graph view remains in the header.
 
 ## Components
 
@@ -63,21 +54,21 @@ State transitions use short ease-out changes. Indeterminate progress conveys ong
 
 ## Do's and Don'ts
 
-Keep native labelled inputs, keyboard focus outlines, current-step ARIA and progressbar semantics. Do not invent results, source imagery, account avatars or unsupported controls. Browser restrictions currently prevent visual verification; source and behavioural checks do not imply a completed browser review.
+Keep native labelled inputs, keyboard focus outlines, current-step ARIA and progressbar semantics. Do not invent results, source imagery, account avatars or unsupported controls. Source and behavioural checks do not replace a live visual review.
 
 Clip range uses Use source / Trim buttons and a source filmstrip with draggable start/end handles. Precision timing is collapsed beneath it. Dragging seeks the source and commits once on release, with frame-level keyboard adjustments. Remaining native option popups have explicit dark surface and readable text colours.
 
 
 ## Character creation flow
 
-Source contains the video and appearance references. The central desktop workspace keeps its prompt composer visible below the media area, which scrolls independently. Image and video prompts keep distinct text; camera direction uses the same visible composer even with an uploaded camera still. One main action creates the starting frame, including source preparation, without queuing animation. The centre previews the resulting frame and offers Selection / Guidance / Original tabs for inspection. Camera stills do not require a mask-review record, and stills and videos can be expanded fullscreen. Video resolution, sampling and audio controls appear after the frame exists. Regenerate is a secondary revision action available only for an existing frame. The main action then becomes Generate video. Direct-portrait and direct-viewport workflows retain their explicit shortcuts.
+Source contains the video and appearance references. The video canvas and bottom composer remain in view while the selected source or settings panel owns its own scroll. Image and video prompts keep distinct text; camera direction uses the same visible composer even with an uploaded camera still. One main action creates the starting frame, including source preparation, without queuing animation. The centre previews the resulting frame and offers Selection / Guidance / Original tabs for inspection. Camera stills do not require a mask-review record, and stills and videos can be expanded fullscreen. Video resolution, sampling and audio controls appear after the frame exists. Regenerate is a secondary revision action available only for an existing frame. The main action then becomes Generate video. Direct-portrait and direct-viewport workflows retain their explicit shortcuts.
 
 ## October 2026 Image / Video overhaul
 
 The Artify reference supplied by the user supersedes the earlier three-column
 composition described above. `studio_create.css` is the new shell layer.
 Charcoal ground (#101013), slightly lighter tools (#19191e), composer (#222228),
-quiet borders (#33333d), Zura violet actions and the unchanged real logo replace
+quiet borders (#33333d), acid-lime actions and the unchanged real logo replace
 the navy overhead glow. Typography remains the established system sans-serif.
 
 Home offers two clear choices. Image uses one compact model/shape sidebar, a
@@ -94,3 +85,28 @@ qualification limits are documented in docs/IMAGE_STUDIO.md.
 ## Appearance update
 
 The user requested a closer match to Artify: neutral charcoal with acid-lime primary actions replaces the violet accent in Studio. A persistent header toggle offers a warm-white light appearance with dark text. `zura-studio-theme` saves the explicit choice in local browser storage. Image dimensions have labelled width/height fields and a swap action, alongside shape presets.
+
+## Artify canvas refinement, 20 October 2026
+
+The user reconfirmed Artify as the governing reference. Image settings are closed
+initially and open through a labelled Settings control; Escape and Done close the
+inspector without discarding edits. Desktop uses the available canvas width with
+an optional 280px inspector and 24px gutters. Mobile uses a bounded settings sheet.
+The prompt and references stay together in a centred, maximum 960px composer.
+Headers are compact task names, not promotional copy. The Home choices have no
+synthetic illustration. Video retains its existing stage logic with quieter,
+narrower setup controls. Dark/light preferences and all generation recipes remain.
+
+This pass has DOM and regression coverage. Live visual sign-off in the installed
+Comfy window remains outstanding. It is not published.
+
+
+## Shared component foundation
+
+The user selected daisyUI and Web Awesome together. daisyUI styles native fields
+and actions with zu-prefixed classes scoped to #genj-studio; Web Awesome supplies
+contextual tooltips. Both inherit the same saved dark/light Zura palette.
+Bundles are local; no CDN, external font or paid component is required. Native
+field IDs and events remain intact. Existing text hints remain if tooltips fail.
+The video composer has one surface, no duplicate visible field label, and a
+horizontal footer linking the prerequisite message to the primary action.

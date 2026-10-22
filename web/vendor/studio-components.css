@@ -1,0 +1,859 @@
+/*! tailwindcss v4.3.3 | MIT License | https://tailwindcss.com */
+#genj-studio[data-workspace] :where(.zu-btn) {
+    width: unset;
+  }
+#genj-studio[data-workspace] .zu-btn {
+    --zu-size: calc(var(--size-field, 0.25rem) * 10);
+    --zu-btn-p: 1rem;
+    --zu-btn-fg: var(--color-base-content);
+    display: inline-flex;
+    flex-shrink: 0;
+    cursor: pointer;
+    flex-wrap: nowrap;
+    align-items: center;
+    justify-content: center;
+    gap: calc(0.25rem * 1.5);
+    text-align: center;
+    vertical-align: middle;
+    outline-offset: 2px;
+    webkit-user-select: none;
+    user-select: none;
+    font-weight: 600;
+    border-start-start-radius: var(--zu-join-ss, var(--radius-field));
+    border-start-end-radius: var(--zu-join-se, var(--radius-field));
+    border-end-start-radius: var(--zu-join-es, var(--radius-field));
+    border-end-end-radius: var(--zu-join-ee, var(--radius-field));
+    border-width: var(--border);
+    touch-action: manipulation;
+    transition-property: color, background-color, border-color, box-shadow, transform;
+    transition-timing-function: cubic-bezier(0, 0, 0.2, 1);
+    transition-duration: 0.2s;
+    --zu-btn-bg: var(--zu-btn-color, var(--color-base-200));
+    --zu-btn-border: var(--zu-btn-color, var(--color-base-200));
+  }
+@supports (color: color-mix(in lab, red, red)) {
+    #genj-studio[data-workspace] .zu-btn {
+      --zu-btn-border: color-mix(
+      in oklab,
+      var(--zu-btn-color, var(--color-base-200)),
+      #000 calc(var(--depth) * 5%)
+    );
+    }
+  }
+#genj-studio[data-workspace] .zu-btn {
+    --zu-btn-soft-bg: initial;
+    --zu-btn-shadow: 0 3px 2px -2px var(--zu-btn-bg),
+      0 4px 3px -2px var(--zu-btn-bg);
+  }
+@supports (color: color-mix(in lab, red, red)) {
+    #genj-studio[data-workspace] .zu-btn {
+      --zu-btn-shadow: 0 3px 2px -2px color-mix(in oklab, var(--zu-btn-bg) calc(var(--depth) * 30%), #0000),
+      0 4px 3px -2px color-mix(in oklab, var(--zu-btn-bg) calc(var(--depth) * 30%), #0000);
+    }
+  }
+#genj-studio[data-workspace] .zu-btn {
+    --zu-btn-inset: 0 0.5px 0 0.5px oklch(100% 0 0 / calc(var(--depth) * 6%));
+    height: var(--zu-size);
+    padding-inline: var(--zu-btn-p);
+    font-size: var(--zu-fontsize, 0.875rem);
+    background-color: var(--zu-btn-bg);
+    color: var(--zu-btn-fg);
+    border-color: var(--zu-btn-border);
+    border-style: var(--zu-btn-border-style, solid);
+    outline-color: var(--zu-btn-color, var(--color-base-content));
+    --tw-prose-links: var(--zu-btn-fg);
+    background-image: none, var(--zu-fx-noise);
+    background-size: auto, calc(var(--noise, 0) * 100%);
+    text-shadow: 0 0.5px oklch(100% 0 0 / calc(var(--depth) * 0.15));
+    box-shadow: var(--zu-btn-inset) inset, var(--zu-btn-shadow);
+  }
+#genj-studio[data-workspace] .zu-btn:is([type="checkbox"], [type="radio"]) {
+    appearance: none;
+  }
+#genj-studio[data-workspace] .zu-btn:is([type="checkbox"], [type="radio"])[aria-label]::after {
+    --tw-content: attr(aria-label);
+    content: var(--tw-content);
+  }
+#genj-studio[data-workspace] .zu-btn:where(:checked:not(.zu-filter [type="radio"].zu-btn)) {
+    --zu-btn-color: var(--color-primary);
+    --zu-btn-fg: var(--color-primary-content);
+  }
+#genj-studio[data-workspace] .prose :where(a.zu-btn:not(.zu-btn-link)):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
+  text-decoration-line: none;
+}
+@media (hover: hover) {
+    #genj-studio[data-workspace] .zu-btn:hover {
+      --zu-btn-bg: var(--zu-btn-color, var(--color-base-200));
+    }
+    @supports (color: color-mix(in lab, red, red)) {
+      #genj-studio[data-workspace] .zu-btn:hover {
+        --zu-btn-bg: color-mix(in oklab, var(--zu-btn-color, var(--color-base-200)), #000 7%);
+      }
+    }
+    #genj-studio[data-workspace] .zu-btn:hover {
+      color: var(--zu-btn-fg);
+      --zu-btn-border: var(--zu-btn-bg);
+    }
+    @supports (color: color-mix(in lab, red, red)) {
+      #genj-studio[data-workspace] .zu-btn:hover {
+        --zu-btn-border: color-mix(in oklab, var(--zu-btn-bg), #000 calc(var(--depth) * 5%));
+      }
+    }
+    #genj-studio[data-workspace] .zu-btn:hover {
+      --zu-btn-border-style: solid;
+      --zu-btn-inset: 0 0.5px 0 0.5px oklch(100% 0 0 / calc(var(--depth) * 6%));
+      --zu-btn-shadow: 0 3px 2px -2px var(--zu-btn-bg),
+          0 4px 3px -2px var(--zu-btn-bg);
+    }
+    @supports (color: color-mix(in lab, red, red)) {
+      #genj-studio[data-workspace] .zu-btn:hover {
+        --zu-btn-shadow: 0 3px 2px -2px color-mix(in oklab, var(--zu-btn-bg) calc(var(--depth) * 30%), #0000),
+          0 4px 3px -2px color-mix(in oklab, var(--zu-btn-bg) calc(var(--depth) * 30%), #0000);
+      }
+    }
+  }
+#genj-studio[data-workspace] .zu-btn:active:not(.zu-btn-active, [aria-pressed="true"], [aria-checked="true"], [aria-current]:not([aria-current="false"], [aria-current=""]) ) {
+    translate: 0 0.5px;
+    --zu-btn-bg: var(--zu-btn-color, var(--color-base-200));
+  }
+@supports (color: color-mix(in lab, red, red)) {
+    #genj-studio[data-workspace] .zu-btn:active:not(.zu-btn-active, [aria-pressed="true"], [aria-checked="true"], [aria-current]:not([aria-current="false"], [aria-current=""]) ) {
+      --zu-btn-bg: color-mix(in oklab, var(--zu-btn-color, var(--color-base-200)), #000 5%);
+    }
+  }
+#genj-studio[data-workspace] .zu-btn:active:not(.zu-btn-active, [aria-pressed="true"], [aria-checked="true"], [aria-current]:not([aria-current="false"], [aria-current=""]) ) {
+    color: var(--zu-btn-fg, var(--color-base-content));
+    --zu-btn-border: var(--zu-btn-color, var(--color-base-200));
+  }
+@supports (color: color-mix(in lab, red, red)) {
+    #genj-studio[data-workspace] .zu-btn:active:not(.zu-btn-active, [aria-pressed="true"], [aria-checked="true"], [aria-current]:not([aria-current="false"], [aria-current=""]) ) {
+      --zu-btn-border: color-mix(in oklab, var(--zu-btn-color, var(--color-base-200)), #000 7%);
+    }
+  }
+#genj-studio[data-workspace] .zu-btn:active:not(.zu-btn-active, [aria-pressed="true"], [aria-checked="true"], [aria-current]:not([aria-current="false"], [aria-current=""]) ) {
+    --zu-btn-border-style: solid;
+    --zu-btn-inset: 0 0 0 0 oklch(0% 0 0/0);
+    --zu-btn-shadow: 0 0 0 0 oklch(0% 0 0/0);
+  }
+#genj-studio[data-workspace] .zu-btn:where(:checked:not(.zu-filter [type="radio"].zu-btn), :not([type="radio"], [type="checkbox"]):focus-visible ) {
+    --zu-btn-bg: var(--zu-btn-color, var(--color-base-200));
+    color: var(--zu-btn-fg, var(--color-base-content));
+    --zu-btn-border: var(--zu-btn-bg);
+  }
+@supports (color: color-mix(in lab, red, red)) {
+    #genj-studio[data-workspace] .zu-btn:where(:checked:not(.zu-filter [type="radio"].zu-btn), :not([type="radio"], [type="checkbox"]):focus-visible ) {
+      --zu-btn-border: color-mix(in oklab, var(--zu-btn-bg), #000 calc(var(--depth) * 5%));
+    }
+  }
+#genj-studio[data-workspace] .zu-btn:where(:checked:not(.zu-filter [type="radio"].zu-btn), :not([type="radio"], [type="checkbox"]):focus-visible ) {
+    --zu-btn-border-style: solid;
+    --zu-btn-inset: 0 0.5px 0 0.5px oklch(100% 0 0 / calc(var(--depth) * 6%));
+    --zu-btn-shadow: 0 3px 2px -2px var(--zu-btn-bg),
+        0 4px 3px -2px var(--zu-btn-bg);
+  }
+@supports (color: color-mix(in lab, red, red)) {
+    #genj-studio[data-workspace] .zu-btn:where(:checked:not(.zu-filter [type="radio"].zu-btn), :not([type="radio"], [type="checkbox"]):focus-visible ) {
+      --zu-btn-shadow: 0 3px 2px -2px color-mix(in oklab, var(--zu-btn-bg) calc(var(--depth) * 30%), #0000),
+        0 4px 3px -2px color-mix(in oklab, var(--zu-btn-bg) calc(var(--depth) * 30%), #0000);
+    }
+  }
+#genj-studio[data-workspace] .zu-btn:where(:checked:not(.zu-filter [type="radio"].zu-btn), :not([type="radio"], [type="checkbox"]):focus-visible ) {
+    isolation: isolate;
+  }
+#genj-studio[data-workspace] .zu-btn:focus-visible {
+    outline-width: 2px;
+    outline-style: solid;
+    isolation: isolate;
+  }
+#genj-studio[data-workspace] .zu-btn:has(:focus-visible) {
+    outline-width: 2px;
+    outline-style: solid;
+    isolation: isolate;
+  }
+#genj-studio[data-workspace] .zu-btn:is([aria-pressed="true"], [aria-checked="true"], [aria-current]:not([aria-current="false"], [aria-current=""]) ) {
+    --zu-btn-bg: var(--zu-btn-color, var(--color-base-200));
+  }
+@supports (color: color-mix(in lab, red, red)) {
+    #genj-studio[data-workspace] .zu-btn:is([aria-pressed="true"], [aria-checked="true"], [aria-current]:not([aria-current="false"], [aria-current=""]) ) {
+      --zu-btn-bg: color-mix(in oklab, var(--zu-btn-color, var(--color-base-200)), #000 5%);
+    }
+  }
+#genj-studio[data-workspace] .zu-btn:is([aria-pressed="true"], [aria-checked="true"], [aria-current]:not([aria-current="false"], [aria-current=""]) ) {
+    color: var(--zu-btn-fg, var(--color-base-content));
+    --zu-btn-border: var(--zu-btn-color, var(--color-base-200));
+  }
+@supports (color: color-mix(in lab, red, red)) {
+    #genj-studio[data-workspace] .zu-btn:is([aria-pressed="true"], [aria-checked="true"], [aria-current]:not([aria-current="false"], [aria-current=""]) ) {
+      --zu-btn-border: color-mix(in oklab, var(--zu-btn-color, var(--color-base-200)), #000 7%);
+    }
+  }
+#genj-studio[data-workspace] .zu-btn:is([aria-pressed="true"], [aria-checked="true"], [aria-current]:not([aria-current="false"], [aria-current=""]) ) {
+    --zu-btn-border-style: solid;
+    --zu-btn-inset: 0 0 0 0 oklch(0% 0 0/0);
+    --zu-btn-shadow: 0 0 0 0 oklch(0% 0 0/0);
+    isolation: isolate;
+  }
+#genj-studio[data-workspace] .zu-btn:is(.zu-btn-disabled, :disabled, [disabled], [aria-disabled="true"]) {
+    pointer-events: none;
+    color: var(--color-base-content);
+  }
+@supports (color: color-mix(in lab, red, red)) {
+    #genj-studio[data-workspace] .zu-btn:is(.zu-btn-disabled, :disabled, [disabled], [aria-disabled="true"]) {
+      color: color-mix(in oklch, var(--color-base-content) 20%, #0000);
+    }
+  }
+#genj-studio[data-workspace] .zu-btn:is(.zu-btn-disabled, :disabled, [disabled], [aria-disabled="true"]) {
+    --zu-btn-bg: #0000;
+    --zu-btn-border: #0000;
+    background-image: none;
+    --zu-btn-inset: 0 0 0 0 oklch(0% 0 0/0);
+    --zu-btn-shadow: 0 0 0 0 oklch(0% 0 0/0);
+  }
+#genj-studio[data-workspace] .zu-btn:is(.zu-btn-disabled, :disabled, [disabled], [aria-disabled="true"]):not(.zu-btn-link, .zu-btn-ghost) {
+    background-color: var(--color-base-content);
+  }
+@supports (color: color-mix(in lab, red, red)) {
+    #genj-studio[data-workspace] .zu-btn:is(.zu-btn-disabled, :disabled, [disabled], [aria-disabled="true"]):not(.zu-btn-link, .zu-btn-ghost) {
+      background-color: color-mix(in oklab, var(--color-base-content) 10%, transparent);
+    }
+  }
+#genj-studio[data-workspace] .zu-input {
+    position: relative;
+    display: inline-flex;
+    flex-shrink: 1;
+    appearance: none;
+    align-items: center;
+    gap: calc(0.25rem * 2);
+    background-color: var(--color-base-100);
+    padding-inline: calc(0.25rem * 3);
+    vertical-align: middle;
+    white-space: nowrap;
+    --zu-size: calc(var(--size-field, 0.25rem) * var(--zu-in-size-mul, 10));
+    --zu-input-color: var(--color-base-content);
+  }
+@supports (color: color-mix(in lab, red, red)) {
+    #genj-studio[data-workspace] .zu-input {
+      --zu-input-color: color-mix(in oklab, var(--color-base-content) 20%, #0000);
+    }
+  }
+#genj-studio[data-workspace] .zu-input {
+    cursor: text;
+    width: clamp(3rem, 20rem, 100%);
+    height: var(--zu-size);
+    font-size: max(var(--zu-font-size, 0rem), var(--zu-font-size-min, 0.875rem));
+    touch-action: manipulation;
+    border-start-start-radius: var(--zu-join-ss, var(--radius-field));
+    border-start-end-radius: var(--zu-join-se, var(--radius-field));
+    border-end-start-radius: var(--zu-join-es, var(--radius-field));
+    border-end-end-radius: var(--zu-join-ee, var(--radius-field));
+    border: var(--border) solid var(--zu-input-color, #0000);
+    box-shadow: 0 1px var(--zu-input-color) inset, 0 -1px oklch(100% 0 0 / calc(var(--depth) * 0.1)) inset;
+  }
+@supports (color: color-mix(in lab, red, red)) {
+    #genj-studio[data-workspace] .zu-input {
+      box-shadow: 0 1px color-mix(in oklab, var(--zu-input-color) calc(var(--depth) * 10%), #0000) inset, 0 -1px oklch(100% 0 0 / calc(var(--depth) * 0.1)) inset;
+    }
+  }
+#genj-studio[data-workspace] .zu-input input {
+    height: 100%;
+    width: 100%;
+    appearance: none;
+    background-color: transparent;
+    border: none;
+  }
+#genj-studio[data-workspace] .zu-input input::placeholder {
+    color: var(--color-base-content);
+    opacity: 50%;
+  }
+#genj-studio[data-workspace] .zu-input input:focus, #genj-studio[data-workspace] .zu-input input:focus-within {
+    --tw-outline-style: none;
+    outline-style: none;
+    @media (forced-colors: active) {
+      outline: 2px solid transparent;
+      outline-offset: 2px;
+    }
+  }
+#genj-studio[data-workspace] .zu-input input::-webkit-calendar-picker-indicator {
+    inset-inline-end: -0.15em;
+  }
+#genj-studio[data-workspace] .zu-input::-webkit-inner-spin-button {
+    margin-inline-end: -10px;
+  }
+#genj-studio[data-workspace] .zu-input::-webkit-calendar-picker-indicator {
+    inset-inline-end: 0.75em;
+  }
+#genj-studio[data-workspace] input.zu-input {
+    position: relative;
+    display: inline-flex;
+    text-align: start;
+  }
+#genj-studio[data-workspace] input.zu-input[type="url"], #genj-studio[data-workspace] input.zu-input[type="tel"], #genj-studio[data-workspace] input.zu-input[type="email"], #genj-studio[data-workspace] input.zu-input[type="number"] {
+    direction: ltr;
+  }
+#genj-studio[data-workspace] input.zu-input::-webkit-datetime-edit, #genj-studio[data-workspace] input.zu-input::-webkit-date-and-time-value {
+    display: grid;
+    min-height: 100%;
+    align-items: center;
+    text-align: inherit;
+  }
+#genj-studio[data-workspace] input.zu-input::-webkit-inner-spin-button {
+    margin-block: calc(0.25rem * var(--zu-spin-my, -3));
+  }
+#genj-studio[data-workspace] input.zu-input::-webkit-calendar-picker-indicator {
+    position: absolute;
+    width: 1em;
+    height: 1em;
+    cursor: pointer;
+  }
+#genj-studio[data-workspace] input.zu-input::-webkit-color-swatch-wrapper {
+    padding-block: 0.25rem;
+  }
+#genj-studio[data-workspace] .zu-input input {
+    position: relative;
+    display: inline-flex;
+    text-align: start;
+  }
+#genj-studio[data-workspace] .zu-input input[type="url"], #genj-studio[data-workspace] .zu-input input[type="tel"], #genj-studio[data-workspace] .zu-input input[type="email"], #genj-studio[data-workspace] .zu-input input[type="number"] {
+    direction: ltr;
+  }
+#genj-studio[data-workspace] .zu-input input::-webkit-datetime-edit, #genj-studio[data-workspace] .zu-input input::-webkit-date-and-time-value {
+    display: grid;
+    min-height: 100%;
+    align-items: center;
+    text-align: inherit;
+  }
+#genj-studio[data-workspace] .zu-input input::-webkit-inner-spin-button {
+    margin-block: calc(0.25rem * var(--zu-spin-my, -3));
+  }
+#genj-studio[data-workspace] .zu-input input::-webkit-calendar-picker-indicator {
+    position: absolute;
+    width: 1em;
+    height: 1em;
+    cursor: pointer;
+  }
+#genj-studio[data-workspace] .zu-input input::-webkit-color-swatch-wrapper {
+    padding-block: 0.25rem;
+  }
+#genj-studio[data-workspace] .zu-input:focus {
+    --zu-input-color: var(--color-base-content);
+    box-shadow: 0 1px var(--zu-input-color);
+  }
+@supports (color: color-mix(in lab, red, red)) {
+    #genj-studio[data-workspace] .zu-input:focus {
+      box-shadow: 0 1px color-mix(in oklab, var(--zu-input-color) calc(var(--depth) * 10%), #0000);
+    }
+  }
+#genj-studio[data-workspace] .zu-input:focus {
+    outline: 2px solid var(--zu-input-color);
+    outline-offset: 2px;
+  }
+@media (pointer: coarse) {
+    @supports (-webkit-touch-callout: none) {
+      #genj-studio[data-workspace] .zu-input:focus {
+        --zu-font-size: 1rem;
+      }
+    }
+  }
+#genj-studio[data-workspace] .zu-input:focus-within {
+    --zu-input-color: var(--color-base-content);
+    box-shadow: 0 1px var(--zu-input-color);
+  }
+@supports (color: color-mix(in lab, red, red)) {
+    #genj-studio[data-workspace] .zu-input:focus-within {
+      box-shadow: 0 1px color-mix(in oklab, var(--zu-input-color) calc(var(--depth) * 10%), #0000);
+    }
+  }
+#genj-studio[data-workspace] .zu-input:focus-within {
+    outline: 2px solid var(--zu-input-color);
+    outline-offset: 2px;
+  }
+@media (pointer: coarse) {
+    @supports (-webkit-touch-callout: none) {
+      #genj-studio[data-workspace] .zu-input:focus-within {
+        --zu-font-size: 1rem;
+      }
+    }
+  }
+#genj-studio[data-workspace] .zu-input:has( > input[disabled]) {
+    cursor: not-allowed;
+    border-color: var(--color-base-200);
+    background-color: var(--color-base-200);
+  }
+#genj-studio[data-workspace] .zu-input:has( > input[disabled]):is(input), #genj-studio[data-workspace] .zu-input:has( > input[disabled])  :is(input) {
+    color: var(--color-base-content);
+    @supports (color: color-mix(in lab, red, red)) {
+      color: color-mix(in oklab, var(--color-base-content) 40%, transparent);
+    }
+  }
+#genj-studio[data-workspace] .zu-input:has( > input[disabled]) {
+    box-shadow: none;
+  }
+#genj-studio[data-workspace] .zu-input:has( > input[disabled])::placeholder, #genj-studio[data-workspace] .zu-input:has( > input[disabled])  ::placeholder {
+    color: var(--color-base-content);
+    opacity: 20%;
+  }
+#genj-studio[data-workspace] .zu-input:is(:disabled, [disabled]) {
+    cursor: not-allowed;
+    border-color: var(--color-base-200);
+    background-color: var(--color-base-200);
+  }
+#genj-studio[data-workspace] .zu-input:is(:disabled, [disabled]):is(input), #genj-studio[data-workspace] .zu-input:is(:disabled, [disabled])  :is(input) {
+    color: var(--color-base-content);
+    @supports (color: color-mix(in lab, red, red)) {
+      color: color-mix(in oklab, var(--color-base-content) 40%, transparent);
+    }
+  }
+#genj-studio[data-workspace] .zu-input:is(:disabled, [disabled]) {
+    box-shadow: none;
+  }
+#genj-studio[data-workspace] .zu-input:is(:disabled, [disabled])::placeholder, #genj-studio[data-workspace] .zu-input:is(:disabled, [disabled])  ::placeholder {
+    color: var(--color-base-content);
+    opacity: 20%;
+  }
+#genj-studio[data-workspace] fieldset:disabled .zu-input {
+    cursor: not-allowed;
+    border-color: var(--color-base-200);
+    background-color: var(--color-base-200);
+  }
+#genj-studio[data-workspace] fieldset:disabled .zu-input:is(input), #genj-studio[data-workspace] fieldset:disabled .zu-input  :is(input) {
+    color: var(--color-base-content);
+    @supports (color: color-mix(in lab, red, red)) {
+      color: color-mix(in oklab, var(--color-base-content) 40%, transparent);
+    }
+  }
+#genj-studio[data-workspace] fieldset:disabled .zu-input {
+    box-shadow: none;
+  }
+#genj-studio[data-workspace] fieldset:disabled .zu-input::placeholder, #genj-studio[data-workspace] fieldset:disabled .zu-input  ::placeholder {
+    color: var(--color-base-content);
+    opacity: 20%;
+  }
+#genj-studio[data-workspace] .zu-input:has( > input[disabled]) > input[disabled] {
+    cursor: not-allowed;
+  }
+#genj-studio[data-workspace] :is(.zu-input[type="url"], .zu-input[type="tel"], .zu-input[type="email"], .zu-input[type="number"]):dir(rtl) {
+  border-start-start-radius: var(--zu-join-se, var(--radius-field));
+  border-start-end-radius: var(--zu-join-ss, var(--radius-field));
+  border-end-start-radius: var(--zu-join-ee, var(--radius-field));
+  border-end-end-radius: var(--zu-join-es, var(--radius-field));
+}
+#genj-studio[data-workspace] .zu-select {
+    position: relative;
+    display: inline-flex;
+    flex-shrink: 1;
+    appearance: none;
+    align-items: center;
+    gap: calc(0.25rem * 1.5);
+    background-color: var(--color-base-100);
+    padding-inline-start: calc(0.25rem * 3);
+    padding-inline-end: calc(0.25rem * 7);
+    vertical-align: middle;
+    --zu-size: calc(var(--size-field, 0.25rem) * var(--zu-sl-size-mul, 10));
+    --zu-input-color: var(--color-base-content);
+  }
+@supports (color: color-mix(in lab, red, red)) {
+    #genj-studio[data-workspace] .zu-select {
+      --zu-input-color: color-mix(in oklab, var(--color-base-content) 20%, #0000);
+    }
+  }
+#genj-studio[data-workspace] .zu-select {
+    width: clamp(3rem, 20rem, 100%);
+    height: var(--zu-size);
+    font-size: max(var(--zu-font-size, 0rem), var(--zu-font-size-min, 0.875rem));
+    touch-action: manipulation;
+    border-start-start-radius: var(--zu-join-ss, var(--radius-field));
+    border-start-end-radius: var(--zu-join-se, var(--radius-field));
+    border-end-start-radius: var(--zu-join-es, var(--radius-field));
+    border-end-end-radius: var(--zu-join-ee, var(--radius-field));
+    background-image: linear-gradient(45deg, #0000 50%, currentColor 50%), linear-gradient(135deg, currentColor 50%, #0000 50%);
+    background-position: calc(100% - 20px) calc(1px + 50%), calc(100% - 16.1px) calc(1px + 50%);
+    background-size: 4px 4px, 4px 4px;
+    background-repeat: no-repeat;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    border: var(--border) solid var(--zu-input-color, #0000);
+    box-shadow: 0 1px var(--zu-input-color) inset, 0 -1px oklch(100% 0 0 / calc(var(--depth) * 0.1)) inset;
+  }
+@supports (color: color-mix(in lab, red, red)) {
+    #genj-studio[data-workspace] .zu-select {
+      box-shadow: 0 1px color-mix(in oklab, var(--zu-input-color) calc(var(--depth) * 10%), #0000) inset, 0 -1px oklch(100% 0 0 / calc(var(--depth) * 0.1)) inset;
+    }
+  }
+#genj-studio[data-workspace] [dir="rtl"] .zu-select {
+    background-position: calc(0% + 12px) calc(1px + 50%), calc(0% + 16px) calc(1px + 50%);
+  }
+#genj-studio[data-workspace] .zu-select[multiple] {
+    height: auto;
+    overflow: auto;
+    padding-block: calc(0.25rem * 3);
+    padding-inline-end: calc(0.25rem * 3);
+    background-image: none;
+  }
+#genj-studio[data-workspace] .zu-select select {
+    margin-inline-start: calc(0.25rem * -3);
+    margin-inline-end: calc(0.25rem * -7);
+    width: calc(100% + 2.75rem);
+    appearance: none;
+    padding-inline-start: calc(0.25rem * 3);
+    padding-inline-end: calc(0.25rem * 7);
+    height: calc(100% - calc(var(--border) * 2));
+    align-items: center;
+    background: inherit;
+    border-radius: inherit;
+    border-style: none;
+  }
+#genj-studio[data-workspace] .zu-select select::placeholder {
+    color: var(--color-base-content);
+    opacity: 50%;
+  }
+#genj-studio[data-workspace] .zu-select select:focus, #genj-studio[data-workspace] .zu-select select:focus-within {
+    --tw-outline-style: none;
+    outline-style: none;
+    @media (forced-colors: active) {
+      outline: 2px solid transparent;
+      outline-offset: 2px;
+    }
+  }
+#genj-studio[data-workspace] .zu-select select:not(:last-child) {
+    margin-inline-end: calc(0.25rem * -5.5);
+    background-image: none;
+  }
+#genj-studio[data-workspace] .zu-select:focus {
+    --zu-input-color: var(--color-base-content);
+    box-shadow: 0 1px var(--zu-input-color);
+  }
+@supports (color: color-mix(in lab, red, red)) {
+    #genj-studio[data-workspace] .zu-select:focus {
+      box-shadow: 0 1px color-mix(in oklab, var(--zu-input-color) calc(var(--depth) * 10%), #0000);
+    }
+  }
+#genj-studio[data-workspace] .zu-select:focus {
+    outline: 2px solid var(--zu-input-color);
+    outline-offset: 2px;
+  }
+#genj-studio[data-workspace] .zu-select:focus-within {
+    --zu-input-color: var(--color-base-content);
+    box-shadow: 0 1px var(--zu-input-color);
+  }
+@supports (color: color-mix(in lab, red, red)) {
+    #genj-studio[data-workspace] .zu-select:focus-within {
+      box-shadow: 0 1px color-mix(in oklab, var(--zu-input-color) calc(var(--depth) * 10%), #0000);
+    }
+  }
+#genj-studio[data-workspace] .zu-select:focus-within {
+    outline: 2px solid var(--zu-input-color);
+    outline-offset: 2px;
+  }
+#genj-studio[data-workspace] .zu-select:open {
+    --zu-input-color: var(--color-base-content);
+    box-shadow: 0 1px var(--zu-input-color);
+  }
+@supports (color: color-mix(in lab, red, red)) {
+    #genj-studio[data-workspace] .zu-select:open {
+      box-shadow: 0 1px color-mix(in oklab, var(--zu-input-color) calc(var(--depth) * 10%), #0000);
+    }
+  }
+#genj-studio[data-workspace] .zu-select:open {
+    outline: 2px solid var(--zu-input-color);
+    outline-offset: 2px;
+    background-image: linear-gradient(135deg, #0000 50%, currentColor 50%), linear-gradient(45deg, currentColor 50%, #0000 50%);
+  }
+@supports (appearance: base-select) {
+    #genj-studio[data-workspace] :is(:is(.zu-select), .zu-select select) {
+      appearance: base-select;
+    }
+    #genj-studio[data-workspace] :is(:is(.zu-select), .zu-select select)::picker(select) {
+      appearance: base-select;
+    }
+  }
+#genj-studio[data-workspace] :is(:is(.zu-select), .zu-select select)::picker(select) {
+    color: inherit;
+    max-height: min(24rem, 70dvh);
+    margin-inline: 0.5rem;
+    translate: -0.5rem 0;
+    border: var(--border) solid var(--color-base-200);
+    margin-block: calc(0.25rem * 2);
+    border-radius: var(--radius-box);
+    padding: calc(0.25rem * 2);
+    background-color: inherit;
+    box-shadow: 0 2px calc(var(--depth) * 3px) -2px oklch(0% 0 0/0.2);
+    box-shadow: 0 20px 25px -5px rgb(0 0 0 / calc(var(--depth) * 0.1)), 0 8px 10px -6px rgb(0 0 0 / calc(var(--depth) * 0.1));
+  }
+#genj-studio[data-workspace] :is(:is(.zu-select), .zu-select select)::picker-icon {
+    display: none;
+  }
+#genj-studio[data-workspace] :is(:is(.zu-select), .zu-select select) selectedcontent {
+    width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+#genj-studio[data-workspace] :is(:is(.zu-select), .zu-select select) optgroup {
+    padding-top: 0.5em;
+  }
+#genj-studio[data-workspace] :is(:is(.zu-select), .zu-select select) optgroup option:nth-child(1) {
+    margin-top: 0.5em;
+  }
+#genj-studio[data-workspace] :is(:is(.zu-select), .zu-select select) optgroup {
+    padding-top: 0.5em;
+  }
+#genj-studio[data-workspace] :is(:is(.zu-select), .zu-select select) optgroup option:nth-child(1) {
+    margin-top: 0.5em;
+  }
+#genj-studio[data-workspace] :is(:is(.zu-select), .zu-select select) option {
+    border-radius: var(--radius-field);
+    padding-block: calc(0.25rem * 1.5);
+    padding-inline: calc(0.25rem * var(--zu-option-px, 3));
+    transition-property: color, background-color;
+    transition-duration: 0.2s;
+    transition-timing-function: cubic-bezier(0, 0, 0.2, 1);
+    white-space: normal;
+  }
+#genj-studio[data-workspace] :is(:is(.zu-select), .zu-select select) option:not(:disabled):hover, #genj-studio[data-workspace] :is(:is(.zu-select), .zu-select select) option:not(:disabled):focus-visible {
+    cursor: pointer;
+    background-color: var(--color-base-content);
+    @supports (color: color-mix(in lab, red, red)) {
+      background-color: color-mix(in oklab, var(--color-base-content) 10%, transparent);
+    }
+    --tw-outline-style: none;
+    outline-style: none;
+    @media (forced-colors: active) {
+      outline: 2px solid transparent;
+      outline-offset: 2px;
+    }
+  }
+#genj-studio[data-workspace] :is(:is(.zu-select), .zu-select select) option:not(:disabled):active {
+    background-color: var(--color-neutral);
+    color: var(--color-neutral-content);
+    box-shadow: 0 2px calc(var(--depth) * 3px) -2px var(--color-neutral);
+  }
+#genj-studio[data-workspace] :is(:is(.zu-select), .zu-select select) option {
+    border-radius: var(--radius-field);
+    padding-block: calc(0.25rem * 1.5);
+    padding-inline: calc(0.25rem * var(--zu-option-px, 3));
+    transition-property: color, background-color;
+    transition-duration: 0.2s;
+    transition-timing-function: cubic-bezier(0, 0, 0.2, 1);
+    white-space: normal;
+  }
+#genj-studio[data-workspace] :is(:is(.zu-select), .zu-select select) option:not(:disabled):hover, #genj-studio[data-workspace] :is(:is(.zu-select), .zu-select select) option:not(:disabled):focus-visible {
+    cursor: pointer;
+    background-color: var(--color-base-content);
+    @supports (color: color-mix(in lab, red, red)) {
+      background-color: color-mix(in oklab, var(--color-base-content) 10%, transparent);
+    }
+    --tw-outline-style: none;
+    outline-style: none;
+    @media (forced-colors: active) {
+      outline: 2px solid transparent;
+      outline-offset: 2px;
+    }
+  }
+#genj-studio[data-workspace] :is(:is(.zu-select), .zu-select select) option:not(:disabled):active {
+    background-color: var(--color-neutral);
+    color: var(--color-neutral-content);
+    box-shadow: 0 2px calc(var(--depth) * 3px) -2px var(--color-neutral);
+  }
+#genj-studio[data-workspace] [dir="rtl"] .zu-select::picker(select) {
+    translate: 0.5rem 0;
+  }
+#genj-studio[data-workspace] [dir="rtl"] .zu-select select::picker(select) {
+    translate: 0.5rem 0;
+  }
+#genj-studio[data-workspace] .zu-select:has( > select[disabled]) {
+    cursor: not-allowed;
+    border-color: var(--color-base-200);
+    background-color: var(--color-base-200);
+  }
+#genj-studio[data-workspace] .zu-select:has( > select[disabled]):is(select), #genj-studio[data-workspace] .zu-select:has( > select[disabled])  :is(select) {
+    color: var(--color-base-content);
+    @supports (color: color-mix(in lab, red, red)) {
+      color: color-mix(in oklab, var(--color-base-content) 40%, transparent);
+    }
+  }
+#genj-studio[data-workspace] .zu-select:has( > select[disabled]) {
+    box-shadow: none;
+  }
+#genj-studio[data-workspace] .zu-select:has( > select[disabled])::placeholder, #genj-studio[data-workspace] .zu-select:has( > select[disabled])  ::placeholder {
+    color: var(--color-base-content);
+    opacity: 20%;
+  }
+#genj-studio[data-workspace] .zu-select:is(:disabled, [disabled]) {
+    cursor: not-allowed;
+    border-color: var(--color-base-200);
+    background-color: var(--color-base-200);
+  }
+#genj-studio[data-workspace] .zu-select:is(:disabled, [disabled]):is(select), #genj-studio[data-workspace] .zu-select:is(:disabled, [disabled])  :is(select) {
+    color: var(--color-base-content);
+    @supports (color: color-mix(in lab, red, red)) {
+      color: color-mix(in oklab, var(--color-base-content) 40%, transparent);
+    }
+  }
+#genj-studio[data-workspace] .zu-select:is(:disabled, [disabled]) {
+    box-shadow: none;
+  }
+#genj-studio[data-workspace] .zu-select:is(:disabled, [disabled])::placeholder, #genj-studio[data-workspace] .zu-select:is(:disabled, [disabled])  ::placeholder {
+    color: var(--color-base-content);
+    opacity: 20%;
+  }
+#genj-studio[data-workspace] fieldset:disabled .zu-select {
+    cursor: not-allowed;
+    border-color: var(--color-base-200);
+    background-color: var(--color-base-200);
+  }
+#genj-studio[data-workspace] fieldset:disabled .zu-select:is(select), #genj-studio[data-workspace] fieldset:disabled .zu-select  :is(select) {
+    color: var(--color-base-content);
+    @supports (color: color-mix(in lab, red, red)) {
+      color: color-mix(in oklab, var(--color-base-content) 40%, transparent);
+    }
+  }
+#genj-studio[data-workspace] fieldset:disabled .zu-select {
+    box-shadow: none;
+  }
+#genj-studio[data-workspace] fieldset:disabled .zu-select::placeholder, #genj-studio[data-workspace] fieldset:disabled .zu-select  ::placeholder {
+    color: var(--color-base-content);
+    opacity: 20%;
+  }
+#genj-studio[data-workspace] .zu-select:has( > select[disabled]) > select[disabled] {
+    cursor: not-allowed;
+  }
+#genj-studio[data-workspace] .zu-textarea {
+    min-height: calc(0.25rem * 20);
+    flex-shrink: 1;
+    appearance: none;
+    border-radius: var(--radius-field);
+    background-color: var(--color-base-100);
+    padding-inline: calc(0.25rem * 3);
+    padding-block: calc(0.25rem * 2);
+    vertical-align: middle;
+    --zu-input-color: var(--color-base-content);
+  }
+@supports (color: color-mix(in lab, red, red)) {
+    #genj-studio[data-workspace] .zu-textarea {
+      --zu-input-color: color-mix(in oklab, var(--color-base-content) 20%, #0000);
+    }
+  }
+#genj-studio[data-workspace] .zu-textarea {
+    width: clamp(3rem, 20rem, 100%);
+    font-size: max(var(--zu-font-size, 0rem), var(--zu-font-size-min, 0.875rem));
+    touch-action: manipulation;
+    border: var(--border) solid var(--zu-input-color, #0000);
+    box-shadow: 0 1px var(--zu-input-color) inset, 0 -1px oklch(100% 0 0 / calc(var(--depth) * 0.1)) inset;
+  }
+@supports (color: color-mix(in lab, red, red)) {
+    #genj-studio[data-workspace] .zu-textarea {
+      box-shadow: 0 1px color-mix(in oklab, var(--zu-input-color) calc(var(--depth) * 10%), #0000) inset, 0 -1px oklch(100% 0 0 / calc(var(--depth) * 0.1)) inset;
+    }
+  }
+#genj-studio[data-workspace] .zu-textarea textarea {
+    appearance: none;
+    background-color: transparent;
+    border: none;
+  }
+#genj-studio[data-workspace] .zu-textarea textarea::placeholder {
+    color: var(--color-base-content);
+    opacity: 50%;
+  }
+#genj-studio[data-workspace] .zu-textarea textarea:focus, #genj-studio[data-workspace] .zu-textarea textarea:focus-within {
+    --tw-outline-style: none;
+    outline-style: none;
+    @media (forced-colors: active) {
+      outline: 2px solid transparent;
+      outline-offset: 2px;
+    }
+  }
+#genj-studio[data-workspace] .zu-textarea:focus {
+    --zu-input-color: var(--color-base-content);
+    box-shadow: 0 1px var(--zu-input-color);
+  }
+@supports (color: color-mix(in lab, red, red)) {
+    #genj-studio[data-workspace] .zu-textarea:focus {
+      box-shadow: 0 1px color-mix(in oklab, var(--zu-input-color) calc(var(--depth) * 10%), #0000);
+    }
+  }
+#genj-studio[data-workspace] .zu-textarea:focus {
+    outline: 2px solid var(--zu-input-color);
+    outline-offset: 2px;
+    isolation: isolate;
+  }
+@media (pointer: coarse) {
+    @supports (-webkit-touch-callout: none) {
+      #genj-studio[data-workspace] .zu-textarea:focus {
+        --zu-font-size: 1rem;
+      }
+    }
+  }
+#genj-studio[data-workspace] .zu-textarea:focus-within {
+    --zu-input-color: var(--color-base-content);
+    box-shadow: 0 1px var(--zu-input-color);
+  }
+@supports (color: color-mix(in lab, red, red)) {
+    #genj-studio[data-workspace] .zu-textarea:focus-within {
+      box-shadow: 0 1px color-mix(in oklab, var(--zu-input-color) calc(var(--depth) * 10%), #0000);
+    }
+  }
+#genj-studio[data-workspace] .zu-textarea:focus-within {
+    outline: 2px solid var(--zu-input-color);
+    outline-offset: 2px;
+    isolation: isolate;
+  }
+@media (pointer: coarse) {
+    @supports (-webkit-touch-callout: none) {
+      #genj-studio[data-workspace] .zu-textarea:focus-within {
+        --zu-font-size: 1rem;
+      }
+    }
+  }
+#genj-studio[data-workspace] .zu-textarea:has( > textarea[disabled]) {
+    cursor: not-allowed;
+    border-color: var(--color-base-200);
+    background-color: var(--color-base-200);
+    color: var(--color-base-content);
+  }
+@supports (color: color-mix(in lab, red, red)) {
+    #genj-studio[data-workspace] .zu-textarea:has( > textarea[disabled]) {
+      color: color-mix(in oklab, var(--color-base-content) 40%, transparent);
+    }
+  }
+#genj-studio[data-workspace] .zu-textarea:has( > textarea[disabled]) {
+    box-shadow: none;
+  }
+#genj-studio[data-workspace] .zu-textarea:has( > textarea[disabled])::placeholder, #genj-studio[data-workspace] .zu-textarea:has( > textarea[disabled])  ::placeholder {
+    color: var(--color-base-content);
+    opacity: 20%;
+  }
+#genj-studio[data-workspace] .zu-textarea:is(:disabled, [disabled]) {
+    cursor: not-allowed;
+    border-color: var(--color-base-200);
+    background-color: var(--color-base-200);
+    color: var(--color-base-content);
+  }
+@supports (color: color-mix(in lab, red, red)) {
+    #genj-studio[data-workspace] .zu-textarea:is(:disabled, [disabled]) {
+      color: color-mix(in oklab, var(--color-base-content) 40%, transparent);
+    }
+  }
+#genj-studio[data-workspace] .zu-textarea:is(:disabled, [disabled]) {
+    box-shadow: none;
+  }
+#genj-studio[data-workspace] .zu-textarea:is(:disabled, [disabled])::placeholder, #genj-studio[data-workspace] .zu-textarea:is(:disabled, [disabled])  ::placeholder {
+    color: var(--color-base-content);
+    opacity: 20%;
+  }
+#genj-studio[data-workspace] .zu-textarea:has( > textarea[disabled]) > textarea[disabled] {
+    cursor: not-allowed;
+  }
+#genj-studio[data-workspace] .zu-btn-ghost {
+    --zu-btn-bg: #0000;
+    color: var(--zu-btn-rest-fg, var(--zu-btn-color, var(--color-base-content, currentColor)));
+    --zu-btn-border: #0000;
+    background-image: none;
+    --zu-btn-inset: 0 0 0 0 oklch(0% 0 0/0);
+    --zu-btn-shadow: 0 0 0 0 oklch(0% 0 0/0);
+  }
+#genj-studio[data-workspace] .zu-btn-primary {
+    --zu-btn-color: var(--color-primary);
+    --zu-btn-fg: var(--color-primary-content);
+    --zu-btn-soft-bg: initial;
+  }

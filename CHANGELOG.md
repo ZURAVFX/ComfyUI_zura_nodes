@@ -1,5 +1,11 @@
 # Release notes
 
+## 1.3.28 - 22 October 2026
+
+- Add Wan 2.1 Chained Relight as an alternate to H3. Build and review the lighting frame first, then run the artist-supplied four-step recipe in 81-frame sections at 720p, preserving the source soundtrack. H3 remains available for short relights.
+- Simplify the Studio entry point into Image and Video workspaces with the Artify-inspired canvas layout, saved dark/light themes, precise image sizing, native references, prompt-first generation and clearable history.
+- Improve Wan relight setup reporting, fixed-recipe controls, graph export and memory handoff from H3 to Wan 2.1. Keep the approved source workflow’s private media and local filenames out of the release.
+
 ## Unreleased - Image / Video Studio
 
 - Add saved dark/light appearances using neutral surfaces and Artify-inspired lime accents.

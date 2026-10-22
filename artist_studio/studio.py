@@ -32,6 +32,7 @@ STAGES = {
     "h3_enhance": "08_H3_Enhanced_1080p",
     "wan": "07_Wan_Character_Replacement",
     "wan2": "Wan_Animate_2_Full_Frame",
+    "wan21_relight": "07_Wan21_Relight_Recipe",
     "wan_prepare": "07A_Wan_Motion_Preparation",
     "wan_merge": "07D_Wan_Finish_Motion",
     "wan_speech": "07B_Wan_Speech_Performance",
@@ -45,7 +46,9 @@ DEFAULTS = {"engine": "local", "background": "keep", "scope": "person", "prompt"
             "resolution": 1280, "delivery_mode": "native", "quality": "fast", "audio_id": "", "audio_start": 0.0, "length_mode": "custom", "lip_sync": False, "refine_lips": False,
             "finished_frame_position": "first", "finished_frame_number": 1, "h3_viewport_direct": False, "h3_head_swap": False,
             "camera_preset": "Left three-quarter", "camera_prompt": "", "camera_width": 768, "camera_height": 448,
-            "subject_mode": "auto", "preserve_people": False, "workflow_mode": "swap", "edit_area": "mask", "mask_method": "auto", "mask_prompt": "person", "mask_points": []}
+            "subject_mode": "auto", "preserve_people": False, "preserve_identity": False,
+            "relight_engine": "h3",
+            "workflow_mode": "swap", "edit_area": "mask", "mask_method": "auto", "mask_prompt": "person", "mask_points": []}
 PREP_KEYS = ("start", "duration", "size", "scope", "performer", "margin", "pitch")
 
 
@@ -89,6 +92,7 @@ def clean_config(value):
                          ("workflow_mode", ("motion", "swap", "viewport", "relight", "camera")),
                          ("subject_mode", ("auto", "people", "objects")),
                          ("finished_frame_position", ("first", "last", "frame")),
+                         ("relight_engine", ("h3", "wan21")),
                          ("mask_method", ("auto", "text", "points")),
                          ("h3_preset", H3_PRESETS),
                          ("h3_attention", ("native", "kitchen", "sage_sol")),
@@ -109,7 +113,10 @@ def clean_config(value):
         raise ValueError("Timed finished-frame references are supported by LTX and H3. Select First frame or switch models.")
     if c["workflow_mode"] == "relight" and c["engine"] != "h3":
         raise ValueError("Relight currently supports MiniMax H3. Choose H3 for this task.")
+    if c["workflow_mode"] != "relight":
+        c["relight_engine"] = "h3"
     c["preserve_people"] = bool(c["preserve_people"])
+    c["preserve_identity"] = bool(c["preserve_identity"]) and c["workflow_mode"] == "relight"
     if c["preserve_people"] and (c["engine"] != "h3" or c["workflow_mode"] != "motion"):
         raise ValueError("Keep original people currently supports H3 scene transformation only.")
     c["viewport_render"] = c["workflow_mode"] == "viewport"
@@ -167,6 +174,11 @@ def clean_config(value):
     from .mask_selection import clean_points
     c["mask_points"] = clean_points(c["mask_points"], require_positive=False)
     c["resolution"] = 832 if c["engine"] == "wan2" else int(c["resolution"])
+    if c["workflow_mode"] == "relight" and c["relight_engine"] == "wan21":
+        c["resolution"] = 1280
+        c["delivery_mode"] = "native"
+        c["preserve_identity"] = False
+        c["remove_text"] = False
     if c["resolution"] not in ((1024,) if head_swap_setup(c) else (832,) if c["engine"] == "wan2" else (256, 512, 768, 960, 1280, 1920)):
         if head_swap_setup(c):
             c["resolution"] = 1024
@@ -568,6 +580,9 @@ def build_graph(project, stage, use_cache=True, run_id=None):
         if stage == "h3":
             return build_studio_graph(project, check_asset)
         raise ValueError("Create the camera frame before generating video.")
+    if stage == "wan21_relight":
+        from .wan21_relight import build_studio_graph
+        return build_studio_graph(project, check_asset)
     """Fill known native node inputs; no new subgraph interfaces are fabricated."""
     require_relight_direction(project.get("config", {}))
     if project.get("config", {}).get("workflow_mode") == "relight" and project["config"].get("engine") != "h3":
@@ -745,6 +760,14 @@ def build_graph(project, stage, use_cache=True, run_id=None):
                     if "zura_join_tracking_masks" in graph else ["11", 0])
             if "zura_split_tracking_shots" in graph:
                 graph["text_removal"]["inputs"]["tracking_segments"] = ["zura_split_tracking_shots", 2]
+        # Only Seedance consumes the coloured-depth review video. Local video
+        # engines build their own guidance after the artist approves the look;
+        # loading Depth Anything in this preliminary review graph did duplicate
+        # inference and delayed the first useful mask/footage preview.
+        if c.get("engine") != "seedance":
+            graph["20"]["inputs"]["guide_frames"] = ["4", 0]
+            for identity in ("13", "15", "16", "17"):
+                graph.pop(identity, None)
     elif stage == "design":
         if project.get("character"):
             graph["121"]["inputs"]["image"] = project["character"]["file"]
@@ -1033,9 +1056,12 @@ def editable_graph(project, stage="auto"):
             raise ValueError("Create the character preview before opening its animation graph.")
         if not h3_viewport_direct(p):
             p["opening_approval"] = p["opening_key"]
-        stage = (p["config"]["engine"] if p["config"]["engine"] in ("h3", "wan", "wan2") else
+        if p["config"].get("workflow_mode") == "relight":
+            stage = "wan21_relight" if p["config"].get("relight_engine") == "wan21" else "h3"
+        else:
+            stage = (p["config"]["engine"] if p["config"]["engine"] in ("h3", "wan", "wan2") else
                  "background" if p["config"]["background"] == "keep" else "restyle")
-    if stage == "h3" and p.get("opening_input") and not h3_viewport_direct(p):
+    if stage in ("h3", "wan21_relight") and p.get("opening_input") and not h3_viewport_direct(p):
         p["opening_approval"] = p["opening_key"]
     if stage == "wan":
         from .wan_speech import enabled, guide_ready
@@ -1051,7 +1077,7 @@ def editable_graph(project, stage="auto"):
         if not run or run.get("plan", {}).get("key") != plan["key"]:
             p["ltx25_run"] = {"namespace": run["namespace"], "plan": plan, "receipts": {}, "next_phase": "text"}
         stage = "ltx25_" + (p["ltx25_run"].get("next_phase") or "decode")
-    if stage not in ("prepare", "design", "background", "restyle", "h3", "h3_enhance", "wan", "wan_speech", "draft", "final") and not stage.startswith("ltx25_"):
+    if stage not in ("prepare", "design", "background", "restyle", "h3", "h3_enhance", "wan", "wan2", "wan21_relight", "wan_speech", "draft", "final") and not stage.startswith("ltx25_"):
         raise ValueError("Choose preparation, character preview or animation.")
     # Each native Wan preparation section is a separate queue job. Folding
     # the old full-clip IMAGE branch into subgraphs does not bound memory.
@@ -1770,6 +1796,16 @@ class Studio:
                             generation_resolution=action.get("generation_resolution"),
                             generation_raster=copy.deepcopy(action.get("generation_raster")),
                             output_raster=actual, sha256=sha(path))
+            elif stage == "wan21_relight":
+                from .enhancement import checked_output_path, inspect_video
+                path = checked_output_path(video)
+                actual = inspect_video(path, expected_frames=action.get("expected_frames"),
+                                       expected_fps=24)
+                item.update(label="Wan 2.1 Relight", delivery_mode="native",
+                            generation_resolution=action.get("generation_resolution"),
+                            generation_raster=copy.deepcopy(action.get("generation_raster")),
+                            output_raster=actual, relight_recipe=action.get("relight_recipe"),
+                            sha256=sha(path))
             append_result_once(p, item)
             if stage == "draft":
                 text = "\n".join(s for value in outputs.values() for s in value.get("text", []))
@@ -1877,8 +1913,11 @@ class Studio:
         if stage == "animate":
             if not p.get("opening_input") and not h3_viewport_direct(p) and not head_swap_setup(p["config"]):
                 raise ValueError("Create the character preview first.")
-            stage = (p["config"]["engine"] if p["config"]["engine"] in ("h3", "wan", "wan2")
-                     else "background" if p["config"]["background"] == "keep" else "restyle")
+            if p["config"].get("workflow_mode") == "relight":
+                stage = "wan21_relight" if p["config"].get("relight_engine") == "wan21" else "h3"
+            else:
+                stage = (p["config"]["engine"] if p["config"]["engine"] in ("h3", "wan", "wan2")
+                         else "background" if p["config"]["background"] == "keep" else "restyle")
         if stage == "final":
             p["accepted_draft"] = p.get("draft_task")
         if stage not in STAGES:
@@ -1889,7 +1928,7 @@ class Studio:
             raise ValueError("Reload Zura Studio before continuing.")
         if any(a.get("request_key") == request_key for a in p.get("actions", [])):
             return p
-        if stage in ("prepare", "design", "h3", "wan", "wan2", "wan_speech"):
+        if stage in ("prepare", "design", "h3", "wan", "wan2", "wan21_relight", "wan_speech"):
             validate_selection(p)
         if stage == "h3" and p["config"].get("delivery_mode") == "enhanced1080":
             from .enhancement import readiness as enhancement_readiness, SETUP_COMMAND, UPSCALE_MODEL
@@ -1940,9 +1979,18 @@ class Studio:
                 # A serial CPU acknowledgement clears previously retained
                 # models, including a guide run manually from graph view.
                 stage, next_stage = "wan_cleanup", "wan" if has_guide else "wan_speech"
+        if stage == "wan21_relight":
+            previous = p.get("actions", [])[-1] if p.get("actions") else {}
+            just_cleaned = (previous.get("stage") == "wan_cleanup" and previous.get("state") == "complete"
+                            and previous.get("next_stage") == "wan21_relight"
+                            and request_key == str(uuid.uuid5(uuid.NAMESPACE_URL, previous["id"])))
+            if not just_cleaned:
+                # Clear the image-generation stack before loading Wan 2.1.
+                stage, next_stage = "wan_cleanup", "wan21_relight"
         if stage == "wan_cleanup" and next_stage is None:
             previous = p.get("actions", [])[-1] if p.get("actions") else {}
-            next_stage = ("h3_enhance" if previous.get("stage") == "h3"
+            next_stage = ("wan21_relight" if previous.get("next_stage") == "wan21_relight" else
+                          "h3_enhance" if previous.get("stage") == "h3"
                           and previous.get("delivery_mode") == "enhanced1080" else "wan")
         elif stage == "wan_speech":
             next_stage = "wan_cleanup"
@@ -2008,6 +2056,15 @@ class Studio:
                 if action["delivery_mode"] == "enhanced1080":
                     action["next_stage"] = "wan_cleanup"
                     action["studio_action_tag"] = prompt_id
+        elif stage == "wan21_relight":
+            from . import verify_review
+            _, manifest = verify_review(p["review"])
+            size = graph["272:407:89"]["inputs"]
+            action.update(label="Wan 2.1 Relight", resolution=max(size["width"], size["height"]),
+                          generation_resolution=max(size["width"], size["height"]),
+                          generation_raster={"width": size["width"], "height": size["height"]},
+                          expected_frames=manifest["clip"]["frames"],
+                          relight_recipe="wan21-relight-switchx-v1")
         elif stage == "h3_enhance":
             base = p.get("h3_enhancement_base") or {}
             action["delivery_mode"] = "enhanced1080"
@@ -2139,9 +2196,12 @@ def register():
         wan2 = wan2_readiness(nodes.NODE_CLASS_MAPPINGS, folder_paths.get_full_path)
         from .h3_camera import readiness as camera_readiness
         camera = camera_readiness(nodes.NODE_CLASS_MAPPINGS, folder_paths.get_full_path)
+        from .wan21_relight import readiness as wan21_relight_readiness
+        wan21_relight = wan21_relight_readiness(nodes.NODE_CLASS_MAPPINGS, folder_paths.get_full_path)
         return web.json_response({**hardware_snapshot(), "models": models, "h3_models": h3_models, "wan_models": wan_models, "speech": readiness(),
             "h3_text_cleanup": text_cleanup_readiness(),
             "h3_head_swap": head_swap, "wan2": wan2, "h3_camera": camera,
+            "wan21_relight": wan21_relight,
             "h3_attention_backends": h3_attention_capabilities(nodes.NODE_CLASS_MAPPINGS),
             "wan_speech": wan_speech_readiness(),
             "engine_ready": {"h3_camera": camera["ready"], "wan2": wan2["ready"], "local": all(models[key] for key in masked_keys) and not missing_ltx_nodes,
@@ -2151,16 +2211,19 @@ def register():
                              "h3_viewport": h3_viewport_ready,
                              "h3_head_swap": head_swap["ready"],
                              "h3_enhanced1080": all(h3_models.values()) and not missing_h3_nodes and h3_enhancement["ready"],
+                             "wan21_relight": wan21_relight["ready"],
                              "wan": all(wan_models.values()) and not missing_wan_nodes},
             "engine_quality": {"local": "Reviewed five-second whole-scene examples; masked speech and longer continuation remain experimental",
                                "h3": "Native fixed-audio speech and source-background guidance; review timing and motion",
-                               "wan": "Native source performance or an audio-driven face guide; review head turns and speech timing"},
+                               "wan": "Native source performance or an audio-driven face guide; review head turns and speech timing",
+                               "wan21_relight": wan21_relight["note"]},
             "missing_ltx_nodes": missing_ltx_nodes,
             "missing_ltx_scene_nodes": missing_ltx_scene_nodes,
             "missing_ltx_viewport_nodes": ltx_viewport["missing_nodes"],
             "missing_h3_viewport_nodes": missing_h3_viewport_nodes,
             "missing_wan2_nodes": wan2["missing_nodes"],
             "model_files": {"wan2": wan2["model_files"],
+                "wan21_relight": wan21_relight["model_files"],
                 "local_viewport": ltx_viewport["model_files"],
                 "h3_viewport": [{"folder": folder, "filename": name, "ready": h3_models[key]}
                                 for key, (folder, name) in H3_VIEWPORT_MODELS.items()],

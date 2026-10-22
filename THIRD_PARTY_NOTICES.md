@@ -100,3 +100,14 @@ not bundled. The model itself is unmodified. Zura uses the native ComfyUI
 upscaler and Lanczos resize on each frame, with separately installed
 [VideoHelperSuite](https://github.com/Kosinkadink/ComfyUI-VideoHelperSuite)
 for streaming. The resulting video is enhanced from a 720p H3 render.
+
+
+## Studio UI components
+
+- daisyUI 5.7.50, MIT, https://github.com/saadeghi/daisyui. Licence: licenses/daisyui-LICENSE.txt.
+- Web Awesome 3.14.0, MIT, https://github.com/shoelace-style/webawesome. Licence: licenses/webawesome-LICENSE.md.
+- Tailwind CSS 4.3.3, MIT; compiled component CSS only, no global reset.
+- Web Awesome bundle transitive licence notices are retained in web/vendor/studio-components.js.LEGAL.txt.
+
+Only the generated local CSS/JavaScript is needed at runtime. Rebuild using
+`npm ci` and `npm run build` in tools/studio-ui. End users do not need Node.

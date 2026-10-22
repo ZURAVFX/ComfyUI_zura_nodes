@@ -43,7 +43,7 @@ class SceneOnlyTests(unittest.TestCase):
         self.assertEqual(g['zura_edit_surroundings']['class_type'], 'InvertMask')
         self.assertEqual(g['zura_edit_surroundings']['inputs']['mask'], ['12', 0])
         self.assertEqual(g['20']['inputs']['mask'], ['zura_edit_surroundings', 0])
-        self.assertEqual(g['17']['inputs']['mask'], ['zura_edit_surroundings', 0])
+        self.assertEqual(g['20']['class_type'], 'GenjSaveReview')
         self.assertNotIn('text_removal', g, 'Text union must never reopen protected people')
         self.assertNotIn('zura_mask_points', g)
 
