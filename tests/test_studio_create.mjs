@@ -123,6 +123,10 @@ ui.references=[{file:'edit-source.png',name:'source.png'}];ui.$('prompt').value=
 assert.match(ui.$('generate').textContent,/Apply edit/);assert.match(ui.$('reference-hint').textContent,/Image 1: source/);
 ui.$('model').value='klein9b';ui.render();assert.equal(ui.$('generate').disabled,false);
 ui.references=[];ui.setImageOperation('create');ui.$('prompt').value='';ui.render();
+ui.items=[{model:'klein9b',prompt:'Change the wall',references:[{file:'source.png'}],shape:'square',width:1024,height:1024,seed:7,file:{filename:'edit.png'}}];ui.renderGallery();
+ui.$('gallery').querySelector('[data-reuse]').click();
+assert.equal(ui.imageOperation,'edit','Reusing an edited image returns to Edit instead of selecting a hidden model in Create');assert.equal(ui.$('model').value,'klein9b');
+ui.items=[];ui.references=[];ui.setImageOperation('create');ui.$('prompt').value='';ui.renderGallery();ui.render();
 assert.equal(ui.$('settings-panel').hidden,true);
 ui.$('settings-toggle').onclick();
 assert.equal(ui.$('settings-panel').hidden,false);

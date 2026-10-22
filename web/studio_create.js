@@ -100,7 +100,14 @@ export class CreativeWorkspace {
     this.$("clear-references").onclick=()=>{this.references=[];this.save();this.render();};
     this.$("refresh").onclick=()=>this.loadModels();this.$("cancel").onclick=()=>this.cancel();
     this.$("new").onclick=()=>{this.$("prompt").value="";this.save();this.render();this.$("prompt").focus({preventScroll:true});};
-    this.$("gallery").onclick=e=>{const button=e.target.closest("[data-reuse]");if(button){const item=this.items[Number(button.dataset.reuse)];this.references=item.references||[];this.$("prompt").value=item.prompt;this.$("model").value=item.model;this.$("shape").value=item.shape;const size=imageDimensions(item);this.$("width").value=size[0];this.$("height").value=size[1];this.$("seed").value=item.seed;this.$("random").checked=false;this.save();this.render();}};
+    this.$("gallery").onclick=e=>{
+      if(this.job||this.submitting||this.uploading)return;
+      const button=e.target.closest("[data-reuse]");if(!button)return;
+      const item=this.items[Number(button.dataset.reuse)];
+      this.setImageOperation(IMAGE_MODELS.find(m=>m.id===item.model)?.edit?'edit':'create');
+      this.references=item.references||[];this.$("prompt").value=item.prompt;this.$("model").value=item.model;this.$("shape").value=item.shape;
+      const size=imageDimensions(item);this.$("width").value=size[0];this.$("height").value=size[1];this.$("seed").value=item.seed;this.$("random").checked=false;this.save();this.render();
+    };
     this.root.querySelector("#gs-exit").onclick=()=>this.mode==="image"?this.graph():studio.graphView();
     this.api.addEventListener?.("progress",event=>{const d=event.detail;if(!this.job||d.prompt_id!==this.job.id)return;this.$("bar").value=100*d.value/d.max;this.$("progress-title").textContent=`Generating · Step ${d.value} of ${d.max}`;this.$("progress-detail").textContent=this.elapsed();});
     this.api.addEventListener?.("executing",event=>{const d=event.detail;if(!this.job||d.prompt_id!==this.job.id||!d.node)return;const names={text:"Loading text encoder",prompt:"Reading your prompt",model:"Loading image model",sample:"Generating image",decode:"Decoding image",save:"Saving image"};this.$("bar").removeAttribute("value");this.$("progress-title").textContent=names[d.node]||"Preparing image";});
