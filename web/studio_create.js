@@ -36,7 +36,6 @@ export class CreativeWorkspace {
     const timing=document.createElement("details");timing.className="zc-video-timing";
     timing.innerHTML='<summary>Trim footage</summary><div></div>';
     timing.querySelector("div").append(studio.$("trim-controls"),studio.$("trimmer"),studio.$("trim-precision"));
-    composer.prepend(timing);
     composer.append(this.root.querySelector(".gs-action-area"));
     const settings=document.createElement("details");settings.className="zc-video-settings";
     settings.innerHTML='<summary>Generation settings <span>Model, quality & audio</span></summary>';
@@ -48,11 +47,20 @@ export class CreativeWorkspace {
     page.querySelector(".zc-image-tools").append(history);
     history.addEventListener("wa-select",e=>{const action=e.detail?.item?.value;if(["new","clear-history"].includes(action)&&!this.$(action).disabled)this.$(action).click();});
     for(const id of ["new","clear-history"])this.$(id).classList.add("zc-menu-fallback");
-    const library=this.root.querySelector(".gs-library"),drawer=document.createElement("details");drawer.className="zc-recent-shots";drawer.innerHTML='<summary>Recent shots</summary>';library.before(drawer);drawer.append(library);
+    this.buildVideoCanvas(timing);
     const imagePromptLabel=page.querySelector('label[for="zc-prompt"]');imagePromptLabel.className="zc-sr-only";
     const quick=document.createElement("button");quick.type="button";quick.id="zc-quick-settings";quick.className="zu-btn zu-btn-ghost";quick.setAttribute("aria-label","Image model and resolution");
     this.$("recipe-label").before(quick);this.$("recipe-label").className="zc-sr-only";
     quick.onclick=()=>this.$("settings-toggle").click();
+    this.imageOperation=this.draft.operation==="edit"?"edit":"create";
+    const imageTabs=document.createElement('nav');imageTabs.className='zc-image-operation';imageTabs.setAttribute('aria-label','Image task');
+    imageTabs.innerHTML='<button type="button" data-image-operation="create">Create image</button><button type="button" data-image-operation="edit">Edit image</button>';
+    page.querySelector('.zc-image-heading h2').replaceWith(imageTabs);
+    for(const button of imageTabs.querySelectorAll('button'))button.onclick=()=>this.setImageOperation(button.dataset.imageOperation);
+    const imageHistory=document.createElement('details');imageHistory.className='zc-image-takes';imageHistory.innerHTML='<summary>History</summary><div id="zc-image-history"></div>';
+    page.querySelector('.zc-image-tools').prepend(imageHistory);
+    imageHistory.addEventListener('click',event=>{const button=event.target.closest('[data-view-image]');if(button){this.selectedImage=Number(button.dataset.viewImage);this.renderGallery();imageHistory.open=false;}});
+    const imageStatus=document.createElement('div');imageStatus.className='zc-image-status';imageStatus.append(this.$('progress'),this.$('message'));page.querySelector('.zc-image-scroll').append(imageStatus);
     for(const button of this.root.querySelectorAll("[data-space]"))button.onclick=()=>this.show(button.dataset.space);
     this.$("prompt").value=this.draft.prompt||"";this.$("shape").value=IMAGE_SIZES[this.draft.shape]?this.draft.shape:"square";
     const initialSize=IMAGE_SIZES[this.$("shape").value];this.$("width").value=this.draft.width??initialSize[0];this.$("height").value=this.draft.height??initialSize[1];
@@ -117,13 +125,55 @@ export class CreativeWorkspace {
     for(const button of tabs.querySelectorAll('button'))button.onclick=()=>this.selectPanel(button.dataset.panel);
     this.selectPanel('source');
   }
+  buildVideoCanvas(timing){
+    const main=this.root.querySelector('.gs-main'),stage=this.root.querySelector('.gs-preview-scroll');
+    const heading=this.root.querySelector('.gs-preview-heading'),tools=document.createElement('div');
+    tools.className='zc-viewer-tools';heading.append(tools);
+    this.studio.$('compare-toggle').textContent='Compare';this.studio.$('compare-toggle').setAttribute('aria-label','Compare source and final render');
+    const views=document.createElement('details');views.className='zc-viewer-views';views.name='zura-viewer-tools';
+    views.innerHTML='<summary>View</summary>';views.append(this.studio.$('preview-tabs'));
+    tools.append(views,this.studio.$('compare-toggle'),timing);
+    timing.name='zura-viewer-tools';
+    const takes=document.createElement('details');takes.className='zc-take-drawer';takes.name='zura-viewer-tools';
+    takes.innerHTML='<summary>Takes <span id="zc-take-count">0</span></summary><div class="zc-viewer-drawer"><div class="zc-drawer-heading"><strong>Your takes</strong><button type="button" aria-label="Close takes">'+closeIcon()+'</button></div></div>';
+    takes.querySelector('.zc-viewer-drawer').append(this.studio.$('results'));
+    const history=document.createElement('details');history.className='zc-recent-shots';history.name='zura-viewer-tools';
+    history.innerHTML='<summary>History</summary><div class="zc-viewer-drawer"><div class="zc-drawer-heading"><strong>Recent shots</strong><button type="button" aria-label="Close history">'+closeIcon()+'</button></div></div>';
+    history.querySelector('.zc-viewer-drawer').append(this.root.querySelector('.gs-library'));
+    tools.append(takes,history);
+    for(const detail of [takes,history,views,timing]){
+      detail.querySelector('.zc-drawer-heading button')?.addEventListener('click',()=>{detail.open=false;detail.querySelector('summary').focus({preventScroll:true});});
+      detail.addEventListener('toggle',()=>{if(detail.open)for(const other of [takes,history,views,timing])if(other!==detail)other.open=false;});
+    }
+    const inspector=document.createElement('button');inspector.id='zc-video-controls';inspector.type='button';inspector.className='gs-quiet';inspector.textContent='Controls';inspector.setAttribute('aria-expanded','false');inspector.setAttribute('aria-controls','zc-video-inspector');
+    this.root.querySelector('.gs-controls').id='zc-video-inspector';tools.prepend(inspector);
+    inspector.onclick=()=>{const open=!main.parentElement.classList.contains('zc-controls-open');main.parentElement.classList.toggle('zc-controls-open',open);inspector.setAttribute('aria-expanded',String(open));};
+    const hideInspector=document.createElement('button');hideInspector.type='button';hideInspector.className='zc-inspector-close';hideInspector.textContent='Done';
+    this.root.querySelector('.gs-control-heading').append(hideInspector);hideInspector.onclick=()=>{main.parentElement.classList.remove('zc-controls-open');inspector.setAttribute('aria-expanded','false');inspector.focus({preventScroll:true});};
+    const notice=document.createElement('div');notice.className='zc-viewer-notice';
+    const dismiss=document.createElement('button');dismiss.type='button';dismiss.className='gs-quiet';dismiss.setAttribute('aria-label','Dismiss message');dismiss.innerHTML=closeIcon();dismiss.onclick=()=>{this.studio.dismissedError=this.studio.project?.error;this.studio.message('');};
+    notice.append(this.studio.$('message'),dismiss);stage.append(notice);
+    const download=document.createElement('a');download.id='zc-download-take';download.className='gs-quiet';download.textContent='Download';download.hidden=true;download.setAttribute('download','zura-take.mp4');tools.append(download);
+    main.addEventListener('keydown',event=>{if(event.key!=='Escape')return;for(const detail of [takes,history,views,timing])if(detail.open){detail.open=false;detail.querySelector('summary').focus({preventScroll:true});event.preventDefault();return;}if(main.parentElement.classList.contains('zc-controls-open'))hideInspector.click();});
+    // Selecting a take returns its comparison to the full-size canvas.
+    takes.addEventListener('click',event=>{if(event.target.closest('[data-compare-result]'))takes.open=false;});
+    views.addEventListener('click',event=>{if(event.target.closest('[data-view]'))views.open=false;});
+  }
+  syncVideoSurface(){
+    const results=this.studio.project?.results||[];this.$('take-count').textContent=String(results.length);
+    const take=this.root.querySelector('.zc-take-drawer');take.hidden=!results.length;
+    const download=this.$('download-take');download.hidden=!results.length;
+    if(results.length)download.href=results.at(-1).url;
+    this.root.querySelector('.zc-viewer-views').hidden=this.studio.$('preview-tabs').hidden;
+    this.studio.$('preview-description').title=this.studio.$('preview-description').textContent;
+  }
   selectPanel(key){
     if(!['source','look','settings'].includes(key))return;
     this.panel=key;
     for(const panel of this.root.querySelectorAll('.zc-inspector-panel'))panel.hidden=panel.dataset.panel!==key;
     for(const button of this.root.querySelectorAll('.zc-inspector-tabs button'))button.setAttribute('aria-pressed',String(button.dataset.panel===key));
   }
-  revealTarget(target){const panel=target.closest('.zc-inspector-panel');if(panel)this.selectPanel(panel.dataset.panel);}
+  revealTarget(target){const panel=target.closest('.zc-inspector-panel');if(panel){this.selectPanel(panel.dataset.panel);if(window.matchMedia?.('(max-width: 900px)').matches){this.root.querySelector('.gs-workspace').classList.add('zc-controls-open');this.$('video-controls').setAttribute('aria-expanded','true');}}}
   styleControls(){
     if(globalThis.customElements?.get('wa-dropdown'))this.root.classList.add('zc-components-ready');
     // Prefix library classes and preserve native fields, IDs and event handlers.
@@ -144,20 +194,38 @@ export class CreativeWorkspace {
   }
   $(id){return this.root.querySelector("#zc-"+id);}
   async fetch(path,body){const r=await this.api.fetchApi(path,body===undefined?{}:{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});let data;try{data=await r.json();}catch{if(r.ok)return {};throw new Error("ComfyUI is unavailable. Reconnect and try again.");}if(!r.ok)throw new Error(data.error?.message||data.error||"ComfyUI could not complete this request.");return data;}
-  config(){return {model:this.$("model").value||this.draft.model||"flux3",prompt:this.$("prompt").value,shape:this.$("shape").value,references:this.references.map(r=>({...r})),width:Number(this.$("width").value),height:Number(this.$("height").value),seed:Number(this.$("seed").value),random:this.$("random").checked};}
+  config(){return {operation:this.imageOperation,model:this.$("model").value||(this.imageOperation==='edit'?'qwen2511':'flux3'),prompt:this.$("prompt").value,shape:this.$("shape").value,references:this.references.map(r=>({...r})),width:Number(this.$("width").value),height:Number(this.$("height").value),seed:Number(this.$("seed").value),random:this.$("random").checked};}
+  setImageOperation(operation){
+    if(this.job||this.submitting||this.uploading)return;
+    this.imageOperation=operation;
+    for(const option of this.$('model').querySelectorAll('option'))option.hidden=!!this.models.find(m=>m.id===option.value)?.edit!==(operation==='edit');
+    if(!this.models.some(m=>m.id===this.$('model').value&&m.ready&&!!m.edit===(operation==='edit')))this.$('model').value=this.models.find(m=>m.ready&&!!m.edit===(operation==='edit'))?.id||'';
+    this.save();this.render();
+  }
   save(){this.draft=this.config();try{localStorage.setItem(KEY,JSON.stringify({draft:this.draft,items:this.items,job:this.job}));}catch{this.message("Browser storage is full. Your files still save in ComfyUI/output/zura_images.");}}
   message(text){this.$("message").textContent=text||"";this.$("message").hidden=!text;}
   show(mode){this.mode=mode;this.root.dataset.workspace=mode;for(const b of this.root.querySelectorAll(".zc-nav [data-space]"))b.setAttribute("aria-current",b.dataset.space===mode?"page":"false");if(mode!=="video")this.root.querySelectorAll("video,audio").forEach(m=>m.pause());if(mode==="image"&&!this.models.length)this.loadModels();if(this.job)this.startPolling();}
   async loadModels(){
     if(this.loading)return;this.loading=true;
-    try{const types=[...new Set(IMAGE_MODELS.flatMap(m=>Object.values(buildImageGraph({model:m.id,prompt:"check"})).map(n=>n.class_type)))];types.push("ReferenceMultiLatent","LoadImage");const parts=await Promise.all(types.map(t=>this.fetch("/object_info/"+t)));this.models=imageAvailability(Object.assign({},...parts));const selected=this.draft.model;this.$("model").innerHTML=this.models.map(m=>`<option value="${m.id}" ${m.ready?"":"disabled"}>${escape(m.name)}${m.ready?"":" · Setup needed"}</option>`).join("");this.$("model").value=this.models.find(m=>m.id===selected&&m.ready)?.id||this.models.find(m=>m.ready)?.id||"flux3";this.$("setup").innerHTML=this.models.map(m=>`<div class="zc-model-setup"><strong>${escape(m.name)}</strong><p>${m.ready?"Installed · Native recipe tested on 16 GB":escape("Missing: "+m.missing.join(", "))}</p><a href="${m.url}" target="_blank" rel="noopener noreferrer">Model files & instructions</a></div>`).join("");}
+    try{
+      const types=[...new Set(IMAGE_MODELS.flatMap(m=>Object.values(buildImageGraph({model:m.id,prompt:"check",references:m.minReferences?[{file:"availability-check.png"}]:[]})).map(n=>n.class_type)).concat("ReferenceMultiLatent","LoadImage"))];
+      const parts=await Promise.all(types.map(t=>this.fetch("/object_info/"+t)));
+      this.models=imageAvailability(Object.assign({},...parts));const edit=this.imageOperation==='edit';
+      this.$("model").innerHTML=this.models.map(m=>`<option value="${m.id}" ${!!m.edit===edit?'':'hidden'} ${m.ready?"":"disabled"}>${escape(m.name)}${m.ready?"":" · Setup needed"}</option>`).join("");
+      this.$("model").value=this.models.find(m=>m.id===this.draft.model&&m.ready&&!!m.edit===edit)?.id||this.models.find(m=>m.ready&&!!m.edit===edit)?.id||"";
+      this.$("setup").innerHTML=this.models.map(m=>`<div class="zc-model-setup"><strong>${escape(m.name)}</strong><p>${m.ready?(m.edit?"Installed · Imported artist recipe; render test pending":"Installed · Native recipe tested on 16 GB"):escape("Missing: "+m.missing.join(", "))}</p><a href="${m.url}" target="_blank" rel="noopener noreferrer">Model files & instructions</a></div>`).join("");
+    }
     catch(e){this.message(e.message);}finally{this.loading=false;this.render();}
   }
   render(){
     this.styleControls();
     const c=this.config(),m=this.models.find(m=>m.id===c.model),busy=!!this.job||this.submitting||this.uploading;
     let size,error;try{size=imageDimensions(c);}catch(e){error=e.message;}
-    this.$("generate").disabled=busy||!m?.ready||!c.prompt.trim()||!!error||this.references.length>(m?.maxReferences||0)||!!this.references.length&&!m?.referenceReady;this.$("generate").firstChild.textContent=busy?"Generating… ":"Generate image ";
+    this.$("generate").disabled=busy||!m?.ready||!c.prompt.trim()||!!error||this.references.length<(m?.minReferences||0)||this.references.length>(m?.maxReferences||0)||!!this.references.length&&!m?.referenceReady;this.$("generate").firstChild.textContent=busy?"Generating… ":this.imageOperation==='edit'?"Apply edit ":"Generate image ";
+    for(const button of this.root.querySelectorAll('[data-image-operation]')){button.setAttribute('aria-pressed',String(button.dataset.imageOperation===this.imageOperation));button.disabled=busy;}
+    this.root.querySelector('.zc-image-empty h3').textContent=this.imageOperation==='edit'?'Edit your image':'Create your first image';
+    this.root.querySelector('.zc-image-empty>p').textContent=this.imageOperation==='edit'?'Drop or paste the source image below, then describe your change.':'Add references below, or start with a prompt.';
+    this.$('prompt').placeholder=this.imageOperation==='edit'?'Describe what to change. Image 1 is your source; keep everything else…':'Describe the image you have in mind…';
     for(const id of ["model","seed","random","new","width","height","swap-size"])this.$(id).disabled=busy||(id==="model"&&!this.models.length);
     this.$("progress").hidden=!this.job&&!this.submitting;this.$("cancel").disabled=!this.job;
     this.$("clear-history").disabled=!this.items.length;
@@ -165,6 +233,7 @@ export class CreativeWorkspace {
     this.$("add-references").disabled=busy||!max||!m?.referenceReady||this.references.length>=max;
     this.$("clear-references").hidden=!this.references.length;this.$("clear-references").disabled=busy;
     this.$("reference-hint").textContent=this.uploading?"Uploading references…":!max?"Text only. Choose Flux to use reference images.":!m?.referenceReady?"Update ComfyUI for reference image support.":`${this.references.length} / ${max} · Drop or paste images here (Ctrl+V)`+(this.references.length?" · Refer to Image 1, Image 2… in your prompt.":"")+(this.references.length>2?" · References resized to a 2 MP total.":"");
+    if(this.imageOperation==='edit'&&m?.referenceReady&&!this.uploading)this.$('reference-hint').textContent=`${this.references.length} / ${max} · Image 1: source to edit. Extra images: references. Drop or Ctrl+V.`;
     if(this.references.length>max)this.$("reference-hint").textContent=`This model accepts ${max} references. Remove some or choose another model.`;
     const fingerprint=JSON.stringify([this.references,busy]);
     if(fingerprint!==this.referenceFingerprint){this.referenceFingerprint=fingerprint;this.$("reference-list").innerHTML=this.references.map((r,i)=>`<div class="zc-reference"><img src="${escape(this.api.apiURL('/view?'+new URLSearchParams({filename:r.filename,subfolder:r.subfolder||'',type:'input'})))}" alt="${escape(r.name||'Reference '+(i+1))}"/><span>Image ${i+1}</span><button type="button" data-remove-ref="${i}" aria-label="Remove reference ${i+1}" ${busy?'disabled':''}>${closeIcon()}</button>${i?`<button type="button" class="zc-ref-move" data-move-ref="${i}" aria-label="Move reference ${i+1} earlier" ${busy?'disabled':''}>${previousIcon()}</button>`:''}</div>`).join('');}
@@ -178,7 +247,9 @@ export class CreativeWorkspace {
   }
   renderGallery(){
     this.$("image-empty").hidden=!!this.items.length;
-    this.$("gallery").innerHTML=this.items.map((item,i)=>`<figure><a href="${escape(this.api.apiURL(view(item.file)))}" target="_blank" rel="noopener"><img src="${escape(this.api.apiURL(view(item.file)))}" alt="${escape(item.prompt)}" loading="lazy"/></a><figcaption><span>${escape(IMAGE_MODELS.find(m=>m.id===item.model)?.name||item.model)}${item.seconds?` · ${Math.round(item.seconds)}s`:""}</span><div><button type="button" data-reuse="${i}">Reuse prompt</button><a href="${escape(this.api.apiURL(view(item.file)))}" download="${escape(item.file.filename)}">Download</a></div></figcaption></figure>`).join("");
+    this.selectedImage=Math.min(this.selectedImage||0,Math.max(0,this.items.length-1));
+    this.$("gallery").innerHTML=this.items.map((item,i)=>i!==this.selectedImage?'':`<figure><a href="${escape(this.api.apiURL(view(item.file)))}" target="_blank" rel="noopener"><img src="${escape(this.api.apiURL(view(item.file)))}" alt="${escape(item.prompt)}"/></a><figcaption><span>${escape(IMAGE_MODELS.find(m=>m.id===item.model)?.name||item.model)}${item.seconds?` · ${Math.round(item.seconds)}s`:""}</span><div><button type="button" data-reuse="${i}">Reuse prompt</button><a href="${escape(this.api.apiURL(view(item.file)))}" download="${escape(item.file.filename)}">Download</a></div></figcaption></figure>`).join("");
+    this.$('image-history').innerHTML=this.items.map((item,i)=>`<button type="button" data-view-image="${i}" aria-pressed="${i===this.selectedImage}"><img src="${escape(this.api.apiURL(view(item.file)))}" alt="" loading="lazy"/><span>${escape(item.prompt)}</span></button>`).join('')||'<p>No saved images yet.</p>';
   }
   async pasteReferences(event){
     if(!["image","video"].includes(this.mode))return;
@@ -198,7 +269,7 @@ export class CreativeWorkspace {
   async uploadReferences(files){
     if(this.job||this.submitting||this.uploading||!files.length)return;
     const m=this.models.find(m=>m.id===this.config().model);
-    if(!m?.maxReferences||!m.referenceReady){this.message("Choose Flux 3 or Flux 2 Klein with reference support installed.");return;}
+    if(!m?.maxReferences||!m.referenceReady){this.message("Choose an installed model with image reference support.");return;}
     if(files.length+this.references.length>m.maxReferences){this.message(`Choose up to ${m.maxReferences-this.references.length} more images for ${m.name}. Nothing was discarded.`);return;}
     if(files.some(f=>!(/\.(png|jpe?g|webp)$/i.test(f.name))||f.size>64*1024*1024)){this.message("Use PNG, JPEG or WebP images under 64 MB each.");return;}
     this.uploading=true;this.message("");this.render();
@@ -230,7 +301,7 @@ export class CreativeWorkspace {
       if(entry?.status?.completed||entry?.status?.status_str==="error"){
         const files=entry.outputs?.save?.images||[];
         const messages=entry.status.messages||[],start=messages.find(m=>m[0]==="execution_start")?.[1]?.timestamp,end=messages.find(m=>m[0]==="execution_success")?.[1]?.timestamp;
-        for(const file of files)this.items.unshift({...job.config,file,seconds:start&&end?(end-start)/1000:null});this.items=this.items.slice(0,30);
+        for(const file of files)this.items.unshift({...job.config,file,seconds:start&&end?(end-start)/1000:null});this.items=this.items.slice(0,30);if(files.length)this.selectedImage=0;
         const error=messages.find(m=>m[0]==="execution_error")?.[1];this.message(files.length?"":error?.exception_message||"Generation stopped. Your previous images are safe.");this.job=null;this.stopPolling();this.save();this.renderGallery();this.render();
       }else{const queue=await this.fetch("/queue");if(this.job!==job)return;const running=queue.queue_running.some(r=>r[1]===job.id),pending=queue.queue_pending.some(r=>r[1]===job.id);if(!running&&!pending){this.job=null;this.stopPolling();this.save();this.message("This run is no longer in ComfyUI's queue. You can generate again.");this.render();}else this.$("progress-detail").textContent=running?this.elapsed():"Waiting for other ComfyUI jobs";}
     }catch(e){this.message("Connection interrupted. Reconnecting to your image run…");}finally{this.polling=false;}

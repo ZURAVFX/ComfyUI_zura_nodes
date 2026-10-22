@@ -271,7 +271,7 @@ class ArtistStudio {
   }
   engineAllowed(engine) {
     if(this.config.workflow_mode==="camera")return engine==="h3";
-    return this.config.workflow_mode==="relight"?["h3","wan21"].includes(engine):this.config.workflow_mode!=="viewport" || engine!=="wan";
+    return this.config.workflow_mode==="relight"?engine==="wan21":this.config.workflow_mode!=="viewport" || engine!=="wan";
   }
   directViewport() {return this.config.engine==="h3" && this.config.workflow_mode==="viewport" && !!this.config.h3_viewport_direct && this.lookMode!=="ready";}
   useGeneratedLook() {
@@ -310,7 +310,7 @@ class ArtistStudio {
       this.config.lip_sync=false;this.config.refine_lips=false;this.pendingReference=false;this.useGeneratedLook();
     }
     if(this.config.workflow_mode==="relight"){
-      Object.assign(this.config,{edit_area:"scene",h3_head_swap:false,h3_viewport_direct:false,preserve_people:false,audio_id:"",audio_start:0,lip_sync:false,refine_lips:false});this.pendingReference=false;this.useGeneratedLook();
+      Object.assign(this.config,{relight_engine:"wan21",edit_area:"scene",h3_head_swap:false,h3_viewport_direct:false,preserve_people:false,preserve_identity:false,remove_text:false,audio_id:"",audio_start:0,lip_sync:false,refine_lips:false});this.pendingReference=false;this.useGeneratedLook();
     }
   }
   referenceRoles(){return this.references.map(a=>a.role||"auto");}
@@ -345,7 +345,7 @@ class ArtistStudio {
     if(c.workflow_mode==="viewport"){c.audio_id="";c.lip_sync=false;}
     if(!reference)c.audio_start=0;
     if(c.length_mode==="original")c.start=0;
-    if(c.workflow_mode==="relight")c.relight_engine=selectedEngine;
+    if(c.workflow_mode==="relight")c.relight_engine="wan21";
     c.engine=["relight","camera"].includes(c.workflow_mode)?"h3":selectedEngine;
     c.preserve_people=c.engine==="h3" && c.workflow_mode==="motion" && !!this.$("preserve_people")?.checked;
     c.preserve_identity=c.workflow_mode==="relight" && !!this.$("preserve_identity")?.checked;
@@ -709,6 +709,7 @@ class ArtistStudio {
   }
   async primary() {
     if(!verifiedSetup(this.config)){this.message(verifiedNotice,true);return;}
+    if(this.promptStage==="image" && this.project?.opening_input && !this.headSwap() && !this.directViewport() && this.config.workflow_mode!=="camera")return this.$("redesign").click();
     this.trimSeeking=false;this.$("canvas")?.classList?.remove("is-expanded");
     return this.primaryRecipe();
   }
@@ -768,7 +769,7 @@ class ArtistStudio {
     });
   }
   defaultReviewPreview(project,wholeScene) {
-    if(project?.phase==="opening" && project.opening_input){
+    if(project?.opening_input && ["opening","working","error"].includes(project.phase)){
       const openingKey=project.id+":"+(project.opening_key||project.opening_url||project.opening_input);
       if(this.openingPreviewKey!==openingKey){this.openingPreviewKey=openingKey;this.preview="look";this.trimSeeking=false;this.promptStage=null;}
       return;
@@ -787,7 +788,7 @@ class ArtistStudio {
       const allowed=["swap","viewport","camera","relight"].includes(input.value);input.closest("label").hidden=!allowed;input.disabled=!allowed || this.busy || this.project?.phase==="working";
     });
     this.container.querySelectorAll('input[name="gs-engine"]').forEach(input=>{
-      const allowed=viewport||camera?input.value==="h3":relight?["h3","wan21"].includes(input.value):["wan","h3","local","wan2"].includes(input.value);
+      const allowed=viewport||camera?input.value==="h3":relight?input.value==="wan21":["wan","h3","local","wan2"].includes(input.value);
       input.closest("label").hidden=!allowed;input.disabled=!allowed || this.busy || this.project?.phase==="working";
     });
     for(const id of ["mask_method","subject_mode"]){const input=this.$(id);input.closest("label").hidden=true;}
@@ -920,6 +921,7 @@ class ArtistStudio {
     }else this.$("exit").disabled=this.busy;
   }
   syncForm() {
+    if(this.config.workflow_mode==="relight" && this.project?.phase!=="working")Object.assign(this.config,{engine:"h3",relight_engine:"wan21",resolution:1280,delivery_mode:"native",preserve_identity:false,remove_text:false});
     this.syncPreservedPeople();
     if(this.$("preserve_people"))this.$("preserve_people").checked=!!this.config.preserve_people;
     const resolution=this.config.engine==="h3" && this.config.delivery_mode==="enhanced1080"
@@ -1049,6 +1051,9 @@ class ArtistStudio {
     this.trimTimeline?.update(this.source,this.config,{disabled:this.busy||working,maximum:info.maximum});
     this.$("trim-controls").hidden=!this.source;
     this.$("trim-precision").hidden=!this.source || this.config.length_mode==="original";
+    if(image && hasOpening && !working && !this.busy){this.$("primary").innerHTML="Regenerate frame"+icon("arrow");this.$("primary").disabled=this.$("redesign").disabled;}
+    this.$("action-note").title=this.$("action-note").textContent;
+    this.creative?.syncVideoSurface?.();
   }
   renderStudio() {
     this.contentDetection.update(this.source,{...this.config,subject_mode:"people"});
@@ -1271,7 +1276,7 @@ class ArtistStudio {
       label=p?.opening_input?(phase==="done"?"Generate another take":"Use this angle & generate"):(this.lookMode==="ready"?"Review camera still":"Create camera still");
       note=p?.opening_input?"Approve this view and generate video with the original acting and audio.":"Choose an angle or describe it. Review the still before generating video.";
     }
-    if(working){label="Working on your shot";note="Progress and Cancel run are below the preview. You can return to this shot later.";}
+    if(working){label="Generating";note="You can cancel this run below the preview.";}
     if(reference && !this.audio && !working){label="Choose reference audio";note="Upload a track under Audio and performance.";}
     if(this.busy && !working)label="Please wait";
     const sourceSeconds=Number(this.source?.duration), start=this.config.length_mode==="original"?0:Number(this.config.start);
@@ -1342,12 +1347,12 @@ class ArtistStudio {
     this.$("preview-tabs").querySelector('[data-view="look"]').hidden=!p?.opening_input;
     this.$("preview-tabs").querySelectorAll("button").forEach(b=>b.classList.toggle("active",b.dataset.view===this.preview));
     let video=this.source?.url,opening=null,title=this.source?"Your source video":"Create a new look",description=this.source?"Video loaded. Choose what changes and add your starting look.":"Start with footage or a viewport render.";
-    if(p?.review){video=({mask:p.mask_url,guide:p.guide_url||p.selected_url,source:p.selected_url})[this.preview];title="Check the selection";description=wholeScene?"The whole frame is selected. Review the source movement and framing before creating the look.":this.config.remove_text?"Watch the full clip. The orange mask should cover the selected area and all titles and subtitles you want removed.":"Watch the full clip. Make sure the orange mask covers the selected area throughout the shot.";}
+    if(p?.review){video=({mask:p.mask_url,guide:p.guide_url||p.selected_url,source:p.selected_url})[this.preview] || p.selected_url || this.source?.url;title="Check the selection";description=wholeScene?"The whole frame is selected. Review the source movement and framing before creating the look.":this.config.remove_text?"Watch the full clip. The orange mask should cover the selected area and all titles and subtitles you want removed.":"Watch the full clip. Make sure the orange mask covers the selected area throughout the shot.";}
     if(p?.review && preservePeople){title="Review the surroundings";description="The orange area will change. People should stay outside the mask throughout the clip.";}
     if(p?.review && relight){title="Review the source";description="Keep this composition and performance. Next, create a lighting frame to review.";}
     if(p?.review && !wholeScene && p.tracking_coverage?.cut_reselection_requires_review)description+=" Check that the correct person or object stays selected after each camera cut.";
     if(p?.review && !wholeScene && p.tracking_coverage?.near_empty_frames)description+=" The selection is missing in part of the clip. Check whether the subject has left the picture or the mask needs correcting.";
-    if(phase==="opening" && this.preview==="look"){opening=p.opening_url;video=null;title=this.lookMode==="ready"?"Review your finished frame":"Review your starting frame";description=relight?"Check the lighting. Subjects, objects and composition should match the source.":"Check the appearance and framing before animation.";if(relight)title="Review your lighting frame";}
+    if(p?.opening_url && this.preview==="look" && !["done","draft"].includes(phase)){opening=p.opening_url;video=null;title=working?"Your approved starting frame":this.lookMode==="ready"?"Review your finished frame":"Review your starting frame";description=relight?"Check the lighting. Subjects, objects and composition should match the source.":"Check the appearance and framing before animation.";if(relight)title=working?"Your approved lighting frame":"Review your lighting frame";}
     if((phase==="draft" || phase==="done") && p.results?.length){video=p.results.at(-1).url;title=phase==="draft"?"Review your draft":"Your finished take";description="The selected soundtrack is restored. Watch the entire take before keeping it.";}
     if(workflow==="camera"){
       if(phase==="opening"&&this.preview==="look"){title="Review your camera still";description="Check the angle, identity and framing before generating video.";}
@@ -1373,7 +1378,7 @@ class ArtistStudio {
     const stageNames=workflow==="camera"?["Source","Camera still","Review & render","Result"]:["Source","Starting frame","Video","Result"],stageNotes=workflow==="camera"?["Add your video","Choose a new angle","Approve the view","Compare & download"]:["Video & references","Create & review","Settings & generation","Compare & download"];
     this.container.querySelectorAll("[data-step]").forEach(e=>{const index=Number(e.dataset.step);e.querySelector("strong").textContent=stageNames[index];e.querySelector("small").textContent=stageNotes[index];e.hidden=direct&&index===1;});
     this.container.querySelectorAll("[data-step]").forEach(e=>{const current=Number(e.dataset.step)===step;e.classList.toggle("active",current);e.classList.toggle("complete",Number(e.dataset.step)<step);if(current)e.setAttribute("aria-current","step");else e.removeAttribute("aria-current");});
-    if(p?.error)this.message(p.error,true);
+    if(p?.error && p.error!==this.dismissedError)this.message(p.error,true);
     const results=p?.results || [];this.$("results").hidden=!results.length;
     const fingerprint=JSON.stringify(results);
     if(this.resultFingerprint!==fingerprint){

@@ -10,6 +10,13 @@ wan21 = importlib.import_module(studio.__package__ + ".wan21_relight")
 
 
 class Wan21RelightTests(unittest.TestCase):
+    def test_relight_defaults_and_legacy_h3_selection_migrate_to_wan21(self):
+        for old in ({}, {"relight_engine": "h3"}, {"relight_engine": "wan21"}):
+            config = studio.clean_config({"engine": "h3", "workflow_mode": "relight", **old})
+            self.assertEqual(config["relight_engine"], "wan21")
+            self.assertEqual(config["resolution"], 1280)
+            self.assertFalse(config["preserve_identity"])
+
     def project(self):
         project = fixture.SharedEngineTests().project()
         project["config"] = studio.clean_config({

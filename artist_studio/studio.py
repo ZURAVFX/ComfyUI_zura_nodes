@@ -47,7 +47,7 @@ DEFAULTS = {"engine": "local", "background": "keep", "scope": "person", "prompt"
             "finished_frame_position": "first", "finished_frame_number": 1, "h3_viewport_direct": False, "h3_head_swap": False,
             "camera_preset": "Left three-quarter", "camera_prompt": "", "camera_width": 768, "camera_height": 448,
             "subject_mode": "auto", "preserve_people": False, "preserve_identity": False,
-            "relight_engine": "h3",
+            "relight_engine": "wan21",
             "workflow_mode": "swap", "edit_area": "mask", "mask_method": "auto", "mask_prompt": "person", "mask_points": []}
 PREP_KEYS = ("start", "duration", "size", "scope", "performer", "margin", "pitch")
 
@@ -115,6 +115,10 @@ def clean_config(value):
         raise ValueError("Relight currently supports MiniMax H3. Choose H3 for this task.")
     if c["workflow_mode"] != "relight":
         c["relight_engine"] = "h3"
+    else:
+        # Migrate saved H3 choices when editing/exporting a shot. Running jobs
+        # keep their queued graph and are never automatically resubmitted.
+        c["relight_engine"] = "wan21"
     c["preserve_people"] = bool(c["preserve_people"])
     c["preserve_identity"] = bool(c["preserve_identity"]) and c["workflow_mode"] == "relight"
     if c["preserve_people"] and (c["engine"] != "h3" or c["workflow_mode"] != "motion"):

@@ -1,5 +1,13 @@
 # Release notes
 
+## Unreleased - Canvas and image editing
+
+- Give the current image, video or live sample the main central canvas. Takes, history, view choices and trimming open from the viewer toolbar. Keep a compact prompt and one primary action beneath the canvas, with no document scrolling.
+- Keep the approved starting image visible during video generation and after a stopped job. Stopped progress is hidden; recovery messages can be dismissed.
+- Replace H3 relight video with the artist-supplied Wan 2.1 chained recipe. Saved H3 relight selections migrate when edited; active jobs are never resubmitted. H3 still creates the lighting image for review.
+- Add Image > Edit image with Qwen Image Edit 2511 (INT8, Lightning 4-step) and FLUX Klein 9B (FP8, native four-step schedule and reference KV cache). Image 1 is the source; later images are references. Both graphs pass live local schema validation; new GPU render approval is pending.
+- Accept current and legacy ComfyUI model-option schemas when checking installed models.
+
 ## 1.3.28 - 22 October 2026
 
 - Add Wan 2.1 Chained Relight as an alternate to H3. Build and review the lighting frame first, then run the artist-supplied four-step recipe in 81-frame sections at 720p, preserving the source soundtrack. H3 remains available for short relights.

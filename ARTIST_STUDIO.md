@@ -20,9 +20,10 @@ Its thumbnail confirms the upload.
   H3 is recommended. LTX remains experimental; Wan is available in the other
   editing modes.
 - **Relight** changes the scene lighting while retaining the source composition.
-  MiniMax H3 is the short-clip route. Wan 2.1 is the chained route for longer
-  clips: fixed four-step sampling in 81-frame sections, at 720p-class output.
-  Both use a reviewed lighting frame and restore the original soundtrack. Check
+  Video generation uses the supplied Wan 2.1 chained workflow, replacing the
+  H3 relight video option. Create and review a lighting image first, then run
+  fixed four-step sampling in 81-frame sections, at 720p-class output.
+  The original soundtrack is restored. Check
   joins on longer Wan clips and inspect the result for identity, material and
   temporal changes.
 
