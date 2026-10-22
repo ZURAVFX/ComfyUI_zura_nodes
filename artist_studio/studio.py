@@ -69,6 +69,25 @@ def h3_attention_capabilities(node_mappings):
                             ("PathchSageAttentionKJ", "SolAttnPatch"))}
 
 
+def design_readiness(node_mappings, get_full_path):
+    """Check the actual Klein opening-frame graph, independently of video models."""
+    graph = json.loads((HERE / "graphs" / (STAGES["design"] + ".json")).read_text(encoding="utf-8"))
+    loaders = {"UNETLoader": ("diffusion_models", "unet_name"),
+               "CLIPLoader": ("text_encoders", "clip_name"),
+               "VAELoader": ("vae", "vae_name")}
+    files = []
+    for node in graph.values():
+        if node["class_type"] not in loaders:
+            continue
+        folder, field = loaders[node["class_type"]]
+        filename = node["inputs"][field]
+        files.append({"folder": folder, "filename": filename,
+                      "ready": bool(get_full_path(folder, filename))})
+    missing = sorted({node["class_type"] for node in graph.values()} - set(node_mappings))
+    return {"ready": bool(files) and all(item["ready"] for item in files) and not missing,
+            "model_files": files, "missing_nodes": missing}
+
+
 def clean_config(value):
     c = {**DEFAULTS, **{k: v for k, v in value.items() if k in DEFAULTS}}
     # Preserve the former two-way edit selector on older saved shots. The
@@ -416,6 +435,8 @@ def prep_key(project):
 def assert_approved(project):
     from . import verify_review
     if not project.get("review") or project.get("approval") != prep_key(project):
+        if project.get("config", {}).get("workflow_mode") == "relight":
+            raise ValueError("The source clip changed. Create and review a new lighting frame before relighting.")
         raise ValueError("Check the mask preview and choose Use this mask first.")
     check_asset(project["source"])
     if project.get("audio"):
@@ -2202,13 +2223,14 @@ def register():
         camera = camera_readiness(nodes.NODE_CLASS_MAPPINGS, folder_paths.get_full_path)
         from .wan21_relight import readiness as wan21_relight_readiness
         wan21_relight = wan21_relight_readiness(nodes.NODE_CLASS_MAPPINGS, folder_paths.get_full_path)
+        design = design_readiness(nodes.NODE_CLASS_MAPPINGS, folder_paths.get_full_path)
         return web.json_response({**hardware_snapshot(), "models": models, "h3_models": h3_models, "wan_models": wan_models, "speech": readiness(),
             "h3_text_cleanup": text_cleanup_readiness(),
             "h3_head_swap": head_swap, "wan2": wan2, "h3_camera": camera,
             "wan21_relight": wan21_relight,
             "h3_attention_backends": h3_attention_capabilities(nodes.NODE_CLASS_MAPPINGS),
             "wan_speech": wan_speech_readiness(),
-            "engine_ready": {"h3_camera": camera["ready"], "wan2": wan2["ready"], "local": all(models[key] for key in masked_keys) and not missing_ltx_nodes,
+            "engine_ready": {"design": design["ready"], "h3_camera": camera["ready"], "wan2": wan2["ready"], "local": all(models[key] for key in masked_keys) and not missing_ltx_nodes,
                              "local_scene": all(models[key] for key in scene_keys) and all(detectors.values()) and not missing_ltx_scene_nodes,
                              "local_viewport": ltx_viewport["ready"],
                              "h3": all(h3_models.values()) and not missing_h3_nodes,
@@ -2222,11 +2244,12 @@ def register():
                                "wan": "Native source performance or an audio-driven face guide; review head turns and speech timing",
                                "wan21_relight": wan21_relight["note"]},
             "missing_ltx_nodes": missing_ltx_nodes,
+            "missing_design_nodes": design["missing_nodes"],
             "missing_ltx_scene_nodes": missing_ltx_scene_nodes,
             "missing_ltx_viewport_nodes": ltx_viewport["missing_nodes"],
             "missing_h3_viewport_nodes": missing_h3_viewport_nodes,
             "missing_wan2_nodes": wan2["missing_nodes"],
-            "model_files": {"wan2": wan2["model_files"],
+            "model_files": {"design": design["model_files"], "wan2": wan2["model_files"],
                 "wan21_relight": wan21_relight["model_files"],
                 "local_viewport": ltx_viewport["model_files"],
                 "h3_viewport": [{"folder": folder, "filename": name, "ready": h3_models[key]}

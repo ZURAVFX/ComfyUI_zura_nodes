@@ -2,7 +2,7 @@
 
 22 October 2026. Candidate scope for Zura Nodes 1.3.28; 1.3.27 is already published.
 
-Relight now offers two routes. MiniMax H3 creates the lighting frame and handles short relights. Wan 2.1 uses the artist-supplied Switch X recipe after the lighting frame is reviewed: fixed four-step sampling, 81-frame sections, source-matched framing up to a 1280-pixel long edge, 24 fps and restored original soundtrack. The recipe is checked against the running Comfy node schemas and private workflow paths/media are removed. Its parent workflow was artist-confirmed as working well; no new full Studio render is claimed for this integration. Review section joins on long clips.
+Relight now uses Klein to create the lighting image and Wan 2.1 for video. H3 relight video is removed from Studio. Wan 2.1 uses the artist-supplied Switch X recipe after the lighting frame is reviewed: fixed four-step sampling, 81-frame sections, source-matched framing up to a 1280-pixel long edge, 24 fps and restored original soundtrack. The recipe is checked against the running Comfy node schemas and private workflow paths/media are removed. Its parent workflow was artist-confirmed as working well; no new full Studio render is claimed for this integration. Review section joins on long clips.
 
 The Image workspace includes local model readiness, prompt-first generation, native reference conditioning, exact dimensions, saved themes and clearable generation history. These additions preserve existing approved video paths.
 
@@ -86,7 +86,7 @@ Wan Animate 2 is now exposed separately as **Character + background**, at the ar
 
 References: [official Animate2](https://github.com/Wan-Video/Wan-Animate-2), [Comfy distilled blueprint](https://github.com/Comfy-Org/workflow_templates/blob/main/blueprints/motion_transfer_wan_animate_2_distilled.json), [native Comfy implementation](https://github.com/Comfy-Org/ComfyUI/blob/master/comfy_extras/nodes_wan.py).
 
-Historical note: H3 Relight was restored as an explicitly labelled preview on 20 October 2026. It uses original audio and requires review of the lighting frame before animation. The Wan 2.1 route above was added on 22 October.
+Historical note: H3 Relight was restored as an explicitly labelled preview on 20 October 2026. It uses original audio and requires review of the lighting frame before animation. The Wan 2.1 route above replaced it on 22 October. Lighting-image generation uses Klein independently of H3.
 
 
 ### Local UI and relight readiness checks (20 October 2026)

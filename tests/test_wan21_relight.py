@@ -10,6 +10,20 @@ wan21 = importlib.import_module(studio.__package__ + ".wan21_relight")
 
 
 class Wan21RelightTests(unittest.TestCase):
+    def test_lighting_image_readiness_needs_klein_and_not_h3(self):
+        graph = studio.json.loads((studio.HERE / "graphs" / "01B_Design_Opening_Frame.json").read_text(encoding="utf-8"))
+        mappings = {node["class_type"]: object() for node in graph.values()}
+        result = studio.design_readiness(mappings, lambda folder, filename: filename)
+        self.assertTrue(result["ready"])
+        self.assertEqual({item["filename"] for item in result["model_files"]}, {
+            "flux-2-klein-9b-fp8.safetensors", "qwen_3_8b_fp8mixed.safetensors",
+            "full_encoder_small_decoder.safetensors"})
+        self.assertFalse(studio.design_readiness(mappings, lambda folder, filename: None)["ready"])
+        del mappings["ReferenceLatent"]
+        missing = studio.design_readiness(mappings, lambda folder, filename: filename)
+        self.assertFalse(missing["ready"])
+        self.assertEqual(missing["missing_nodes"], ["ReferenceLatent"])
+
     def test_relight_defaults_and_legacy_h3_selection_migrate_to_wan21(self):
         for old in ({}, {"relight_engine": "h3"}, {"relight_engine": "wan21"}):
             config = studio.clean_config({"engine": "h3", "workflow_mode": "relight", **old})
@@ -40,6 +54,8 @@ class Wan21RelightTests(unittest.TestCase):
         graph = self.build()
         self.assertEqual(graph["wan21_reference"]["inputs"]["image"], "genj_studio/test/opening.png")
         self.assertEqual(graph["wan21_shot"]["inputs"]["shot_id"], "shot_" + "b" * 16)
+        self.assertEqual(graph["wan21_shot"]["inputs"]["approved_shot_id"], graph["wan21_shot"]["inputs"]["shot_id"])
+        self.assertNotEqual(graph["wan21_shot"]["inputs"]["approved_shot_id"], self.project()["approval"])
         self.assertEqual(graph["wan21_source_frames"]["inputs"]["video"], ["wan21_shot", 0])
         self.assertEqual(graph["272:407:89"]["inputs"]["width"], 1280)
         self.assertEqual(graph["272:407:89"]["inputs"]["height"], 704)
@@ -59,6 +75,11 @@ class Wan21RelightTests(unittest.TestCase):
         raw = wan21.RECIPE.read_text(encoding="utf-8")
         for private in ("relight needed.mp4", "reference_image.png", "ComfyUI-Shared", "C:\\\\Users\\\\ellio", "data:image/"):
             self.assertNotIn(private, raw)
+
+    def test_matching_loader_ids_do_not_skip_source_approval_checks(self):
+        with patch.object(studio, "assert_approved", side_effect=ValueError("Source changed")):
+            with self.assertRaisesRegex(ValueError, "Source changed"):
+                wan21.build_studio_graph(self.project(), lambda asset: asset["file"])
 
     def test_fixed_recipe_ignores_h3_delivery_controls(self):
         config = self.project()["config"]

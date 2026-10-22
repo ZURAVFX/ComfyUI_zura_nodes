@@ -19,6 +19,14 @@ fields.image_prompt.value='Soft blue studio light';assert.equal(ui.hasLook(),tru
 fields.image_prompt.value='';fields.prompt.value='Warm sunset through the windows';
 const config=ui.readConfig();assert.equal(config.engine,'h3','A stale unsupported model radio cannot enter the payload');assert.equal(config.edit_area,'scene');assert.equal(config.viewport_render,false);
 ui.config=config;
+fields.models={textContent:'',classList:{toggle(){}}};fields['model-checklist']={innerHTML:''};
+ui.modelStatus={engine_ready:{h3:false,design:true,wan21_relight:true},
+  model_files:{h3:[{filename:'missing-h3.safetensors',ready:false}],design:[{folder:'diffusion_models',filename:'flux-2-klein-9b-fp8.safetensors',ready:true}]},
+  missing_h3_nodes:['MissingH3Node'],wan21_relight:{model_files:[{folder:'diffusion_models',filename:'wan_2.1_idv2v_int8_convrot.safetensors',ready:true}],missing_nodes:[]}};
+ui.updateModelStatus();assert.equal(fields.models.textContent,'Wan 2.1 · Relight ready','Wan relight does not require H3 installed');
+assert.match(fields['model-checklist'].innerHTML,/flux-2-klein-9b/);assert.doesNotMatch(fields['model-checklist'].innerHTML,/missing-h3|MissingH3Node/);
+ui.modelStatus.engine_ready.design=false;ui.updateModelStatus();assert.equal(fields.models.textContent,'Wan 2.1 · Relight setup needed');
+ui.modelStatus=null;
 const payload=JSON.parse(JSON.stringify(ui.projectBody()));assert.deepEqual(payload.references,[]);assert.equal(payload.character,undefined);assert.equal(payload.source,'source');assert.equal(payload.config.prompt,'Warm sunset through the windows');
 assert.equal(ui.engineAllowed('wan21'),true);for(const model of ['h3','local','wan','seedance'])assert.equal(ui.engineAllowed(model),false);
 ui.config={...config,workflow_mode:'swap'};for(const model of ['local','h3','wan','seedance'])assert.equal(ui.engineAllowed(model),true,'Switching out of Relight restores the other engines');

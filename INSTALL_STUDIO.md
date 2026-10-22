@@ -21,13 +21,17 @@ For a virtual-environment install, use that installation's Python in place of `p
 ## Create a character replacement
 
 1. Add your source video and character references. Choose the clip interval.
-2. Describe the first frame under **Starting frame prompt**, then select **Create starting frame**. Source tracking and frame creation run automatically with progress for each stage.
-3. Review the frame. Use **Selection** to inspect tracking, or **Regenerate starting frame** to revise the look.
-4. Choose video resolution, sampling and audio, then select **Generate video**. Use **Cancel run** to stop.
+2. Describe the look under **Describe your starting image**, then select **Create starting frame**. Source tracking and image creation run automatically with progress for each stage.
+3. Review the image. Choose **Edit image** and **Regenerate image** to revise it, or **Use image & continue** to approve it. Approval opens the next stage without starting a video render.
+4. Add optional video direction under **Direct your video**. Choose video resolution, sampling and audio, then select **Generate video**. Use **Cancel run** to stop.
 
 A finished frame skips image generation. H3 **Head & face** uses the portrait directly; H3 direct viewport uses appearance references directly. These routes show their own controls.
 
 Wan Animate 2 is the separate **Character + background** engine choice. It regenerates the complete frame, without a spatial mask. See [its setup and limitations](docs/WAN_ANIMATE2.md); this local integration is not an artist-approved quality result yet.
+
+For lighting changes, choose **Relight**: create and approve a Klein lighting image, then render with the supplied Wan 2.1 chained recipe. H3 is not required for this route.
+
+For instruction-based still-image edits, open **Image > Edit image** and choose **Qwen Image Edit 2511** or **FLUX Klein 9B**. See [image editing](docs/IMAGE_EDIT.md) for the source/reference order, limits and validation status.
 
 ## Choose an engine and download its weights
 

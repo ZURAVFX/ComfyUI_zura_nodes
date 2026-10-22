@@ -4,9 +4,11 @@
 
 - Give the current image, video or live sample the main central canvas. Takes, history, view choices and trimming open from the viewer toolbar. Keep a compact prompt and one primary action beneath the canvas, with no document scrolling.
 - Keep the approved starting image visible during video generation and after a stopped job. Stopped progress is hidden; recovery messages can be dismissed.
-- Replace H3 relight video with the artist-supplied Wan 2.1 chained recipe. Saved H3 relight selections migrate when edited; active jobs are never resubmitted. H3 still creates the lighting image for review.
+- Replace H3 relight video with the artist-supplied Wan 2.1 chained recipe. Saved H3 relight selections migrate when edited; active jobs are never resubmitted. Klein creates the lighting image for review; H3 models are not required.
 - Add Image > Edit image with Qwen Image Edit 2511 (INT8, Lightning 4-step) and FLUX Klein 9B (FP8, native four-step schedule and reference KV cache). Image 1 is the source; later images are references. Both graphs pass live local schema validation; new GPU render approval is pending.
 - Accept current and legacy ComfyUI model-option schemas when checking installed models.
+- Guide image-to-video generation through Create image, Approve image, then Direct video. Image approval opens video controls without starting a render. Regeneration returns to image review and retains the separate video direction.
+- Fix Wan relight's reviewed-source loader receiving a preparation hash instead of the approved shot ID. Source and lighting-image approval checks remain enforced.
 
 ## 1.3.28 - 22 October 2026
 

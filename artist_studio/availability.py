@@ -32,8 +32,8 @@ def camera_setup(config):
 
 
 def relight_setup(config):
-    # Both validated relight backends use the approved H3 opening-frame stage.
-    # The selected backend only changes the video-generation route.
+    # Opening frames use Klein. "h3" is the legacy orchestration key;
+    # the selected relight backend determines the video model independently.
     return (config.get("workflow_mode") == "relight" and config.get("engine") == "h3"
             and config.get("relight_engine", "h3") in ("h3", "wan21")
             and config.get("edit_area") == "scene"
