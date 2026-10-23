@@ -219,7 +219,20 @@ export class CreativeWorkspace {
   }
   save(){this.draft=this.config();try{localStorage.setItem(KEY,JSON.stringify({draft:this.draft,items:this.items,job:this.job}));}catch{this.message("Browser storage is full. Your files still save in ComfyUI/output/zura_images.");}}
   message(text){this.$("message").textContent=text||"";this.$("message").hidden=!text;}
-  show(mode){this.mode=mode;this.root.dataset.workspace=mode;for(const b of this.root.querySelectorAll(".zc-nav [data-space]"))b.setAttribute("aria-current",b.dataset.space===(mode==='frames'?'video':mode)?"page":"false");this.root.querySelectorAll("video,audio").forEach(m=>m.pause());if(mode==='video')this.videoComposer?.sync();if(mode==="image"&&!this.models.length)this.loadModels();if(mode==='frames'){this.frames??=new FrameVideoWorkspace(this);this.frames.open();}if(this.job)this.startPolling();}
+  show(mode){
+    this.mode=mode;this.root.dataset.workspace=mode;
+    if(mode==='frames')this.frames??=new FrameVideoWorkspace(this);
+    // Set real visibility as well as the CSS state, so another page cannot
+    // cover navigation when the workspace changes or styles are still loading.
+    const pages={'.zc-home':'home','.zc-image-page':'image','.zf-page':'frames','.gs-workspace':'video','.gs-steps':'video'};
+    for(const child of this.root.children)for(const [selector,space] of Object.entries(pages))if(child.matches(selector))child.hidden=mode!==space;
+    for(const b of this.root.querySelectorAll('.zc-nav [data-space]'))b.setAttribute('aria-current',b.dataset.space===(mode==='frames'?'video':mode)?'page':'false');
+    this.root.querySelectorAll('video,audio').forEach(m=>m.pause());
+    if(mode==='video')this.videoComposer?.sync();
+    if(mode==='image'&&!this.models.length)this.loadModels();
+    if(mode==='frames')this.frames.open();
+    if(this.job)this.startPolling();
+  }
   async loadModels(){
     if(this.loading)return;this.loading=true;
     try{

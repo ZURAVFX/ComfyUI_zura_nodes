@@ -215,6 +215,23 @@ assert.equal(flow.$('model-prompt').hidden,true);await flow.primary();
 let animations=0;flow.primaryRecipe=async()=>animations++;await flow.primary();assert.equal(animations,1,'Only the next Generate video action starts video generation');
 flow.promptStage=null;flow.render();assert.equal(flow.composerStage(),'video','Approval survives repainting and restoring the current image');
 flow.creative.close();
+// The frame workspace can be left through every visible route, with both
+// workspaces' media and prompt drafts retained. No generation is submitted.
+const navStudio=new context.Studio(),navUi=navStudio.creative;
+navStudio.source={id:'retained-video',name:'source.mp4'};navStudio.references=[{id:'retained-reference'}];
+const navRequests=calls.filter(c=>c.path==='/prompt').length;
+const task=navStudio.container.querySelector('#zc-video-task');task.value='frames';task.dispatchEvent(new window.Event('change'));
+assert.equal(navUi.mode,'frames');assert.equal(navUi.frames.page.hidden,false);assert.equal(navStudio.container.querySelector('.gs-workspace').hidden,true);
+navUi.frames.assets.first={file:'retained-first.png',filename:'retained-first.png'};navUi.frames.$('prompt').value='A slow camera move';navUi.frames.save();
+navUi.frames.$('back').click();assert.equal(navUi.mode,'video');assert.equal(navUi.frames.page.hidden,true);assert.equal(navStudio.container.querySelector('.gs-workspace').hidden,false);
+for(const mode of ['home','image','video']){
+  navUi.show('frames');navStudio.container.querySelector(`.zc-nav [data-space="${mode}"]`).click();assert.equal(navUi.mode,mode);assert.equal(navUi.frames.page.hidden,true,mode+' must hide the frame page');
+}
+navUi.show('frames');const frameTask=navUi.frames.$('task');frameTask.value='camera';frameTask.dispatchEvent(new window.Event('change'));
+assert.equal(navUi.mode,'video');assert.equal(navStudio.config.workflow_mode,'camera','The same workflow control exits frames and selects the intended recipe');assert.equal(navUi.frames.page.hidden,true);
+navUi.show('frames');assert.equal(navUi.frames.assets.first.file,'retained-first.png');assert.equal(navUi.frames.$('prompt').value,'A slow camera move');
+assert.equal(navStudio.source.id,'retained-video');assert.equal(navStudio.references[0].id,'retained-reference');
+assert.equal(calls.filter(c=>c.path==='/prompt').length,navRequests,'Navigation cannot queue a render');navUi.close();
 ui.close();
 assert.equal(JSON.parse(storage['zura-image-workspace-v1']).items.length,1);
 const oldFiles=ui.items.map(i=>i.file.filename);ui.$('clear-history').onclick();assert.equal(ui.items.length,0);assert.equal(ui.$('gallery').querySelectorAll('img').length,0);assert.equal(ui.$('image-empty').hidden,false);ui.$('undo-history').onclick();assert.deepEqual(ui.items.map(i=>i.file.filename),oldFiles);ui.$('clear-history').onclick();

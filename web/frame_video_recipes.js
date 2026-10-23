@@ -8,10 +8,18 @@ export const FRAME_VIDEO_MODELS={
   lora:'minimax_h3_fl2v_turbo_8step_v1.0_comfyui_bf16.safetensors',
 };
 export const FRAME_LENGTHS=[22,39,56,73,90,107,124];
+export const FRAME_SIZE_PRESETS=[
+  {id:'landscape',label:'Landscape · 1344 × 768',width:1344,height:768},
+  {id:'portrait',label:'Portrait · 768 × 1344',width:768,height:1344},
+  {id:'square',label:'Square · 960 × 960',width:960,height:960},
+  {id:'standard',label:'4:3 · 1152 × 864',width:1152,height:864},
+  {id:'vertical',label:'3:4 · 864 × 1152',width:864,height:1152},
+  {id:'small',label:'Landscape · 1024 × 576',width:1024,height:576},
+];
 const ref=id=>[id,0];
 export function buildFrameVideoGraph(c){
-  if(!c.first?.file||!c.last?.file)throw new Error('Add both a first frame and a last frame.');
-  if(!String(c.prompt||'').trim())throw new Error('Describe the transition between your frames.');
+  if(!c.first?.file)throw new Error('Add a first frame to begin. The last frame is optional.');
+  if(!String(c.prompt||'').trim())throw new Error('Describe the video you want to generate.');
   const width=Number(c.width),height=Number(c.height),frames=Number(c.frames),steps=Number(c.steps??8),seed=Number(c.seed??42);
   if(![width,height].every(n=>Number.isInteger(n)&&n>=256&&n<=1536&&n%32===0)||width*height>1344*768)throw new Error('Use dimensions in multiples of 32, up to 1.03 megapixels.');
   if(!FRAME_LENGTHS.includes(frames))throw new Error('Choose a supported H3 clip length.');
@@ -19,13 +27,14 @@ export function buildFrameVideoGraph(c){
   if(!Number.isSafeInteger(seed)||seed<0)throw new Error('Seed must be a positive whole number or zero.');
   if(c.audioEnabled&&!c.audio?.file)throw new Error('Add an audio reference, or switch Audio reference off.');
   const g={},node=(id,class_type,inputs)=>{g[id]={class_type,inputs};};
-  node('first','LoadImage',{image:c.first.file});node('last','LoadImage',{image:c.last.file});
+  node('first','LoadImage',{image:c.first.file});
+  if(c.last?.file)node('last','LoadImage',{image:c.last.file});
   node('model','UNETLoader',{unet_name:FRAME_VIDEO_MODELS.model,weight_dtype:'default'});
   node('turbo','LoraLoaderModelOnly',{model:ref('model'),lora_name:FRAME_VIDEO_MODELS.lora,strength_model:1});
   node('attention','ModelAttentionBackend',{model:ref('turbo'),attention:'comfy kitchen attention'});
   node('text','CLIPLoader',{clip_name:FRAME_VIDEO_MODELS.text,type:'minimax',device:'default'});
   node('video_vae','VAELoader',{vae_name:FRAME_VIDEO_MODELS.videoVae});node('audio_vae','VAELoader',{vae_name:FRAME_VIDEO_MODELS.audioVae});
-  node('endpoints','MiniMaxH3ImageToVideo',{clip:ref('text'),vae:ref('video_vae'),prompt:c.prompt,width,height,length:frames,first_frame:ref('first'),last_frame:ref('last')});
+  node('endpoints','MiniMaxH3ImageToVideo',{clip:ref('text'),vae:ref('video_vae'),prompt:c.prompt,width,height,length:frames,first_frame:ref('first'),...(c.last?.file?{last_frame:ref('last')}:{})});
   let positive=ref('endpoints');
   if(c.audioEnabled){
     node('audio_ref','LoadAudio',{audio:c.audio.file});

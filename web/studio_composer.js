@@ -9,6 +9,7 @@ export const composerIcons={
   settings:svg('<path d="M4 7h16M4 17h16"/><circle cx="9" cy="7" r="3" fill="var(--zc-composer)"/><circle cx="15" cy="17" r="3" fill="var(--zc-composer)"/>'),
   chevron:svg('<path d="m8 10 4 4 4-4"/>'),
 };
+export const VIDEO_WORKFLOWS=[['swap','Character replacement'],['viewport','Viewport to final'],['camera','Change camera angle'],['relight','Relight'],['frames','First & last frame']];
 
 /** A compact surface over the existing controls, never a second configuration. */
 export class VideoComposer {
@@ -16,14 +17,10 @@ export class VideoComposer {
     this.studio=studio;this.workspace=workspace;this.root=studio.container;
     const composer=this.root.querySelector('.gs-composer');composer.classList.add('zc-prompt-card');
     const task=document.createElement('label');task.className='zc-task-control';
-    task.innerHTML=`<span class="zc-sr-only">Video workflow</span><select id="zc-video-task" aria-label="Video workflow"><option value="swap">Character replacement</option><option value="viewport">Viewport to final</option><option value="camera">Change camera angle</option><option value="relight">Relight</option><option value="frames">First & last frame</option></select>`;
+    task.innerHTML=`<span class="zc-sr-only">Video workflow</span><select id="zc-video-task" aria-label="Video workflow">${VIDEO_WORKFLOWS.map(([id,label])=>`<option value="${id}">${label}</option>`).join('')}</select>`;
     studio.$('prompt-stage').append(task);
     this.root.querySelector('.gs-workflow-choice').hidden=true;
-    task.querySelector('select').onchange=e=>{
-      if(e.target.value==='frames'){workspace.show('frames');return;}
-      const input=this.root.querySelector(`input[name="gs-workflow"][value="${e.target.value}"]`);
-      if(input&&!input.disabled){for(const radio of this.root.querySelectorAll('input[name="gs-workflow"]'))radio.checked=radio===input;input.dispatchEvent(new this.root.ownerDocument.defaultView.Event('change',{bubbles:true}));}
-    };
+    task.querySelector('select').onchange=e=>this.selectWorkflow(e.target.value);
     const attachments=document.createElement('div');attachments.className='zc-composer-attachments';
     attachments.innerHTML=`<button type="button" id="zc-attach-source" class="zc-attachment">${composerIcons.video}<span>Source video</span></button><button type="button" id="zc-attach-refs" class="zc-attachment">${composerIcons.image}<span>References</span></button><button type="button" id="zc-attach-frame" class="zc-attachment">${composerIcons.image}<span>Finished frame</span></button>`;
     composer.insertBefore(attachments,studio.$('prompt-composer'));
@@ -57,6 +54,16 @@ export class VideoComposer {
     composer.addEventListener('toggle',e=>{const detail=e.target;if(detail.tagName==='DETAILS'&&detail.open)for(const other of composer.querySelectorAll('details'))if(other!==detail)other.open=false;},true);
     composer.addEventListener('keydown',e=>{if(e.key!=='Escape')return;const open=Array.from(composer.querySelectorAll('details')).find(d=>d.open);if(open){open.open=false;open.querySelector('summary').focus({preventScroll:true});e.stopPropagation();}});
     this.composer=composer;this.sync();
+  }
+  selectWorkflow(value){
+    if(value==='frames'){this.workspace.show('frames');return;}
+    if(!VIDEO_WORKFLOWS.some(([id])=>id===value))return;
+    const input=this.root.querySelector(`input[name="gs-workflow"][value="${value}"]`);
+    if(input&&!input.disabled){
+      for(const radio of this.root.querySelectorAll('input[name="gs-workflow"]'))radio.checked=radio===input;
+      input.dispatchEvent(new this.root.ownerDocument.defaultView.Event('change',{bubbles:true}));
+      this.workspace.show('video');
+    }
   }
   popup(id,label,icon,content){
     const detail=document.createElement('details');detail.className='zc-tool-popup';detail.innerHTML=`<summary aria-label="${label}">${icon}<span id="zc-tool-${id}"></span>${composerIcons.chevron}</summary><div class="zc-tool-panel"></div>`;
