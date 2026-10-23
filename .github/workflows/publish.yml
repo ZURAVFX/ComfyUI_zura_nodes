@@ -49,6 +49,9 @@ jobs:
           assert Path('web/v2_media_picker.js').is_file()
           studio_loader = Path('web/studio.js').read_text(encoding='utf-8')
           for asset in ('web/studio_create.js', 'web/studio_create.css',
+                        'web/studio_composer.js', 'web/studio_composer.css',
+                        'web/studio_frames.js', 'web/frame_video_recipes.js',
+                        'web/image_recipes.js',
                         'web/studio_components.css',
                         'web/vendor/studio-components.css',
                         'web/vendor/studio-components.js',

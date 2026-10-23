@@ -1,6 +1,6 @@
 # Release notes
 
-## Unreleased - Canvas and image editing
+## 1.3.29 - 23 October 2026
 
 - Rebuild the prompt composer around left-aligned video/reference attachments, one writing surface and a bottom row for the real model, resolution, clip length, audio and advanced controls. Replace the cramped workflow grid with one selector. Controls and history open over the full-size viewer; light/dark preferences remain saved.
 - Add First & last frame using the approved H3 FL2VA INT8 / Turbo 8-step / Kitchen / res_multistep-simple recipe. A first frame is required; the last frame is optional. Audio reference is an explicit switch; switching off retains the upload locally while removing it from the graph and generating native H3 audio. Native 24 fps lengths preserve the last keyframe when supplied. First-only and first/last audio variants pass live ComfyUI schema validation; integration GPU render approval is pending.
