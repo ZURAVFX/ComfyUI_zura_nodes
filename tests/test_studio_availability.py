@@ -39,8 +39,16 @@ class AvailabilityTests(unittest.TestCase):
     def test_relight_original_audio_stages_are_available(self):
         config = self.config(engine="h3", workflow_mode="relight", prompt="Warm sunset")
         self.assertTrue(verified_setup(config))
-        for stage in ("prepare", "design", "create_look", "animate", "h3"):
+        self.assertEqual(config["relight_engine"], "wan21")
+        for stage in ("prepare", "design", "create_look", "animate", "wan21_relight"):
             require_verified_setup(config, stage)
+        with self.assertRaisesRegex(ValueError, "selected Relight video graph"):
+            require_verified_setup(config, "h3")
+        # An already-running legacy H3 job can still finish on its own backend.
+        legacy = {**config, "relight_engine": "h3"}
+        require_verified_setup(legacy, "h3")
+        with self.assertRaisesRegex(ValueError, "selected Relight video graph"):
+            require_verified_setup(legacy, "wan21_relight")
         self.assertFalse(verified_setup({**config, "audio_id": "voice"}))
         self.assertFalse(verified_setup({**config, "engine": "wan"}))
 
