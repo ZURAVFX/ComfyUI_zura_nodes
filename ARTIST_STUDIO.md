@@ -18,8 +18,10 @@ look tools; the current image or video keeps the full central canvas.
 
 For **First & last frame**, choose that workflow in the composer. Upload a
 first frame, describe the movement, then generate. The last frame is optional:
-add it to guide the ending, or use **Remove last** to return to first-frame-only
-generation. Use the same workflow selector to switch out again, retaining your
+add it to guide the ending. Each uploaded frame is a thumbnail with an **X**
+in its corner. Remove either frame directly; removing the last frame returns
+to first-frame-only generation and keeps the prompt and settings. Use the
+same workflow selector to switch out again, retaining your
 media and prompt. Home/Image/Video navigation remains available too.
 No additional
 reference images are used. Switch **Audio reference** on to supply a track,

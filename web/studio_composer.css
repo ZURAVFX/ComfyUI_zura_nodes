@@ -94,6 +94,19 @@
 #genj-studio #zf-empty p{color:var(--gs-muted);max-width:50ch;font-size:14px}
 #genj-studio .zf-viewer>video,#genj-studio #zf-image-slot,#genj-studio #zf-image-slot>img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain}
 #genj-studio .zf-composer>strong{font-size:14px;line-height:24px;font-weight:600}
+#genj-studio .zf-composer{gap:10px;padding:16px 18px}
+#genj-studio .zf-composer textarea{height:56px;min-height:56px!important;max-height:56px}
+#genj-studio .zf-frame-slot{position:relative;flex:none;min-width:0}
+#genj-studio .zf-frame-slot>.zc-attachment{position:relative;width:144px;height:48px;min-height:48px;padding:10px;overflow:hidden}
+#genj-studio .zf-frame-slot>.zc-attachment.has-media{width:128px;padding:0;border-color:var(--zc-text)}
+#genj-studio .zf-frame-slot>.zc-attachment.has-media>img{width:100%;height:100%;object-fit:cover;border-radius:0}
+#genj-studio .zf-frame-slot>.zc-attachment.has-media>span{position:absolute;bottom:0;left:0;right:0;padding:2px 6px;background:#101013cc;color:#fff;text-align:left;font-size:10px;line-height:14px}
+#genj-studio .zf-remove-frame{position:absolute;z-index:2;top:-10px;right:-10px;display:grid;place-items:center;width:28px;min-width:28px;height:28px;min-height:28px;padding:0;border:0;border-radius:50%;background:none;color:#101013;cursor:pointer}
+#genj-studio .zf-remove-frame:before{content:'';position:absolute;inset:4px;border-radius:50%;background:#f2f2f0}
+#genj-studio .zf-remove-frame>svg{position:relative}
+#genj-studio .zf-remove-frame:hover:before{background:#fff}
+#genj-studio .zf-remove-frame:focus-visible{outline:2px solid var(--gs-focus);outline-offset:2px}
+#genj-studio .zf-remove-frame:disabled{cursor:not-allowed;opacity:.5}
 #genj-studio .zf-composer>p{margin:0;font-size:11px;line-height:16px;color:var(--gs-muted)}
 #genj-studio .zf-dimensions{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px}
 #genj-studio .zf-dimensions label,#genj-studio .zf-composer .zc-tool-panel>label{display:block;font-size:12px;line-height:1.5}
@@ -113,6 +126,8 @@
 #genj-studio .zf-viewer:has(#zf-progress:not([hidden])) #zf-message{bottom:112px}
 #genj-studio .zf-composer .zc-prompt-tools>.zc-tool-popup:last-child>.zc-tool-panel{left:auto;right:0}
 @media(max-width:700px){
+ #genj-studio .zf-remove-frame{width:44px;min-width:44px;height:44px;min-height:44px;top:-18px;right:-18px}
+ #genj-studio .zf-remove-frame:before{inset:12px}
  #genj-studio .zf-heading{gap:4px;flex-wrap:wrap}
  #genj-studio .zf-heading #zf-clear{margin-left:auto}
  #genj-studio[data-workspace=video] .gs-composer,#genj-studio .zf-composer,#genj-studio .zc-image-composer{padding:14px;gap:10px;border-radius:12px}
