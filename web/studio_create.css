@@ -317,20 +317,6 @@
 #genj-studio[data-workspace=video] .gs-take{padding:0;border:0;background:none}
 #genj-studio[data-workspace=video] .gs-take video{width:100%;height:160px;object-fit:contain;background:var(--zc-canvas)}
 #genj-studio[data-workspace=video] .gs-take>div{padding-top:8px;flex-wrap:wrap}
-#genj-studio[data-workspace=video] .gs-composer{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 20px;align-items:center;align-self:stretch;width:100%;min-width:0;min-height:0;max-height:none;overflow:visible;padding:12px 16px;margin:0;border:1px solid var(--gs-line);border-radius:12px;background:var(--zc-composer)}
-#genj-studio[data-workspace=video] #gs-prompt-stage{grid-column:1;grid-row:1;display:flex;align-items:center;flex-wrap:wrap;gap:6px 16px;margin:0}
-#genj-studio[data-workspace=video] #gs-prompt-heading{font-size:12px;line-height:24px;font-weight:600;color:var(--zc-text)}
-#genj-studio[data-workspace=video] #gs-prompt-stage button{min-height:28px;padding:4px 8px;background:none;border:0;border-radius:4px;color:var(--gs-muted);font-size:11px;text-decoration:underline;text-underline-offset:3px}
-#genj-studio[data-workspace=video] #gs-prompt-stage button:hover{background:var(--zc-hover);color:var(--zc-text)}
-#genj-studio[data-workspace=video] #gs-frame-review{margin:0;padding:4px 0;font-size:14px;line-height:1.5;color:var(--zc-text)}
-#genj-studio[data-workspace=video] #gs-prompt-composer{grid-column:1;grid-row:2;min-width:0}
-#genj-studio[data-workspace=video] .gs-composer :is(.gs-image-editor,.gs-prompt-toggle,#gs-camera-direction-setting){margin:0;padding:0;border:0;border-radius:0;background:none}
-#genj-studio[data-workspace=video] .gs-composer :is(.gs-label,.gs-image-editor>div,.gs-camera-regenerate){display:none}
-#genj-studio[data-workspace=video] .gs-composer textarea{display:block;min-height:44px!important;height:44px;max-height:44px;width:100%;padding:2px 0;margin:0;border:0;border-radius:0;background:transparent;color:var(--zc-text);font-size:14px;line-height:1.5;resize:none;box-shadow:none}
-#genj-studio[data-workspace=video] .gs-composer .gs-action-area{display:contents}
-#genj-studio[data-workspace=video] .gs-composer #gs-primary{grid-column:2;grid-row:1 / 4;align-self:center;margin:0;min-width:168px;min-height:44px;width:auto;padding:10px 16px;border:0;border-radius:8px;background:var(--gs-accent);color:var(--gs-ink);font-size:13px;font-weight:600}
-#genj-studio[data-workspace=video] .gs-composer #gs-action-note{grid-column:1;grid-row:3;min-width:0;max-width:none;max-height:none;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin:0;padding:0;border:0;background:none;text-align:left;font-size:11px;line-height:16px;color:var(--gs-muted)}
-#genj-studio[data-workspace=video] .gs-composer :is(#gs-starting-image,#gs-cancel){display:none}
 #genj-studio[data-workspace=video] #zc-video-controls,#genj-studio[data-workspace=video] .zc-inspector-close{display:none}
 #genj-studio[data-workspace=video] .gs-canvas.is-expanded,#genj-studio[data-workspace=video] .gs-canvas:fullscreen{position:fixed;inset:0;z-index:2000;width:100vw;height:100dvh;border:0;border-radius:0}
 @media(max-width:1100px){
@@ -363,9 +349,6 @@
  #genj-studio[data-workspace=video] .gs-preview-heading>div:first-child{display:none}
  #genj-studio[data-workspace=video] .zc-viewer-tools{flex:1;flex-wrap:wrap;justify-content:flex-start;gap:0}
  #genj-studio[data-workspace=video] .zc-viewer-tools :is(button,summary,a){min-height:40px;padding:8px;font-size:11px}
- #genj-studio[data-workspace=video] .gs-composer{gap:4px 8px;padding:12px}
- #genj-studio[data-workspace=video] .gs-composer #gs-primary{min-width:0;max-width:140px;padding:10px 12px;font-size:12px}
- #genj-studio[data-workspace=video] .gs-composer textarea{font-size:16px}
  #genj-studio[data-workspace=video] .gs-progress-caption{gap:8px;flex-wrap:wrap}
  #genj-studio[data-workspace=video] .gs-progress-caption>span{max-width:100%;white-space:normal}
 }
@@ -373,5 +356,4 @@
  #genj-studio[data-workspace=video] .gs-top{height:44px;min-height:44px}
  #genj-studio[data-workspace=video] .gs-steps{flex-basis:36px}
  #genj-studio[data-workspace=video] .gs-main{gap:8px}
- #genj-studio[data-workspace=video] .gs-composer{padding:8px 12px}
 }

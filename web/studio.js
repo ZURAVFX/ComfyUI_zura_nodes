@@ -1077,14 +1077,14 @@ class ArtistStudio {
     this.$("frame-review").hidden=!review;
     this.$("frame-review").textContent=relight?"Check the lighting above. Keep the subjects and composition, then continue to video.":camera?"Check the new angle, identity and framing above, then continue to video.":"Check the appearance and framing above, then continue to video.";
     this.$("prompt-stage").hidden=false;
-    this.$("prompt-heading").textContent=review?"Approve your image":image?(readyImage?"1. Add your finished image":camera?"1. Create your camera image":relight?"1. Describe the lighting":"1. Describe your starting image"):(this.guidedFrame()?"2. Direct your video":"Direct your video");
+    this.$("prompt-heading").textContent=review?"Approve your image":image?(readyImage?"Add your finished image":camera?"Create your camera image":relight?"Create a lighting image":"Create your starting image"):"Direct your video";
     this.$("edit-frame").hidden=!hasOpening || image || working;
     this.$("edit-frame").textContent=readyImage?"Replace image":"Edit image";
     this.$("edit-frame").disabled=this.busy;
     this.$("keep-frame").hidden=!hasOpening || !image || working;
     this.$("keep-frame").disabled=this.busy;
     this.$("prompt").placeholder=relight?"Optional: describe how the lighting should feel through the shot. Original movement is kept.":camera?"Optional: direct the video. The new angle and original performance are carried through.":"Optional: describe the action, camera movement and details to keep.";
-    this.$("image_prompt").placeholder=relight?"Describe only the image lighting, e.g. warm sunset from the left, soft shadows…":"Describe appearance, setting and lighting. You will direct the video after approving this image.";
+    this.$("image_prompt").placeholder=relight?"Describe the lighting, e.g. warm sunset from the left, soft shadows…":"Describe the look, setting and lighting…";
     this.$("prompt").setAttribute("aria-label","Video direction");
     this.$("image_prompt").setAttribute("aria-label","Starting image direction");
     const info=clipLength(this.config,this.source?.duration);
@@ -1284,7 +1284,7 @@ class ArtistStudio {
       thumbnail.onloadedmetadata=()=>{if(thumbnail.duration>0)thumbnail.currentTime=Math.min(0.1,thumbnail.duration/2);};thumbnail.load();
     }else if(!this.source && thumbnail.getAttribute("src")){thumbnail.pause();thumbnail.removeAttribute("src");thumbnail.load();}
     this.$("source-detail").textContent=this.source?`${this.source.width} × ${this.source.height} · ${Number(this.source.duration).toFixed(2)}s · Click to replace`:"MP4, MOV, WebM or MKV";
-    this.container.querySelectorAll("select,textarea,input:not([type=file])").forEach(el=>el.disabled=(el.id==="gs-graph-stage"?false:working) || this.busy);
+    this.container.querySelectorAll("select,textarea,input:not([type=file])").forEach(el=>{if(el.id.startsWith('gs-')||el.name?.startsWith('gs-'))el.disabled=(el.id==="gs-graph-stage"?false:working) || this.busy;});
     this.container.querySelectorAll('input[name="gs-engine"]').forEach(choice=>{
       choice.disabled=working || this.busy || !this.engineAllowed(choice.value);
       choice.closest("label").title=relight&&choice.value==="h3"?"Legacy H3 relight":relight&&choice.value==="wan21"?"Wan 2.1 uses a chained 4-step recipe for longer relight clips.":"";
@@ -1548,7 +1548,7 @@ app.registerExtension({
     installArtistLinkRendering(app);
     const css=document.createElement("link");css.rel="stylesheet";css.href=new URL("./studio.css",import.meta.url).href;document.head.appendChild(css);
     for(const path of ["./vendor/studio-components.css","./studio_components.css"]){const link=document.createElement("link");link.rel="stylesheet";link.href=new URL(path,import.meta.url).href;document.head.appendChild(link);}
-    const createCss=document.createElement("link");createCss.rel="stylesheet";createCss.href=new URL("./studio_create.css",import.meta.url).href;document.head.appendChild(createCss);
+    for(const path of ["./studio_create.css","./studio_composer.css"]){const link=document.createElement("link");link.rel="stylesheet";link.href=new URL(path,import.meta.url).href;document.head.appendChild(link);}
     import("./vendor/studio-components.js").then(()=>{
       document.getElementById("genj-studio")?.classList.add("zc-components-ready");
       for(const tip of document.querySelectorAll("#genj-studio wa-tooltip")){document.getElementById(tip.getAttribute("for"))?.removeAttribute("title");}

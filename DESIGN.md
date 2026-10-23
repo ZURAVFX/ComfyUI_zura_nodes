@@ -24,6 +24,8 @@ colors:
 
 # Zura Studio design system
 
+The prompt composer follows the supplied compact video-generator reference: attachments on the upper left, a single unboxed writing surface, then model, dimensions, clip length, audio and advanced tools in a bottom row. The primary action sits at the right. Use a single workflow selector rather than the cramped multi-line mode grid. Detailed controls open above the composer or in the inspector, preserving the central media canvas.
+
 ## Overview
 
 Zura Studio is a local creative workspace for image and video generation. The user-approved direction follows Artify: a quiet charcoal canvas, compact tools, a persistent bottom prompt and a single acid-lime primary action. Dark and light themes share the same layout and save the user's choice.

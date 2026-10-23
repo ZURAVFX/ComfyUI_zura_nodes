@@ -9,6 +9,22 @@ default local installation. The direct studio link is
 Open **Zura Studio** in ComfyUI, choose a workflow, then drop a source video.
 Its thumbnail confirms the upload.
 
+The prompt composer contains **Add video**, **References** and the workflow
+selector. Model, resolution, clip length and audio sit below the writing area.
+The settings button opens advanced controls. **Controls** opens selection and
+look tools; the current image or video keeps the full central canvas.
+
+For **First & last frame**, choose that workflow in the composer. Upload the
+two endpoint images, describe the transition, then generate. No additional
+reference images are used. Switch **Audio reference** on to supply a track,
+or off for H3-generated audio. Switching off keeps the uploaded file locally
+but does not send it into the graph. The approved recipe uses the H3 FL2VA
+INT8 model, Turbo at strength 1.0, eight steps, Comfy Kitchen attention and
+res_multistep/simple. Lengths show H3's actual 24 fps frame grid, preserving
+the final anchor. Width and height accept multiples of 32 up to 1.03 MP.
+Both audio variants pass installed-node validation; this integration still
+needs a visual GPU render check.
+
 - **Motion transfer** rebuilds the full frame around the source movement.
   With H3, **Keep original people** edits the surroundings while protecting
   the people and their original facial performance. Build the look from

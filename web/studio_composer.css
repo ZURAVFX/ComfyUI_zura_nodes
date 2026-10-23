@@ -1,0 +1,130 @@
+/* The prompt is the workspace's command surface. Keep controls compact and
+   panels out of layout flow so the current result always owns the canvas. */
+#genj-studio[data-workspace=video] .gs-composer,
+#genj-studio .zf-composer{
+ display:flex;flex-direction:column;gap:12px;align-self:stretch;width:100%;min-width:0;min-height:0;max-height:none;overflow:visible;
+ margin:0;padding:18px 20px 14px;border:1px solid var(--gs-line);border-radius:16px;background:var(--zc-composer);position:relative;
+}
+#genj-studio[data-workspace=video] #gs-prompt-stage{display:flex;align-items:center;gap:16px;min-height:24px;flex-wrap:wrap;margin:0}
+#genj-studio[data-workspace=video] #gs-prompt-heading{font-size:14px;line-height:24px;font-weight:600;color:var(--zc-text)}
+#genj-studio[data-workspace=video] #gs-prompt-stage button{padding:4px 8px;min-height:28px;background:none;border:0;border-radius:6px;color:var(--gs-muted);font-size:12px}
+#genj-studio[data-workspace=video] #gs-prompt-stage button:hover{background:var(--zc-hover);color:var(--zc-text)}
+#genj-studio .zc-task-control{margin-left:auto;max-width:240px}
+#genj-studio .zc-task-control select.zu-select{width:auto;max-width:100%;background:transparent;border:0;min-height:32px;padding:4px 28px 4px 8px;font-size:12px;color:var(--gs-muted)}
+#genj-studio .zc-composer-attachments{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+#genj-studio .zc-attachment{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:44px;max-width:240px;padding:10px 14px;border:1px dashed var(--gs-line);border-radius:9px;background:none;color:var(--zc-text);font-size:12px;cursor:pointer}
+#genj-studio .zc-attachment>svg{flex:none}
+#genj-studio .zc-attachment>span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#genj-studio .zc-attachment>img{width:36px;height:30px;object-fit:cover;border-radius:4px}
+#genj-studio .zc-attachment.has-media{border-style:solid;padding:6px 12px 6px 6px}
+#genj-studio .zc-attachment.has-media:has(img)>svg{display:none}
+#genj-studio .zc-attachment:hover:not(:disabled),#genj-studio .zc-attachment.is-dragging{background:var(--zc-hover);border-color:var(--gs-muted)}
+#genj-studio .zc-attachment:disabled{color:var(--gs-muted);cursor:not-allowed}
+#genj-studio[data-workspace=video] #gs-prompt-composer{min-width:0}
+#genj-studio[data-workspace=video] .gs-composer :is(.gs-image-editor,.gs-prompt-toggle,#gs-camera-direction-setting){margin:0;padding:0;border:0;border-radius:0;background:none}
+#genj-studio[data-workspace=video] .gs-composer :is(#gs-model-prompt>.gs-label,#gs-image-editor>.gs-label,#gs-image-editor>div,#gs-camera-direction-setting>.gs-label,.gs-camera-regenerate){display:none}
+#genj-studio[data-workspace=video] .gs-composer textarea,
+#genj-studio .zf-composer textarea,
+#genj-studio .zc-image-composer textarea{
+ display:block;width:100%;height:64px;min-height:64px!important;max-height:64px;resize:none;padding:4px 0;margin:0;
+ border:0;border-radius:0;background:transparent!important;color:var(--zc-text);font-size:14px;line-height:1.6;box-shadow:none;
+}
+#genj-studio .zc-prompt-card textarea:focus-visible,#genj-studio .zf-composer textarea:focus-visible,#genj-studio .zc-image-composer textarea:focus-visible{outline:0;box-shadow:none}
+#genj-studio .zc-prompt-card:focus-within,#genj-studio .zf-composer:focus-within,#genj-studio .zc-image-composer:focus-within{border-color:var(--gs-muted)}
+#genj-studio[data-workspace=video] #gs-frame-review{margin:0;padding:4px 0;max-width:70ch;font-size:14px;line-height:1.6;color:var(--zc-text)}
+#genj-studio .zc-prompt-bottom{display:flex;align-items:center;justify-content:space-between;gap:12px;min-width:0}
+#genj-studio .zc-prompt-tools{display:flex;align-items:center;gap:4px;flex-wrap:wrap;min-width:0}
+#genj-studio .zc-tool,#genj-studio .zc-tool-popup>summary,#genj-studio .zc-composer-audio>details>summary{
+ display:inline-flex;align-items:center;gap:8px;min-height:36px;padding:8px 10px;border:0;border-radius:7px;background:none;color:var(--zc-text);font-size:12px;line-height:20px;cursor:pointer;white-space:nowrap;list-style:none;
+}
+#genj-studio .zc-tool>svg,#genj-studio .zc-tool-popup>summary>svg{width:17px;height:17px;flex:none;color:var(--gs-muted)}
+#genj-studio .zc-tool-popup>summary>svg:last-child{width:12px}
+#genj-studio .zc-tool:hover,#genj-studio .zc-tool-popup[open]>summary,#genj-studio .zc-tool-popup>summary:hover,#genj-studio .zc-composer-audio>details>summary:hover{background:var(--zc-hover)}
+#genj-studio .zc-model-control{position:relative;max-width:200px}
+#genj-studio .zc-model-control select.zu-select{font:inherit;min-height:20px;height:20px;min-width:0;max-width:160px;width:auto;padding:0 18px 0 0;border:0;border-radius:0;background:none;appearance:none;color:var(--zc-text)}
+#genj-studio .zc-model-control>svg:last-child{position:absolute;right:10px;width:12px;pointer-events:none}
+#genj-studio .zc-tool-popup,#genj-studio .zc-composer-audio>details{position:relative;margin:0;padding:0;border:0;background:none}
+#genj-studio .zc-tool-popup summary::-webkit-details-marker,#genj-studio .zc-composer-audio summary::-webkit-details-marker{display:none}
+#genj-studio .zc-tool-panel,#genj-studio .zc-composer-audio>details>.gs-advanced-body{
+ position:absolute;bottom:calc(100% + 12px);left:0;z-index:25;width:280px;max-width:calc(100vw - 48px);max-height:min(440px,55dvh);overflow:auto;
+ padding:18px;background:var(--gs-panel);border:1px solid var(--gs-line);border-radius:12px;box-shadow:0 12px 32px #0003;
+}
+#genj-studio .zc-tool-panel .gs-label{display:block;margin:0 0 8px;font-size:12px}
+#genj-studio .zc-tool-panel :is(select,input){width:100%}
+#genj-studio .zc-tool-panel #gs-duration-setting{display:block;margin-top:12px}
+#genj-studio .zc-tool-panel .gs-length-choice{display:flex;gap:4px;width:100%}
+#genj-studio .zc-prompt-submit{flex:none;display:flex;align-items:center}
+#genj-studio[data-workspace=video] .gs-composer #gs-primary,#genj-studio .zf-composer .gs-primary{
+ min-width:132px;min-height:40px;width:auto;height:auto;padding:10px 16px;margin:0;display:inline-flex;align-items:center;justify-content:center;gap:12px;
+ border:0;border-radius:9px;background:var(--gs-accent);color:var(--gs-ink);font-size:13px;font-weight:600;opacity:1;
+}
+#genj-studio[data-workspace=video] .gs-composer #gs-primary:disabled,#genj-studio .zf-composer .gs-primary:disabled,#genj-studio .zc-image-composer .gs-primary:disabled{background:var(--zc-hover);color:var(--gs-muted);opacity:1;cursor:not-allowed}
+#genj-studio[data-workspace=video] .gs-composer #gs-action-note{margin:0;padding:0;border:0;background:none;text-align:left;font-size:11px;line-height:16px;color:var(--gs-muted);min-width:0;max-height:none;max-width:none;white-space:normal}
+#genj-studio[data-workspace=video] .gs-composer .gs-action-area{display:none}
+#genj-studio[data-workspace=video] .gs-workspace{grid-template-columns:minmax(0,1fr)}
+#genj-studio[data-workspace=video] .gs-main{grid-column:1}
+#genj-studio[data-workspace=video] .gs-controls{display:none;position:absolute;inset:0 auto 16px 16px;width:min(340px,calc(100% - 32px));z-index:30}
+#genj-studio[data-workspace=video] .zc-controls-open .gs-controls{display:flex}
+#genj-studio[data-workspace=video] :is(#zc-video-controls,.zc-inspector-close){display:flex;min-height:36px;padding:8px;border:0;background:none;font-size:12px}
+#genj-studio[data-workspace=video] .zc-inspector-close{margin-left:auto}
+#genj-studio .zc-image-composer{padding:18px 20px 14px;gap:12px;border-radius:16px;overflow:visible}
+#genj-studio .zc-image-composer .zc-reference-toolbar{justify-content:flex-start;gap:8px}
+#genj-studio .zc-image-composer .zc-reference-toolbar>span{margin-left:auto}
+#genj-studio .zc-image-composer #zc-model{max-width:240px;width:100%;background:none;border:0;padding:8px 28px 8px 8px;min-height:36px}
+#genj-studio .zc-image-composer .zc-composer-bottom{justify-content:flex-start;flex-wrap:wrap;gap:4px 8px}
+#genj-studio .zc-image-composer .zc-model-control{min-width:0}
+#genj-studio .zc-image-composer #zc-generate{margin-left:auto;min-width:132px}
+#genj-studio .zc-image-composer #zc-quick-settings{padding:8px;font-size:12px}
+#genj-studio:not([data-workspace=frames])>.zf-page{display:none!important}
+#genj-studio[data-workspace=frames]>:is(.gs-workspace,.gs-steps){display:none!important}
+#genj-studio[data-workspace=frames] #gs-models{display:none}
+#genj-studio .zf-page{display:grid;grid-template-rows:auto minmax(0,1fr) auto;gap:12px;flex:1;min-width:0;min-height:0;padding:16px;overflow:hidden}
+#genj-studio .zf-heading{display:flex;align-items:center;gap:16px;min-width:0}
+#genj-studio .zf-heading h2{font-size:14px;font-weight:600;flex:1}
+#genj-studio .zf-heading button,#genj-studio .zf-heading summary{padding:8px 12px;min-height:36px;font-size:12px;color:var(--gs-muted);background:none;border:0;border-radius:6px;cursor:pointer;list-style:none}
+#genj-studio .zf-heading button:hover,#genj-studio .zf-heading summary:hover{background:var(--zc-hover);color:var(--zc-text)}
+#genj-studio #zf-takes{position:absolute;z-index:15;right:16px;top:116px;max-height:50dvh;width:min(360px,calc(100vw - 32px));overflow:auto;padding:16px;background:var(--gs-panel);border:1px solid var(--gs-line);border-radius:12px}
+#genj-studio #zf-takes button{display:block;width:100%;padding:12px;text-align:left;overflow-wrap:anywhere}
+#genj-studio .zf-viewer{position:relative;min-width:0;min-height:0;overflow:hidden;border:1px solid var(--gs-line);border-radius:12px;background:var(--zc-canvas)}
+#genj-studio #zf-empty{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:12px;padding:24px;text-align:center}
+#genj-studio #zf-empty h3{font-size:24px;font-weight:500;letter-spacing:-.025em}
+#genj-studio #zf-empty p{color:var(--gs-muted);max-width:50ch;font-size:14px}
+#genj-studio .zf-viewer>video,#genj-studio #zf-image-slot,#genj-studio #zf-image-slot>img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain}
+#genj-studio .zf-composer>strong{font-size:14px;line-height:24px;font-weight:600}
+#genj-studio .zf-composer>p{margin:0;font-size:11px;line-height:16px;color:var(--gs-muted)}
+#genj-studio .zf-dimensions{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px}
+#genj-studio .zf-dimensions label,#genj-studio .zf-composer .zc-tool-panel>label{display:block;font-size:12px;line-height:1.5}
+#genj-studio .zf-composer .zc-tool-panel input[type=number]{display:block;width:100%;margin-top:8px}
+#genj-studio .zf-composer .zc-tool-panel p,#genj-studio #zf-setup{font-size:12px;line-height:1.6;color:var(--gs-muted);margin:12px 0;overflow-wrap:anywhere}
+#genj-studio .zf-check{display:flex!important;gap:8px;align-items:center;margin-top:12px}
+#genj-studio .zf-audio-switch{cursor:pointer;gap:8px}
+#genj-studio .zf-audio-switch input{appearance:none;position:relative;width:30px!important;height:18px;min-height:18px;border:1px solid var(--gs-muted);border-radius:12px;margin:0;background:transparent;cursor:pointer}
+#genj-studio .zf-audio-switch input:before{content:'';display:block;width:12px;height:12px;position:absolute;top:2px;left:2px;border-radius:50%;background:var(--gs-muted);transition:transform .15s}
+#genj-studio .zf-audio-switch input:checked{background:var(--gs-accent);border-color:var(--gs-accent)}
+#genj-studio .zf-audio-switch input:checked:before{background:var(--gs-ink);transform:translateX(12px)}
+#genj-studio #zf-progress{position:absolute;bottom:0;left:0;right:0;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px 16px;padding:16px;background:var(--gs-panel);font-size:12px}
+#genj-studio #zf-progress progress{grid-column:1/-1;width:100%;height:4px;accent-color:var(--gs-accent)}
+#genj-studio #zf-progress-detail{grid-column:1/-1;color:var(--gs-muted)}
+#genj-studio #zf-cancel{background:none;border:1px solid var(--gs-line);border-radius:6px;padding:6px 10px;font-size:12px}
+#genj-studio #zf-message{position:absolute;bottom:12px;left:12px;right:12px;padding:12px 16px;margin:0;background:var(--gs-panel);border:1px solid var(--gs-line);border-radius:10px;font-size:12px}
+#genj-studio .zf-viewer:has(#zf-progress:not([hidden])) #zf-message{bottom:112px}
+#genj-studio .zf-composer .zc-prompt-tools>.zc-tool-popup:last-child>.zc-tool-panel{left:auto;right:0}
+@media(max-width:700px){
+ #genj-studio[data-workspace=video] .gs-composer,#genj-studio .zf-composer,#genj-studio .zc-image-composer{padding:14px;gap:10px;border-radius:12px}
+ #genj-studio .zc-prompt-bottom{align-items:flex-end;gap:8px}
+ #genj-studio .zc-prompt-tools{gap:0}
+ #genj-studio .zc-tool,#genj-studio .zc-tool-popup>summary,#genj-studio .zc-composer-audio>details>summary{padding:8px;min-height:44px}
+ #genj-studio .zc-tool-popup{position:static}
+ #genj-studio .zc-tool-panel,#genj-studio .zc-composer-audio>details>.gs-advanced-body{left:12px;right:12px;bottom:calc(100% + 8px);width:auto;max-width:none}
+ #genj-studio .zc-composer-audio>details{position:static}
+ #genj-studio .zc-prompt-tools .zc-model-control{max-width:156px}
+ #genj-studio .zc-model-control select.zu-select{font-size:12px;min-height:24px;max-width:112px}
+ #genj-studio[data-workspace=video] .gs-composer textarea,#genj-studio .zf-composer textarea,#genj-studio .zc-image-composer textarea{font-size:16px;height:56px;min-height:56px!important;max-height:56px}
+ #genj-studio[data-workspace=video] .gs-composer #gs-primary,#genj-studio .zf-composer .gs-primary{min-width:104px;min-height:44px;padding:10px 12px}
+ #genj-studio[data-workspace=video] .gs-composer #gs-action-note{font-size:11px;line-height:16px}
+}
+@media(max-width:420px){#genj-studio .zc-prompt-bottom{flex-wrap:wrap}#genj-studio .zc-prompt-submit{margin-left:auto}#genj-studio .zc-composer-attachments{gap:6px}#genj-studio .zc-attachment{padding:8px 10px}}
+@media(max-height:650px) and (min-width:701px){
+ #genj-studio[data-workspace=video] .gs-composer,#genj-studio .zf-composer,#genj-studio .zc-image-composer{padding:12px 16px;gap:8px}
+ #genj-studio[data-workspace=video] .gs-composer textarea,#genj-studio .zf-composer textarea,#genj-studio .zc-image-composer textarea{height:44px;min-height:44px!important;max-height:44px}
+}

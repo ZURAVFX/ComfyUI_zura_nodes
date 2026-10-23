@@ -1,4 +1,6 @@
 import {IMAGE_MODELS,IMAGE_SIZES,buildImageGraph,imageAvailability,imageDimensions} from "./image_recipes.js";
+import {VideoComposer} from "./studio_composer.js";
+import {FrameVideoWorkspace} from "./studio_frames.js";
 
 const escape=value=>String(value??"").replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const arrow=()=>'<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12h16m-6-6 6 6-6 6"/></svg>';
@@ -48,6 +50,11 @@ export class CreativeWorkspace {
     history.addEventListener("wa-select",e=>{const action=e.detail?.item?.value;if(["new","clear-history"].includes(action)&&!this.$(action).disabled)this.$(action).click();});
     for(const id of ["new","clear-history"])this.$(id).classList.add("zc-menu-fallback");
     this.buildVideoCanvas(timing);
+    this.videoComposer=new VideoComposer(studio,this);
+    const imageModelLabel=document.createElement('label');imageModelLabel.className='zc-model-control zc-tool';
+    imageModelLabel.innerHTML='<span class="zc-sr-only">Image model</span>';imageModelLabel.append(this.$('model'));
+    page.querySelector('.zc-composer-bottom').prepend(imageModelLabel);
+    page.querySelector('.zc-image-settings>label[for="zc-model"]').remove();
     const imagePromptLabel=page.querySelector('label[for="zc-prompt"]');imagePromptLabel.className="zc-sr-only";
     const quick=document.createElement("button");quick.type="button";quick.id="zc-quick-settings";quick.className="zu-btn zu-btn-ghost";quick.setAttribute("aria-label","Image model and resolution");
     this.$("recipe-label").before(quick);this.$("recipe-label").className="zc-sr-only";
@@ -108,7 +115,7 @@ export class CreativeWorkspace {
       this.references=item.references||[];this.$("prompt").value=item.prompt;this.$("model").value=item.model;this.$("shape").value=item.shape;
       const size=imageDimensions(item);this.$("width").value=size[0];this.$("height").value=size[1];this.$("seed").value=item.seed;this.$("random").checked=false;this.save();this.render();
     };
-    this.root.querySelector("#gs-exit").onclick=()=>this.mode==="image"?this.graph():studio.graphView();
+    this.root.querySelector("#gs-exit").onclick=()=>this.mode==="image"?this.graph():this.mode==="frames"?this.frames.graph():studio.graphView();
     this.api.addEventListener?.("progress",event=>{const d=event.detail;if(!this.job||d.prompt_id!==this.job.id)return;this.$("bar").value=100*d.value/d.max;this.$("progress-title").textContent=`Generating · Step ${d.value} of ${d.max}`;this.$("progress-detail").textContent=this.elapsed();});
     this.api.addEventListener?.("executing",event=>{const d=event.detail;if(!this.job||d.prompt_id!==this.job.id||!d.node)return;const names={text:"Loading text encoder",prompt:"Reading your prompt",model:"Loading image model",sample:"Generating image",decode:"Decoding image",save:"Saving image"};this.$("bar").removeAttribute("value");this.$("progress-title").textContent=names[d.node]||"Preparing image";});
     for(const [id,hint] of [["zc-swap-size","Swap image width and height"],["zc-clear-history","Hide previous images from this workspace. Saved files stay on disk."],["zc-add-references","Upload reference images, or paste an image with Ctrl+V."],["zc-settings-toggle","Choose a model, exact dimensions and seed."],["gs-exit","Open the editable ComfyUI graph with your current media."]]){
@@ -167,6 +174,7 @@ export class CreativeWorkspace {
     views.addEventListener('click',event=>{if(event.target.closest('[data-view]'))views.open=false;});
   }
   syncVideoSurface(){
+    this.videoComposer?.sync();
     const results=this.studio.project?.results||[];this.$('take-count').textContent=String(results.length);
     const take=this.root.querySelector('.zc-take-drawer');take.hidden=!results.length;
     const download=this.$('download-take');download.hidden=!results.length;
@@ -211,7 +219,7 @@ export class CreativeWorkspace {
   }
   save(){this.draft=this.config();try{localStorage.setItem(KEY,JSON.stringify({draft:this.draft,items:this.items,job:this.job}));}catch{this.message("Browser storage is full. Your files still save in ComfyUI/output/zura_images.");}}
   message(text){this.$("message").textContent=text||"";this.$("message").hidden=!text;}
-  show(mode){this.mode=mode;this.root.dataset.workspace=mode;for(const b of this.root.querySelectorAll(".zc-nav [data-space]"))b.setAttribute("aria-current",b.dataset.space===mode?"page":"false");if(mode!=="video")this.root.querySelectorAll("video,audio").forEach(m=>m.pause());if(mode==="image"&&!this.models.length)this.loadModels();if(this.job)this.startPolling();}
+  show(mode){this.mode=mode;this.root.dataset.workspace=mode;for(const b of this.root.querySelectorAll(".zc-nav [data-space]"))b.setAttribute("aria-current",b.dataset.space===(mode==='frames'?'video':mode)?"page":"false");this.root.querySelectorAll("video,audio").forEach(m=>m.pause());if(mode==='video')this.videoComposer?.sync();if(mode==="image"&&!this.models.length)this.loadModels();if(mode==='frames'){this.frames??=new FrameVideoWorkspace(this);this.frames.open();}if(this.job)this.startPolling();}
   async loadModels(){
     if(this.loading)return;this.loading=true;
     try{
@@ -247,7 +255,7 @@ export class CreativeWorkspace {
     this.$("model-hint").textContent=m?.hint||"Checking local model files.";
     this.$("size").textContent=error || size.join(" × ")+" px · "+(size[0]*size[1]/1e6).toFixed(2)+" MP"+(size[0]*size[1]>1048576?" · Above the tested 1 MP size; needs more memory.":" · Multiples of 16");
     for(const id of ["width","height"])this.$(id).setAttribute("aria-invalid",String(!!error));
-    if(this.$("quick-settings"))this.$("quick-settings").textContent=(m?.name||"Choose model")+" · "+(size?size.join(" × "):"Set size");
+    if(this.$("quick-settings"))this.$("quick-settings").textContent=size?size.join(" × "):"Set size";
     if(this.$("history-menu")){const item=this.$("history-menu").querySelector('[value="clear-history"]');item?.toggleAttribute("disabled",!this.items.length);}
     this.$("recipe-label").textContent=m?`${m.name} · ${m.steps} steps`:"Local image generation";
     for(const b of this.root.querySelectorAll("[data-shape]")){b.setAttribute("aria-pressed",String(!!size&&IMAGE_SIZES[b.dataset.shape].every((v,i)=>v===size[i])));b.disabled=busy;}
@@ -259,6 +267,7 @@ export class CreativeWorkspace {
     this.$('image-history').innerHTML=this.items.map((item,i)=>`<button type="button" data-view-image="${i}" aria-pressed="${i===this.selectedImage}"><img src="${escape(this.api.apiURL(view(item.file)))}" alt="" loading="lazy"/><span>${escape(item.prompt)}</span></button>`).join('')||'<p>No saved images yet.</p>';
   }
   async pasteReferences(event){
+    if(this.mode==='frames')return this.frames.paste(event);
     if(!["image","video"].includes(this.mode))return;
     const clipboard=event.clipboardData;
     let files=Array.from(clipboard?.items||[]).filter(item=>item.kind==="file"&&item.type.startsWith("image/")).map(item=>item.getAsFile()).filter(Boolean);
@@ -315,7 +324,7 @@ export class CreativeWorkspace {
   }
   async cancel(){if(!this.job)return;try{const id=this.job.id;await this.fetch("/queue",{delete:[id]});await this.fetch("/interrupt",{prompt_id:id});this.message("Cancellation requested.");await this.poll();}catch(e){this.message(e.message);}}
   stopPolling(){clearInterval(this.timer);this.timer=null;}
-  close(){this.save();this.stopPolling();}
+  close(){this.save();this.stopPolling();this.frames?.close();}
   async graph(){
     try{const graph=buildImageGraph(this.job?.config||this.config());if(typeof this.app.loadApiJson!=="function")throw new Error("Update ComfyUI to open this image graph.");const original=(this.app.rootGraph||this.app.graph)?.serialize?.();if(!original)throw new Error("Your current graph could not be backed up.");try{await this.app.loadApiJson(graph,"Zura Image · "+Date.now()+".json");}catch(e){await this.app.loadGraphData(original);throw e;}this.studio.close();}catch(e){this.message(e.message);}
   }

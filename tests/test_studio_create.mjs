@@ -56,7 +56,12 @@ assert.deepEqual([...ui.root.querySelectorAll('.zc-choices [data-space] strong')
 assert.ok(!ui.root.querySelector('.zc-choices button').classList.contains('zu-btn'),'Home choices keep their full-width list-row layout instead of DaisyUI compact-button sizing');
 assert.equal(ui.root.querySelectorAll('.zc-card-art').length,0,'Home uses direct Image and Video choices without placeholder cards');
 ui.show('video');studio.render();
-assert.equal(studio.container.querySelector('.zc-mode-picker'),null,'Video workflows stay directly visible instead of being hidden in a dropdown');
+assert.ok(studio.container.querySelector('#zc-video-task').closest('.gs-composer'),'Workflow choice lives in the composer');
+assert.equal(studio.container.querySelector('.gs-workflow-choice').hidden,true,'The cramped legacy mode grid has no second visible copy');
+for(const id of ['zc-attach-source','zc-attach-refs','zc-video-model','gs-resolution','gs-duration','gs-audio-mode'])assert.ok(studio.container.querySelector('#'+id).closest('.gs-composer'),id+' belongs to the compact composer');
+const dropped=[],originalUpload=studio.upload;studio.upload=(type,file)=>dropped.push({type,file});
+for(const [id,name] of [['source','clip.mp4'],['refs','look.png']])studio.container.querySelector('#zc-attach-'+id).ondrop({preventDefault(){},stopPropagation(){},dataTransfer:{files:[{name}]}});
+assert.equal(dropped[0].type,'source');assert.equal(dropped[0].file.name,'clip.mp4');assert.equal(dropped[1].type,'character');assert.equal(dropped[1].file[0].name,'look.png');studio.upload=originalUpload;
 assert.equal(studio.container.querySelector('input[name="gs-workflow"][value="relight"]').closest('label').hidden,false,'Relight is visible from the Video source step');
 assert.doesNotMatch(ui.$('generate').innerHTML,/[↗]/,'Image actions use consistent inline icons');
 assert.equal(studio.$('preserve-identity-setting').hidden,true,'The H3 identity option stays out of unrelated modes');
@@ -186,7 +191,9 @@ assert.equal(ui.job,null);assert.equal(ui.items.length,1);assert.equal(ui.items[
 reject=true;await ui.generate();assert.match(ui.$('message').textContent,/validation/);assert.equal(ui.job,null);assert.equal(ui.$('generate').disabled,false);
 const ids=[...studio.container.querySelectorAll('[id]')].map(n=>n.id);assert.equal(ids.length,new Set(ids).size);
 // Image review is an explicit, local step before motion and video generation.
-const flow=new context.Studio();flow.config={...originalConfig};
+const flow=new context.Studio();
+const modelPicker=flow.container.querySelector('#zc-video-model');modelPicker.value='h3';modelPicker.onchange({target:modelPicker});while(flow.busy)await new Promise(resolve=>setTimeout(resolve,1));assert.equal(flow.config.engine,'h3','The composer model picker updates the existing workflow configuration');
+flow.config={...originalConfig};
 flow.source={id:'flow-source',duration:2,has_audio:true,url:'/source.mp4'};flow.references=[{id:'flow-ref',url:'/ref.png'}];
 flow.project={id:'guided-flow',phase:'opening',config:{...flow.config},review:'shot',approval:'prep',prepared_key:'prep',opening_key:'image-one',opening_input:{file:'one.png'},opening_url:'/one.png'};
 flow.syncForm();flow.render();
