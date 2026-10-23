@@ -9,32 +9,47 @@ export const FRAME_VIDEO_MODELS={
 };
 export const FRAME_LENGTHS=[22,39,56,73,90,107,124];
 export const FRAME_SIZE_PRESETS=[
-  {id:'landscape',label:'Landscape · 1344 × 768',width:1344,height:768},
-  {id:'portrait',label:'Portrait · 768 × 1344',width:768,height:1344},
-  {id:'square',label:'Square · 960 × 960',width:960,height:960},
-  {id:'standard',label:'4:3 · 1152 × 864',width:1152,height:864},
-  {id:'vertical',label:'3:4 · 864 × 1152',width:864,height:1152},
-  {id:'small',label:'Landscape · 1024 × 576',width:1024,height:576},
+  {id:'landscape',label:'Landscape · 16:9',width:1344,height:768,ratio:16/9},
+  {id:'portrait',label:'Portrait · 9:16',width:768,height:1344,ratio:9/16},
+  {id:'square',label:'Square · 1:1',width:960,height:960,ratio:1},
+  {id:'standard',label:'Standard · 4:3',width:1152,height:864,ratio:4/3},
+  {id:'vertical',label:'Vertical · 3:4',width:864,height:1152,ratio:3/4},
 ];
+export const FRAME_MEGAPIXELS=[0.25,0.5,0.75,1];
+export function frameVideoPresetSize(id,megapixels){
+  const preset=FRAME_SIZE_PRESETS.find(p=>p.id===id),mp=Number(megapixels);
+  if(!preset||!FRAME_MEGAPIXELS.includes(mp))throw new Error('Choose a shape and megapixel size.');
+  const width=Math.round(Math.sqrt(mp*1e6*preset.ratio)/32)*32,height=Math.round(Math.sqrt(mp*1e6/preset.ratio)/32)*32;
+  return frameVideoDimensions({width,height});
+}
 const ref=id=>[id,0];
+export function frameVideoDimensions(c){
+  const width=Number(c.width),height=Number(c.height);
+  if(![width,height].every(n=>Number.isInteger(n)&&n>=256&&n<=1536&&n%32===0))throw new Error('Use dimensions in 32-pixel increments, from 256 to 1536 pixels.');
+  if(width*height>1344*768)throw new Error('Choose smaller dimensions or a lower megapixel size. H3 supports up to 1.03 megapixels in this mode.');
+  return {width,height};
+}
 export function buildFrameVideoGraph(c){
   if(!c.first?.file)throw new Error('Add a first frame to begin. The last frame is optional.');
   if(!String(c.prompt||'').trim())throw new Error('Describe the video you want to generate.');
-  const width=Number(c.width),height=Number(c.height),frames=Number(c.frames),steps=Number(c.steps??8),seed=Number(c.seed??42);
-  if(![width,height].every(n=>Number.isInteger(n)&&n>=256&&n<=1536&&n%32===0)||width*height>1344*768)throw new Error('Use dimensions in multiples of 32, up to 1.03 megapixels.');
+  const {width,height}=frameVideoDimensions(c),frames=Number(c.frames),steps=Number(c.steps??8),seed=Number(c.seed??42);
   if(!FRAME_LENGTHS.includes(frames))throw new Error('Choose a supported H3 clip length.');
   if(!Number.isInteger(steps)||steps<4||steps>40)throw new Error('Sampling steps must be between 4 and 40.');
   if(!Number.isSafeInteger(seed)||seed<0)throw new Error('Seed must be a positive whole number or zero.');
   if(c.audioEnabled&&!c.audio?.file)throw new Error('Add an audio reference, or switch Audio reference off.');
   const g={},node=(id,class_type,inputs)=>{g[id]={class_type,inputs};};
   node('first','LoadImage',{image:c.first.file});
-  if(c.last?.file)node('last','LoadImage',{image:c.last.file});
+  node('fit_first','ImageScale',{image:ref('first'),upscale_method:'lanczos',width,height,crop:'center'});
+  if(c.last?.file){
+    node('last','LoadImage',{image:c.last.file});
+    node('fit_last','ImageScale',{image:ref('last'),upscale_method:'lanczos',width,height,crop:'center'});
+  }
   node('model','UNETLoader',{unet_name:FRAME_VIDEO_MODELS.model,weight_dtype:'default'});
   node('turbo','LoraLoaderModelOnly',{model:ref('model'),lora_name:FRAME_VIDEO_MODELS.lora,strength_model:1});
   node('attention','ModelAttentionBackend',{model:ref('turbo'),attention:'comfy kitchen attention'});
   node('text','CLIPLoader',{clip_name:FRAME_VIDEO_MODELS.text,type:'minimax',device:'default'});
   node('video_vae','VAELoader',{vae_name:FRAME_VIDEO_MODELS.videoVae});node('audio_vae','VAELoader',{vae_name:FRAME_VIDEO_MODELS.audioVae});
-  node('endpoints','MiniMaxH3ImageToVideo',{clip:ref('text'),vae:ref('video_vae'),prompt:c.prompt,width,height,length:frames,first_frame:ref('first'),...(c.last?.file?{last_frame:ref('last')}:{})});
+  node('endpoints','MiniMaxH3ImageToVideo',{clip:ref('text'),vae:ref('video_vae'),prompt:c.prompt,width,height,length:frames,first_frame:ref('fit_first'),...(c.last?.file?{last_frame:ref('fit_last')}:{})});
   let positive=ref('endpoints');
   if(c.audioEnabled){
     node('audio_ref','LoadAudio',{audio:c.audio.file});
@@ -55,7 +70,7 @@ export function frameVideoAvailability(info){
   const missing=[];
   for(const [node,[key,file]] of Object.entries(names))if(!options(node,key).includes(file))missing.push(file);
   for(const file of [FRAME_VIDEO_MODELS.videoVae,FRAME_VIDEO_MODELS.audioVae])if(!options('VAELoader','vae_name').includes(file))missing.push(file);
-  for(const node of ['ModelAttentionBackend','MiniMaxH3ImageToVideo','MiniMaxH3AddGuide','LoadAudio','LoadImage','BasicGuider','BasicScheduler','KSamplerSelect','RandomNoise','SamplerCustomAdvanced','VAEDecode','VAEDecodeAudio','CreateVideo','SaveVideo'])if(!info[node])missing.push(node);
+  for(const node of ['ModelAttentionBackend','MiniMaxH3ImageToVideo','MiniMaxH3AddGuide','LoadAudio','LoadImage','ImageScale','BasicGuider','BasicScheduler','KSamplerSelect','RandomNoise','SamplerCustomAdvanced','VAEDecode','VAEDecodeAudio','CreateVideo','SaveVideo'])if(!info[node])missing.push(node);
   if(info.ModelAttentionBackend&&!options('ModelAttentionBackend','attention').includes('comfy kitchen attention'))missing.push('Comfy Kitchen attention');
   return {ready:!missing.length,missing};
 }

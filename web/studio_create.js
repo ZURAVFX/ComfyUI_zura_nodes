@@ -222,6 +222,7 @@ export class CreativeWorkspace {
   show(mode){
     this.mode=mode;this.root.dataset.workspace=mode;
     if(mode==='frames')this.frames??=new FrameVideoWorkspace(this);
+    this.videoComposer?.mountWorkflow(mode);
     // Set real visibility as well as the CSS state, so another page cannot
     // cover navigation when the workspace changes or styles are still loading.
     const pages={'.zc-home':'home','.zc-image-page':'image','.zf-page':'frames','.gs-workspace':'video','.gs-steps':'video'};

@@ -10,24 +10,30 @@ Open **Zura Studio** in ComfyUI, choose a workflow, then drop a source video.
 Its thumbnail confirms the upload.
 
 The prompt composer contains **Add video**, **References** and the workflow
-selector. Model, resolution, clip length and audio sit below the writing area.
+selector. The workflow selector stays directly beside the model below the
+writing area, including in First & last frame mode. Resolution, clip length
+and audio sit alongside them.
 The settings button opens advanced controls. **Controls** opens selection and
 look tools; the current image or video keeps the full central canvas.
 
 For **First & last frame**, choose that workflow in the composer. Upload a
 first frame, describe the movement, then generate. The last frame is optional:
 add it to guide the ending, or use **Remove last** to return to first-frame-only
-generation. **Back to video**, the workflow selector and the Home/Image/Video
-navigation let you leave this mode while retaining your media and prompt.
+generation. Use the same workflow selector to switch out again, retaining your
+media and prompt. Home/Image/Video navigation remains available too.
 No additional
 reference images are used. Switch **Audio reference** on to supply a track,
 or off for H3-generated audio. Switching off keeps the uploaded file locally
 but does not send it into the graph. The approved recipe uses the H3 FL2VA
 INT8 model, Turbo at strength 1.0, eight steps, Comfy Kitchen attention and
 res_multistep/simple. Lengths show H3's actual 24 fps frame grid, preserving
-the final anchor when supplied. The resolution menu offers landscape, portrait,
-square and 4:3 presets, plus **Custom dimensions**. Exact custom width and height
-accept multiples of 32 up to 1.03 MP and are saved with the draft.
+the final anchor when supplied. Both frame inputs scale proportionally to fill
+the selected size, then crop centrally. Neither input is stretched.
+The resolution menu offers standard landscape, portrait, square, 4:3 and 3:4
+shapes with a 0.25–1 MP picker, plus **Custom dimensions**. Custom width and
+height snap visibly to the nearest 32 pixels. The exact pixel size and actual
+megapixel count are shown; both dimensions and the megapixel setting are saved.
+This mode supports up to 1.03 MP, with 256–1536 pixels per side.
 The Generate button's note explains any missing input or incomplete setup.
 Both first-only and first/last audio variants pass installed-node validation; this integration still
 needs a visual GPU render check.

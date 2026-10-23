@@ -1,5 +1,5 @@
-import {buildFrameVideoGraph,frameVideoAvailability,FRAME_LENGTHS,FRAME_SIZE_PRESETS} from './frame_video_recipes.js';
-import {composerIcons as icons,VIDEO_WORKFLOWS} from './studio_composer.js';
+import {buildFrameVideoGraph,frameVideoPresetSize,frameVideoAvailability,FRAME_LENGTHS,FRAME_SIZE_PRESETS,FRAME_MEGAPIXELS} from './frame_video_recipes.js';
+import {composerIcons as icons} from './studio_composer.js';
 import {tidyArtistGraph} from './artist_graph.js';
 const KEY='zura-first-last-v1';
 const escape=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -12,9 +12,7 @@ export class FrameVideoWorkspace{
     this.page=document.createElement('section');this.page.className='zf-page';
     this.page.innerHTML=`
       <div class="zf-heading">
-        <button type="button" id="zf-back"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="m10 5-7 7 7 7M3 12h18"/></svg>Back to video</button>
-        <h2 class="zc-sr-only">Frame to video</h2>
-        <label class="zc-task-control"><span class="zc-sr-only">Video workflow</span><select id="zf-task" aria-label="Video workflow">${VIDEO_WORKFLOWS.map(([id,label])=>`<option value="${id}" ${id==='frames'?'selected':''}>${label}</option>`).join('')}</select></label>
+        <h2>First & last frame</h2>
         <details id="zf-history"><summary>History</summary><div id="zf-takes"></div></details><button type="button" id="zf-clear">Clear history</button>
       </div>
       <div class="zf-viewer">
@@ -33,12 +31,13 @@ export class FrameVideoWorkspace{
         </div>
         <label for="zf-prompt" class="zc-sr-only">Describe your video</label><textarea id="zf-prompt" placeholder="Describe the movement, camera and action…" maxlength="12000" required></textarea>
         <div class="zc-prompt-bottom"><div class="zc-prompt-tools">
-          <span class="zc-tool">${icons.model}MiniMax H3</span>
+          <span class="zc-tool zf-model">${icons.model}MiniMax H3</span>
           <details class="zc-tool-popup"><summary aria-label="Output resolution">${icons.size}<span id="zf-size-label">1344 × 768</span>${icons.chevron}</summary>
             <div class="zc-tool-panel"><strong>Output resolution</strong>
-              <label class="zf-presets" for="zf-size-preset">Size preset<select id="zf-size-preset">${FRAME_SIZE_PRESETS.map(p=>`<option value="${p.id}">${p.label}</option>`).join('')}<option value="custom">Custom dimensions</option></select></label>
+              <label class="zf-presets" for="zf-size-preset">Shape<select id="zf-size-preset">${FRAME_SIZE_PRESETS.map(p=>`<option value="${p.id}">${p.label}</option>`).join('')}<option value="custom">Custom dimensions</option></select></label>
+              <label class="zf-presets" id="zf-megapixels-setting" for="zf-megapixels">Megapixels<select id="zf-megapixels">${FRAME_MEGAPIXELS.map(mp=>`<option value="${mp}" ${mp===1?'selected':''}>${mp} MP</option>`).join('')}</select></label>
               <div class="zf-dimensions" id="zf-custom-size"><label>Width (px)<input id="zf-width" type="number" min="256" max="1536" step="32" value="1344"/></label><label>Height (px)<input id="zf-height" type="number" min="256" max="1536" step="32" value="768"/></label></div>
-              <p>Up to 1.03 MP. Custom dimensions use multiples of 32. Match your image shape to avoid stretching or cropping.</p>
+              <p id="zf-size-hint">Dimensions follow H3’s 32-pixel grid. Megapixel sizes are approximate.</p><p>Both frames scale proportionally to fill the output, then crop centrally. No stretching.</p><p id="zf-canvas-note"></p>
             </div>
           </details>
           <label class="zc-tool zc-model-control">${icons.clock}<span class="zc-sr-only">Clip length</span><select id="zf-length" aria-label="Clip length">${FRAME_LENGTHS.map(n=>`<option value="${n}" ${n===73?'selected':''}>${(n/24).toFixed(2)}s</option>`).join('')}</select>${icons.chevron}</label>
@@ -49,18 +48,21 @@ export class FrameVideoWorkspace{
       </form>`;
     owner.root.append(this.page);
     const draft=saved.draft||{};for(const id of ['prompt','width','height','length','steps','seed'])if(draft[id]!==undefined)this.$(id).value=draft[id];
-    this.$('size-preset').value=draft.sizePreset==='custom'?'custom':FRAME_SIZE_PRESETS.find(p=>p.width===Number(this.$('width').value)&&p.height===Number(this.$('height').value))?.id||'custom';
+    this.normaliseDimensions();
+    const width=Number(this.$('width').value),height=Number(this.$('height').value);
+    this.$('size-preset').value=draft.sizePreset==='custom'?'custom':FRAME_SIZE_PRESETS.find(p=>p.width===width&&p.height===height||FRAME_MEGAPIXELS.some(mp=>{const s=frameVideoPresetSize(p.id,mp);return s.width===width&&s.height===height;}))?.id||'custom';
+    this.$('megapixels').value=FRAME_MEGAPIXELS.includes(Number(draft.megapixels))?draft.megapixels:FRAME_MEGAPIXELS.reduce((best,mp)=>Math.abs(mp-width*height/1e6)<Math.abs(best-width*height/1e6)?mp:best,1);
     this.$('audio-enabled').checked=draft.audioEnabled===true;this.$('random').checked=draft.random!==false;
-    this.$('back').onclick=()=>owner.show('video');this.$('refresh').onclick=()=>this.loadModels();
-    this.$('task').onchange=e=>{owner.videoComposer.selectWorkflow(e.target.value);this.$('task').value='frames';};
+    this.$('refresh').onclick=()=>this.loadModels();
     this.$('clear').onclick=()=>{this.items=[];this.renderHistory();this.$('result').pause();this.$('result').hidden=true;this.$('result').removeAttribute('src');this.preview();this.save();};
     this.page.querySelector('form').onsubmit=e=>{e.preventDefault();this.generate();};
-    for(const id of ['prompt','width','height','length','steps','seed','audio-enabled','random'])for(const event of ['input','change'])this.$(id).addEventListener(event,()=>{this.save();this.render();});
-    this.$('size-preset').onchange=()=>{
+    for(const id of ['prompt','width','height','length','steps','seed','audio-enabled','random'])for(const event of ['input','change'])this.$(id).addEventListener(event,()=>{if(id==='width'||id==='height')this.normaliseDimensions();this.save();this.render();});
+    const applySize=()=>{
       const preset=FRAME_SIZE_PRESETS.find(p=>p.id===this.$('size-preset').value);
-      if(preset){this.$('width').value=preset.width;this.$('height').value=preset.height;}
+      if(preset){const size=frameVideoPresetSize(preset.id,this.$('megapixels').value);this.$('width').value=size.width;this.$('height').value=size.height;this.dimensionNotice='';}
       this.save();this.render();
     };
+    this.$('size-preset').onchange=applySize;this.$('megapixels').onchange=applySize;
     for(const id of ['first','last']){
       const button=this.page.querySelector(`[data-frame="${id}"]`);button.onclick=()=>this.$(id).click();
       this.$(id).onchange=e=>{const file=e.target.files?.[0];e.target.value='';if(file)this.upload(id,file);};
@@ -78,17 +80,22 @@ export class FrameVideoWorkspace{
     this.render();this.renderHistory();this.preview();
   }
   $(id){return this.page.querySelector('#zf-'+id);}
-  config(){return {first:this.assets.first,last:this.assets.last,audio:this.assets.audio,audioEnabled:this.$('audio-enabled').checked,prompt:this.$('prompt').value,width:Number(this.$('width').value),height:Number(this.$('height').value),sizePreset:this.$('size-preset').value,frames:Number(this.$('length').value),steps:Number(this.$('steps').value),seed:Number(this.$('seed').value),random:this.$('random').checked};}
+  normaliseDimensions(){
+    let changed=false;this.dimensionNotice='';
+    for(const id of ['width','height']){const input=this.$(id),value=Number(input.value);if(Number.isFinite(value)&&value>=256&&value<=1536&&value%32!==0){input.value=Math.round(value/32)*32;changed=true;}}
+    if(changed)this.dimensionNotice=`Adjusted to ${this.$('width').value} × ${this.$('height').value} on H3’s 32-pixel grid.`;
+  }
+  config(){return {first:this.assets.first,last:this.assets.last,audio:this.assets.audio,audioEnabled:this.$('audio-enabled').checked,prompt:this.$('prompt').value,width:Number(this.$('width').value),height:Number(this.$('height').value),sizePreset:this.$('size-preset').value,megapixels:Number(this.$('megapixels').value),frames:Number(this.$('length').value),steps:Number(this.$('steps').value),seed:Number(this.$('seed').value),random:this.$('random').checked};}
   save(){const c=this.config();try{localStorage.setItem(KEY,JSON.stringify({assets:this.assets,draft:{...c,length:c.frames},job:this.job,items:this.items}));}catch{this.message('Browser storage is full. Outputs still save in ComfyUI/output/zura/first_last.');}}
   busy(){return !!(this.job||this.submitting||this.uploading);}
   message(text){this.$('message').hidden=!text;this.$('message').textContent=text;}
   async fetch(path,body){return this.owner.fetch(path,body);}
   async loadModels(){
     if(this.loading)return;this.loading=true;this.modelError='';this.render();
-    try{const types=['UNETLoader','CLIPLoader','VAELoader','LoraLoaderModelOnly','ModelAttentionBackend','MiniMaxH3ImageToVideo','MiniMaxH3AddGuide','LoadAudio','LoadImage','BasicGuider','BasicScheduler','KSamplerSelect','RandomNoise','SamplerCustomAdvanced','VAEDecode','VAEDecodeAudio','CreateVideo','SaveVideo'];const parts=await Promise.all(types.map(t=>this.fetch('/object_info/'+t)));this.availability=frameVideoAvailability(Object.assign({},...parts));this.$('setup').textContent=this.availability.ready?'All required models and nodes are installed.':'Missing: '+this.availability.missing.join(', ');}
+    try{const types=['UNETLoader','CLIPLoader','VAELoader','LoraLoaderModelOnly','ModelAttentionBackend','MiniMaxH3ImageToVideo','MiniMaxH3AddGuide','LoadAudio','LoadImage','ImageScale','BasicGuider','BasicScheduler','KSamplerSelect','RandomNoise','SamplerCustomAdvanced','VAEDecode','VAEDecodeAudio','CreateVideo','SaveVideo'];const parts=await Promise.all(types.map(t=>this.fetch('/object_info/'+t)));this.availability=frameVideoAvailability(Object.assign({},...parts));this.$('setup').textContent=this.availability.ready?'All required models and nodes are installed.':'Missing: '+this.availability.missing.join(', ');}
     catch(e){this.modelError='Could not check H3 models. Open generation settings and refresh installed models.';this.message(e.message);}finally{this.loading=false;this.render();}
   }
-  open(){this.$('task').value='frames';for(const option of this.$('task').querySelectorAll('option')){const input=this.owner.root.querySelector(`input[name="gs-workflow"][value="${option.value}"]`);option.disabled=!!input?.disabled;}if(!this.availability)this.loadModels();if(this.job)this.startPolling();}
+  open(){if(!this.availability)this.loadModels();if(this.job)this.startPolling();}
   async upload(slot,file){
     if(this.busy())return;
     if(slot!=='audio'&&!/^image\/(png|jpeg|webp)$/.test(file.type)&&! /\.(png|jpe?g|webp)$/i.test(file.name)){this.message('Choose a PNG, JPG or WebP image.');return;}
@@ -104,16 +111,19 @@ export class FrameVideoWorkspace{
   }
   render(){
     const busy=this.busy(),c=this.config();let error='';try{buildFrameVideoGraph(c);}catch(e){error=e.message;}
-    for(const id of ['prompt','width','height','size-preset','length','steps','seed','audio-enabled','random','swap','remove-last','clear'])this.$(id).disabled=busy;
+    for(const id of ['prompt','width','height','size-preset','megapixels','length','steps','seed','audio-enabled','random','swap','remove-last','clear'])this.$(id).disabled=busy;
     for(const slot of ['first','last']){const button=this.page.querySelector(`[data-frame="${slot}"]`),asset=this.assets[slot];button.disabled=busy;let image=button.querySelector('img');if(asset){if(!image){image=document.createElement('img');image.alt='';button.prepend(image);}image.src=view(this.api,asset,'input');button.title=asset.name;}else image?.remove();button.classList.toggle('has-media',!!asset);}
     this.$('audio-file-button').hidden=!c.audioEnabled;this.$('audio-file-button').disabled=busy;this.$('audio-file-button').querySelector('span').textContent=this.assets.audio?.name||'Add audio reference';
     this.$('remove-last').hidden=!this.assets.last;this.$('swap').hidden=!this.assets.first||!this.assets.last;
     this.page.querySelector('[data-frame="last"] span').textContent=this.assets.last?'Last frame':'Last frame · optional';
     this.$('custom-size').hidden=c.sizePreset!=='custom';
+    this.$('megapixels-setting').hidden=c.sizePreset==='custom';
+    this.$('size-hint').textContent=c.sizePreset==='custom'?'Enter exact dimensions. Values snap to the nearest 32 pixels (256–1536 per side).':'Megapixel sizes are approximate, aligned to H3’s 32-pixel grid.';
     this.$('generate').disabled=busy||!this.availability?.ready||!!error;this.$('generate').textContent=busy?'Generating…':'Generate video';this.$('progress').hidden=!this.job&&!this.submitting;this.$('cancel').disabled=!this.job;
     this.$('size-label').textContent=`${c.width} × ${c.height}`;
+    this.$('canvas-note').textContent=`${c.width} × ${c.height} · ${(c.width*c.height/1e6).toFixed(2)} MP`;
     const setup=this.loading?'Checking installed H3 models…':this.modelError||(!this.availability?'Open this workflow to check installed H3 models.':!this.availability.ready?'H3 setup is incomplete. Open generation settings to see missing models.':'');
-    this.$('note').textContent=error||setup||`${c.frames} frames at 24 fps · ${c.last?.file?'First + last frame':'First frame only'} · ${c.audioEnabled?'Follows your audio reference':'H3 generates audio'}`;
+    this.$('note').textContent=error||setup||this.dimensionNotice||`${c.frames} frames at 24 fps · ${c.last?.file?'First + last frame':'First frame only'} · ${c.audioEnabled?'Follows your audio reference':'H3 generates audio'}`;
   }
   renderHistory(){this.$('takes').innerHTML=this.items.map((item,i)=>`<button type="button" data-take="${i}">${escape(item.config.prompt.slice(0,60))} · ${(item.config.frames/24).toFixed(2)}s</button>`).join('');this.$('takes').onclick=e=>{const button=e.target.closest('[data-take]');if(button)this.showResult(this.items[Number(button.dataset.take)].file);};if(this.items[0])this.showResult(this.items[0].file);}
   showResult(file){this.$('empty').hidden=true;this.$('image-slot').hidden=true;this.$('result').hidden=false;this.$('result').src=view(this.api,file);this.$('history').open=false;}

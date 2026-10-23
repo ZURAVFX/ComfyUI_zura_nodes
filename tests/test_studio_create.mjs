@@ -56,7 +56,7 @@ assert.deepEqual([...ui.root.querySelectorAll('.zc-choices [data-space] strong')
 assert.ok(!ui.root.querySelector('.zc-choices button').classList.contains('zu-btn'),'Home choices keep their full-width list-row layout instead of DaisyUI compact-button sizing');
 assert.equal(ui.root.querySelectorAll('.zc-card-art').length,0,'Home uses direct Image and Video choices without placeholder cards');
 ui.show('video');studio.render();
-assert.ok(studio.container.querySelector('#zc-video-task').closest('.gs-composer'),'Workflow choice lives in the composer');
+assert.ok(studio.container.querySelector('#zc-video-task').closest('.zc-prompt-tools'),'Workflow choice sits in the model tool row');assert.equal(studio.container.querySelector('#zc-video-task').closest('.zc-task-control').previousElementSibling,ui.videoComposer.imageModel);
 assert.equal(studio.container.querySelector('.gs-workflow-choice').hidden,true,'The cramped legacy mode grid has no second visible copy');
 for(const id of ['zc-attach-source','zc-attach-refs','zc-video-model','gs-resolution','gs-duration','gs-audio-mode'])assert.ok(studio.container.querySelector('#'+id).closest('.gs-composer'),id+' belongs to the compact composer');
 const dropped=[],originalUpload=studio.upload;studio.upload=(type,file)=>dropped.push({type,file});
@@ -221,14 +221,15 @@ const navStudio=new context.Studio(),navUi=navStudio.creative;
 navStudio.source={id:'retained-video',name:'source.mp4'};navStudio.references=[{id:'retained-reference'}];
 const navRequests=calls.filter(c=>c.path==='/prompt').length;
 const task=navStudio.container.querySelector('#zc-video-task');task.value='frames';task.dispatchEvent(new window.Event('change'));
-assert.equal(navUi.mode,'frames');assert.equal(navUi.frames.page.hidden,false);assert.equal(navStudio.container.querySelector('.gs-workspace').hidden,true);
+assert.equal(navUi.mode,'frames');assert.equal(navUi.frames.page.hidden,false);assert.equal(navUi.frames.page.querySelector('#zc-video-task'),task,'The same selector remains in the frame composer');assert.equal(task.value,'frames');assert.ok(task.closest('.zc-task-control').previousElementSibling.classList.contains('zf-model'));assert.equal(navUi.frames.page.querySelector('#zf-back'),null);assert.equal(navStudio.container.querySelector('.gs-workspace').hidden,true);
 navUi.frames.assets.first={file:'retained-first.png',filename:'retained-first.png'};navUi.frames.$('prompt').value='A slow camera move';navUi.frames.save();
-navUi.frames.$('back').click();assert.equal(navUi.mode,'video');assert.equal(navUi.frames.page.hidden,true);assert.equal(navStudio.container.querySelector('.gs-workspace').hidden,false);
+task.value='swap';task.dispatchEvent(new window.Event('change'));assert.equal(navUi.mode,'video');assert.equal(navUi.frames.page.hidden,true);assert.equal(navStudio.container.querySelector('.gs-workspace').hidden,false);
+while(navStudio.busy)await new Promise(resolve=>setTimeout(resolve,1));
 for(const mode of ['home','image','video']){
   navUi.show('frames');navStudio.container.querySelector(`.zc-nav [data-space="${mode}"]`).click();assert.equal(navUi.mode,mode);assert.equal(navUi.frames.page.hidden,true,mode+' must hide the frame page');
 }
-navUi.show('frames');const frameTask=navUi.frames.$('task');frameTask.value='camera';frameTask.dispatchEvent(new window.Event('change'));
-assert.equal(navUi.mode,'video');assert.equal(navStudio.config.workflow_mode,'camera','The same workflow control exits frames and selects the intended recipe');assert.equal(navUi.frames.page.hidden,true);
+navUi.show('frames');navStudio.render();assert.equal(task.value,'frames','Legacy repaints cannot reset the current workflow selection');task.value='camera';task.dispatchEvent(new window.Event('change'));
+assert.equal(navUi.mode,'video');assert.equal(navStudio.container.querySelectorAll('select[aria-label="Video workflow"]').length,1);assert.equal(task.closest('.zc-task-control').previousElementSibling,navUi.videoComposer.imageModel,'The selector returns beside the model');assert.equal(navStudio.config.workflow_mode,'camera','The same workflow control exits frames and selects the intended recipe');assert.equal(navUi.frames.page.hidden,true);
 navUi.show('frames');assert.equal(navUi.frames.assets.first.file,'retained-first.png');assert.equal(navUi.frames.$('prompt').value,'A slow camera move');
 assert.equal(navStudio.source.id,'retained-video');assert.equal(navStudio.references[0].id,'retained-reference');
 assert.equal(calls.filter(c=>c.path==='/prompt').length,navRequests,'Navigation cannot queue a render');navUi.close();

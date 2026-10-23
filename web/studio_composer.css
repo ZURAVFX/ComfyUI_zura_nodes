@@ -9,8 +9,9 @@
 #genj-studio[data-workspace=video] #gs-prompt-heading{font-size:14px;line-height:24px;font-weight:600;color:var(--zc-text)}
 #genj-studio[data-workspace=video] #gs-prompt-stage button{padding:4px 8px;min-height:28px;background:none;border:0;border-radius:6px;color:var(--gs-muted);font-size:12px}
 #genj-studio[data-workspace=video] #gs-prompt-stage button:hover{background:var(--zc-hover);color:var(--zc-text)}
-#genj-studio .zc-task-control{margin-left:auto;max-width:240px}
-#genj-studio .zc-task-control select.zu-select{width:auto;max-width:100%;background:transparent;border:0;min-height:32px;padding:4px 28px 4px 8px;font-size:12px;color:var(--gs-muted)}
+#genj-studio .zc-task-control{position:relative;margin:0;max-width:240px;min-width:0}
+#genj-studio .zc-task-control select.zu-select{width:auto;max-width:100%;height:20px;min-height:20px;background:transparent;border:0;padding:0 20px 0 0;font:inherit;color:var(--zc-text);appearance:none;cursor:pointer}
+#genj-studio .zc-task-control>svg{position:absolute;right:10px;width:12px;pointer-events:none}
 #genj-studio .zc-composer-attachments{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 #genj-studio .zc-attachment{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:44px;max-width:240px;padding:10px 14px;border:1px dashed var(--gs-line);border-radius:9px;background:none;color:var(--zc-text);font-size:12px;cursor:pointer}
 #genj-studio .zc-attachment>svg{flex:none}
@@ -80,9 +81,6 @@
 #genj-studio[data-workspace=frames] #gs-models{display:none}
 #genj-studio .zf-page{display:grid;grid-template-rows:auto minmax(0,1fr) auto;gap:12px;flex:1;min-width:0;min-height:0;padding:16px;overflow:hidden}
 #genj-studio .zf-heading{display:flex;align-items:center;gap:16px;min-width:0}
-#genj-studio .zf-heading .zc-task-control{min-width:0;margin-right:auto}
-#genj-studio .zf-heading .zc-task-control select{max-width:100%;min-height:36px}
-#genj-studio #zf-back{display:inline-flex;align-items:center;gap:8px;white-space:nowrap}
 #genj-studio .zf-heading h2{font-size:14px;font-weight:600;flex:1}
 #genj-studio .zf-heading button,#genj-studio .zf-heading summary{padding:8px 12px;min-height:36px;font-size:12px;color:var(--gs-muted);background:none;border:0;border-radius:6px;cursor:pointer;list-style:none}
 #genj-studio .zf-heading button:hover,#genj-studio .zf-heading summary:hover{background:var(--zc-hover);color:var(--zc-text)}
@@ -116,7 +114,6 @@
 #genj-studio .zf-composer .zc-prompt-tools>.zc-tool-popup:last-child>.zc-tool-panel{left:auto;right:0}
 @media(max-width:700px){
  #genj-studio .zf-heading{gap:4px;flex-wrap:wrap}
- #genj-studio .zf-heading .zc-task-control{flex:1;min-width:176px}
  #genj-studio .zf-heading #zf-clear{margin-left:auto}
  #genj-studio[data-workspace=video] .gs-composer,#genj-studio .zf-composer,#genj-studio .zc-image-composer{padding:14px;gap:10px;border-radius:12px}
  #genj-studio .zc-prompt-bottom{align-items:flex-end;gap:8px}

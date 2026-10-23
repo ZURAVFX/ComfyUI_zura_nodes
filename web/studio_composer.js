@@ -16,20 +16,20 @@ export class VideoComposer {
   constructor(studio,workspace){
     this.studio=studio;this.workspace=workspace;this.root=studio.container;
     const composer=this.root.querySelector('.gs-composer');composer.classList.add('zc-prompt-card');
-    const task=document.createElement('label');task.className='zc-task-control';
-    task.innerHTML=`<span class="zc-sr-only">Video workflow</span><select id="zc-video-task" aria-label="Video workflow">${VIDEO_WORKFLOWS.map(([id,label])=>`<option value="${id}">${label}</option>`).join('')}</select>`;
-    studio.$('prompt-stage').append(task);
+    const task=document.createElement('label');task.className='zc-task-control zc-tool';
+    task.innerHTML=`<span class="zc-sr-only">Video workflow</span><select id="zc-video-task" class="zu-select" aria-label="Video workflow">${VIDEO_WORKFLOWS.map(([id,label])=>`<option value="${id}">${label}</option>`).join('')}</select>${composerIcons.chevron}`;
+    this.task=task;
     this.root.querySelector('.gs-workflow-choice').hidden=true;
     task.querySelector('select').onchange=e=>this.selectWorkflow(e.target.value);
     const attachments=document.createElement('div');attachments.className='zc-composer-attachments';
     attachments.innerHTML=`<button type="button" id="zc-attach-source" class="zc-attachment">${composerIcons.video}<span>Source video</span></button><button type="button" id="zc-attach-refs" class="zc-attachment">${composerIcons.image}<span>References</span></button><button type="button" id="zc-attach-frame" class="zc-attachment">${composerIcons.image}<span>Finished frame</span></button>`;
     composer.insertBefore(attachments,studio.$('prompt-composer'));
     const bottom=document.createElement('div');bottom.className='zc-prompt-bottom';
-    const tools=document.createElement('div');tools.className='zc-prompt-tools';bottom.append(tools);
+    const tools=document.createElement('div');tools.className='zc-prompt-tools';bottom.append(tools);this.tools=tools;
     const model=document.createElement('label');model.className='zc-model-control zc-tool';
     model.innerHTML=`${composerIcons.model}<span class="zc-sr-only">Video model</span><select id="zc-video-model" aria-label="Video model"></select>${composerIcons.chevron}`;
     tools.append(model);
-    const imageModel=document.createElement('span');imageModel.className='zc-tool zc-frame-model';imageModel.innerHTML=`${composerIcons.model}<span>FLUX Klein</span>`;tools.append(imageModel);this.imageModel=imageModel;this.model=model;
+    const imageModel=document.createElement('span');imageModel.className='zc-tool zc-frame-model';imageModel.innerHTML=`${composerIcons.model}<span>FLUX Klein</span>`;tools.append(imageModel,task);this.imageModel=imageModel;this.model=model;
     this.resolution=this.popup('resolution','Output resolution',composerIcons.size,studio.$('quality-setting'));tools.append(this.resolution);
     const lengthControls=this.root.querySelector('.gs-clip-length');lengthControls.append(studio.$('duration-setting'));
     this.length=this.popup('length','Clip length',composerIcons.clock,lengthControls);tools.append(this.length);
@@ -65,6 +65,24 @@ export class VideoComposer {
       this.workspace.show('video');
     }
   }
+  mountWorkflow(mode){
+    // Reuse the same control and handler in both composers. Its place in the
+    // tool row stays immediately after the model, including endpoint video.
+    const select=this.task.querySelector('select'),focused=this.root.ownerDocument.activeElement===select;
+    const model=mode==='frames'?this.workspace.frames.page.querySelector('.zf-model'):this.imageModel;
+    if(model.nextElementSibling!==this.task)model.after(this.task);
+    this.syncWorkflow();
+    if(focused)select.focus({preventScroll:true});
+  }
+  syncWorkflow(){
+    const frames=this.workspace.mode==='frames',select=this.task.querySelector('select');
+    select.value=frames?'frames':this.studio.config.workflow_mode==='motion'?'swap':this.studio.config.workflow_mode;
+    select.disabled=!frames&&(this.studio.busy||this.studio.project?.phase==='working');
+    for(const option of select.querySelectorAll('option')){
+      const input=this.root.querySelector(`input[name="gs-workflow"][value="${option.value}"]`);
+      option.disabled=!!input?.disabled;
+    }
+  }
   popup(id,label,icon,content){
     const detail=document.createElement('details');detail.className='zc-tool-popup';detail.innerHTML=`<summary aria-label="${label}">${icon}<span id="zc-tool-${id}"></span>${composerIcons.chevron}</summary><div class="zc-tool-panel"></div>`;
     detail.querySelector('div').append(content);return detail;
@@ -83,7 +101,7 @@ export class VideoComposer {
     const key=radios.map(r=>r.value+':'+r.disabled).join('|');
     if(select.dataset.choices!==key){select.replaceChildren();for(const radio of radios){const option=document.createElement('option');option.value=radio.value;option.textContent={local:'LTX 2.5',h3:'MiniMax H3',wan:'Wan 2.2',wan2:'Wan Animate 2',wan21:'Wan 2.1',seedance:'Seedance'}[radio.value];option.disabled=radio.disabled;select.append(option);}select.dataset.choices=key;}
     select.value=s.config.engine;select.disabled=working;this.model.hidden=stage!=='video';this.imageModel.hidden=stage!=='image'||s.lookMode==='ready';
-    const task=this.root.querySelector('#zc-video-task');task.value=s.config.workflow_mode==='motion'?'swap':s.config.workflow_mode;task.disabled=working;
+    this.syncWorkflow();
     this.resolution.hidden=stage!=='video';this.audio.hidden=s.$('audio-settings').hidden||stage!=='video';
     this.root.querySelector('#zc-tool-resolution').textContent=s.$('resolution').selectedOptions?.[0]?.textContent?.split(' · ')[0]||'Resolution';
     this.root.querySelector('#zc-tool-length').textContent=s.config.length_mode==='original'?'Full clip':`${s.config.duration}s`;

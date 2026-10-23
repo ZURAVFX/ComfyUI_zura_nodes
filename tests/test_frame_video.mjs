@@ -1,21 +1,31 @@
 import assert from 'node:assert/strict';
 import {parseHTML} from '../../ui-check/node_modules/linkedom/esm/index.js';
-import {buildFrameVideoGraph,FRAME_VIDEO_MODELS,FRAME_SIZE_PRESETS,frameVideoAvailability} from '../web/frame_video_recipes.js';
+import {buildFrameVideoGraph,frameVideoDimensions,frameVideoPresetSize,FRAME_MEGAPIXELS,FRAME_VIDEO_MODELS,FRAME_SIZE_PRESETS,frameVideoAvailability} from '../web/frame_video_recipes.js';
 import {FrameVideoWorkspace} from '../web/studio_frames.js';
 const config={first:{file:'first.png'},last:{file:'last.png'},audio:{file:'reference.wav'},prompt:'A smooth transition through the scene.',width:1344,height:768,frames:73,seed:42,steps:8};
 const off=buildFrameVideoGraph({...config,audioEnabled:false});
-assert.equal(off.endpoints.class_type,'MiniMaxH3ImageToVideo');assert.deepEqual(off.endpoints.inputs.first_frame,['first',0]);assert.deepEqual(off.endpoints.inputs.last_frame,['last',0]);
+assert.equal(off.endpoints.class_type,'MiniMaxH3ImageToVideo');assert.deepEqual(off.endpoints.inputs.first_frame,['fit_first',0]);assert.deepEqual(off.endpoints.inputs.last_frame,['fit_last',0]);
+for(const slot of ['first','last'])assert.deepEqual(off['fit_'+slot].inputs,{image:[slot,0],upscale_method:'lanczos',width:1344,height:768,crop:'center'},'Both endpoints preserve proportions and use centred cover cropping');
 assert.equal(off.model.inputs.unet_name,FRAME_VIDEO_MODELS.model);assert.equal(off.attention.inputs.attention,'comfy kitchen attention');assert.equal(off.turbo.inputs.strength_model,1);assert.equal(off.scheduler.inputs.steps,8);assert.equal(off.scheduler.inputs.scheduler,'simple');assert.equal(off.sampler.inputs.sampler_name,'res_multistep');
 assert.ok(!off.audio_ref&&!off.audio_guide,'Audio off excludes the stored reference and guide from the submitted graph');assert.ok(off.decode_audio,'Audio off retains native generated audio');
 assert.ok(!JSON.stringify(off).includes('reference.wav'));
 const on=buildFrameVideoGraph({...config,audioEnabled:true});assert.equal(on.audio_ref.inputs.audio,'reference.wav');assert.deepEqual(on.guider.inputs.conditioning,['audio_guide',0]);assert.deepEqual(off.guider.inputs.conditioning,['endpoints',0]);
 assert.equal(off.endpoints.inputs.length/off.video.inputs.fps,73/24,'The UI uses native lengths, preserving the final endpoint and soundtrack timing');
-const firstOnly=buildFrameVideoGraph({...config,last:null});assert.ok(!firstOnly.last);assert.ok(!('last_frame' in firstOnly.endpoints.inputs));
-assert.deepEqual(firstOnly.endpoints.inputs.first_frame,['first',0]);
+for(const preset of FRAME_SIZE_PRESETS)for(const mp of FRAME_MEGAPIXELS){
+  const size=frameVideoPresetSize(preset.id,mp);
+  assert.equal(size.width%32,0);assert.equal(size.height%32,0);
+  assert.ok(size.width*size.height<=1344*768);assert.ok(Math.abs(size.width*size.height/1e6-mp)<0.06);
+  assert.doesNotThrow(()=>buildFrameVideoGraph({...config,...size}));
+}
+assert.throws(()=>frameVideoDimensions({width:720,height:1280}),/32-pixel/);
+assert.throws(()=>frameVideoDimensions({width:1024,height:1024}),/smaller/);
+const firstOnly=buildFrameVideoGraph({...config,last:null});assert.ok(!firstOnly.last&&!firstOnly.fit_last);assert.ok(!('last_frame' in firstOnly.endpoints.inputs));
+assert.deepEqual(firstOnly.endpoints.inputs.first_frame,['fit_first',0]);
 assert.ok(buildFrameVideoGraph({...config,last:null,audioEnabled:true}).audio_guide,'First-frame-only supports the same optional audio guide');
 assert.throws(()=>buildFrameVideoGraph({...config,first:null}),/first frame/);assert.throws(()=>buildFrameVideoGraph({...config,width:1920,height:1080}),/dimensions/);assert.throws(()=>buildFrameVideoGraph({...config,frames:72}),/length/);assert.throws(()=>buildFrameVideoGraph({...config,audioEnabled:true,audio:null}),/audio reference/);
 for(const preset of FRAME_SIZE_PRESETS)assert.doesNotThrow(()=>buildFrameVideoGraph({...config,...preset}),preset.label+' fits the H3 canvas limit');
 const info={};for(const n of Object.values(on))info[n.class_type]={input:{required:{}}};
+info.ImageScale={input:{required:{}}};
 info.UNETLoader.input.required.unet_name=[[FRAME_VIDEO_MODELS.model]];info.CLIPLoader.input.required.clip_name=[[FRAME_VIDEO_MODELS.text]];info.LoraLoaderModelOnly.input.required.lora_name=[[FRAME_VIDEO_MODELS.lora]];info.VAELoader.input.required.vae_name=[[FRAME_VIDEO_MODELS.videoVae,FRAME_VIDEO_MODELS.audioVae]];info.ModelAttentionBackend.input.required.attention=[['comfy kitchen attention']];assert.equal(frameVideoAvailability(info).ready,true);
 const {document,window}=parseHTML('<html><body><section id="root"></section></body></html>');
 info.ModelAttentionBackend.input.required.attention=['COMBO',{options:['pytorch attention','comfy kitchen attention']}];assert.equal(frameVideoAvailability(info).ready,true,'Current ComfyUI COMBO schemas do not falsely hide Kitchen support');
@@ -29,15 +39,24 @@ const ui=new FrameVideoWorkspace(owner);await ui.loadModels();ui.assets={first:{
 ui.$('remove-last').click();assert.equal(ui.assets.last,undefined);assert.equal(ui.$('generate').disabled,false,'A first frame and prompt are enough to enable Generate');assert.match(ui.$('note').textContent,/First frame only/);assert.equal(ui.$('swap').hidden,true);assert.equal(ui.$('remove-last').hidden,true);
 assert.match(ui.page.querySelector('[data-frame="last"]').textContent,/optional/);
 ui.availability.ready=false;ui.render();assert.equal(ui.$('generate').disabled,true);assert.match(ui.$('note').textContent,/setup is incomplete/);ui.availability.ready=true;
-ui.$('size-preset').value='portrait';ui.$('size-preset').dispatchEvent(new window.Event('change'));assert.equal(ui.config().width,768);assert.equal(ui.config().height,1344);assert.equal(ui.$('custom-size').hidden,true);assert.equal(ui.$('generate').disabled,false);
-ui.$('size-preset').value='custom';ui.$('size-preset').dispatchEvent(new window.Event('change'));assert.equal(ui.$('custom-size').hidden,false);assert.equal(ui.config().width,768,'Custom starts with the current size');
-ui.$('width').value=736;ui.$('height').value=1280;ui.$('width').dispatchEvent(new window.Event('input'));assert.equal(ui.$('generate').disabled,false);assert.equal(ui.$('size-label').textContent,'736 × 1280');
-ui.$('width').value=735;ui.$('width').dispatchEvent(new window.Event('input'));assert.equal(ui.$('generate').disabled,true);assert.match(ui.$('note').textContent,/multiples of 32/);
+ui.$('size-preset').value='portrait';ui.$('size-preset').dispatchEvent(new window.Event('change'));
+const portraitSize=frameVideoPresetSize('portrait',1);assert.equal(ui.config().width,portraitSize.width);assert.equal(ui.config().height,portraitSize.height);assert.equal(ui.$('custom-size').hidden,true);assert.equal(ui.$('megapixels-setting').hidden,false);assert.equal(ui.$('generate').disabled,false);
+ui.$('megapixels').value=0.5;ui.$('megapixels').dispatchEvent(new window.Event('change'));
+assert.deepEqual({width:ui.config().width,height:ui.config().height},frameVideoPresetSize('portrait',0.5));
+ui.$('size-preset').value='custom';ui.$('size-preset').dispatchEvent(new window.Event('change'));assert.equal(ui.$('custom-size').hidden,false);assert.equal(ui.$('megapixels-setting').hidden,true);
+ui.$('width').value=720;ui.$('height').value=1280;ui.$('width').dispatchEvent(new window.Event('input'));
+assert.equal(ui.config().width,736,'The reported 720px input snaps visibly to the nearest 32px');assert.equal(ui.$('generate').disabled,false);assert.equal(ui.$('size-label').textContent,'736 × 1280');assert.match(ui.$('note').textContent,/Adjusted to 736 × 1280/);
+ui.$('width').value=100;ui.$('width').dispatchEvent(new window.Event('input'));assert.equal(ui.$('generate').disabled,true);assert.match(ui.$('note').textContent,/32-pixel/);
 ui.$('width').value=736;ui.$('width').dispatchEvent(new window.Event('input'));
 const restoredOwner={...owner,root:document.createElement('section')},restored=new FrameVideoWorkspace(restoredOwner);assert.equal(restored.$('size-preset').value,'custom');assert.equal(restored.config().width,736);assert.equal(restored.config().height,1280);assert.equal(restored.$('custom-size').hidden,false);assert.equal(restored.assets.last,undefined);restored.close();
+// Existing drafts with a 720px side migrate without requiring the user to
+// reopen the hidden resolution panel before Generate becomes available.
+const legacy=JSON.parse(stored['zura-first-last-v1']);legacy.draft.width=720;stored['zura-first-last-v1']=JSON.stringify(legacy);
+const migrated=new FrameVideoWorkspace(restoredOwner);await migrated.loadModels();assert.equal(migrated.config().width,736);assert.equal(migrated.$('generate').disabled,false);migrated.close();
 ui.$('audio-enabled').checked=false;ui.$('audio-enabled').dispatchEvent(new window.Event('change'));assert.equal(ui.assets.audio.file,'reference.wav','Toggling off retains the uploaded track');assert.equal(ui.$('audio-file-button').hidden,true);
 assert.equal(ui.page.querySelectorAll('[data-frame]').length,2);assert.equal(ui.page.querySelectorAll('[data-reference]').length,0);
 await ui.generate();assert.equal(ui.job.id,'our-job');assert.equal(calls.filter(c=>c.path==='/prompt').length,1);const submitted=calls.find(c=>c.path==='/prompt').body.prompt;assert.ok(!submitted.audio_guide);assert.ok(!submitted.last);assert.ok(!('last_frame' in submitted.endpoints.inputs));assert.equal(submitted.endpoints.inputs.width,736);assert.equal(submitted.endpoints.inputs.height,1280);
+assert.ok(!submitted.output_size,'The selected dimensions are sampled natively without a resizing stage');
 await ui.cancel();assert.deepEqual(calls.find(c=>c.path==='/interrupt').body,{prompt_id:'our-job'});assert.deepEqual(calls.find(c=>c.path==='/queue'&&c.body).body,{delete:['our-job']});
 while(ui.polling)await new Promise(r=>setTimeout(r,1));history={'our-job':{status:{completed:true},outputs:{save:{images:[{filename:'result.mp4',subfolder:'zura/first_last'}]}}}};await ui.poll();assert.equal(ui.job,null);assert.equal(ui.items.length,1);assert.equal(ui.$('result').hidden,false);assert.match(ui.$('result').src,/result.mp4/);
 ui.$('clear').click();assert.equal(ui.items.length,0);assert.equal(ui.$('result').hidden,true);assert.equal(ui.$('result').getAttribute('src'),null);ui.close();
