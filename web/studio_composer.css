@@ -1,9 +1,12 @@
 /* The prompt is the workspace's command surface. Keep controls compact and
    panels out of layout flow so the current result always owns the canvas. */
+#genj-studio{--zc-video-width:1200px}
+#genj-studio[data-workspace=video] .gs-preview-scroll,
+#genj-studio .zf-viewer{width:100%;max-width:var(--zc-video-width);margin-inline:auto}
 #genj-studio[data-workspace=video] .gs-composer,
 #genj-studio .zf-composer{
  display:flex;flex-direction:column;gap:12px;align-self:stretch;width:100%;min-width:0;min-height:0;max-height:none;overflow:visible;
- margin:0 auto;padding:16px 20px;max-width:1200px;border:1px solid var(--gs-line);border-radius:16px;background:var(--zc-composer);position:relative;
+ margin:0 auto;padding:16px 20px;max-width:var(--zc-video-width);border:1px solid var(--gs-line);border-radius:16px;background:var(--zc-composer);position:relative;
 }
 #genj-studio[data-workspace=video] #gs-prompt-stage{display:flex;align-items:center;gap:16px;min-height:24px;flex-wrap:wrap;margin:0}
 #genj-studio[data-workspace=video] #gs-prompt-heading{font-size:14px;line-height:24px;font-weight:600;color:var(--zc-text)}
