@@ -1023,7 +1023,8 @@ def build_h3_graph(project, use_cache=True, preserve_background=True):
     live_preview_node = None
     try:
         import nodes
-        if "MiniMaxH3PreviewOverrideCS" in nodes.NODE_CLASS_MAPPINGS:
+        from .live_preview import preview_method
+        if preview_method(c, "h3") != "taesd" and "MiniMaxH3PreviewOverrideCS" in nodes.NODE_CLASS_MAPPINGS:
             live_preview_node = "h3_live_preview_" + str(project["id"])
     except (ImportError, AttributeError):
         pass

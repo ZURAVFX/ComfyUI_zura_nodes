@@ -51,6 +51,11 @@ jobs:
           for asset in ('web/studio_create.js', 'web/studio_create.css',
                         'web/studio_composer.js', 'web/studio_composer.css',
                         'web/studio_frames.js', 'web/frame_video_recipes.js',
+                        'web/video_recipe_catalog.js', 'web/wan_frame_video_recipes.js',
+                        'web/ltx_frame_video_recipes.js', 'web/reference_video_recipes.js',
+                        'web/studio_references.js', 'web/studio_popovers.js',
+                        'web/studio_live_preview.js', 'artist_studio/live_preview.py',
+                        'artist_studio/opening_subject.py',
                         'web/image_recipes.js',
                         'web/studio_components.css',
                         'web/vendor/studio-components.css',
@@ -212,6 +217,8 @@ jobs:
           python -m unittest discover -s tests -p 'test_studio_audio_modes.py'
           python -m unittest discover -s tests -p 'test_studio_selection_limits.py'
           python -m unittest discover -s tests -p 'test_studio_create_look.py'
+          python -m unittest discover -s tests -p 'test_opening_subject.py'
+          python -m unittest discover -s tests -p 'test_live_preview.py'
           python -m unittest discover -s tests -p 'test_file_cache.py'
           python -m unittest discover -s tests -p 'test_studio_runtime_efficiency.py'
           python -m unittest discover -s tests -p 'test_h3_camera.py'
@@ -254,6 +261,13 @@ jobs:
           node tests/test_studio_create.mjs
           node tests/test_image_edit_recipes.mjs
           node tests/test_frame_video.mjs
+          node tests/test_endpoint_ui.mjs
+          node tests/test_wan_frame_video_recipes.mjs
+          node tests/test_ltx_frame_video_recipes.mjs
+          node tests/test_reference_video_recipes.mjs
+          node tests/test_reference_video_ui.mjs
+          node tests/test_studio_popovers.mjs
+          node tests/test_studio_live_preview.mjs
           node tests/test_studio_length.mjs
           node tests/test_studio_layout.mjs
           node tests/test_studio_reset.mjs

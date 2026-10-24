@@ -396,12 +396,16 @@ def validate_selection(project):
 
 
 def prep_key(project):
+    from .opening_subject import directed_source_subject
     settings = {"source": project["source"]["sha"], **{k: project["config"][k] for k in PREP_KEYS}}
     if project["config"].get("remove_text"):
         settings["remove_text"] = 6
     if project["config"].get("length_mode") == "original":
         settings["length_mode"] = "original"
     c = project["config"]
+    directed_subject = directed_source_subject(c)
+    if directed_subject:
+        settings["directed_source_subject"] = directed_subject
     if c.get("remove_text") and c.get("engine") == "h3" and c.get("edit_area") == "scene":
         settings["h3_scene_text_regions"] = 1
     if c.get("workflow_mode") == "relight" and not c.get("remove_text"):
@@ -598,6 +602,7 @@ def ltx25_phase_graph(project, phase):
 
 
 def build_graph(project, stage, use_cache=True, run_id=None):
+    from .opening_subject import directed_source_subject
     if camera_setup(project["config"]):
         from .h3_camera import build_studio_graph, build_studio_still_graph
         if stage == "design":
@@ -727,10 +732,10 @@ def build_graph(project, stage, use_cache=True, run_id=None):
                     "_meta": {"title": "Relight scene · protect source lettering"}}
                 for target in ("17", "20"):
                     graph[target]["inputs"]["mask"] = ["zura_relight_edit_mask", 0]
-        elif c["mask_method"] == "text":
-            if not c["mask_prompt"]:
+        elif c["mask_method"] == "text" or directed_source_subject(c):
+            if not c["mask_prompt"] and not directed_source_subject(c):
                 raise ValueError("Describe the area to change before preparing the mask.")
-            graph["7"]["inputs"]["text"] = c["mask_prompt"]
+            graph["7"]["inputs"]["text"] = (directed_source_subject(c) or c["mask_prompt"])
             graph["8"]["inputs"]["individual_masks"] = False
             graph["9"]["inputs"]["performer"] = -1
         elif c["mask_method"] == "points":
@@ -835,6 +840,9 @@ def build_graph(project, stage, use_cache=True, run_id=None):
                 "Match the face and hairstyle. Keep the original body, clothing, pose, head angle, expression, "
                 "camera framing, background, objects and lighting unchanged. Return one complete scene. "
                 "Do not add text or extra people.")
+        elif c.get("workflow_mode") == "swap":
+            from .opening_subject import replacement_direction
+            graph["127"]["inputs"]["value"] = replacement_direction(directed_source_subject(c))
         if c.get("preserve_people"):
             graph["127"]["inputs"]["value"] = (
                 "Change only the surroundings outside the reviewed protected people, using the references for scene appearance. "
@@ -871,7 +879,13 @@ def build_graph(project, stage, use_cache=True, run_id=None):
             graph["127"]["inputs"]["value"] += (
                 " Map each image to the scene element it depicts: " + role_text +
                 " Preserve distinct characters as distinct designs; do not copy a character sheet into the frame.")
-        if c["edit_area"] == "mask" or (c.get("workflow_mode") == "relight" and not c.get("remove_text")):
+        from .opening_subject import missing_opening_selection
+        missing_subject = missing_opening_selection(project)
+        # A named non-person replacement can need a new silhouette. Its
+        # opening edit uses source/reference conditioning, rather than being
+        # pasted back through the old object's shape. Video masks stay intact.
+        if ((c["edit_area"] == "mask" and not missing_subject and not directed_source_subject(c))
+                or (c.get("workflow_mode") == "relight" and not c.get("remove_text"))):
             # Register the approved opening look to the real source before
             # video inference. Only the selected region may change; this is
             # never a post-generation paste of the original performer.
@@ -1231,6 +1245,8 @@ def append_result_once(project, item):
 
 def public_project(project):
     p = copy.deepcopy(project)
+    from .opening_subject import directed_source_subject
+    p["selection_target"] = directed_source_subject(p.get("config", {}))
     if p.get("audio") and "audio_id" not in p.get("config", {}) and p["audio"].get("id"):
         p["config"]["audio_id"] = p["audio"]["id"]
     for key in ("source", "character", "opening_input", "audio", "reference_audio"):
@@ -1370,6 +1386,9 @@ class Studio:
             self.store.save(p)
             extra = {"client_id": "zura-studio", "create_time": int(time.time() * 1000),
                      "comfy_usage_source": "zura-studio"}
+            from .live_preview import preview_method
+            extra["preview_method"] = preview_method(p["config"], action["stage"])
+            action["preview_method"] = extra["preview_method"]
             number = self.server.number
             self.server.number += 1
             queue.put((number, action["id"], action["graph"], extra, action["output_nodes"], {}))
@@ -1936,6 +1955,9 @@ class Studio:
             self.store.save(p)
             return p
         if stage == "animate":
+            from .opening_subject import missing_opening_selection
+            if missing_opening_selection(p):
+                raise ValueError("The source subject was not selected. In Source, choose Describe area (for example, 'chicken nugget') or click the subject, then create the frame again. An empty person mask cannot guide character replacement.")
             if not p.get("opening_input") and not h3_viewport_direct(p) and not head_swap_setup(p["config"]):
                 raise ValueError("Create the character preview first.")
             if p["config"].get("workflow_mode") == "relight":
@@ -2116,8 +2138,10 @@ class Studio:
         if stage in ("wan_cleanup", "ltx25_cleanup"):
             self.start_watcher()
             return p
+        from .live_preview import preview_method
         extra = {"client_id": data.get("client_id", "genj-studio"), "create_time": int(time.time() * 1000),
-                 "comfy_usage_source": "zura-studio"}
+                 "comfy_usage_source": "zura-studio", "preview_method": preview_method(p["config"], stage)}
+        action["preview_method"] = extra["preview_method"]
         if (stage == "h3_enhance"
                 or stage == "h3" and p["config"].get("delivery_mode") == "enhanced1080"):
             # VHS copies extra_data unchanged to each freshly numbered continuation.

@@ -28,7 +28,7 @@ assert.match(createCss,/\.zc-viewer-drawer[^}]*position:absolute/,'History and t
 assert.match(createCss,/@media\(max-width:900px\)[\s\S]*?\.gs-controls\{display:none;position:absolute/,'Small screens show controls on demand without taking space from the viewer');
 assert.match(createCss,/\.gs-steps strong\{[^}]*clip-path:inset\(50%\)/,'Mobile stage labels remain accessible without overflowing the viewport');
 assert.match(createCss,/textarea\.zu-textarea\{width:100%;max-width:none;min-width:0/,'DaisyUI textareas remain full-width inside the prompt composer');
-assert.match(createCss,/\.zc-viewer-tools :is\(button,summary,a\)\{min-height:40px/,'Small-screen viewer tools retain usable touch targets');
+assert.match(createCss,/\.zc-viewer-tools \.zc-viewer-trigger\{min-height:40px/,'Small-screen viewer tools retain usable touch targets');
 assert.doesNotMatch(createCss,/\.zc-choices>button:hover\{[^}]*padding-inline/,'Home choices do not shift under the pointer');
 console.log('Studio panel DOM preserves unique labelled controls, native previews, four stages and accessible live cancel/progress.');
 

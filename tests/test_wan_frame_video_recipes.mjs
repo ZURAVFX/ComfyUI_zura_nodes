@@ -1,0 +1,47 @@
+import assert from 'node:assert/strict';
+import {buildWanFrameVideoGraph,wanFrameVideoDimensions,wanFrameVideoAvailability,WAN_FRAME_VIDEO_CAPABILITIES as caps,WAN_FRAME_VIDEO_MODELS as models} from '../web/wan_frame_video_recipes.js';
+
+const c={first:{file:'first.png'},last:{file:'last.png'},prompt:'A smooth camera move through the scene.',width:736,height:416,frames:49,steps:4,seed:42};
+const graph=buildWanFrameVideoGraph(c);
+assert.equal(caps.fps,24);assert.equal(caps.supportsAudioReference,false);assert.equal(caps.generatesAudio,false);
+for(const slot of ['first','last'])assert.deepEqual(graph['fit_'+slot].inputs,{image:[slot,0],upscale_method:'lanczos',width:736,height:416,crop:'center'});
+assert.deepEqual(graph.endpoints.inputs.start_image,['fit_first',0]);assert.deepEqual(graph.endpoints.inputs.end_image,['fit_last',0]);
+assert.equal(graph.endpoints.inputs.length,49);assert.equal(graph.endpoints.inputs.batch_size,1);
+for(const stage of ['high','low']){
+  assert.equal(graph[stage+'_model'].inputs.unet_name,models[stage]);
+  assert.equal(graph[stage+'_model'].inputs.weight_dtype,'fp8_e4m3fn_fast');
+  assert.equal(graph[stage+'_turbo'].inputs.lora_name,models[stage+'Lora']);assert.equal(graph[stage+'_turbo'].inputs.strength_model,1);
+  assert.equal(graph[stage+'_shift'].inputs.shift,5);assert.equal(graph[stage+'_attention'].inputs.attention,'comfy kitchen attention');
+  const sample=graph[stage+'_sample'].inputs;
+  assert.equal(sample.steps,4);assert.equal(sample.cfg,1);assert.equal(sample.sampler_name,'euler');assert.equal(sample.scheduler,'simple');assert.equal(sample.noise_seed,42);
+  assert.deepEqual(sample.positive,['endpoints',0]);assert.deepEqual(sample.negative,['endpoints',1]);
+}
+assert.deepEqual(graph.high_sample.inputs.latent_image,['endpoints',2]);assert.deepEqual(graph.low_sample.inputs.latent_image,['high_sample',0]);
+assert.equal(graph.high_sample.inputs.add_noise,'enable');assert.equal(graph.low_sample.inputs.add_noise,'disable');
+assert.equal(graph.high_sample.inputs.start_at_step,0);assert.equal(graph.high_sample.inputs.end_at_step,2);
+assert.equal(graph.low_sample.inputs.start_at_step,2);assert.equal(graph.low_sample.inputs.end_at_step,4);
+assert.equal(graph.high_sample.inputs.return_with_leftover_noise,'enable');assert.equal(graph.low_sample.inputs.return_with_leftover_noise,'disable');
+assert.equal(graph.decode.class_type,'VAEDecode');assert.deepEqual(graph.decode.inputs.samples,['low_sample',0]);
+assert.equal(graph.video.inputs.fps,24);assert.ok(!('audio' in graph.video.inputs));
+assert.ok(Object.values(graph).every(n=>n._meta?.title));
+assert.ok(!JSON.stringify(graph).includes('360'),'Task-specific rotation conditioning must not leak into general video generation');
+assert.ok(!JSON.stringify(graph).includes('xz567'));
+const firstOnly=buildWanFrameVideoGraph({...c,last:null,audio:{file:'stored-unused.wav'},audioEnabled:false});
+assert.ok(!firstOnly.last&&!firstOnly.fit_last);assert.ok(!('end_image' in firstOnly.endpoints.inputs));assert.ok(!JSON.stringify(firstOnly).includes('stored-unused.wav'));
+assert.throws(()=>buildWanFrameVideoGraph({...c,audioEnabled:true,audio:{file:'reference.wav'}}),/does not use audio references/);
+assert.throws(()=>buildWanFrameVideoGraph({...c,first:null}),/first frame/);assert.throws(()=>buildWanFrameVideoGraph({...c,prompt:' '}),/Describe/);
+assert.throws(()=>buildWanFrameVideoGraph({...c,frames:50}),/4n \+ 1/);assert.throws(()=>buildWanFrameVideoGraph({...c,frames:85}),/each Wan section/);
+assert.throws(()=>buildWanFrameVideoGraph({...c,steps:8}),/four sampling steps/);assert.throws(()=>buildWanFrameVideoGraph({...c,seed:-1}),/Seed/);
+assert.throws(()=>wanFrameVideoDimensions({width:730,height:416}),/multiples of 16/);assert.throws(()=>wanFrameVideoDimensions({width:1536,height:1536}),/megapixels/);
+assert.equal(buildWanFrameVideoGraph({...c,lowMemoryDecode:true}).decode.class_type,'VAEDecodeTiled');
+assert.equal(buildWanFrameVideoGraph({...c,fastFp8:false}).high_model.inputs.weight_dtype,'default');
+const info=Object.fromEntries(caps.nodeTypes.map(name=>[name,{input:{required:{}}}]));
+info.UNETLoader.input.required={unet_name:[[models.high,models.low]],weight_dtype:[['default','fp8_e4m3fn_fast']]};
+info.CLIPLoader.input.required.clip_name=[[models.text]];info.VAELoader.input.required.vae_name=[[models.vae]];
+info.LoraLoaderModelOnly.input.required.lora_name=[[models.highLora,models.lowLora]];
+info.ModelAttentionBackend.input.required.attention=['COMBO',{options:['pytorch attention','comfy kitchen attention']}];
+assert.equal(wanFrameVideoAvailability(info).ready,true);
+info.LoraLoaderModelOnly.input.required.lora_name=[[models.highLora]];
+assert.deepEqual(wanFrameVideoAvailability(info),{ready:false,missing:[models.lowLora]});
+assert.ok(wanFrameVideoAvailability({...info,VAELoader:undefined}).missing.includes('VAELoader'));
+console.log('Wan endpoints preserve proportions, use matched four-step high/low scheduling, exclude unsupported audio and task LoRAs, and report exact setup requirements.');

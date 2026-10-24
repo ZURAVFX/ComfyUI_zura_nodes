@@ -105,6 +105,10 @@ ui.selectPanel('look');assert.equal(ui.$('panel-look').hidden,false);assert.equa
 ui.revealTarget(studio.$('head-replacement'));assert.equal(ui.$('panel-source').hidden,false);
 assert.ok(studio.$('takes').closest('.zc-take-drawer'),'Takes open in a drawer instead of stealing canvas height');
 assert.ok(studio.$('library-list').closest('.zc-recent-shots'),'History is outside the canvas flow');
+for(const selector of ['#zc-video-controls','.zc-viewer-views>summary','.zc-video-timing>summary','.zc-recent-shots>summary']){
+  const trigger=studio.container.querySelector(selector);
+  assert.ok(trigger.classList.contains('zc-viewer-trigger')&&trigger.querySelector('svg')&&trigger.getAttribute('aria-label'),'Viewer tool uses a compact icon with an accessible text label');
+}
 assert.ok(studio.$('trimmer').closest('.zc-video-timing'),'Trimming is a viewer tool, outside the prompt composer');
 assert.equal(studio.container.querySelector('.gs-preview-scroll').children.length,4,'Viewer contains only toolbar, comparison, canvas and notice');
 studio.project={id:'viewer',phase:'working',review:'review',opening_url:'/view/approved.png',opening_input:{file:'approved.png'},actions:[],config:{...studio.config}};studio.preview='look';studio.render();
@@ -231,8 +235,32 @@ for(const mode of ['home','image','video']){
 navUi.show('frames');navStudio.render();assert.equal(task.value,'frames','Legacy repaints cannot reset the current workflow selection');task.value='camera';task.dispatchEvent(new window.Event('change'));
 assert.equal(navUi.mode,'video');assert.equal(navStudio.container.querySelectorAll('select[aria-label="Video workflow"]').length,1);assert.equal(task.closest('.zc-task-control').previousElementSibling,navUi.videoComposer.imageModel,'The selector returns beside the model');assert.equal(navStudio.config.workflow_mode,'camera','The same workflow control exits frames and selects the intended recipe');assert.equal(navUi.frames.page.hidden,true);
 navUi.show('frames');assert.equal(navUi.frames.assets.first.file,'retained-first.png');assert.equal(navUi.frames.$('prompt').value,'A slow camera move');
+task.value='references';task.dispatchEvent(new window.Event('change'));
+assert.equal(navUi.mode,'references');assert.equal(navUi.referencesVideo.page.hidden,false);assert.equal(navUi.frames.page.hidden,true);
+assert.equal(navUi.referencesVideo.page.querySelector('#zc-video-task'),task,'The same workflow selector remains next to the reference model');
+navUi.referencesVideo.assets.images=[{file:'ingredient.png',filename:'ingredient.png'}];navUi.referencesVideo.$('prompt').value='Use <Picture 1> in a quiet scene.';navUi.referencesVideo.save();
+assert.equal(navStudio.container.querySelectorAll('#zf-prompt').length,1);assert.equal(navStudio.container.querySelectorAll('#zr-prompt').length,1);
+task.value='frames';task.dispatchEvent(new window.Event('change'));assert.equal(navUi.mode,'frames');assert.equal(navUi.referencesVideo.page.hidden,true);
+task.value='references';task.dispatchEvent(new window.Event('change'));assert.equal(navUi.referencesVideo.assets.images[0].file,'ingredient.png');assert.match(navUi.referencesVideo.$('prompt').value,/<Picture 1>/);
+while(navStudio.busy)await new Promise(resolve=>setTimeout(resolve,1));
+task.value='swap';task.dispatchEvent(new window.Event('change'));assert.equal(navUi.mode,'video');assert.equal(navUi.referencesVideo.page.hidden,true);
 assert.equal(navStudio.source.id,'retained-video');assert.equal(navStudio.references[0].id,'retained-reference');
 assert.equal(calls.filter(c=>c.path==='/prompt').length,navRequests,'Navigation cannot queue a render');navUi.close();
+// Graph view detaches the UI. Returning must restore light dismissal and the
+// active video workspace's sample stream and job tracking without resubmission.
+document.body.append(navStudio.container);
+const popup=document.createElement('details');popup.className='zc-tool-popup';navStudio.container.append(popup);
+for(const mode of ['frames','references']){
+  navUi.show(mode);const workspace=mode==='frames'?navUi.frames:navUi.referencesVideo;
+  const previousPreview=workspace.nativeSamplePreview;
+  navUi.close();assert.equal(workspace.nativeSamplePreview,null);
+  let resumed=0;const priorStart=workspace.startPolling;workspace.startPolling=()=>resumed++;workspace.job={id:'retained-job'};
+  navUi.open();assert.equal(navUi.mode,mode);assert.ok(workspace.nativeSamplePreview);assert.notEqual(workspace.nativeSamplePreview,previousPreview);assert.equal(resumed,1);
+  popup.open=true;document.body.dispatchEvent(new window.Event('pointerdown',{bubbles:true}));assert.equal(popup.open,false,'Outside clicks still dismiss after reopening');
+  workspace.job=null;workspace.startPolling=priorStart;
+}
+assert.match(source,/this\.creative\?\.open\(\)/,'Opening Studio restores the retained creative workspace');
+navUi.close();navStudio.container.remove();
 ui.close();
 assert.equal(JSON.parse(storage['zura-image-workspace-v1']).items.length,1);
 const oldFiles=ui.items.map(i=>i.file.filename);ui.$('clear-history').onclick();assert.equal(ui.items.length,0);assert.equal(ui.$('gallery').querySelectorAll('img').length,0);assert.equal(ui.$('image-empty').hidden,false);ui.$('undo-history').onclick();assert.deepEqual(ui.items.map(i=>i.file.filename),oldFiles);ui.$('clear-history').onclick();

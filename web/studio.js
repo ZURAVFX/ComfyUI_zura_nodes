@@ -8,6 +8,7 @@ import { clipLength, recoverClipLength } from "./studio_length.js";
 import { ShotComparison } from "./studio_compare.js";
 import { ClipTrimmer } from "./studio_trim.js";
 import { CreativeWorkspace } from "./studio_create.js";
+import { installNativeSamplePreview } from "./studio_live_preview.js";
 
 const ROOT = "/zura/studio";
 const defaults = {engine:"wan", relight_engine:"h3", background:"keep", scope:"person", prompt:"", image_prompt:"", start:0, duration:2, size:512, performer:-1, margin:20, pitch:false, seed:42, render_size:0, h3_head_swap:false, h3_preset:"take_fast", h3_steps:0, h3_attention:"native", remove_text:false, resolution:1280, delivery_mode:"native", quality:"fast", audio_id:"", audio_start:0, length_mode:"custom", lip_sync:false, refine_lips:false, workflow_mode:"swap", preserve_people:false, preserve_identity:false, edit_area:"mask", mask_method:"auto", mask_prompt:"person", mask_points:[],subject_mode:"people",finished_frame_position:"first",finished_frame_number:1};
@@ -206,6 +207,7 @@ class ArtistStudio {
       player.addEventListener("loadedmetadata",()=>{if(this.lastVideo===this.source?.url)player.currentTime=Math.min(this.trimSeekTime ?? this.trimTimeline.range.start,Math.max(0,this.source.duration-.001));});
     }
     this.liveSampleAction=null;this.liveSampleData=null;
+    this.connectNativePreview();
     if(typeof api!=="undefined")api.addEventListener?.("minimax_h3_preview",event=>this.receiveH3Preview(event.detail||{}));
     this.bind();this.syncForm();
     if(typeof CreativeWorkspace!=="undefined")this.creative=new CreativeWorkspace(this,api,app);
@@ -1121,7 +1123,7 @@ class ArtistStudio {
     this.$("preserve-people-setting").hidden=this.config.engine!=="h3" || workflow!=="motion";
     this.$("mask-options").hidden=wholeScene || preservePeople;
     this.$("selection-options").hidden=wholeScene || preservePeople;
-    this.$("selection-summary").textContent=method==="text"?`Selection · ${this.config.mask_prompt || "describe an area"}`:method==="points"?"Selection · click to choose":"Person · automatic";
+    this.$("selection-summary").textContent=method==="text"?`Selection · ${this.config.mask_prompt || "describe an area"}`:method==="points"?"Selection · click to choose":this.project?.selection_target?`Selection · ${this.project.selection_target}`:"Person · automatic";
     this.$("auto-mask-setting").hidden=method!=="auto";
     this.$("mask-prompt-setting").hidden=method!=="text";
     this.$("mask-points-setting").hidden=method!=="points";
@@ -1390,9 +1392,8 @@ class ArtistStudio {
     if(progress.percent===null)progressBar.removeAttribute("aria-valuenow");
     else progressBar.setAttribute("aria-valuenow",String(progress.percent));
     this.$("working-fill").style.width=progress.percent===null?"":`${progress.percent}%`;
-    const activeH3Action=latestAction?.stage==="h3" && this.config.engine==="h3";
-    if(working && activeH3Action && latestAction.id!==this.liveSampleAction){this.liveSampleAction=latestAction.id;this.liveSampleData=null;}
-    this.renderLiveH3Preview(working&&activeH3Action);
+    if(working && latestAction?.id!==this.liveSampleAction){this.liveSampleAction=latestAction?.id;this.liveSampleData=null;}
+    this.renderLiveH3Preview(working);
     this.defaultReviewPreview(p,wholeScene);
     this.$("preview-tabs").hidden=!(p?.review || workflow==="camera"&&p?.opening_input) || phase==="done" || phase==="draft";
     this.$("preview-tabs").querySelector('[data-view="look"]').textContent=workflow==="camera"?"Camera still":"Starting frame";
@@ -1450,19 +1451,29 @@ class ArtistStudio {
     this.liveSampleAction=action.id;this.liveSampleData=detail;
     this.renderLiveH3Preview(project.phase==="working");
   }
+  connectNativePreview(){
+    if(this.nativeSamplePreview||typeof installNativeSamplePreview!=="function"||typeof api==="undefined")return;
+    this.nativeSamplePreview=installNativeSamplePreview(api,{
+      getJob:()=>{const action=this.project?.actions?.at(-1);return this.project?.phase==="working"&&action?{id:action.id,previewMethod:action.preview_method}:null;},
+      onPreview:sample=>{const action=this.project?.actions?.at(-1);if(!action)return;this.liveSampleAction=action.id;this.liveSampleData=sample;this.renderLiveH3Preview(true);},
+      onClear:()=>{this.liveSampleData=null;this.renderLiveH3Preview(false);},
+    });
+  }
   renderLiveH3Preview(active){
     const figure=this.$("live-preview"),sample=this.liveSampleData;
-    figure.hidden=!active || !sample?.webp;
+    figure.hidden=!active || !(sample?.webp||sample?.src);
     if(figure.hidden)return;
-    const image=this.$("live-preview-image"),src=`data:image/webp;base64,${sample.webp}`;
+    const image=this.$("live-preview-image"),src=sample.src||`data:image/webp;base64,${sample.webp}`;
     if(image.getAttribute("src")!==src)image.src=src;
     this.$("live-preview-step").textContent=sample.total_steps?`Step ${sample.step}/${sample.total_steps}`:"";
-    figure.setAttribute("aria-label",`Fast approximate-colour H3 preview, step ${sample.step||"?"} of ${sample.total_steps||"?"}`);
+    this.$("live-preview-caption").textContent=sample.caption||"Live H3 sample · approximate colours";
+    figure.setAttribute("aria-label",sample.caption||`Approximate H3 preview, step ${sample.step||"?"} of ${sample.total_steps||"?"}`);
   }
   async open() {
+    this.connectNativePreview();
     if(!this.container.isConnected)document.body.appendChild(this.container);
     document.documentElement.classList.add("genj-open");this.render();
-    if(this.creative?.job)this.creative.startPolling();
+    this.creative?.open();
     if(window.matchMedia?.("(min-width: 901px)")?.matches ?? true)this.container.scrollTop=0;
     try{
       this.modelStatus=await request("/status");this.syncForm();this.render();
@@ -1528,7 +1539,7 @@ class ArtistStudio {
     }catch(e){if(epoch===this.resetEpoch)this.message("Connection interrupted. Your job is saved. Reopen this view when ComfyUI reconnects.",true);}
     finally{if(epoch===this.resetEpoch)this.polling=false;}
   }
-  close(){this.creative?.close();this.comparison?.hide();this.trimTimeline?.close();this.$("canvas").classList.remove("is-expanded");if(document.fullscreenElement===this.$("canvas"))document.exitFullscreen?.().catch(()=>{});this.container.querySelectorAll("video,audio").forEach(media=>media.pause());this.container.remove();document.documentElement.classList.remove("genj-open");clearInterval(this.timer);}
+  close(){this.nativeSamplePreview?.dispose();this.nativeSamplePreview=null;this.creative?.close();this.comparison?.hide();this.trimTimeline?.close();this.$("canvas").classList.remove("is-expanded");if(document.fullscreenElement===this.$("canvas"))document.exitFullscreen?.().catch(()=>{});this.container.querySelectorAll("video,audio").forEach(media=>media.pause());this.container.remove();document.documentElement.classList.remove("genj-open");clearInterval(this.timer);}
 }
 
 app.registerExtension({

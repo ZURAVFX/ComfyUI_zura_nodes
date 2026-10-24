@@ -1,0 +1,35 @@
+import assert from 'node:assert/strict';
+import {installNativeSamplePreview,nativePreviewMethod,attachWorkspaceSamplePreview} from '../web/studio_live_preview.js';
+import {parseHTML} from '../../ui-check/node_modules/linkedom/esm/index.js';
+const {document}=parseHTML('<section><div class="zf-viewer"></div></section>');globalThis.document=document;
+const listeners=new Map();
+const api={addEventListener(type,fn){if(!listeners.has(type))listeners.set(type,new Set());listeners.get(type).add(fn);},removeEventListener(type,fn){listeners.get(type)?.delete(fn);}};
+const emit=(type,detail)=>{for(const fn of listeners.get(type)||[])fn({detail});};
+let job={id:'own',previewMethod:'taesd'},samples=[],clears=0;
+const revoked=[];let urls=0;const originalCreate=URL.createObjectURL,originalRevoke=URL.revokeObjectURL;
+URL.createObjectURL=()=>`blob:preview-${++urls}`;URL.revokeObjectURL=url=>revoked.push(url);
+try{
+  const live=installNativeSamplePreview(api,{getJob:()=>job,onPreview:sample=>samples.push(sample),onClear:()=>clears++});
+  const blob=new Blob(['sample'],{type:'image/jpeg'});
+  emit('b_preview_with_metadata',{jobId:'foreign',blob});emit('b_preview',blob);assert.equal(samples.length,0);
+  emit('b_preview_with_metadata',{jobId:'own',nodeId:'sampler',blob});emit('b_preview',blob);assert.equal(samples.length,1);assert.match(samples[0].caption,/TAE/);
+  emit('execution_start',{prompt_id:'foreign'});emit('progress',{prompt_id:'foreign'});emit('b_preview',new Blob(['old'],{type:'image/jpeg'}));assert.equal(samples.length,1);
+  emit('execution_start',{prompt_id:'own'});emit('b_preview',new Blob(['not-ready'],{type:'image/jpeg'}));assert.equal(samples.length,1);
+  emit('progress',{prompt_id:'own'});emit('b_preview',new Blob(['legacy'],{type:'image/jpeg'}));assert.equal(samples.length,2);
+  emit('execution_success',{prompt_id:'own'});assert.ok(clears>0);assert.equal(revoked.length,2);
+  live.dispose();for(const handlers of listeners.values())assert.equal(handlers.size,0);
+  const resumed=installNativeSamplePreview(api,{getJob:()=>job,onPreview:sample=>samples.push(sample)});
+  const beforeResume=samples.length;
+  emit('b_preview',new Blob(['no-owner'],{type:'image/jpeg'}));assert.equal(samples.length,beforeResume);
+  emit('progress',{prompt_id:'own'});emit('b_preview',new Blob(['resumed'],{type:'image/jpeg'}));assert.equal(samples.length,beforeResume+1,'Reopening during sampling does not require a missed execution_start');
+  emit('progress',{prompt_id:'foreign'});emit('b_preview',new Blob(['foreign'],{type:'image/jpeg'}));assert.equal(samples.length,beforeResume+1);
+  resumed.dispose();
+  const files=['taeh3.safetensors','lighttaew2_1.safetensors'];api.fetchApi=async()=>({ok:true,json:async()=>files});
+  assert.equal(await nativePreviewMethod(api,'h3'),'taesd');assert.equal(await nativePreviewMethod(api,'wan'),'taesd');assert.equal(await nativePreviewMethod(api,'ltx'),'auto');
+  files.length=0;assert.equal(await nativePreviewMethod(api,'h3'),'auto');api.fetchApi=async()=>{throw new Error('offline');};assert.equal(await nativePreviewMethod(api,'wan'),'auto');
+  const owner={api,page:document.querySelector('section'),job:{id:'canvas',previewMethod:'taesd'}};attachWorkspaceSamplePreview(owner);attachWorkspaceSamplePreview(owner);
+  assert.equal(owner.page.querySelectorAll('.zura-live-sample').length,1);assert.equal(owner.page.querySelectorAll('img').length,0);
+  emit('b_preview_with_metadata',{jobId:'canvas',blob:new Blob(['canvas'],{type:'image/png'})});assert.equal(owner.page.querySelector('.zura-live-sample').hidden,false);
+  owner.nativeSamplePreview.clear();assert.equal(owner.page.querySelector('.zura-live-sample').hidden,true);assert.equal(owner.page.querySelectorAll('img').length,0);owner.nativeSamplePreview.dispose();
+}finally{URL.createObjectURL=originalCreate;URL.revokeObjectURL=originalRevoke;}
+console.log('Native previews: job ownership, foreign/stale rejection, metadata deduplication, URL cleanup, TAE fallback and canvas lifecycle pass.');

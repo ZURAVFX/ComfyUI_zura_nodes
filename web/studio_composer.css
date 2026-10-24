@@ -10,7 +10,10 @@
 #genj-studio[data-workspace=video] #gs-prompt-stage button{padding:4px 8px;min-height:28px;background:none;border:0;border-radius:6px;color:var(--gs-muted);font-size:12px}
 #genj-studio[data-workspace=video] #gs-prompt-stage button:hover{background:var(--zc-hover);color:var(--zc-text)}
 #genj-studio .zc-task-control{position:relative;margin:0;max-width:240px;min-width:0}
-#genj-studio .zc-task-control select.zu-select{width:auto;max-width:100%;height:20px;min-height:20px;background:transparent;border:0;padding:0 20px 0 0;font:inherit;color:var(--zc-text);appearance:none;cursor:pointer}
+#genj-studio .zc-task-control select.zu-select{width:auto;max-width:100%;height:20px;min-height:20px;background:transparent;background-image:none;border:0;border-radius:0;padding:0 20px 0 0;font:inherit;line-height:20px;color:var(--zc-text);appearance:none;cursor:pointer;box-shadow:none;outline-offset:5px}
+#genj-studio .zc-task-control:focus-within{outline:2px solid var(--gs-focus,var(--gs-accent));outline-offset:2px}
+#genj-studio .zc-task-control select.zu-select:focus-visible{outline:0}
+#genj-studio .zc-task-control select.zu-select option{background:var(--gs-panel);color:var(--zc-text)}
 #genj-studio .zc-task-control>svg{position:absolute;right:10px;width:12px;pointer-events:none}
 #genj-studio .zc-composer-attachments{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 #genj-studio .zc-attachment{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:44px;max-width:240px;padding:10px 14px;border:1px dashed var(--gs-line);border-radius:9px;background:none;color:var(--zc-text);font-size:12px;cursor:pointer}
@@ -76,9 +79,10 @@
 #genj-studio .zc-image-composer .zc-model-control{min-width:0}
 #genj-studio .zc-image-composer #zc-generate{margin-left:auto;min-width:132px}
 #genj-studio .zc-image-composer #zc-quick-settings{padding:8px;font-size:12px}
-#genj-studio:not([data-workspace=frames])>.zf-page{display:none!important}
-#genj-studio[data-workspace=frames]>:is(.gs-workspace,.gs-steps){display:none!important}
-#genj-studio[data-workspace=frames] #gs-models{display:none}
+#genj-studio:not([data-workspace=frames])>.zf-page:not(.zr-page){display:none!important}
+#genj-studio:not([data-workspace=references])>.zr-page{display:none!important}
+#genj-studio:is([data-workspace=frames],[data-workspace=references])>:is(.gs-workspace,.gs-steps){display:none!important}
+#genj-studio:is([data-workspace=frames],[data-workspace=references]) #gs-models{display:none}
 #genj-studio .zf-page{display:grid;grid-template-rows:auto minmax(0,1fr) auto;gap:12px;flex:1;min-width:0;min-height:0;padding:16px;overflow:hidden}
 #genj-studio .zf-heading{display:flex;align-items:center;gap:16px;min-width:0}
 #genj-studio .zf-heading h2{font-size:14px;font-weight:600;flex:1}
@@ -86,14 +90,23 @@
 #genj-studio .zf-heading button:hover,#genj-studio .zf-heading summary:hover{background:var(--zc-hover);color:var(--zc-text)}
 #genj-studio .zf-presets{display:block;margin-top:16px;font-size:12px;color:var(--zc-text)}
 #genj-studio .zf-presets select{display:block;margin-top:8px;padding:10px 12px;width:100%;min-height:40px;background:var(--gs-input);color:var(--zc-text);border:1px solid var(--gs-line);border-radius:6px}
-#genj-studio #zf-takes{position:absolute;z-index:15;right:16px;top:116px;max-height:50dvh;width:min(360px,calc(100vw - 32px));overflow:auto;padding:16px;background:var(--gs-panel);border:1px solid var(--gs-line);border-radius:12px}
-#genj-studio #zf-takes button{display:block;width:100%;padding:12px;text-align:left;overflow-wrap:anywhere}
+#genj-studio :is(#zf-takes,#zr-takes){position:absolute;z-index:15;right:16px;top:116px;max-height:50dvh;width:min(360px,calc(100vw - 32px));overflow:auto;padding:16px;background:var(--gs-panel);border:1px solid var(--gs-line);border-radius:12px}
+#genj-studio :is(#zf-takes,#zr-takes) button{display:block;width:100%;padding:12px;text-align:left;overflow-wrap:anywhere}
 #genj-studio .zf-viewer{position:relative;min-width:0;min-height:0;overflow:hidden;border:1px solid var(--gs-line);border-radius:12px;background:var(--zc-canvas)}
-#genj-studio #zf-empty{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:12px;padding:24px;text-align:center}
-#genj-studio #zf-empty h3{font-size:24px;font-weight:500;letter-spacing:-.025em}
-#genj-studio #zf-empty p{color:var(--gs-muted);max-width:50ch;font-size:14px}
-#genj-studio .zf-viewer>video,#genj-studio #zf-image-slot,#genj-studio #zf-image-slot>img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain}
+#genj-studio :is(#zf-empty,#zr-empty){position:absolute;inset:0;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:12px;padding:24px;text-align:center}
+#genj-studio :is(#zf-empty,#zr-empty) h3{font-size:24px;font-weight:500;letter-spacing:-.025em}
+#genj-studio :is(#zf-empty,#zr-empty) p{color:var(--gs-muted);max-width:50ch;font-size:14px}
+#genj-studio .zf-viewer>video,#genj-studio :is(#zf-image-slot,#zr-image-slot),#genj-studio :is(#zf-image-slot,#zr-image-slot)>img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain}
 #genj-studio .zf-composer>strong{font-size:14px;line-height:24px;font-weight:600}
+#genj-studio .zr-attachments{flex-wrap:wrap;max-height:108px;overflow:auto;padding:3px}
+#genj-studio .zr-assets{display:contents}
+#genj-studio .zr-reference{display:inline-flex;align-items:center;gap:8px;min-height:40px;padding:4px 6px 4px 8px;border:1px solid var(--gs-line);border-radius:8px;background:var(--gs-input);font-size:12px;white-space:nowrap}
+#genj-studio .zr-reference img{width:34px;height:34px;object-fit:cover;border-radius:4px}
+#genj-studio .zr-reference button{display:grid;place-items:center;width:28px;height:28px;border:0;border-radius:5px;background:none;color:var(--gs-muted);font-size:18px;cursor:pointer}
+#genj-studio .zr-reference button:hover,#genj-studio .zr-reference button:focus-visible{background:var(--zc-hover);color:var(--zc-text)}
+#genj-studio .zr-timing{display:grid;grid-template-columns:1fr 1fr;gap:8px 12px;margin-top:16px;padding-top:12px;border-top:1px solid var(--gs-line)}
+#genj-studio .zr-timing>strong{grid-column:1/-1;font-size:12px;font-weight:600}
+#genj-studio .zr-timing label{font-size:12px;line-height:1.5}
 #genj-studio .zf-composer{gap:10px;padding:16px 18px}
 #genj-studio .zf-composer textarea{height:56px;min-height:56px!important;max-height:56px}
 #genj-studio .zf-frame-slot{position:relative;flex:none;min-width:0}
@@ -111,25 +124,25 @@
 #genj-studio .zf-dimensions{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px}
 #genj-studio .zf-dimensions label,#genj-studio .zf-composer .zc-tool-panel>label{display:block;font-size:12px;line-height:1.5}
 #genj-studio .zf-composer .zc-tool-panel input[type=number]{display:block;width:100%;margin-top:8px}
-#genj-studio .zf-composer .zc-tool-panel p,#genj-studio #zf-setup{font-size:12px;line-height:1.6;color:var(--gs-muted);margin:12px 0;overflow-wrap:anywhere}
+#genj-studio .zf-composer .zc-tool-panel p,#genj-studio :is(#zf-setup,#zr-setup){font-size:12px;line-height:1.6;color:var(--gs-muted);margin:12px 0;overflow-wrap:anywhere}
 #genj-studio .zf-check{display:flex!important;gap:8px;align-items:center;margin-top:12px}
 #genj-studio .zf-audio-switch{cursor:pointer;gap:8px}
 #genj-studio .zf-audio-switch input{appearance:none;position:relative;width:30px!important;height:18px;min-height:18px;border:1px solid var(--gs-muted);border-radius:12px;margin:0;background:transparent;cursor:pointer}
 #genj-studio .zf-audio-switch input:before{content:'';display:block;width:12px;height:12px;position:absolute;top:2px;left:2px;border-radius:50%;background:var(--gs-muted);transition:transform .15s}
 #genj-studio .zf-audio-switch input:checked{background:var(--gs-accent);border-color:var(--gs-accent)}
 #genj-studio .zf-audio-switch input:checked:before{background:var(--gs-ink);transform:translateX(12px)}
-#genj-studio #zf-progress{position:absolute;bottom:0;left:0;right:0;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px 16px;padding:16px;background:var(--gs-panel);font-size:12px}
-#genj-studio #zf-progress progress{grid-column:1/-1;width:100%;height:4px;accent-color:var(--gs-accent)}
-#genj-studio #zf-progress-detail{grid-column:1/-1;color:var(--gs-muted)}
-#genj-studio #zf-cancel{background:none;border:1px solid var(--gs-line);border-radius:6px;padding:6px 10px;font-size:12px}
-#genj-studio #zf-message{position:absolute;bottom:12px;left:12px;right:12px;padding:12px 16px;margin:0;background:var(--gs-panel);border:1px solid var(--gs-line);border-radius:10px;font-size:12px}
-#genj-studio .zf-viewer:has(#zf-progress:not([hidden])) #zf-message{bottom:112px}
+#genj-studio :is(#zf-progress,#zr-progress){position:absolute;bottom:0;left:0;right:0;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px 16px;padding:16px;background:var(--gs-panel);font-size:12px}
+#genj-studio :is(#zf-progress,#zr-progress) progress{grid-column:1/-1;width:100%;height:4px;accent-color:var(--gs-accent)}
+#genj-studio :is(#zf-progress-detail,#zr-progress-detail){grid-column:1/-1;color:var(--gs-muted)}
+#genj-studio :is(#zf-cancel,#zr-cancel){background:none;border:1px solid var(--gs-line);border-radius:6px;padding:6px 10px;font-size:12px}
+#genj-studio :is(#zf-message,#zr-message){position:absolute;bottom:12px;left:12px;right:12px;padding:12px 16px;margin:0;background:var(--gs-panel);border:1px solid var(--gs-line);border-radius:10px;font-size:12px}
+#genj-studio .zf-viewer:has(:is(#zf-progress,#zr-progress):not([hidden])) :is(#zf-message,#zr-message){bottom:112px}
 #genj-studio .zf-composer .zc-prompt-tools>.zc-tool-popup:last-child>.zc-tool-panel{left:auto;right:0}
 @media(max-width:700px){
  #genj-studio .zf-remove-frame{width:44px;min-width:44px;height:44px;min-height:44px;top:-18px;right:-18px}
  #genj-studio .zf-remove-frame:before{inset:12px}
  #genj-studio .zf-heading{gap:4px;flex-wrap:wrap}
- #genj-studio .zf-heading #zf-clear{margin-left:auto}
+ #genj-studio .zf-heading :is(#zf-clear,#zr-clear){margin-left:auto}
  #genj-studio[data-workspace=video] .gs-composer,#genj-studio .zf-composer,#genj-studio .zc-image-composer{padding:14px;gap:10px;border-radius:12px}
  #genj-studio .zc-prompt-bottom{align-items:flex-end;gap:8px}
  #genj-studio .zc-prompt-tools{gap:0}
@@ -148,3 +161,9 @@
  #genj-studio[data-workspace=video] .gs-composer,#genj-studio .zf-composer,#genj-studio .zc-image-composer{padding:12px 16px;gap:8px}
  #genj-studio[data-workspace=video] .gs-composer textarea,#genj-studio .zf-composer textarea,#genj-studio .zc-image-composer textarea{height:44px;min-height:44px!important;max-height:44px}
 }
+
+/* A live sample fills the canvas; progress stays readable above its lower edge. */
+#genj-studio .zf-viewer .zura-live-sample{position:absolute;inset:0;margin:0;background:var(--zc-canvas);pointer-events:none}
+#genj-studio .zura-live-sample>img{width:100%;height:100%;object-fit:contain}
+#genj-studio .zura-live-sample>figcaption{position:absolute;left:12px;bottom:116px;padding:8px 12px;border-radius:6px;background:var(--gs-panel);color:var(--gs-muted);font-size:11px}
+#genj-studio .zf-viewer>:is(#zf-progress,#zr-progress){z-index:2}

@@ -1,6 +1,8 @@
 import {IMAGE_MODELS,IMAGE_SIZES,buildImageGraph,imageAvailability,imageDimensions} from "./image_recipes.js";
-import {VideoComposer} from "./studio_composer.js";
+import {VideoComposer,composerIcons} from "./studio_composer.js";
 import {FrameVideoWorkspace} from "./studio_frames.js";
+import {ReferenceVideoWorkspace} from "./studio_references.js";
+import {installPopoverDismissal} from "./studio_popovers.js";
 
 const escape=value=>String(value??"").replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const arrow=()=>'<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12h16m-6-6 6 6-6 6"/></svg>';
@@ -15,6 +17,7 @@ const view=file=>"/view?"+new URLSearchParams({filename:file.filename,subfolder:
 export class CreativeWorkspace {
   constructor(studio,api,app){
     this.studio=studio;this.api=api;this.app=app;this.root=studio.container;
+    this.disposePopovers=installPopoverDismissal(this.root);
     const saved=read();this.items=Array.isArray(saved.items)?saved.items.slice(0,30):[];
     this.job=saved.job||null;this.draft=saved.draft||{};this.models=[];this.submitting=false;this.uploading=false;this.references=Array.isArray(this.draft.references)?this.draft.references:[];
     const nav=document.createElement("nav");nav.className="zc-nav";nav.setAttribute("aria-label","Workspace");
@@ -36,7 +39,7 @@ export class CreativeWorkspace {
     // handlers remain the source of truth for every approved video route.
     const composer=this.root.querySelector(".gs-composer");
     const timing=document.createElement("details");timing.className="zc-video-timing";
-    timing.innerHTML='<summary>Trim footage</summary><div></div>';
+    timing.innerHTML=`<summary>${composerIcons.trim}<span>Trim footage</span></summary><div></div>`;
     timing.querySelector("div").append(studio.$("trim-controls"),studio.$("trimmer"),studio.$("trim-precision"));
     composer.append(this.root.querySelector(".gs-action-area"));
     const settings=document.createElement("details");settings.className="zc-video-settings";
@@ -115,7 +118,7 @@ export class CreativeWorkspace {
       this.references=item.references||[];this.$("prompt").value=item.prompt;this.$("model").value=item.model;this.$("shape").value=item.shape;
       const size=imageDimensions(item);this.$("width").value=size[0];this.$("height").value=size[1];this.$("seed").value=item.seed;this.$("random").checked=false;this.save();this.render();
     };
-    this.root.querySelector("#gs-exit").onclick=()=>this.mode==="image"?this.graph():this.mode==="frames"?this.frames.graph():studio.graphView();
+    this.root.querySelector("#gs-exit").onclick=()=>this.mode==="image"?this.graph():this.mode==="frames"?this.frames.graph():this.mode==="references"?this.referencesVideo.graph():studio.graphView();
     this.api.addEventListener?.("progress",event=>{const d=event.detail;if(!this.job||d.prompt_id!==this.job.id)return;this.$("bar").value=100*d.value/d.max;this.$("progress-title").textContent=`Generating · Step ${d.value} of ${d.max}`;this.$("progress-detail").textContent=this.elapsed();});
     this.api.addEventListener?.("executing",event=>{const d=event.detail;if(!this.job||d.prompt_id!==this.job.id||!d.node)return;const names={text:"Loading text encoder",prompt:"Reading your prompt",model:"Loading image model",sample:"Generating image",decode:"Decoding image",save:"Saving image"};this.$("bar").removeAttribute("value");this.$("progress-title").textContent=names[d.node]||"Preparing image";});
     for(const [id,hint] of [["zc-swap-size","Swap image width and height"],["zc-clear-history","Hide previous images from this workspace. Saved files stay on disk."],["zc-add-references","Upload reference images, or paste an image with Ctrl+V."],["zc-settings-toggle","Choose a model, exact dimensions and seed."],["gs-exit","Open the editable ComfyUI graph with your current media."]]){
@@ -143,23 +146,23 @@ export class CreativeWorkspace {
     const main=this.root.querySelector('.gs-main'),stage=this.root.querySelector('.gs-preview-scroll');
     const heading=this.root.querySelector('.gs-preview-heading'),tools=document.createElement('div');
     tools.className='zc-viewer-tools';heading.append(tools);
-    this.studio.$('compare-toggle').textContent='Compare';this.studio.$('compare-toggle').setAttribute('aria-label','Compare source and final render');
+    this.studio.$('compare-toggle').innerHTML= composerIcons.compare+'<span>Compare</span>';this.studio.$('compare-toggle').setAttribute('aria-label','Compare source and final render');
     const views=document.createElement('details');views.className='zc-viewer-views';views.name='zura-viewer-tools';
-    views.innerHTML='<summary>View</summary>';views.append(this.studio.$('preview-tabs'));
+    views.innerHTML=`<summary>${composerIcons.view}<span>View</span>${composerIcons.chevron}</summary>`;views.append(this.studio.$('preview-tabs'));
     tools.append(views,this.studio.$('compare-toggle'),timing);
     timing.name='zura-viewer-tools';
     const takes=document.createElement('details');takes.className='zc-take-drawer';takes.name='zura-viewer-tools';
-    takes.innerHTML='<summary>Takes <span id="zc-take-count">0</span></summary><div class="zc-viewer-drawer"><div class="zc-drawer-heading"><strong>Your takes</strong><button type="button" aria-label="Close takes">'+closeIcon()+'</button></div></div>';
+    takes.innerHTML='<summary>'+composerIcons.takes+'<span>Takes</span> <span id="zc-take-count">0</span></summary><div class="zc-viewer-drawer"><div class="zc-drawer-heading"><strong>Your takes</strong><button type="button" aria-label="Close takes">'+closeIcon()+'</button></div></div>';
     takes.querySelector('.zc-viewer-drawer').append(this.studio.$('results'));
     const history=document.createElement('details');history.className='zc-recent-shots';history.name='zura-viewer-tools';
-    history.innerHTML='<summary>History</summary><div class="zc-viewer-drawer"><div class="zc-drawer-heading"><strong>Recent shots</strong><button type="button" aria-label="Close history">'+closeIcon()+'</button></div></div>';
+    history.innerHTML='<summary>'+composerIcons.history+'<span>History</span></summary><div class="zc-viewer-drawer"><div class="zc-drawer-heading"><strong>Recent shots</strong><button type="button" aria-label="Close history">'+closeIcon()+'</button></div></div>';
     history.querySelector('.zc-viewer-drawer').append(this.root.querySelector('.gs-library'));
     tools.append(takes,history);
     for(const detail of [takes,history,views,timing]){
       detail.querySelector('.zc-drawer-heading button')?.addEventListener('click',()=>{detail.open=false;detail.querySelector('summary').focus({preventScroll:true});});
       detail.addEventListener('toggle',()=>{if(detail.open)for(const other of [takes,history,views,timing])if(other!==detail)other.open=false;});
     }
-    const inspector=document.createElement('button');inspector.id='zc-video-controls';inspector.type='button';inspector.className='gs-quiet';inspector.textContent='Controls';inspector.setAttribute('aria-expanded','false');inspector.setAttribute('aria-controls','zc-video-inspector');
+    const inspector=document.createElement('button');inspector.id='zc-video-controls';inspector.type='button';inspector.className='gs-quiet';inspector.innerHTML=composerIcons.settings+'<span>Controls</span>';inspector.setAttribute('aria-expanded','false');inspector.setAttribute('aria-controls','zc-video-inspector');
     this.root.querySelector('.gs-controls').id='zc-video-inspector';tools.prepend(inspector);
     inspector.onclick=()=>{const open=!main.parentElement.classList.contains('zc-controls-open');main.parentElement.classList.toggle('zc-controls-open',open);inspector.setAttribute('aria-expanded',String(open));};
     const hideInspector=document.createElement('button');hideInspector.type='button';hideInspector.className='zc-inspector-close';hideInspector.textContent='Done';
@@ -167,7 +170,12 @@ export class CreativeWorkspace {
     const notice=document.createElement('div');notice.className='zc-viewer-notice';
     const dismiss=document.createElement('button');dismiss.type='button';dismiss.className='gs-quiet';dismiss.setAttribute('aria-label','Dismiss message');dismiss.innerHTML=closeIcon();dismiss.onclick=()=>{this.studio.dismissedError=this.studio.project?.error;this.studio.message('');};
     notice.append(this.studio.$('message'),dismiss);stage.append(notice);
-    const download=document.createElement('a');download.id='zc-download-take';download.className='gs-quiet';download.textContent='Download';download.hidden=true;download.setAttribute('download','zura-take.mp4');tools.append(download);
+    const download=document.createElement('a');download.id='zc-download-take';download.className='gs-quiet';download.innerHTML=composerIcons.download+'<span>Download</span>';download.hidden=true;download.setAttribute('download','zura-take.mp4');tools.append(download);
+    for(const control of tools.querySelectorAll(':scope>button,:scope>a,:scope>details>summary')){
+      control.classList.add('zc-viewer-trigger');
+      control.title=control.textContent.trim();
+      if(!control.hasAttribute('aria-label'))control.setAttribute('aria-label',control.title);
+    }
     main.addEventListener('keydown',event=>{if(event.key!=='Escape')return;for(const detail of [takes,history,views,timing])if(detail.open){detail.open=false;detail.querySelector('summary').focus({preventScroll:true});event.preventDefault();return;}if(main.parentElement.classList.contains('zc-controls-open'))hideInspector.click();});
     // Selecting a take returns its comparison to the full-size canvas.
     takes.addEventListener('click',event=>{if(event.target.closest('[data-compare-result]'))takes.open=false;});
@@ -219,19 +227,25 @@ export class CreativeWorkspace {
   }
   save(){this.draft=this.config();try{localStorage.setItem(KEY,JSON.stringify({draft:this.draft,items:this.items,job:this.job}));}catch{this.message("Browser storage is full. Your files still save in ComfyUI/output/zura_images.");}}
   message(text){this.$("message").textContent=text||"";this.$("message").hidden=!text;}
+  open(){
+    this.disposePopovers=installPopoverDismissal(this.root);
+    this.show(this.mode||'home');
+  }
   show(mode){
     this.mode=mode;this.root.dataset.workspace=mode;
     if(mode==='frames')this.frames??=new FrameVideoWorkspace(this);
+    if(mode==='references')this.referencesVideo??=new ReferenceVideoWorkspace(this);
     this.videoComposer?.mountWorkflow(mode);
     // Set real visibility as well as the CSS state, so another page cannot
     // cover navigation when the workspace changes or styles are still loading.
-    const pages={'.zc-home':'home','.zc-image-page':'image','.zf-page':'frames','.gs-workspace':'video','.gs-steps':'video'};
+    const pages={'.zc-home':'home','.zc-image-page':'image','.zf-page:not(.zr-page)':'frames','.zr-page':'references','.gs-workspace':'video','.gs-steps':'video'};
     for(const child of this.root.children)for(const [selector,space] of Object.entries(pages))if(child.matches(selector))child.hidden=mode!==space;
-    for(const b of this.root.querySelectorAll('.zc-nav [data-space]'))b.setAttribute('aria-current',b.dataset.space===(mode==='frames'?'video':mode)?'page':'false');
+    for(const b of this.root.querySelectorAll('.zc-nav [data-space]'))b.setAttribute('aria-current',b.dataset.space===(['frames','references'].includes(mode)?'video':mode)?'page':'false');
     this.root.querySelectorAll('video,audio').forEach(m=>m.pause());
     if(mode==='video')this.videoComposer?.sync();
     if(mode==='image'&&!this.models.length)this.loadModels();
     if(mode==='frames')this.frames.open();
+    if(mode==='references')this.referencesVideo.open();
     if(this.job)this.startPolling();
   }
   async loadModels(){
@@ -282,6 +296,7 @@ export class CreativeWorkspace {
   }
   async pasteReferences(event){
     if(this.mode==='frames')return this.frames.paste(event);
+    if(this.mode==='references')return this.referencesVideo.paste(event);
     if(!["image","video"].includes(this.mode))return;
     const clipboard=event.clipboardData;
     let files=Array.from(clipboard?.items||[]).filter(item=>item.kind==="file"&&item.type.startsWith("image/")).map(item=>item.getAsFile()).filter(Boolean);
@@ -338,7 +353,7 @@ export class CreativeWorkspace {
   }
   async cancel(){if(!this.job)return;try{const id=this.job.id;await this.fetch("/queue",{delete:[id]});await this.fetch("/interrupt",{prompt_id:id});this.message("Cancellation requested.");await this.poll();}catch(e){this.message(e.message);}}
   stopPolling(){clearInterval(this.timer);this.timer=null;}
-  close(){this.save();this.stopPolling();this.frames?.close();}
+  close(){this.save();this.stopPolling();this.frames?.close();this.referencesVideo?.close();this.disposePopovers?.();}
   async graph(){
     try{const graph=buildImageGraph(this.job?.config||this.config());if(typeof this.app.loadApiJson!=="function")throw new Error("Update ComfyUI to open this image graph.");const original=(this.app.rootGraph||this.app.graph)?.serialize?.();if(!original)throw new Error("Your current graph could not be backed up.");try{await this.app.loadApiJson(graph,"Zura Image · "+Date.now()+".json");}catch(e){await this.app.loadGraphData(original);throw e;}this.studio.close();}catch(e){this.message(e.message);}
   }
