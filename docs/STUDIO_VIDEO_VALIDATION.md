@@ -60,3 +60,21 @@ Boundary/DOM tests cover selecting and building the maximum for all engines,
 rejecting lengths above the limit, optional last frames, final LTX guide
 indexing and reference-audio duration. This increases a single native window;
 it does not implement constant-memory continuation.
+
+## Reference-video vocal direction
+
+The explicit Follow Audio option completed a real Ref2VA Turbo GPU check with
+one appearance image and a speech recording: 124 frames at 512 x 288, eight
+steps, 33.48 seconds, with eight TAE preview updates. Native audio keyframes
+and unanchored references ran together successfully. The output contains the
+uploaded vocal, not a decoded generated replacement. Comparing decoded mono
+32 kHz waveforms gave correlation 0.9984 and zero sample lag; the 2.28-second
+source was followed by silence in the 5.17-second video.
+
+These checks establish execution, soundtrack routing and timing. Facial
+performance is not newly artist-approved. The guide conditions generation but
+does not freeze target audio latents. Reference-only remains the default.
+Recipe and DOM tests cover both routes, native tag canonicalisation, stable
+audio selection after removal, saved drafts, job locking, conditional node
+availability, padding, and full-length vocal use beyond the ten-second
+reference-context limit.

@@ -5,6 +5,7 @@ import {
   buildReferenceVideoGraph,
   nextReferenceVideoFrameCount,
   referencePromptTags,
+  referenceAudioSources,
   referenceVideoAvailability,
   referenceVideoDimensions,
   referenceVideoFrames,
@@ -37,6 +38,31 @@ assert.deepEqual(tags.map(item=>item.tag),[
 ]);
 
 const graph=buildReferenceVideoGraph(config);
+assert.equal(buildReferenceVideoGraph({...config,prompt:'He says <audio 02> beside <picture 1>.'}).references.inputs.prompt,'He says <Audio 2> beside <Picture 1>.');
+assert.throws(()=>buildReferenceVideoGraph({...config,prompt:'He says <audio 3>.'}),/has 2 audio/);
+assert.deepEqual(referenceAudioSources(config).map(a=>[a.tag,a.key,a.start]),[
+  ['<Audio 1>','video:refs/room.mp4',1.5],['<Audio 2>','audio:refs/voice.wav',0],
+]);
+const followConfig={...config,audioDriver:'audio:refs/voice.wav',frames:362};
+const follow=buildReferenceVideoGraph(followConfig),duration=362/24;
+assert.deepEqual(follow.guider.inputs.conditioning,['vocal_guide',0],'The vocal must condition generation, not only the soundtrack');
+assert.deepEqual(follow.vocal_guide.inputs,{positive:['references',0],latent:['references',1],audio_vae:['audio_vae',0],audio:['followed_audio',0],frame_idx:0});
+assert.deepEqual(follow.sample.inputs.latent_image,['references',1]);
+assert.deepEqual(follow.vocal_window.inputs,{audio:['audio_1',0],start_index:0,duration},'Follow uses the raw vocal for the whole video, beyond the reference-only 10-second cap');
+assert.equal(follow.audio_guard_1.inputs.max_seconds,8,'Reference context remains independently limited');
+assert.deepEqual(follow.vocal_tail.inputs,{audio1:['vocal_stereo',0],audio2:['vocal_silence',0],direction:'after'});
+assert.deepEqual(follow.vocal_silence.inputs,{duration,sample_rate:48000,channels:2});
+assert.deepEqual(follow.followed_audio.inputs,{audio:['vocal_tail',0],start_index:0,duration});
+assert.deepEqual(follow.video.inputs.audio,['followed_audio',0]);
+assert.equal(follow.decode_audio,undefined,'Avoid decoding a generated soundtrack that will be discarded');
+const pairedFollow=buildReferenceVideoGraph({...config,audioDriver:'video:refs/room.mp4'});
+assert.deepEqual(pairedFollow.vocal_window.inputs,{audio:['video_audio_1',0],start_index:1.5,duration:124/24},'Apply a paired video start offset exactly once');
+const tinyFollow=buildReferenceVideoGraph({...config,audioDriver:'audio:refs/voice.wav',frames:5});
+assert.equal(tinyFollow.vocal_stereo.inputs.max_seconds,0.5,'Respect native preparation node minimum for very short previews');
+assert.throws(()=>buildReferenceVideoGraph({...config,audioDriver:'audio:removed.wav'}),/Choose an uploaded audio/);
+assert.equal(graph.vocal_guide,undefined);
+assert.deepEqual(graph.guider.inputs.conditioning,['references',0]);
+assert.deepEqual(graph.video.inputs.audio,['decode_audio',0],'Reference-only still generates its own audio');
 assert.equal(graph.model.inputs.unet_name,models.ref2va);
 assert.equal(graph.model.inputs.weight_dtype,'default');
 assert.equal(graph.turbo.inputs.lora_name,models.turbo);
@@ -220,6 +246,13 @@ info.ModelAttentionBackend.input.required={
 };
 info.SpectrumApplyMiniMaxH3={input:{required:{}}};
 assert.equal(referenceVideoAvailability(info,config).ready,true);
+assert.equal(referenceVideoAvailability(info,followConfig).ready,true);
+const withoutGuide={...info};delete withoutGuide.MiniMaxH3AddGuide;
+assert.equal(referenceVideoAvailability(withoutGuide,config).ready,true);
+assert.ok(referenceVideoAvailability(withoutGuide,followConfig).missing.includes('MiniMaxH3AddGuide'));
+const withoutAudioDecoder={...info};delete withoutAudioDecoder.VAEDecodeAudio;
+assert.equal(referenceVideoAvailability(withoutAudioDecoder,followConfig).ready,true);
+assert.equal(referenceVideoAvailability(withoutAudioDecoder,config).ready,false);
 assert.equal(
   referenceVideoAvailability(info,{...config,spectrum:true}).ready,
   true,

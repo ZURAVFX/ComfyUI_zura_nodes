@@ -41,7 +41,7 @@ export const REFERENCE_VIDEO_CAPABILITIES=Object.freeze({
     'CLIPLoader','VAELoader','MiniMaxH3ReferenceToVideo','MiniMaxH3SigmaShift',
     'ModelAttentionBackend','BasicGuider','BasicScheduler','KSamplerSelect',
     'RandomNoise','SamplerCustomAdvanced','VAEDecode','VAEDecodeAudio',
-    'CreateVideo','SaveVideo',
+    'CreateVideo','SaveVideo','MiniMaxH3AddGuide','EmptyAudio','AudioConcat',
   ],
 });
 
@@ -132,7 +132,16 @@ export function referenceVideoPrompt(c={}){
   }
   // The native H3 tokenizer prepends each reference label and vision block.
   // Prompt tags are pointers written by the user, not extra prompt content.
-  return prompt;
+  return prompt.replace(/<(Picture|Video|Audio)\s+(\d+)>/gi,(_,kind,n)=>`<${kind[0].toUpperCase()+kind.slice(1).toLowerCase()} ${Number(n)}>`);
+}
+
+/** Stable file keys keep a chosen vocal selected when earlier references move. */
+export function referenceAudioSources(c={}){
+  return referencePromptTags(c).filter(item=>item.kind==='audio').map(item=>{
+    const paired=item.pairedVideoIndex!==undefined;
+    const source=paired?c.videos[item.pairedVideoIndex]:c.audios[item.standaloneAudioIndex];
+    return {...item,key:(paired?'video:':'audio:')+source.file,file:paired?source.audioFile:source.file,start:paired?Number(source.start||0):0,name:source.name||source.filename||source.file};
+  });
 }
 
 export function referenceVideoDimensions(c={}){
@@ -166,6 +175,8 @@ function normaliseConfig(c={}){
   const images=list(c.images||[],'Image references');
   const videos=list(c.videos||[],'Video references');
   const audios=list(c.audios||[],'Audio references');
+  const audioDriver=c.audioDriver||'';
+  if(audioDriver&&!referenceAudioSources(c).some(source=>source.key===audioDriver))throw new Error('Choose an uploaded audio to follow, or select Reference only.');
   if(images.length>caps.maxImages)throw new Error(`H3 supports up to ${caps.maxImages} reference images.`);
   if(videos.length>caps.maxVideos)throw new Error(`H3 supports up to ${caps.maxVideos} reference videos.`);
   if(audios.length>caps.maxAudios)throw new Error(`H3 supports up to ${caps.maxAudios} standalone reference audios.`);
@@ -208,7 +219,7 @@ function normaliseConfig(c={}){
   if(!Number.isSafeInteger(seed)||seed<0)throw new Error('Seed must be a positive whole number or zero.');
   if(c.refImageSize!==undefined&&!['match','max'].includes(c.refImageSize))throw new Error('Choose Match or Max reference image sizing.');
   return {
-    ...c,images,videos,audios,
+    ...c,images,videos,audios,audioDriver,
     prompt:referenceVideoPrompt({...c,images,videos,audios}),
     model,speedup,spectrum,steps,seed,
     refImageSize:c.refImageSize||'match',
@@ -245,7 +256,7 @@ export function buildReferenceVideoGraph(config={}){
   const clip=node('text','CLIPLoader',{clip_name:REFERENCE_VIDEO_MODELS.text,type:'minimax',device:'default'},'Load H3 reference text and vision encoder');
   const videoVae=node('video_vae','VAELoader',{vae_name:REFERENCE_VIDEO_MODELS.videoVae},'Load INT8 H3 video decoder');
   const audioVae=node('audio_vae','VAELoader',{vae_name:REFERENCE_VIDEO_MODELS.audioVae},'Load H3 audio decoder');
-  const references={};
+  const references={},audioLoads=new Map();
   c.images.forEach((image,index)=>{
     references[`ref_images.ref_image_${index}`]=node(`image_${index+1}`,'LoadImage',{image:image.file},`Reference picture ${index+1}`);
   });
@@ -262,6 +273,7 @@ export function buildReferenceVideoGraph(config={}){
     let soundtrack;
     if(video.audioFile){
       const loadedAudio=node(`video_audio_${index+1}`,'LoadAudio',{audio:video.audioFile},`Reference soundtrack ${index+1}`);
+      audioLoads.set('video:'+video.file,loadedAudio);
       const audioWindow=node(`video_audio_window_${index+1}`,'TrimAudioDuration',{audio:loadedAudio,start_index:video.start,duration:video.duration},`Match soundtrack reference interval ${index+1}`);
       soundtrack=node(`video_audio_guard_${index+1}`,'H3ReferenceAudio',{audio:audioWindow,max_seconds:caps.maxVideoSeconds},`Make reference soundtrack ${index+1} stereo`);
       inputs.audio=soundtrack;
@@ -272,6 +284,7 @@ export function buildReferenceVideoGraph(config={}){
   });
   c.audios.forEach((audio,index)=>{
     const loaded=node(`audio_${index+1}`,'LoadAudio',{audio:audio.file},`Reference audio ${index+1}`);
+    audioLoads.set('audio:'+audio.file,loaded);
     const guarded=node(`audio_guard_${index+1}`,'H3ReferenceAudio',{audio:loaded,max_seconds:audio.duration},`Trim reference audio ${index+1}`);
     references[`ref_audios.ref_audio_${index}`]=guarded;
   });
@@ -279,13 +292,23 @@ export function buildReferenceVideoGraph(config={}){
     clip,vae:videoVae,audio_vae:audioVae,prompt:c.prompt,width:c.width,height:c.height,
     length:c.frames,ref_image_size:c.refImageSize,...references,
   },'Combine image, video and audio references');
+  let followedAudio;
+  if(c.audioDriver){
+    const source=referenceAudioSources(c).find(item=>item.key===c.audioDriver),duration=c.frames/caps.fps;
+    const selected=node('vocal_window','TrimAudioDuration',{audio:audioLoads.get(source.key),start_index:source.start,duration},'Read the selected vocal on the output timeline');
+    const stereo=node('vocal_stereo','H3ReferenceAudio',{audio:selected,max_seconds:Math.max(0.5,duration)},'Prepare the selected vocal');
+    const silence=node('vocal_silence','EmptyAudio',{duration,sample_rate:48000,channels:2},'Keep silence after a short vocal');
+    const padded=node('vocal_tail','AudioConcat',{audio1:stereo,audio2:silence,direction:'after'},'Append silence without repeating the vocal');
+    followedAudio=node('followed_audio','TrimAudioDuration',{audio:padded,start_index:0,duration},'Match the vocal to the video duration');
+    positive=node('vocal_guide','MiniMaxH3AddGuide',{positive,latent:ref('references',1),audio_vae:audioVae,audio:followedAudio,frame_idx:0},'Drive the performance with the selected vocal');
+  }
   const guider=node('guider','BasicGuider',{model,conditioning:positive},'Guide the reference scene');
   const scheduler=node('scheduler','BasicScheduler',{model,scheduler:c.speedup==='turbo'?'simple':'beta',steps:c.steps,denoise:1},'Schedule H3 sampling');
   const sampler=node('sampler','KSamplerSelect',{sampler_name:'res_multistep'},'Choose H3 sampler');
   const noise=node('noise','RandomNoise',{noise_seed:c.seed},'Choose variation seed');
   const samples=node('sample','SamplerCustomAdvanced',{noise,guider,sampler,sigmas:scheduler,latent_image:ref('references',1)},'Generate video and audio');
   const decoded=node('decode','VAEDecode',{samples,vae:videoVae},'Decode H3 video');
-  const decodedAudio=node('decode_audio','VAEDecodeAudio',{samples,vae:audioVae},'Decode H3 audio');
+  const decodedAudio=followedAudio||node('decode_audio','VAEDecodeAudio',{samples,vae:audioVae},'Decode H3 audio');
   const video=node('video','CreateVideo',{images:decoded,audio:decodedAudio,fps:caps.fps,bit_depth:8,color_space:'sRGB',codec:'none'},'Assemble video with audio');
   node('save','SaveVideo',{video,filename_prefix:'zura/reference/h3',format:'mp4','format.codec':'h264','format.codec.encoding':'auto'},'Save reference video');
   return graph;
@@ -305,8 +328,10 @@ export function referenceVideoAvailability(info={},config={}){
     'UNETLoader','CLIPLoader','VAELoader','LoraLoaderModelOnly',
     'ModelAttentionBackend','MiniMaxH3SigmaShift','MiniMaxH3ReferenceToVideo',
     'BasicGuider','BasicScheduler','KSamplerSelect','RandomNoise',
-    'SamplerCustomAdvanced','VAEDecode','VAEDecodeAudio','CreateVideo','SaveVideo',
+    'SamplerCustomAdvanced','VAEDecode','CreateVideo','SaveVideo',
   ];
+  if(config.audioDriver)requiredNodes.push('MiniMaxH3AddGuide','EmptyAudio','AudioConcat','TrimAudioDuration','H3ReferenceAudio','LoadAudio');
+  else requiredNodes.push('VAEDecodeAudio');
   if(counts.images)requiredNodes.push('LoadImage');
   if(counts.videos){
     requiredNodes.push('LoadVideo','Video Slice','GetVideoComponents','H3ReferenceVideo');

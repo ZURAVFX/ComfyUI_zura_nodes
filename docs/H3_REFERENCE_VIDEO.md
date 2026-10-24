@@ -22,6 +22,31 @@ videos use `<Video 1>`, and audio uses `<Audio 1>`. A paired video soundtrack
 receives its audio number before the video tag. Standalone audio continues the
 audio number sequence after the paired tracks.
 
+## Direct the performance with audio
+
+After adding audio, use the **Audio direction** selector beside clip length:
+
+- **Reference only** keeps the existing behaviour: H3 generates a new soundtrack
+  using the uploaded audio as a reference.
+- **Follow Audio 1** uses that vocal as a timeline guide during generation and
+  keeps it as the output soundtrack. With several clips, choose which one to follow.
+
+For example, upload a character image and a vocal, choose **Follow Audio 1**, then
+write `The character in <Picture 1> says <audio 1>.` Tags are case-insensitive in
+Studio and are converted to H3's native spelling before submission. Mentioning an
+audio tag alone does not enable follow mode.
+
+Follow mode starts standalone audio at zero. A paired video soundtrack follows
+that video's selected start. It trims the vocal to the output clip length and
+pads a shorter vocal with silence, without looping. The ten-second reference
+context limit does not cut off the followed vocal in a longer output.
+
+The editable graph uses native `MiniMaxH3AddGuide` audio conditioning with the
+reference AV latent. It does not simply replace the soundtrack after sampling.
+The soundtrack comes from the uploaded audio, while facial timing remains a
+model-generated performance and should be reviewed. This is not a frozen target
+audio latent or a guarantee of exact lip synchronisation.
+
 ## Sampling
 
 The Fast profile pairs the installed INT8 Ref2VA checkpoint with the verified
