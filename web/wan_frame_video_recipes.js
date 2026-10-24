@@ -11,7 +11,7 @@ export const WAN_FRAME_VIDEO_MODELS=Object.freeze({
 });
 export const WAN_FRAME_VIDEO_CAPABILITIES=Object.freeze({
   id:'wan',label:'Wan 2.2',fps:24,dimensionStep:16,frameStep:4,
-  minFrames:9,maxFrames:81,defaultFrames:81,defaultSteps:4,minSteps:4,maxSteps:4,
+  minFrames:9,maxFrames:361,defaultFrames:81,defaultSteps:4,minSteps:4,maxSteps:4,
   minDimension:256,maxDimension:1536,maxPixels:1344*768,
   supportsAudioReference:false,generatesAudio:false,
   precision:'FP8 scaled',attention:'comfy kitchen attention',
@@ -33,7 +33,7 @@ export function buildWanFrameVideoGraph(c){
   if(c.audioEnabled)throw new Error('Wan 2.2 does not use audio references. Switch Audio reference off or choose H3 or LTX.');
   const {width,height}=wanFrameVideoDimensions(c),cap=WAN_FRAME_VIDEO_CAPABILITIES;
   const frames=Number(c.frames??cap.defaultFrames),steps=Number(c.steps??cap.defaultSteps),seed=Number(c.seed??42);
-  if(!Number.isInteger(frames)||frames<cap.minFrames||frames>cap.maxFrames||(frames-1)%cap.frameStep!==0)throw new Error('Choose 9–81 frames in steps of 4 (4n + 1) for each Wan section.');
+  if(!Number.isInteger(frames)||frames<cap.minFrames||frames>cap.maxFrames||(frames-1)%cap.frameStep!==0)throw new Error('Choose 9–361 frames in steps of 4 (4n + 1), up to about 15 seconds.');
   if(steps!==4)throw new Error('This Wan Lightx2v preset uses four sampling steps.');
   if(!Number.isSafeInteger(seed)||seed<0)throw new Error('Seed must be a positive whole number or zero.');
   const attention=c.attention||cap.attention;

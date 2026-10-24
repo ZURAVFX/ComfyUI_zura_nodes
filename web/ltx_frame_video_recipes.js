@@ -8,7 +8,7 @@ export const LTX_FRAME_VIDEO_MODELS=Object.freeze({
 });
 export const LTX_DISTILLED_SIGMAS='1.0,0.99375,0.9875,0.98125,0.975,0.909375,0.725,0.421875,0.0';
 export const LTX_FRAME_VIDEO_CAPABILITIES=Object.freeze({
-  id:'ltx',label:'LTX 2.5',fps:24,dimensionStep:32,frameStep:8,minFrames:9,maxFrames:257,defaultFrames:49,
+  id:'ltx',label:'LTX 2.5',fps:24,dimensionStep:32,frameStep:8,minFrames:9,maxFrames:361,defaultFrames:49,
   defaultSteps:8,minSteps:8,maxSteps:8,supportsAudioReference:true,audioReferenceRole:'performance',generatesAudio:true,
   maxPixels:1344*768,
   nodeTypes:['LoadImage','ImageScale','UNETLoader','ModelAttentionBackend','CLIPLoader','CLIPTextEncode','VAELoader',
@@ -24,7 +24,7 @@ export function buildLtxFrameVideoGraph(c){
   const width=Number(c.width),height=Number(c.height),frames=Number(c.frames),steps=Number(c.steps??8),seed=Number(c.seed??42);
   if(![width,height].every(n=>Number.isInteger(n)&&n>=256&&n<=1536&&n%32===0))throw new Error('Use dimensions in 32-pixel increments, from 256 to 1536 pixels.');
   if(width*height>LTX_FRAME_VIDEO_CAPABILITIES.maxPixels)throw new Error('Choose a size up to 1.03 megapixels for this LTX recipe.');
-  if(!Number.isInteger(frames)||frames<9||frames>257||(frames-1)%8!==0)throw new Error('LTX needs 8n + 1 frames, from 9 to 257.');
+  if(!Number.isInteger(frames)||frames<9||frames>LTX_FRAME_VIDEO_CAPABILITIES.maxFrames||(frames-1)%8!==0)throw new Error('LTX needs 8n + 1 frames, from 9 to 361 (about 15 seconds).');
   if(steps!==8)throw new Error('The LTX 2.5 distilled model uses its fixed 8-step schedule.');
   if(c.fps!=null&&Number(c.fps)!==24)throw new Error('This LTX recipe runs at 24 fps.');
   if(!Number.isSafeInteger(seed)||seed<0)throw new Error('Seed must be a positive whole number or zero.');

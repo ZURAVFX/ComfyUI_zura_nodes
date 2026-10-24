@@ -3,7 +3,7 @@ import {buildWanFrameVideoGraph,wanFrameVideoAvailability,WAN_FRAME_VIDEO_CAPABI
 import {buildLtxFrameVideoGraph,ltxFrameVideoAvailability,LTX_FRAME_VIDEO_CAPABILITIES} from './ltx_frame_video_recipes.js';
 
 const h3={id:'h3',label:'MiniMax H3',fps:24,dimensionStep:32,minDimension:256,maxDimension:1536,maxPixels:1344*768,
-  minFrames:22,maxFrames:124,frameStep:17,frameOffset:5,defaultFrames:73,defaultSteps:8,minSteps:4,maxSteps:40,
+  minFrames:22,maxFrames:362,frameStep:17,frameOffset:5,defaultFrames:73,defaultSteps:8,minSteps:4,maxSteps:40,
   supportsAudioReference:true,generatesAudio:true,precision:'INT8',
   nodeTypes:['UNETLoader','CLIPLoader','VAELoader','LoraLoaderModelOnly','ModelAttentionBackend','MiniMaxH3ImageToVideo','MiniMaxH3AddGuide','LoadAudio','LoadImage','ImageScale','BasicGuider','BasicScheduler','KSamplerSelect','RandomNoise','SamplerCustomAdvanced','VAEDecode','VAEDecodeAudio','CreateVideo','SaveVideo']};
 export const ENDPOINT_RECIPES=[

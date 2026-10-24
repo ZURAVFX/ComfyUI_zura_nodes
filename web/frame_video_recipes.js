@@ -7,7 +7,8 @@ export const FRAME_VIDEO_MODELS={
   audioVae:'minimax_h3_audio_vae_fp32.safetensors',
   lora:'minimax_h3_fl2v_turbo_8step_v1.0_comfyui_bf16.safetensors',
 };
-export const FRAME_LENGTHS=[22,39,56,73,90,107,124];
+// Keep the native 17k+5 grid. 362 frames is the trained ~15-second ceiling.
+export const FRAME_LENGTHS=Array.from({length:21},(_,i)=>22+i*17);
 export const FRAME_SIZE_PRESETS=[
   {id:'landscape',label:'Landscape · 16:9',width:1344,height:768,ratio:16/9},
   {id:'portrait',label:'Portrait · 9:16',width:768,height:1344,ratio:9/16},

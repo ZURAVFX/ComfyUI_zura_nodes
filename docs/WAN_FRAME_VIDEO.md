@@ -29,7 +29,7 @@ claim is made from schema validation alone.
 ## Length and continuation
 
 The preset renders at 24 fps with `4n + 1` frames. Each section is bounded to
-9–81 frames here, not the native node's much larger theoretical length limit.
+9–361 frames here, up to 15.04 seconds, not the native node's much larger theoretical length limit.
 The default reference size is 736 × 416. The interface may choose a smaller
 frame or section size to reduce memory use; even a short 14B clip can offload
 on a 16 GB GPU, so these limits are not a guarantee of VRAM-only execution.
@@ -40,8 +40,9 @@ section and use the user's final image only for the final section. It must
 remove the carried overlap exactly once, preserve 24 fps, reset at shot cuts,
 and visually check joins and identity drift. There is no automatic native
 unbounded loop in this recipe, and repeated independent endpoint graphs must
-not be advertised as seamless continuation. Longer output is not enabled by
-increasing this builder's per-section frame cap.
+not be advertised as seamless continuation. The 15-second option samples one
+longer native window and uses more memory. It does not implement bounded
+continuation or guarantee 15 seconds at the maximum resolution on 16 GB.
 
 The native implementation is `comfy_extras/nodes_wan.py` in ComfyUI. The
 [official Wan 2.2 guide](https://docs.comfy.org/tutorials/video/wan/wan2_2)

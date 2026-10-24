@@ -46,5 +46,17 @@ ui.job=null;ui.render();ui.save();const restored=new FrameVideoWorkspace({...own
 missingLtx=true;await ui.loadModels();assert.equal(ui.availability.ready,false);assert.match(ui.$('setup').textContent,/LTXVAddGuide/);
 change('h3');assert.equal(ui.availability.ready,true);assert.equal(ui.$('generate').disabled,false);assert.equal(ui.config().frames,73);assert.equal(ui.$('steps').disabled,false);
 await ui.generate();assert.equal(submissions[2].model.inputs.unet_name,h3.model);assert.equal(submissions[2].endpoints.inputs.length,73);
-ui.job=null;ui.close();
+ui.job=null;missingLtx=false;await ui.loadModels();
+for(const engine of ['h3','wan','ltx']){
+  change(engine);const maximum=endpointLengths(engine).at(-1);
+  assert.equal(maximum,engine==='h3'?362:361);
+  ui.$('length').value=String(maximum);ui.$('length').dispatchEvent(new window.Event('change'));ui.render();
+  assert.equal(ui.config().frames,maximum);assert.equal(ui.$('generate').disabled,false);
+  assert.equal(ui.$('note').hidden,false);assert.match(ui.$('note').textContent,/15\.0[48]s.*more memory/);
+  const graph=ui.build(ui.config());
+  if(engine==='h3'){assert.equal(graph.endpoints.inputs.length,362);assert.ok(graph.endpoints.inputs.last_frame);}
+  if(engine==='wan')assert.equal(graph.endpoints.inputs.length,361);
+  if(engine==='ltx')assert.equal(graph.guide_last.inputs.frame_idx,360);
+}
+ui.close();
 console.log('Endpoint UI: model switching, native lengths/steps, per-model grid, audio restrictions, draft recovery, selected graph submission and partial node availability pass.');

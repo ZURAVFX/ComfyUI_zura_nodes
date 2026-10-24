@@ -30,7 +30,9 @@ const firstOnly=buildWanFrameVideoGraph({...c,last:null,audio:{file:'stored-unus
 assert.ok(!firstOnly.last&&!firstOnly.fit_last);assert.ok(!('end_image' in firstOnly.endpoints.inputs));assert.ok(!JSON.stringify(firstOnly).includes('stored-unused.wav'));
 assert.throws(()=>buildWanFrameVideoGraph({...c,audioEnabled:true,audio:{file:'reference.wav'}}),/does not use audio references/);
 assert.throws(()=>buildWanFrameVideoGraph({...c,first:null}),/first frame/);assert.throws(()=>buildWanFrameVideoGraph({...c,prompt:' '}),/Describe/);
-assert.throws(()=>buildWanFrameVideoGraph({...c,frames:50}),/4n \+ 1/);assert.throws(()=>buildWanFrameVideoGraph({...c,frames:85}),/each Wan section/);
+assert.throws(()=>buildWanFrameVideoGraph({...c,frames:50}),/4n \+ 1/);assert.throws(()=>buildWanFrameVideoGraph({...c,frames:365}),/15 seconds/);
+assert.equal(caps.maxFrames,361);
+assert.equal(buildWanFrameVideoGraph({...c,frames:361}).endpoints.inputs.length,361);
 assert.throws(()=>buildWanFrameVideoGraph({...c,steps:8}),/four sampling steps/);assert.throws(()=>buildWanFrameVideoGraph({...c,seed:-1}),/Seed/);
 assert.throws(()=>wanFrameVideoDimensions({width:730,height:416}),/multiples of 16/);assert.throws(()=>wanFrameVideoDimensions({width:1536,height:1536}),/megapixels/);
 assert.equal(buildWanFrameVideoGraph({...c,lowMemoryDecode:true}).decode.class_type,'VAEDecodeTiled');

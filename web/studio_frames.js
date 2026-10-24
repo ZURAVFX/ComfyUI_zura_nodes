@@ -140,7 +140,9 @@ export class FrameVideoWorkspace{
     this.$('setup').textContent=this.availability?.ready?'All required models and nodes are installed.':this.availability?'Missing: '+this.availability.missing.join(', '):'Open this workflow to check installed models.';
     const setup=this.loading?`Checking installed ${cap.label} models…`:this.modelError||(!this.availability?`Open this workflow to check installed ${cap.label} models.`:!this.availability.ready?`${cap.label} setup is incomplete. Open generation settings to see missing models.`:'');
     this.$('note').textContent=error||setup||this.dimensionNotice||`${c.frames} frames at ${cap.fps} fps · ${c.last?.file?'First + last frame':'First frame only'} · ${c.audioEnabled?'Follows your audio reference':cap.generatesAudio?`${cap.label} generates audio`:'Silent video'}`;
-    this.$('note').hidden=!error&&!setup&&!this.dimensionNotice;
+    const longClip=c.frames/cap.fps>5;
+    if(!error&&!setup&&!this.dimensionNotice&&longClip)this.$('note').textContent=`${(c.frames/cap.fps).toFixed(2)}s · ${c.frames} frames at ${cap.fps} fps. Longer clips use more memory; try 0.25 MP first on a 16 GB GPU.`;
+    this.$('note').hidden=!error&&!setup&&!this.dimensionNotice&&!longClip;
   }
   renderHistory(){this.$('takes').innerHTML=this.items.map((item,i)=>`<button type="button" data-take="${i}">${escape(item.config.prompt.slice(0,60))} · ${(item.config.frames/24).toFixed(2)}s</button>`).join('');this.$('takes').onclick=e=>{const button=e.target.closest('[data-take]');if(button)this.showResult(this.items[Number(button.dataset.take)].file);};if(this.items[0])this.showResult(this.items[0].file);}
   showResult(file){this.nativeSamplePreview?.clear();this.$('empty').hidden=true;this.$('image-slot').hidden=true;this.$('result').hidden=false;this.$('result').src=view(this.api,file);this.$('history').open=false;}

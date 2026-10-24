@@ -11,6 +11,12 @@ assert.ok(!off.audio_ref&&!off.audio_guide,'Audio off excludes the stored refere
 assert.ok(!JSON.stringify(off).includes('reference.wav'));
 const on=buildFrameVideoGraph({...config,audioEnabled:true});assert.equal(on.audio_ref.inputs.audio,'reference.wav');assert.deepEqual(on.guider.inputs.conditioning,['audio_guide',0]);assert.deepEqual(off.guider.inputs.conditioning,['endpoints',0]);
 assert.equal(off.endpoints.inputs.length/off.video.inputs.fps,73/24,'The UI uses native lengths, preserving the final endpoint and soundtrack timing');
+for(const last of [config.last,null]){
+  const longest=buildFrameVideoGraph({...config,frames:362,last});
+  assert.equal(longest.endpoints.inputs.length,362);assert.equal(longest.video.inputs.fps,24);
+  assert.equal(!!longest.endpoints.inputs.last_frame,!!last);
+}
+assert.throws(()=>buildFrameVideoGraph({...config,frames:379}),/clip length/);
 for(const preset of FRAME_SIZE_PRESETS)for(const mp of FRAME_MEGAPIXELS){
   const size=frameVideoPresetSize(preset.id,mp);
   assert.equal(size.width%32,0);assert.equal(size.height%32,0);

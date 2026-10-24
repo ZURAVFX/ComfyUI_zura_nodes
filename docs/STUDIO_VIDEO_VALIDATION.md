@@ -41,3 +41,22 @@ The local browser permission block prevented visual browser qualification.
 Python changes require a ComfyUI restart; frontend changes require a refresh.
 Longer continuation for the new workspaces remains pending, as recorded in
 `VIDEO_CONTINUATION_STATUS.md`. No public release is implied by these checks.
+
+## Fifteen-second endpoint limit
+
+The first/last-frame controls now allow H3 through 362 frames (15.08 seconds)
+and Wan/LTX through 361 frames (15.04 seconds), preserving each native temporal
+grid at 24 fps. Short defaults remain unchanged; the last image is still
+optional. Longer selections show a memory hint rather than blocking Generate.
+
+All three maximum-length recipes completed real GPU checks at 256 x 256 with
+both endpoints connected. Saved MP4 metadata confirms 362/361/361 frames at
+24 fps. H3 took 38.61 seconds, Wan 44.62 seconds and LTX 49.71 seconds in these
+particular low-resolution runs. These are execution checks using the same still
+at both ends, not quality approvals, high-resolution speed estimates or proof
+that 15 seconds at the maximum megapixel setting fits 16 GB.
+
+Boundary/DOM tests cover selecting and building the maximum for all engines,
+rejecting lengths above the limit, optional last frames, final LTX guide
+indexing and reference-audio duration. This increases a single native window;
+it does not implement constant-memory continuation.

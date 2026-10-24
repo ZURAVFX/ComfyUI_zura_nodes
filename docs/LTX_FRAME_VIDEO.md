@@ -6,7 +6,7 @@ The default uses the installed official distilled INT8 + convrot transformer, Ge
 
 With Audio reference on, the graph trims the supplied waveform to the selected clip, encodes it into audio tokens, freezes those tokens with a zero noise mask, and supplies them alongside the video latent. The original trimmed waveform becomes the output soundtrack. This is performance/audio conditioning, not speaker identity transfer. With Audio reference off, the model generates its own soundtrack. Muting the final output is a separate UI/output concern. Very short reference audio is not silently repeated or padded by this recipe.
 
-The recipe uses 24 fps, dimensions divisible by 32, and frame counts of `8n + 1`. Its bounded builder ceiling is 257 frames and 1.03 megapixels, with 49 frames as the starting default. These are recipe limits, not a measured VRAM guarantee. The upper corner of this range has not been qualified on 16 GB. UI should start conservatively and use actual generation measurements for estimates.
+The recipe uses 24 fps, dimensions divisible by 32, and frame counts of `8n + 1`. Its single-window ceiling is 361 frames (15.04 seconds) and 1.03 megapixels, with 49 frames as the starting default. These are recipe limits, not a measured VRAM guarantee. The upper corner of this range has not been qualified on 16 GB. Longer clips show a hint to start at 0.25 MP on a 16 GB GPU. The last guide stays at the actual final frame, and reference audio follows the native duration.
 
 ## Verification
 
