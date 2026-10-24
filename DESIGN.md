@@ -1,14 +1,14 @@
 ---
 colors:
-  background: "#101013"
-  surface: "#19191e"
-  composer: "#222228"
-  border: "#33333d"
+  background: "#111111"
+  surface: "#1b1b1b"
+  composer: "#222222"
+  border: "#383838"
   primary: "#caff00"
-  foreground: "#f2f2f0"
-  muted: "#a3a3aa"
+  foreground: "#f2f2f2"
+  muted: "#ababab"
   selected: "#292a21"
-  hover: "#26262b"
+  hover: "#303030"
   focus: "#d7ff50"
   warning-indicator: "#edb977"
   error: "#e77e70"
@@ -26,6 +26,16 @@ colors:
 
 The prompt composer follows the supplied compact video-generator reference: attachments on the upper left, a single unboxed writing surface, then model, dimensions, clip length, audio and advanced tools in a bottom row. The primary action sits at the right. Use a single workflow selector rather than the cramped multi-line mode grid. Detailed controls open above the composer or in the inspector, preserving the central media canvas.
 
+The current prompt surface is at most 1200px wide and centred beneath the media
+canvas. Model and workflow stay together; output size and duration form the next
+group; image and audio guidance form a separate group. Quiet vertical separators
+and tighter spacing within groups establish the hierarchy. They wrap naturally
+on narrow screens without forcing the entire page to scroll. Image references
+show real thumbnails with corner remove buttons. Reference to Video can mark one
+uploaded picture as the first-frame guide and retain the existing Follow Audio
+choice. Dark surfaces are neutral greys with equal RGB channels, without a blue
+tint. Light mode keeps the same hierarchy and a saved independent appearance.
+
 ## Overview
 
 Zura Studio is a local creative workspace for image and video generation. The user-approved direction follows Artify: a quiet charcoal canvas, compact tools, a persistent bottom prompt and a single acid-lime primary action. Dark and light themes share the same layout and save the user's choice.
@@ -36,7 +46,7 @@ The scoped CSS variables on `#genj-studio` define the palette above. Charcoal di
 
 ## Typography
 
-Segoe UI with system sans-serif fallbacks. Base text is 14 px. Compact labels are 12–13 px; panel headings are 18 px. Mobile inputs use 16 px text and a 44 px minimum height.
+Manrope variable, bundled locally under the SIL Open Font License, with system sans-serif fallbacks. Base text is 14 px. Tool labels are 13 px and workflow menu options are 14 px, using the same typeface as the canvas. Panel headings are 18 px. Mobile inputs use 16 px text and a 44 px minimum height. The font never needs an external request at runtime.
 
 ## Layout
 

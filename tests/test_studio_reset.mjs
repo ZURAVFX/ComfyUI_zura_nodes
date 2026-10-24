@@ -83,4 +83,36 @@ const calls=[];
   assert.equal(ui.busy,false);
 }
 
-console.log("Start over clears the active draft, safely cancels its render, and ignores late Studio responses.");
+{
+  const {ui,fields}=makeStudio();ui.config.image_prompt='Keep my revised direction';
+  const refs=ui.references,audio=ui.audio;ui.project={id:'previous',phase:'opening'};
+  ui.removeInput('source');assert.equal(ui.source,null);assert.equal(ui.project,null);
+  assert.equal(ui.references,refs);assert.equal(ui.audio,audio);assert.equal(ui.config.start,0);
+  assert.equal(ui.config.mask_points.length,0);assert.equal(ui.config.image_prompt,'Keep my revised direction');
+  assert.equal(fields.get('source').value,'');
+  ui.removeInput('character');assert.equal(ui.references.length,0);assert.equal(fields.get('character').value,'');
+  ui.removeInput('ready');assert.equal(ui.readyAsset,null);assert.equal(ui.lookMode,'build');
+}
+{
+  const {ui}=makeStudio();ui.project={id:'active',phase:'working'};
+  ui.removeInput('source');assert.equal(ui.source.id,'src');assert.equal(ui.project.id,'active');
+}
+{
+  const {ui,fields}=makeStudio();ui.lookMode='build';ui.config.workflow_mode='swap';
+  let focused=false;fields.set('image_prompt',{focus(){focused=true;}});
+  ui.project={opening_input:{file:'old-result.png'},phase:'opening'};
+  ui.editStartingFrame();assert.equal(ui.promptStage,'image');assert.equal(ui.preview,'original');
+  assert.equal(ui.project.opening_input.file,'old-result.png','Retain previous result for Keep current image without making it the retry input');
+  assert.equal(focused,true);
+}
+{
+  const {ui}=makeStudio();ui.lookMode='build';ui.project={id:'prepared',phase:'opening'};
+  ui.config.image_prompt='Keep this direction';ui.readConfig=()=>({...ui.config});
+  const source=ui.source,refs=ui.references;
+  ui.changeOpeningModel('qwen2511');
+  assert.equal(ui.config.opening_model,'qwen2511');assert.equal(ui.config.image_prompt,'Keep this direction');
+  assert.equal(ui.source,source);assert.equal(ui.references,refs);assert.equal(ui.project.id,'prepared','A model change reuses source preparation');
+  assert.equal(ui.promptStage,'image');assert.equal(ui.preview,'original');
+  ui.project.phase='working';ui.changeOpeningModel('qwen21');assert.equal(ui.config.opening_model,'qwen2511');
+}
+console.log("Input removal and model changes preserve the other inputs; image retries use the original source.");

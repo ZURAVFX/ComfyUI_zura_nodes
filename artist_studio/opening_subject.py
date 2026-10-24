@@ -17,6 +17,9 @@ def directed_source_subject(config):
     if not match:
         return None
     target = match.group(1).strip(" \"'")
+    from .opening_edit import target_position
+    if target_position(target) != 'auto':
+        return None  # Spatial people are selected individually, not as a SAM category.
     if target.lower() in {"it", "this", "that", "him", "her", "them", "subject", "character", "person", "performer", "man", "woman", "guy", "bloke"}:
         return None
     # 'X and Y' needs the artist's explicit multi-subject selection, as do

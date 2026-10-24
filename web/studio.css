@@ -1,5 +1,6 @@
-#genj-studio,#genj-studio-launch{font-family:"Segoe UI",system-ui,sans-serif;font-size:14px;line-height:1.45;color:var(--zc-text)}
-:root{--gs-bg:#101013;--gs-panel:#19191e;--gs-line:#33333d;--gs-muted:#a3a3aa;--gs-accent:#caff00;--gs-ink:#17180f;--gs-accent-bright:#dcff55;--gs-accent-soft:#d7f76b;--gs-selected:#292a21;--gs-input:#202026;--gs-focus:#d7ff50;--gs-warning:#edb977;--gs-error:#e77e70;--gs-overlay-backdrop:rgba(0,0,0,.73);--gs-floating-shadow:rgba(0,0,0,.25);--zc-text:#f2f2f0;--zc-hover:#26262b;--zc-canvas:#101013;--zc-composer:#222228}
+@font-face{font-family:"Zura Manrope";src:url("./assets/fonts/Manrope-Variable.ttf") format("truetype");font-weight:200 800;font-style:normal;font-display:swap}
+#genj-studio,#genj-studio-launch{font-family:"Zura Manrope",system-ui,sans-serif;font-size:14px;line-height:1.5;color:var(--zc-text);font-synthesis:none}
+:root{--gs-bg:#111111;--gs-panel:#1b1b1b;--gs-line:#383838;--gs-muted:#ababab;--gs-accent:#caff00;--gs-ink:#17180f;--gs-accent-bright:#dcff55;--gs-accent-soft:#d7f76b;--gs-selected:#292a21;--gs-input:#262626;--gs-focus:#d7ff50;--gs-warning:#edb977;--gs-error:#e77e70;--gs-overlay-backdrop:rgba(0,0,0,.73);--gs-floating-shadow:rgba(0,0,0,.25);--zc-text:#f2f2f2;--zc-hover:#303030;--zc-canvas:#111111;--zc-composer:#222222}
 #genj-studio{position:fixed;inset:0;z-index:1100;background:var(--gs-bg);overflow:auto;color-scheme:dark}
 #genj-studio *{box-sizing:border-box}
 #genj-studio [hidden]{display:none!important}

@@ -1,12 +1,12 @@
 /* Zura Studio workspace. Layout lives here; native control components live in
    studio_components.css. One shell, one token set, one composer per workspace. */
 #genj-studio[data-workspace]{
- --gs-bg:#101013;--gs-panel:#19191e;--gs-input:#19191e;--gs-line:#33333d;--gs-muted:#a3a3aa;
+ --gs-bg:#111111;--gs-panel:#1b1b1b;--gs-input:#262626;--gs-line:#383838;--gs-muted:#ababab;
  --gs-selected:#292a21;--gs-accent:#caff00;--gs-accent-bright:#dcff55;--gs-accent-soft:#d7f76b;--gs-focus:#d7ff50;--gs-ink:#17180f;
- --zc-text:#f2f2f0;--zc-hover:#26262b;--zc-canvas:#101013;--zc-composer:#222228;
+ --zc-text:#f2f2f2;--zc-hover:#303030;--zc-canvas:#111111;--zc-composer:#222222;
  display:flex;flex-direction:column;position:fixed;inset:0;width:100vw;height:100dvh;max-height:100dvh;min-width:0;min-height:0;overflow:clip;overscroll-behavior:none;background:var(--gs-bg);color:var(--zc-text);color-scheme:dark;font-size:14px;line-height:1.5;
 }
-#genj-studio[data-theme=light]{--gs-bg:#f5f5f1;--gs-panel:#fff;--gs-input:#f0f0eb;--gs-line:#dcdcd5;--gs-muted:#686861;--gs-selected:#eaf0d6;--gs-accent:#caff00;--gs-accent-bright:#d9ff4f;--gs-accent-soft:#5b7100;--gs-focus:#627b00;--zc-text:#202019;--zc-hover:#ecece5;--zc-canvas:#e9e9e2;--zc-composer:#fff;--gs-ink:#17180f;color-scheme:light}
+#genj-studio[data-theme=light]{--gs-bg:#f5f5f5;--gs-panel:#fff;--gs-input:#f0f0f0;--gs-line:#d9d9d9;--gs-muted:#666666;--gs-selected:#eaf0d6;--gs-accent:#caff00;--gs-accent-bright:#d9ff4f;--gs-accent-soft:#5b7100;--gs-focus:#627b00;--zc-text:#202020;--zc-hover:#ebebeb;--zc-canvas:#eeeeee;--zc-composer:#fff;--gs-ink:#17180f;color-scheme:light}
 #genj-studio[data-workspace] [hidden]{display:none!important}
 #genj-studio[data-workspace] .gs-top{height:64px;min-height:64px;padding:0 24px;gap:24px;border-bottom:1px solid var(--gs-line);flex-shrink:0}
 #genj-studio[data-workspace] .gs-brand{gap:10px;flex-shrink:0}

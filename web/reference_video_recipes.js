@@ -1,5 +1,6 @@
 // Native MiniMax H3 Ref2Video recipe. References are ingredients for identity,
-// appearance, scene, motion cues and audio; they are not frame anchors.
+// appearance, scene, motion cues and audio. A selected picture can also anchor
+// the first frame through H3's native timeline guide.
 export const REFERENCE_VIDEO_MODELS=Object.freeze({
   ref2va:'minimax_h3_ref2va_pruned_int8_convrot.safetensors',
   viggle:'minimax_h3_ref2va_viggle_pruned_int8_convrot.safetensors',
@@ -36,7 +37,7 @@ export const REFERENCE_VIDEO_CAPABILITIES=Object.freeze({
   maxAudioSeconds:10,
   promptTags:['<Picture i>','<Video k>','<Audio j>'],
   nodeTypes:[
-    'LoadImage','LoadVideo','Video Slice','GetVideoComponents','H3ReferenceVideo',
+    'LoadImage','ImageScale','LoadVideo','Video Slice','GetVideoComponents','H3ReferenceVideo',
     'LoadAudio','TrimAudioDuration','H3ReferenceAudio','UNETLoader','LoraLoaderModelOnly',
     'CLIPLoader','VAELoader','MiniMaxH3ReferenceToVideo','MiniMaxH3SigmaShift',
     'ModelAttentionBackend','BasicGuider','BasicScheduler','KSamplerSelect',
@@ -175,6 +176,10 @@ function normaliseConfig(c={}){
   const images=list(c.images||[],'Image references');
   const videos=list(c.videos||[],'Video references');
   const audios=list(c.audios||[],'Audio references');
+  const firstFrame=c.firstFrame??'';
+  if(typeof firstFrame!=='string'||firstFrame&&!images.some(image=>image.file===firstFrame)){
+    throw new Error('Choose an uploaded picture as the first frame, or select References only.');
+  }
   const audioDriver=c.audioDriver||'';
   if(audioDriver&&!referenceAudioSources(c).some(source=>source.key===audioDriver))throw new Error('Choose an uploaded audio to follow, or select Reference only.');
   if(images.length>caps.maxImages)throw new Error(`H3 supports up to ${caps.maxImages} reference images.`);
@@ -219,7 +224,7 @@ function normaliseConfig(c={}){
   if(!Number.isSafeInteger(seed)||seed<0)throw new Error('Seed must be a positive whole number or zero.');
   if(c.refImageSize!==undefined&&!['match','max'].includes(c.refImageSize))throw new Error('Choose Match or Max reference image sizing.');
   return {
-    ...c,images,videos,audios,audioDriver,
+    ...c,images,videos,audios,firstFrame,audioDriver,
     prompt:referenceVideoPrompt({...c,images,videos,audios}),
     model,speedup,spectrum,steps,seed,
     refImageSize:c.refImageSize||'match',
@@ -292,6 +297,15 @@ export function buildReferenceVideoGraph(config={}){
     clip,vae:videoVae,audio_vae:audioVae,prompt:c.prompt,width:c.width,height:c.height,
     length:c.frames,ref_image_size:c.refImageSize,...references,
   },'Combine image, video and audio references');
+  if(c.firstFrame){
+    const imageIndex=c.images.findIndex(image=>image.file===c.firstFrame);
+    const fitted=node('fit_first','ImageScale',{
+      image:ref(`image_${imageIndex+1}`),upscale_method:'lanczos',width:c.width,height:c.height,crop:'center',
+    },'Fit the selected first frame without stretching');
+    positive=node('first_guide','MiniMaxH3AddGuide',{
+      positive,latent:ref('references',1),vae:videoVae,image:fitted,frame_idx:0,
+    },'Anchor the selected picture at the first frame');
+  }
   let followedAudio;
   if(c.audioDriver){
     const source=referenceAudioSources(c).find(item=>item.key===c.audioDriver),duration=c.frames/caps.fps;
@@ -330,6 +344,7 @@ export function referenceVideoAvailability(info={},config={}){
     'BasicGuider','BasicScheduler','KSamplerSelect','RandomNoise',
     'SamplerCustomAdvanced','VAEDecode','CreateVideo','SaveVideo',
   ];
+  if(config.firstFrame)requiredNodes.push('ImageScale','MiniMaxH3AddGuide');
   if(config.audioDriver)requiredNodes.push('MiniMaxH3AddGuide','EmptyAudio','AudioConcat','TrimAudioDuration','H3ReferenceAudio','LoadAudio');
   else requiredNodes.push('VAEDecodeAudio');
   if(counts.images)requiredNodes.push('LoadImage');

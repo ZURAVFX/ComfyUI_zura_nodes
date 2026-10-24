@@ -1,0 +1,27 @@
+import assert from 'node:assert/strict';
+import {parseHTML} from '../../ui-check/node_modules/linkedom/esm/index.js';
+import {VideoComposer} from '../web/studio_composer.js';
+
+const {document,window}=parseHTML(`<html><body><div id="studio"><input name="gs-look" value="ready" type="radio"/><details id="models"><summary></summary><select><option value="klein9b">Klein</option><option value="qwen2511">Qwen</option></select><span data-opening-model-label></span><button data-opening-model="klein9b"></button><button data-opening-model="qwen2511"></button><p data-opening-status></p><button data-use-finished-image></button></details></div></body></html>`);
+Object.defineProperty(window.HTMLSelectElement.prototype,'value',{configurable:true,get(){return this.querySelector('option[selected]')?.value||'';},set(v){for(const option of this.querySelectorAll('option'))option.selected=option.value===v;}});
+const composer=Object.create(VideoComposer.prototype);
+composer.root=document.querySelector('#studio');composer.imageModel=document.querySelector('#models');
+composer.studio={config:{opening_model:'klein9b'},lookMode:'build',modelStatus:{opening_models:{klein9b:{ready:true},qwen2511:{ready:false}}}};
+composer.syncOpeningModel(false);
+assert.equal(composer.imageModel.querySelector('[data-opening-model-label]').textContent,'FLUX Klein 9B');
+assert.equal(composer.imageModel.querySelector('[data-opening-model="qwen2511"]').disabled,true,'A missing Qwen setup cannot disable the ready Klein option');
+assert.equal(composer.imageModel.querySelector('[data-opening-model="klein9b"]').disabled,false);
+assert.equal(composer.imageModel.querySelector('[data-opening-status]').hidden,false);
+composer.studio.modelStatus.opening_models.qwen2511.ready=true;
+composer.studio.config.opening_model='qwen2511';composer.syncOpeningModel(false);
+assert.equal(composer.imageModel.querySelector('[data-opening-model-label]').textContent,'Qwen Image Edit 2511');
+assert.equal(composer.imageModel.querySelector('[data-opening-model="qwen2511"]').getAttribute('aria-checked'),'true');
+assert.equal(composer.imageModel.querySelector('[data-opening-status]').hidden,true);
+composer.studio.lookMode='ready';composer.syncOpeningModel(false);
+assert.equal(composer.imageModel.querySelector('[data-opening-model-label]').textContent,'Finished image');
+assert.equal(composer.imageModel.querySelector('[data-use-finished-image]').getAttribute('aria-checked'),'true');
+assert.equal(composer.imageModel.querySelector('[data-opening-model="qwen2511"]').getAttribute('aria-checked'),'false');
+composer.imageModel.open=true;composer.syncOpeningModel(true);
+assert.equal(composer.imageModel.open,false,'Rendering closes the model picker');
+for(const button of composer.imageModel.querySelectorAll('button'))assert.equal(button.disabled,true);
+console.log('Starting image generator menu preserves selected model, finished-image choice, independent readiness and render locking.');

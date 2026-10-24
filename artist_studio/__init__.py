@@ -203,14 +203,15 @@ class GenjChoosePerformer:
     @classmethod
     def INPUT_TYPES(cls):
         return {"required": {"masks": ("MASK",), "performer": ("INT", {"default": -1, "min": -1, "max": 63,
-                "tooltip": "-1 selects the largest central detection. Otherwise use a zero-based detection index."})}}
+                "tooltip": "-1 selects the largest central detection. Otherwise use a zero-based detection index."})},
+                "optional": {"position": (["auto", "centre", "left", "right"], {"default": "auto"})}}
 
     RETURN_TYPES = ("MASK", "STRING")
     RETURN_NAMES = ("initial_performer_mask", "selection")
     FUNCTION = "choose"
     CATEGORY = CATEGORY
 
-    def choose(self, masks, performer):
+    def choose(self, masks, performer, position="auto"):
         areas = masks.sum(dim=(-1, -2))
         valid = areas > 1
         if not bool(valid.any()):
@@ -223,7 +224,13 @@ class GenjChoosePerformer:
             cy = (masks * ys).sum((-1, -2)) / areas.clamp_min(1)
             distance = ((cx / w - 0.5) ** 2 + (cy / h - 0.5) ** 2)
             score = areas / (1 + 4 * distance)
-            score[~valid] = -1
+            if position == "centre":
+                score = -(cx / w - 0.5).abs()
+            elif position == "left":
+                score = -cx / w
+            elif position == "right":
+                score = cx / w
+            score[~valid] = -float("inf")
             performer = int(score.argmax())
         if performer >= len(masks):
             raise ValueError(f"Detected {len(masks)} objects. Select an index from 0 to {len(masks) - 1}.")

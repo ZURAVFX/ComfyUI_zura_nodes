@@ -22,23 +22,39 @@ export class VideoComposer {
   constructor(studio,workspace){
     this.studio=studio;this.workspace=workspace;this.root=studio.container;
     const composer=this.root.querySelector('.gs-composer');composer.classList.add('zc-prompt-card');
-    const task=document.createElement('label');task.className='zc-task-control zc-tool';
-    task.innerHTML=`<span class="zc-sr-only">Video workflow</span><select id="zc-video-task" class="zu-select" aria-label="Video workflow">${VIDEO_WORKFLOWS.map(([id,label])=>`<option value="${id}">${label}</option>`).join('')}</select>${composerIcons.chevron}`;
+    const task=document.createElement('details');task.className='zc-task-control zc-tool-popup';
+    task.innerHTML=`<summary aria-label="Video workflow" aria-haspopup="menu"><span data-workflow-label></span>${composerIcons.chevron}</summary><select id="zc-video-task" aria-label="Video workflow" hidden aria-hidden="true" tabindex="-1">${VIDEO_WORKFLOWS.map(([id,label])=>`<option value="${id}">${label}</option>`).join('')}</select><div class="zc-tool-panel zc-workflow-menu" role="menu" aria-label="Video workflow">${VIDEO_WORKFLOWS.map(([id,label])=>`<button type="button" role="menuitemradio" aria-checked="false" data-workflow="${id}">${label}<span aria-hidden="true"></span></button>`).join('')}</div>`;
     this.task=task;
     this.root.querySelector('.gs-workflow-choice').hidden=true;
     task.querySelector('select').onchange=e=>this.selectWorkflow(e.target.value);
+    task.addEventListener('click',e=>{if(task.querySelector('select').disabled){e.preventDefault();return;}const option=e.target.closest('[data-workflow]');if(!option||option.disabled)return;task.open=false;this.selectWorkflow(option.dataset.workflow);task.querySelector('summary').focus({preventScroll:true});});
+    task.addEventListener('keydown',e=>{if(!['ArrowDown','ArrowUp','Home','End','Escape'].includes(e.key))return;if(e.key==='Escape'){task.open=false;task.querySelector('summary').focus({preventScroll:true});e.preventDefault();return;}e.preventDefault();task.open=true;const items=[...task.querySelectorAll('[data-workflow]')].filter(b=>!b.disabled),index=items.indexOf(this.root.ownerDocument.activeElement);const next=e.key==='Home'?0:e.key==='End'?items.length-1:index<0?(e.key==='ArrowUp'?items.length-1:0):(index+(e.key==='ArrowUp'?-1:1)+items.length)%items.length;items[next]?.focus({preventScroll:true});});
     const attachments=document.createElement('div');attachments.className='zc-composer-attachments';
     attachments.innerHTML=`<button type="button" id="zc-attach-source" class="zc-attachment">${composerIcons.video}<span>Source video</span></button><button type="button" id="zc-attach-refs" class="zc-attachment">${composerIcons.image}<span>References</span></button><button type="button" id="zc-attach-frame" class="zc-attachment">${composerIcons.image}<span>Finished frame</span></button>`;
+    for(const [id,type,label] of [['source','source','source video'],['refs','character','references'],['frame','ready','finished frame']]){
+      const input=attachments.querySelector('#zc-attach-'+id),slot=document.createElement('div');slot.className='zc-attachment-slot';input.before(slot);slot.append(input);
+      const remove=document.createElement('button');remove.type='button';remove.className='zf-remove-frame zc-remove-input';remove.id='zc-remove-'+id;remove.setAttribute('aria-label','Remove '+label);remove.innerHTML=svg('<path d="m7 7 10 10M7 17 17 7"/>');remove.hidden=true;
+      remove.onclick=()=>studio.removeInput(type);slot.append(remove);
+    }
     composer.insertBefore(attachments,studio.$('prompt-composer'));
     const bottom=document.createElement('div');bottom.className='zc-prompt-bottom';
     const tools=document.createElement('div');tools.className='zc-prompt-tools';bottom.append(tools);this.tools=tools;
+    const recipeTools=document.createElement('div');recipeTools.className='zc-tool-group';recipeTools.setAttribute('role','group');recipeTools.setAttribute('aria-label','Model and workflow');tools.append(recipeTools);
     const model=document.createElement('label');model.className='zc-model-control zc-tool';
     model.innerHTML=`${composerIcons.model}<span class="zc-sr-only">Video model</span><select id="zc-video-model" aria-label="Video model"></select>${composerIcons.chevron}`;
-    tools.append(model);
-    const imageModel=document.createElement('span');imageModel.className='zc-tool zc-frame-model';imageModel.innerHTML=`${composerIcons.model}<span>FLUX Klein</span>`;tools.append(imageModel,task);this.imageModel=imageModel;this.model=model;
-    this.resolution=this.popup('resolution','Output resolution',composerIcons.size,studio.$('quality-setting'));tools.append(this.resolution);
-    const lengthControls=this.root.querySelector('.gs-clip-length');lengthControls.append(studio.$('duration-setting'));
-    this.length=this.popup('length','Clip length',composerIcons.clock,lengthControls);tools.append(this.length);
+    recipeTools.append(model);
+    const imageModel=document.createElement('details');imageModel.className='zc-tool-popup zc-frame-model';
+    imageModel.innerHTML=`<summary aria-label="Starting image model" aria-haspopup="menu">${composerIcons.model}<span data-opening-model-label>FLUX Klein 9B</span>${composerIcons.chevron}</summary><select id="zc-opening-model" hidden aria-hidden="true" tabindex="-1" aria-label="Starting image model"><option value="klein9b">FLUX Klein 9B</option><option value="qwen2511">Qwen Image Edit 2511</option><option value="qwen21">Qwen Image 2.1</option></select><div class="zc-tool-panel zc-workflow-menu zc-opening-menu" role="menu" aria-label="Starting image generator"><button type="button" role="menuitemradio" aria-checked="true" data-opening-model="klein9b">FLUX Klein 9B<span aria-hidden="true"></span></button><button type="button" role="menuitemradio" aria-checked="false" data-opening-model="qwen2511">Qwen Image Edit 2511<span aria-hidden="true"></span></button><button type="button" role="menuitemradio" aria-checked="false" data-opening-model="qwen21">Qwen Image 2.1<span aria-hidden="true"></span></button><p data-opening-status hidden></p><button type="button" role="menuitemradio" aria-checked="false" data-use-finished-image>Use finished image<span aria-hidden="true"></span></button></div>`;
+    imageModel.querySelector('select').onchange=e=>studio.changeOpeningModel(e.target.value);
+    imageModel.addEventListener('click',e=>{if(studio.busy||studio.project?.phase==='working'){e.preventDefault();return;}const option=e.target.closest('[data-opening-model]');if(option&&!option.disabled){imageModel.open=false;studio.changeOpeningModel(option.dataset.openingModel);}const ready=e.target.closest('[data-use-finished-image]');if(ready&&!ready.disabled){imageModel.open=false;const input=this.root.querySelector('input[name="gs-look"][value="ready"]');if(input&&!input.disabled){input.checked=true;input.dispatchEvent(new this.root.ownerDocument.defaultView.Event('change',{bubbles:true}));studio.$('ready').click();}}});
+    imageModel.addEventListener('keydown',e=>{if(!['ArrowDown','ArrowUp','Home','End'].includes(e.key)||studio.busy||studio.project?.phase==='working')return;e.preventDefault();imageModel.open=true;const items=[...imageModel.querySelectorAll('[role="menuitemradio"]')].filter(b=>!b.disabled),index=items.indexOf(this.root.ownerDocument.activeElement),next=e.key==='Home'?0:e.key==='End'?items.length-1:index<0?0:(index+(e.key==='ArrowUp'?-1:1)+items.length)%items.length;items[next]?.focus({preventScroll:true});});
+    recipeTools.append(imageModel,task);this.imageModel=imageModel;this.model=model;
+    const outputTools=document.createElement('div');outputTools.className='zc-tool-group';outputTools.setAttribute('role','group');outputTools.setAttribute('aria-label','Video size and length');tools.append(outputTools);
+    this.resolution=this.popup('resolution','Output resolution',composerIcons.size,studio.$('quality-setting'));outputTools.append(this.resolution);
+    const lengthControls=this.root.querySelector('.gs-clip-length');studio.$('trim-precision').querySelector('.gs-two').append(studio.$('duration-setting'));
+    this.length=this.popup('length','Clip length',composerIcons.clock,lengthControls);this.length.classList.add('zc-trim-popup');
+    const timing=this.root.querySelector('.zc-video-timing');if(timing){timing.querySelector('summary').onclick=e=>{e.preventDefault();this.length.open=!this.length.open;};}
+    const trimPanel=this.length.querySelector('.zc-tool-panel');trimPanel.append(studio.$('trimmer'),studio.$('trim-precision'));outputTools.append(this.length);
     // Original audio fields keep their listeners, uploads and model restrictions.
     this.audio=document.createElement('div');this.audio.className='zc-tool-popup zc-composer-audio';
     this.audio.append(studio.$('audio-settings'));tools.append(this.audio);
@@ -57,7 +73,7 @@ export class VideoComposer {
       button.ondrop=e=>{e.preventDefault();e.stopPropagation();button.classList.remove('is-dragging');const files=Array.from(e.dataTransfer?.files||[]);studio.upload(type,type==='character'?files:files[0]);};
     }
     // One popover at a time. Escape returns focus to its trigger.
-    composer.addEventListener('toggle',e=>{const detail=e.target;if(detail.tagName==='DETAILS'&&detail.open)for(const other of composer.querySelectorAll('details'))if(other!==detail)other.open=false;},true);
+    composer.addEventListener('toggle',e=>{const detail=e.target;if(detail.tagName==='DETAILS'&&detail.open)for(const other of composer.querySelectorAll('details.zc-tool-popup,.zc-composer-audio>details'))if(other!==detail&&!other.contains(detail)&&!detail.contains(other))other.open=false;},true);
     composer.addEventListener('keydown',e=>{if(e.key!=='Escape')return;const open=Array.from(composer.querySelectorAll('details')).find(d=>d.open);if(open){open.open=false;open.querySelector('summary').focus({preventScroll:true});e.stopPropagation();}});
     this.composer=composer;this.sync();
   }
@@ -87,7 +103,26 @@ export class VideoComposer {
     for(const option of select.querySelectorAll('option')){
       const input=this.root.querySelector(`input[name="gs-workflow"][value="${option.value}"]`);
       option.disabled=!!input?.disabled;
+      const item=this.task.querySelector(`[data-workflow="${option.value}"]`);item.disabled=select.disabled||option.disabled;item.setAttribute('aria-checked',String(option.value===select.value));
     }
+    const label=VIDEO_WORKFLOWS.find(([id])=>id===select.value)?.[1]||'Video workflow';this.task.querySelector('[data-workflow-label]').textContent=label;
+    const trigger=this.task.querySelector('summary');trigger.setAttribute('aria-label','Video workflow: '+label);trigger.setAttribute('aria-disabled',String(select.disabled));
+    if(select.disabled)this.task.open=false;
+  }
+  syncOpeningModel(working){
+    const chosen=this.studio.config.opening_model||'klein9b',status=this.studio.modelStatus?.opening_models,ready=this.studio.lookMode==='ready';
+    this.imageModel.querySelector('select').value=chosen;
+    const names={klein9b:'FLUX Klein 9B',qwen2511:'Qwen Image Edit 2511',qwen21:'Qwen Image 2.1'};
+    this.imageModel.querySelector('[data-opening-model-label]').textContent=ready?'Finished image':names[chosen]||names.klein9b;
+    this.imageModel.querySelector('summary').setAttribute('aria-disabled',String(working));
+    for(const option of this.imageModel.querySelectorAll('[data-opening-model]')){
+      const model=status?.[option.dataset.openingModel],needsRestart=!status&&option.dataset.openingModel!=='klein9b';option.disabled=working||needsRestart||model?.ready===false;
+      option.setAttribute('aria-checked',String(!ready&&chosen===option.dataset.openingModel));
+      option.title=needsRestart?'Restart ComfyUI to enable the new image models.':model?.ready===false?'Model setup needed. Check Models & setup.':option.dataset.openingModel==='qwen21'?'Experimental base model - 40 steps, INT8, up to 9 references':option.dataset.openingModel==='qwen2511'?'4-step INT8 edit · original frame + up to 2 references':'4-step FP8 edit · original frame + up to 3 references';
+    }
+    const note=this.imageModel.querySelector('[data-opening-status]'),missing=status&&Object.values(status).some(m=>!m.ready);note.hidden=!missing&&chosen!=='qwen21';note.textContent=chosen==='qwen21'?'Qwen Image 2.1 is experimental and has not been render-tested here.':missing?'Unavailable generators need their model files or nodes installed.':'';
+    const finished=this.imageModel.querySelector('[data-use-finished-image]'),input=this.root.querySelector('input[name="gs-look"][value="ready"]');finished.disabled=working||!!input?.disabled;finished.setAttribute('aria-checked',String(ready));
+    if(working)this.imageModel.open=false;
   }
   popup(id,label,icon,content){
     const detail=document.createElement('details');detail.className='zc-tool-popup';detail.innerHTML=`<summary aria-label="${label}">${icon}<span id="zc-tool-${id}"></span>${composerIcons.chevron}</summary><div class="zc-tool-panel"></div>`;
@@ -98,7 +133,7 @@ export class VideoComposer {
     const button=this.root.querySelector('#zc-attach-'+id);let thumb=button.querySelector('img');
     if(asset?.url){if(!thumb){thumb=document.createElement('img');thumb.alt='';button.prepend(thumb);}thumb.src=asset.poster_url||asset.url;}
     else thumb?.remove();
-    button.classList.toggle('has-media',!!asset);button.querySelector('span').textContent=label;button.title=asset?.name||label;
+    const remove=this.root.querySelector('#zc-remove-'+id);remove.hidden=!asset;remove.disabled=this.studio.busy||this.studio.project?.phase==='working';button.parentElement.hidden=false;button.classList.toggle('has-media',!!asset);button.querySelector('span').textContent=label;button.title=asset?.name||label;
   }
   sync(){
     const s=this.studio,working=s.busy||s.project?.phase==='working',stage=s.composerStage();
@@ -106,7 +141,8 @@ export class VideoComposer {
     const select=this.root.querySelector('#zc-video-model'),radios=Array.from(this.root.querySelectorAll('input[name="gs-engine"]')).filter(r=>!r.closest('label').hidden);
     const key=radios.map(r=>r.value+':'+r.disabled).join('|');
     if(select.dataset.choices!==key){select.replaceChildren();for(const radio of radios){const option=document.createElement('option');option.value=radio.value;option.textContent={local:'LTX 2.5',h3:'MiniMax H3',wan:'Wan 2.2',wan2:'Wan Animate 2',wan21:'Wan 2.1',seedance:'Seedance'}[radio.value];option.disabled=radio.disabled;select.append(option);}select.dataset.choices=key;}
-    select.value=s.config.engine;select.disabled=working;this.model.hidden=stage!=='video';this.imageModel.hidden=stage!=='image'||s.lookMode==='ready';
+    select.value=s.config.engine;select.disabled=working;this.model.hidden=stage!=='video';this.imageModel.hidden=stage!=='image';
+    this.syncOpeningModel(working);
     this.syncWorkflow();
     this.resolution.hidden=stage!=='video';this.audio.hidden=s.$('audio-settings').hidden||stage!=='video';
     this.root.querySelector('#zc-tool-resolution').textContent=s.$('resolution').selectedOptions?.[0]?.textContent?.split(' · ')[0]||'Resolution';
@@ -115,8 +151,9 @@ export class VideoComposer {
     const source=s.source?{...s.source,url:s.source.thumbnail_url}:null;
     this.attachment('source',source,s.source?'Source video':'Add video');
     this.attachment('refs',s.references?.[0],s.references?.length?`${s.references.length} reference${s.references.length===1?'':'s'}`:'References');
+    this.root.querySelector('#zc-remove-refs').setAttribute('aria-label',s.references?.length>1?'Remove all references':'Remove reference');this.root.querySelector('#zc-remove-refs').title=s.references?.length>1?'Remove all references':'Remove reference';
     this.attachment('frame',s.readyAsset,s.readyAsset?'Finished frame':'Finished frame');
-    this.root.querySelector('#zc-attach-refs').hidden=s.lookMode==='ready';this.root.querySelector('#zc-attach-frame').hidden=s.lookMode!=='ready';
+    this.root.querySelector('#zc-attach-refs').parentElement.hidden=s.lookMode==='ready';this.root.querySelector('#zc-attach-frame').parentElement.hidden=s.lookMode!=='ready';
     for(const button of this.composer.querySelectorAll('.zc-attachment'))button.disabled=working;
     this.length.querySelector('summary').setAttribute('aria-label','Clip length: '+this.root.querySelector('#zc-tool-length').textContent);
   }

@@ -94,7 +94,7 @@ def _output_size(source_path: str | Path) -> tuple[int, int]:
 def _relight_prompt(config: Mapping[str, Any]) -> str:
     direction = str(config.get("prompt") or config.get("image_prompt") or "").strip()
     if not direction:
-        raise Wan21RelightError("Describe the lighting before generating this relight.")
+        direction = "Follow the lighting and colour of the supplied lighting image."
     return (
         "Relight the entire shot to match the provided lighting reference. Keep the source "
         "subjects, objects, scene layout, camera path, framing, motion and performance "

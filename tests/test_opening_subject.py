@@ -48,7 +48,7 @@ class OpeningSubjectTests(fixture.unittest.TestCase):
         original = copy.deepcopy(p)
         g = self.graph(p, 'design')
         self.assertEqual(p, original)
-        self.assertEqual(g['122']['inputs']['images'], ['92:105', 0])
+        self.assertEqual(g['zura_opening_original_resolution']['inputs']['image'], ['92:105', 0])
         self.assertNotIn('zura_masked_look', g)
         self.assertEqual(g['92:103']['inputs']['positive'], ['92:131', 0])
         text = g['127']['inputs']['value']
@@ -62,7 +62,7 @@ class OpeningSubjectTests(fixture.unittest.TestCase):
         p['tracking_coverage'] = {'shots':[{'start':0, 'near_empty_ranges':[{'start':0,'end':48}]}]}
         self.assertTrue(missing_opening_selection(p))
         g = self.graph(p, 'design')
-        self.assertEqual(g['122']['inputs']['images'], ['92:105', 0])
+        self.assertEqual(g['zura_opening_original_resolution']['inputs']['image'], ['92:105', 0])
         p['tracking_coverage']['shots'][0]['near_empty_ranges'][0]['start'] = 12
         self.assertFalse(missing_opening_selection(p))
         self.assertIn('zura_masked_look', self.graph(p, 'design'))

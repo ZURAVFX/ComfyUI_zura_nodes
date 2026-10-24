@@ -10,6 +10,46 @@ wan21 = importlib.import_module(studio.__package__ + ".wan21_relight")
 
 
 class Wan21RelightTests(unittest.TestCase):
+    def test_wan21_image_preparation_has_no_sam_or_depth_model(self):
+        project = self.project()
+        with patch.object(studio, "check_asset"):
+            graph = studio.build_graph(project, "prepare", use_cache=False)
+        kinds = {node["class_type"] for node in graph.values()}
+        self.assertFalse(any("SAM" in kind or "DepthAnything" in kind for kind in kinds))
+        self.assertEqual(graph["20"]["inputs"]["guide_frames"], ["4", 0])
+
+    def test_uploaded_lighting_image_skips_image_generation_and_prompt_requirement(self):
+        project = self.project()
+        project.update(look_mode="ready", starting_asset={"file": "finished-lighting.png"})
+        project["config"].update(prompt="", image_prompt="")
+        with patch.object(studio, "assert_approved"), patch.object(studio, "check_asset"):
+            graph = studio.build_graph(project, "design", use_cache=False)
+        self.assertEqual({node["class_type"] for node in graph.values()}, {"LoadImage", "PreviewImage"})
+        self.assertEqual(graph["starting_frame"]["inputs"]["image"], "finished-lighting.png")
+
+    def test_each_lighting_generator_edits_original_video_without_sam(self):
+        for model in ("klein9b", "qwen2511", "qwen21"):
+            with self.subTest(model=model):
+                project = self.project()
+                project["config"]["opening_model"] = model
+                with patch.object(studio, "assert_approved"), patch.object(studio, "check_asset"):
+                    graph = studio.build_graph(project, "design", use_cache=False)
+                self.assertEqual(graph["zura_original_video"]["inputs"]["file"], "source.mp4")
+                self.assertEqual(graph["122"]["inputs"]["images"], ["zura_opening_original_resolution", 0])
+                self.assertFalse(any("SAM" in node["class_type"] for node in graph.values()))
+                for node in graph.values():
+                    for value in node.get("inputs", {}).values():
+                        if isinstance(value, list) and len(value) == 2 and isinstance(value[0], str):
+                            self.assertIn(value[0], graph)
+
+    def test_qwen21_receives_all_nine_appearance_references(self):
+        project = self.project()
+        project["config"]["opening_model"] = "qwen21"
+        project["references"] = [{"file": f"ref-{i}.png"} for i in range(9)]
+        with patch.object(studio, "assert_approved"), patch.object(studio, "check_asset"):
+            graph = studio.build_graph(project, "design", use_cache=False)
+        self.assertEqual(len([key for key in graph["92:109"]["inputs"] if key.startswith("images.image_")]), 10)
+
     def test_lighting_image_readiness_needs_klein_and_not_h3(self):
         graph = studio.json.loads((studio.HERE / "graphs" / "01B_Design_Opening_Frame.json").read_text(encoding="utf-8"))
         mappings = {node["class_type"]: object() for node in graph.values()}
@@ -88,11 +128,14 @@ class Wan21RelightTests(unittest.TestCase):
         self.assertFalse(config["preserve_identity"])
         self.assertFalse(config["remove_text"])
 
-    def test_rejects_missing_direction_approval_or_unsupported_features(self):
+    def test_supplied_lighting_image_needs_no_written_direction(self):
         project = self.project()
         project["config"]["prompt"] = ""
-        with patch.object(studio, "assert_approved"), self.assertRaisesRegex(ValueError, "lighting"):
-            wan21.build_studio_graph(project, lambda asset: asset["file"])
+        with patch.object(studio, "assert_approved"), patch.object(wan21, "_output_size", return_value=(1280, 704)):
+            graph = wan21.build_studio_graph(project, lambda asset: asset["file"])
+        self.assertIn("supplied lighting image", graph["272:408:274:3"]["inputs"]["text"])
+
+    def test_rejects_missing_approval_or_unsupported_features(self):
         project = self.project()
         project["opening_approval"] = None
         with patch.object(studio, "assert_approved"), self.assertRaisesRegex(ValueError, "lighting frame"):

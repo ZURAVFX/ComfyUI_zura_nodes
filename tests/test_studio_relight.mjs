@@ -39,8 +39,14 @@ calls.length=0;actions.length=0;response={id:'relight-shot',phase:'review',revie
 await ui.primaryRecipe();assert.deepEqual(actions,['create_look'],'Relight reviews source then generates lighting frame');
 actions.length=0;response={...response,phase:'opening',approval:'review',opening_input:{file:'lighting.png'}};ui.project=response;
 await ui.primaryRecipe();assert.deepEqual(actions,['animate'],'Relight animation requires the generated lighting frame review');
-ui.lookMode='ready';ui.readyAsset=null;assert.equal(ui.hasLook(),false);ui.readyAsset={id:'ready'};assert.equal(ui.hasLook(),false,'Relight always creates its reviewed lighting frame');
-assert.equal(ui.projectBody().look_mode,'build');assert.equal(ui.projectBody().starting_image,undefined,'A stale finished frame cannot enter the Relight payload');
+ui.lookMode='ready';ui.readyAsset=null;assert.equal(ui.hasLook(),false);ui.readyAsset={id:'ready'};assert.equal(ui.hasLook(),true,'Relight accepts a supplied lighting image');
+assert.equal(ui.projectBody().look_mode,'ready');assert.equal(ui.projectBody().starting_image,'ready','The supplied lighting image skips generation');
+ui.project=null;ui.modelStatus={engine_ready:{design:false,wan21_relight:true},opening_models:{klein9b:{ready:false,model_files:[],missing_nodes:['MissingKlein']}}};
+ui.updateModelStatus();assert.equal(fields.models.textContent,'Wan 2.1 · Relight ready','A supplied image requires no image generator');
+assert.doesNotMatch(fields['model-checklist'].innerHTML,/MissingKlein/);
+ui.lookMode='build';ui.config.opening_model='qwen2511';ui.modelStatus.opening_models.qwen2511={ready:true,model_files:[],missing_nodes:[]};
+ui.updateModelStatus();assert.equal(fields.models.textContent,'Wan 2.1 · Relight ready','Selected Qwen availability is independent of Klein');
+ui.modelStatus=null;
 response={id:'saved-relight',phase:'opening',source:{id:'saved-source',duration:2},config:{...config,engine:'local',edit_area:'mask'},look_mode:'build',references:[]};
 ui.lastVideo=null;await ui.loadProject('saved-relight');
 assert.equal(ui.config.workflow_mode,'relight');assert.equal(ui.config.engine,'h3');assert.equal(ui.config.edit_area,'scene');assert.deepEqual(Array.from(ui.references),[],'Restoring a prompt-only project never inserts an undefined character');

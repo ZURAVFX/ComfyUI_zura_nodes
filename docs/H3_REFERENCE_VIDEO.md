@@ -2,7 +2,7 @@
 
 The Ref2Video mode runs the native local H3 `MiniMaxH3ReferenceToVideo` node.
 References provide identity, appearance, scene, motion cues and audio. They are
-not frame anchors.
+unanchored by default; an optional picture can set the first frame.
 
 ## Inputs
 
@@ -14,13 +14,31 @@ not frame anchors.
   window.
 - Up to three standalone audio references. Each is limited to ten seconds so
   reference tokens do not slow every sampling step.
-- Images have no target-frame setting. Use the separate first and last frame
-  workflow when exact frame anchoring is required.
+- A selected picture can guide the first frame. Use the separate first and last
+  frame workflow for an ending-frame guide.
 
 Prompt tags follow the native presentation order. Images use `<Picture 1>`,
 videos use `<Video 1>`, and audio uses `<Audio 1>`. A paired video soundtrack
 receives its audio number before the video tag. Standalone audio continues the
 audio number sequence after the paired tracks.
+
+## Choose the first frame
+
+Add your images, then choose **Start: Picture 1** (or another picture) in the
+prompt bar. **Start: Auto** keeps references unanchored. The selected thumbnail
+is marked First frame and appears in the canvas before generation. Mentioning
+`<picture 1>` in the prompt alone does not fix it to the first frame.
+
+The recipe scales that image proportionally to cover the output, crops the
+excess centrally and adds native `MiniMaxH3AddGuide` image conditioning at
+frame index zero. The artist-facing first frame corresponds to that zero-based
+native index. Other references remain available and Follow Audio can be used
+at the same time. The model generates the image from the guide, so the result
+is not promised to be a pixel-identical copy of the uploaded file.
+
+The selection is saved by file rather than reference number. Removing a
+different picture keeps the same starting image; removing the selected image
+returns to Auto. Selection changes never start a generation automatically.
 
 ## Direct the performance with audio
 

@@ -59,6 +59,14 @@ ui.show('video');studio.render();
 assert.ok(studio.container.querySelector('#zc-video-task').closest('.zc-prompt-tools'),'Workflow choice sits in the model tool row');assert.equal(studio.container.querySelector('#zc-video-task').closest('.zc-task-control').previousElementSibling,ui.videoComposer.imageModel);
 assert.equal(studio.container.querySelector('.gs-workflow-choice').hidden,true,'The cramped legacy mode grid has no second visible copy');
 for(const id of ['zc-attach-source','zc-attach-refs','zc-video-model','gs-resolution','gs-duration','gs-audio-mode'])assert.ok(studio.container.querySelector('#'+id).closest('.gs-composer'),id+' belongs to the compact composer');
+const workflowMenu=ui.videoComposer.task;
+assert.equal(workflowMenu.tagName,'DETAILS');
+assert.equal(workflowMenu.querySelector('select').hidden,true,'OS-native workflow dropdown is hidden behind the styled menu');
+assert.equal(workflowMenu.querySelectorAll('[role="menuitemradio"]').length,6);
+assert.equal(workflowMenu.querySelector('[data-workflow="swap"]').getAttribute('aria-checked'),'true');
+const removedInputs=[],savedRemoveInput=studio.removeInput;studio.removeInput=type=>removedInputs.push(type);
+for(const id of ['source','refs','frame'])studio.container.querySelector('#zc-remove-'+id).onclick();
+assert.deepEqual(removedInputs,['source','character','ready'],'Each attachment has its own clear action, independent of the upload action');studio.removeInput=savedRemoveInput;
 const dropped=[],originalUpload=studio.upload;studio.upload=(type,file)=>dropped.push({type,file});
 for(const [id,name] of [['source','clip.mp4'],['refs','look.png']])studio.container.querySelector('#zc-attach-'+id).ondrop({preventDefault(){},stopPropagation(){},dataTransfer:{files:[{name}]}});
 assert.equal(dropped[0].type,'source');assert.equal(dropped[0].file.name,'clip.mp4');assert.equal(dropped[1].type,'character');assert.equal(dropped[1].file[0].name,'look.png');studio.upload=originalUpload;
@@ -109,7 +117,9 @@ for(const selector of ['#zc-video-controls','.zc-viewer-views>summary','.zc-vide
   const trigger=studio.container.querySelector(selector);
   assert.ok(trigger.classList.contains('zc-viewer-trigger')&&trigger.querySelector('svg')&&trigger.getAttribute('aria-label'),'Viewer tool uses a compact icon with an accessible text label');
 }
-assert.ok(studio.$('trimmer').closest('.zc-video-timing'),'Trimming is a viewer tool, outside the prompt composer');
+assert.ok(studio.$('trimmer').closest('.zc-trim-popup'),'The existing filmstrip timeline is directly available from the time selector');
+assert.ok(studio.$('duration-setting').closest('#gs-trim-precision'),'Numeric timing is secondary to visual trim handles');
+studio.container.querySelector('.zc-video-timing>summary').onclick({preventDefault(){}});assert.equal(ui.videoComposer.length.open,true,'Viewer Trim footage opens the same time selector');ui.videoComposer.length.open=false;
 assert.equal(studio.container.querySelector('.gs-preview-scroll').children.length,4,'Viewer contains only toolbar, comparison, canvas and notice');
 studio.project={id:'viewer',phase:'working',review:'review',opening_url:'/view/approved.png',opening_input:{file:'approved.png'},actions:[],config:{...studio.config}};studio.preview='look';studio.render();
 assert.equal(studio.$('opening').hidden,false,'The approved image remains visible while video is sampling');

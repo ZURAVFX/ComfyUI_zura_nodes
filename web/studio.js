@@ -267,7 +267,7 @@ class ArtistStudio {
     if(this.config.workflow_mode==="camera")return this.lookMode==="ready"?!!this.readyAsset:this.$("camera_preset").value!=="Custom prompt only" || !!this.$("camera_prompt").value.trim();
     if(this.config.workflow_mode==="relight"){
       const direction=String(this.$("image_prompt")?.value ?? this.config.image_prompt ?? "").trim() || String(this.$("prompt")?.value ?? this.config.prompt ?? "").trim();
-      return !!direction && this.lookMode!=="ready";
+      return this.lookMode==="ready"?!!this.readyAsset:!!direction;
     }
     if(this.lookMode==="ready")return !!this.readyAsset;
     return this.references.length>0;
@@ -283,6 +283,16 @@ class ArtistStudio {
     this.lookMode="build";
     if(recreate && this.project)this.invalidateLook();
     return true;
+  }
+  changeOpeningModel(value) {
+    if(this.busy || this.project?.phase==="working" || !["klein9b","qwen2511","qwen21"].includes(value))return;
+    this.config={...this.readConfig(),opening_model:value,h3_viewport_direct:false};
+    this.useGeneratedLook();
+    this.promptStage="image";this.preview="original";
+    this.syncForm();this.render();
+  }
+  openingModelStatus() {
+    return this.modelStatus?.opening_models?.[this.config.opening_model || "klein9b"];
   }
   syncPreservedPeople() {
     this.config.preserve_people=!!this.config.preserve_people && this.config.engine==="h3" && this.config.workflow_mode==="motion";
@@ -313,7 +323,8 @@ class ArtistStudio {
       this.config.lip_sync=false;this.config.refine_lips=false;this.pendingReference=false;this.useGeneratedLook();
     }
     if(this.config.workflow_mode==="relight"){
-      Object.assign(this.config,{relight_engine:"wan21",edit_area:"scene",h3_head_swap:false,h3_viewport_direct:false,preserve_people:false,preserve_identity:false,remove_text:false,audio_id:"",audio_start:0,lip_sync:false,refine_lips:false});this.pendingReference=false;this.useGeneratedLook();
+      Object.assign(this.config,{relight_engine:"wan21",edit_area:"scene",h3_head_swap:false,h3_viewport_direct:false,preserve_people:false,preserve_identity:false,remove_text:false,audio_id:"",audio_start:0,lip_sync:false,refine_lips:false});this.pendingReference=false;
+      if(this.lookMode==="direct")this.lookMode="build";
     }
   }
   referenceRoles(){return this.references.map(a=>a.role||"auto");}
@@ -324,9 +335,24 @@ class ArtistStudio {
        this.$("camera_preset").value!==(saved.camera_preset||"Left three-quarter"));
   }
   configBody(config){return {config,reference_roles:this.referenceRoles()};}
-  projectBody(){const generatedOnly=this.config.workflow_mode==="relight" || this.config.preserve_people;return {source:this.source.id,character:this.character?.id,look_mode:generatedOnly?"build":this.lookMode,
+  projectBody(){const generatedOnly=this.config.preserve_people;return {source:this.source.id,character:this.character?.id,look_mode:generatedOnly?"build":this.lookMode,
     references:this.references.map(a=>a.id),reference_roles:this.references.map(a=>a.role||"auto"),starting_image:generatedOnly?undefined:this.readyAsset?.id,config:this.config};}
   invalidateLook(){this.character=this.references[0] || this.readyAsset;this.project=null;localStorage.removeItem("genj-studio-project");}
+  removeInput(type){
+    if(this.busy || this.project?.phase==="working")return;
+    if(type==="source"){
+      this.source=null;this.$("source").value="";this.trimTimeline?.close();
+      this.trimSeeking=false;this.trimSeekTime=null;this.lastVideo=null;
+      this.config={...this.config,start:0,mask_points:[],performer:-1};
+      this.$("player").pause?.();this.$("player").removeAttribute("src");
+    }else if(type==="character"){
+      this.references=[];this.$("character").value="";this.referenceFingerprint=null;
+    }else if(type==="ready"){
+      this.readyAsset=null;this.$("ready").value="";this.lookMode="build";
+    }else return;
+    this.invalidateLook();this.promptStage="image";this.preview="original";this.reviewPreviewKey=null;
+    this.syncForm();this.message("");this.render();
+  }
   message(text, error=false) {
     const el=this.$("message"); el.hidden=!text; el.textContent=text || "";
     el.classList.toggle("is-error", error);
@@ -386,12 +412,13 @@ class ArtistStudio {
     if(select.value===mode)return;
     select.value=mode;select.dispatchEvent(new Event("change",{bubbles:true}));
   }
-  bind() {
-    this.$("edit-frame").onclick=()=>{
+  editStartingFrame(){
       if(this.lookMode==="ready")return this.$("ready").click();
-      this.promptStage="image";this.preview="look";this.render();
+      this.promptStage="image";this.preview="original";this.trimSeeking=false;this.render();
       this.$(this.config.workflow_mode==="camera"?"camera_prompt":"image_prompt").focus({preventScroll:true});
-    };
+  }
+  bind() {
+    this.$("edit-frame").onclick=()=>this.editStartingFrame();
     this.$("keep-frame").onclick=()=>{this.promptStage="review";this.render();};
     this.container.addEventListener("keydown",event=>{if(event.key==="Escape"){this.$("canvas").classList.remove("is-expanded");this.updateFullscreenLabel();}});
     this.container.querySelectorAll("[data-length-mode]").forEach(button=>button.onclick=()=>this.chooseClipLength(button.dataset.lengthMode));
@@ -452,7 +479,7 @@ class ArtistStudio {
     });
     this.$("live-cancel").onclick=()=>this.$("cancel").click();
     this.container.querySelectorAll('input[name="gs-look"]').forEach(input=>input.onchange=()=>{
-      if(this.busy || this.project?.phase==="working" || (this.config.preserve_people || this.config.workflow_mode==="relight") && input.value==="ready")return;
+      if(this.busy || this.project?.phase==="working" || this.config.preserve_people && input.value==="ready")return;
       if(input.value==="direct" && !(this.config.workflow_mode==="viewport" && this.config.engine==="h3"))return;
       this.config.h3_viewport_direct=input.value==="direct";this.lookMode=input.value==="direct"?"build":input.value;this.invalidateLook();this.syncForm();this.render();
     });
@@ -622,7 +649,7 @@ class ArtistStudio {
     await this.perform(async(epoch)=>{
       if(type==="opening" && this.config.preserve_people)throw new Error("Regenerate the starting frame to keep the original people protected.");
       if(type==="opening" && !this.project)throw new Error("Prepare and review the shot before choosing a starting image.");
-      const referenceLimit=this.config.workflow_mode==="camera"?5:9;
+      const referenceLimit=this.headSwap()?1:this.config.workflow_mode==="camera"?5:this.directViewport()?9:({klein9b:3,qwen2511:2,qwen21:9}[this.config.opening_model||"klein9b"]||3);
       if(type==="character" && this.references.length+files.length>referenceLimit)throw new Error(`Use up to ${referenceLimit} reference images. Remove one before adding more.`);
       for(const file of files){
       const form=new FormData();form.append("file",file);
@@ -892,7 +919,7 @@ class ArtistStudio {
     this.$("model-prompt").hidden=camera;
     const lookHeading=this.container.querySelector(".gs-look h2"),readyLabel=this.container.querySelector('input[name="gs-look"][value="ready"] + span');
     if(lookHeading)lookHeading.textContent=camera?"New camera view":"Starting look";
-    if(readyLabel)readyLabel.textContent=camera?"Use camera still":"Use finished frame";
+    if(readyLabel)readyLabel.textContent=camera?"Use camera still":relight?"Upload lighting image":"Use finished frame";
     if(camera){
       this.$("build-look-label").textContent="Create new angle";
       this.$("look-note").textContent=this.lookMode==="ready"?"Use your finished camera still, then animate the source performance.":"Choose an angle and create a still to review before animation.";
@@ -1037,7 +1064,6 @@ class ArtistStudio {
       }else this.config.delivery_mode="native";
       if(this.project.config.quality==null)this.config.quality=this.project.config.h3_preset?.endsWith("_quality")?"detailed":"fast";
       localStorage.setItem("genj-studio-project",id);
-      if(this.config.workflow_mode==="relight" && this.lookMode==="ready")this.useGeneratedLook();
       this.syncForm();this.lastVideo=null;this.render();
     });
   }
@@ -1081,7 +1107,7 @@ class ArtistStudio {
     this.$("prompt-stage").hidden=false;
     this.$("prompt-heading").textContent=review?"Approve your image":image?(readyImage?"Add your finished image":camera?"Create your camera image":relight?"Create a lighting image":"Create your starting image"):"Direct your video";
     this.$("edit-frame").hidden=!hasOpening || image || working;
-    this.$("edit-frame").textContent=readyImage?"Replace image":"Edit image";
+    this.$("edit-frame").textContent=readyImage?"Replace image":"Regenerate image";
     this.$("edit-frame").disabled=this.busy;
     this.$("keep-frame").hidden=!hasOpening || !image || working;
     this.$("keep-frame").disabled=this.busy;
@@ -1107,6 +1133,13 @@ class ArtistStudio {
       this.$("action-note").textContent=relight?"Your lighting image is approved. Generate the video with Wan 2.1.":"Your image is approved. Add optional video direction, then generate.";
     }
     if(this.guidedFrame() && stage!=="video")this.$("video-options").hidden=true;
+    if(image && !camera && !readyImage && !working && !this.busy){
+      const model=this.openingModelStatus(),maximum=model?.max_references ?? ({klein9b:3,qwen2511:2,qwen21:9}[this.config.opening_model||"klein9b"]||3);
+      if(model?.ready===false || this.references.length>maximum){
+        this.$("primary").disabled=true;
+        this.$("action-note").textContent=this.references.length>maximum?`This image model accepts ${maximum} references. Remove extras or choose another model.`:"Set up this image model, choose another, or upload a finished image.";
+      }
+    }
     this.$("action-note").title=this.$("action-note").textContent;
     this.creative?.syncVideoSurface?.();
   }
@@ -1138,8 +1171,8 @@ class ArtistStudio {
     const designGraphChoice=this.$("graph-stage").querySelector('option[value="design"]');
     designGraphChoice.disabled=this.directViewport();
     if(this.directViewport() && this.$("graph-stage").value==="design")this.$("graph-stage").value="auto";
-    readyChoice.disabled=relight || preservePeople;
-    readyChoice.closest("label").hidden=relight || preservePeople;
+    readyChoice.disabled=preservePeople;
+    readyChoice.closest("label").hidden=preservePeople;
     this.$("look-note").textContent=relight&&this.lookMode!=="ready"?"Describe the lighting below. Optional images guide the light and colour.":this.lookMode==="ready"?"Use an already-composed frame. No image generation.":viewport&&this.config.engine==="h3"?"Build and approve a starting frame. H3 also receives the blockout video and your look references.":viewport?"Build one scene plate from up to three references. Match the viewport composition; LTX uses this plate for appearance.":"Combine up to three references into one starting frame.";
     this.$("character-label").textContent=relight?"Lighting references · optional":this.lookMode==="ready"?"Appearance references · optional":"Reference images";
     if(this.directViewport())this.$("look-note").textContent="Recommended for blockouts. H3 uses your source camera and motion with up to nine look references. No starting frame is generated.";
@@ -1226,6 +1259,11 @@ class ArtistStudio {
       this.$("speed-note").textContent="Speed estimates are unavailable until the local status check completes.";
       this.$("memory-note").textContent="Start with a short test. An exact hardware limit needs a render on this system.";
     }
+    this.$("duration").step="any";
+    if(relight && this.config.relight_engine==="wan21"){
+      this.$("duration").max=String(Math.min(Number(this.source?.duration)||30,30));
+      this.$("limit-note").textContent="Choose any interval within your source. Wan 2.1 relights longer clips in 81-frame sections; inspect the joins.";
+    }
     const reference=this.$("audio-mode").value==="reference",activeReference=reference && !!this.audio;
     const speechGraphOption=this.$("graph-stage").querySelector('option[value="wan_speech"]');
     speechGraphOption.disabled=this.config.engine!=="wan" || !activeReference || !this.config.lip_sync;
@@ -1292,7 +1330,7 @@ class ArtistStudio {
       choice.closest("label").title=relight&&choice.value==="h3"?"Legacy H3 relight":relight&&choice.value==="wan21"?"Wan 2.1 uses a chained 4-step recipe for longer relight clips.":"";
     });
     if(preservePeople){this.$("lip_sync").checked=false;this.$("refine_lips").checked=false;this.$("lip_sync").disabled=true;this.$("refine_lips").disabled=true;}
-    this.container.querySelectorAll('input[name="gs-look"]').forEach(choice=>choice.disabled=working || this.busy || (preservePeople || relight) && choice.value==="ready");
+    this.container.querySelectorAll('input[name="gs-look"]').forEach(choice=>choice.disabled=working || this.busy || preservePeople && choice.value==="ready");
     if(this.config.length_mode==="original"){this.$("start").value=0;this.$("start").disabled=true;}
     const btn=this.$("primary"),hasAssets=!!this.source && this.hasLook();
     let label=this.directViewport()?"Prepare motion guidance":this.lookMode==="ready"?"Review finished frame":"Create starting frame",note=!this.source?"Add a source video to begin.":"Add reference images or a finished frame on the left.";
@@ -1315,8 +1353,8 @@ class ArtistStudio {
       else note="We’ll detect the people and protect them while changing the surroundings.";
     }
     if(relight && !working){
-      label="Create lighting frame";
-      note=!this.source?"Add a source video to begin.":!hasAssets?"Describe the lighting in the prompt below. Reference images are optional.":"Create and review a lighting frame, then animate the shot.";
+      label=this.lookMode==="ready"?"Review lighting image":"Create lighting frame";
+      note=!this.source?"Add a source video to begin.":!hasAssets?(this.lookMode==="ready"?"Upload a finished lighting image.":"Describe the lighting in the prompt below. Reference images are optional."):this.lookMode==="ready"?"Use your lighting image directly, then review it before rendering.":"Create and review a lighting frame, then animate the shot.";
     }
     if(relight && hasAssets && !working){
       if(p?.phase==="review"){label=this.lookMode==="ready"?"Use lighting frame":"Create lighting frame";note="Check the source movement, then create and review the lighting.";}
@@ -1351,10 +1389,11 @@ class ArtistStudio {
     if(enhancementUnavailable&&!working&&!this.busy&&hasAssets){label=this.modelStatus.engine_ready?.h3?"1080p enhancement setup needed":"H3 model setup needs attention";note=!this.modelStatus.engine_ready?.h3?"Set up the H3 models before starting this shot.":!enhancementStatus.model_ready?`Run ${enhancementSetupCommand} and restart ComfyUI before starting H3 Enhanced 1080p.`:"Enable the required native VHS and upscale nodes before starting H3 Enhanced 1080p.";}
     const unsupportedRelight=relight && this.config.engine!=="h3";
     if(unsupportedRelight && !working){label="Choose Wan 2.1";note="Relight uses Wan 2.1 after you approve the lighting frame.";}
-    const wan21RelightUnavailable=wan21Relight && !!this.modelStatus && (!this.modelStatus.engine_ready?.design || !this.modelStatus.engine_ready?.wan21_relight);
+    const lightingImageReady=this.lookMode==="ready" || (this.openingModelStatus()?.ready ?? this.modelStatus?.engine_ready?.design);
+    const wan21RelightUnavailable=wan21Relight && !!this.modelStatus && (!lightingImageReady || !this.modelStatus.engine_ready?.wan21_relight);
     if(wan21RelightUnavailable && !working && !this.busy){
       label="Wan 2.1 setup needed";
-      note=!this.modelStatus.engine_ready?.design?"Klein models or nodes for the lighting frame are missing. Check Model guide & setup.":"Wan 2.1 models or custom nodes are missing. Check Model guide & setup.";
+      note=!lightingImageReady?"Set up the selected image model, choose another model, or upload a lighting image.":"Wan 2.1 models or custom nodes are missing. Check Model guide & setup.";
     }
     const unsupportedViewport=viewport && this.config.engine==="wan";
     if(unsupportedViewport && !working){label="Choose H3";note="H3 is the approved viewport option. Character performance offers Wan, H3 and LTX.";}
@@ -1407,6 +1446,10 @@ class ArtistStudio {
     if(p?.review && !wholeScene && p.tracking_coverage?.cut_reselection_requires_review)description+=" Check that the correct person or object stays selected after each camera cut.";
     if(p?.review && !wholeScene && p.tracking_coverage?.near_empty_frames)description+=" The selection is missing in part of the clip. Check whether the subject has left the picture or the mask needs correcting.";
     if(p?.opening_url && this.preview==="look" && (!["done","draft"].includes(phase) || this.composerStage()!=="video")){opening=p.opening_url;video=null;title=working?"Your approved starting frame":this.lookMode==="ready"?"Review your finished frame":"Review your starting frame";description=relight?"Check the lighting. Subjects, objects and composition should match the source.":"Check the appearance and framing before animation.";if(relight)title=working?"Your approved lighting frame":"Review your lighting frame";}
+    if(this.preview==="original" && this.composerStage()==="image" && this.source){
+      video=this.source.url;opening=null;title="Original footage";
+      description="Regenerate the selected starting frame from this source, using your references and revised prompt.";
+    }
     if((phase==="draft" || phase==="done") && p.results?.length && this.composerStage()==="video"){video=p.results.at(-1).url;title=phase==="draft"?"Review your draft":"Your finished take";description="The selected soundtrack is restored. Watch the entire take before keeping it.";}
     if(workflow==="camera"){
       if(phase==="opening"&&this.preview==="look"){title="Review your camera still";description="Check the angle, identity and framing before generating video.";}
@@ -1496,7 +1539,10 @@ class ArtistStudio {
     const camera=this.config.workflow_mode==="camera";
     const cameraStatus=this.modelStatus.h3_camera?.[this.project?.opening_input||this.lookMode==="ready"?"video":"still"];
     const route=camera?"h3_camera":this.headSwap()?"h3_head_swap":viewport&&engine==="local"?"local_viewport":viewport&&engine==="h3"?"h3_viewport":engine==="local"&&this.config.edit_area==="scene"?"local_scene":engine;
-    const baseReady=wan21Relight?this.modelStatus.engine_ready?.design:((camera?cameraStatus?.ready:undefined) ?? this.modelStatus.engine_ready?.[route] ?? (route==="local" && this.modelStatus.ready));
+    const openingStatus=this.openingModelStatus();
+    const needsImage=this.lookMode!=="ready" && !this.project?.opening_input;
+    const openingReady=!needsImage || (openingStatus?.ready ?? this.modelStatus.engine_ready?.design);
+    const baseReady=wan21Relight?openingReady:((camera?cameraStatus?.ready:undefined) ?? this.modelStatus.engine_ready?.[route] ?? (route==="local" && this.modelStatus.ready));
     const enhancementReady=!enhancementRequested || this.modelStatus.h3_enhancement?.ready===true;
     const ready=(engine==="seedance" || baseReady) && (!wan21Relight || this.modelStatus.engine_ready?.wan21_relight===true) && enhancementReady && (!speech || this.modelStatus.wan_speech?.ready) && cleanupReady;
     const enhancementStatus=this.modelStatus.h3_enhancement || {};
@@ -1507,9 +1553,9 @@ class ArtistStudio {
     if(this.headSwap())this.$("models").textContent=baseReady?"H3 · Head & face ready":"Head & face setup needed";
     if(camera)this.$("models").textContent=baseReady?"H3 · Camera ready":"Camera setup needed";
     this.$("models").classList.toggle("needs-attention",!ready);
-    const files=wan21Relight?[...(this.modelStatus.model_files?.design||[]),...(wan21Status.model_files||[])]:((camera?cameraStatus?.model_files:null)||(this.headSwap()?this.modelStatus.h3_head_swap?.model_files:null)||this.modelStatus.model_files?.[route]||[]);
+    const files=wan21Relight?[...(needsImage?(openingStatus?.model_files||this.modelStatus.model_files?.design||[]):[]),...(wan21Status.model_files||[])]:((camera?cameraStatus?.model_files:null)||(this.headSwap()?this.modelStatus.h3_head_swap?.model_files:null)||this.modelStatus.model_files?.[route]||[]);
     const missingNodeField={wan2:"missing_wan2_nodes",h3_head_swap:"missing_h3_head_swap_nodes",local:"missing_ltx_nodes",local_scene:"missing_ltx_scene_nodes",local_viewport:"missing_ltx_viewport_nodes",h3:"missing_h3_nodes",h3_viewport:"missing_h3_viewport_nodes",wan:"missing_wan_nodes"}[route];
-    const missingNodes=wan21Relight?[...(this.modelStatus.missing_design_nodes||[]),...(wan21Status.missing_nodes||[])]:((camera?cameraStatus?.missing_nodes:null)||(this.headSwap()?this.modelStatus.h3_head_swap?.missing_nodes:null)||this.modelStatus[missingNodeField]||[]);
+    const missingNodes=wan21Relight?[...(needsImage?(openingStatus?.missing_nodes||this.modelStatus.missing_design_nodes||[]):[]),...(wan21Status.missing_nodes||[])]:((camera?cameraStatus?.missing_nodes:null)||(this.headSwap()?this.modelStatus.h3_head_swap?.missing_nodes:null)||this.modelStatus[missingNodeField]||[]);
     this.$("model-checklist").innerHTML=engine==="seedance"?'<p class="gs-note">Uses the paid provider. Check credits and cost before rendering.</p>':files.map(item=>`<p class="gs-note">${item.ready?"Ready":"Missing"}: <code>${escape(item.path||`models/${item.folder}/${item.filename}`)}</code>${!item.ready&&item.url?` · <a href="${escape(item.url)}" target="_blank" rel="noopener noreferrer">Download</a>`:""}</p>`).join("")+(missingNodes.length?`<p class="gs-note">Missing nodes: ${missingNodes.map(escape).join(", ")}. Install the matching packs listed in the setup guide, then restart ComfyUI.</p>`:"<p class=\"gs-note\">Required native node checks passed. Optional speech or enhancement has its own setup.</p>");
   }
   async poll() {

@@ -31,9 +31,9 @@ export class FrameVideoWorkspace{
           <button type="button" id="zf-audio-file-button" class="zc-attachment" hidden>${icons.audio}<span>Add audio reference</span></button><input id="zf-audio-file" type="file" accept="audio/*,.wav,.mp3,.m4a,.flac,.ogg" hidden/>
         </div>
         <label for="zf-prompt" class="zc-sr-only">Describe your video</label><textarea id="zf-prompt" placeholder="Describe the movement, camera and action…" maxlength="12000" required></textarea>
-        <div class="zc-prompt-bottom"><div class="zc-prompt-tools">
+        <div class="zc-prompt-bottom"><div class="zc-prompt-tools"><div class="zc-tool-group" role="group" aria-label="Model and workflow">
           <label class="zc-tool zc-model-control zf-model">${icons.model}<span class="zc-sr-only">Video model</span><select id="zf-engine" aria-label="Video model">${ENDPOINT_RECIPES.map(m=>`<option value="${m.id}">${m.label}</option>`).join('')}</select>${icons.chevron}</label>
-          <details class="zc-tool-popup"><summary aria-label="Output resolution">${icons.size}<span id="zf-size-label">1344 × 768</span>${icons.chevron}</summary>
+          </div><div class="zc-tool-group" role="group" aria-label="Video size and length"><details class="zc-tool-popup"><summary aria-label="Output resolution">${icons.size}<span id="zf-size-label">1344 × 768</span>${icons.chevron}</summary>
             <div class="zc-tool-panel"><strong>Output resolution</strong>
               <label class="zf-presets" for="zf-size-preset">Shape<select id="zf-size-preset">${FRAME_SIZE_PRESETS.map(p=>`<option value="${p.id}">${p.label}</option>`).join('')}<option value="custom">Custom dimensions</option></select></label>
               <label class="zf-presets" id="zf-megapixels-setting" for="zf-megapixels">Megapixels<select id="zf-megapixels">${FRAME_MEGAPIXELS.map(mp=>`<option value="${mp}" ${mp===1?'selected':''}>${mp} MP</option>`).join('')}</select></label>
@@ -42,7 +42,7 @@ export class FrameVideoWorkspace{
             </div>
           </details>
           <label class="zc-tool zc-model-control">${icons.clock}<span class="zc-sr-only">Clip length</span><select id="zf-length" aria-label="Clip length">${FRAME_LENGTHS.map(n=>`<option value="${n}" ${n===73?'selected':''}>${(n/24).toFixed(2)}s</option>`).join('')}</select>${icons.chevron}</label>
-          <label class="zc-tool zf-audio-switch"><input type="checkbox" id="zf-audio-enabled" role="switch"/>Audio reference</label>
+          </div><label class="zc-tool zf-audio-switch"><input type="checkbox" id="zf-audio-enabled" role="switch"/>Audio reference</label>
           <details class="zc-tool-popup"><summary aria-label="Advanced generation settings">${icons.settings}</summary><div class="zc-tool-panel"><label>Sampling steps<input type="number" id="zf-steps" min="4" max="40" value="8"/></label><p id="zf-recipe-hint"></p><label>Seed<input id="zf-seed" type="number" min="0" max="9007199254740991" value="42"/></label><label class="zf-check"><input type="checkbox" id="zf-random" checked/>New variation</label><div id="zf-setup"></div><button id="zf-refresh" type="button">Refresh installed models</button></div></details>
         </div><div class="zc-prompt-submit"><button id="zf-generate" class="gs-primary" type="submit" aria-describedby="zf-note" disabled>Generate video</button></div></div>
         <p id="zf-note" aria-live="polite">Add a first frame to begin. The last frame is optional.</p>
