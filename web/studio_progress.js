@@ -25,7 +25,10 @@ export function stageProgress(progress, fallback={}) {
   const steps=active && Number.isInteger(p.step)&&Number.isInteger(p.total_steps)&&p.total_steps>0
     ?`Step ${Math.max(0,p.step)} of ${p.total_steps}`:null;
   const title=fallback.label || p.stage_label || "Preparing your shot";
-  const activity=p.stage_label && p.stage_label!==title?p.stage_label:null;
+  // Older backends label every sampler/decoder as video. Keep image-stage
+  // wording correct immediately, including before the backend is restarted.
+  let activity=p.stage_label && p.stage_label!==title?p.stage_label:null;
+  if(fallback.stage==='design' && activity)activity=activity.replace(/H3 video model/g,'image model').replace(/H3 text encoder/g,'image text encoder').replace(/H3 decoder/g,'image decoder').replace(/H3 speed adapter/g,'image adapter').replace(/\bvideo\b/gi,'image');
   const detail=queued
     ?(Number.isInteger(p.queue_position)&&p.queue_position>0?`Queue position ${p.queue_position}`:"Waiting in the ComfyUI queue")
     :waiting?"Switching models…"

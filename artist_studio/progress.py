@@ -6,10 +6,17 @@ import threading
 import time
 
 
-def _friendly_node(class_type):
+def _friendly_node(class_type, stage=None):
     """Translate common model nodes to short artist-facing stage labels."""
     name = str(class_type or "").split(".")[-1]
     low = name.lower()
+    if stage == "design":
+        if "unetloader" in low: return "Loading image model"
+        if "cliploader" in low: return "Loading image text encoder"
+        if "vaeloader" in low: return "Loading image decoder"
+        if "loraloader" in low: return "Loading image adapter"
+        if "vaedecode" in low or "decodeimage" in low: return "Decoding image"
+        if "sampler" in low: return "Generating image"
     if "depthanything" in low:
         return "Building depth guidance"
     if "genjh3framepad" in low:
@@ -182,7 +189,7 @@ class NativeProgressAdapter:
             class_type = dynprompt.get_node(node_id).get("class_type")
         except (KeyError, TypeError, AttributeError):
             class_type = ""
-        label = _friendly_node(class_type)
+        label = _friendly_node(class_type, action.get("stage"))
         return self.estimator.update(server_address, action_id, node_id, label,
                                      item.get("value"), item.get("max"), "running", queue_position)
 

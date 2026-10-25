@@ -132,6 +132,15 @@ class ProgressEstimatorTests(unittest.TestCase):
 
 
 class NativeAdapterTests(unittest.TestCase):
+    def test_design_sampler_reports_image_without_changing_video_actions(self):
+        registry = self.registry("image", {"sampler": {"state": "running", "value": 2, "max": 4}})
+        adapter = NativeProgressAdapter(registry_getter=lambda: registry)
+        result = adapter.project_progress(None, "server", {"id": "image", "state": "running", "stage": "design"})
+        self.assertEqual(result["stage_label"], "Generating image")
+        self.assertEqual(_progress._friendly_node("UNETLoader", "design"), "Loading image model")
+        self.assertEqual(_progress._friendly_node("VAEDecode", "design"), "Decoding image")
+        self.assertEqual(_progress._friendly_node("KSampler", "h3"), "Generating video")
+
     @staticmethod
     def registry(prompt_id, nodes, class_type="KSampler"):
         return SimpleNamespace(prompt_id=prompt_id, nodes=nodes,

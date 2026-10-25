@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import {parseHTML} from '../../ui-check/node_modules/linkedom/esm/index.js';
 import {VideoComposer} from '../web/studio_composer.js';
 
-const {document,window}=parseHTML(`<html><body><div id="studio"><input name="gs-look" value="ready" type="radio"/><details id="models"><summary></summary><select><option value="klein9b">Klein</option><option value="qwen2511">Qwen</option></select><span data-opening-model-label></span><button data-opening-model="klein9b"></button><button data-opening-model="qwen2511"></button><p data-opening-status></p><button data-use-finished-image></button></details></div></body></html>`);
+const {document,window}=parseHTML(`<html><body><div id="studio"><input name="gs-look" value="ready" type="radio"/><details id="models"><summary></summary><select><option value="flux3">Flux 3</option><option value="klein9b">Klein</option><option value="qwen2511">Qwen</option></select><span data-opening-model-label></span><button data-opening-model="flux3"></button><button data-opening-model="klein9b"></button><button data-opening-model="qwen2511"></button><p data-opening-status></p><button data-use-finished-image></button></details></div></body></html>`);
 Object.defineProperty(window.HTMLSelectElement.prototype,'value',{configurable:true,get(){return this.querySelector('option[selected]')?.value||'';},set(v){for(const option of this.querySelectorAll('option'))option.selected=option.value===v;}});
 const composer=Object.create(VideoComposer.prototype);
 composer.root=document.querySelector('#studio');composer.imageModel=document.querySelector('#models');
@@ -25,3 +25,7 @@ composer.imageModel.open=true;composer.syncOpeningModel(true);
 assert.equal(composer.imageModel.open,false,'Rendering closes the model picker');
 for(const button of composer.imageModel.querySelectorAll('button'))assert.equal(button.disabled,true);
 console.log('Starting image generator menu preserves selected model, finished-image choice, independent readiness and render locking.');
+
+composer.studio.modelStatus.opening_models.flux3={ready:true};composer.studio.config.opening_model='flux3';composer.studio.lookMode='build';composer.syncOpeningModel(false);
+assert.equal(composer.imageModel.querySelector('[data-opening-model-label]').textContent,'Flux 3 Klein');assert.equal(composer.imageModel.querySelector('[data-opening-model="flux3"]').disabled,false);
+delete composer.studio.modelStatus.opening_models.flux3;composer.syncOpeningModel(false);assert.equal(composer.imageModel.querySelector('[data-opening-model="flux3"]').disabled,true,'Older backends must restart before a newly added recipe can be selected');

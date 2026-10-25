@@ -7,6 +7,12 @@ import json
 from pathlib import Path
 
 MODELS = {
+    "flux3": {
+        "id": "flux3", "name": "Flux 3 Klein", "max_references": 9,
+        "files": (("diffusion_models", "flux3-image-klein-int8-convrot.safetensors"),
+                  ("text_encoders", "qwen3vl_4b_int8_convrot.safetensors"),
+                  ("vae", "flux2-vae.safetensors")),
+    },
     "klein9b": {
         "id": "klein9b", "name": "FLUX Klein 9B", "max_references": 3,
         "files": (("diffusion_models", "flux-2-klein-9b-fp8.safetensors"),
@@ -41,6 +47,8 @@ def apply_model(graph, model="klein9b", references=None):
     if model == "klein9b":
         return graph  # Keep the existing approved Klein recipe exactly.
     references = references or []
+    if model == "flux3":
+        return _apply_flux3(graph, references)
     if model == "qwen21":
         return _apply_qwen21(graph, references)
     if len(references) > 2:
@@ -115,6 +123,34 @@ def _prune(graph):
         if identity not in reachable:
             del graph[identity]
     return graph
+
+
+def _apply_flux3(graph, references):
+    """Use the existing Image workspace's INT8 reference recipe on the source frame."""
+    if len(references) > 9:
+        raise ValueError("Flux 3 Klein accepts nine appearance references plus the original frame.")
+    def node(identity, kind, **inputs):
+        graph[identity] = {"class_type": kind, "inputs": inputs}
+        return [identity, 0]
+    files = MODELS["flux3"]["files"]
+    model = node("92:107", "UNETLoader", unet_name=files[0][1], weight_dtype="default")
+    clip = node("92:108", "CLIPLoader", clip_name=files[1][1], type="flux3", device="default")
+    vae = node("92:110", "VAELoader", vae_name=files[2][1])
+    positive = node("92:109", "CLIPTextEncode", clip=clip, text=["127", 0])
+    negative = node("zura_flux3_negative", "ConditioningZeroOut", conditioning=positive)
+    images = {"images.image0": ["92:111", 0]}
+    for index, ref in enumerate(references, 1):
+        if not isinstance(ref, dict) or not ref.get("file"):
+            raise ValueError("Upload each appearance reference before generating the starting image.")
+        images[f"images.image{index}"] = node(f"zura_flux3_reference_{index}", "LoadImage", image=ref["file"])
+    node("zura_flux3_references", "ReferenceMultiLatent", positive=positive, negative=negative,
+         vae=vae, resolution="resize", **{"resolution.megapixels": min(1, 2 / (len(references) + 1)), **images})
+    graph["92:103"]["inputs"] = {"model": model, "positive": ["zura_flux3_references", 0],
+                                 "negative": ["zura_flux3_references", 1], "cfg": 1.0}
+    node("92:102", "BasicScheduler", model=model, scheduler="simple", steps=16, denoise=1.0)
+    graph["92:127"]["inputs"].update(pixels=["92:111", 0], vae=vae)
+    graph["92:105"]["inputs"]["vae"] = vae
+    return _prune(graph)
 
 
 def _apply_qwen21(graph, references):

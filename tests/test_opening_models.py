@@ -21,6 +21,15 @@ class OpeningModelTests(unittest.TestCase):
         self.assertIs(models.apply_model(graph), graph)
         self.assertEqual(graph, before)
 
+    def test_flux3_reuses_native_int8_image_recipe_with_original_first(self):
+        graph = models.apply_model(self.graph(), "flux3", [{"file": "character.png"}])
+        self.assertEqual(graph["92:107"]["inputs"]["unet_name"], "flux3-image-klein-int8-convrot.safetensors")
+        self.assertEqual(graph["92:108"]["inputs"]["type"], "flux3")
+        self.assertEqual(graph["92:102"]["inputs"]["steps"], 16)
+        self.assertEqual(graph["zura_flux3_references"]["inputs"]["images.image0"], ["92:111", 0])
+        self.assertEqual(graph["zura_flux3_reference_1"]["inputs"]["image"], "character.png")
+        self.assertEqual(graph["92:104"]["inputs"]["latent_image"], ["92:113", 0])
+
     def test_qwen_uses_original_first_and_references_in_order(self):
         graph = models.apply_model(self.graph(), "qwen2511", [{"file": "one.png"}, {"file": "two.png"}])
         positive, negative = graph["92:109"]["inputs"], graph["92:86"]["inputs"]
@@ -72,6 +81,7 @@ class OpeningModelTests(unittest.TestCase):
         kinds.update({node["class_type"]: object for node in qwen.values()})
         qwen21 = models.apply_model(self.graph(), "qwen21", [{"file": "ref.png"}])
         kinds.update({node["class_type"]: object for node in qwen21.values()})
+        kinds.update({node["class_type"]: object for node in models.apply_model(self.graph(), "flux3").values()})
         files = {pair for model in models.MODELS.values() for pair in model["files"]}
         status = models.readiness(kinds, lambda folder, name: "installed" if (folder, name) in files else None)
         self.assertTrue(all(m["ready"] for m in status.values()))

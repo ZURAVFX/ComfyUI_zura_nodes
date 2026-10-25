@@ -212,12 +212,21 @@ class ArtistStudio {
     this.bind();this.syncForm();
     if(typeof CreativeWorkspace!=="undefined")this.creative=new CreativeWorkspace(this,api,app);
   }
+  comparisonTarget(url) {
+    const p=this.project,source=p?.selected_url || this.source?.url;
+    if(!p || !source || p.phase==="working")return null;
+    const image=!url && !!p.opening_url && (this.composerStage()!=="video" || this.preview==="look" || !p.results?.length);
+    const result=url || (image?p.opening_url:p.results?.at(-1)?.url);
+    if(!result)return null;
+    const resultLabel=image?({relight:"Lighting image",camera:"Camera still",viewport:"Finished scene image"}[this.config.workflow_mode]||"Starting image"):"Final render";
+    return {source,result,offset:p.selected_url?0:(p.config?.start || 0),kind:image?"image":"video",resultLabel};
+  }
   compareTake(url) {
-    const p=this.project,source=p?.selected_url || this.source?.url,result=url || p?.results?.at(-1)?.url;
-    if(!source || !result)return;
+    const target=this.comparisonTarget(url);if(!target)return;
+    const p=this.project;
     if(!this.comparison){this.comparison=new ShotComparison(this.$("comparison"));this.comparison.onClose=()=>{this.compareActive=false;this.render();};}
-    this.compareActive=true;this.compareProject=p.id;this.compareResult=result;this.$("player").pause();
-    this.comparison.show(source,result,p?.selected_url?0:(p?.config?.start || 0));this.render();
+    this.compareActive=true;this.compareProject=p.id;this.compareResult=target.result;this.compareKind=target.kind;this.$("player").pause();
+    this.comparison.show(target.source,target.result,target.offset,target);this.render();
   }
   $(id) { return this.container.querySelector("#gs-" + id); }
   async setTrim(range){
@@ -285,7 +294,7 @@ class ArtistStudio {
     return true;
   }
   changeOpeningModel(value) {
-    if(this.busy || this.project?.phase==="working" || !["klein9b","qwen2511","qwen21"].includes(value))return;
+    if(this.busy || this.project?.phase==="working" || !["flux3","klein9b","qwen2511","qwen21"].includes(value))return;
     this.config={...this.readConfig(),opening_model:value,h3_viewport_direct:false};
     this.useGeneratedLook();
     this.promptStage="image";this.preview="original";
@@ -497,7 +506,7 @@ class ArtistStudio {
     };
     for (const type of ["source","character","ready","audio"])this.bindUpload(type);
     this.$("preview-tabs").querySelectorAll("button").forEach(button=>button.onclick=()=>{
-      this.trimSeeking=false;this.preview=button.dataset.view;this.render();
+      this.trimSeeking=false;this.compareActive=false;this.comparison?.hide();this.preview=button.dataset.view;this.render();
     });
     this.$("library-list").onclick=e=>{
       const button=e.target.closest("[data-project]");if(button)this.loadProject(button.dataset.project);
@@ -649,7 +658,7 @@ class ArtistStudio {
     await this.perform(async(epoch)=>{
       if(type==="opening" && this.config.preserve_people)throw new Error("Regenerate the starting frame to keep the original people protected.");
       if(type==="opening" && !this.project)throw new Error("Prepare and review the shot before choosing a starting image.");
-      const referenceLimit=this.headSwap()?1:this.config.workflow_mode==="camera"?5:this.directViewport()?9:({klein9b:3,qwen2511:2,qwen21:9}[this.config.opening_model||"klein9b"]||3);
+      const referenceLimit=this.headSwap()?1:this.config.workflow_mode==="camera"?5:this.directViewport()?9:({flux3:9,klein9b:3,qwen2511:2,qwen21:9}[this.config.opening_model||"klein9b"]||3);
       if(type==="character" && this.references.length+files.length>referenceLimit)throw new Error(`Use up to ${referenceLimit} reference images. Remove one before adding more.`);
       for(const file of files){
       const form=new FormData();form.append("file",file);
@@ -1134,7 +1143,7 @@ class ArtistStudio {
     }
     if(this.guidedFrame() && stage!=="video")this.$("video-options").hidden=true;
     if(image && !camera && !readyImage && !working && !this.busy){
-      const model=this.openingModelStatus(),maximum=model?.max_references ?? ({klein9b:3,qwen2511:2,qwen21:9}[this.config.opening_model||"klein9b"]||3);
+      const model=this.openingModelStatus(),maximum=model?.max_references ?? ({flux3:9,klein9b:3,qwen2511:2,qwen21:9}[this.config.opening_model||"klein9b"]||3);
       if(model?.ready===false || this.references.length>maximum){
         this.$("primary").disabled=true;
         this.$("action-note").textContent=this.references.length>maximum?`This image model accepts ${maximum} references. Remove extras or choose another model.`:"Set up this image model, choose another, or upload a finished image.";
@@ -1465,11 +1474,13 @@ class ArtistStudio {
     if(!video && this.lastVideo){player.pause();player.removeAttribute("src");player.load();this.lastVideo=null;}
     if(opening && image.getAttribute("src")!==opening)image.src=opening;
     this.$("empty").hidden=!!video || !!opening;
-    const canCompare=(phase==="done" || phase==="draft") && !!p?.results?.length && !!(p.selected_url || this.source?.url);
+    const target=this.comparisonTarget(this.compareActive&&this.compareKind==="video"?this.compareResult:undefined),canCompare=!!target;
     this.$("compare-toggle").hidden=!canCompare;
-    if(!canCompare || this.compareProject!==p?.id){this.compareActive=false;this.comparison?.hide();}
+    this.$("compare-toggle").setAttribute("aria-label",target?.kind==="image"?"Compare original and modified image":"Compare original and rendered video");
+    this.$("comparison").setAttribute("aria-label",target?.kind==="image"?"Compare original and modified image":"Compare original and rendered video");
+    if(!canCompare || this.compareProject!==p?.id || this.compareKind!==target?.kind){this.compareActive=false;this.comparison?.hide();}
     this.$("canvas").hidden=!!this.compareActive;
-    if(this.compareActive)this.comparison.show(p.selected_url || this.source.url,this.compareResult || video,p.selected_url?0:(p.config?.start || 0));
+    if(this.compareActive)this.comparison.show(target.source,target.kind==="image"?target.result:this.compareResult||target.result,target.offset,target);
     const hasFrame=!!p?.opening_input,direct=this.directViewport()||this.headSwap();
     const step=!hasAssets?0:phase==="done"||phase==="draft"?3:!direct&&this.composerStage()!=="video"?1:2;
     const stageNames=workflow==="camera"?["Source","Camera still","Review & render","Result"]:["Source","Starting frame","Video","Result"],stageNotes=workflow==="camera"?["Add your video","Choose a new angle","Approve the view","Compare & download"]:["Video & references","Create & review","Settings & generation","Compare & download"];

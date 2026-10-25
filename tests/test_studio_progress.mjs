@@ -27,4 +27,9 @@ assert.equal(preparing.title,'Generating video · Wan 2.2');
 assert.equal(preparing.detail,'Loading');
 assert.equal(preparing.meta,'24s elapsed');
 assert.equal(stageProgress({...oldSampler},{state:'queued'}).percent,null,'Queue transition overrides stale native sampling');
+for(const label of ['Generating video','Decoding video','Loading H3 video model']){
+  const image=stageProgress({state:'running',stage_label:label,step:2,total_steps:4},{stage:'design',label:'Creating the lighting frame'});
+  assert.doesNotMatch(image.detail,/video|H3/);assert.equal(image.title,'Creating the lighting frame');
+}
+assert.equal(stageProgress({state:'running',stage_label:'Generating video'},{stage:'h3',label:'Rendering'}).detail,'Generating video','Video stages retain video labels');
 console.log('Studio progress shows actual stage percent, honest unknown states and measured stage ETA.');

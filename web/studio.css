@@ -127,8 +127,8 @@
 .gs-compare-toolbar{justify-content:space-between}.gs-comparison button{min-height:40px;padding:8px 12px;background:var(--gs-selected);color:var(--zc-text);border:1px solid var(--gs-accent-soft);border-radius:6px;font:inherit;cursor:pointer}
 .gs-comparison button:focus-visible{outline:2px solid var(--gs-focus);outline-offset:2px}
 .gs-compare-stage{position:relative;aspect-ratio:var(--gs-compare-ratio);max-height:calc(100dvh - 320px);width:100%;background:var(--gs-bg);overflow:hidden}
-.gs-compare-stage video{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;pointer-events:none}
-.gs-compare-stage [data-source]{clip-path:inset(0 0 0 var(--gs-wipe))}
+.gs-compare-stage :is(video,img){position:absolute;inset:0;width:100%;height:100%;object-fit:contain;pointer-events:none}
+.gs-compare-stage :is([data-source],[data-source-image]){clip-path:inset(0 0 0 var(--gs-wipe))}
 .gs-compare-label{position:absolute;top:14px;padding:6px 10px;border-radius:4px;background:color-mix(in srgb,var(--gs-bg) 90%,transparent);color:var(--zc-text);font-size:12px;pointer-events:none}
 .gs-compare-label.is-result{left:14px}.gs-compare-label.is-source{right:14px}
 .gs-compare-divider{position:absolute;left:var(--gs-wipe);top:0;bottom:0;width:2px;background:var(--zc-text);pointer-events:none;transform:translateX(-1px)}

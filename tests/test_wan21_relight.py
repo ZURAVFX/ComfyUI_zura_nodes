@@ -28,7 +28,7 @@ class Wan21RelightTests(unittest.TestCase):
         self.assertEqual(graph["starting_frame"]["inputs"]["image"], "finished-lighting.png")
 
     def test_each_lighting_generator_edits_original_video_without_sam(self):
-        for model in ("klein9b", "qwen2511", "qwen21"):
+        for model in ("flux3", "klein9b", "qwen2511", "qwen21"):
             with self.subTest(model=model):
                 project = self.project()
                 project["config"]["opening_model"] = model
