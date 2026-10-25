@@ -72,6 +72,23 @@ ui.$('count').value='';const beforeInvalid=calls.filter(c=>c.path==='/prompt').l
 await ui.generate();assert.equal(calls.filter(c=>c.path==='/prompt').length,beforeInvalid);
 assert.match(ui.$('message').textContent,/valid frame count/);ui.$('count').value=121;
 
+// Frame edits accept intermediate values without clamping, spinner changes or shortcuts.
+assert.equal(ui.$('count').type,'text');assert.equal(ui.$('count').getAttribute('inputmode'),'numeric');
+const beforeFrameEdit=calls.filter(c=>c.path==='/prompt').length;
+ui.$('count').value='';ui.$('count').oninput();assert.equal(ui.$('count').value,'');assert.equal(ui.$('message').hidden,true);
+ui.$('count').value='1';ui.$('count').oninput();assert.equal(ui.$('count').value,'1');
+ui.$('count').value='127';ui.$('count').oninput();assert.equal(ui.$('count').value,'127');
+ui.$('count').onchange();assert.equal(ui.state.frameCount,127);
+ui.$('count').value='1200';ui.$('count').onchange();assert.equal(ui.$('count').value,'1200','Out-of-range values remain editable, never silently clamped');
+assert.match(ui.$('message').textContent,/1–993/);assert.equal(ui.$('generate').disabled,true);
+ui.$('count').value='12e1';ui.$('count').onchange();assert.equal(ui.$('generate').disabled,true,'Exponent notation is not a frame count');
+ui.$('count').value='121';ui.$('count').onchange();assert.equal(ui.$('generate').disabled,false);
+let prevented=false,stopped=false;
+ui.$('count').onkeydown({key:'Enter',preventDefault(){prevented=true;},stopPropagation(){stopped=true;}});
+assert.equal(prevented,true);assert.equal(stopped,true);assert.equal(calls.filter(c=>c.path==='/prompt').length,beforeFrameEdit,'Enter applies the range without starting a render');
+ui.$('start').value='';ui.$('start').oninput();ui.$('start').onkeydown({key:'Escape',preventDefault(){},stopPropagation(){}});
+assert.equal(ui.$('start').value,'40','Escape restores the committed value');
+
 events.executing[0]({detail:{node:'foreign'}});events.progress[0]({detail:{value:5,max:8}});
 await ui.generate();assert.equal(ui.job.id,'paintout-job');const prompt=calls.find(c=>c.path==='/prompt').body.prompt;
 assert.equal(prompt.source.inputs.start_frame,40);assert.equal(JSON.parse(prompt.anchors.inputs.anchors)[0].frame,60);

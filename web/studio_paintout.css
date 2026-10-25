@@ -40,6 +40,8 @@
 #genj-studio .zps-anchor-shortcuts button{padding:8px;border:0;background:var(--zc-hover);border-radius:5px}
 #genj-studio .zp-page .zc-tool-panel>label{margin-top:14px}
 #genj-studio .zp-page .zc-tool-panel select{display:block;margin-top:6px;width:100%;min-height:36px;padding:8px 10px;border:1px solid var(--gs-line);border-radius:6px;background:var(--gs-input);color:var(--zc-text)}
+#genj-studio .zp-page :is(#zps-start,#zps-count){display:block;width:100%;min-width:0;min-height:40px;margin-top:8px;padding:10px 12px;border:1px solid var(--gs-line);border-radius:6px;background:var(--gs-input);color:var(--zc-text);font-size:14px;font-variant-numeric:tabular-nums}
+#genj-studio .zp-page :is(#zps-start,#zps-count)[aria-invalid=true]{outline:1px solid var(--gs-muted);outline-offset:2px}
 #genj-studio #zps-selected-name{display:block;overflow-wrap:anywhere}
 #genj-studio #zps-takes{position:absolute;z-index:15;right:16px;top:48px;max-height:50dvh;width:min(360px,calc(100vw - 32px));overflow:auto;padding:12px;background:var(--gs-panel);border:1px solid var(--gs-line);border-radius:12px}
 #genj-studio #zps-takes:empty:after{content:'No paintout takes yet';display:block;padding:12px;color:var(--gs-muted);font-size:12px}
