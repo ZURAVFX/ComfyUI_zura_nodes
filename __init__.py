@@ -62,7 +62,7 @@ NODE_DISPLAY_NAME_MAPPINGS.update(QWEN_DESIGN_NAMES)
 
 WEB_DIRECTORY = "./web"
 PACKAGE_ROOT = Path(__file__).resolve().parent
-__version__ = "1.3.29"
+__version__ = "1.3.30"
 
 
 def _register_routes():
@@ -179,3 +179,8 @@ NODE_DISPLAY_NAME_MAPPINGS.update(AUDIO_DIALOGUE_NAMES)
 if getattr(PromptServer, "instance", None) is not None:
     register_dialogue_routes(PromptServer.instance)
     register_audio_dialogue_routes(PromptServer.instance)
+
+# Paintout nodes retain their standalone IDs so saved workflows remain compatible.
+from .paintout import NODE_CLASS_MAPPINGS as PAINTOUT_NODES, NODE_DISPLAY_NAME_MAPPINGS as PAINTOUT_NAMES
+NODE_CLASS_MAPPINGS.update(PAINTOUT_NODES)
+NODE_DISPLAY_NAME_MAPPINGS.update(PAINTOUT_NAMES)

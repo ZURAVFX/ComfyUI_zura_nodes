@@ -96,6 +96,16 @@
       "category": "Reference",
       "description": "Imported reference graph comparing H3 acceleration and LoRA branches.",
       "previous_file": "Zura_MiniMax_H3_Ref2Vid_Speedboosts.json"
+    },
+    {
+      "file": "Video - Targeted Paintout (LTX 2.5).json",
+      "category": "Video",
+      "description": "Remove selected objects with Obscura, a supplied removal mask and manually painted clean frames."
+    },
+    {
+      "file": "Video - Full Scene Clean Plate (LTX 2.5).json",
+      "category": "Video",
+      "description": "Generate an empty scene with the official Clean Plate LoRA, then restore wanted subjects in compositing."
     }
   ]
 }

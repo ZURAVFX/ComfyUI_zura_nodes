@@ -105,6 +105,19 @@ a:focus-visible{outline:2px solid var(--blue);outline-offset:4px}
       <div class="note"><b>Keep the graph within reach.</b> Studio guides the shot setup and review. Switch to Graph view whenever you want to inspect or edit the native ComfyUI workflow.</div>
     </section>
 
+    <section class="band" id="paintout" aria-labelledby="paintout-title">
+      <h2 id="paintout-title">Paint out a subject. Or clear the whole scene.</h2>
+      <p class="lede">Two LTX 2.5 graph templates are included in Zura Nodes. Use painted clean frames and a removal mask for a targeted repair, or generate a full-scene clean plate and restore wanted subjects in After Effects.</p>
+      <ul class="rows">
+        <li><span class="n">01</span><span class="t">Targeted anchor paintout</span><span class="d">Obscura uses your manually painted keyframes and supplied mask. The repair blends back into the original plate.</span></li>
+        <li><span class="n">02</span><span class="t">Full-scene clean plate</span><span class="d">The official Lightricks Clean Plate LoRA aims to remove people, vehicles and moving obstructions across the frame. No mask or painted anchors are required.</span></li>
+        <li><span class="n">03</span><span class="t">SDR and HDR delivery</span><span class="d">Browse video/ProRes or image sequences. Process in SDR or HDR and export float EXRs, 10-bit HLG or SDR video, with source audio and a motion preview.</span></li>
+      </ul>
+      <div class="actions">
+        <a class="btn" href="https://github.com/ZURAVFX/ComfyUI_zura_nodes/blob/main/PAINTOUT.md">Paintout setup and examples</a>
+      </div>
+    </section>
+
     <section class="band" aria-labelledby="workflow-title">
       <h2 id="workflow-title">A short path from source to render.</h2>
       <ol class="steps">

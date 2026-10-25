@@ -1,5 +1,13 @@
 # Release notes
 
+## 1.3.30 - 25 October 2026
+
+- Integrate the LTX 2.5 targeted Obscura anchor paintout and official full-scene Clean Plate workflows into Zura Nodes, preserving existing paintout node IDs.
+- Add Windows file browsing, separate video/image-sequence choices, sequence-only frame-rate controls, and painted-frame cards with thumbnails, frame indices and strengths.
+- Add matched SDR/HDR working conversions, float32 VAE execution, original-plate compositing, EXR/HLG/SDR delivery, trimmed source audio and motion previews.
+- Include two portable example graphs and their model/setup guide in the reviewed template catalogue and Registry package. No media or model weights are bundled.
+- Retain the tested INT8, eight-step Euler sampler and memory-bounded native guide-attention path. Smart cropping remains experimental.
+
 ## 1.3.29 - 23 October 2026
 
 - Rebuild the prompt composer around left-aligned video/reference attachments, one writing surface and a bottom row for the real model, resolution, clip length, audio and advanced controls. Replace the cramped workflow grid with one selector. Controls and history open over the full-size viewer; light/dark preferences remain saved.

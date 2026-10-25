@@ -1,5 +1,12 @@
 # Zura nodes (ComfyUI_zura_nodes)
 
+## LTX 2.5 paintout and clean plates
+
+Zura Nodes now includes two native graph workflows: [targeted paintout](workflows/Video%20-%20Targeted%20Paintout%20%28LTX%202.5%29.json) with Obscura, a removal mask and painted anchor frames; and [full-scene clean plate](workflows/Video%20-%20Full%20Scene%20Clean%20Plate%20%28LTX%202.5%29.json) with the official Lightricks Clean Plate LoRA. The latter needs no removal mask or anchors; restore any wanted subjects from the original in After Effects.
+
+Both support video/ProRes and image-sequence browsing, SDR or HDR processing, float EXR or 10-bit HLG/SDR export, trimmed source audio and a motion preview. These are graph templates, separate from Studio's character-performance modes. See [Paintout setup and model requirements](PAINTOUT.md). If you installed the earlier standalone `ComfyUI-Zura-Paintout` pack, remove or disable that copy after updating Zura Nodes, then restart ComfyUI and refresh the browser. Saved paintout node IDs remain compatible.
+
+
 **Zura Studio** is the guided video interface in the official Zura Nodes pack. **Character performance** offers Wan, MiniMax H3 and LTX 2.5, with approved original-performance, uploaded replacement-dialogue and silent-footage routes. Wan offers precise masked replacement; H3 uses character/performance guidance; LTX recreates the whole frame. **Viewport to final** currently offers H3. A separate **H3 → Head & face** option uses your first portrait directly, keeps original audio and composites a tracked face crop into the source. It is qualified for up to two seconds. See [approved workflows](docs/APPROVED_WORKFLOWS.md) and [installation](INSTALL_STUDIO.md).
 
 **Word replacement:** edit audio with LongCat or video with a tracked LTX Dub-It face crop. Both native workflows provide waveform selection and a full replacement phrase inside the nodes, then blend only the chosen words into the source. Extra speaker references are optional for LongCat. See [Dialogue editing](DIALOGUE_EDITING.md) for setup, timing controls and tested limits.
