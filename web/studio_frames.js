@@ -1,3 +1,4 @@
+import {megapixelSlider,editableDimension} from './studio_resolution.js';
 import {FRAME_LENGTHS,FRAME_SIZE_PRESETS,FRAME_MEGAPIXELS} from './frame_video_recipes.js';
 import {composerIcons as icons} from './studio_composer.js';
 import {tidyArtistGraph} from './artist_graph.js';
@@ -52,8 +53,8 @@ export class FrameVideoWorkspace{
     for(const id of ['prompt','width','height','length','steps','seed'])if(draft[id]!==undefined)this.$(id).value=draft[id];
     this.normaliseDimensions();
     const width=Number(this.$('width').value),height=Number(this.$('height').value);
-    this.$('size-preset').value=draft.sizePreset==='custom'?'custom':FRAME_SIZE_PRESETS.find(p=>p.width===width&&p.height===height||FRAME_MEGAPIXELS.some(mp=>{const s=endpointPresetSize(this.recipe().id,p.id,mp);return s.width===width&&s.height===height;}))?.id||'custom';
-    this.$('megapixels').value=FRAME_MEGAPIXELS.includes(Number(draft.megapixels))?draft.megapixels:FRAME_MEGAPIXELS.reduce((best,mp)=>Math.abs(mp-width*height/1e6)<Math.abs(best-width*height/1e6)?mp:best,1);
+    this.$('size-preset').value=FRAME_SIZE_PRESETS.some(p=>p.id===draft.sizePreset)?draft.sizePreset:draft.sizePreset==='custom'?'custom':FRAME_SIZE_PRESETS.find(p=>p.width===width&&p.height===height||FRAME_MEGAPIXELS.some(mp=>{const s=endpointPresetSize(this.recipe().id,p.id,mp);return s.width===width&&s.height===height;}))?.id||'custom';
+    this.$('megapixels').value=Number(draft.megapixels)>=.25&&Number(draft.megapixels)<=1?draft.megapixels:FRAME_MEGAPIXELS.reduce((best,mp)=>Math.abs(mp-width*height/1e6)<Math.abs(best-width*height/1e6)?mp:best,1);
     this.$('audio-enabled').checked=this.recipe().supportsAudioReference&&draft.audioEnabled===true;this.$('random').checked=draft.random!==false;
     this.$('refresh').onclick=()=>this.loadModels();
     this.$('engine').onchange=()=>{const cap=this.recipe();this.$('steps').value=cap.defaultSteps;this.setLengths(cap.defaultFrames);if(!cap.supportsAudioReference)this.$('audio-enabled').checked=false;this.normaliseDimensions();this.selectAvailability();this.save();this.render();};
@@ -66,6 +67,8 @@ export class FrameVideoWorkspace{
       this.save();this.render();
     };
     this.$('size-preset').onchange=applySize;this.$('megapixels').onchange=applySize;
+    megapixelSlider(this.$('megapixels'));
+    for(const key of ['width','height'])editableDimension(this.$(key),()=>{this.$('size-preset').value='custom';this.normaliseDimensions();this.save();this.render();},()=>({step:this.recipe().dimensionStep,min:this.recipe().minDimension||256,max:this.recipe().maxDimension||1536}));
     for(const id of ['first','last']){
       const button=this.page.querySelector(`[data-frame="${id}"]`);button.onclick=()=>this.$(id).click();
       this.$(id).onchange=e=>{const file=e.target.files?.[0];e.target.value='';if(file)this.upload(id,file);};
@@ -147,7 +150,7 @@ export class FrameVideoWorkspace{
   renderHistory(){this.$('takes').innerHTML=this.items.map((item,i)=>`<button type="button" data-take="${i}">${escape(item.config.prompt.slice(0,60))} · ${(item.config.frames/24).toFixed(2)}s</button>`).join('');this.$('takes').onclick=e=>{const button=e.target.closest('[data-take]');if(button)this.showResult(this.items[Number(button.dataset.take)].file);};if(this.items[0])this.showResult(this.items[0].file);}
   showResult(file){this.nativeSamplePreview?.clear();this.$('empty').hidden=true;this.$('image-slot').hidden=true;this.$('result').hidden=false;this.$('result').src=view(this.api,file);this.$('history').open=false;}
   elapsed(step,max){const elapsed=Math.floor((Date.now()-this.job.started)/1000);const sampleElapsed=this.sampleStarted?(Date.now()-this.sampleStarted)/1000:0;if(!this.sampleStarted&&step)this.sampleStarted=Date.now();return step>1&&sampleElapsed>0?`About ${Math.ceil(sampleElapsed/(step-1)*(max-step))}s left in sampling · ${elapsed}s elapsed`:`${elapsed}s elapsed`;}
-  async generate(){
+  async generate(){if(['width','height'].some(k=>this.$(k).commitDimension?.()===false)){this.message('Enter a whole number for width and height.');return;}
     if(this.busy())return;this.submitting=true;this.message('');this.render();
     try{if(!this.availability?.ready)throw new Error(`Install the required ${this.recipe().label} models and refresh.`);const config=this.config();if(config.random)config.seed=crypto.getRandomValues(new Uint32Array(1))[0];const graph=this.build(config),previewMethod=await nativePreviewMethod(this.api,config.engine);const response=await this.fetch('/prompt',{prompt:graph,client_id:this.api.clientId,extra_data:{zura_first_last:true,preview_method:previewMethod}});if(!response.prompt_id)throw new Error('ComfyUI did not confirm this run. Check the queue before retrying.');this.job={id:response.prompt_id,started:Date.now(),config,previewMethod,stages:Object.fromEntries(Object.entries(graph).map(([id,node])=>[id,node._meta?.title]).filter(([,title])=>title))};this.sampleStarted=null;this.save();this.startPolling();}
     catch(e){this.message(e.message);}finally{this.submitting=false;this.render();}

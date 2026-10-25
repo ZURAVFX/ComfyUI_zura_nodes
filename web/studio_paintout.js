@@ -1,3 +1,4 @@
+import {megapixelSlider,selectNumberOnFocus} from './studio_resolution.js';
 import {buildPaintoutGraph,paintoutValidation,paintoutAvailability,PAINTOUT_DEFAULT_PROMPTS,PAINTOUT_OUTPUT_MODES,PAINTOUT_SIZE_PRESETS,paintoutPresetSize,paintoutRangeFix} from './paintout_recipes.js';
 import {composerIcons as icons} from './studio_composer.js';
 import {attachWorkspaceSamplePreview} from './studio_live_preview.js';
@@ -57,6 +58,7 @@ export class PaintoutWorkspace{
     this.page.querySelector('form').onsubmit=e=>{e.preventDefault();this.generate();};
     this.$('size-mode').onchange=()=>{this.state.resolutionMode=this.$('size-mode').value;this.applySize();this.changed();};
     this.$('megapixels').onchange=()=>{this.state.megapixels=Number(this.$('megapixels').value);this.applySize();this.changed();};
+    megapixelSlider(this.$('megapixels'),{max:2});
     for(const button of this.page.querySelectorAll('[data-mode]'))button.onclick=()=>this.setMode(button.dataset.mode);
     for(const button of this.page.querySelectorAll('[data-view]'))button.onclick=()=>this.preview(button.dataset.view);
     this.$('prompt').oninput=()=>{this.prompts[this.state.mode]=this.$('prompt').value;this.save();};
@@ -94,6 +96,7 @@ export class PaintoutWorkspace{
       delete input.dataset.inputError;input.removeAttribute('aria-invalid');input.value=String(value);
       if(value!==getValue())setValue(value);else this.render();return true;
     };
+    selectNumberOnFocus(input);
     input.onchange=input.onblur=commit;
     input.oninput=()=>{delete input.dataset.inputError;input.removeAttribute('aria-invalid');this.message('');};
     input.onkeydown=e=>{e.stopPropagation();if(e.key==='Enter'){e.preventDefault();commit();}else if(e.key==='Escape'){e.preventDefault();input.value=String(getValue());delete input.dataset.inputError;input.removeAttribute('aria-invalid');this.render();}};
@@ -176,7 +179,7 @@ export class PaintoutWorkspace{
     this.$('range-help').textContent=this.sourceInfo?`Source frames 0â€“${this.sourceInfo.frames-1}. Up to 993 frames per run. Press Enter or click away to apply. ${c.frameCount>81?'Long ranges can exceed VRAM; this workflow samples the whole range at once.':'Longer ranges need more memory.'}`:'Add footage to choose its frame range.';
     const sizeMode=this.state.resolutionMode,preset=PAINTOUT_SIZE_PRESETS.some(p=>p[0]===sizeMode);
     this.$('resolution-label').textContent=(sizeMode==='source'?'Source Â· ':'')+`${c.width} Ã— ${c.height}`;
-    this.$('size-mode').value=sizeMode;this.$('megapixels').value=this.state.megapixels;
+    this.$('size-mode').value=sizeMode;this.$('megapixels').value=this.state.megapixels;this.$('megapixels').updateReadout?.();
     this.$('custom-size').hidden=sizeMode!=='custom';this.$('megapixels-control').hidden=!preset;
     const original=this.sourceInfo?`${this.sourceInfo.width} Ã— ${this.sourceInfo.height}`:'the source resolution';
     this.$('size-help').textContent=`AI processing: ${c.width} Ã— ${c.height} Â· ${(c.width*c.height/1e6).toFixed(2)} MP. Saved output: ${original}.`;

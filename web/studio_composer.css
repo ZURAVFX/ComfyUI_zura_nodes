@@ -214,3 +214,13 @@
 
 #genj-studio .zc-opening-menu>[data-use-finished-image]{margin-top:6px;padding-top:12px;border-top:1px solid var(--gs-line);border-radius:0}
 #genj-studio .zc-opening-menu>[data-opening-status]{margin:4px 0;padding:8px 12px;font-size:12px;line-height:18px;color:var(--gs-muted)}
+
+/* Size controls share one quiet, readable layout in every composer. */
+#genj-studio .zc-native-resolution-bridge{display:none!important}
+#genj-studio .zc-tool-panel input[type=range]{width:100%;min-height:28px;margin:8px 0 0;padding:0;accent-color:var(--gs-accent,#dfff53);cursor:pointer}
+#genj-studio .zc-resolution-readout{display:block;font-size:12px;color:var(--gs-muted);font-variant-numeric:tabular-nums}
+#genj-studio .zc-resolution-dimensions{display:block;margin:16px 0 8px;font-size:18px;font-weight:600;line-height:1.4;font-variant-numeric:tabular-nums;color:var(--gs-text)}
+#genj-studio .zc-tool-panel .zf-dimensions{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px;margin-top:16px}
+#genj-studio .zc-tool-panel .zf-dimensions input{width:100%;min-width:0;font-variant-numeric:tabular-nums}
+#genj-studio .zc-tool-panel label{line-height:1.5}
+#genj-studio .zc-tool-panel [aria-invalid=true]{outline:1px solid var(--gs-error,#f58b78)}

@@ -1,0 +1,28 @@
+import assert from 'node:assert/strict';
+import {parseHTML} from '../../ui-check/node_modules/linkedom/esm/index.js';
+import {editableDimension,VideoResolutionControl} from '../web/studio_resolution.js';
+import {ENDPOINT_RECIPES,endpointPresetSize} from '../web/video_recipe_catalog.js';
+const {document,window}=parseHTML('<html><body><section id="panel"></section><select id="native"><option value="1280">720p</option><option value="1920">1080p</option></select><input id="number" value="640"/></body></html>');
+Object.defineProperty(window.HTMLSelectElement.prototype,'value',{configurable:true,get(){return this.querySelector('option[selected]')?.value||this.querySelector('option')?.value||'';},set(v){for(const o of this.querySelectorAll('option'))o.toggleAttribute('selected',o.value===String(v));}});
+Object.assign(globalThis,{document,window});
+let commits=0,selected=0;
+const number=document.querySelector('#number');number.select=()=>selected++;
+editableDimension(number,()=>commits++);
+number.dispatchEvent(new window.Event('focus'));assert.equal(selected,1,'Focusing selects the complete number');
+number.value='';number.dispatchEvent(new window.Event('input',{bubbles:true}));assert.equal(number.value,'','Clearing is allowed while typing');assert.equal(commits,0);
+number.value='12';number.dispatchEvent(new window.Event('input',{bubbles:true}));assert.equal(number.value,'12','Partial values do not snap while typing');
+number.value='721';assert.equal(number.commitDimension(),true);assert.equal(number.value,'736');assert.equal(commits,1);
+number.value='1e3';assert.equal(number.commitDimension(),false);assert.equal(commits,1);
+const studio={config:{workflow_mode:'relight',engine:'h3',opening_model:'klein9b',resolution:1280},source:{width:1920,height:1080},composerStage:()=>stage,$:()=>document.querySelector('#native')};
+let stage='image';const panel=document.querySelector('#panel'),control=new VideoResolutionControl(studio,panel);control.sync();
+const field=id=>panel.querySelector('#zvr-'+id);
+field('mp').value='.65';field('mp').oninput();assert.equal(studio.config.opening_width%16,0);assert.equal(studio.config.opening_height%16,0);assert.match(field('dimensions').textContent,new RegExp(String(studio.config.opening_width)));assert.match(field('hint').textContent,/Saved frame stays 1920/);
+const imageWidth=studio.config.opening_width;stage='video';control.sync();assert.match(field('dimensions').textContent,/1280 × 720/,'Existing relight default matches its graph');
+field('shape').value='portrait';field('shape').onchange();assert.ok(studio.config.relight_height>studio.config.relight_width);assert.equal(studio.config.opening_width,imageWidth,'Image and video sizes stay independent');
+field('shape').value='custom';field('shape').onchange();field('width').value='720';field('height').value='1280';field('width').commitDimension();assert.equal(studio.config.relight_width,720);assert.equal(studio.config.relight_height,1280);
+studio.busy=true;control.sync();assert.equal(field('mp').disabled,true);assert.equal(field('width').disabled,true);
+for(const recipe of ENDPOINT_RECIPES)for(const shape of ['landscape','portrait','square','standard','vertical'])for(let i=5;i<=20;i++){
+  const size=endpointPresetSize(recipe.id,shape,i/20);
+  assert.equal(size.width%recipe.dimensionStep,0);assert.equal(size.height%recipe.dimensionStep,0);assert.ok(size.width*size.height<=recipe.maxPixels);assert.ok(size.width>0&&size.height>0);
+}
+console.log('Resolution: live MP sizing, model grids and budgets, independent relight stages, whole-number selection and deferred validation pass.');

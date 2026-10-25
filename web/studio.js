@@ -297,6 +297,7 @@ class ArtistStudio {
   changeOpeningModel(value) {
     if(this.busy || this.project?.phase==="working" || !["flux3","klein9b","qwen2511","qwen21"].includes(value))return;
     this.config={...this.readConfig(),opening_model:value,h3_viewport_direct:false};
+    if(value==='qwen21'&&this.config.opening_width&&this.config.opening_height){for(const key of ['opening_width','opening_height'])this.config[key]=Math.floor(this.config[key]/32)*32;}
     this.useGeneratedLook();
     this.promptStage="image";this.preview="original";
     this.syncForm();this.render();

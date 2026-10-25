@@ -90,6 +90,34 @@ class Wan21RelightTests(unittest.TestCase):
         with patch.object(studio, "assert_approved"), patch.object(wan21, "_output_size", return_value=(1280, 704)):
             return wan21.build_studio_graph(project, lambda asset: asset["file"])
 
+    def test_selected_resolution_reaches_both_native_relight_inputs(self):
+        project = self.project()
+        project["config"].update(relight_width=720, relight_height=1280)
+        graph = self.build(project)
+        for key in ("272:407:89", "272:408:275:190"):
+            self.assertEqual(graph[key]["inputs"]["width"], 720)
+            self.assertEqual(graph[key]["inputs"]["height"], 1280)
+            self.assertEqual(graph[key]["inputs"]["keep_proportion"], "crop")
+
+    def test_opening_resolution_keeps_original_frame_and_final_source_size(self):
+        for model in ("flux3", "klein9b", "qwen2511", "qwen21"):
+            project = self.project()
+            project["config"].update(opening_model=model, opening_width=1152, opening_height=640)
+            with patch.object(studio, "assert_approved"), patch.object(studio, "check_asset"):
+                graph = studio.build_graph(project, "design", use_cache=False)
+            self.assertEqual(graph["92:111"]["inputs"]["image"], ["125", 0])
+            self.assertEqual(graph["92:111"]["inputs"]["width"], 1152)
+            self.assertEqual(graph["92:111"]["inputs"]["crop"], "center")
+            self.assertEqual(graph["zura_opening_original_resolution"]["inputs"]["width"], ["zura_original_size", 0])
+
+    def test_invalid_grid_and_pixel_budget_are_rejected_before_queueing(self):
+        for sizes in ({"opening_width": 721, "opening_height": 1280},
+                      {"relight_width": 2048, "relight_height": 2048},
+                      {"opening_width": 2048, "opening_height": 2048},
+                      {"relight_width": 720}):
+            with self.subTest(sizes=sizes), self.assertRaises(ValueError):
+                studio.clean_config({"engine": "h3", "workflow_mode": "relight", **sizes})
+
     def test_builds_original_performance_recipe_with_reviewed_frame_and_direction(self):
         graph = self.build()
         self.assertEqual(graph["wan21_reference"]["inputs"]["image"], "genj_studio/test/opening.png")

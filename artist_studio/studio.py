@@ -42,6 +42,9 @@ STAGES.update({"ltx25_" + phase: "LTX 2.5 " + phase for phase in
                ("text", "motion", "stage1", "upscale", "refine", "decode", "cleanup")})
 DEFAULTS = {"engine": "local", "background": "keep", "scope": "person", "prompt": "", "image_prompt": "",
             "opening_model": "klein9b",
+            "opening_width": 0, "opening_height": 0, "opening_shape": "source", "opening_megapixels": 1.0,
+            "relight_width": 0, "relight_height": 0, "relight_shape": "source", "relight_megapixels": 0.9,
+            "camera_shape": "source", "camera_megapixels": 0.35,
             "start": 0.0, "duration": 2.0, "size": 512, "performer": -1,
             "margin": 20, "pitch": False, "seed": 42, "render_size": 0, "h3_preset": "preview_quality", "h3_steps": 0, "h3_attention": "native", "remove_text": False,
             "resolution": 1280, "delivery_mode": "native", "quality": "fast", "audio_id": "", "audio_start": 0.0, "length_mode": "custom", "lip_sync": False, "refine_lips": False,
@@ -203,6 +206,17 @@ def clean_config(value):
     c["mask_prompt"] = str(c["mask_prompt"]).strip()[:500]
     from .mask_selection import clean_points
     c["mask_points"] = clean_points(c["mask_points"], require_positive=False)
+    for prefix, step, maximum, pixels in (("opening", 32 if c["opening_model"] == "qwen21" else 16, 2048, 2_000_000), ("relight", 16, 1920, 1920 * 1088)):
+        pair = []
+        for side in ("width", "height"):
+            raw = c[prefix + "_" + side]
+            number = int(raw)
+            if isinstance(raw, bool) or float(raw) != number or number and (number < 256 or number > maximum or number % step):
+                raise ValueError(f"Choose {prefix} dimensions from 256 to {maximum}, in multiples of {step}.")
+            pair.append(number)
+            c[prefix + "_" + side] = number
+        if bool(pair[0]) != bool(pair[1]) or pair[0] * pair[1] > pixels:
+            raise ValueError(f"Choose both {prefix} dimensions within the model's pixel limit.")
     c["resolution"] = 832 if c["engine"] == "wan2" else int(c["resolution"])
     if c["workflow_mode"] == "relight" and c["relight_engine"] == "wan21":
         c["resolution"] = 1280
@@ -956,6 +970,11 @@ def build_graph(project, stage, use_cache=True, run_id=None):
                 constrain_sampling(graph, ["zura_look_boundary", 0])
         from .opening_models import apply_model
         apply_model(graph, c.get("opening_model", "klein9b"), references)
+        if c.get("opening_width") and c.get("opening_height"):
+            graph["92:111"] = {"class_type": "ImageScale", "inputs": {
+                "image": ["125", 0], "width": c["opening_width"], "height": c["opening_height"],
+                "upscale_method": "lanczos", "crop": "center"},
+                "_meta": {"title": "Starting image generation resolution"}}
         restore_source_size(graph)
         graph["122"]["inputs"]["filename_prefix"] = "genj/studio_images/" + project["id"]
         if c.get("workflow_mode") == "relight" and not references:
@@ -1948,7 +1967,7 @@ class Studio:
                 p["opening_approval"] = None
                 p.pop("ltx25_run", None)
             if (prior["opening_model"] != config["opening_model"] or prior["h3_viewport_direct"] != config["h3_viewport_direct"] or prior["workflow_mode"] != config["workflow_mode"] or prior["image_prompt"] != config["image_prompt"] or (prior["prompt"] != config["prompt"] and not config["image_prompt"])
-                    or any(prior[k] != config[k] for k in ("camera_preset", "camera_prompt", "camera_width", "camera_height"))):
+                    or any(prior[k] != config[k] for k in ("camera_preset", "camera_prompt", "camera_width", "camera_height", "opening_width", "opening_height"))):
                 p.update(opening_input=None, opening_key=None, opening_url=None, opening_approval=None)
             p["phase"] = ("opening" if p.get("opening_input") and p["config"]["engine"] in ("local", "h3", "wan", "wan2")
                           else "approved" if p.get("approval") else "review" if p.get("review") else "new")

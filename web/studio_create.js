@@ -1,3 +1,4 @@
+import {resolutionSize,editableDimension} from './studio_resolution.js';
 import {IMAGE_MODELS,IMAGE_SIZES,buildImageGraph,imageAvailability,imageDimensions} from "./image_recipes.js";
 import {VideoComposer,composerIcons} from "./studio_composer.js";
 import {FrameVideoWorkspace} from "./studio_frames.js";
@@ -60,9 +61,11 @@ export class CreativeWorkspace {
     page.querySelector('.zc-composer-bottom').prepend(imageModelLabel);
     page.querySelector('.zc-image-settings>label[for="zc-model"]').remove();
     const imagePromptLabel=page.querySelector('label[for="zc-prompt"]');imagePromptLabel.className="zc-sr-only";
-    const quick=document.createElement("button");quick.type="button";quick.id="zc-quick-settings";quick.className="zu-btn zu-btn-ghost";quick.setAttribute("aria-label","Image model and resolution");
-    this.$("recipe-label").before(quick);this.$("recipe-label").className="zc-sr-only";
-    quick.onclick=()=>this.$("settings-toggle").click();
+    const imageResolution=document.createElement('details');imageResolution.className='zc-tool-popup';
+    imageResolution.innerHTML='<summary id="zc-quick-settings" aria-label="Image resolution"></summary><div class="zc-tool-panel"><strong>Resolution</strong><label>Megapixels<input id="zc-image-megapixels" aria-label="Megapixels" type="range" min="0.25" max="2" step="0.05" value="1"/><output id="zc-image-mp-label" class="zc-resolution-readout"></output></label></div>';
+    this.$('recipe-label').before(imageResolution);this.$('recipe-label').className='zc-sr-only';
+    const sizePanel=imageResolution.querySelector('.zc-tool-panel');sizePanel.prepend(page.querySelector('.zc-shapes'));sizePanel.append(page.querySelector('.zc-dimensions'),this.$('size'));
+    this.$('image-megapixels').oninput=()=>{const ratio=this.imageSizeRatio||Number(this.$('width').value)/Number(this.$('height').value),size=resolutionSize(ratio,Number(this.$('image-megapixels').value),{step:16,min:256,max:2048,maxPixels:2e6});this.$('width').value=size.width;this.$('height').value=size.height;this.save();this.render();};
     this.imageOperation=this.draft.operation==="edit"?"edit":"create";
     const imageTabs=document.createElement('nav');imageTabs.className='zc-image-operation';imageTabs.setAttribute('aria-label','Image task');
     imageTabs.innerHTML='<button type="button" data-image-operation="create">Create image</button><button type="button" data-image-operation="edit">Edit image</button>';
@@ -80,9 +83,10 @@ export class CreativeWorkspace {
     this.$("prompt").oninput=()=>{this.save();this.render();};
     this.$("model").onchange=()=>{this.save();this.render();};
     for(const id of ["width","height"])this.$(id).oninput=()=>{this.save();this.render();};
+    for(const key of ['width','height'])editableDimension(this.$(key),()=>{this.imageSizeRatio=Number(this.$('width').value)/Number(this.$('height').value);this.save();this.render();},()=>({step:16,min:256,max:2048}));
     this.$("swap-size").onclick=()=>{const w=this.$("width").value;this.$("width").value=this.$("height").value;this.$("height").value=w;this.save();this.render();};
     this.$("seed").onchange=()=>this.save();this.$("random").onchange=()=>this.save();
-    for(const button of page.querySelectorAll("[data-shape]"))button.onclick=()=>{this.$("shape").value=button.dataset.shape;const size=IMAGE_SIZES[button.dataset.shape];this.$("width").value=size[0];this.$("height").value=size[1];this.save();this.render();};
+    for(const button of page.querySelectorAll("[data-shape]"))button.onclick=()=>{this.$("shape").value=button.dataset.shape;this.imageSizeRatio=null;const size=IMAGE_SIZES[button.dataset.shape];this.$("width").value=size[0];this.$("height").value=size[1];this.save();this.render();};
     for(const button of page.querySelectorAll("[data-suggestion]"))button.onclick=()=>{this.$("prompt").value=button.dataset.suggestion;this.save();this.render();this.$("prompt").focus({preventScroll:true});};
     page.querySelector("form").onsubmit=e=>{e.preventDefault();this.generate();};
     const toggleSettings=open=>{
@@ -286,6 +290,8 @@ export class CreativeWorkspace {
     this.$("model-hint").textContent=m?.hint||"Checking local model files.";
     this.$("size").textContent=error || size.join(" × ")+" px · "+(size[0]*size[1]/1e6).toFixed(2)+" MP"+(size[0]*size[1]>1048576?" · Above the tested 1 MP size; needs more memory.":" · Multiples of 16");
     for(const id of ["width","height"])this.$(id).setAttribute("aria-invalid",String(!!error));
+    this.$('image-megapixels').disabled=busy;this.$('image-mp-label').textContent=size?`${(size[0]*size[1]/1e6).toFixed(2)} MP`:'';
+    if(this.$('image-megapixels')!==document.activeElement&&size)this.$('image-megapixels').value=Math.min(2,size[0]*size[1]/1e6);
     if(this.$("quick-settings"))this.$("quick-settings").textContent=size?size.join(" × "):"Set size";
     if(this.$("history-menu")){const item=this.$("history-menu").querySelector('[value="clear-history"]');item?.toggleAttribute("disabled",!this.items.length);}
     this.$("recipe-label").textContent=m?`${m.name} · ${m.steps} steps`:"Local image generation";
@@ -337,6 +343,7 @@ export class CreativeWorkspace {
     return `Taking longer than recent renders · ${Math.abs(remaining)}s over estimate · ${elapsed}s elapsed`;
   }
   async generate(){
+    if(['width','height'].some(k=>this.$(k).commitDimension?.()===false)){this.message('Enter a whole number for width and height.');return;}
     if(this.job||this.submitting||this.uploading)return;
     this.submitting=true;this.message("");this.render();
     try{const c=this.config();if(!this.models.find(m=>m.id===c.model)?.ready)throw new Error("Install this model first, then refresh models.");if(c.random)c.seed=crypto.getRandomValues(new Uint32Array(1))[0];const graph=buildImageGraph(c);this.$("bar").removeAttribute("value");this.$("progress-title").textContent="Submitting image";const result=await this.fetch("/prompt",{prompt:graph,client_id:this.api.clientId,extra_data:{zura_image:true}});if(!result.prompt_id)throw new Error("ComfyUI did not confirm this run. Check the queue before retrying.");this.job={id:result.prompt_id,started:Date.now(),config:c};this.$("progress-title").textContent="Queued";this.save();this.startPolling();}

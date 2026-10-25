@@ -1,3 +1,4 @@
+import {resolutionSize} from './studio_resolution.js';
 // The artist-approved H3 FL2VA recipe. Endpoints are native keyframes, not
 // ingredients. Keep the supplied sampler, Turbo adapter and Kitchen backend.
 export const FRAME_VIDEO_MODELS={
@@ -19,9 +20,8 @@ export const FRAME_SIZE_PRESETS=[
 export const FRAME_MEGAPIXELS=[0.25,0.5,0.75,1];
 export function frameVideoPresetSize(id,megapixels){
   const preset=FRAME_SIZE_PRESETS.find(p=>p.id===id),mp=Number(megapixels);
-  if(!preset||!FRAME_MEGAPIXELS.includes(mp))throw new Error('Choose a shape and megapixel size.');
-  const width=Math.round(Math.sqrt(mp*1e6*preset.ratio)/32)*32,height=Math.round(Math.sqrt(mp*1e6/preset.ratio)/32)*32;
-  return frameVideoDimensions({width,height});
+  if(!preset||!(Number.isFinite(mp)&&mp>=.25&&mp<=1))throw new Error('Choose a shape and megapixel size.');
+  return resolutionSize(preset.ratio,mp,{step:32,min:256,max:1536,maxPixels:1344*768});
 }
 const ref=id=>[id,0];
 export function frameVideoDimensions(c){

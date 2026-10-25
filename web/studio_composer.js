@@ -1,3 +1,4 @@
+import {VideoResolutionControl} from './studio_resolution.js';
 const svg=body=>`<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${body}</svg>`;
 export const composerIcons={
   video:svg('<rect x="3" y="5" width="18" height="14" rx="3"/><path d="m10 9 5 3-5 3z"/>'),
@@ -50,7 +51,11 @@ export class VideoComposer {
     imageModel.addEventListener('keydown',e=>{if(!['ArrowDown','ArrowUp','Home','End'].includes(e.key)||studio.busy||studio.project?.phase==='working')return;e.preventDefault();imageModel.open=true;const items=[...imageModel.querySelectorAll('[role="menuitemradio"]')].filter(b=>!b.disabled),index=items.indexOf(this.root.ownerDocument.activeElement),next=e.key==='Home'?0:e.key==='End'?items.length-1:index<0?0:(index+(e.key==='ArrowUp'?-1:1)+items.length)%items.length;items[next]?.focus({preventScroll:true});});
     recipeTools.append(imageModel,task);this.imageModel=imageModel;this.model=model;
     const outputTools=document.createElement('div');outputTools.className='zc-tool-group';outputTools.setAttribute('role','group');outputTools.setAttribute('aria-label','Video size and length');tools.append(outputTools);
-    this.resolution=this.popup('resolution','Output resolution',composerIcons.size,studio.$('quality-setting'));outputTools.append(this.resolution);
+    const nativeQuality=studio.$('quality-setting');
+    this.resolution=this.popup('resolution','Resolution',composerIcons.size,nativeQuality);outputTools.append(this.resolution);
+    // Keep the original native quality control as the configuration bridge.
+    nativeQuality.hidden=true;this.resolution.before(nativeQuality);
+    this.sizeControl=new VideoResolutionControl(studio,this.resolution.querySelector('.zc-tool-panel'));this.sizeControl.nativeQuality=nativeQuality;this.resolution.querySelector('.zc-tool-panel').append(nativeQuality);
     const lengthControls=this.root.querySelector('.gs-clip-length');studio.$('trim-precision').querySelector('.gs-two').append(studio.$('duration-setting'));
     this.length=this.popup('length','Clip length',composerIcons.clock,lengthControls);this.length.classList.add('zc-trim-popup');
     const timing=this.root.querySelector('.zc-video-timing');if(timing){timing.querySelector('summary').onclick=e=>{e.preventDefault();this.length.open=!this.length.open;};}
@@ -59,7 +64,7 @@ export class VideoComposer {
     this.audio=document.createElement('div');this.audio.className='zc-tool-popup zc-composer-audio';
     this.audio.append(studio.$('audio-settings'));tools.append(this.audio);
     const settings=document.createElement('button');settings.type='button';settings.className='zc-tool';settings.innerHTML=composerIcons.settings;settings.setAttribute('aria-label','More video settings');settings.title='More video settings';
-    settings.onclick=()=>{workspace.selectPanel('settings');this.openControls();};tools.append(settings);
+    settings.onclick=()=>{workspace.selectPanel('settings');this.openControls();};tools.append(settings);this.settings=settings;
     const action=document.createElement('div');action.className='zc-prompt-submit';action.append(studio.$('primary'));bottom.append(action);composer.append(bottom,studio.$('action-note'));
     this.root.querySelector('#zc-video-model').onchange=e=>{
       const input=this.root.querySelector(`input[name="gs-engine"][value="${e.target.value}"]`);
@@ -118,7 +123,7 @@ export class VideoComposer {
     for(const option of this.imageModel.querySelectorAll('[data-opening-model]')){
       const model=status?.[option.dataset.openingModel],needsRestart=!model&&option.dataset.openingModel!=='klein9b';option.disabled=working||needsRestart||model?.ready===false;
       option.setAttribute('aria-checked',String(!ready&&chosen===option.dataset.openingModel));
-      option.title=needsRestart?'Restart ComfyUI to enable the new image models.':model?.ready===false?'Model setup needed. Check Models & setup.':option.dataset.openingModel==='flux3'?'16-step INT8 edit · original frame + up to 9 references':option.dataset.openingModel==='qwen21'?'Experimental base model - 40 steps, INT8, up to 9 references':option.dataset.openingModel==='qwen2511'?'4-step INT8 edit · original frame + up to 2 references':'4-step FP8 edit · original frame + up to 3 references';
+      option.title=needsRestart?'Restart ComfyUI to enable the new image models.':model?.ready===false?'Model setup needed. Check Models & setup.':option.dataset.openingModel==='flux3'?'16-step INT8 edit Â· original frame + up to 9 references':option.dataset.openingModel==='qwen21'?'Experimental base model - 40 steps, INT8, up to 9 references':option.dataset.openingModel==='qwen2511'?'4-step INT8 edit Â· original frame + up to 2 references':'4-step FP8 edit Â· original frame + up to 3 references';
     }
     const note=this.imageModel.querySelector('[data-opening-status]'),missing=status&&Object.values(status).some(m=>!m.ready);note.hidden=!missing&&chosen!=='qwen21';note.textContent=chosen==='qwen21'?'Qwen Image 2.1 is experimental and has not been render-tested here.':missing?'Unavailable generators need their model files or nodes installed.':'';
     const finished=this.imageModel.querySelector('[data-use-finished-image]'),input=this.root.querySelector('input[name="gs-look"][value="ready"]');finished.disabled=working||!!input?.disabled;finished.setAttribute('aria-checked',String(ready));
@@ -144,8 +149,8 @@ export class VideoComposer {
     select.value=s.config.engine;select.disabled=working;this.model.hidden=stage!=='video';this.imageModel.hidden=stage==='video';
     this.syncOpeningModel(working);
     this.syncWorkflow();
-    this.resolution.hidden=stage!=='video';this.audio.hidden=s.$('audio-settings').hidden||stage!=='video';
-    this.root.querySelector('#zc-tool-resolution').textContent=s.$('resolution').selectedOptions?.[0]?.textContent?.split(' · ')[0]||'Resolution';
+    this.resolution.hidden=false;this.settings.hidden=stage!=='video'||['relight','camera'].includes(s.config.workflow_mode);this.audio.hidden=s.$('audio-settings').hidden||stage!=='video';
+    this.root.querySelector('#zc-tool-resolution').textContent=s.$('resolution').selectedOptions?.[0]?.textContent?.split(' Â· ')[0]||'Resolution';
     this.root.querySelector('#zc-tool-length').textContent=s.config.length_mode==='original'?'Full clip':`${s.config.duration}s`;
     const audioSummary=s.$('audio-summary');audioSummary.textContent=s.config.audio_id?'Reference audio':'Original audio';audioSummary.title='Audio and facial performance';
     const source=s.source?{...s.source,url:s.source.thumbnail_url}:null;

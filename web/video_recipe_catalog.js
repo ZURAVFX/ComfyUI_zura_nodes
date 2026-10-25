@@ -1,3 +1,4 @@
+import {resolutionSize} from './studio_resolution.js';
 import {buildFrameVideoGraph,frameVideoAvailability,FRAME_LENGTHS,FRAME_SIZE_PRESETS,FRAME_MEGAPIXELS} from './frame_video_recipes.js';
 import {buildWanFrameVideoGraph,wanFrameVideoAvailability,WAN_FRAME_VIDEO_CAPABILITIES} from './wan_frame_video_recipes.js';
 import {buildLtxFrameVideoGraph,ltxFrameVideoAvailability,LTX_FRAME_VIDEO_CAPABILITIES} from './ltx_frame_video_recipes.js';
@@ -20,8 +21,6 @@ export function endpointLengths(id){
 }
 export function endpointPresetSize(engine,shape,megapixels){
   const c=endpointRecipe(engine),preset=FRAME_SIZE_PRESETS.find(p=>p.id===shape),mp=Number(megapixels);
-  if(!preset||!FRAME_MEGAPIXELS.includes(mp))throw new Error('Choose a shape and megapixel size.');
-  const width=Math.round(Math.sqrt(mp*1e6*preset.ratio)/c.dimensionStep)*c.dimensionStep;
-  const height=Math.round(Math.sqrt(mp*1e6/preset.ratio)/c.dimensionStep)*c.dimensionStep;
-  return {width,height};
+  if(!preset||!(Number.isFinite(mp)&&mp>=.25&&mp<=1))throw new Error('Choose a shape and megapixel size.');
+  return resolutionSize(preset.ratio,mp,{step:c.dimensionStep,min:c.minDimension||256,max:c.maxDimension||1536,maxPixels:c.maxPixels});
 }

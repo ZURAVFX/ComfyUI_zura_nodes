@@ -128,6 +128,10 @@ def build_studio_graph(project: Mapping[str, Any], check_asset) -> dict[str, dic
     source_path = check_asset(project["source"])
     check_asset(project["opening_input"])
     width, height = _output_size(source_path)
+    if config.get("relight_width") and config.get("relight_height"):
+        width, height = int(config["relight_width"]), int(config["relight_height"])
+        if any(v < 256 or v > 1920 or v % 16 for v in (width, height)) or width * height > 1920 * 1088:
+            raise Wan21RelightError("Choose valid Wan 2.1 dimensions on its 16-pixel grid.")
 
     payload = json.loads(RECIPE.read_text(encoding="utf-8"))
     if payload.get("_zura_recipe") != "wan21-relight-switchx-v1":
@@ -139,7 +143,7 @@ def build_studio_graph(project: Mapping[str, Any], check_asset) -> dict[str, dic
         # assert_approved checks the preparation hash above. The loader compares
         # shot IDs, not that hash, just like the other Studio animation graphs.
         "inputs": {"shot_id": project["review"], "approved_shot_id": project["review"],
-                   "render_long_edge": LONG_EDGE, "output_scale": 1, "preview_seconds": 0},
+                   "render_long_edge": max(width, height), "output_scale": 1, "preview_seconds": 0},
         "_meta": {"title": "Load approved source clip"},
     }
     graph["wan21_source_frames"] = {
