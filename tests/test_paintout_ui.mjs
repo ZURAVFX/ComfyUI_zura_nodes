@@ -18,6 +18,7 @@ const owner={root:document.querySelector('#root'),studio:{close(){}},app:{},api:
   if(path==='/zura/paintout/pick')return {paths:selected};
   if(path.startsWith('/zura/paintout/info')){const file=new URLSearchParams(path.split('?')[1]).get('file');return {path:file,name:file.split('/').at(-1),frames:file===paint?1:240,width:1920,height:1080,fps:24,kind:file===paint?'image':'video',...(file===paint?{}:{media_url:'/media?file='+encodeURIComponent(file)})};}
   if(path==='/zura/paintout/export-frame')return {path:'Z:/output/paint_000060.png',url:'/media?token=export',frame:body.frame};
+  if(path==='/object_info')return info;
   if(path==='/prompt')return submitResponse?await submitResponse:{prompt_id:'paintout-job'};
   if(path.startsWith('/history/'))return completed?{'paintout-job':completed}:{};
   if(path==='/queue')return {queue_running:[[0,'paintout-job']],queue_pending:[]};
@@ -77,9 +78,31 @@ assert.equal(prompt.source.inputs.start_frame,40);assert.equal(JSON.parse(prompt
 assert.equal(prompt.save.inputs.motion_preview,true);
 events.progress[0]({detail:{prompt_id:'someone-else',value:8,max:8}});assert.notEqual(ui.$('bar').value,100,'Unrelated jobs cannot advance progress');
 events.progress[0]({detail:{prompt_id:'paintout-job',value:3,max:8}});assert.equal(ui.$('bar').value,37.5);
+events.executing[0]({detail:{prompt_id:'paintout-job',node:'source'}});
+events.progress[0]({detail:{prompt_id:'paintout-job',node:'source',value:12,max:121}});
+assert.match(ui.$('progress-title').textContent,/Reading footage.*Frame 12 of 121/);
+assert.doesNotMatch(ui.$('progress-title').textContent,/Sampling/);
+ui.progressSnapshot.at=Date.now()-4000;ui.progressSnapshot.first=8;
+events.progress[0]({detail:{prompt_id:'paintout-job',node:'source',value:16,max:121}});
+await ui.poll();assert.match(ui.$('progress-detail').textContent,/left in this stage.*elapsed/,'Polling preserves the measured stage ETA');
+events.executing[0]({detail:{prompt_id:'paintout-job',node:'model'}});
+assert.equal(ui.$('bar').hasAttribute('value'),false,'Model loading does not keep a stale frame percentage');
+events.progress[0]({detail:{prompt_id:'paintout-job',node:'sample',value:4,max:8}});
+assert.match(ui.$('progress-title').textContent,/Step 4 of 8/);
+events.executing[0]({detail:{prompt_id:'paintout-job',node:'save'}});
+events.progress[0]({detail:{prompt_id:'paintout-job',node:'save',value:121,max:121}});
+assert.equal(ui.$('progress-title').textContent,'Finalising video files and audio');
+assert.equal(ui.$('bar').hasAttribute('value'),false,'Frame export is followed by a separate finalisation stage');
+
 await ui.cancel();assert.deepEqual(calls.find(c=>c.path==='/queue'&&c.body)?.body,{delete:['paintout-job']});assert.deepEqual(calls.find(c=>c.path==='/interrupt').body,{prompt_id:'paintout-job'});
 completed={status:{completed:true},outputs:{save:{images:[{filename:'paintout_SDR_10bit.mp4',subfolder:'paintout/take'},{filename:'motion_preview_SDR.mp4',subfolder:'paintout/take'}],text:['Saved 121 frames: Z:/output/paintout/take']}}};await ui.poll();
 assert.equal(ui.result.file.filename,'motion_preview_SDR.mp4');assert.equal(ui.result.master.filename,'paintout_SDR_10bit.mp4');assert.equal(ui.$('download').textContent,'Download video');assert.equal(ui.job,null);
+assert.equal(ui.view,'result');assert.equal(ui.$('video').hidden,false);assert.match(ui.$('video').src,/motion_preview_SDR/);
+assert.equal(ui.$('video').currentTime,0);assert.equal(ui.$('result-status').hidden,false);
+assert.match(ui.$('result-status').textContent,/Ready.*121 frames/);assert.equal(ui.$('compare').hidden,false);
+const recovered=new PaintoutWorkspace(owner);recovered.sourceInfo=null;await recovered.open();
+assert.equal(recovered.view,'result','Reopening a finished workspace returns directly to its final output');
+assert.equal(recovered.$('video').hidden,false);assert.match(recovered.$('video').src,/motion_preview_SDR/);recovered.close();
 ui.result.config.outputMode='EXR sequence';ui.render();assert.equal(ui.$('download').textContent,'Download preview');
 ui.result.config.source='Z:/other.mov';ui.render();assert.equal(ui.$('compare').hidden,true,'Never compare history against unrelated footage');
 // Queue acknowledgement gives instant visible feedback and repeated clicks submit once.

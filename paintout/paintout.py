@@ -25,6 +25,14 @@ def is_hdr(space):return space in ('acescg','acescct','hlg_rec2020','pq_rec2020'
 def string(default='', **kw): return ('STRING', {'default': default, **kw})
 def integer(default, lo=0, hi=100000): return ('INT', {'default': default, 'min': lo, 'max': hi})
 def floating(default, lo=0., hi=1.): return ('FLOAT', {'default': default, 'min': lo, 'max': hi, 'step': .01})
+
+def frame_progress(total):
+    """Use native owned-node progress for CPU preparation and export too."""
+    try:
+        from comfy.utils import ProgressBar
+        return ProgressBar(total).update_absolute
+    except ImportError:
+        return lambda value: None  # CPU-only tools can also use the frame helpers.
 def natural(p): return [int(t) if t.isdigit() else t.lower() for t in re.split(r'(\d+)', str(p))]
 def read_image(path):
     import OpenImageIO as oiio
@@ -317,10 +325,11 @@ class ZuraPaintoutCrop:
         padded=math.ceil((frame_count-1)/8)*8+1
         resampler=('comfy_lanczos' if processing_mode=='SDR (sRGB)' else 'float32_bicubic_antialias') if framing_mode!='Smart crop (experimental)' else 'bilinear'
         c=dict(source=d,mask=m,space=colour_space,processing=processing_mode,start=start_frame,count=frame_count,fps=d.get('fps',sequence_fps),rect=[x0,y0,w,h],resized=[rh,rw],padded=[ph,pw],grow=repair_grow,feather=feather_pixels,framing_mode=framing_mode,resampler=resampler)
-        ims=[];ms=[]
+        ims=[];ms=[];progress=frame_progress(frame_count)
         for a,b in zip(frames(d,start_frame,frame_count),mask_frames(m,start_frame,frame_count)):
             if a.shape[:2]!=(H,W) or b.shape!=(H,W):raise ValueError('Sequence resolution changes mid-shot')
             ims.append(crop_work(a,c,colour_space));ms.append(crop_work(b,c,colour_space,True)[...,0])
+            progress(len(ims))
         image=torch.cat(ims);mask=torch.cat(ms)
         # Grow the conditioning mask at inference scale; final matte is built in original pixels.
         grow=math.ceil(repair_grow*scale)
@@ -576,6 +585,7 @@ class ZuraPaintoutUncrop:
                 _,fit=composite_crop(src,generated,m[y:y+h,x:x+w],plate['grow'],plate['feather'],True)
                 fits.append(fit)
             shared_fit={key:np.median([f[key] for f in fits],axis=0).tolist() for key in ('gain','offset')}
+        progress=frame_progress(plate['count'])
         for i,(a,m) in enumerate(zip(frames(plate['source'],plate['start'],plate['count']),mask_frames(plate['mask'],plate['start'],plate['count']))):
             raw=decoded_crop[i:i+1,:rh,:rw,:3].detach().float().cpu()
             generated=resize(unworking(raw,plate['space'],plate.get('processing','HDR (ACEScct)')),h,w)[0].numpy()
@@ -596,6 +606,7 @@ class ZuraPaintoutUncrop:
                 save_exr(target/f'frame_{plate["start"]+i:06d}.exr',master,'acescg',precision=='float16')
             delivery.append(linear)
             metrics.append(fit)
+            progress(i+1)
         metadata=dict(plate={k:v for k,v in plate.items() if not k.startswith('_')},precision=precision,match_context=match_context,colour_fits=metrics,notes='RGB only. Source alpha/AOV/header metadata are not copied. Video exports copy source audio when present, trimmed to the selected range. Sequence fps is authoritative.')
         (target/'paintout.json').write_text(json.dumps(metadata,indent=2),encoding='utf-8')
         previews=delivery.finish()

@@ -39,12 +39,14 @@ class PaintoutDecodeTests(unittest.TestCase):
                 self.assertEqual(list((root/'zura_paintout_rgb').glob('*.part')), [])
 
     def test_source_resolution_only_pads_without_resampling(self):
+        reported = []
         pixels = np.random.default_rng(42).random((66, 70, 3), dtype=np.float32)
         data = dict(kind='sequence', width=70, height=66, count=1, files=['frame.png'])
         mask = dict(kind='rectangle', width=70, height=66, count=1, rect=[0, 0, 70, 66])
         with patch.object(native, 'describe', return_value=data), \
              patch.object(native, 'frames', return_value=iter([pixels])), \
              patch.object(native, 'working', side_effect=lambda image, *args: image), \
+             patch.object(native, 'frame_progress', return_value=reported.append), \
              patch.object(native, 'resize', side_effect=AssertionError('Must not resize')), \
              patch.object(native, 'resize_fullframe', side_effect=AssertionError('Must not resize')):
             result = native.ZuraPaintoutCrop().prepare(
@@ -54,6 +56,7 @@ class PaintoutDecodeTests(unittest.TestCase):
         self.assertEqual((width, height), (128, 128))
         self.assertEqual(plate['resized'], [66, 70])
         self.assertEqual(plate['rect'], [0, 0, 70, 66])
+        self.assertEqual(reported, [1])
         torch.testing.assert_close(image[0, :66, :70], torch.from_numpy(pixels), rtol=0, atol=0)
 
 

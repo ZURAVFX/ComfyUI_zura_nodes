@@ -74,6 +74,8 @@ Studio exposes **Processing resolution** beside the duration control. Keep the d
 
 Video decoding preserves every selected source frame, including 59.94 fps footage with FFmpeg 7. A failed run reports the stage and error in Studio. Generate shows submission immediately and prevents duplicate clicks while awaiting queue confirmation. Restart ComfyUI after installing this Python update, then refresh Studio.
 
+Completed runs open the finished motion preview in the main viewer at frame zero, with Compare and Download available. The selected result is saved with the workspace and restored when reopened. Preparation and compositing report actual frame counts; sampling reports actual steps. Loading, decoding and final file/audio saving remain separate stages. Progress shows elapsed time and estimates the current stage only after measurable progress, without treating sampling completion as completion of the whole render.
+
 ## Validation and limits
 
 The integrated source uses the previously tested inference path. On an RTX 4080 with 16 GB VRAM and 64 GB RAM, the native targeted 301-frame control completed in 8m21s. High-bit-depth loading, compositing and export add work. The newer 49-frame integration tests took 102s targeted SDR, 83s full-scene SDR, 114s targeted SDR-to-HDR and 104s full-scene SDR-to-HDR. Loading/cache state differed; these are measured examples, not guaranteed timings.
