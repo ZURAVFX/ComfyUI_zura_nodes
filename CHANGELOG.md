@@ -1,5 +1,15 @@
 # Release notes
 
+## 1.3.31 - 25 October 2026
+
+- Add guided Studio Paintout / clean plate with source-frame scrubbing, full-resolution paint exports, compact painted-anchor cards and editable original frame numbers.
+- Fix FFmpeg 7 dropping high-frame-rate source frames before generation. Expose processing presets, megapixel budgets, custom dimensions and source-resolution padding without resizing. Saved output retains source dimensions.
+- Present completed paintout clips in the main viewer and restore them when reopened. Show owned-job submission, queue position, real preparation/export frame counts, sampling steps, stage timing, cancellation and final file/audio saving.
+- Add native H3 Reference to Video with image/video/audio inputs, explicit vocal direction and optional Picture 1 first-frame anchoring. Extend native first/last-frame options to Wan 2.2 and LTX 2.5, with supported lengths up to 15 seconds.
+- Restore Flux 3 Klein starting-image selection; add independent Klein 9B and Qwen editing options, source-bound regeneration and optional finished lighting images. Add original-versus-modified image comparisons and align previews with the compact composer.
+- Include live sample handling, clearer workflow/popover controls and saved reference inputs. Experimental image routes and new GPU quality validation remain documented rather than implied to be artist-approved.
+
+
 ## 1.3.30 - 25 October 2026
 
 - Integrate the LTX 2.5 targeted Obscura anchor paintout and official full-scene Clean Plate workflows into Zura Nodes, preserving existing paintout node IDs.
