@@ -46,6 +46,8 @@ jobs:
           assert version == template_version, 'Keep the package template version in sync'
           assert Path('LICENSE').is_file()
           assert Path('THIRD_PARTY_NOTICES.md').is_file()
+          for asset in ('paintout/__init__.py', 'paintout/paintout.py', 'paintout/media.py', 'paintout/browser.py', 'paintout/attention.py', 'web/paintout.js', 'PAINTOUT.md'):
+              assert Path(asset).is_file(), f'Missing paintout release asset: {asset}'
           assert Path('web/v2_media_picker.js').is_file()
           studio_loader = Path('web/studio.js').read_text(encoding='utf-8')
           for asset in ('web/studio_create.js', 'web/studio_create.css',
@@ -182,6 +184,9 @@ jobs:
       - name: Run regression checks
         run: |
           python -m unittest discover -s tests -p 'test_template_catalogue.py'
+          python -m compileall -q paintout
+          python -m unittest discover -s tests -p 'test_paintout_*.py'
+          node tests/test_paintout_picker.mjs
           node tests/test_audio_editor_connections.mjs
           node tests/test_dialogue_timing_connections.mjs
           node tests/test_dialogue_transcript.mjs

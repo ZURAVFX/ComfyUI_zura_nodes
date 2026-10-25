@@ -82,3 +82,7 @@ parakeet.local.json*
 # UI build sources are not runtime dependencies.
 /tools/
 /work/
+
+# LTX 2.5 paintout examples.
+!/workflows/Video - Targeted Paintout (LTX 2.5).json
+!/workflows/Video - Full Scene Clean Plate (LTX 2.5).json

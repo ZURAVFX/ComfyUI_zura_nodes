@@ -8,3 +8,8 @@ soundfile>=0.12.0
 av>=14.0
 aiohttp>=3.11
 Pillow>=10.0
+
+# High-bit-depth paintout import, compositing and EXR delivery.
+OpenImageIO>=3.0
+scipy>=1.11
+opencv-python>=4.8
