@@ -29,19 +29,23 @@ const config={source,mask,anchors:[{file:paint,frame:60}],mode:'targeted'};
 const info={};for(const c of [config,{...config,mode:'full'}])for(const n of Object.values(buildPaintoutGraph(c)))info[n.class_type]={input:{required:{},optional:{}}};
 for(const [type,key,values] of [['UNETLoader','unet_name',[PAINTOUT_MODELS.model]],['CLIPLoader','clip_name',[PAINTOUT_MODELS.text]],['VAELoader','vae_name',[PAINTOUT_MODELS.videoVae,PAINTOUT_MODELS.audioVae]],['LoraLoaderModelOnly','lora_name',[PAINTOUT_MODELS.targetedLora]],['LTXICLoRALoaderModelOnly','lora_name',[PAINTOUT_MODELS.fullLora]],['KSampler','scheduler',['linear_quadratic']]])info[type].input.required[key]=[values];
 info.LTXAddVideoICLoRAGuideAdvanced.input.optional.use_streaming=['BOOLEAN',{}];ui.modelInfo=info;ui.render();
-assert.equal(ui.$('generate').disabled,true);
+assert.equal(ui.$('generate').disabled,false);
 selected=[source];await ui.pickSource('footage');assert.equal(ui.state.source,source);assert.equal(ui.state.frameCount,81);assert.equal(ui.$('source').querySelector('span').textContent,'shot.mov');assert.ok(ui.$('source').querySelector('img'),'Loaded footage has a thumbnail');
-assert.equal(ui.$('remove-source').hidden,false);assert.equal(ui.$('generate').disabled,true);
+assert.equal(ui.$('remove-source').hidden,false);assert.equal(ui.$('generate').disabled,false);
 selected=[mask];await ui.pickMask();selected=[paint];await ui.pickAnchors();
 assert.equal(ui.state.anchors[0].frame,60,'Infer the source ID from a native exported frame filename');
 assert.equal(ui.view,'anchor');assert.equal(ui.$('anchor-strength').value,'0.75');assert.equal(ui.$('anchor-strength').checkValidity(),true);
 assert.equal(ui.$('generate').disabled,false);
 assert.equal(calls.filter(c=>c.path==='/prompt').length,0,'Choosing and numbering anchors never queues a render');
+assert.equal(ui.$('count').type,'text');
+const oldCount=ui.state.frameCount;ui.$('count').value='';assert.equal(ui.state.frameCount,oldCount);ui.$('count').value='1';ui.$('count').value='128';assert.equal(ui.state.frameCount,oldCount);ui.$('count').onblur();assert.equal(ui.state.frameCount,128);
+ui.state.anchors[0].frame=128;ui.render();assert.equal(ui.$('generate').textContent,'Review setup');const correction=ui.$('note').querySelector('button');assert.match(correction.textContent,/129 frames/);correction.click();assert.equal(ui.state.frameCount,129);assert.equal(ui.state.anchors[0].frame,128);
+ui.state.anchors[0].frame=60;ui.render();
 const number=ui.$('anchors').querySelector('input');number.value='55';number.onchange();assert.equal(ui.config().anchors[0].frame,55);
 ui.$('start').value=40;ui.$('start').onchange();ui.$('count').value=121;ui.$('count').onchange();
 assert.equal(Number(number.min),40);assert.equal(Number(number.max),160,'The input follows the new source range');
 number.value='150';number.onchange();assert.equal(ui.$('generate').disabled,false);assert.equal(ui.config().anchors[0].frame,150,'Anchor IDs never become clip-relative');
-number.value='161';number.onchange();assert.equal(ui.$('generate').disabled,true);assert.match(ui.$('note').textContent,/outside the selected source range/);
+number.value='161';number.onchange();assert.equal(ui.$('generate').disabled,false);assert.match(ui.$('note').textContent,/outside the selected source range/);
 ui.seek(90);ui.page.querySelector('[data-anchor-frame="current"]').click();assert.equal(ui.state.anchors[0].frame,90);
 ui.page.querySelector('[data-anchor-frame="first"]').click();assert.equal(ui.state.anchors[0].frame,40);
 ui.page.querySelector('[data-anchor-frame="last"]').click();assert.equal(ui.state.anchors[0].frame,160);
@@ -54,7 +58,7 @@ await ui.exportFrame();assert.equal(ui.$('export-link').hidden,false);assert.equ
 ui.$('size-mode').value='source';ui.$('size-mode').onchange();
 assert.equal(ui.config().width,1920);assert.equal(ui.config().height,1088);
 assert.match(ui.$('resolution-label').textContent,/Source/);
-assert.match(ui.$('size-help').textContent,/Saved output: 1920 × 1080/);
+assert.match(ui.$('size-help').textContent,/Saved output: 1920 Ã— 1080/);
 assert.equal(buildPaintoutGraph(ui.config()).source.inputs.framing_mode,'Source resolution (pad, no resize)');
 ui.$('size-mode').value='portrait';ui.$('size-mode').onchange();
 ui.$('megapixels').value='0.5';ui.$('megapixels').onchange();
@@ -64,30 +68,28 @@ ui.$('size-mode').value='custom';ui.$('size-mode').onchange();
 ui.$('width').value='719';ui.$('width').onchange();assert.equal(ui.state.width,704);
 ui.$('height').value='1000';ui.$('height').onchange();assert.equal(ui.state.height,1024);
 assert.equal(ui.$('custom-size').hidden,false);
-const restored=new PaintoutWorkspace(owner);assert.equal(restored.state.resolutionMode,'custom');assert.equal(restored.state.width,704);restored.close();
+const restored=new PaintoutWorkspace(owner);assert.equal(Number(restored.$('start').value),restored.state.startFrame);assert.equal(Number(restored.$('count').value),restored.state.frameCount);assert.equal(restored.state.resolutionMode,'custom');assert.equal(restored.state.width,704);restored.close();
 ui.$('size-mode').value='default';ui.$('size-mode').onchange();
 assert.equal(ui.config().width,1152);assert.equal(ui.config().height,640);
 // An invalid number in a popover must explain the problem instead of silently blocking submit.
 ui.$('count').value='';const beforeInvalid=calls.filter(c=>c.path==='/prompt').length;
 await ui.generate();assert.equal(calls.filter(c=>c.path==='/prompt').length,beforeInvalid);
-assert.match(ui.$('message').textContent,/valid frame count/);ui.$('count').value=121;
+assert.match(ui.$('message').textContent,/whole number.*frame count/);ui.$('count').value=121;
 
-// Frame edits accept intermediate values without clamping, spinner changes or shortcuts.
+// Free typing does not clamp, submit, or leak keys to graph shortcuts.
 assert.equal(ui.$('count').type,'text');assert.equal(ui.$('count').getAttribute('inputmode'),'numeric');
 const beforeFrameEdit=calls.filter(c=>c.path==='/prompt').length;
 ui.$('count').value='';ui.$('count').oninput();assert.equal(ui.$('count').value,'');assert.equal(ui.$('message').hidden,true);
-ui.$('count').value='1';ui.$('count').oninput();assert.equal(ui.$('count').value,'1');
-ui.$('count').value='127';ui.$('count').oninput();assert.equal(ui.$('count').value,'127');
+for(const value of ['1','12','127']){ui.$('count').value=value;ui.$('count').oninput();assert.equal(ui.$('count').value,value);}
 ui.$('count').onchange();assert.equal(ui.state.frameCount,127);
-ui.$('count').value='1200';ui.$('count').onchange();assert.equal(ui.$('count').value,'1200','Out-of-range values remain editable, never silently clamped');
-assert.match(ui.$('message').textContent,/1–993/);assert.equal(ui.$('generate').disabled,true);
-ui.$('count').value='12e1';ui.$('count').onchange();assert.equal(ui.$('generate').disabled,true,'Exponent notation is not a frame count');
-ui.$('count').value='121';ui.$('count').onchange();assert.equal(ui.$('generate').disabled,false);
+ui.$('count').value='1200';ui.$('count').onchange();assert.equal(ui.$('count').value,'1200');assert.match(ui.$('message').textContent,/whole number.*993/);
+ui.$('count').value='12e1';ui.$('count').onchange();assert.equal(ui.$('count').getAttribute('aria-invalid'),'true');
+ui.$('count').value='121';ui.$('count').onchange();
 let prevented=false,stopped=false;
 ui.$('count').onkeydown({key:'Enter',preventDefault(){prevented=true;},stopPropagation(){stopped=true;}});
-assert.equal(prevented,true);assert.equal(stopped,true);assert.equal(calls.filter(c=>c.path==='/prompt').length,beforeFrameEdit,'Enter applies the range without starting a render');
+assert.equal(prevented,true);assert.equal(stopped,true);assert.equal(calls.filter(c=>c.path==='/prompt').length,beforeFrameEdit);
 ui.$('start').value='';ui.$('start').oninput();ui.$('start').onkeydown({key:'Escape',preventDefault(){},stopPropagation(){}});
-assert.equal(ui.$('start').value,'40','Escape restores the committed value');
+assert.equal(ui.$('start').value,'40');
 
 events.executing[0]({detail:{node:'foreign'}});events.progress[0]({detail:{value:5,max:8}});
 await ui.generate();assert.equal(ui.job.id,'paintout-job');const prompt=calls.find(c=>c.path==='/prompt').body.prompt;

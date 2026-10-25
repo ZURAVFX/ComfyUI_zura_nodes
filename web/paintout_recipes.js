@@ -74,6 +74,18 @@ export function paintoutValidation(config={}){
   return '';
 }
 
+/** Offer an explicit range correction without moving painted source-frame IDs. */
+export function paintoutRangeFix(config,sourceFrames,maskFrames){
+  const c=normalise(config),start=Number(c.startFrame),count=Number(c.frameCount);
+  if(!Number.isInteger(start)||!Number.isInteger(count)||start<0||count<1)return null;
+  const anchors=c.mode==='targeted'?(c.anchors||[]).filter(a=>a.enabled!==false&&Number(a.frame)>=0).map(a=>Number(a.frame)):[];
+  if(!anchors.every(Number.isInteger))return null;
+  const available=Math.min(Number.isInteger(sourceFrames)?sourceFrames:Infinity,c.mode==='targeted'&&maskFrames>1?maskFrames:Infinity);
+  const first=Math.min(start,...anchors),end=Math.min(Math.max(start+count,...anchors.map(n=>n+1)),available,first+993);
+  if(end<=first||anchors.some(n=>n<first||n>=end)||first===start&&end-first===count)return null;
+  return {patch:{startFrame:first,frameCount:end-first},label:`Use frames ${first}–${end-1} (${end-first} frames)`};
+}
+
 export function buildPaintoutGraph(config={}){
   const error=paintoutValidation(config);if(error)throw new Error(error);
   const c=normalise(config),targeted=c.mode==='targeted',g={};

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
-import {buildPaintoutGraph,paintoutValidation,paintoutAvailability,PAINTOUT_MODELS} from '../web/paintout_recipes.js';
+import {buildPaintoutGraph,paintoutValidation,paintoutAvailability,PAINTOUT_MODELS,paintoutRangeFix} from '../web/paintout_recipes.js';
 
 const config={mode:'targeted',source:'Z:/plates/street.mov',mask:'Z:/plates/mask.mov',anchors:[{file:'Z:/paint/clean.exr',frame:0,strength:.75,enabled:true,colour_space:'srgb_display'}],seed:74757503725004};
 const targeted=buildPaintoutGraph(config),full=buildPaintoutGraph({...config,mode:'full'});
@@ -114,3 +114,8 @@ assert.equal(sourceSize.source.inputs.framing_mode,'Source resolution (pad, no r
 assert.equal(sourceSize.source.inputs.render_height,1088);
 assert.equal(buildPaintoutGraph({...config,resolutionMode:'custom',width:640,height:640}).source.inputs.framing_mode,'Full frame (fit, no crop)');
 assert.match(paintoutValidation({...config,resolutionMode:'source',sourceWidth:8192,sourceHeight:4096}),/smaller processing resolution/);
+
+assert.deepEqual(paintoutRangeFix({...config,frameCount:127,anchors:[{file:'Z:/clean.png',frame:127}]},690,301).patch,{startFrame:0,frameCount:128});
+assert.equal(paintoutRangeFix({...config,anchors:[{file:'Z:/clean.png',frame:700}]},690,301),null,'Never silently move an unavailable painted frame');
+assert.deepEqual(paintoutRangeFix({...config,startFrame:20,frameCount:301,anchors:[{file:'Z:/clean.png',frame:28}]},690,301).patch,{startFrame:20,frameCount:281});
+assert.equal(paintoutRangeFix({...config,frameCount:994,anchors:[{file:'Z:/clean.png',frame:993}]},1500,1500),null,'A correction must not discard a painted guide or exceed the shot limit');
