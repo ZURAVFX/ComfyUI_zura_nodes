@@ -72,7 +72,9 @@ class PaintoutReleaseTests(unittest.TestCase):
                 module.register_routes()
                 module.register_routes()
             self.assertEqual([(r.method, r.path) for r in routes],
-                             [('POST', '/zura/paintout/pick'), ('GET', '/zura/paintout/thumbnail')])
+                             [('POST', '/zura/paintout/pick'), ('GET', '/zura/paintout/thumbnail'),
+                              ('GET', '/zura/paintout/info'), ('GET', '/zura/paintout/media'),
+                              ('POST', '/zura/paintout/export-frame'), ('GET', '/zura/paintout/frame-preview')])
 
 
 if __name__ == '__main__':

@@ -7,6 +7,8 @@ const routingUrl='data:text/javascript;base64,'+Buffer.from(routing).toString('b
 const js=fs.readFileSync(new URL('../web/artist_graph.js',import.meta.url),'utf8').replace('"./graph_routing.js"',JSON.stringify(routingUrl));
 const {promptFingerprint,expandStageSignals,crossingCount,trimStageSignals,visibleArtistInputs,initialiseArtistImages,layoutInput,nativeWireLayout,installArtistLinkRendering,nudgeToClear}=await import('data:text/javascript;base64,'+Buffer.from(js).toString('base64'));
 const {routeFixedPorts}=await import(routingUrl);
+const paintoutInputs=['ZuraPaintoutCrop','ZuraPaintoutFullFrame','ZuraPaintoutAnchors'].map(type=>({type}));
+assert.equal(visibleArtistInputs(paintoutInputs).size,3,'Native footage/mask pickers and painted-frame controls stay visible in Paintout graphs');
 const original={image:{class_type:'LoadImage',inputs:{image:'example_character.png'}},render:{class_type:'Render',inputs:{image:['image',0],seed:42}}};
 const renamed={'10':{class_type:'LoadImage',inputs:{image:'example_character.png'}},'11':{class_type:'Render',inputs:{image:['10',0],seed:42}}};
 assert.equal(await promptFingerprint(original),await promptFingerprint(renamed));

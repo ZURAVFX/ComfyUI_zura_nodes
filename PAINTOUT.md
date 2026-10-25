@@ -2,6 +2,18 @@
 
 Paintout is included in Zura Nodes from **1.3.30**. These are native ComfyUI graph templates, separate from Studio's character-performance modes.
 
+## Studio
+
+In **Video**, choose **Paintout / clean plate** beside the model. Choose **Targeted repair** for a masked paintout, or **Full-scene clean plate** to generate an empty scene without masks or painted frames.
+
+For targeted repair, add footage, a matching removal mask and full-resolution painted frames. Each painted image has a thumbnail, an editable **Frame** number and a corner remove button. Frame numbers refer to the original source, starting at **0**, even after trimming. Exported `paint_000042` filenames prefill frame 42. Duplicate and out-of-range anchors block generation with an explanation.
+
+Click a painted thumbnail to inspect it. Its **Painted frame** menu offers first selected frame, playhead and last selected frame shortcuts, plus optional strength and colour controls. **Save frame to paint** exports the selected source frame at full resolution: 16-bit sRGB PNG for SDR or float32 ACEScg EXR for HDR. Paint it externally, then add the finished image to the strip.
+
+Range, colour and delivery settings open above the composer. The native recipe stays at eight steps and processes one continuous shot, up to 993 frames, without chunking. Longer ranges require more memory. MP4 results include source/result comparison; EXR exports show the saved folder and a downloadable motion preview. Graph view keeps the native footage/mask picker and painted-frame controls exposed.
+
+Restart ComfyUI after updating to load the new browser helpers, then refresh Studio. Studio integration has recipe/schema, CPU export and interaction-test coverage; a new GPU acceptance render and an on-screen layout check remain pending.
+
 ## Choose an example
 
 - [Video - Targeted Paintout (LTX 2.5)](workflows/Video%20-%20Targeted%20Paintout%20%28LTX%202.5%29.json): Obscura Remova, manually painted clean frames and a required removal mask. White marks the objects to remove; black keeps the original. The repaired area is blended into the original-resolution plate.

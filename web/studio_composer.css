@@ -88,10 +88,11 @@
 #genj-studio .zc-image-composer .zc-model-control{min-width:0}
 #genj-studio .zc-image-composer #zc-generate{margin-left:auto;min-width:132px}
 #genj-studio .zc-image-composer #zc-quick-settings{padding:8px;font-size:12px}
-#genj-studio:not([data-workspace=frames])>.zf-page:not(.zr-page){display:none!important}
+#genj-studio:not([data-workspace=frames])>.zf-page:not(.zr-page):not(.zp-page){display:none!important}
 #genj-studio:not([data-workspace=references])>.zr-page{display:none!important}
-#genj-studio:is([data-workspace=frames],[data-workspace=references])>:is(.gs-workspace,.gs-steps){display:none!important}
-#genj-studio:is([data-workspace=frames],[data-workspace=references]) #gs-models{display:none}
+#genj-studio:not([data-workspace=paintout])>.zp-page{display:none!important}
+#genj-studio:is([data-workspace=frames],[data-workspace=references],[data-workspace=paintout])>:is(.gs-workspace,.gs-steps){display:none!important}
+#genj-studio:is([data-workspace=frames],[data-workspace=references],[data-workspace=paintout]) #gs-models{display:none}
 #genj-studio .zf-page{display:grid;grid-template-rows:auto minmax(0,1fr) auto;gap:12px;flex:1;min-width:0;min-height:0;padding:16px;overflow:hidden}
 #genj-studio .zf-heading{display:flex;align-items:center;gap:16px;min-width:0}
 #genj-studio .zf-heading h2{font-size:14px;font-weight:600;flex:1}

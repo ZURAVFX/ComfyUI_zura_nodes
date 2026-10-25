@@ -15,7 +15,7 @@ export const composerIcons={
   takes:svg('<rect x="3" y="7" width="18" height="14" rx="2"/><path d="M7 3h10m-8 9 6 3-6 3z"/>'),
   download:svg('<path d="M12 3v12m-4-4 4 4 4-4M4 17v4h16v-4"/>'),
 };
-export const VIDEO_WORKFLOWS=[['swap','Character replacement'],['viewport','Viewport to final'],['camera','Change camera angle'],['relight','Relight'],['frames','First & last frame'],['references','Reference to video']];
+export const VIDEO_WORKFLOWS=[['swap','Character replacement'],['viewport','Viewport to final'],['camera','Change camera angle'],['relight','Relight'],['paintout','Paintout / clean plate'],['frames','First & last frame'],['references','Reference to video']];
 
 /** A compact surface over the existing controls, never a second configuration. */
 export class VideoComposer {
@@ -78,7 +78,7 @@ export class VideoComposer {
     this.composer=composer;this.sync();
   }
   selectWorkflow(value){
-    if(value==='frames'||value==='references'){this.workspace.show(value);return;}
+    if(['frames','references','paintout'].includes(value)){this.workspace.show(value);return;}
     if(!VIDEO_WORKFLOWS.some(([id])=>id===value))return;
     const input=this.root.querySelector(`input[name="gs-workflow"][value="${value}"]`);
     if(input&&!input.disabled){
@@ -91,13 +91,13 @@ export class VideoComposer {
     // Reuse the same control and handler in both composers. Its place in the
     // tool row stays immediately after the model, including endpoint video.
     const select=this.task.querySelector('select'),focused=this.root.ownerDocument.activeElement===select;
-    const model=mode==='frames'?this.workspace.frames.page.querySelector('.zf-model'):mode==='references'?this.workspace.referencesVideo.page.querySelector('.zf-model'):this.imageModel;
+    const model=mode==='frames'?this.workspace.frames.page.querySelector('.zf-model'):mode==='references'?this.workspace.referencesVideo.page.querySelector('.zf-model'):mode==='paintout'?this.workspace.paintout.page.querySelector('.zf-model'):this.imageModel;
     if(model.nextElementSibling!==this.task)model.after(this.task);
     this.syncWorkflow();
     if(focused)select.focus({preventScroll:true});
   }
   syncWorkflow(){
-    const independent=['frames','references'].includes(this.workspace.mode),select=this.task.querySelector('select');
+    const independent=['frames','references','paintout'].includes(this.workspace.mode),select=this.task.querySelector('select');
     select.value=independent?this.workspace.mode:this.studio.config.workflow_mode==='motion'?'swap':this.studio.config.workflow_mode;
     select.disabled=!independent&&(this.studio.busy||this.studio.project?.phase==='working');
     for(const option of select.querySelectorAll('option')){

@@ -62,7 +62,7 @@ for(const id of ['zc-attach-source','zc-attach-refs','zc-video-model','gs-resolu
 const workflowMenu=ui.videoComposer.task;
 assert.equal(workflowMenu.tagName,'DETAILS');
 assert.equal(workflowMenu.querySelector('select').hidden,true,'OS-native workflow dropdown is hidden behind the styled menu');
-assert.equal(workflowMenu.querySelectorAll('[role="menuitemradio"]').length,6);
+assert.equal(workflowMenu.querySelectorAll('[role="menuitemradio"]').length,7);
 assert.equal(workflowMenu.querySelector('[data-workflow="swap"]').getAttribute('aria-checked'),'true');
 const removedInputs=[],savedRemoveInput=studio.removeInput;studio.removeInput=type=>removedInputs.push(type);
 for(const id of ['source','refs','frame'])studio.container.querySelector('#zc-remove-'+id).onclick();
@@ -254,6 +254,14 @@ task.value='frames';task.dispatchEvent(new window.Event('change'));assert.equal(
 task.value='references';task.dispatchEvent(new window.Event('change'));assert.equal(navUi.referencesVideo.assets.images[0].file,'ingredient.png');assert.match(navUi.referencesVideo.$('prompt').value,/<Picture 1>/);
 while(navStudio.busy)await new Promise(resolve=>setTimeout(resolve,1));
 task.value='swap';task.dispatchEvent(new window.Event('change'));assert.equal(navUi.mode,'video');assert.equal(navUi.referencesVideo.page.hidden,true);
+task.value='paintout';task.dispatchEvent(new window.Event('change'));
+assert.equal(navUi.mode,'paintout');assert.equal(navUi.paintout.page.hidden,false);assert.equal(navUi.frames.page.hidden,true);assert.equal(navUi.referencesVideo.page.hidden,true);
+assert.equal(navUi.paintout.page.querySelector('#zc-video-task'),task,'Paintout retains the workflow menu beside its model');
+navUi.paintout.state.anchors=[{file:'Z:/painted_42.png',frame:42,strength:.75,enabled:true}];navUi.paintout.renderAnchors();navUi.paintout.save();
+task.value='frames';task.dispatchEvent(new window.Event('change'));assert.equal(navUi.paintout.page.hidden,true);assert.equal(navUi.frames.page.hidden,false);
+task.value='paintout';task.dispatchEvent(new window.Event('change'));assert.equal(navUi.paintout.state.anchors[0].frame,42,'Leaving Paintout retains artist anchor IDs');
+while(navStudio.busy)await new Promise(resolve=>setTimeout(resolve,1));
+task.value='swap';task.dispatchEvent(new window.Event('change'));assert.equal(navUi.mode,'video');assert.equal(navUi.paintout.page.hidden,true);
 assert.equal(navStudio.source.id,'retained-video');assert.equal(navStudio.references[0].id,'retained-reference');
 assert.equal(calls.filter(c=>c.path==='/prompt').length,navRequests,'Navigation cannot queue a render');navUi.close();
 // Graph view detaches the UI. Returning must restore light dismissal and the

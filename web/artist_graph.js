@@ -25,7 +25,7 @@ export function installArtistLinkRendering(app) {
 // Keep them on the canvas: converting/promoting just the filename widget loses
 // the linked upload/preview lifecycle on some Comfy frontend versions.
 export function visibleArtistInputs(nodes) {
-  return new Set([...nodes].filter(n=>n.type==="LoadImage"));
+  return new Set([...nodes].filter(n=>["LoadImage","ZuraPaintoutCrop","ZuraPaintoutFullFrame","ZuraPaintoutAnchors"].includes(n.type)));
 }
 
 export async function initialiseArtistImages(graph, apiGraph) {
@@ -90,9 +90,9 @@ export function expandStageSignals(prompt) {
 }
 
 function role(n) {
-  if(["GenjRestoreSoundtrack","GenjSaveReview","SaveImage","PreviewImage","SaveVideo","GenjRecordDraft","VHS_VideoCombine","GenjVHSVideoFromFilenames","ZuraWanSpeechSaveGuide","ZuraWanSavePreparationPart","ZuraWanMergePreparation"].includes(n.type))return "save";
+  if(["GenjRestoreSoundtrack","GenjSaveReview","SaveImage","PreviewImage","SaveVideo","GenjRecordDraft","VHS_VideoCombine","GenjVHSVideoFromFilenames","ZuraWanSpeechSaveGuide","ZuraWanSavePreparationPart","ZuraWanMergePreparation","ZuraPaintoutUncrop"].includes(n.type))return "save";
   if(n.type?.startsWith("ZuraSpeech")||String(n.id).startsWith("zura_speech_"))return "speech";
-  if(["LoadImage","LoadVideo","LoadAudio","GenjLoadReviewedShot","GenjApplyReferenceAudio","ZuraApplyBoundedReferenceAudio","VHS_LoadVideoFFmpegPath","VHS_LoadVideoPath","VHS_BatchManager"].includes(n.type)||n.type?.startsWith("Primitive"))return "inputs";
+  if(["LoadImage","LoadVideo","LoadAudio","GenjLoadReviewedShot","GenjApplyReferenceAudio","ZuraApplyBoundedReferenceAudio","VHS_LoadVideoFFmpegPath","VHS_LoadVideoPath","VHS_BatchManager","ZuraPaintoutCrop","ZuraPaintoutFullFrame","ZuraPaintoutAnchors"].includes(n.type)||n.type?.startsWith("Primitive"))return "inputs";
   return "process";
 }
 

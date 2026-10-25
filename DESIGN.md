@@ -38,6 +38,16 @@ tint. Light mode keeps the same hierarchy and a saved independent appearance.
 
 ## Overview
 
+Paintout reuses the same canvas and bottom composer. Its two methods are targeted
+repair and a full-scene clean plate. Only targeted repair exposes masks and
+painted anchors. Anchors form a single horizontal thumbnail strip, with an
+always-visible source-frame number beside each image and a corner remove icon.
+Selecting a thumbnail reveals its preview; guide strength, colour and frame
+shortcuts stay in a contextual menu. Source numbering starts at zero and remains
+absolute when the footage range changes. The central preview includes a source
+frame scrubber and a full-resolution frame export action for painting externally.
+The page itself does not scroll; long anchor lists scroll within their strip.
+
 Zura Studio is a local creative workspace for image and video generation. The user-approved direction follows Artify: a quiet charcoal canvas, compact tools, a persistent bottom prompt and a single acid-lime primary action. Dark and light themes share the same layout and save the user's choice.
 
 ## Colors
