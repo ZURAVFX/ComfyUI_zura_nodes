@@ -138,7 +138,15 @@ class MaskModeTests(unittest.TestCase):
 
     def test_masked_opening_registers_source_and_changes_only_reviewed_area(self):
         graph = self.graph(self.project(), 'design')
-        self.assertEqual(graph['122']['inputs']['images'], ['zura_masked_look',0])
+        self.assertEqual(graph['122']['inputs']['images'], ['zura_opening_preserve_source',0])
+        preserved = graph['zura_opening_preserve_source']['inputs']
+        self.assertEqual(preserved['destination'], ['125',0])
+        self.assertEqual(preserved['source'], ['zura_opening_original_resolution',0])
+        self.assertEqual(preserved['mask'], ['zura_look_inside_mask',0])
+        scaled = graph['zura_opening_original_resolution']['inputs']
+        self.assertEqual(scaled['image'], ['zura_masked_look',0])
+        self.assertEqual(scaled['width'], ['zura_original_size',0])
+        self.assertEqual(scaled['height'], ['zura_original_size',1])
         composite = graph['zura_masked_look']['inputs']
         self.assertEqual(composite['destination'], ['zura_look_source',0])
         self.assertEqual(composite['source'], ['92:105',0])
@@ -163,7 +171,12 @@ class MaskModeTests(unittest.TestCase):
 
     def test_whole_scene_opening_can_change_background_and_mentions_camera_geometry(self):
         graph = self.graph(self.project(edit_area='scene'), 'design')
-        self.assertEqual(graph['122']['inputs']['images'], ['92:105',0])
+        self.assertEqual(graph['122']['inputs']['images'], ['zura_opening_original_resolution',0])
+        scaled = graph['zura_opening_original_resolution']['inputs']
+        self.assertEqual(scaled['image'], ['92:105',0])
+        self.assertEqual(scaled['width'], ['zura_original_size',0])
+        self.assertEqual(scaled['height'], ['zura_original_size',1])
+        self.assertNotIn('zura_opening_preserve_source', graph)
         self.assertNotIn('zura_masked_look', graph)
         self.assertIn('ground plane', graph['127']['inputs']['value'])
         self.assertIn('camera framing', graph['127']['inputs']['value'])
