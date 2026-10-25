@@ -78,19 +78,26 @@ def frames(d,start,count):
     if matrix:
         vf+=f',scale=in_color_matrix={matrix}:in_range={"pc" if d.get("range")=="pc" else "tv"}:out_range=pc'
     # Preserve encoded RGB values at 16-bit precision; colour conversion follows decoding.
-    cmd=['ffmpeg','-v','error','-i',d['path'],'-vf',vf,'-an','-sn','-f','rawvideo','-pix_fmt','rgb48le','-']
+    # FFmpeg 7 defaults rawvideo to 25 fps after this filter chain. Keep every
+    # decoded source frame, including 59.94 fps footage, rather than drop/duplicate.
+    cmd=['ffmpeg','-v','error','-i',d['path'],'-vf',vf,'-an','-sn','-fps_mode','passthrough','-f','rawvideo','-pix_fmt','rgb48le','-']
     # Windows anonymous pipes throttle large RGB streams. Reuse an uncompressed
     # temporary disk cache instead, while retaining 16-bit decoded RGB precision.
     size=d['width']*d['height']*6*count
     cache_dir=Path(tempfile.gettempdir())/'zura_paintout_rgb';cache_dir.mkdir(exist_ok=True)
-    key=hashlib.sha256((str(Path(d['path']).resolve())+str(Path(d['path']).stat().st_mtime_ns)+vf+str(count)).encode()).hexdigest()
+    key=hashlib.sha256(('frame-exact-v2|'+str(Path(d['path']).resolve())+str(Path(d['path']).stat().st_mtime_ns)+vf+str(count)).encode()).hexdigest()
     cached=cache_dir/(key+'.rgb')
     if size<=8*1024**3 and (cached.exists() or shutil.disk_usage(cache_dir).free>size*1.2):
         if not cached.exists() or cached.stat().st_size!=size:
             part=cache_dir/(key+'_'+uuid.uuid4().hex+'.part')
-            subprocess.run(cmd[:-1]+[str(part)],check=True,capture_output=True)
-            if part.stat().st_size!=size:raise ValueError('Video ended before requested frame range')
-            part.replace(cached)
+            try:
+                subprocess.run(cmd[:-1]+[str(part)],check=True,capture_output=True)
+                if part.stat().st_size!=size:
+                    decoded=part.stat().st_size//(d['width']*d['height']*6)
+                    raise ValueError(f'Decoded {decoded} of {count} requested source frames starting at {start}. Check the footage and selected range.')
+                part.replace(cached)
+            finally:
+                part.unlink(missing_ok=True)
         mapped=np.memmap(cached,dtype='<u2',mode='r',shape=(count,d['height'],d['width'],3))
         try:
             for a in mapped:yield a.astype(np.float32)/65535.
@@ -238,7 +245,9 @@ def crop_work(a,c,space,is_mask=False):
     if t.ndim==3:t=t[...,None]
     if not is_mask:t=working(t,space,c.get('processing','HDR (ACEScct)'),is_hdr(c['space']))
     else:t=(t>.001).float()
-    if c.get('framing_mode') in ('Full frame (original method)','Full frame (fit, no crop)'):
+    if c.get('framing_mode')=='Source resolution (pad, no resize)':
+        pass  # Keep source pixels exact; only the model-grid padding below is added.
+    elif c.get('framing_mode') in ('Full frame (original method)','Full frame (fit, no crop)'):
         t=resize_fullframe(t,rh,rw,c.get('resampler','float32_bicubic_antialias'),is_mask)
     else:t=resize(t,rh,rw,'area' if is_mask else 'bilinear')
     if is_mask:t=(t>0).float()
@@ -252,7 +261,7 @@ class ZuraPaintoutCrop:
         'colour_space':(COLOUR_SPACES,),
         'start_frame':integer(0),'frame_count':integer(81,1,993),'sequence_fps':floating(25,1,120),
         'context_pixels':integer(128,32,2048),'max_crop_side':integer(768,128,2048),
-        'repair_grow':integer(16,0,256),'feather_pixels':integer(24,0,256)},'optional':{'processing_mode':(PROCESSING_MODES,), 'framing_mode':(['Smart crop (experimental)','Full frame (original method)','Full frame (fit, no crop)'],), 'render_width':integer(1152,64,4096), 'render_height':integer(640,64,4096)}}
+        'repair_grow':integer(16,0,256),'feather_pixels':integer(24,0,256)},'optional':{'processing_mode':(PROCESSING_MODES,), 'framing_mode':(['Smart crop (experimental)','Full frame (original method)','Full frame (fit, no crop)','Source resolution (pad, no resize)'],), 'render_width':integer(1152,64,4096), 'render_height':integer(640,64,4096)}}
     RETURN_TYPES=('IMAGE','MASK','ZURA_PLATE','INT','INT','INT','FLOAT','STRING')
     RETURN_NAMES=('crop_frames','crop_mask','plate','width','height','padded_frames','fps','crop_report')
     FUNCTION='prepare'; CATEGORY=CATEGORY
@@ -269,7 +278,10 @@ class ZuraPaintoutCrop:
         if d['count'] and start_frame+frame_count>d['count']:raise ValueError('Requested plate frame range is too long')
         W,H=d['width'],d['height']
         if render_width%64 or render_height%64:raise ValueError('Render width and height must be multiples of 64')
-        if framing_mode not in ('Smart crop (experimental)','Full frame (original method)','Full frame (fit, no crop)'):raise ValueError('Unknown framing mode')
+        if framing_mode not in ('Smart crop (experimental)','Full frame (original method)','Full frame (fit, no crop)','Source resolution (pad, no resize)'):raise ValueError('Unknown framing mode')
+        if framing_mode=='Source resolution (pad, no resize)':
+            render_width,render_height=math.ceil(W/64)*64,math.ceil(H/64)*64
+            if max(render_width,render_height)>4096:raise ValueError('Source resolution exceeds 4096 pixels. Choose a smaller processing resolution.')
         if framing_mode!='Smart crop (experimental)':
             if framing_mode=='Full frame (original method)':
                 aspect=render_width/render_height
@@ -277,7 +289,8 @@ class ZuraPaintoutCrop:
                 else:cw,ch=W,round(W/aspect)
                 x0,y0=(W-cw)//2,(H-ch)//2
             else:x0,y0,cw,ch=0,0,W,H
-            if framing_mode=='Full frame (fit, no crop)':
+            if framing_mode=='Source resolution (pad, no resize)':rw,rh=W,H
+            elif framing_mode=='Full frame (fit, no crop)':
                 scale=min(render_width/W,render_height/H);rw,rh=max(1,round(W*scale)),max(1,round(H*scale))
             else:rw,rh=render_width,render_height
             x1,y1=x0+cw,y0+ch

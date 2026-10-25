@@ -14,6 +14,12 @@ export const PAINTOUT_DEFAULT_PROMPTS={
 };
 export const PAINTOUT_COLOUR_SPACES=['auto','acescg','acescct','hlg_rec2020','pq_rec2020','linear_rec709','srgb_display','rec709_gamma24','rec709_oetf'];
 export const PAINTOUT_OUTPUT_MODES=['SDR video','HLG video','EXR sequence','EXR + SDR video','EXR + HLG video'];
+export const PAINTOUT_SIZE_PRESETS=[['landscape','Widescreen · 16:9',16/9],['portrait','Portrait · 9:16',9/16],['square','Square · 1:1',1],['standard','Landscape · 4:3',4/3]];
+export function paintoutPresetSize(preset,megapixels=.75){
+  const ratio=PAINTOUT_SIZE_PRESETS.find(p=>p[0]===preset)?.[2]||16/9;
+  const snap=n=>Math.max(64,Math.min(4096,Math.round(n/64)*64));
+  return {width:snap(Math.sqrt(Number(megapixels)*1e6*ratio)),height:snap(Math.sqrt(Number(megapixels)*1e6/ratio))};
+}
 export const paintoutStages={
   source:'Reading footage and preparing frames',anchors:'Loading painted anchors',
   model:'Loading LTX 2.5',lora:'Loading the paintout adapter',memory:'Preparing guide attention',
@@ -37,6 +43,8 @@ export function paintoutValidation(config={}){
   if(!whole(c.startFrame,0,100000))return 'Start frame must be a whole source-frame number, starting at 0.';
   if(!whole(c.frameCount,1,993))return 'Choose between 1 and 993 frames for one continuous shot.';
   if(!Number.isFinite(Number(c.sequenceFps))||Number(c.sequenceFps)<1||Number(c.sequenceFps)>120)return 'Sequence frame rate must be between 1 and 120 fps.';
+  if(c.resolutionMode!==undefined&&!['default','source','custom',...PAINTOUT_SIZE_PRESETS.map(p=>p[0])].includes(c.resolutionMode))return 'Choose a processing resolution.';
+  if(c.resolutionMode==='source'&&![c.sourceWidth,c.sourceHeight].every(n=>whole(n,1,4096)))return 'Load footage up to 4096 pixels per side, or choose a smaller processing resolution.';
   if(![c.width,c.height].every(n=>whole(n,64,4096)&&Number(n)%64===0))return 'Render width and height must use 64-pixel increments, from 64 to 4096 pixels.';
   if(!PAINTOUT_COLOUR_SPACES.includes(c.sourceColour))return 'Choose the actual source colour space.';
   if(!['SDR (sRGB)','HDR (ACEScct)'].includes(c.processingSpace))return 'Choose SDR or HDR processing.';
@@ -74,7 +82,7 @@ export function buildPaintoutGraph(config={}){
     plate_path:c.source,...(targeted?{mask_path:c.mask}:{}),colour_space:c.sourceColour,
     start_frame:Number(c.startFrame),frame_count:Number(c.frameCount),sequence_fps:Number(c.sequenceFps),
     context_pixels:128,max_crop_side:768,repair_grow:0,feather_pixels:targeted?24:0,
-    processing_mode:c.processingSpace,framing_mode:targeted?'Full frame (original method)':'Full frame (fit, no crop)',
+    processing_mode:c.processingSpace,framing_mode:c.resolutionMode==='source'?'Source resolution (pad, no resize)':c.resolutionMode&&c.resolutionMode!=='default'?'Full frame (fit, no crop)':targeted?'Full frame (original method)':'Full frame (fit, no crop)',
     render_width:Number(c.width),render_height:Number(c.height),
   });
   if(targeted)node('anchors','ZuraPaintoutAnchors',{plate:ref('source',2),anchors:JSON.stringify(c.anchors.filter(a=>a.enabled!==false).map(a=>({file:a.file,frame:Number(a.frame),strength:Number(a.strength??.75),enabled:true,...(a.colour_space?{colour_space:a.colour_space}:{})})))});

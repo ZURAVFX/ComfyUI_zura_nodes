@@ -12,13 +12,13 @@ window.HTMLInputElement.prototype.checkValidity=function(){const n=Number(this.v
 const stored={},events={},calls=[];
 Object.assign(globalThis,{document,window,localStorage:{getItem:k=>stored[k],setItem:(k,v)=>stored[k]=v}});
 const source='Z:/plates/shot.mov',mask='Z:/plates/mask.mov',paint='Z:/plates/paint_000060.png';
-let selected=[],completed=null;
+let selected=[],completed=null,submitResponse=null;
 const owner={root:document.querySelector('#root'),studio:{close(){}},app:{},api:{clientId:'test',apiURL:p=>p,addEventListener:(n,h)=>{(events[n]??=[]).push(h);},removeEventListener(){}},fetch:async(path,body)=>{
   calls.push({path,body});
   if(path==='/zura/paintout/pick')return {paths:selected};
   if(path.startsWith('/zura/paintout/info')){const file=new URLSearchParams(path.split('?')[1]).get('file');return {path:file,name:file.split('/').at(-1),frames:file===paint?1:240,width:1920,height:1080,fps:24,kind:file===paint?'image':'video',...(file===paint?{}:{media_url:'/media?file='+encodeURIComponent(file)})};}
   if(path==='/zura/paintout/export-frame')return {path:'Z:/output/paint_000060.png',url:'/media?token=export',frame:body.frame};
-  if(path==='/prompt')return {prompt_id:'paintout-job'};
+  if(path==='/prompt')return submitResponse?await submitResponse:{prompt_id:'paintout-job'};
   if(path.startsWith('/history/'))return completed?{'paintout-job':completed}:{};
   if(path==='/queue')return {queue_running:[[0,'paintout-job']],queue_pending:[]};
   return {};
@@ -49,6 +49,28 @@ ui.sourceInfo={...ui.sourceInfo,kind:'sequence',fps:25};ui.$('fps').value=30;ui.
 ui.setMode('targeted');ui.maskInfo.frames=240;ui.state.anchors[0].frame=60;ui.renderAnchors();ui.changed();
 ui.sourceInfo={...ui.sourceInfo,kind:'video',fps:24};ui.preview('source');ui.$('video').onerror();assert.equal(ui.$('video').hidden,true);ui.seek(65);assert.match(ui.$('image-slot').querySelector('img').src,/frame=65/,'Unsupported codecs retain an exact-frame preview');
 await ui.exportFrame();assert.equal(ui.$('export-link').hidden,false);assert.equal(calls.find(c=>c.path==='/zura/paintout/export-frame').body.frame,65);
+// Visible resolution presets, exact source padding, snapping and persistence.
+ui.$('size-mode').value='source';ui.$('size-mode').onchange();
+assert.equal(ui.config().width,1920);assert.equal(ui.config().height,1088);
+assert.match(ui.$('resolution-label').textContent,/Source/);
+assert.match(ui.$('size-help').textContent,/Saved output: 1920 × 1080/);
+assert.equal(buildPaintoutGraph(ui.config()).source.inputs.framing_mode,'Source resolution (pad, no resize)');
+ui.$('size-mode').value='portrait';ui.$('size-mode').onchange();
+ui.$('megapixels').value='0.5';ui.$('megapixels').onchange();
+assert.ok(ui.config().height>ui.config().width);assert.equal(ui.config().width%64,0);
+assert.equal(ui.$('custom-size').hidden,true);assert.equal(ui.$('megapixels-control').hidden,false);
+ui.$('size-mode').value='custom';ui.$('size-mode').onchange();
+ui.$('width').value='719';ui.$('width').onchange();assert.equal(ui.state.width,704);
+ui.$('height').value='1000';ui.$('height').onchange();assert.equal(ui.state.height,1024);
+assert.equal(ui.$('custom-size').hidden,false);
+const restored=new PaintoutWorkspace(owner);assert.equal(restored.state.resolutionMode,'custom');assert.equal(restored.state.width,704);restored.close();
+ui.$('size-mode').value='default';ui.$('size-mode').onchange();
+assert.equal(ui.config().width,1152);assert.equal(ui.config().height,640);
+// An invalid number in a popover must explain the problem instead of silently blocking submit.
+ui.$('count').value='';const beforeInvalid=calls.filter(c=>c.path==='/prompt').length;
+await ui.generate();assert.equal(calls.filter(c=>c.path==='/prompt').length,beforeInvalid);
+assert.match(ui.$('message').textContent,/valid frame count/);ui.$('count').value=121;
+
 events.executing[0]({detail:{node:'foreign'}});events.progress[0]({detail:{value:5,max:8}});
 await ui.generate();assert.equal(ui.job.id,'paintout-job');const prompt=calls.find(c=>c.path==='/prompt').body.prompt;
 assert.equal(prompt.source.inputs.start_frame,40);assert.equal(JSON.parse(prompt.anchors.inputs.anchors)[0].frame,60);
@@ -60,6 +82,16 @@ completed={status:{completed:true},outputs:{save:{images:[{filename:'paintout_SD
 assert.equal(ui.result.file.filename,'motion_preview_SDR.mp4');assert.equal(ui.result.master.filename,'paintout_SDR_10bit.mp4');assert.equal(ui.$('download').textContent,'Download video');assert.equal(ui.job,null);
 ui.result.config.outputMode='EXR sequence';ui.render();assert.equal(ui.$('download').textContent,'Download preview');
 ui.result.config.source='Z:/other.mov';ui.render();assert.equal(ui.$('compare').hidden,true,'Never compare history against unrelated footage');
+// Queue acknowledgement gives instant visible feedback and repeated clicks submit once.
+completed=null;let accept;submitResponse=new Promise(resolve=>accept=resolve);
+const beforeSubmit=calls.filter(c=>c.path==='/prompt').length,pending=ui.generate();
+assert.equal(ui.$('progress').hidden,false);assert.equal(ui.$('progress-title').textContent,'Submitting clean plate');
+await ui.generate();assert.equal(calls.filter(c=>c.path==='/prompt').length,beforeSubmit+1);
+accept({prompt_id:'paintout-job'});await pending;submitResponse=null;
+completed={status:{status_str:'error',messages:[['execution_error',{node_id:'source',exception_message:'Decoded 85 of 200 requested source frames.'}]]},outputs:{}};
+await ui.poll();assert.equal(ui.job,null);assert.match(ui.$('message').textContent,/Paintout stopped.*Reading footage.*Decoded 85/);
+assert.equal(ui.$('progress').hidden,true);assert.equal(ui.$('generate').disabled,false);
+
 ui.resetSource();assert.equal(ui.$('export-link').hidden,true);assert.equal(ui.$('export-link').getAttribute('href'),null);assert.equal(ui.state.anchors.length,0);
 ui.close();const resumed=new PaintoutWorkspace(owner);assert.equal(resumed.state.source,'');assert.equal(resumed.state.anchors.length,0);resumed.close();
 console.log('Paintout UI: exact anchor IDs, editable range, compact controls, full-scene isolation, codec fallback, exports, owned jobs and reset pass.');

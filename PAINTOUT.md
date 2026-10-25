@@ -70,6 +70,10 @@ The targeted graph defaults to the original workflow's **1152 x 640 centre frami
 
 The full-scene graph fits the whole frame into the generation canvas with padding, then delivers the generated scene at source resolution. **Smart crop** remains experimental in the targeted loader: it can save inference area, but the cropped test did not match the original framing's removal quality, so it is not the default.
 
+Studio exposes **Processing resolution** beside the duration control. Keep the default canvas, choose an aspect preset and megapixel budget, or enter custom dimensions that snap to 64-pixel increments. **Use source** processes the original pixels without resizing, adding only model-grid padding that is removed on export. Source mode accepts up to 4096 pixels per side and can need substantially more memory. All options still deliver at the original footage dimensions; the picker shows both processing and saved sizes.
+
+Video decoding preserves every selected source frame, including 59.94 fps footage with FFmpeg 7. A failed run reports the stage and error in Studio. Generate shows submission immediately and prevents duplicate clicks while awaiting queue confirmation. Restart ComfyUI after installing this Python update, then refresh Studio.
+
 ## Validation and limits
 
 The integrated source uses the previously tested inference path. On an RTX 4080 with 16 GB VRAM and 64 GB RAM, the native targeted 301-frame control completed in 8m21s. High-bit-depth loading, compositing and export add work. The newer 49-frame integration tests took 102s targeted SDR, 83s full-scene SDR, 114s targeted SDR-to-HDR and 104s full-scene SDR-to-HDR. Loading/cache state differed; these are measured examples, not guaranteed timings.

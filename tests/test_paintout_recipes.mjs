@@ -108,3 +108,9 @@ assert.equal(paintoutAvailability(info,'full').ready,true);
 combo('LTXICLoRALoaderModelOnly','lora_name',[]);
 assert.ok(paintoutAvailability(info,'full').missing.includes(PAINTOUT_MODELS.fullLora));
 console.log('Paintout recipes preserve both native templates; range, anchor, HDR and availability checks passed.');
+
+const sourceSize=buildPaintoutGraph({...config,resolutionMode:'source',sourceWidth:1920,sourceHeight:1080,width:1920,height:1088});
+assert.equal(sourceSize.source.inputs.framing_mode,'Source resolution (pad, no resize)');
+assert.equal(sourceSize.source.inputs.render_height,1088);
+assert.equal(buildPaintoutGraph({...config,resolutionMode:'custom',width:640,height:640}).source.inputs.framing_mode,'Full frame (fit, no crop)');
+assert.match(paintoutValidation({...config,resolutionMode:'source',sourceWidth:8192,sourceHeight:4096}),/smaller processing resolution/);
