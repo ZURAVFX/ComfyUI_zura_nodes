@@ -159,3 +159,14 @@
 .zp-editor-mask-actions .zp-editor-segments ol{position:static;display:flex;flex-direction:column;gap:6px;max-height:180px;overflow:auto;list-style:none;padding:8px 0;margin:0}
 .zp-editor-segments li{margin:0}.zp-editor-segments li button{width:100%;text-align:left}
 @media(max-width:700px){.zp-editor-track-range label{flex:1 1 140px}.zp-editor-track-range input[type=number]{width:100%}.zp-editor-segment-actions button{flex:1 1 200px}}
+
+/* Keep the everyday path short; detailed tracking controls stay in the page. */
+.zp-editor-mask-actions .zp-editor-track-guide{flex-basis:100%}
+.zp-editor-mask-actions .zp-editor-advanced{width:100%}
+.zp-editor-advanced>summary{padding-inline:0}
+.zp-editor-advanced>p{margin:4px 0 8px;color:var(--gs-muted,#a3a3aa);font-size:12px;line-height:1.5}
+.zp-editor-mask-actions .zp-editor-advanced .zp-editor-track-range{border:0;padding:8px 0}
+.zp-editor-mask-actions .zp-editor-segment-actions{padding-top:4px}
+
+.zp-editor-tools input:not([type=range]),.zp-editor-tools textarea{-webkit-user-select:text;user-select:text;cursor:text}
+.zp-editor-tools input::selection,.zp-editor-tools textarea::selection{background:var(--gs-accent,#caff00);color:var(--gs-ink,#101013)}

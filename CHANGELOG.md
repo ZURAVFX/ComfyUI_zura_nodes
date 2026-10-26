@@ -8,6 +8,13 @@
 - Share package checks between release and repository CI, update GitHub Actions and exclude authoring files from Registry archives.
 - Update the PostCSS build dependency to 8.5.31, clear its reported advisories and check frontend builds in CI.
 
+## 1.3.34 - 26 October 2026 (testing release)
+
+- Fix Clean frames showing an unexpanded mask after the authoritative preview arrived with no guide selected. Preview requests now use the displayed expansion value.
+- Reject stale decoded mask previews after changing expansion.
+- Simplify masking: keep selection, preview and tracking visible; collapse precise range, direction and combine settings under Advanced tracking options. Repair/add-mask actions appear after a mask exists.
+- Restore native text selection and editing shortcuts in cleanup instructions and other mask-panel fields, isolated from graph input handling.
+
 ## 1.3.33 - 26 October 2026 (testing release)
 
 - Restore visible Zura Studio and Paintout Studio buttons on the graph. Menu commands and optional launcher nodes remain available.

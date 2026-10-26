@@ -115,6 +115,7 @@ jobs:
           node tests/test_studio_upload.mjs
           node tests/test_studio_upload_dom.mjs
           node tests/test_studio_trim.mjs
+          node tests/test_paintout_preview.mjs
           node tests/test_paintout_entry.mjs
           node tests/test_studio_create.mjs
           node tests/test_image_edit_recipes.mjs

@@ -261,6 +261,19 @@ task.value='swap';task.dispatchEvent(new window.Event('change'));assert.equal(na
 task.value='paintout';task.dispatchEvent(new window.Event('change'));
 assert.equal(navUi.mode,'paintout');assert.equal(navUi.paintout.page.hidden,false);assert.equal(navUi.frames.page.hidden,true);assert.equal(navUi.referencesVideo.page.hidden,true);
 assert.equal(navUi.paintout.page.querySelector('#zc-video-task'),task,'Paintout retains the workflow menu beside its model');
+const paintTools=navUi.paintout.editor.tools,advanced=paintTools.querySelector('[data-editor=tracking-options]');
+assert.equal(advanced.hasAttribute('open'),false,'Precise tracking controls start collapsed');
+for(const key of ['range-start','range-end','direction','operation'])assert.ok(advanced.querySelector(`[data-editor=${key}]`),'Advanced tracking retains '+key);
+assert.ok(!paintTools.querySelector('[data-editor=track]').closest('details'),'Tracking stays visible without opening advanced options');
+assert.ok(!paintTools.querySelector('[data-editor=add-segment]').closest('details'),'Adding another mask stays directly accessible');
+let escapedTextEvents=0;const input=paintTools.querySelector('[data-editor=instruction]');
+for(const type of ['mousedown','dblclick','keydown','selectstart','copy']){
+ const listener=()=>escapedTextEvents++;navUi.paintout.page.addEventListener(type,listener);
+ const event=new window.Event(type,{bubbles:true,cancelable:true});Object.defineProperty(event,'key',{value:'a'});
+ input.dispatchEvent(event);assert.equal(event.defaultPrevented,false,'Native text editing remains enabled for '+type);
+ navUi.paintout.page.removeEventListener(type,listener);
+}
+assert.equal(escapedTextEvents,0,'Text editing cannot reach graph selection/shortcut handlers');
 navUi.paintout.state.anchors=[{file:'Z:/painted_42.png',frame:42,strength:.75,enabled:true}];navUi.paintout.renderAnchors();navUi.paintout.save();
 task.value='frames';task.dispatchEvent(new window.Event('change'));assert.equal(navUi.paintout.page.hidden,true);assert.equal(navUi.frames.page.hidden,false);
 task.value='paintout';task.dispatchEvent(new window.Event('change'));assert.equal(navUi.paintout.state.anchors[0].frame,42,'Leaving Paintout retains artist anchor IDs');
