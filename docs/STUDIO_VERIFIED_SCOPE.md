@@ -1,6 +1,6 @@
-# Current Studio scope
+# Studio scope snapshot
 
-22 October 2026. Candidate scope for Zura Nodes 1.3.28; 1.3.27 is already published.
+Historical scope recorded on 22 October 2026 for Zura Nodes 1.3.28. Later additions are in the [changelog](../CHANGELOG.md); use the [current README](../README.md) for entry points.
 
 Relight now uses Klein to create the lighting image and Wan 2.1 for video. H3 relight video is removed from Studio. Wan 2.1 uses the artist-supplied Switch X recipe after the lighting frame is reviewed: fixed four-step sampling, 81-frame sections, source-matched framing up to a 1280-pixel long edge, 24 fps and restored original soundtrack. The recipe is checked against the running Comfy node schemas and private workflow paths/media are removed. Its parent workflow was artist-confirmed as working well; no new full Studio render is claimed for this integration. Review section joins on long clips.
 

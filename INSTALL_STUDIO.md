@@ -1,12 +1,12 @@
 # Install Zura Studio
 
-**Version 1.3.24:** Character performance offers Wan, MiniMax H3 and LTX 2.5, including the approved original-audio, replacement-dialogue and silent-footage paths. Wan offers precise masked replacement; H3 uses selection/depth guidance; LTX recreates the whole frame. Viewport to final offers H3. LTX viewport remains excluded after its separate rejected test. H3 Head & face is a separate two-second original-audio option. Download only the model for your chosen task. See [approved workflows](docs/APPROVED_WORKFLOWS.md) and the [current scope](docs/STUDIO_VERIFIED_SCOPE.md).
+Character performance offers Wan, MiniMax H3 and LTX 2.5, including the approved original-audio, replacement-dialogue and silent-footage paths. Wan offers precise masked replacement; H3 uses selection/depth guidance; LTX recreates the whole frame. Viewport to final offers H3. LTX viewport remains excluded after its separate rejected test. H3 Head & face is a separate two-second original-audio option. Download only the model for your chosen task. See [approved workflows](docs/APPROVED_WORKFLOWS.md) and the [current scope](docs/STUDIO_VERIFIED_SCOPE.md).
 
 Zura Studio is included in the official **Zura Nodes** ComfyUI pack. The pack is code; video model weights are separate downloads and are not included.
 
 ## Install the pack
 
-When an approved version is available, open **ComfyUI Manager â†’ Install Custom Nodes**, search for **Zura Nodes**, and install the entry published by **ZURAVFX**. Manager installs the pack's Python requirements for you. If the release is still awaiting Registry review or Manager cannot install it, use the official GitHub ZIP below. Restart ComfyUI, then choose **Zura → Open Zura Studio** in the ComfyUI menu (or add the optional **Open Zura Studio** launcher node).
+When an approved version is available, open **ComfyUI Manager > Install Custom Nodes**, search for **Zura Nodes**, and install the entry published by **ZURAVFX**. Manager installs the pack's Python requirements for you. If the release is still awaiting Registry review or Manager cannot install it, use the official GitHub ZIP below. Restart ComfyUI, then choose **Zura → Open Zura Studio** in the ComfyUI menu (or add the optional **Open Zura Studio** launcher node).
 
 If Manager is unavailable, download the current ZIP from the official [Zura Nodes GitHub Releases](https://github.com/ZURAVFX/ComfyUI_zura_nodes/releases). Extract it to `ComfyUI/custom_nodes/ComfyUI_zura_nodes` so that `requirements.txt` is directly inside that folder.
 

@@ -1,11 +1,13 @@
 # Zura Studio 1.3.24 release candidate, 17 October 2026
 
+> Historical snapshot from 17 October 2026. This describes the 1.3.24 candidate. Use the [current README](../../README.md), [installation guide](../../INSTALL_STUDIO.md) and [changelog](../../CHANGELOG.md) for current instructions.
+
 This candidate is on the development branch. It has not been published as a
 stable release. The current stable release and this candidate are separate.
 
 Zura Studio belongs to the official Zura Nodes package. Use the
 [official release download](https://github.com/ZURAVFX/ComfyUI_zura_nodes/releases)
-and [installation guide](INSTALL_STUDIO.md). Comfy Registry review is separate
+and [installation guide](../../INSTALL_STUDIO.md). Comfy Registry review is separate
 from GitHub distribution; Manager availability requires Registry approval.
 
 Start ComfyUI, refresh its interface and click **Zura Studio**. Choose Wan 2.2,
@@ -76,4 +78,4 @@ Remaining qualification limits:
 
 The package includes code, neutral workflows and documentation. Private voice
 recordings, test videos, transcripts, scripts and model weights are excluded.
-See [validation details](ARTIST_STUDIO_VALIDATION.md) and [Studio guide](ARTIST_STUDIO.md).
+See [validation details](../../ARTIST_STUDIO_VALIDATION.md) and [Studio guide](../../ARTIST_STUDIO.md).

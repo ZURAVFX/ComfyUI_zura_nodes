@@ -19,7 +19,6 @@ node_modules/
 tests/
 .github/
 RELEASING.md
-pyproject.toml.template
 models/
 model_cache/
 input/
@@ -86,3 +85,13 @@ parakeet.local.json*
 # LTX 2.5 paintout examples.
 !/workflows/Video - Targeted Paintout (LTX 2.5).json
 !/workflows/Video - Full Scene Clean Plate (LTX 2.5).json
+
+# Repository-only documentation, authoring settings and generated archives.
+/.impeccable/
+/docs/archive/
+/CONTRIBUTING.md
+/PRODUCT.md
+/DESIGN.md
+/node.zip
+/.coverage
+/coverage.xml

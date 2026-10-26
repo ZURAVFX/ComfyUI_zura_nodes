@@ -1,4 +1,4 @@
-# Start here: v1.0.0-rc.1
+# Paintout Studio manual checks
 
 Use a copy of a short, continuous shot. Start with a visible object against a recoverable background. The bedroom overlap test is a stress test and remains unsuitable as the final demonstration.
 
@@ -27,7 +27,7 @@ Use a copy of a short, continuous shot. Start with a visible object against a re
 Copy this for each issue:
 
 ```
-Build: 1.0.0-rc.1
+Build: Zura Nodes version or Git commit
 Shot: name, dimensions, frame rate, selected source range
 Stage: Mask / Clean frames / Render / Project / Install
 Steps:

@@ -5,12 +5,13 @@ This repository is the source for the `comfyui-zura-nodes` package in the
 
 To release an update:
 
-1. Commit and push your changes to `main`.
-2. Choose a new version, for example `1.0.1`. Update `project.version` in
-   `pyproject.toml` and `__version__` in `__init__.py`. If the example workflow
-   changes, update the four Zura nodes' `properties.ver` values too.
+1. Run the checks in [CONTRIBUTING.md](CONTRIBUTING.md), then commit and push
+   the changes to `main`.
+2. Choose a new version, for example `1.3.33`. Update `project.version` in
+   `pyproject.toml` and `__version__` in `__init__.py`. For changed workflows, update `properties.ver` on Zura nodes only;
+   retain the recorded versions of third-party nodes.
 3. On GitHub, create and publish a release with the matching tag, for example
-   `v1.0.1`, targeting the updated commit.
+   `v1.3.33`, targeting the updated commit.
 4. Check **Actions > Publish to Comfy Registry**. It checks the version,
    runs the regression tests and publishes the package automatically.
 5. Wait for Registry processing and verify the new version on the package page.
@@ -29,3 +30,7 @@ ComfyUI Manager can discover Registry updates. Users choose when to install
 them, or use their own update settings. Publishing does not silently overwrite
 their machines. Registry availability also does not guarantee inclusion in
 Comfy Cloud's curated node environment.
+
+Run `python tools/check_package.py` to check metadata and assets locally.
+`pyproject.toml` is the canonical metadata; keep its dependencies aligned with
+`requirements.txt`. Testing changes may stay on `main` without a release tag.

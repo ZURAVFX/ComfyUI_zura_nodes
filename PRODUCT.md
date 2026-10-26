@@ -20,7 +20,7 @@ Users upload a source video and either a finished starting frame or one or more 
 
 ## Constraints and evidence
 
-H3 is the recommended viewport route, currently supporting approximately 0.21 to five seconds. Wan remains available for its approved human-performance routes, but is withdrawn from viewport rendering. LTX viewport quality is experimental. Resolution and length must reflect model capabilities rather than promise unsupported renders. Seedance uses paid credits; local UI checks must not queue it.
+H3 is the recommended viewport route, currently supporting approximately 0.21 to five seconds. Wan remains available for its approved human-performance routes, but is withdrawn from viewport rendering. LTX viewport is excluded after its rejected quality test. Resolution and length must reflect model capabilities rather than promise unsupported renders. Seedance uses paid credits; local UI checks must not queue it.
 
 Native sampling progress may expose steps. Loading and other stages without measurable totals must show a named loading state; remaining-time estimates are measured and scoped to the active stage. Subject detection is local CPU advice, with explicit People and Objects overrides.
 

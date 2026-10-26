@@ -18,6 +18,7 @@ __pycache__/
 .ruff_cache/
 .cache/
 node_modules/
+/tools/studio-ui/components.raw.css
 .coverage
 coverage.xml
 

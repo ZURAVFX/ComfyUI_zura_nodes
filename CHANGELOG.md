@@ -1,5 +1,13 @@
 # Release notes
 
+## Unreleased - Repository maintenance
+
+- Simplify the README and add indexed guides and contributor checks.
+- Archive the 1.3.24 candidate, label dated scope evidence and correct stale installation/testing version labels.
+- Remove the obsolete metadata template; verify runtime dependency manifests match.
+- Share package checks between release and repository CI, update GitHub Actions and exclude authoring files from Registry archives.
+- Update the PostCSS build dependency to 8.5.31, clear its reported advisories and check frontend builds in CI.
+
 ## 1.3.32 - 26 October 2026 (GitHub testing)
 
 - Integrate the updated Paintout tool into Zura Studio Video > Paintout / clean plate, sharing its working page and controller with the separate contest showcase entry point.

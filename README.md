@@ -1,414 +1,63 @@
-# Zura nodes (ComfyUI_zura_nodes)
+# Zura Nodes for ComfyUI
 
-## Paintout Studio testing update
+Local video, image and audio tools, with a guided **Zura Studio** interface and editable native ComfyUI graphs.
 
-**Paintout** is integrated into **Zura Studio > Video > Paintout / clean plate**, with masks, tracked corrections, clean frames and LTX paintout. **Paintout Studio** is a separate showcase entry point for the contest, opening the same tool and working state. Open **Zura → Open Paintout Studio** from the ComfyUI menu or search its command. **Zura → Open Zura Studio** opens the existing Studio. Both also have optional launcher nodes: search **Open Paintout Studio** or **Open Zura Studio** in Add Node, then press the button on the node. No node or queued generation is required to open either studio, and no permanent canvas buttons are added. Direct links: `?paintout=1` and `?zura=1` on your ComfyUI address.
+- **Video:** character replacement, camera changes, reference-to-video, relighting and speech replacement.
+- **Paintout:** tracked masks, painted clean frames, targeted removal and full-scene clean plates.
+- **Image:** starting frames and image editing with source/reference controls.
+- **Audio:** local speech, voice cloning, voice design and dialogue edits.
 
-This is a GitHub testing update for manual feedback, not a new stable Registry release. Update this repository, install its requirements into ComfyUI's Python if needed, restart ComfyUI and refresh your browser. Models remain separate downloads. See [Paintout Studio testing](PAINTOUT_STUDIO_TESTING.md), [model setup](docs/paintout-studio/MODEL_DOWNLOADS.md) and [manual checks](docs/paintout-studio/MANUAL_TESTING.md). Disable a separately installed Zura Paintout pack to avoid duplicate node IDs and routes.
+Model weights are separate downloads. Available routes and tested limits vary by model; see the [approved workflows](docs/APPROVED_WORKFLOWS.md) and [validation history](ARTIST_STUDIO_VALIDATION.md).
 
+## Install and open
 
-## LTX 2.5 paintout and clean plates
+Install **Zura Nodes**, published by **ZURAVFX**, through ComfyUI Manager when an approved Registry version is available. Otherwise, use the official [GitHub release](https://github.com/ZURAVFX/ComfyUI_zura_nodes/releases/latest).
 
-Zura Nodes now includes two native graph workflows: [targeted paintout](workflows/Video%20-%20Targeted%20Paintout%20%28LTX%202.5%29.json) with Obscura, a removal mask and painted anchor frames; and [full-scene clean plate](workflows/Video%20-%20Full%20Scene%20Clean%20Plate%20%28LTX%202.5%29.json) with the official Lightricks Clean Plate LoRA. The latter needs no removal mask or anchors; restore any wanted subjects from the original in After Effects.
+Follow the [installation and model guide](INSTALL_STUDIO.md) to install Python requirements into ComfyUI's environment and download the models for your chosen task. Restart ComfyUI and refresh the browser.
 
-Both support video/ProRes and image-sequence browsing, SDR or HDR processing, float EXR or 10-bit HLG/SDR export, trimmed source audio and a motion preview. These are graph templates, separate from Studio's character-performance modes. See [Paintout setup and model requirements](PAINTOUT.md). If you installed the earlier standalone `ComfyUI-Zura-Paintout` pack, remove or disable that copy after updating Zura Nodes, then restart ComfyUI and refresh the browser. Saved paintout node IDs remain compatible.
+Open **Zura > Open Zura Studio** from the ComfyUI menu or search for that command. Optional **Open Zura Studio** and **Open Paintout Studio** launcher nodes provide shortcuts inside a workflow. On the default local address:
 
+- [Zura Studio](http://127.0.0.1:8188/?zura=1)
+- [Paintout Studio](http://127.0.0.1:8188/?paintout=1)
 
-**Zura Studio** is the guided video interface in the official Zura Nodes pack. **Character performance** offers Wan, MiniMax H3 and LTX 2.5, with approved original-performance, uploaded replacement-dialogue and silent-footage routes. Wan offers precise masked replacement; H3 uses character/performance guidance; LTX recreates the whole frame. **Viewport to final** currently offers H3. A separate **H3 → Head & face** option uses your first portrait directly, keeps original audio and composites a tracked face crop into the source. It is qualified for up to two seconds. See [approved workflows](docs/APPROVED_WORKFLOWS.md) and [installation](INSTALL_STUDIO.md).
+Use your own ComfyUI host and port if they differ.
 
-**Word replacement:** edit audio with LongCat or video with a tracked LTX Dub-It face crop. Both native workflows provide waveform selection and a full replacement phrase inside the nodes, then blend only the chosen words into the source. Extra speaker references are optional for LongCat. See [Dialogue editing](DIALOGUE_EDITING.md) for setup, timing controls and tested limits.
+## Current development build
 
-**New here?** In ComfyUI Manager, search for **Zura Nodes** and install an approved version. If Registry review is pending or Manager cannot install it, use the official [release ZIP](https://github.com/ZURAVFX/ComfyUI_zura_nodes/releases). Restart ComfyUI after installation. Model weights are separate downloads; the short [installation and model guide](INSTALL_STUDIO.md) lists the files and steps.
+`main` contains the **1.3.32 GitHub testing update**. The latest published GitHub release is separate; a code push does not publish a stable Registry version.
 
-For **Viewport to final**, use H3: its train example was artist-approved. LTX and Wan viewport routes are excluded from Studio after rejected results.
+Paintout is integrated into **Studio > Video > Paintout / clean plate**. Its separate Paintout Studio entry opens the same working page and controller. Disable an earlier standalone Zura Paintout installation before using this integration to avoid duplicate nodes and routes.
 
-H3 offers optional **Comfy Kitchen** and experimental **Sage + Sol** attention under **More controls**. See [measured speed comparisons and setup](H3_SPEED.md). Native remains the default for existing shots.
+Read the [testing notes](PAINTOUT_STUDIO_TESTING.md), [model setup](docs/paintout-studio/MODEL_DOWNLOADS.md) and [manual checks](docs/paintout-studio/MANUAL_TESTING.md). Representative shot quality and a fresh-machine installation still need feedback. Version changes are recorded in the [changelog](CHANGELOG.md).
 
-After generation, choose **Compare before / after** or **Compare** on any take. Drag the divider to reveal the final render against the selected source clip, with synchronised playback, seeking and fullscreen. Only the finished render plays audio.
+## Workflows
 
-H3 viewport recommends **Use references directly**: review the source movement, then render with up to nine look images without generating a starting frame. Alternatively, choose **Build from references**, describe the starting image, generate and review it, then choose **Use image & continue** to unlock video direction and generation. That path adds a native first-frame guide and leaves up to eight extra reference slots. Image direction appears first. The separate video direction opens only after image approval. The generated-frame path remains less qualified than the tested direct-reference route.
+Open **Browse Templates > Zura Nodes**. Templates are grouped as Audio, Video, Image, Utility and Reference. The [template catalogue](TEMPLATES.md) lists each example and its setup requirements.
 
-**Relight** uses a reviewed Klein lighting image followed by the artist-supplied Wan 2.1 chained video recipe. **Image > Edit image** offers Qwen Image Edit 2511 and FLUX Klein 9B with ordered source/reference images; both graphs pass installed-node validation, with new render approval pending. See [image editing](docs/IMAGE_EDIT.md). General masked object editing and protected-person background editing remain development work.
+Examples include Wan character replacement, H3 camera changes, LTX paintout, LongCat dialogue editing, Qwen voice design, Gemma prompt enhancement and the original SAM3/H3 reference workflows. Their layouts and model selections remain editable.
 
-To open the complete studio, start ComfyUI and click **Zura Studio**. On a default local installation, use `Open_Zura_Studio.url` or open `http://127.0.0.1:8188/?zura=1`. The available local models share saved projects and editable graph access. The standalone Wan test graph is only a diagnostic example.
+Examples use placeholder media. Personal reference images, videos, voice recordings and model weights are not bundled.
 
-Studio shows your GPU memory and RAM, a model-specific starting size and clip length, and a collapsible checklist of missing model files. These are measured examples on an RTX 4080 with 16 GB VRAM and 64 GB RAM, not minimum specifications or guaranteed render times:
+## Guides
 
-| Model | Best reason to start here | Five-second example | Current length guidance |
-| --- | --- | --- | --- |
-| Wan 2.2 | Keep original acting, gestures and cuts; optional audio-driven speech | Native 1080p: about 25–28 minutes, with preparation and new speech guidance extra | Custom clips up to 30 seconds; original length is processed in sections. A 23.75-second 720p example was accepted with detail loss between sections. |
-| MiniMax H3 | Expressive faces and replacement speech | 720p enhanced to 1080p: about 10 minutes, with opening design and selection extra | Up to five seconds. Native 1080p remains unqualified on the tested 16 GB GPU. |
-| LTX 2.5 | Short character/performance recreation with body-motion guidance | Motion-guided whole-scene 1080p: about 3 minutes 23 seconds, with opening design and selection extra | Up to five seconds. No precise output mask; viewport mode is excluded. |
-
-
-All three local routes were tested on the same 16 GB GPU / 64 GB RAM system. LTX's observed GPU peak was about 15.6 GB; exact Wan/H3 peaks and lower-memory systems are unqualified. An exact maximum resolution cannot be calculated from VRAM alone. Start with a short test on your own system. Voice cloning creates a separate audio track which the selected video model can use to guide the face.
-
-At the appearance step, **Use starting image** accepts an existing finished
-frame alongside the separate character reference. It preserves the uploaded
-image exactly and displays it for approval before animation. The automatic
-character-preview option remains available.
-
-With **Remove on-screen text** enabled, H3 automatically repairs eligible
-background text before sampling. It uses the saved performer mask separately
-from the combined edit mask and skips a detected text panel that touches or
-comes close to the performer. This needs [ComfyUI-ArtVenture](https://github.com/sipherxyz/comfyui-art-venture)
-and [ComfyUI-KJNodes](https://github.com/kijai/ComfyUI-KJNodes); ArtVenture may
-download `big-lama.pt` (about 196 MB) on first use. No extra artist controls
-are added.
-
-H3's resolution selector offers **720p**, **1080p enhanced** and **1080p native**.
-Enhanced delivery creates motion at 720p and automatically enhances the finished
-frames. Run `Setup_H3_Enhancement_Windows.cmd` once to install its enhancement
-model. Native 1080p uses substantially more memory and has not completed the
-local 16 GB GPU qualification. See the tested limits in [Zura Studio validation](ARTIST_STUDIO_VALIDATION.md).
-
-Choose **Original clip length** or **Custom length**. **Audio and performance**
-defaults to **Original audio + performance** for every model. Select
-**Reference audio + new performance** to upload a track or create a voice.
-Switching back to Original retains that track locally for later use.
-Silent videos work with the audio encoders.
-**Graph view** opens the current stage as an editable ComfyUI workflow in a new
-tab; **Zura → Open Zura Studio** returns to the artist interface. Graph edits
-remain in that workflow. Reference mode accepts an audio file or a video
-containing your voice. **Create a new facial performance** enables the engine's
-speech route automatically.
-Untick it for music or sound design. **Create a voice track** can also clone a
-voice or generate speech with local Zura LongCat and select the result
-automatically. Studio checks supported clip lengths before preparation.
-Run `Setup_Wan_Speech_Windows.cmd` once for Wan's native
-InfiniteTalk guide. `Setup_Speech_Windows.cmd` installs the optional LatentSync
-1.6 mouth finish; MuseTalk 1.5 remains available in Graph view.
-The speech finish needs a visible human face; review timing and face detail on
-each take. See [Zura Studio](ARTIST_STUDIO.md) for setup and tested limitations.
-Wan's reference-speech mode uses a new audio-driven mouth guide before generation, retaining
-its own facial texture. **More controls > Refine lips after generation** adds
-the optional mouth-only finish if needed. Original face tracking preserves the
-old mouth performance in Original mode. Reference mode instead uses the new
-speech guide.
-The native guide uses an automatically checked portrait of the approved look.
-Studio caches successful guides and handles the model-memory hand-off. Exported
-graphs verify that the guide matches their audio, timing, approved look and seed
-before rendering. Original
-mode uses the source face directly, without creating a replacement performance.
-
-A set of artist-facing ComfyUI video, image and audio controls: load a source clip,
-mask or replace a performer, plan multicam shots, and optionally relight a
-generated take. It coexists
-with the original `comfyui_trend_studio` pack — class names, wire types and
-server routes are separate, so both can stay installed.
-
-## Local speech (v1.1.0)
-
-**Zura LongCat Voice** adds local LongCat-AudioDiT 3.5B voice cloning and text-to-speech.
-Open `workflows/Audio - Clone a Voice (LongCat).json`: **Load Audio -> Zura LongCat Voice -> Preview Audio**.
-Supply one authorised speaker recording, its exact transcript, and the new script.
-The separate `Audio - Text to Speech (LongCat).json` needs no reference recording.
-
-Pace and seed are the artist controls. Every run saves a 24-bit WAV, float master,
-script, settings and individual long-script chunks under `output/zura_voice`.
-Text-to-speech does not support a natural-language speaker-description prompt.
-
-Run **Setup_LongCat_Windows.cmd** once after installing/updating the package.
-It explicitly downloads the model into a separate Python environment; generation
-is local and offline. The model is not bundled with the Registry package and is
-not downloaded merely by importing the node. Tested on an RTX 4080 16 GB.
-See **[LONGCAT.md](LONGCAT.md)** for setup, limitations and team usage.
-
-## Voice workflows (v1.2.0)
-
-Both designed-TTS routes are included. Choose by the result, not a forced model ranking.
-
-| Workflow | Use |
+| Task | Guide |
 | --- | --- |
-| [Qwen Direct](<workflows/Audio - Design a Voice (Qwen).json>) | Describe a voice and its delivery, enter a script; Qwen makes the finished speech. |
-| [Qwen to LongCat](<workflows/Audio - Design a Voice (Qwen to LongCat).json>) | Design a short reference with Qwen, then have LongCat speak a different final script. |
-| [LongCat Voice Clone](<workflows/Audio - Clone a Voice (LongCat).json>) | Reuse an approved real or designed voice recording with its exact transcript. |
+| Install and select model files | [Installation](INSTALL_STUDIO.md) |
+| Use the guided interface and Graph view | [Zura Studio](ARTIST_STUDIO.md) |
+| Use standalone nodes and Wan continuation | [Node and workflow guide](docs/NODE_GUIDE.md) |
+| Mask, remove objects and create clean plates | [Paintout](PAINTOUT.md) |
+| Replace words in audio or video | [Dialogue editing](DIALOGUE_EDITING.md) |
+| Clone a voice or generate speech | [LongCat](LONGCAT.md) |
+| Design a voice with Qwen | [Voice design](VOICE_DESIGN.md) |
+| Set up H3 attention options | [H3 speed comparisons](H3_SPEED.md) |
+| Find detailed technical and historical notes | [Documentation index](docs/README.md) |
 
-Run `Setup_Voice_Design_Windows.cmd` once for Qwen, and `Setup_LongCat_Windows.cmd`
-for the LongCat routes. Environments are isolated; generation uses local weights
-without hosted speech requests. No voice recordings or weights are in this repository.
-See [VOICE_DESIGN.md](VOICE_DESIGN.md) for the team guide, reference reuse and limits.
+## Updates and development
 
-## Template catalogue
+Install available updates through ComfyUI Manager, or update your Git checkout, then restart ComfyUI and refresh the browser. Registry publication makes an update discoverable; users control when it is installed.
 
-Open **Browse Templates > Zura Nodes**. Names begin with Audio, Video, Image, Utility or Reference. Start with **Audio - Replace Speech (LongCat)** or **Video - Replace Speech (LTX INT8)** for dialogue edits. See [all templates and setup requirements](TEMPLATES.md). Audition copies and the experimental AnyAngle graph are excluded from the public catalogue.
-
-## Nodes
-
-| Node | Purpose |
-| --- | --- |
-| **Zura Load Video** | Uploaded local file, trimmed to start/duration, decoded at 24 fps. Outputs an ordinary `VIDEO` with frames and original audio, and the decoded frames. **Choose local video** uploads and selects the file automatically. Existing files must be inside ComfyUI's input/output/temp folders. Download remote clips yourself before uploading; the legacy URL field no longer fetches videos. |
-| **Zura Mask** | Takes **any** `VIDEO` wire, so it works outside the Wan pipeline too. One dropdown for the replacement area — **Whole character**, **Whole head** (hair, forehead and ears, cut at the neck), or **Face only** — plus mask expansion and a **Blockify mask** switch with a free **block size** integer (8–512 px, step 1, KJNodes `BlockifyMask` parity; it delegates to the installed KJNodes node and reproduces its bbox block-grid algorithm exactly as fallback). Inputs: `video`. Outputs: `mask_preview` (red-tinted control video), `masked_footage` (the payload the sampler consumes) and `mask` (the replacement mask itself, as a native `MASK`). |
-| **Zura Wan 2.2 Looped Chunks Sampler** | The looped `WanAnimateToVideo` renderer: native `continue_motion` continuation between chunks, hard reset at detected or manual cuts. `steps` and `cfg` are plain widgets the Turbo Switch node can override. Outputs generated frames **and** a finished `VIDEO` with the original audio and exact timing — no separate finish node. |
-| **Zura Wan 2.2 Turbo Switch** | Lazy base/accelerated model selector emitting model/steps/cfg. Wan 2.2 specific: turbo runs the accelerated branch at 4–8 steps with cfg 1.0, quality runs the base branch at 40 steps with cfg 5.0. LoRA branches stay visible in the graph (Power LoRA Loaders or similar). |
-
-### Camera and scene controls
-
-| Node | Purpose |
-| --- | --- |
-| **Zura Klein Look Presets** and **Zura Optional Image Edit** | Simple lighting, background, and environment prompts with a lazy on/off switch. |
-| **Zura V3 · Pick camera angles** | Nine visual camera previews, a per-shot timeline, angle choices, optional segment prompts, and a visible Plan/Render switch. |
-| **Zura · Clip duration (24 fps)** | A frame-exact short take from 0.5 to 5 seconds, with a four-second default. The simple camera workflow links the decoded frame count to the picker so one camera covers the whole take. |
-| **Zura H3 multicam V3** | Generates only selected non-source camera intervals from the original video and reassembles them at the source timing. Other V3 planning and prompt nodes support this workflow. |
-| **H3 · Render selected camera angle** | Renders one selected camera still against the original 24 fps performance and speech, and sends the unmodified source audio to the video export. |
-| **Clean relight · multicam V4** | Optional Klein start-frame relight and Wan IDV2V motion-guided render, passing through the original source audio. When Look is off, it returns the H3 result without loading the image/video models. |
-| **Zura · Match Mouth Motion** and **Zura · Person Motion Control** | Pre-generation control helpers for the V4 relight path. They are not a post-render performer composite. |
-
-Start with [the simple single-camera example](<workflows/Video - Change Camera (H3).json>)
-to change the camera on a short performance. It uses the same local Qwen Edit
-2511 four-step camera previews and H3 CrossView-Warp path as the advanced
-multicam workflow. The source loads once, is decoded at 24 fps, and supplies
-both the performance guide and original speech. Clip duration is 0.5–5 seconds,
-with four seconds selected by default.
-
-1. Select your video and clip duration. Leave the picker in **Plan previews** and click ComfyUI **Run** to make the nine previews.
-2. Choose one camera in the visual picker. Add an optional movement prompt if needed.
-3. Choose **Render video** in the picker, then click ComfyUI **Run** again. H3 renders the selected view and exports it with the original audio.
-
-Both passes run with local model weights and use no Comfy credits. The picker
-caches its camera stills, so the render pass reuses them. There is no Gaussian
-reconstruction or Qwen Image 2.1 stage in this example. **Delivery shape and size**
-crops/resizes the finished frames; it does not change the H3 generation resolution.
-
-The experimental AnyAngle example is no longer bundled in the public templates. Existing saved graphs and node classes remain supported.
-
-For several cuts, use [the advanced multicam example](<workflows/Video - Multicam (H3 Advanced).json>).
-Choose angles and timing in the planning section before enabling the H3
-render. Its stage subgraphs keep model setup apart from artist controls.
-The examples use `example_performance.mp4` as a placeholder; select your own
-input clip after loading either workflow.
-
-The advanced V3/V4 workflow needs a 24 fps source clip, suitable local MiniMax H3,
-FLUX.2 Klein, and Wan models and LoRAs, plus its other visible custom-node
-dependencies (including CrossViewWarp, VideoHelperSuite, and KJNodes). The
-scene-control node uses a person-segmentation YOLO weight in
-`models/ultralytics/segm/`; the mouth-control node uses `face-alignment==1.4.1`
-and downloads its landmark weights on first use. Model-loading nodes and the
-example workflows are bundled, but model weights are not. A
-structurally valid graph does not guarantee visual identity or perfect lip
-sync; review a short test before processing a full clip. The new-angle still
-can drift from the source face; use a modest camera change for the first pass.
-
-Every wire is a standard ComfyUI type except one: `masked_footage` from Zura Mask
-into the sampler, which has to carry the pose, face and mask tensors a video
-wire cannot. Load Video and Mask speak plain `VIDEO`, the mask is a real `MASK`,
-and the reference character goes straight into the sampler's `reference_image`
-input from any LoadImage node.
-
-## Example workflow
-
-`workflows/Video - Replace a Character (Wan 2.2).json` is the example
-graph titled **Zura Wan 2.2 Character Replacement Workflow (Face, Head, Body or
-Full Character Replacement)**, showing all four nodes wired
-together, including driving-clip, mask-check and raw-mask preview nodes. The
-mask leaves on a native `MASK` slot wired to ComfyUI's own **Preview Mask**.
-The graph is a starting point: replace the `example_clip.mp4` and
-`example_character.png` placeholders with your own input video and reference
-image, and confirm that the named model and LoRA files exist in your ComfyUI
-installation before running it.
-
-The example uses **Power Lora Loader (rgthree)** so the two named Wan LoRA
-weights remain visible in the graph. Install rgthree-comfy, or replace that
-node with an equivalent loader while keeping the model and CLIP connections.
-Load it from ComfyUI's Workflows menu (copy it into `user/default/workflows/`)
-or open the file directly.
-
-## Fast Animate recipe
-
-The example's accelerated branch uses the Wan2.1 I2V LightX2V adapter at
-strength **0.60**, followed by the Wan Animate relighting LoRA at **1.00**.
-It excludes the Wan2.2 high-noise I2V LightX2V adapter. The [Wan2.2 project
-guidance](https://github.com/Wan-Video/Wan2.2#run-wan-animate) warns that
-LoRAs trained on Wan2.2 can behave unexpectedly with Wan-Animate. Kijai's
-[Wan Animate example](https://github.com/kijai/ComfyUI-WanVideoWrapper/blob/main/example_workflows/wanvideo_WanAnimate_example_01.json)
-also pairs the Wan2.1 I2V LightX2V adapter with the Animate relighting LoRA;
-its strengths differ from this workflow's settings. Comfy's [official Animate
-template](https://github.com/Comfy-Org/workflow_templates/blob/main/templates/video_wan2_2_14B_animate.json)
-lists the same Wan2.1 LightX2V file as its four-step acceleration adapter.
-
-The Turbo Switch runs this branch at **6 steps, CFG 1.0**. Its detailed
-branch uses the base Animate model at **40 steps, CFG 5.0**. These are graph
-settings, not a measured speed or quality guarantee. Earlier sweep claims
-were removed because they were measured with the now-excluded high-noise
-adapter, so they do not establish results for this recipe.
-
-The integrated Zura Studio has a separate native Animate graph and model
-stack. Its fast route uses the Wan2.1 LightX2V adapter at **0.60**, while its
-relight and realism LoRAs are loaded at **1.00**; do not read the standalone
-workflow's BF16 relight choice as the Studio's exact stack.
-
-## How chunk continuation works
-
-This standalone example renders long clips in 41-frame windows; the integrated
-Zura Studio uses 81-frame windows. At every chunk border the renderer uses
-**native continuation** by default, following a hand-built Wan 2.2 Animate
-loop (`continue_motion` → sampler → `trim_image`). The optional **Soft blend**
-setting adds a cross-fade between decoded versions of the shared frames:
-
-1. **The previous chunk's real frames are handed over as `continue_motion`.**
-   The next chunk's sampling window starts on those exact frames, and the
-   source conditioning (pose / face / background / mask) is aligned to the same
-   absolute frames, so the model samples motion it has genuinely seen instead of
-   inventing a fresh take. A graph loop drops the frames the native node reports
-   as `trim_image` because they only repeat output it already emitted. Native
-   continuation keeps the predecessor's decoded frames and discards this
-   repeated context, avoiding a blend of moving faces.
-2. **Soft blend uses a flat-ended Hann cross-fade.** Those shared frames hold
-   two renditions of the same absolute frames: the predecessor's real pixels
-   and this chunk's rendition of them, produced with those pixels in its
-   context. Ramping between them spreads any difference across the zone, but
-   disagreement can soften or double moving features. The zone's first
-   frame is exactly the predecessor's frame and its last frame is exactly this
-   chunk's own continuation, which the following frame continues in the same
-   pass.
-
-Continuation is driven by the previous generated pixels. The result still
-depends on the source clip, mask, conditioning, model, and sampling settings;
-inspect the preview and joins for each render. Use Native continuation when
-blending makes mouth detail softer.
-
-`overlap_frames` (default 5, must be 4n+1 and at most half of `chunk_frames`)
-is the length of the continuation anchor and, in Soft blend, the cross-fade zone; raise it
-to 9 for a tighter hold on fast movement. A full continuation chunk's window is
-still exactly `chunk_frames` frames, so the continuation costs no extra sampling.
-Every chunk logs `mean |real - rendition|` for the frames it was given
-(`continuation_delta`, also in the receipt). A small value indicates similar
-decoded context; a large value warrants inspecting the join before adjusting
-the overlap or conditioning.
-
-### Shots
-
-`shot_mode` decides where continuation restarts:
-
-- **Continuous** — the whole clip is one shot; every border is a continuation.
-- **Detect cuts** — automatic structural cut detection; within a shot chunks
-  continue from each other, and at a cut the new shot starts with
-  unconditioned frames, so the cut stays a hard cut.
-- **Manual cuts** — the same, with frame numbers you type (comma separated).
-
-A sampling window never spans a cut and continuation never reaches back past the
-start of its own shot, so a detected or manual cut is always reproduced exactly.
-The receipt lists the resolved shot ranges (`shots`) next to the detected `cuts`,
-and the progress panel shows which shot and frame range is rendering.
-
-## Files
-
-- `driving_clip.py`, `mask_performer.py`, `render.py`, `speed.py` — the four nodes (Zura Load Video, Zura Mask, Zura Wan 2.2 Looped Chunks Sampler, Zura Wan 2.2 Turbo Switch).
-- `media_source.py` — contained local media, 24 fps decode, YouTube source links and local previews (routes `/zura/video_candidates`, `/zura/preview_video`). Remote video fetching is disabled.
-- `planning.py`, `cut_detection.py` — frame planner and adaptive cut detector (unchanged from v1).
-- `segmentation.py` — CPU YOLO person mask.
-- `video.py` — native `VideoFromComponents` assembly with a test fallback.
-- `web/` — picker UI and the render progress panel.
-
-### Naming
-
-Class IDs (`TrendStudioV2DrivingClip`, `TrendStudioV2MaskPerformer`,
-`TrendStudioV2Render`, `TrendStudioV2Speed`) are the workflow contract, so they
-are kept from the pack's pre-Zura name: graphs saved earlier still load and run.
-Everything user-visible — display names, node category, wire type, routes and
-docs — is Zura.
-
-## Install
-
-Search for **Zura Nodes** in ComfyUI Manager, or clone the
-[Zura Nodes repository](https://github.com/ZURAVFX/ComfyUI_zura_nodes)
-into `ComfyUI/custom_nodes/ComfyUI_zura_nodes/` and restart ComfyUI. Install
-the Python extras from `requirements.txt` into the same Python environment
-that runs ComfyUI (`requests`, `yt-dlp`, and `ultralytics`).
-
-Zura Mask also requires the WanAnimate preprocessing custom node:
-<https://github.com/kijai/ComfyUI-WanAnimatePreprocess>. It supplies the
-`OnnxDetectionModelLoader`, `PoseAndFaceDetection`, and `DrawViTPose` nodes
-used for pose and face conditioning. Install it through ComfyUI Manager or
-clone it into the same `custom_nodes` directory, then restart ComfyUI.
-
-Put `ffmpeg` and `ffprobe` on the system `PATH`. They are used to decode and
-assemble video, including local clips. Node.js must also be available on
-`PATH` when using YouTube source discovery, because yt-dlp uses it as a
-JavaScript runtime for YouTube extraction. Local clips do not need YouTube or
-Node.js.
-
-Place the model files in these standard ComfyUI model directories:
-
-- `ComfyUI/models/ultralytics/segm/person_yolov8m-seg.pt` for the CPU person
-  segmentation pass. ComfyUI Impact Subpack can download this file through
-  its model installer; the [upstream model file is also available from
-  Bingsu's ADetailer repository](https://huggingface.co/Bingsu/adetailer/resolve/main/person_yolov8m-seg.pt).
-- `ComfyUI/models/detection/vitpose-l-wholebody.onnx` for ViTPose whole-body
-  pose estimation.
-- `ComfyUI/models/detection/yolov10m.onnx` for the WanAnimate detector.
-
-The latter two files are the names selected by Zura's preprocessing call and
-are loaded from the `detection` directory registered by
-ComfyUI-WanAnimatePreprocess. The [YOLO file is in the Wan 2.2 Animate process
-checkpoint](https://huggingface.co/Wan-AI/Wan2.2-Animate-14B/blob/main/process_checkpoint/det/yolov10m.onnx),
-and the [Large whole-body ViTPose release is linked by the preprocessing
-project](https://huggingface.co/JunkyByte/easy_ViTPose/tree/main/onnx/wholebody).
-Follow that project's current model instructions if its filenames or locations
-change.
-
-The example workflow names the Wan 2.2 Animate UNet, UMT5 text encoder, Wan
-VAE, CLIP Vision encoder, and two LoRAs explicitly. Replace those widget
-values with the filenames installed in your own model folders. The workflow
-also contains user input placeholders as described above.
-
-## Updates
-
-Install available releases through ComfyUI Manager and restart ComfyUI.
-For contributors and maintainers, [RELEASING.md](RELEASING.md) explains how
-GitHub releases are published automatically to the Comfy Registry.
+See [contributing and checks](CONTRIBUTING.md) for the repository layout and local validation, and [releasing](RELEASING.md) for GitHub-to-Registry publishing.
 
 ## Licence
 
-Zura Nodes' original code is released under AGPL-3.0-only. See [LICENSE](LICENSE)
-and [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for the KJNodes-derived
-component and other upstream dependencies. Model weights are downloaded
-separately and retain their own licences.
-
-## Additional workflow
-
-`workflows/Utility - Improve a Prompt (Gemma 4).json` is a compact Gemma 4 prompt
-enhancement workflow for everyday use. Its optional image input is the
-placeholder `example_reference.png`; no reference image is included in the
-node pack. It expects the matching Gemma model and the ComfyUI installation
-that provides the prompt-enhancer subgraph used by the workflow.
-
-## Additional workflow examples
-
-The pack also includes three reference workflows with their original graph
-layouts preserved:
-
-- `workflows/Reference - Mask and Roto (SAM3).json` — SAM 3 text-prompt
-  masking and roto preview.
-- `workflows/Reference - Head and Face Swap (H3).json` — MiniMax H3 head and face
-  replacement with SAM 3 masking.
-- `workflows/Reference - Speedboost Comparison (H3).json` — MiniMax H3 reference
-  to video with the supplied speed-boost and LoRA branches.
-
-These files contain placeholder media names only. The source images and videos
-used to create them are not bundled or shared. They depend on the ComfyUI and
-custom-node packs represented by their node classes, plus the model files named
-inside each graph.
-
-### Starting images in node view
-
-- [Build a starting frame](<workflows/Image - Build a Starting Frame.json>): source opening image, one appearance reference and an editable prompt.
-- [Build with three references](<workflows/Image - Build a Starting Frame (3 References).json>): three separate native image-conditioning inputs.
-- [Use a finished frame](<workflows/Image - Use a Finished Starting Frame.json>): load and preview without generation.
-
-Open the native subgraphs for sampling and model controls. These starting-image
-workflows run without a Studio project. For video, Studio's **Graph view** exports
-the current model stage with editable native nodes. See [the artist guide](ARTIST_STUDIO.md#studio-and-graph-view).
-
-In Zura Studio, the shared **Prompt** field is available for every model and
-with either starting-image option. It guides LTX, H3, Wan and Seedance, and also
-guides the starting image when you build one from references.
-
-Choose **Motion transfer** to rebuild the scene around the source movement, or
-**Object swap** to mask a person or object and preserve the rest of the shot.
-
-### Simpler character flow
-
-Upload the video and character references, describe the starting look, then select **Create starting frame**. Tracking runs automatically. Review or regenerate the frame, inspect the selection, then choose video settings and **Generate video**.
-
-**Wan Animate 2** is a separate **Character + background** choice for whole-frame motion transfer. It uses its native distilled recipe, without a spatial mask. This new local integration is setup-gated and not yet visually qualified. See [setup and limits](docs/WAN_ANIMATE2.md).
+Original Zura code is **AGPL-3.0-only**. See [LICENSE](LICENSE), [third-party notices](THIRD_PARTY_NOTICES.md) and the bundled licences for upstream components. Model weights retain their own licences.
