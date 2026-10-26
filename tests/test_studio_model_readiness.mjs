@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import vm from 'node:vm';
 
 const code=fs.readFileSync(new URL('../web/studio.js',import.meta.url),'utf8')
-  .replace(/^import .*;\r?\n/gm,'').split('app.registerExtension({')[0];
+  .replace(/^import .*;\r?\n/gm,'').replace(/^export /gm,'').split('app.registerExtension({')[0];
 const context={};vm.createContext(context);
 vm.runInContext(code+'\nthis.Studio=ArtistStudio;',context);
 function check(config,status){

@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
 const createCss=fs.readFileSync(new URL('../web/studio_create.css',import.meta.url),'utf8');
-const source=fs.readFileSync(new URL('../web/studio.js',import.meta.url),'utf8').replace(/^import .*;\r?\n/gm,'').split('app.registerExtension({')[0];
+const source=fs.readFileSync(new URL('../web/studio.js',import.meta.url),'utf8').replace(/^import .*;\r?\n/gm,'').replace(/^export /gm,'').split('app.registerExtension({')[0];
 const context={ContentDetection:class{},document:{createElement:()=>({setAttribute(){}})}};
 vm.createContext(context);vm.runInContext(source+'\nthis.Studio=ArtistStudio;',context);
 context.Studio.prototype.bind=()=>{};context.Studio.prototype.syncForm=()=>{};

@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
 import {clipLength,recoverClipLength} from '../web/studio_length.js';
-const code=fs.readFileSync(new URL('../web/studio.js',import.meta.url),'utf8').replace(/^import .*;\r?\n/gm,'').split('app.registerExtension({')[0];
+const code=fs.readFileSync(new URL('../web/studio.js',import.meta.url),'utf8').replace(/^import .*;\r?\n/gm,'').replace(/^export /gm,'').split('app.registerExtension({')[0];
 let response;
 const context={clipLength,recoverClipLength,localStorage:{setItem(){},removeItem(){}},api:{fetchApi:async()=>({ok:true,json:async()=>response})}};
 vm.createContext(context);vm.runInContext(code+'\nthis.Studio=ArtistStudio;',context);

@@ -24,7 +24,7 @@ Use your own ComfyUI host and port if they differ.
 
 ## Current development build
 
-`main` contains the **1.3.32 GitHub testing update**. The latest published GitHub release is separate; a code push does not publish a stable Registry version.
+**1.3.32 is a testing release submitted to Comfy Registry for processing.** Submission does not mean approval or immediate availability through Manager. The [1.3.32 testing release](https://github.com/ZURAVFX/ComfyUI_zura_nodes/releases/tag/v1.3.32) is available on GitHub.
 
 Paintout is integrated into **Studio > Video > Paintout / clean plate**. Its separate Paintout Studio entry opens the same working page and controller. Disable an earlier standalone Zura Paintout installation before using this integration to avoid duplicate nodes and routes.
 

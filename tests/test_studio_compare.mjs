@@ -30,7 +30,7 @@ view.show('original.mp4','finished.mp4',1);assert.equal(view.resultImage.hidden,
 const studio=fs.readFileSync(new URL('../web/studio.js',import.meta.url),'utf8');
 assert.ok(studio.includes('this.compareProject!==p?.id'),'Project changes cannot retain another shot comparison');
 assert.ok(studio.includes('p?.selected_url || this.source?.url'),'Prefer exact trimmed source, not guidance or mask');
-vm.runInContext(studio.replace(/^import .*;\r?\n/gm,'').split('app.registerExtension({')[0]+'\nthis.Studio=ArtistStudio;',context);
+vm.runInContext(studio.replace(/^import .*;\r?\n/gm,'').replace(/^export /gm,'').split('app.registerExtension({')[0]+'\nthis.Studio=ArtistStudio;',context);
 const ui=Object.create(context.Studio.prototype);
 ui.config={workflow_mode:'relight'};ui.source={url:'original.mp4'};ui.project={id:'shot',phase:'opening',selected_url:'selected.mp4',opening_url:'lighting.png',config:{start:4}};ui.composerStage=()=> 'review';
 assert.equal(ui.comparisonTarget().kind,'image');assert.equal(ui.comparisonTarget().result,'lighting.png');assert.equal(ui.comparisonTarget().resultLabel,'Lighting image');assert.equal(ui.comparisonTarget().offset,0);

@@ -8,14 +8,14 @@
 - Share package checks between release and repository CI, update GitHub Actions and exclude authoring files from Registry archives.
 - Update the PostCSS build dependency to 8.5.31, clear its reported advisories and check frontend builds in CI.
 
-## 1.3.32 - 26 October 2026 (GitHub testing)
+## 1.3.32 - 26 October 2026 (testing release)
 
 - Integrate the updated Paintout tool into Zura Studio Video > Paintout / clean plate, sharing its working page and controller with the separate contest showcase entry point.
 - Add separate Paintout Studio with a guided mask / clean frames / render workspace, interactive trim, hard per-frame painting, custom mask-video import, independent tracking segments and clean-frame masks.
 - Show accepted clean-frame mask expansion immediately; preserve separate raw seeds when adding masks and repairing tracking.
 - Add menu commands and optional Open Zura Studio / Open Paintout Studio nodes. Remove permanent canvas launch buttons. Existing Studio stays separate.
 - Stretch plate, guides and masks to the nearest larger supported 64-pixel processing grid and restore exact source dimensions, rational frame rate and selected frame count. Include model setup and manual-testing notes.
-- Testing build: representative shot quality and fresh-machine setup still need artist feedback. No stable Registry release is made by this code push.
+- Testing build: representative shot quality and fresh-machine setup still need artist feedback. Submitted to Comfy Registry for processing; approval and Manager availability remain external checks.
 
 
 ## 1.3.31 - 25 October 2026

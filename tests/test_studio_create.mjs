@@ -10,12 +10,16 @@ import {clipLength,recoverClipLength} from '../web/studio_length.js';
 import {stageProgress} from '../web/studio_progress.js';
 
 const {document,window}=parseHTML('<html><body></body></html>');
+// This DOM fixture checks navigation and state, not canvas pixels.
+class ResizeObserver {observe(){} disconnect(){}}
+window.HTMLElement.prototype.getBoundingClientRect=()=>({x:0,y:0,left:0,top:0,width:960,height:540,right:960,bottom:540});
+window.HTMLCanvasElement.prototype.getContext=()=>({setTransform(){},clearRect(){}});
 Object.defineProperty(window.HTMLSelectElement.prototype,'value',{configurable:true,get(){return this.querySelector('option[selected]')?.value||this.querySelector('option')?.value||'';},set(v){for(const o of this.querySelectorAll('option'))o.removeAttribute('selected');this.querySelectorAll('option').forEach(o=>{if(o.value===String(v))o.setAttribute('selected','');});}});
 Object.defineProperty(window.HTMLSelectElement.prototype,'selectedOptions',{configurable:true,get(){return [...this.querySelectorAll('option')].filter(o=>o.selected);}});
 Object.defineProperty(window.HTMLInputElement.prototype,'checked',{configurable:true,get(){return this.hasAttribute('checked');},set(v){v?this.setAttribute('checked',''):this.removeAttribute('checked');}});
 for(const method of ['pause','play','load'])window.HTMLElement.prototype[method]=()=>{};
 let storage={};const localStorage={getItem:k=>storage[k]||null,setItem:(k,v)=>storage[k]=v,removeItem:k=>delete storage[k]};
-Object.assign(globalThis,{document,window,localStorage});
+Object.assign(globalThis,{document,window,localStorage,ResizeObserver});
 const info={};
 for(const m of IMAGE_MODELS)for(const n of Object.values(buildImageGraph({model:m.id,prompt:'test',references:m.minReferences?[{file:'source.png'}]:[]})))info[n.class_type]={input:{required:{}}};
 info.UNETLoader.input.required.unet_name=[IMAGE_MODELS.map(m=>m.model)];info.CLIPLoader.input.required={clip_name:[IMAGE_MODELS.map(m=>m.text)],type:[IMAGE_MODELS.map(m=>m.type)]};info.VAELoader.input.required.vae_name=[IMAGE_MODELS.map(m=>m.vae)];info.LoraLoaderModelOnly.input.required.lora_name=[IMAGE_MODELS.map(m=>m.lora).filter(Boolean)];
@@ -31,7 +35,7 @@ const api={apiURL:p=>p,addEventListener(name,handler){apiEvents.set(name,handler
 const app={};
 const context={document,window,localStorage,api,app,CreativeWorkspace,ContentDetection,ClipTrimmer,clipLength,recoverClipLength,stageProgress,setTimeout,clearTimeout,setInterval,clearInterval,crypto:globalThis.crypto,URLSearchParams,AbortController,FormData};
 vm.createContext(context);
-const source=fs.readFileSync(new URL('../web/studio.js',import.meta.url),'utf8').replace(/^import .*;\r?\n/gm,'').split('app.registerExtension({')[0];
+const source=fs.readFileSync(new URL('../web/studio.js',import.meta.url),'utf8').replace(/^import .*;\r?\n/gm,'').replace(/^export /gm,'').split('app.registerExtension({')[0];
 vm.runInContext(source+'\nthis.Studio=ArtistStudio;',context);
 const studio=new context.Studio(),ui=studio.creative;
 studio.project={id:'preview-project',phase:'working',actions:[{id:'preview-action',stage:'h3'}]};studio.config.engine='h3';

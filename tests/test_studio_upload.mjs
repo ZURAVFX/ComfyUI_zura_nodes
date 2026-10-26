@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
-const source=fs.readFileSync(new URL('../web/studio.js',import.meta.url),'utf8').replace(/^import .*;\r?\n/gm,'').split('app.registerExtension({')[0];
+const source=fs.readFileSync(new URL('../web/studio.js',import.meta.url),'utf8').replace(/^import .*;\r?\n/gm,'').replace(/^export /gm,'').split('app.registerExtension({')[0];
 const context={FormData,URLSearchParams,AbortController,setInterval,clearInterval,setTimeout,clearTimeout,localStorage:{removeItem(){}}};
 vm.createContext(context);vm.runInContext(source+'\nthis.Studio=ArtistStudio;',context);
 for(const type of ['source','character','ready','audio']){

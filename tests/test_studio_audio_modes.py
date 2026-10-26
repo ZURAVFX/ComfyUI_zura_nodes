@@ -239,7 +239,7 @@ class AudioModeTests(unittest.TestCase):
         script = r'''
 const fs=require('fs'),vm=require('vm'),assert=require('assert');
 let source=fs.readFileSync(process.argv[1],'utf8').split('\napp.registerExtension({')[0];
-source=source.replace(/^import .*;\r?\n/gm,'');
+source=source.replace(/^import .*;\r?\n/gm,'').replace(/^export /gm,'');
 let lengthSource=fs.readFileSync(require('path').join(require('path').dirname(process.argv[1]),'studio_length.js'),'utf8').replace(/export /g,'');
 const context={console,ContentDetection:class {},document:{createElement:()=>({setAttribute(){}})}};
 vm.createContext(context);vm.runInContext(lengthSource,context);

@@ -19,6 +19,20 @@ assert Path('LICENSE').is_file()
 assert Path('THIRD_PARTY_NOTICES.md').is_file()
 for asset in ('paintout/__init__.py', 'paintout/paintout.py', 'paintout/media.py', 'paintout/browser.py', 'paintout/attention.py', 'web/paintout.js', 'web/studio_paintout.js', 'web/studio_paintout.css', 'web/paintout_recipes.js', 'PAINTOUT.md'):
     assert Path(asset).is_file(), f'Missing paintout release asset: {asset}'
+for asset in ('studio_launchers.py', 'web/studio_launchers.js',
+              'paintout/editor_store.py', 'paintout/editor_routes.py',
+              'paintout/frame_editor.py', 'paintout/import_review.py',
+              'web/paintout_studio/paintout_app.js',
+              'web/paintout_studio/paintout_shared.js',
+              'web/paintout_studio/paintout_integrated.css',
+              'web/paintout_studio/paintout_editor.js',
+              'web/paintout_studio/paintout_editor.css',
+              'web/paintout_studio/assets/fonts/Manrope-Variable.ttf',
+              'web/paintout_studio/assets/fonts/Manrope-OFL.txt',
+              'web/paintout_studio/assets/icons/Lucide-LICENSE.txt',
+              'PAINTOUT_STUDIO_TESTING.md', 'PAINTOUT_THIRD_PARTY_NOTICES.md',
+              'docs/paintout-studio/MODEL_DOWNLOADS.md'):
+    assert Path(asset).is_file(), f'Missing Paintout Studio release asset: {asset}'
 assert Path('web/v2_media_picker.js').is_file()
 studio_loader = Path('web/studio.js').read_text(encoding='utf-8')
 for asset in ('web/studio_create.js', 'web/studio_create.css',

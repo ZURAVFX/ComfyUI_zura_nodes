@@ -24,7 +24,7 @@ Object.defineProperty(window.HTMLInputElement.prototype,'checked',{
   },
 });
 for(const method of ['load','pause','play'])window.HTMLElement.prototype[method]=()=>{};
-const source=fs.readFileSync(new URL('../web/studio.js',import.meta.url),'utf8').replace(/^import .*;\r?\n/gm,'').split('app.registerExtension({')[0];
+const source=fs.readFileSync(new URL('../web/studio.js',import.meta.url),'utf8').replace(/^import .*;\r?\n/gm,'').replace(/^export /gm,'').split('app.registerExtension({')[0];
 const status={engine_ready:{wan:true,h3:true,local_scene:true,h3_viewport:true},model_files:{wan:[{ready:true,path:'wan-test.safetensors'}],h3:[{ready:true,path:'h3-test.safetensors'}],local_scene:[{ready:true,path:'ltx-test.safetensors'}]}};
 const calls=[];let rejectUpload=false;
 const api={apiURL:path=>path,fetchApi:async(path,options)=>{

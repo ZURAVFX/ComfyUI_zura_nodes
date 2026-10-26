@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
-const source=fs.readFileSync(new URL('../web/studio.js',import.meta.url),'utf8').replace(/^import .*;\r?\n/gm,'').split('app.registerExtension({')[0];
+const source=fs.readFileSync(new URL('../web/studio.js',import.meta.url),'utf8').replace(/^import .*;\r?\n/gm,'').replace(/^export /gm,'').split('app.registerExtension({')[0];
 assert.ok(source.includes('<option value="restyle">LTX character animation</option>'),'The restored native LTX stage exists in the real selector');
 const context={};vm.createContext(context);vm.runInContext(source+'\nthis.Studio=ArtistStudio;this.allowed=verifiedSetup;this.initial=defaults;',context);
 assert.equal(context.initial.engine,'wan');assert.equal(context.initial.workflow_mode,'swap');assert.equal(context.initial.subject_mode,'people');

@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import vm from 'node:vm';
 
 const source=fs.readFileSync(new URL('../web/studio.js',import.meta.url),'utf8')
-  .replace(/^import .*;\r?\n/gm,'')
+  .replace(/^import .*;\r?\n/gm,'').replace(/^export /gm,'')
   .replaceAll('await import("./vendor/elk.bundled.js");','')
   .split('app.registerExtension({')[0];
 const restored=[],loaded=[],original={nodes:[{id:'my-original-node'}]};

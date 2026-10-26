@@ -10,7 +10,7 @@ assert.equal(recoverClipLength({...original,engine:'local',workflow_mode:'motion
 assert.equal(recoverClipLength({...original,engine:'wan',audio_id:'speech',lip_sync:true},45).duration,30);
 assert.equal(clipLength({...original,length_mode:'custom',duration:5},15).invalid,false);
 // Execute the actual CTA handler without browser APIs or any Comfy queue.
-const source=fs.readFileSync(new URL('../web/studio.js',import.meta.url),'utf8').replace(/^import .*;\r?\n/gm,'').split('app.registerExtension({')[0];
+const source=fs.readFileSync(new URL('../web/studio.js',import.meta.url),'utf8').replace(/^import .*;\r?\n/gm,'').replace(/^export /gm,'').split('app.registerExtension({')[0];
 const context={app:{registerExtension(){}},clipLength,recoverClipLength};
 vm.createContext(context);vm.runInContext(source+'\nthis.Studio=ArtistStudio;',context);
 const studio=Object.create(context.Studio.prototype),events=[];
