@@ -19,7 +19,7 @@ assert Path('LICENSE').is_file()
 assert Path('THIRD_PARTY_NOTICES.md').is_file()
 for asset in ('paintout/__init__.py', 'paintout/paintout.py', 'paintout/media.py', 'paintout/browser.py', 'paintout/attention.py', 'web/paintout.js', 'web/studio_paintout.js', 'web/studio_paintout.css', 'web/paintout_recipes.js', 'PAINTOUT.md'):
     assert Path(asset).is_file(), f'Missing paintout release asset: {asset}'
-for asset in ('studio_launchers.py', 'web/studio_launchers.js',
+for asset in ('studio_launchers.py', 'web/studio_launchers.js', 'web/studio_launchers.css',
               'paintout/editor_store.py', 'paintout/editor_routes.py',
               'paintout/frame_editor.py', 'paintout/import_review.py',
               'web/paintout_studio/paintout_app.js',

@@ -8,6 +8,12 @@
 - Share package checks between release and repository CI, update GitHub Actions and exclude authoring files from Registry archives.
 - Update the PostCSS build dependency to 8.5.31, clear its reported advisories and check frontend builds in CI.
 
+## 1.3.33 - 26 October 2026 (testing release)
+
+- Restore visible Zura Studio and Paintout Studio buttons on the graph. Menu commands and optional launcher nodes remain available.
+- Fix Add footage and image-sequence import being blocked by a project save before any source is selected. Existing edits are still saved before replacing footage.
+- Add regression coverage for first import, cancellation, failed saves and visible launchers.
+
 ## 1.3.32 - 26 October 2026 (testing release)
 
 - Integrate the updated Paintout tool into Zura Studio Video > Paintout / clean plate, sharing its working page and controller with the separate contest showcase entry point.

@@ -15,7 +15,7 @@ Install **Zura Nodes**, published by **ZURAVFX**, through ComfyUI Manager when a
 
 Follow the [installation and model guide](INSTALL_STUDIO.md) to install Python requirements into ComfyUI's environment and download the models for your chosen task. Restart ComfyUI and refresh the browser.
 
-Open **Zura > Open Zura Studio** from the ComfyUI menu or search for that command. Optional **Open Zura Studio** and **Open Paintout Studio** launcher nodes provide shortcuts inside a workflow. On the default local address:
+Click the visible **Zura Studio** or **Paintout Studio** button at the bottom-right of the graph. Both also remain available through the **Zura** menu and command search. Optional **Open Zura Studio** and **Open Paintout Studio** launcher nodes provide shortcuts inside a workflow. On the default local address:
 
 - [Zura Studio](http://127.0.0.1:8188/?zura=1)
 - [Paintout Studio](http://127.0.0.1:8188/?paintout=1)
@@ -24,7 +24,7 @@ Use your own ComfyUI host and port if they differ.
 
 ## Current development build
 
-**1.3.32 is a testing release submitted to Comfy Registry for processing.** Submission does not mean approval or immediate availability through Manager. The [1.3.32 testing release](https://github.com/ZURAVFX/ComfyUI_zura_nodes/releases/tag/v1.3.32) is available on GitHub.
+**1.3.33 is a testing release submitted to Comfy Registry for processing.** Submission does not mean approval or immediate availability through Manager. The [1.3.33 testing release](https://github.com/ZURAVFX/ComfyUI_zura_nodes/releases/tag/v1.3.33) is available on GitHub.
 
 Paintout is integrated into **Studio > Video > Paintout / clean plate**. Its separate Paintout Studio entry opens the same working page and controller. Disable an earlier standalone Zura Paintout installation before using this integration to avoid duplicate nodes and routes.
 

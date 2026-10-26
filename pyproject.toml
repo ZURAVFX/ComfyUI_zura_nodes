@@ -1,6 +1,6 @@
 [project]
 name = "comfyui-zura-nodes"
-version = "1.3.32"
+version = "1.3.33"
 description = "ComfyUI Zura Studio for character performance with LTX 2.5, MiniMax H3 and Wan, H3 head replacement and viewport-to-final workflows."
 readme = "README.md"
 requires-python = ">=3.10"

@@ -1,0 +1,7 @@
+/* Visible graph shortcuts. Each Studio keeps its own Back to graph action. */
+#zura-studio-shortcuts{position:fixed;right:16px;bottom:16px;z-index:9000;display:flex;gap:6px;padding:6px;background:#19191e;border:1px solid #33333d;border-radius:12px;max-width:calc(100vw - 32px);font:13px/1.4 "Segoe UI",sans-serif}
+#zura-studio-shortcuts button{appearance:none;min-height:40px;padding:8px 14px;border:0;border-radius:7px;background:transparent;color:#f2f2f0;font:inherit;cursor:pointer;white-space:nowrap}
+#zura-studio-shortcuts button:hover{background:#292a21;color:#caff00}
+#zura-studio-shortcuts button:focus-visible{outline:2px solid #d7ff50;outline-offset:1px}
+body:has(#genj-studio:not([hidden])) #zura-studio-shortcuts,body:has(#zura-paintout-app:not([hidden])) #zura-studio-shortcuts{display:none}
+@media(max-width:480px){#zura-studio-shortcuts{right:8px;bottom:8px;gap:2px;padding:4px}#zura-studio-shortcuts button{padding-inline:10px;min-height:44px}}

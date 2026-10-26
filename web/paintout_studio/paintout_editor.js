@@ -244,7 +244,7 @@ export class PaintoutEditor{
     this.saveTimer=setTimeout(()=>this.persist().catch(e=>this.status('Project was not saved: '+e.message)),500);
   }
   async persist(){
-    if(this.w.picking||this.toolJob||this.submitting||this.loadingProject||this.openingProject||this.importing||this.manualDirty||this.manualSaving)return;await this.ensureProject();
+    if(!this.w.state.source||this.w.picking||this.toolJob||this.submitting||this.loadingProject||this.openingProject||this.importing||this.manualDirty||this.manualSaving)return;await this.ensureProject();
     if(this.saving){this.saveAgain=true;return;}this.saving=true;
     const project=this.project,source=this.projectSource;
     try{const doc=await this.w.fetch(endpoint+'/project',{id:project,data:this.projectData(),expected_revision:this.revision});if(this.project===project&&this.projectSource===source){this.document=doc;this.revision=doc.revision;}}
