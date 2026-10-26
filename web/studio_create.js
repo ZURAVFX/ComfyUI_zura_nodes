@@ -2,7 +2,7 @@ import {IMAGE_MODELS,IMAGE_SIZES,buildImageGraph,imageAvailability,imageDimensio
 import {VideoComposer,composerIcons} from "./studio_composer.js";
 import {FrameVideoWorkspace} from "./studio_frames.js";
 import {ReferenceVideoWorkspace} from "./studio_references.js";
-import {PaintoutWorkspace} from "./studio_paintout.js";
+import {getPaintoutWorkspace} from "./paintout_studio/paintout_shared.js";
 import {installPopoverDismissal} from "./studio_popovers.js";
 
 const escape=value=>String(value??"").replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -236,7 +236,7 @@ export class CreativeWorkspace {
     this.mode=mode;this.root.dataset.workspace=mode;
     if(mode==='frames')this.frames??=new FrameVideoWorkspace(this);
     if(mode==='references')this.referencesVideo??=new ReferenceVideoWorkspace(this);
-    if(mode==='paintout')this.paintout??=new PaintoutWorkspace(this);
+    if(mode==='paintout')this.paintout=getPaintoutWorkspace(this);
     this.videoComposer?.mountWorkflow(mode);
     // Set real visibility as well as the CSS state, so another page cannot
     // cover navigation when the workspace changes or styles are still loading.
@@ -356,7 +356,7 @@ export class CreativeWorkspace {
   }
   async cancel(){if(!this.job)return;try{const id=this.job.id;await this.fetch("/queue",{delete:[id]});await this.fetch("/interrupt",{prompt_id:id});this.message("Cancellation requested.");await this.poll();}catch(e){this.message(e.message);}}
   stopPolling(){clearInterval(this.timer);this.timer=null;}
-  close(){this.save();this.stopPolling();this.frames?.close();this.referencesVideo?.close();this.paintout?.close();this.disposePopovers?.();}
+  close(){this.save();this.stopPolling();this.frames?.close();this.referencesVideo?.close();if(this.paintout?.owner===this)this.paintout.close();this.disposePopovers?.();}
   async graph(){
     try{const graph=buildImageGraph(this.job?.config||this.config());if(typeof this.app.loadApiJson!=="function")throw new Error("Update ComfyUI to open this image graph.");const original=(this.app.rootGraph||this.app.graph)?.serialize?.();if(!original)throw new Error("Your current graph could not be backed up.");try{await this.app.loadApiJson(graph,"Zura Image · "+Date.now()+".json");}catch(e){await this.app.loadGraphData(original);throw e;}this.studio.close();}catch(e){this.message(e.message);}
   }

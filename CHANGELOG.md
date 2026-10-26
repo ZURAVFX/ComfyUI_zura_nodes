@@ -2,6 +2,7 @@
 
 ## 1.3.32 - 26 October 2026 (GitHub testing)
 
+- Integrate the updated Paintout tool into Zura Studio Video > Paintout / clean plate, sharing its working page and controller with the separate contest showcase entry point.
 - Add separate Paintout Studio with a guided mask / clean frames / render workspace, interactive trim, hard per-frame painting, custom mask-video import, independent tracking segments and clean-frame masks.
 - Show accepted clean-frame mask expansion immediately; preserve separate raw seeds when adding masks and repairing tracking.
 - Add menu commands and optional Open Zura Studio / Open Paintout Studio nodes. Remove permanent canvas launch buttons. Existing Studio stays separate.

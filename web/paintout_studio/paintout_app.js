@@ -1,8 +1,8 @@
 import {app} from '/scripts/app.js';
 import {api} from '/scripts/api.js';
-import {PaintoutWorkspace} from './studio_paintout.js';
+import {getPaintoutWorkspace} from './paintout_shared.js';
 
-let workspace, root;
+let workspace, root, owner;
 async function request(path, body) {
   const response = await api.fetchApi(path, body === undefined ? {} : {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)});
   const data = await response.json().catch(() => ({}));
@@ -22,8 +22,9 @@ export async function openPaintout() {
     const theme=root.querySelector('[data-action=theme]');
     const updateTheme=()=>theme.textContent=root.dataset.theme==='light'?'Dark mode':'Light mode';
     theme.onclick=()=>{root.dataset.theme=root.dataset.theme==='light'?'dark':'light';localStorage.setItem('zura-studio-theme',root.dataset.theme);updateTheme();};updateTheme();
-    workspace = new PaintoutWorkspace({root:root.querySelector('main'), api, app, fetch:request, studio:{close}});
+    owner = {root:root.querySelector('main'), api, app, fetch:request, studio:{close}};
   }
+  workspace = getPaintoutWorkspace(owner);
   root.hidden = false;
   await workspace.open();
 }
