@@ -1,0 +1,42 @@
+/* Shared Studio styles own appearance; these rules only mount the standalone editor. */
+#zura-paintout-launch{position:fixed;right:22px;bottom:22px;z-index:1000;padding:12px 18px;border:0;border-radius:8px;background:#caff00;color:#17180f;font:600 13px 'Zura Manrope',system-ui;cursor:pointer}
+#zura-paintout-app{z-index:10001}
+#zura-paintout-app[hidden]{display:none!important}
+#zura-paintout-app>main{display:flex;flex:1;min-width:0;min-height:0;overflow:hidden}
+#zura-paintout-app>main>.zp-page{width:100%;margin:0;max-width:none}
+#zura-paintout-app .zp-page.zp-editor-open{grid-template-rows:36px 36px minmax(360px,1fr) auto auto;gap:10px;overflow:auto}
+#zura-paintout-app .zp-page.zp-editor-open:not([data-editor-stage=render]) .zps-view-tabs{display:none!important}
+#zura-paintout-app .zp-page.zp-editor-open:not([data-editor-stage=render])>.zf-composer{display:none!important}
+#zura-paintout-app .zp-page.zp-editor-open>.zf-viewer{min-height:180px;max-width:1200px}
+#zura-paintout-app .zp-editor-stages,#zura-paintout-app .zp-editor-timeline-host,#zura-paintout-app .zp-editor-tools{width:100%;max-width:1200px;margin-inline:auto}
+#zura-paintout-app .zp-editor-stages>button{font-family:inherit;background:transparent;border-color:transparent}
+#zura-paintout-app .zp-editor-stages>button[aria-current=step]{background:var(--gs-selected);color:var(--gs-accent)}
+#zura-paintout-app .zp-editor-timeline__header{padding:4px 12px}
+#zura-paintout-app .zp-editor-timeline button{font-family:inherit}
+#zura-paintout-app .zp-editor-icon-button{padding:0;min-height:26px;min-width:26px}
+#zura-paintout-app .zp-editor-tools{padding:12px 16px;gap:8px;background:var(--zc-composer);border-radius:16px}
+#zura-paintout-app .zp-editor-tools :is(button,input,select){font-family:inherit}
+#zura-paintout-app .zp-editor-tools input[type=range]{padding:0;border:0;background:transparent;min-height:24px}
+#zura-paintout-app .zp-editor-tools [data-tool]{padding:6px 9px;min-height:32px}
+#zura-paintout-app .zp-editor-tools .zp-editor-primary{background:var(--gs-accent);color:var(--gs-ink);border-color:transparent}
+#zura-paintout-app .zp-editor-mask-actions{padding-top:8px}
+#zura-paintout-app #zps-history{position:relative}
+#zura-paintout-app #zps-takes{position:absolute;right:0;top:100%;z-index:20;width:300px;max-height:50vh;overflow:auto;padding:16px;background:var(--gs-panel);border:1px solid var(--gs-line);border-radius:12px}
+#zura-paintout-app .zp-page.zp-editor-open[data-editor-stage=render]{grid-template-rows:36px 36px minmax(240px,1fr) auto auto}
+@media(max-height:850px){#zura-paintout-app .zp-page.zp-editor-open{grid-template-rows:36px 36px minmax(300px,45vh) auto auto}}
+@media(max-width:760px){#zura-paintout-app .gs-status{display:none}#zura-paintout-app .gs-top{padding-inline:12px;gap:12px}#zura-paintout-app .gs-brand strong{font-size:14px}#zura-paintout-app .zp-page.zp-editor-open{grid-template-rows:auto auto minmax(280px,45vh) auto auto}#zura-paintout-app .zc-theme-toggle{display:none}}
+
+#zura-paintout-app .zp-page:not(.zp-editor-open)>.zf-composer[hidden]{display:none}
+#zura-paintout-app .zps-start-mode{display:flex;gap:12px;max-width:640px;text-align:left;margin-block:8px}
+#zura-paintout-app .zps-start-mode button{flex:1;padding:18px;min-width:0;border:1px solid var(--gs-line);border-radius:10px;background:var(--gs-panel);color:var(--zc-text);text-align:left}
+#zura-paintout-app .zps-start-mode button[aria-pressed=true]{background:var(--gs-selected);outline:1px solid var(--gs-accent);outline-offset:2px}
+#zura-paintout-app .zps-start-mode strong{display:block;margin-bottom:8px;font-size:14px;font-weight:600}
+#zura-paintout-app .zps-start-mode span{display:block;font-size:12px;line-height:1.5;color:var(--gs-muted)}
+#zura-paintout-app .zps-shot-summary{font-size:12px;color:var(--gs-muted);margin:0;font-variant-numeric:tabular-nums}
+#zura-paintout-app #zps-workflow-label{font-size:12px;color:var(--gs-muted)}
+#zura-paintout-app .zp-page.zp-editor-open .zp-editor-tools{align-self:start}
+#zura-paintout-app .zp-page[data-editor-stage=render] #zps-anchor-settings{display:none}
+@media(max-width:700px){#zura-paintout-app .zps-start-mode{flex-direction:column}}
+
+#zura-paintout-app #zps-begin-sequence{border:0;background:transparent;color:var(--gs-muted);padding:8px 12px;min-height:34px;font:inherit;cursor:pointer;text-decoration:underline;text-underline-offset:4px}
+#zura-paintout-app .zp-page[data-editor-stage=render] .zc-composer-attachments>.zf-frame-slot:not(#zps-mask-control),#zura-paintout-app .zp-page[data-editor-stage=render] .zc-composer-attachments>.zc-tool-popup{display:none}

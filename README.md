@@ -1,5 +1,12 @@
 # Zura nodes (ComfyUI_zura_nodes)
 
+## Paintout Studio testing update
+
+**Paintout Studio** is a separate local workspace for masks, tracked corrections, clean frames and LTX paintout. Open **Zura → Open Paintout Studio** from the ComfyUI menu or search its command. **Zura → Open Zura Studio** opens the existing Studio. Both also have optional launcher nodes: search **Open Paintout Studio** or **Open Zura Studio** in Add Node, then press the button on the node. No node or queued generation is required to open either studio, and no permanent canvas buttons are added. Direct links: `?paintout=1` and `?zura=1` on your ComfyUI address.
+
+This is a GitHub testing update for manual feedback, not a new stable Registry release. Update this repository, install its requirements into ComfyUI's Python if needed, restart ComfyUI and refresh your browser. Models remain separate downloads. See [Paintout Studio testing](PAINTOUT_STUDIO_TESTING.md), [model setup](docs/paintout-studio/MODEL_DOWNLOADS.md) and [manual checks](docs/paintout-studio/MANUAL_TESTING.md). Disable a separately installed Zura Paintout pack to avoid duplicate node IDs and routes.
+
+
 ## LTX 2.5 paintout and clean plates
 
 Zura Nodes now includes two native graph workflows: [targeted paintout](workflows/Video%20-%20Targeted%20Paintout%20%28LTX%202.5%29.json) with Obscura, a removal mask and painted anchor frames; and [full-scene clean plate](workflows/Video%20-%20Full%20Scene%20Clean%20Plate%20%28LTX%202.5%29.json) with the official Lightricks Clean Plate LoRA. The latter needs no removal mask or anchors; restore any wanted subjects from the original in After Effects.
@@ -61,7 +68,7 @@ defaults to **Original audio + performance** for every model. Select
 Switching back to Original retains that track locally for later use.
 Silent videos work with the audio encoders.
 **Graph view** opens the current stage as an editable ComfyUI workflow in a new
-tab; the **Zura Studio** button returns to the artist interface. Graph edits
+tab; **Zura → Open Zura Studio** returns to the artist interface. Graph edits
 remain in that workflow. Reference mode accepts an audio file or a video
 containing your voice. **Create a new facial performance** enables the engine's
 speech route automatically.

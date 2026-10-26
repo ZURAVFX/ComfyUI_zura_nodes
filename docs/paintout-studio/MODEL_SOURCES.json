@@ -1,0 +1,127 @@
+{
+  "checked_date": "2026-10-25",
+  "scope": "Upstream file paths and source revisions observed through Hugging Face API. Model files are not bundled or downloaded. Only Obscura local weight bytes have been compared to an upstream SHA-256. Read each model card and agree to its terms before downloading.",
+  "models": [
+    {
+      "file": "ltx-2.5-22b-distilled-transformer-comfy-int8-convrot.safetensors",
+      "directory": "models/diffusion_models",
+      "repository": "Lightricks/LTX-2.5",
+      "observed_revision": "49b093a39c19169a8a81721dcc541e07e945232f",
+      "model_card": "https://huggingface.co/Lightricks/LTX-2.5",
+      "file_page": "https://huggingface.co/Lightricks/LTX-2.5/blob/main/diffusion_models/ltx-2.5-22b-distilled-transformer-comfy-int8-convrot.safetensors",
+      "revision_download": "https://huggingface.co/Lightricks/LTX-2.5/resolve/49b093a39c19169a8a81721dcc541e07e945232f/diffusion_models/ltx-2.5-22b-distilled-transformer-comfy-int8-convrot.safetensors",
+      "gated": "auto",
+      "local_weight_bytes_verified_against_upstream": false
+    },
+    {
+      "file": "gemma4-12b-with-proj-ltx-2.5-comfy-int8-convrot.safetensors",
+      "directory": "models/text_encoders",
+      "repository": "Lightricks/LTX-2.5",
+      "observed_revision": "49b093a39c19169a8a81721dcc541e07e945232f",
+      "model_card": "https://huggingface.co/Lightricks/LTX-2.5",
+      "file_page": "https://huggingface.co/Lightricks/LTX-2.5/blob/main/text_encoders/gemma4-12b-with-proj-ltx-2.5-comfy-int8-convrot.safetensors",
+      "revision_download": "https://huggingface.co/Lightricks/LTX-2.5/resolve/49b093a39c19169a8a81721dcc541e07e945232f/text_encoders/gemma4-12b-with-proj-ltx-2.5-comfy-int8-convrot.safetensors",
+      "gated": "auto",
+      "local_weight_bytes_verified_against_upstream": false
+    },
+    {
+      "file": "ltx-2.5-video-vae-conv-bf16.safetensors",
+      "directory": "models/vae",
+      "repository": "Lightricks/LTX-2.5",
+      "observed_revision": "49b093a39c19169a8a81721dcc541e07e945232f",
+      "model_card": "https://huggingface.co/Lightricks/LTX-2.5",
+      "file_page": "https://huggingface.co/Lightricks/LTX-2.5/blob/main/vae/ltx-2.5-video-vae-conv-bf16.safetensors",
+      "revision_download": "https://huggingface.co/Lightricks/LTX-2.5/resolve/49b093a39c19169a8a81721dcc541e07e945232f/vae/ltx-2.5-video-vae-conv-bf16.safetensors",
+      "gated": "auto",
+      "local_weight_bytes_verified_against_upstream": false
+    },
+    {
+      "file": "ltx-2.5-audio-vae-bf16.safetensors",
+      "directory": "models/vae",
+      "repository": "Lightricks/LTX-2.5",
+      "observed_revision": "49b093a39c19169a8a81721dcc541e07e945232f",
+      "model_card": "https://huggingface.co/Lightricks/LTX-2.5",
+      "file_page": "https://huggingface.co/Lightricks/LTX-2.5/blob/main/vae/ltx-2.5-audio-vae-bf16.safetensors",
+      "revision_download": "https://huggingface.co/Lightricks/LTX-2.5/resolve/49b093a39c19169a8a81721dcc541e07e945232f/vae/ltx-2.5-audio-vae-bf16.safetensors",
+      "gated": "auto",
+      "local_weight_bytes_verified_against_upstream": false
+    },
+    {
+      "file": "LTX23_Obscura_Remova_v1.safetensors",
+      "directory": "models/loras",
+      "repository": "WepeNerd/Obscura_Remova",
+      "observed_revision": "907f5d25e0b1d8fcc15936a064fd85b4609e7d2b",
+      "model_card": "https://huggingface.co/WepeNerd/Obscura_Remova",
+      "file_page": "https://huggingface.co/WepeNerd/Obscura_Remova/blob/main/LTX23_Obscura_Remova_v1.safetensors",
+      "revision_download": "https://huggingface.co/WepeNerd/Obscura_Remova/resolve/907f5d25e0b1d8fcc15936a064fd85b4609e7d2b/LTX23_Obscura_Remova_v1.safetensors",
+      "gated": false,
+      "local_weight_bytes_verified_against_upstream": true
+    },
+    {
+      "file": "ltx-2.5-22b-ic-lora-clean-plate-1.0.safetensors",
+      "directory": "models/loras",
+      "repository": "Lightricks/LTX-2.5-22b-IC-LoRA-Clean-Plate",
+      "observed_revision": "5cdacad3ee33574ecb11120b873dec320de79b37",
+      "model_card": "https://huggingface.co/Lightricks/LTX-2.5-22b-IC-LoRA-Clean-Plate",
+      "file_page": "https://huggingface.co/Lightricks/LTX-2.5-22b-IC-LoRA-Clean-Plate/blob/main/ltx-2.5-22b-ic-lora-clean-plate-1.0.safetensors",
+      "revision_download": "https://huggingface.co/Lightricks/LTX-2.5-22b-IC-LoRA-Clean-Plate/resolve/5cdacad3ee33574ecb11120b873dec320de79b37/ltx-2.5-22b-ic-lora-clean-plate-1.0.safetensors",
+      "gated": "auto",
+      "local_weight_bytes_verified_against_upstream": false
+    },
+    {
+      "file": "flux3-image-klein-int8-convrot.safetensors",
+      "directory": "models/diffusion_models",
+      "repository": "black-forest-labs/flux-3-image-klein-comfy",
+      "observed_revision": "feef60b0aaf63a4773ace96636ebbcf43b881312",
+      "model_card": "https://huggingface.co/black-forest-labs/flux-3-image-klein-comfy",
+      "file_page": "https://huggingface.co/black-forest-labs/flux-3-image-klein-comfy/blob/main/diffusion_models/flux3-image-klein-int8-convrot.safetensors",
+      "revision_download": "https://huggingface.co/black-forest-labs/flux-3-image-klein-comfy/resolve/feef60b0aaf63a4773ace96636ebbcf43b881312/diffusion_models/flux3-image-klein-int8-convrot.safetensors",
+      "gated": "auto",
+      "local_weight_bytes_verified_against_upstream": false
+    },
+    {
+      "file": "qwen3vl_4b_int8_convrot.safetensors",
+      "directory": "models/text_encoders",
+      "repository": "black-forest-labs/flux-3-image-klein-comfy",
+      "observed_revision": "feef60b0aaf63a4773ace96636ebbcf43b881312",
+      "model_card": "https://huggingface.co/black-forest-labs/flux-3-image-klein-comfy",
+      "file_page": "https://huggingface.co/black-forest-labs/flux-3-image-klein-comfy/blob/main/text_encoders/qwen3vl_4b_int8_convrot.safetensors",
+      "revision_download": "https://huggingface.co/black-forest-labs/flux-3-image-klein-comfy/resolve/feef60b0aaf63a4773ace96636ebbcf43b881312/text_encoders/qwen3vl_4b_int8_convrot.safetensors",
+      "gated": "auto",
+      "local_weight_bytes_verified_against_upstream": false
+    },
+    {
+      "file": "qwen3.5_9b_flux3_prompt_upsampler_w4a8.safetensors",
+      "directory": "models/text_encoders",
+      "repository": "black-forest-labs/flux-3-image-klein-comfy",
+      "observed_revision": "feef60b0aaf63a4773ace96636ebbcf43b881312",
+      "model_card": "https://huggingface.co/black-forest-labs/flux-3-image-klein-comfy",
+      "file_page": "https://huggingface.co/black-forest-labs/flux-3-image-klein-comfy/blob/main/text_encoders/qwen3.5_9b_flux3_prompt_upsampler_w4a8.safetensors",
+      "revision_download": "https://huggingface.co/black-forest-labs/flux-3-image-klein-comfy/resolve/feef60b0aaf63a4773ace96636ebbcf43b881312/text_encoders/qwen3.5_9b_flux3_prompt_upsampler_w4a8.safetensors",
+      "gated": "auto",
+      "local_weight_bytes_verified_against_upstream": false
+    },
+    {
+      "file": "flux2-vae.safetensors",
+      "directory": "models/vae",
+      "repository": "black-forest-labs/flux-3-image-klein-comfy",
+      "observed_revision": "feef60b0aaf63a4773ace96636ebbcf43b881312",
+      "model_card": "https://huggingface.co/black-forest-labs/flux-3-image-klein-comfy",
+      "file_page": "https://huggingface.co/black-forest-labs/flux-3-image-klein-comfy/blob/main/vae/flux2-vae.safetensors",
+      "revision_download": "https://huggingface.co/black-forest-labs/flux-3-image-klein-comfy/resolve/feef60b0aaf63a4773ace96636ebbcf43b881312/vae/flux2-vae.safetensors",
+      "gated": "auto",
+      "local_weight_bytes_verified_against_upstream": false
+    },
+    {
+      "file": "sam3.1_multiplex_fp16.safetensors",
+      "directory": "models/checkpoints",
+      "repository": "Comfy-Org/sam3.1",
+      "observed_revision": "7bb8374780a725b4353ed31f3a9395c9742b5621",
+      "model_card": "https://huggingface.co/Comfy-Org/sam3.1",
+      "file_page": "https://huggingface.co/Comfy-Org/sam3.1/blob/main/checkpoints/sam3.1_multiplex_fp16.safetensors",
+      "revision_download": "https://huggingface.co/Comfy-Org/sam3.1/resolve/7bb8374780a725b4353ed31f3a9395c9742b5621/checkpoints/sam3.1_multiplex_fp16.safetensors",
+      "gated": false,
+      "local_weight_bytes_verified_against_upstream": false
+    }
+  ]
+}

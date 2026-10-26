@@ -1,0 +1,13 @@
+# Paintout Studio in Zura Nodes
+
+GitHub testing update, Zura Nodes 1.3.32. Keeps the existing Zura Studio separate from Paintout Studio. Open **Zura > Open Paintout Studio** or **Zura > Open Zura Studio** from the ComfyUI menu, or search those commands. For a shortcut saved in a workflow, add the optional **Open Paintout Studio** or **Open Zura Studio** node and press its button. No node is required and no permanent canvas buttons are added. Direct links use your ComfyUI address with `?paintout=1` or `?zura=1`. Restart ComfyUI and refresh after updating.
+
+The update refreshes the integrated `paintout/` backend and adds a scoped `web/paintout_studio/` interface. Small launcher modules and root registration expose the optional nodes and commands. The existing Studio launcher is changed to a menu command. Other node implementations, workflows, model paths and project media are preserved. Both Studio paintout interfaces use the same node IDs and local routes; this is a shared backend update.
+
+For GitHub installs, update this repository, install its requirements using ComfyUI's Python, restart ComfyUI and refresh the browser. The separately supplied testing overlay also has an `Install.ps1` script that validates hashes and backs up replaced files before applying its launcher patch. Do not install the standalone Zura-Paintout package alongside this integration: the existing Zura pack owns these node IDs and routes.
+
+Uses the same ComfyUI Python and local models as Zura Nodes, plus LTXVideo and KJNodes. Required Python libraries include NumPy, Pillow, SciPy, OpenImageIO and OpenCV. No models are bundled. See [model setup](docs/paintout-studio/MODEL_DOWNLOADS.md) and [manual checks](docs/paintout-studio/MANUAL_TESTING.md). Model licences and gated access remain separate from this code's licence.
+
+Test: open each Studio separately; import footage; preview a hard mask; scrub and paint/erase; repair tracking from a visible frame; add another segment; add a clean frame and adjust Expand mask; generate and accept/reject a FLUX result; render and check source dimensions, frame count and frame rate. Tracking after full occlusion may require a new seed. Saved projects in the isolated 8189 test instance remain there; the regular instance has its own project/output directory.
+
+This is a public GitHub testing update. It does not publish a new stable Registry release or submit a contest entry. Representative removal quality and a second-machine installation remain manual acceptance checks.

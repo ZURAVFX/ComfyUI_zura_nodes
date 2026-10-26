@@ -36,6 +36,9 @@ def grant(path):
 def describe_media(path):
     from .paintout import describe
     p=checked_path(path);d=describe(str(p));kind='image' if p.is_file() and p.suffix.lower() in IMAGE_EXTENSIONS else d['kind']
+    if kind=='image':
+        from .frame_editor import validate_edit_orientation
+        validate_edit_orientation(p)
     result=dict(path=str(p),name=p.name,width=d['width'],height=d['height'],frames=d['count'],fps=d.get('fps') or 25,kind=kind,
                 thumbnail_url='/zura/paintout/frame-preview?'+urlencode({'file':str(p),'space':'auto','frame':0,'size':1280}))
     if kind=='video':result['media_url']=grant(p)
@@ -112,12 +115,25 @@ async def preview(request):
     except Exception as error:return web.json_response({'error':str(error)},status=400)
 
 
-def export_source_frame(path,frame,colour_space):
+def export_source_frame(path,frame,colour_space,project=None):
     """Use the native frame exporter without running a Comfy prompt or model."""
     from .paintout import ZuraPaintoutExportFrames,describe,selected_space,is_hdr,frames,working
     p=checked_path(path)
     if isinstance(frame,bool) or not isinstance(frame,int) or frame<0:raise ValueError('Enter a whole source frame number starting at 0.')
     d=describe(str(p));space=selected_space(d,colour_space)
+    document=None
+    if project:
+        from .editor_store import load_project
+        document=load_project(project)
+        if checked_path(document.get('data',{}).get('draft',{}).get('source'))!=p:
+            raise ValueError('Export the frame from its original shot project.')
+    def with_reference(result):
+        from .editor_store import source_identity
+        clock=d.get('fps_rational') or (document or {}).get('data',{}).get('draft',{}).get('sequenceFps')
+        download_name=f'{project or p.stem}_frame_{frame:06d}'+Path(result['path']).suffix
+        reference=dict(schema='zura-paintout.frame-reference/v1',project=project,source=source_identity(str(p),d),source_frame=frame,width=d['width'],height=d['height'],fps_rational=str(clock) if clock is not None else None,source_colour_space=space,edit_colour_space=result['colour_space'],image_file=download_name)
+        sidecar=Path(result['path']).with_suffix('.reference.json');sidecar.write_text(json.dumps(reference,indent=2),encoding='utf-8')
+        return {**result,'reference':reference,'reference_path':str(sidecar),'download_name':download_name}
     if frame>=d['count']:raise ValueError('Requested paint frame is outside the source range.')
     if not is_hdr(space):
         import folder_paths
@@ -137,17 +153,17 @@ def export_source_frame(path,frame,colour_space):
         try:
             if not writer.open(str(output),spec) or not writer.write_image(pixels):raise ValueError('Could not save the paint frame PNG.')
         finally:writer.close()
-        return dict(path=str(output),url=grant(output),frame=frame,colour_space='srgb_display')
+        return with_reference(dict(path=str(output),url=grant(output),frame=frame,colour_space='srgb_display'))
     result=ZuraPaintoutExportFrames().export(str(p),colour_space,str(frame),'paintout/paint_frames')
     row=json.loads(result['result'][0])[0]
-    return dict(path=row['file'],url=grant(row['file']),frame=row['frame'],colour_space=row['colour_space'])
+    return with_reference(dict(path=row['file'],url=grant(row['file']),frame=row['frame'],colour_space=row['colour_space']))
 
 async def export_frame(request):
     from ..media_source import require_same_origin
     require_same_origin(request)
     try:
         data=await request.json()
-        result=await asyncio.to_thread(export_source_frame,data.get('file',''),data.get('frame'),data.get('colour_space','auto'))
+        result=await asyncio.to_thread(export_source_frame,data.get('file',''),data.get('frame'),data.get('colour_space','auto'),data.get('project'))
         return web.json_response(result)
     except Exception as error:return web.json_response({'error':str(error)},status=400)
 

@@ -1599,6 +1599,9 @@ class ArtistStudio {
   close(){this.nativeSamplePreview?.dispose();this.nativeSamplePreview=null;this.creative?.close();this.comparison?.hide();this.trimTimeline?.close();this.$("canvas").classList.remove("is-expanded");if(document.fullscreenElement===this.$("canvas"))document.exitFullscreen?.().catch(()=>{});this.container.querySelectorAll("video,audio").forEach(media=>media.pause());this.container.remove();document.documentElement.classList.remove("genj-open");clearInterval(this.timer);}
 }
 
+let registeredStudio;
+export async function openZuraStudio(){return registeredStudio?.open();}
+
 app.registerExtension({
   name:"Zura.Artist.Studio",
   afterConfigureGraph(missingNodeTypes,configuredApp){
@@ -1622,9 +1625,8 @@ app.registerExtension({
       for(const tip of document.querySelectorAll("#genj-studio wa-tooltip")){document.getElementById(tip.getAttribute("for"))?.removeAttribute("title");}
     }).catch(error=>console.warn("Zura tooltips unavailable; native hints remain.",error));
     const studio=new ArtistStudio();
+    registeredStudio=studio;
     studio.container.querySelector(".gs-zura-mark").src=new URL("./assets/zura-logo.png",import.meta.url).href;
-    const button=document.createElement("button");button.id="genj-studio-launch";button.innerHTML=`<img class="gs-launch-logo" src="${new URL("./assets/zura-logo.png",import.meta.url).href}" alt="" width="24" height="24"/>Zura Studio`;button.title="Switch to Studio view";
-    button.onclick=()=>studio.open();document.body.appendChild(button);
     const studioQuery=new URLSearchParams(location.search);
     attachWanGraphControls(app,{request,tidy:tidyWanStage});
     if(studioQuery.get("zura")==="1" || studioQuery.get("genj")==="1")await studio.open();

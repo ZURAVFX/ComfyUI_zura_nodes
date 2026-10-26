@@ -1,5 +1,14 @@
 # Release notes
 
+## 1.3.32 - 26 October 2026 (GitHub testing)
+
+- Add separate Paintout Studio with a guided mask / clean frames / render workspace, interactive trim, hard per-frame painting, custom mask-video import, independent tracking segments and clean-frame masks.
+- Show accepted clean-frame mask expansion immediately; preserve separate raw seeds when adding masks and repairing tracking.
+- Add menu commands and optional Open Zura Studio / Open Paintout Studio nodes. Remove permanent canvas launch buttons. Existing Studio stays separate.
+- Stretch plate, guides and masks to the nearest larger supported 64-pixel processing grid and restore exact source dimensions, rational frame rate and selected frame count. Include model setup and manual-testing notes.
+- Testing build: representative shot quality and fresh-machine setup still need artist feedback. No stable Registry release is made by this code push.
+
+
 ## 1.3.31 - 25 October 2026
 
 - Add guided Studio Paintout / clean plate with source-frame scrubbing, full-resolution paint exports, compact painted-anchor cards and editable original frame numbers.

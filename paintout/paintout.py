@@ -1,11 +1,11 @@
 from __future__ import annotations
-import json, math, re, subprocess, hashlib, tempfile, uuid, shutil
+import json, math, re, subprocess, hashlib, tempfile, uuid, shutil, time
 from pathlib import Path
 from fractions import Fraction
 import numpy as np
 import torch
 import torch.nn.functional as F
-from functools import wraps
+from functools import wraps, lru_cache
 from scipy.ndimage import maximum_filter, distance_transform_edt
 
 CATEGORY = 'Zura/Paintout'
@@ -51,6 +51,14 @@ def read_image(path):
         return a.copy()
     finally: inp.close()
 
+@lru_cache(maxsize=64)
+def _decoded_video_count(path, size, modified_ns):
+    # Matroska and some camera containers omit nb_frames and stream duration.
+    result=subprocess.run(['ffprobe','-v','error','-select_streams','v:0','-count_frames','-show_entries','stream=nb_read_frames','-of','json',path],capture_output=True,check=True,text=True)
+    count=int(json.loads(result.stdout)['streams'][0].get('nb_read_frames',0))
+    if count<1:raise ValueError('The video contains no decodable frames.')
+    return count
+
 def describe(path):
     p=resolve_input(path)
     if p.is_dir():
@@ -63,9 +71,15 @@ def describe(path):
         return dict(kind='sequence',files=[str(p)],width=shape[1],height=shape[0],count=1)
     r=subprocess.run(['ffprobe','-v','error','-select_streams','v:0','-show_streams','-of','json',str(p)],capture_output=True,check=True,text=True)
     s=json.loads(r.stdout)['streams'][0]
+    rotations = [s.get('tags', {}).get('rotate', 0)] + [item.get('rotation', 0) for item in s.get('side_data_list', [])]
+    if any(abs(float(value) % 360) > .01 for value in rotations):
+        raise ValueError('Bake the video rotation into the pixels before importing this shot. Export a constant-frame-rate video with normal orientation.')
     fps=float(Fraction(s['avg_frame_rate'])); rate=float(Fraction(s['r_frame_rate']))
     if abs(fps-rate)>.02: raise ValueError('Variable frame rate: conform to constant frame rate first')
-    return dict(kind='video',path=str(p),width=int(s['width']),height=int(s['height']),fps=fps,transfer=s.get('color_transfer'),primaries=s.get('color_primaries'),matrix=s.get('color_space'),range=s.get('color_range'),pixel_format=s.get('pix_fmt'),count=int(s.get('nb_frames') or round(float(s.get('duration',0))*fps)))
+    count=s.get('nb_frames')
+    if not count or str(count)=='N/A':
+        stat=p.stat();count=_decoded_video_count(str(p),stat.st_size,stat.st_mtime_ns)
+    return dict(kind='video',path=str(p),width=int(s['width']),height=int(s['height']),fps=fps,fps_rational=str(Fraction(s['avg_frame_rate'])),transfer=s.get('color_transfer'),primaries=s.get('color_primaries'),matrix=s.get('color_space'),range=s.get('color_range'),pixel_format=s.get('pix_fmt'),count=int(count))
 
 def resolve_input(path):
     p=Path(path).expanduser()
@@ -74,6 +88,21 @@ def resolve_input(path):
         p=Path(folder_paths.get_input_directory())/p
     if not p.exists():raise ValueError(f'Input does not exist: {p}')
     return p
+
+def prune_frame_cache(directory, reserve=0, keep=None):
+    """Bound this application's disposable decoded RGB cache to 12 GiB / 24 h."""
+    entries=[]
+    for file in directory.glob('*.rgb'):
+        if not re.fullmatch(r'[0-9a-f]{64}\.rgb', file.name):continue
+        try:entries.append((file.stat().st_mtime, file.stat().st_size, file))
+        except OSError:continue
+    total=sum(size for _,size,_ in entries)
+    for modified,size,file in sorted(entries):
+        if file == keep:continue
+        if time.time()-modified < 86400 and total+reserve <= 12*1024**3:continue
+        try:file.unlink();total-=size
+        except OSError:pass  # A mapped file may still be in use by another job.
+
 
 def frames(d,start,count):
     if d['kind']=='sequence':
@@ -95,6 +124,7 @@ def frames(d,start,count):
     cache_dir=Path(tempfile.gettempdir())/'zura_paintout_rgb';cache_dir.mkdir(exist_ok=True)
     key=hashlib.sha256(('frame-exact-v2|'+str(Path(d['path']).resolve())+str(Path(d['path']).stat().st_mtime_ns)+vf+str(count)).encode()).hexdigest()
     cached=cache_dir/(key+'.rgb')
+    prune_frame_cache(cache_dir, reserve=0 if cached.exists() else min(size, 8*1024**3), keep=cached)
     if size<=8*1024**3 and (cached.exists() or shutil.disk_usage(cache_dir).free>size*1.2):
         if not cached.exists() or cached.stat().st_size!=size:
             part=cache_dir/(key+'_'+uuid.uuid4().hex+'.part')
@@ -107,6 +137,7 @@ def frames(d,start,count):
             finally:
                 part.unlink(missing_ok=True)
         mapped=np.memmap(cached,dtype='<u2',mode='r',shape=(count,d['height'],d['width'],3))
+        cached.touch()
         try:
             for a in mapped:yield a.astype(np.float32)/65535.
         finally:del mapped
@@ -126,14 +157,31 @@ def frames(d,start,count):
         if p.poll() is None: p.terminate()
         p.wait()
 
+def protection_mask(descriptor, frame):
+    """Read immutable source-resolution foreground protection for one frame."""
+    files = descriptor.get('protection_files')
+    if not files:
+        return np.zeros((descriptor['height'], descriptor['width']), dtype=np.float32)
+    index = frame - descriptor.get('start', 0)
+    if not 0 <= index < len(files):
+        raise ValueError('Protection frame is outside the source range')
+    import cv2
+    mask = cv2.imread(files[index], cv2.IMREAD_GRAYSCALE)
+    if mask is None or mask.shape != (descriptor['height'], descriptor['width']):
+        raise ValueError('Saved foreground protection is missing or has changed dimensions')
+    return mask.astype(np.float32) / 255.
+
+
 def mask_frames(d,start,count):
     if d['kind']=='painted_tracking':
         import cv2
         offset=start-d['start']
-        for file in d['files'][offset:offset+count]:
+        for index,file in enumerate(d['files'][offset:offset+count],start):
             a=cv2.imread(file,cv2.IMREAD_GRAYSCALE)
             if a is None:raise ValueError('Automatic repair cache is missing; queue the workflow again')
-            yield cv2.resize(a,(d['width'],d['height']),interpolation=cv2.INTER_NEAREST).astype(np.float32)/255.
+            mask=cv2.resize(a,(d['width'],d['height']),interpolation=cv2.INTER_NEAREST).astype(np.float32)/255.
+            if d.get('protection_files'):mask[protection_mask(d,index)>.001]=0
+            yield mask
         return
     if d['kind']=='rectangle':
         a=np.zeros((d['height'],d['width']),dtype=np.float32)
@@ -238,6 +286,10 @@ def selected_space(d,space):
 
 def resize(x,h,w,mode='bilinear'):
     return F.interpolate(x.permute(0,3,1,2),size=(h,w),mode=mode,**({'align_corners':False,'antialias':True} if mode=='bilinear' else {})).permute(0,2,3,1)
+
+def plate_processing_size(width, height):
+    """The smallest 64-pixel LTX grid enclosing both original dimensions."""
+    return math.ceil(width/64)*64, math.ceil(height/64)*64
 def resize_fullframe(x,h,w,resampler,is_mask=False):
     if is_mask:return resize(x,h,w,'area')
     if resampler=='comfy_lanczos':
@@ -255,7 +307,7 @@ def crop_work(a,c,space,is_mask=False):
     else:t=(t>.001).float()
     if c.get('framing_mode')=='Source resolution (pad, no resize)':
         pass  # Keep source pixels exact; only the model-grid padding below is added.
-    elif c.get('framing_mode') in ('Full frame (original method)','Full frame (fit, no crop)'):
+    elif c.get('framing_mode') in ('Full frame (original method)','Full frame (fit, no crop)','Plate resolution (stretch to next grid)'):
         t=resize_fullframe(t,rh,rw,c.get('resampler','float32_bicubic_antialias'),is_mask)
     else:t=resize(t,rh,rw,'area' if is_mask else 'bilinear')
     if is_mask:t=(t>0).float()
@@ -269,7 +321,7 @@ class ZuraPaintoutCrop:
         'colour_space':(COLOUR_SPACES,),
         'start_frame':integer(0),'frame_count':integer(81,1,993),'sequence_fps':floating(25,1,120),
         'context_pixels':integer(128,32,2048),'max_crop_side':integer(768,128,2048),
-        'repair_grow':integer(16,0,256),'feather_pixels':integer(24,0,256)},'optional':{'processing_mode':(PROCESSING_MODES,), 'framing_mode':(['Smart crop (experimental)','Full frame (original method)','Full frame (fit, no crop)','Source resolution (pad, no resize)'],), 'render_width':integer(1152,64,4096), 'render_height':integer(640,64,4096)}}
+        'repair_grow':integer(16,0,256),'feather_pixels':integer(0,0,256)},'optional':{'processing_mode':(PROCESSING_MODES,), 'framing_mode':(['Plate resolution (stretch to next grid)','Smart crop (experimental)','Full frame (original method)','Full frame (fit, no crop)','Source resolution (pad, no resize)'],), 'render_width':integer(1152,64,4096), 'render_height':integer(640,64,4096)}}
     RETURN_TYPES=('IMAGE','MASK','ZURA_PLATE','INT','INT','INT','FLOAT','STRING')
     RETURN_NAMES=('crop_frames','crop_mask','plate','width','height','padded_frames','fps','crop_report')
     FUNCTION='prepare'; CATEGORY=CATEGORY
@@ -286,7 +338,10 @@ class ZuraPaintoutCrop:
         if d['count'] and start_frame+frame_count>d['count']:raise ValueError('Requested plate frame range is too long')
         W,H=d['width'],d['height']
         if render_width%64 or render_height%64:raise ValueError('Render width and height must be multiples of 64')
-        if framing_mode not in ('Smart crop (experimental)','Full frame (original method)','Full frame (fit, no crop)','Source resolution (pad, no resize)'):raise ValueError('Unknown framing mode')
+        if framing_mode not in ('Plate resolution (stretch to next grid)','Smart crop (experimental)','Full frame (original method)','Full frame (fit, no crop)','Source resolution (pad, no resize)'):raise ValueError('Unknown framing mode')
+        if framing_mode=='Plate resolution (stretch to next grid)':
+            render_width,render_height=plate_processing_size(W,H)
+            if max(render_width,render_height)>4096:raise ValueError('This plate exceeds the current 4096-pixel processing limit. No smaller proxy will be substituted.')
         if framing_mode=='Source resolution (pad, no resize)':
             render_width,render_height=math.ceil(W/64)*64,math.ceil(H/64)*64
             if max(render_width,render_height)>4096:raise ValueError('Source resolution exceeds 4096 pixels. Choose a smaller processing resolution.')
@@ -321,10 +376,10 @@ class ZuraPaintoutCrop:
             x0=max(0,x0-margin);y0=max(0,y0-margin);x1=min(W,x1+margin);y1=min(H,y1+margin)
             w,h=x1-x0,y1-y0;scale=min(1.,max_crop_side/max(w,h));rw=max(1,round(w*scale));rh=max(1,round(h*scale))
             pw=max(64,math.ceil(rw/64)*64);ph=max(64,math.ceil(rh/64)*64)
-        else:scale=min(rw/w,rh/h)
+        else:scale=max(rw/w,rh/h)
         padded=math.ceil((frame_count-1)/8)*8+1
         resampler=('comfy_lanczos' if processing_mode=='SDR (sRGB)' else 'float32_bicubic_antialias') if framing_mode!='Smart crop (experimental)' else 'bilinear'
-        c=dict(source=d,mask=m,space=colour_space,processing=processing_mode,start=start_frame,count=frame_count,fps=d.get('fps',sequence_fps),rect=[x0,y0,w,h],resized=[rh,rw],padded=[ph,pw],grow=repair_grow,feather=feather_pixels,framing_mode=framing_mode,resampler=resampler)
+        c=dict(source=d,mask=m,space=colour_space,processing=processing_mode,start=start_frame,count=frame_count,fps=d.get('fps',sequence_fps),fps_rational=d.get('fps_rational',str(Fraction(str(sequence_fps)))),rect=[x0,y0,w,h],resized=[rh,rw],padded=[ph,pw],grow=repair_grow,feather=feather_pixels,framing_mode=framing_mode,resampler=resampler)
         ims=[];ms=[];progress=frame_progress(frame_count)
         for a,b in zip(frames(d,start_frame,frame_count),mask_frames(m,start_frame,frame_count)):
             if a.shape[:2]!=(H,W) or b.shape!=(H,W):raise ValueError('Sequence resolution changes mid-shot')
@@ -334,6 +389,10 @@ class ZuraPaintoutCrop:
         # Grow the conditioning mask at inference scale; final matte is built in original pixels.
         grow=math.ceil(repair_grow*scale)
         if grow:mask=F.max_pool2d(mask[:,None],2*grow+1,1,grow)[:,0]
+        if m.get('protection_files'):
+            for index in range(frame_count):
+                protected=crop_work(protection_mask(m,start_frame+index),c,colour_space,True)[0,...,0]
+                mask[index][protected>0]=0
         if padded>frame_count:
             image=torch.cat([image,image[-1:].expand(padded-frame_count,-1,-1,-1)])
             mask=torch.cat([mask,mask[-1:].expand(padded-frame_count,-1,-1)])
@@ -501,7 +560,7 @@ class ZuraPaintoutVAE:
         vae.first_stage_model.to(dtype=torch.float32)
         return (vae,)
 
-def composite_crop(original,generated,mask,grow,feather,match,fit_override=None):
+def composite_crop(original,generated,mask,grow,feather,match,fit_override=None,protection=None):
     binary=mask>.001
     if not binary.any():return original.copy(),dict(gain=[1,1,1],offset=[0,0,0])
     expanded=maximum_filter(binary,size=2*grow+1) if grow else binary
@@ -509,6 +568,7 @@ def composite_crop(original,generated,mask,grow,feather,match,fit_override=None)
     distance=distance_transform_edt(~expanded)
     alpha=(np.clip(1-distance/max(feather,1),0,1) if feather else expanded.astype(np.float32))
     alpha[expanded]=1
+    if protection is not None:alpha[np.asarray(protection)>.001]=0
     gain=np.ones(3,dtype=np.float32);offset=np.zeros(3,dtype=np.float32)
     if match:
         # Only unchanged context outside the transition is eligible for colour fitting.
@@ -582,7 +642,7 @@ class ZuraPaintoutUncrop:
                 raw=decoded_crop[i:i+1,:rh,:rw,:3].detach().float().cpu()
                 generated=resize(unworking(raw,plate['space'],plate.get('processing','HDR (ACEScct)')),h,w)[0].numpy()
                 src=to_linear(torch.from_numpy(a[y:y+h,x:x+w].copy()),plate['space']).numpy()
-                _,fit=composite_crop(src,generated,m[y:y+h,x:x+w],plate['grow'],plate['feather'],True)
+                _,fit=composite_crop(src,generated,m[y:y+h,x:x+w],plate['grow'],plate['feather'],True,protection=protection_mask(plate['mask'],plate['start']+i)[y:y+h,x:x+w])
                 fits.append(fit)
             shared_fit={key:np.median([f[key] for f in fits],axis=0).tolist() for key in ('gain','offset')}
         progress=frame_progress(plate['count'])
@@ -590,12 +650,14 @@ class ZuraPaintoutUncrop:
             raw=decoded_crop[i:i+1,:rh,:rw,:3].detach().float().cpu()
             generated=resize(unworking(raw,plate['space'],plate.get('processing','HDR (ACEScct)')),h,w)[0].numpy()
             src=to_linear(torch.from_numpy(a[y:y+h,x:x+w].copy()),plate['space']).numpy()
-            result,fit=composite_crop(src,generated,m[y:y+h,x:x+w],plate['grow'],plate['feather'],False,shared_fit)
+            protected=protection_mask(plate['mask'],plate['start']+i)[y:y+h,x:x+w]
+            result,fit=composite_crop(src,generated,m[y:y+h,x:x+w],plate['grow'],plate['feather'],False,shared_fit,protection=protected)
             encoded=from_linear(torch.from_numpy(result),plate['space']).numpy()
             # Keep original encoded values outside the matte, including negatives and HDR highlights.
             matte=maximum_filter(m[y:y+h,x:x+w]>.001,size=2*plate['grow']+1)
             support=distance_transform_edt(~matte)<plate['feather'] if plate['feather'] else matte
             support|=matte
+            support[protected>.001]=False
             if not matte.any():support[:]=False
             region=a[y:y+h,x:x+w].copy();region[support]=encoded[support]
             a[y:y+h,x:x+w]=region

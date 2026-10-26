@@ -111,3 +111,5 @@ for streaming. The resulting video is enhanced from a 720p H3 render.
 
 Only the generated local CSS/JavaScript is needed at runtime. Rebuild using
 `npm ci` and `npm run build` in tools/studio-ui. End users do not need Node.
+
+Paintout Studio uses the packaged Lucide icons under the ISC licence. See `web/paintout_studio/assets/icons/Lucide-LICENSE.txt` and `PAINTOUT_THIRD_PARTY_NOTICES.md`.

@@ -62,7 +62,7 @@ NODE_DISPLAY_NAME_MAPPINGS.update(QWEN_DESIGN_NAMES)
 
 WEB_DIRECTORY = "./web"
 PACKAGE_ROOT = Path(__file__).resolve().parent
-__version__ = "1.3.31"
+__version__ = "1.3.32"
 
 
 def _register_routes():
@@ -184,3 +184,8 @@ if getattr(PromptServer, "instance", None) is not None:
 from .paintout import NODE_CLASS_MAPPINGS as PAINTOUT_NODES, NODE_DISPLAY_NAME_MAPPINGS as PAINTOUT_NAMES
 NODE_CLASS_MAPPINGS.update(PAINTOUT_NODES)
 NODE_DISPLAY_NAME_MAPPINGS.update(PAINTOUT_NAMES)
+
+# Optional UI launchers; no permanent canvas controls.
+from .studio_launchers import NODE_CLASS_MAPPINGS as STUDIO_LAUNCHERS, NODE_DISPLAY_NAME_MAPPINGS as STUDIO_LAUNCHER_NAMES
+NODE_CLASS_MAPPINGS.update(STUDIO_LAUNCHERS)
+NODE_DISPLAY_NAME_MAPPINGS.update(STUDIO_LAUNCHER_NAMES)
