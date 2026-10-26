@@ -5,6 +5,8 @@ export const REFERENCE_VIDEO_MODELS=Object.freeze({
   ref2va:'minimax_h3_ref2va_pruned_int8_convrot.safetensors',
   viggle:'minimax_h3_ref2va_viggle_pruned_int8_convrot.safetensors',
   turbo:'minimax_h3_dmd_ref2va_8step_turbo_pruned.safetensors',
+  fasth3:'fasth3_omniref_8step_pruned_int8_convrot.safetensors',
+  latentUpscaler:'minimax_h3_latent_upscaler_3d_conv_v1_bf16.safetensors',
   text:'qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors',
   videoVae:'minimax_h3_video_vae_int8_convrot.safetensors',
   audioVae:'minimax_h3_audio_vae_fp32.safetensors',
@@ -49,7 +51,7 @@ export const REFERENCE_VIDEO_CAPABILITIES=Object.freeze({
 export const REFERENCE_VIDEO_PROFILES=Object.freeze({
   turbo:Object.freeze({
     id:'turbo',
-    label:'Fast Ref2VA',
+    label:'Normal H3 · 8 steps',
     model:'ref2va',
     speedup:'turbo',
     steps:8,
@@ -68,6 +70,12 @@ export const REFERENCE_VIDEO_PROFILES=Object.freeze({
     sampler:'res_multistep',
     sigmaVideo:12,
     sigmaAudio:6,
+  }),
+  progressive:Object.freeze({
+    id:'progressive',label:'FastH3 · draft',model:'ref2va',speedup:'progressive',
+    steps:8,scheduler:'beta',sampler:'euler',sigmaVideo:12,sigmaAudio:3,
+    minFrames:56,maxFrames:124,
+    description:'Faster drafts, with softer fine detail and possible changes to framing or camera movement. Image references only, 2.33–5.17 seconds. Normal H3 keeps the established quality settings.',
   }),
 });
 
@@ -213,13 +221,22 @@ function normaliseConfig(c={}){
   });
   const model=c.model||'ref2va',speedup=c.speedup||'turbo';
   if(!['ref2va','viggle'].includes(model))throw new Error('Choose the standard or Viggle H3 Ref2VA checkpoint.');
-  if(!['turbo','quality'].includes(speedup))throw new Error('Choose the Turbo or Quality H3 sampling profile.');
+  if(!Object.hasOwn(REFERENCE_VIDEO_PROFILES,speedup))throw new Error('Choose Normal H3, FastH3 draft or Quality H3.');
   if(model==='viggle'&&speedup!=='quality')throw new Error('Use the Viggle checkpoint with the Quality profile. No compatible Viggle Turbo adapter is verified.');
   const spectrum=c.spectrum===true;
   if(spectrum&&speedup!=='turbo')throw new Error('The Spectrum speedup is only enabled with the verified Turbo profile.');
-  const steps=Number(c.steps??(speedup==='turbo'?8:40));
+  const fast=speedup==='progressive';
+  if(fast){
+    if(videos.length||audios.length||firstFrame||audioDriver)throw new Error('FastH3 draft supports image references only. Choose Normal H3 for video/audio references, first-frame guidance or vocal driving.');
+    if(!images.length)throw new Error('Add an image reference for FastH3 draft.');
+    const frames=referenceVideoFrames(c),profile=REFERENCE_VIDEO_PROFILES.progressive;
+    if(frames<profile.minFrames||frames>profile.maxFrames)throw new Error('FastH3 draft supports 2.33–5.17 seconds. Choose a supported length or switch to Normal H3.');
+    if(c.refImageSize==='max')throw new Error('FastH3 draft uses Match output reference sizing. Choose Normal H3 for full reference detail.');
+  }
+  const steps=Number(c.steps??(speedup==='quality'?40:8));
   if(!Number.isInteger(steps)||steps<caps.minSteps||steps>caps.maxSteps)throw new Error(`Sampling steps must be ${caps.minSteps}-${caps.maxSteps}.`);
   if(speedup==='turbo'&&steps!==8)throw new Error('The verified H3 Turbo Ref2VA adapter uses eight sampling steps.');
+  if(fast&&steps!==8)throw new Error('FastH3 draft uses eight sampling steps: four low-resolution and four full-resolution.');
   const seed=Number(c.seed??42);
   if(!Number.isSafeInteger(seed)||seed<0)throw new Error('Seed must be a positive whole number or zero.');
   if(c.refImageSize!==undefined&&!['match','max'].includes(c.refImageSize))throw new Error('Choose Match or Max reference image sizing.');
@@ -240,13 +257,18 @@ export function buildReferenceVideoGraph(config={}){
     graph[id]={class_type,inputs,_meta:{title:title(nodeTitle)}};
     return ref(id);
   };
-  let model=node('model','UNETLoader',{unet_name:REFERENCE_VIDEO_MODELS[c.model],weight_dtype:'default'},'Load INT8 H3 Ref2VA');
+  const fast=c.speedup==='progressive';
+  let model=node('model','UNETLoader',{unet_name:REFERENCE_VIDEO_MODELS[fast?'fasth3':c.model],weight_dtype:'default'},fast?'Load INT8 FastH3 Omni':'Load INT8 H3 Ref2VA');
   let positive;
   if(c.speedup==='turbo'){
     model=node('turbo','LoraLoaderModelOnly',{model,lora_name:REFERENCE_VIDEO_MODELS.turbo,strength_model:1},'Load 8-step Ref2VA Turbo');
   }
   model=node('attention','ModelAttentionBackend',{model,attention:'comfy kitchen attention'},'Comfy Kitchen attention');
-  model=node('shift','MiniMaxH3SigmaShift',{model,shift_video:12,shift_audio:6},'Match H3 video and audio schedules');
+  model=node('shift','MiniMaxH3SigmaShift',{model,shift_video:12,shift_audio:fast?3:6},'Match H3 video and audio schedules');
+  if(fast)model=node('sparse','BlockSparseAttention',{
+    model,selection:'vsa','selection.keep_percent':10,start_percent:0.2,end_percent:1,
+    dense_blocks:'',min_tokens:12288,extra_tokens:256,sink_conditioning:'exact_kv_and_rows',verbose:false,
+  },'Prepare FastH3 sparse attention');
   if(c.spectrum){
     model=node('spectrum','SpectrumApplyMiniMaxH3',{
       model,enabled:true,blend_weight:0.5,degree:4,ridge_lambda:0.1,
@@ -316,21 +338,31 @@ export function buildReferenceVideoGraph(config={}){
     followedAudio=node('followed_audio','TrimAudioDuration',{audio:padded,start_index:0,duration},'Match the vocal to the video duration');
     positive=node('vocal_guide','MiniMaxH3AddGuide',{positive,latent:ref('references',1),audio_vae:audioVae,audio:followedAudio,frame_idx:0},'Drive the performance with the selected vocal');
   }
-  const guider=node('guider','BasicGuider',{model,conditioning:positive},'Guide the reference scene');
   const scheduler=node('scheduler','BasicScheduler',{model,scheduler:c.speedup==='turbo'?'simple':'beta',steps:c.steps,denoise:1},'Schedule H3 sampling');
-  const sampler=node('sampler','KSamplerSelect',{sampler_name:'res_multistep'},'Choose H3 sampler');
-  const noise=node('noise','RandomNoise',{noise_seed:c.seed},'Choose variation seed');
-  const samples=node('sample','SamplerCustomAdvanced',{noise,guider,sampler,sigmas:scheduler,latent_image:ref('references',1)},'Generate video and audio');
+  const sampler=node('sampler','KSamplerSelect',{sampler_name:fast?'euler':'res_multistep'},'Choose H3 sampler');
+  let samples;
+  if(fast){
+    const negative=node('negative','ConditioningZeroOut',{conditioning:positive},'Prepare draft conditioning');
+    samples=node('sample','SelfLiftH3Sampler',{
+      model,positive,negative,vae:videoVae,latent_image:ref('references',1),sampler,sigmas:scheduler,
+      seed:c.seed,cfg:1,transition_step:4,lowres_scale:0.4,rho:0,w_min:0.5,w_max:1,
+      upscaler_model:REFERENCE_VIDEO_MODELS.latentUpscaler,highres_tiling:false,upscaler_unload:true,
+    },'Generate FastH3 draft · 4 low-resolution + 4 full-resolution steps');
+  }else{
+    const guider=node('guider','BasicGuider',{model,conditioning:positive},'Guide the reference scene');
+    const noise=node('noise','RandomNoise',{noise_seed:c.seed},'Choose variation seed');
+    samples=node('sample','SamplerCustomAdvanced',{noise,guider,sampler,sigmas:scheduler,latent_image:ref('references',1)},'Generate video and audio');
+  }
   const decoded=node('decode','VAEDecode',{samples,vae:videoVae},'Decode H3 video');
   const decodedAudio=followedAudio||node('decode_audio','VAEDecodeAudio',{samples,vae:audioVae},'Decode H3 audio');
   const video=node('video','CreateVideo',{images:decoded,audio:decodedAudio,fps:caps.fps,bit_depth:8,color_space:'sRGB',codec:'none'},'Assemble video with audio');
-  node('save','SaveVideo',{video,filename_prefix:'zura/reference/h3',format:'mp4','format.codec':'h264','format.codec.encoding':'auto'},'Save reference video');
+  node('save','SaveVideo',{video,filename_prefix:fast?'zura/reference/fasth3_draft':'zura/reference/h3',format:'mp4','format.codec':'h264','format.codec.encoding':'auto'},'Save reference video');
   return graph;
 }
 
 function options(info,node,key){
   const field=info?.[node]?.input?.required?.[key]??info?.[node]?.input?.optional?.[key];
-  if(field?.[0]==='COMBO')return field[1]?.options||[];
+  if(['COMBO','COMFY_DYNAMICCOMBO_V3'].includes(field?.[0]))return field[1]?.options||[];
   if(Array.isArray(field?.[0]))return field[0];
   return [];
 }
@@ -338,12 +370,15 @@ function options(info,node,key){
 export function referenceVideoAvailability(info={},config={}){
   const counts=referenceCounts(config);
   const model=config.model||'ref2va',speedup=config.speedup||'turbo';
+  const fast=speedup==='progressive';
   const requiredNodes=[
-    'UNETLoader','CLIPLoader','VAELoader','LoraLoaderModelOnly',
+    'UNETLoader','CLIPLoader','VAELoader',
     'ModelAttentionBackend','MiniMaxH3SigmaShift','MiniMaxH3ReferenceToVideo',
-    'BasicGuider','BasicScheduler','KSamplerSelect','RandomNoise',
-    'SamplerCustomAdvanced','VAEDecode','CreateVideo','SaveVideo',
+    'BasicScheduler','KSamplerSelect','VAEDecode','CreateVideo','SaveVideo',
   ];
+  if(fast)requiredNodes.push('SelfLiftH3Sampler','BlockSparseAttention','ConditioningZeroOut');
+  else requiredNodes.push('BasicGuider','RandomNoise','SamplerCustomAdvanced');
+  if(speedup==='turbo')requiredNodes.push('LoraLoaderModelOnly');
   if(config.firstFrame)requiredNodes.push('ImageScale','MiniMaxH3AddGuide');
   if(config.audioDriver)requiredNodes.push('MiniMaxH3AddGuide','EmptyAudio','AudioConcat','TrimAudioDuration','H3ReferenceAudio','LoadAudio');
   else requiredNodes.push('VAEDecodeAudio');
@@ -356,11 +391,12 @@ export function referenceVideoAvailability(info={},config={}){
   if(config.spectrum===true)requiredNodes.push('SpectrumApplyMiniMaxH3');
   const missing=requiredNodes.filter(type=>!info[type]);
   const files=[
-    ['UNETLoader','unet_name',REFERENCE_VIDEO_MODELS[model]],
+    ['UNETLoader','unet_name',REFERENCE_VIDEO_MODELS[fast?'fasth3':model]],
     ['CLIPLoader','clip_name',REFERENCE_VIDEO_MODELS.text],
     ['VAELoader','vae_name',REFERENCE_VIDEO_MODELS.videoVae],
     ['VAELoader','vae_name',REFERENCE_VIDEO_MODELS.audioVae],
     ...(speedup==='turbo'?[['LoraLoaderModelOnly','lora_name',REFERENCE_VIDEO_MODELS.turbo]]:[]),
+    ...(fast?[['SelfLiftH3Sampler','upscaler_model',REFERENCE_VIDEO_MODELS.latentUpscaler]]:[]),
   ];
   for(const [type,key,file] of files){
     if(file&&!options(info,type,key).includes(file))missing.push(file);
@@ -373,6 +409,12 @@ export function referenceVideoAvailability(info={},config={}){
   }
   if(model==='viggle'&&speedup==='turbo'){
     missing.push('A verified turbo adapter for the Viggle checkpoint');
+  }
+  if(fast){
+    if(model!=='ref2va')missing.push('Choose the MiniMax H3 model for FastH3 draft');
+    if(info.BlockSparseAttention&&!options(info,'BlockSparseAttention','selection').some(value=>(value.key||value)==='vsa'))missing.push('ComfyUI with native FastH3 VSA attention support');
+    if(info.KSamplerSelect&&!options(info,'KSamplerSelect','sampler_name').includes('euler'))missing.push('Euler sampler');
+    if(info.BasicScheduler&&!options(info,'BasicScheduler','scheduler').includes('beta'))missing.push('Beta scheduler');
   }
   return {
     ready:missing.length===0,

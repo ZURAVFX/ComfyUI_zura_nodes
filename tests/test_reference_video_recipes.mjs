@@ -311,3 +311,42 @@ assert.equal(
 console.log(
   'H3 Ref2Video maps image/video/audio roles, trims supported media timing, uses the installed INT8 Ref2VA turbo/Kitchen chain, and reports exact availability.',
 );
+
+const draftConfig={...config,speedup:'progressive',videos:[],audios:[],frames:56,firstFrame:'',audioDriver:''};
+const draftGraph=buildReferenceVideoGraph(draftConfig);
+assert.equal(draftGraph.model.inputs.unet_name,models.fasth3);
+assert.equal(draftGraph.turbo,undefined,'The distilled checkpoint must never inherit the old Turbo LoRA');
+assert.equal(draftGraph.shift.inputs.shift_audio,3);
+assert.equal(draftGraph.scheduler.inputs.scheduler,'beta');
+assert.equal(draftGraph.sampler.inputs.sampler_name,'euler');
+assert.equal(draftGraph.sample.class_type,'SelfLiftH3Sampler');
+assert.equal(draftGraph.sample.inputs.transition_step,4);
+assert.equal(draftGraph.sample.inputs.lowres_scale,0.4);
+assert.equal(draftGraph.sample.inputs.upscaler_unload,true,'Release the upscaler before high-resolution sampling');
+assert.deepEqual(draftGraph.sample.inputs.positive,['references',0]);
+assert.deepEqual(draftGraph.sample.inputs.latent_image,['references',1]);
+assert.equal(draftGraph.references.inputs.length,56);
+assert.equal(draftGraph.sparse.inputs['selection.keep_percent'],10);
+assert.equal(draftGraph.spectrum,undefined);
+assert.equal(draftGraph.guider,undefined);
+assert.equal(draftGraph.noise,undefined);
+assert.deepEqual(draftGraph.video.inputs.audio,['decode_audio',0]);
+assert.match(draftGraph.save.inputs.filename_prefix,/fasth3_draft/);
+for(const patch of [{videos:config.videos},{audios:config.audios},{firstFrame:'refs/person.png'},{frames:39},{frames:141},{refImageSize:'max'},{steps:12},{spectrum:true},{model:'viggle'}])assert.throws(()=>buildReferenceVideoGraph({...draftConfig,...patch}));
+assert.equal(buildReferenceVideoGraph({...draftConfig,frames:124}).references.inputs.length,124);
+const draftInfo=structuredClone(info);
+delete draftInfo.LoraLoaderModelOnly;delete draftInfo.SamplerCustomAdvanced;
+draftInfo.UNETLoader.input.required.unet_name=['COMBO',{options:[models.fasth3]}];
+draftInfo.SelfLiftH3Sampler={input:{required:{upscaler_model:[[models.latentUpscaler]]}}};
+draftInfo.ConditioningZeroOut={input:{required:{}}};
+draftInfo.BlockSparseAttention={input:{required:{selection:['COMFY_DYNAMICCOMBO_V3',{options:[{key:'vsa',inputs:{}}]}]}}};
+draftInfo.KSamplerSelect.input.required.sampler_name=[['euler']];
+draftInfo.BasicScheduler.input.required.scheduler=['COMBO',{options:['beta']}];
+assert.equal(referenceVideoAvailability(draftInfo,draftConfig).ready,true,'Draft requires its own checkpoint and upscaler, not normal H3 or its LoRA');
+draftInfo.SelfLiftH3Sampler.input.required.upscaler_model=[['none']];
+assert.deepEqual(referenceVideoAvailability(draftInfo,draftConfig).missing,[models.latentUpscaler]);
+draftInfo.SelfLiftH3Sampler.input.required.upscaler_model=[[models.latentUpscaler]];
+draftInfo.BlockSparseAttention.input.required.selection=['COMFY_DYNAMICCOMBO_V3',{options:[{key:'sol-attn'}]}];
+assert.ok(referenceVideoAvailability(draftInfo,draftConfig).missing.includes('ComfyUI with native FastH3 VSA attention support'));
+assert.equal(buildReferenceVideoGraph(config).turbo.inputs.lora_name,models.turbo,'Normal H3 remains the default');
+console.log('FastH3 draft: supported inputs/length, native progressive graph, independent dependencies and unchanged normal preset pass.');
