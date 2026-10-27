@@ -1,0 +1,37 @@
+name: Publish standalone Paintout to Registry
+
+# Reuse the existing Zura publisher credential without copying or exposing it.
+# This publishes only the separately reviewed Paintout commit, not Zura Nodes.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: standalone-paintout-registry-publish
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    if: github.repository == 'ZURAVFX/ComfyUI_zura_nodes'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: ZURAVFX/Zura-Paintout
+          ref: ff88d0de66ef4f84fe5c7dce282662353c15c0c2
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0
+        with:
+          python-version: '3.12'
+      - name: Verify the separate package and portable media tools
+        run: |
+          python build/verify.py
+          python -m unittest discover -s build -p test_media_tools.py
+      - name: Publish standalone Paintout with the existing publisher credential
+        uses: Comfy-Org/publish-node-action@d2366e7abb6ab16f3bb03e3520ae25c8cf749bc9
+        with:
+          skip_checkout: 'true'
+          personal_access_token: ${{ secrets.REGISTRY_ACCESS_TOKEN }}
