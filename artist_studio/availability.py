@@ -42,6 +42,11 @@ def relight_setup(config):
 
 
 def verified_setup(config):
+    if config.get("h3_character_method") == "openjutsu":
+        return (config.get("engine") == "h3" and config.get("workflow_mode") == "swap"
+                and config.get("scope") == "person" and config.get("mask_method") == "auto"
+                and config.get("edit_area") == ("scene" if config.get("openjutsu_background") == "replace" else "mask")
+                and not any(config.get(k) for k in ("audio_id", "lip_sync", "refine_lips", "preserve_people", "remove_text", "h3_head_swap")))
     if config.get("workflow_mode") == "relight":
         return relight_setup(config)
     if config.get("workflow_mode") == "camera":

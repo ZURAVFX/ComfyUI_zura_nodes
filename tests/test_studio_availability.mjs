@@ -4,8 +4,12 @@ import vm from 'node:vm';
 const source=fs.readFileSync(new URL('../web/studio.js',import.meta.url),'utf8').replace(/^import .*;\r?\n/gm,'').replace(/^export /gm,'').split('app.registerExtension({')[0];
 assert.ok(source.includes('<option value="restyle">LTX character animation</option>'),'The restored native LTX stage exists in the real selector');
 const context={};vm.createContext(context);vm.runInContext(source+'\nthis.Studio=ArtistStudio;this.allowed=verifiedSetup;this.initial=defaults;',context);
-assert.equal(context.initial.engine,'wan');assert.equal(context.initial.workflow_mode,'swap');assert.equal(context.initial.subject_mode,'people');
-const good={...context.initial};assert.equal(context.allowed(good),true);
+assert.equal(context.initial.engine,'h3');assert.equal(context.initial.h3_character_method,'openjutsu');assert.equal(context.initial.openjutsu_direct,true);
+assert.equal(context.allowed(context.initial),true);
+assert.equal(context.allowed({...context.initial,openjutsu_background:'replace',edit_area:'scene'}),true);
+assert.equal(context.allowed({...context.initial,audio_id:'voice',lip_sync:true}),false,'Dubbing keeps its separately approved legacy route');
+assert.equal(context.initial.workflow_mode,'swap');assert.equal(context.initial.subject_mode,'people');
+const good={...context.initial,engine:'wan',h3_character_method:'control',openjutsu_direct:false};assert.equal(context.allowed(good),true);
 for(const changes of [{engine:'local'},{engine:'seedance'},{workflow_mode:'viewport'},{workflow_mode:'motion'},{workflow_mode:'relight'},{mask_method:'points'},{refine_lips:true}]){
   const ui=Object.create(context.Studio.prototype);ui.config={...good,...changes};
   const original=JSON.stringify(ui.config);let queued=false;

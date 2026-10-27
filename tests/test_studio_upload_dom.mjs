@@ -40,6 +40,7 @@ const savedStorage=new Map();
 const context={document,window,Event:window.Event,api,ContentDetection,clipLength,recoverClipLength,stageProgress,ClipTrimmer,FormData,URLSearchParams,AbortController,setTimeout,clearTimeout,setInterval:()=>1,clearInterval(){},crypto:globalThis.crypto,localStorage:{getItem:key=>savedStorage.get(key)||null,removeItem:key=>savedStorage.delete(key),setItem:(key,value)=>savedStorage.set(key,String(value))}};
 vm.createContext(context);vm.runInContext(source+'\nthis.Studio=ArtistStudio;',context);
 const ui=new context.Studio(),checklist=ui.$('model-checklist');
+ui.config.engine='wan';ui.config.h3_character_method='control';
 await ui.open();
 assert.equal(ui.$('model-checklist'),checklist,'First render must preserve the model checklist until status arrives');
 assert.match(checklist.textContent,/wan-test/);
@@ -141,6 +142,32 @@ await new Promise(resolve=>setTimeout(resolve,0));
 assert.equal(ui.config.h3_head_swap,false);assert.equal(ui.config.scope,'person');
 assert.equal(ui.$('audio-settings').hidden,false);assert.equal(ui.$('quality-setting').hidden,false);
 console.log('H3 head-swap actual-DOM opt-in, compatibility reset, audio/length gates, direct render, graph stages and full-character recovery pass.');
+
+// The recommended character path does not demand an image model or generated
+// frame. Background replacement instead exposes the normal scene-image review.
+ui.project=null;ui.lookMode='build';
+Object.assign(ui.config,{engine:'h3',workflow_mode:'swap',scope:'person',h3_head_swap:false,h3_character_method:'openjutsu',openjutsu_background:'keep',openjutsu_direct:true,audio_id:'',lip_sync:false,edit_area:'mask',length_mode:'custom',duration:2});
+ui.modelStatus={...status,engine_ready:{...status.engine_ready,openjutsu:true}};
+ui.syncForm();ui.render();
+assert.equal(ui.directViewport(),true);
+assert.equal(ui.$('image-editor').hidden,true);
+assert.equal(ui.$('video-options').hidden,false);
+assert.equal(ui.$('primary').disabled,false);
+assert.match(ui.$('primary').textContent,/Review person/);
+assert.match(ui.$('models').textContent,/OpenJutsu/);
+const dialogue=ui.referenceAudioConfig({id:'dialogue'});
+assert.equal(dialogue.h3_character_method,'control');
+assert.equal(dialogue.openjutsu_direct,false);
+assert.equal(dialogue.audio_id,'dialogue');
+assert.equal(dialogue.lip_sync,true);
+assert.equal(ui.$('openjutsu-background-setting').hidden,false);
+Object.assign(ui.config,{openjutsu_background:'replace',openjutsu_direct:false,edit_area:'scene'});
+ui.syncForm();ui.render();
+assert.equal(ui.directViewport(),false);
+assert.equal(ui.container.querySelector('input[name="gs-look"][value="direct"]').closest('label').hidden,true);
+assert.match(ui.$('look-note').textContent,/complete scene/);
+Object.assign(ui.config,{h3_character_method:'control',openjutsu_background:'keep',edit_area:'mask'});ui.syncForm();
+console.log('OpenJutsu direct reference, explicit background choice and separate starting-frame review pass.');
 
 // A single forward path: the image prompt stays in the bottom composer, and video tuning
 // appears only after an actual frame has been explicitly approved. Selection remains inspectable.

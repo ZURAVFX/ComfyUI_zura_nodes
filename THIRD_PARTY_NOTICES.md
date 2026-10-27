@@ -113,3 +113,11 @@ Only the generated local CSS/JavaScript is needed at runtime. Rebuild using
 `npm ci` and `npm run build` in tools/studio-ui. End users do not need Node.
 
 Paintout Studio uses the packaged Lucide icons under the ISC licence. See `web/paintout_studio/assets/icons/Lucide-LICENSE.txt` and `PAINTOUT_THIRD_PARTY_NOTICES.md`.
+# OpenJutsu experimental recipe
+
+`artist_studio/graphs/OpenJutsu_Experimental.json` is adapted from
+Comfy-Org/comfy-openjutsu, revision `70ec62df0eda7c58697ea3ac2050588513651583`,
+under the MIT licence. Its licence is preserved in the adjacent
+`OpenJutsu_LICENSE` file. The optional Akatz `h3_character_swap` runtime is a
+separate GPL-3.0 dependency and is not vendored here. See
+`docs/OPENJUTSU_EXPERIMENT.md` for pinned provenance and local test limitations.

@@ -41,6 +41,8 @@ STAGES = {
 STAGES.update({"ltx25_" + phase: "LTX 2.5 " + phase for phase in
                ("text", "motion", "stage1", "upscale", "refine", "decode", "cleanup")})
 DEFAULTS = {"engine": "local", "background": "keep", "scope": "person", "prompt": "", "image_prompt": "",
+            "h3_character_method": "control", "openjutsu_resolution": "480",
+            "openjutsu_background": "keep", "openjutsu_direct": False,
             "opening_model": "klein9b",
             "opening_width": 0, "opening_height": 0, "opening_shape": "source", "opening_megapixels": 1.0,
             "relight_width": 0, "relight_height": 0, "relight_shape": "source", "relight_megapixels": 0.9,
@@ -128,6 +130,11 @@ def clean_config(value):
                          ("scope", ("person", "head"))]:
         if c[key] not in options:
             raise ValueError(f"Choose a valid {key} option.")
+    if c["h3_character_method"] not in ("control", "openjutsu") or str(c["openjutsu_resolution"]) not in ("480", "768") or c["openjutsu_background"] not in ("keep", "replace"):
+        raise ValueError("Choose an available H3 character method and OpenJutsu tier.")
+    c["openjutsu_resolution"] = str(c["openjutsu_resolution"])
+    if c["engine"] != "h3" or c["workflow_mode"] != "swap":
+        c["h3_character_method"] = "control"
     raw_frame = c["finished_frame_number"]
     if isinstance(raw_frame, bool):
         raise ValueError("Choose a whole frame number starting at 1.")
@@ -154,8 +161,12 @@ def clean_config(value):
         raise ValueError("Keep original people currently supports H3 scene transformation only.")
     c["viewport_render"] = c["workflow_mode"] == "viewport"
     c["h3_viewport_direct"] = bool(c["h3_viewport_direct"])
+    c["openjutsu_direct"] = bool(c["openjutsu_direct"])
     c["h3_head_swap"] = bool(c["h3_head_swap"])
     c["edit_area"] = "mask" if c["workflow_mode"] == "swap" or c["preserve_people"] else "scene"
+    if c["h3_character_method"] == "openjutsu" and c["openjutsu_background"] == "replace":
+        c["edit_area"] = "scene"
+        c["openjutsu_direct"] = False
     if c["engine"] == "local" and c["edit_area"] == "mask" and c["finished_frame_position"] != "first":
         raise ValueError("Timed LTX finished frames currently require a whole-scene task. Masked edits use the first frame.")
     # The visible task choice is the sole source of scene/mask routing.
@@ -239,6 +250,8 @@ def clean_config(value):
         # delivery options. Migrate old small-test selections to the supported
         # 720p base instead of keeping a hidden fourth choice in saved shots.
         c["resolution"] = 1280
+    if c["h3_character_method"] == "openjutsu":
+        c.update(quality="fast", h3_steps=8, h3_attention="kitchen", delivery_mode="native")
     return c
 
 
@@ -251,6 +264,10 @@ def require_relight_direction(config, *, supplied_image=False):
 def h3_viewport_direct(project):
     """Use reviewed source motion and appearance images without inventing an opening."""
     c = project.get("config") or {}
+    if (c.get("engine") == "h3" and c.get("workflow_mode") == "swap"
+            and c.get("h3_character_method") == "openjutsu" and c.get("openjutsu_direct")
+            and c.get("openjutsu_background", "keep") == "keep" and project.get("look_mode") != "ready"):
+        return True
     return (c.get("workflow_mode") == "viewport" and c.get("engine") == "h3"
             and bool(c.get("h3_viewport_direct")) and project.get("look_mode") != "ready")
 
@@ -377,6 +394,13 @@ def check_asset(asset):
 def validate_selection(project):
     """Reject unsupported timelines before mask tracking or reference encoding."""
     c = project["config"]
+    if c.get("h3_character_method") == "openjutsu":
+        from .openjutsu import build_graph as openjutsu_graph
+        # Validate this narrower experiment before tracking or generating a look.
+        probe = copy.deepcopy(project)
+        if c.get("openjutsu_background") == "replace" and not probe.get("opening_input"):
+            probe["config"]["openjutsu_background"] = "keep"
+        openjutsu_graph(probe, check_asset)
     if camera_setup(c):
         from .h3_camera import selected_frame_count
         selected_frame_count(project, check_asset)
@@ -663,6 +687,12 @@ def build_graph(project, stage, use_cache=True, run_id=None):
         return {"ack": {"class_type": "PreviewAny", "inputs": {
             "source": f"Zura {label} memory hand-off " + project["id"]}}}
     if stage == "h3":
+        if project["config"].get("h3_character_method") == "openjutsu":
+            assert_approved(project)
+            if not h3_viewport_direct(project) and (project.get("opening_approval") != project.get("opening_key") or not project.get("opening_input")):
+                raise ValueError("Review your starting frame before the OpenJutsu test.")
+            from .openjutsu import build_graph as openjutsu_graph
+            return openjutsu_graph(project, check_asset)
         if head_swap_setup(project.get("config", {})):
             from .h3_head_swap import build_studio_graph
             return build_studio_graph(project, check_asset)
@@ -1127,7 +1157,8 @@ def build_graph(project, stage, use_cache=True, run_id=None):
 
 def _needs_h3_reference_stage(project, graph):
     """Only legacy H3 needs a serialized reference-conditioning hand-off."""
-    return (not head_swap_setup(project.get("config", {})) and "h3_cached" not in graph
+    return (project.get("config", {}).get("h3_character_method") != "openjutsu"
+            and not head_swap_setup(project.get("config", {})) and "h3_cached" not in graph
             and not _viewport_project(project).get("viewport_render", False))
 
 
@@ -1882,7 +1913,14 @@ class Studio:
             self._collect_h3_base(p, action, history)
             return p
         else:
-            video = next(a for value in outputs.values() for a in value.get("gifs", []) if a.get("subfolder") == "genj/final")
+            if action.get("h3_character_method") == "openjutsu":
+                video = next(dict(a, subfolder="genj/final", format="video/mp4")
+                             for value in outputs.values() for a in value.get("images", [])
+                             if a.get("type") == "output" and a.get("subfolder", "").replace("\\", "/") == "genj/final"
+                             and a.get("filename", "").startswith("studio_" + p["id"] + "_openjutsu")
+                             and a["filename"].endswith(".mp4"))
+            else:
+                video = next(a for value in outputs.values() for a in value.get("gifs", []) if a.get("subfolder") == "genj/final")
             item = {"stage": stage, "url": media_url(video), "asset": video, "created": time.time(),
                     "action_id": action["id"],
                     "render_size": action.get("render_size", 0), "h3_preset": action.get("h3_preset"),
@@ -1910,6 +1948,8 @@ class Studio:
                             generation_raster=copy.deepcopy(action.get("generation_raster")),
                             output_raster=actual, relight_recipe=action.get("relight_recipe"),
                             sha256=sha(path))
+            if action.get("h3_character_method") == "openjutsu":
+                item.update(label="OpenJutsu", h3_character_method="openjutsu")
             append_result_once(p, item)
             if stage == "draft":
                 text = "\n".join(s for value in outputs.values() for s in value.get("text", []))
@@ -1966,7 +2006,7 @@ class Studio:
             if any(prior[key] != config[key] for key in ("finished_frame_position", "finished_frame_number")):
                 p["opening_approval"] = None
                 p.pop("ltx25_run", None)
-            if (prior["opening_model"] != config["opening_model"] or prior["h3_viewport_direct"] != config["h3_viewport_direct"] or prior["workflow_mode"] != config["workflow_mode"] or prior["image_prompt"] != config["image_prompt"] or (prior["prompt"] != config["prompt"] and not config["image_prompt"])
+            if (any(prior[k] != config[k] for k in ("openjutsu_direct", "openjutsu_background", "h3_character_method")) or prior["opening_model"] != config["opening_model"] or prior["h3_viewport_direct"] != config["h3_viewport_direct"] or prior["workflow_mode"] != config["workflow_mode"] or prior["image_prompt"] != config["image_prompt"] or (prior["prompt"] != config["prompt"] and not config["image_prompt"])
                     or any(prior[k] != config[k] for k in ("camera_preset", "camera_prompt", "camera_width", "camera_height", "opening_width", "opening_height"))):
                 p.update(opening_input=None, opening_key=None, opening_url=None, opening_approval=None)
             p["phase"] = ("opening" if p.get("opening_input") and p["config"]["engine"] in ("local", "h3", "wan", "wan2")
@@ -2143,7 +2183,13 @@ class Studio:
             action["h3_preset"] = p["config"]["h3_preset"]
             action["delivery_mode"] = p["config"].get("delivery_mode", "native")
             action["generation_resolution"] = h3_generation_resolution(p["config"])
-            if stage == "h3" and camera_setup(p["config"]):
+            if stage == "h3" and p["config"].get("h3_character_method") == "openjutsu":
+                from . import verify_review
+                action.update(h3_character_method="openjutsu", h3_preset="openjutsu_8step",
+                              generation_resolution=int(p["config"]["openjutsu_resolution"]),
+                              resolution=int(p["config"]["openjutsu_resolution"]),
+                              expected_frames=verify_review(p["review"])[1]["clip"]["frames"], label="OpenJutsu · experimental")
+            elif stage == "h3" and camera_setup(p["config"]):
                 from .h3_camera import selected_frame_count
                 raster = {"width": p["config"]["camera_width"], "height": p["config"]["camera_height"]}
                 action.update(resolution=max(raster.values()), generation_resolution=max(raster.values()),
@@ -2310,14 +2356,18 @@ def register():
         design = design_readiness(nodes.NODE_CLASS_MAPPINGS, folder_paths.get_full_path)
         from .opening_models import readiness as opening_models_readiness
         opening_models = opening_models_readiness(nodes.NODE_CLASS_MAPPINGS, folder_paths.get_full_path)
+        from .openjutsu import installed_readiness
+        openjutsu = installed_readiness(nodes.NODE_CLASS_MAPPINGS)
         return web.json_response({**hardware_snapshot(), "models": models, "h3_models": h3_models, "wan_models": wan_models, "speech": readiness(),
             "h3_text_cleanup": text_cleanup_readiness(),
             "h3_head_swap": head_swap, "wan2": wan2, "h3_camera": camera,
             "wan21_relight": wan21_relight,
             "opening_models": opening_models,
+            "openjutsu": openjutsu,
+            "missing_openjutsu_nodes": openjutsu["missing_nodes"],
             "h3_attention_backends": h3_attention_capabilities(nodes.NODE_CLASS_MAPPINGS),
             "wan_speech": wan_speech_readiness(),
-            "engine_ready": {"design": design["ready"], "h3_camera": camera["ready"], "wan2": wan2["ready"], "local": all(models[key] for key in masked_keys) and not missing_ltx_nodes,
+            "engine_ready": {"openjutsu": openjutsu["ready"], "design": design["ready"], "h3_camera": camera["ready"], "wan2": wan2["ready"], "local": all(models[key] for key in masked_keys) and not missing_ltx_nodes,
                              "local_scene": all(models[key] for key in scene_keys) and all(detectors.values()) and not missing_ltx_scene_nodes,
                              "local_viewport": ltx_viewport["ready"],
                              "h3": all(h3_models.values()) and not missing_h3_nodes,
@@ -2336,7 +2386,7 @@ def register():
             "missing_ltx_viewport_nodes": ltx_viewport["missing_nodes"],
             "missing_h3_viewport_nodes": missing_h3_viewport_nodes,
             "missing_wan2_nodes": wan2["missing_nodes"],
-            "model_files": {"design": design["model_files"], "wan2": wan2["model_files"],
+            "model_files": {"openjutsu": openjutsu["model_files"], "design": design["model_files"], "wan2": wan2["model_files"],
                 "wan21_relight": wan21_relight["model_files"],
                 "local_viewport": ltx_viewport["model_files"],
                 "h3_viewport": [{"folder": folder, "filename": name, "ready": h3_models[key]}

@@ -12,9 +12,10 @@ import { CreativeWorkspace } from "./studio_create.js";
 import { installNativeSamplePreview } from "./studio_live_preview.js";
 
 const ROOT = "/zura/studio";
-const defaults = {engine:"wan", relight_engine:"h3", background:"keep", scope:"person", prompt:"", image_prompt:"", start:0, duration:2, size:512, performer:-1, margin:20, pitch:false, seed:42, render_size:0, h3_head_swap:false, h3_preset:"take_fast", h3_steps:0, h3_attention:"native", remove_text:false, resolution:1280, delivery_mode:"native", quality:"fast", audio_id:"", audio_start:0, length_mode:"custom", lip_sync:false, refine_lips:false, workflow_mode:"swap", preserve_people:false, preserve_identity:false, edit_area:"mask", mask_method:"auto", mask_prompt:"person", mask_points:[],subject_mode:"people",finished_frame_position:"first",finished_frame_number:1};
+const defaults = {h3_character_method:"openjutsu",openjutsu_resolution:"480",openjutsu_background:"keep",openjutsu_direct:true,engine:"h3", relight_engine:"h3", background:"keep", scope:"person", prompt:"", image_prompt:"", start:0, duration:2, size:512, performer:-1, margin:20, pitch:false, seed:42, render_size:0, h3_head_swap:false, h3_preset:"take_fast", h3_steps:0, h3_attention:"native", remove_text:false, resolution:1280, delivery_mode:"native", quality:"fast", audio_id:"", audio_start:0, length_mode:"custom", lip_sync:false, refine_lips:false, workflow_mode:"swap", preserve_people:false, preserve_identity:false, edit_area:"mask", mask_method:"auto", mask_prompt:"person", mask_points:[],subject_mode:"people",finished_frame_position:"first",finished_frame_number:1};
 // Keep saved experimental projects readable without silently converting their recipe.
 function verifiedSetup(c={}) {
+  if(c.engine==="h3" && c.workflow_mode==="swap" && c.h3_character_method==="openjutsu")return c.scope==="person" && c.mask_method==="auto" && c.edit_area===(c.openjutsu_background==="replace"?"scene":"mask") && !["audio_id","lip_sync","refine_lips","preserve_people","remove_text","h3_head_swap"].some(k=>c[k]);
   if(c.workflow_mode==="relight")return c.engine==="h3" && ["h3","wan21"].includes(c.relight_engine||"h3") && c.edit_area==="scene" && !["audio_id","lip_sync","refine_lips","preserve_people","h3_head_swap"].some(k=>c[k]);
   if(c.workflow_mode==="camera")return c.engine==="h3" && c.edit_area==="scene" && !["audio_id","lip_sync","refine_lips","preserve_people","h3_head_swap","remove_text"].some(k=>c[k]);
   if(c.engine==="wan2")return c.workflow_mode==="motion" && c.edit_area==="scene" && !["audio_id","lip_sync","refine_lips","preserve_people","remove_text","h3_head_swap"].some(k=>c[k]);
@@ -97,7 +98,7 @@ class ArtistStudio {
             <div id="gs-mask-points-setting" hidden><button id="gs-select-points" class="gs-quiet">Select on opening frame</button><span id="gs-mask-points-note" class="gs-note">Include the area you want to change. Exclude anything selected by mistake.</span></div>
           </div></details>
         </section>
-        <section class="gs-look"><h2>Starting look</h2>
+        <section class="gs-look"><label id="gs-openjutsu-background-setting" hidden><span class="gs-label">Background</span><select id="gs-openjutsu_background"><option value="keep">Keep original background</option><option value="replace">Replace character + background</option></select></label><h2>Starting look</h2>
           <div class="gs-segment gs-look-choice" role="group" aria-label="How to create the starting look">
             <label hidden><input type="radio" name="gs-look" value="direct"/><span>Use references directly</span></label>
             <label><input type="radio" name="gs-look" value="build" checked/><span id="gs-build-look-label">Build from references</span></label>
@@ -153,6 +154,8 @@ class ArtistStudio {
         <label class="gs-checkbox"><input id="gs-remove_text" type="checkbox"/><span>Remove on-screen text</span></label>
         <label id="gs-preserve-identity-setting" class="gs-checkbox" hidden><input id="gs-preserve_identity" type="checkbox"/><span>Preserve face identity<small>Adds source moments from early, middle and late in the clip as H3 identity references. It can help retain the same face and apparent age; it is guidance, not a hard lock.</small></span></label>
         <details class="gs-advanced"><summary>More controls</summary><div class="gs-advanced-body">
+          <label id="gs-openjutsu-setting" hidden><span class="gs-label">H3 character method</span><select id="gs-h3_character_method"><option value="openjutsu">OpenJutsu · recommended</option><option value="control">Legacy H3 · dubbing & special controls</option></select><small>One person, one reference sheet, original audio. Native H3 masked replacement at 8 steps. Choose Legacy H3 for replacement speech.</small></label>
+          <label id="gs-openjutsu-resolution-setting" hidden><span class="gs-label">OpenJutsu size</span><select id="gs-openjutsu_resolution"><option value="480">480 tier · recommended on 16 GB</option><option value="768">768 tier · slower, more memory</option></select><small>Follows the source shape on the model grid. Five seconds measured about 4 minutes at 480, or 10 minutes at 768 on this RTX 4080. Loading and references affect time.</small></label>
           <label id="gs-h3-attention-setting" hidden><span class="gs-label">H3 attention</span><select id="gs-h3_attention"><option value="native">Native · default</option><option value="kitchen" disabled>Comfy Kitchen</option><option value="sage_sol" disabled>Sage + Sol · experimental</option></select><small id="gs-h3-attention-note">Choose an installed sampling backend.</small></label>
           <label><span class="gs-label">Subject guidance</span><select id="gs-subject_mode"><option value="auto">Auto · detect from video</option><option value="people">People</option><option value="objects">Objects & scenery</option></select><small>Each model uses its own motion guidance.</small></label>
           <label id="gs-audio-start-setting" hidden><span class="gs-label">Reference audio start (seconds)</span><input id="gs-audio_start" type="number" min="0" max="86400" step="0.1" value="0"/><small>Aligned to the start of your selected clip. Shorter tracks are padded with silence.</small></label>
@@ -270,7 +273,7 @@ class ArtistStudio {
   headSwap() {return this.config?.h3_head_swap===true && this.config.engine==="h3" && this.config.workflow_mode==="swap";}
   headSwapConfig(c) {
     if(!c.h3_head_swap || c.engine!=="h3" || c.workflow_mode!=="swap"){c.h3_head_swap=false;return c;}
-    return {...c,scope:"head",edit_area:"mask",mask_method:"auto",subject_mode:"people",audio_id:"",audio_start:0,lip_sync:false,refine_lips:false,remove_text:false,pitch:false,preserve_people:false,delivery_mode:"native",resolution:1024,h3_steps:8,h3_attention:"kitchen",quality:"fast"};
+    return {...c,h3_character_method:"control",scope:"head",edit_area:"mask",mask_method:"auto",subject_mode:"people",audio_id:"",audio_start:0,lip_sync:false,refine_lips:false,remove_text:false,pitch:false,preserve_people:false,delivery_mode:"native",resolution:1024,h3_steps:8,h3_attention:"kitchen",quality:"fast"};
   }
   hasLook(){
     if(this.headSwap())return this.references.length>0;
@@ -286,7 +289,8 @@ class ArtistStudio {
     if(this.config.workflow_mode==="camera")return engine==="h3";
     return this.config.workflow_mode==="relight"?engine==="wan21":this.config.workflow_mode!=="viewport" || engine!=="wan";
   }
-  directViewport() {return this.config.engine==="h3" && this.config.workflow_mode==="viewport" && !!this.config.h3_viewport_direct && this.lookMode!=="ready";}
+  openjutsu() {return this.config.engine==="h3" && this.config.workflow_mode==="swap" && this.config.h3_character_method==="openjutsu" && !this.headSwap();}
+  directViewport() {return this.lookMode!=="ready" && (this.config.engine==="h3" && this.config.workflow_mode==="viewport" && !!this.config.h3_viewport_direct || this.openjutsu() && this.config.openjutsu_background!=="replace" && !!this.config.openjutsu_direct);}
   useGeneratedLook() {
     if(this.project?.phase==="working")return false;
     const recreate=this.lookMode!=="build" || this.project?.look_mode==="ready";
@@ -406,6 +410,11 @@ class ArtistStudio {
     c.quality=this.$("quality").value;
     c.h3_preset=c.quality==="fast"?"take_fast":"take_quality";
     c.h3_steps=Number(this.$("h3_steps")?.value ?? this.config.h3_steps ?? 0);
+    c.h3_character_method=this.$("h3_character_method")?.value || "control";c.openjutsu_resolution=this.$("openjutsu_resolution")?.value || "480";
+    if(c.audio_id && c.h3_character_method==="openjutsu"){c.h3_character_method="control";this.$("h3_character_method").value="control";}
+    c.openjutsu_background=this.$("openjutsu_background")?.value || "keep";
+    if(c.engine!=="h3" || c.workflow_mode!=="swap")c.h3_character_method="control";
+    if(c.h3_character_method==="openjutsu" && c.openjutsu_background==="replace"){c.edit_area="scene";c.openjutsu_direct=false;}
     c.image_prompt=this.$("image_prompt")?.value ?? this.config.image_prompt ?? "";
     c.h3_attention=this.$("h3_attention")?.value ?? this.config.h3_attention ?? "native";
     c.size=this.config.size ?? 512;c.render_size=0;
@@ -416,6 +425,11 @@ class ArtistStudio {
     if(c.workflow_mode==="camera")Object.assign(c,{edit_area:"scene",h3_head_swap:false,audio_id:"",audio_start:0,lip_sync:false,refine_lips:false,preserve_people:false,remove_text:false,finished_frame_position:"first",delivery_mode:"native",quality:"fast",h3_steps:8});
     if(c.engine==="wan2")Object.assign(c,{resolution:832,quality:"fast",audio_id:"",audio_start:0,lip_sync:false,refine_lips:false,remove_text:false,pitch:false,preserve_people:false,h3_head_swap:false,delivery_mode:"native",scope:"person"});
     return this.headSwapConfig(c);
+  }
+  referenceAudioConfig(audio) {
+    const config={...this.readConfig(),audio_id:audio.id,audio_start:0,lip_sync:!this.config.preserve_people,refine_lips:false};
+    if(config.engine==="h3" && config.workflow_mode==="swap")Object.assign(config,{h3_character_method:"control",openjutsu_direct:false,edit_area:"mask"});
+    return config;
   }
   chooseClipLength(mode) {
     if(this.busy || this.project?.phase==="working" || !["original","custom"].includes(mode))return;
@@ -491,8 +505,10 @@ class ArtistStudio {
     this.$("live-cancel").onclick=()=>this.$("cancel").click();
     this.container.querySelectorAll('input[name="gs-look"]').forEach(input=>input.onchange=()=>{
       if(this.busy || this.project?.phase==="working" || this.config.preserve_people && input.value==="ready")return;
-      if(input.value==="direct" && !(this.config.workflow_mode==="viewport" && this.config.engine==="h3"))return;
-      this.config.h3_viewport_direct=input.value==="direct";this.lookMode=input.value==="direct"?"build":input.value;this.invalidateLook();this.syncForm();this.render();
+      if(input.value==="direct" && !(this.config.workflow_mode==="viewport" && this.config.engine==="h3" || this.openjutsu() && this.config.openjutsu_background!=="replace"))return;
+      if(this.openjutsu())this.config.openjutsu_direct=input.value==="direct";
+      else this.config.h3_viewport_direct=input.value==="direct";
+      this.lookMode=input.value==="direct"?"build":input.value;this.invalidateLook();this.syncForm();this.render();
     });
     this.$("reference-gallery").onclick=e=>{
       const button=e.target.closest("[data-remove-reference]");
@@ -536,6 +552,8 @@ class ArtistStudio {
         }
         this.config=this.readConfig();
         if(["gs-engine","gs-workflow"].includes(input.name))this.syncForm();
+        if(input.id==="gs-h3_character_method")this.syncForm();
+        if(input.id==="gs-openjutsu_background"){this.invalidateLook();this.syncForm();}
         if(input.id==="gs-preserve_people")this.syncForm();
         if(input.id==="gs-quality"){this.config.h3_steps=0;this.syncForm();}
         if(input.name==="gs-workflow"){
@@ -660,7 +678,7 @@ class ArtistStudio {
     await this.perform(async(epoch)=>{
       if(type==="opening" && this.config.preserve_people)throw new Error("Regenerate the starting frame to keep the original people protected.");
       if(type==="opening" && !this.project)throw new Error("Prepare and review the shot before choosing a starting image.");
-      const referenceLimit=this.headSwap()?1:this.config.workflow_mode==="camera"?5:this.directViewport()?9:({flux3:9,klein9b:3,qwen2511:2,qwen21:9}[this.config.opening_model||"klein9b"]||3);
+      const referenceLimit=this.headSwap()||this.openjutsu()?1:this.config.workflow_mode==="camera"?5:this.directViewport()?9:({flux3:9,klein9b:3,qwen2511:2,qwen21:9}[this.config.opening_model||"klein9b"]||3);
       if(type==="character" && this.references.length+files.length>referenceLimit)throw new Error(`Use up to ${referenceLimit} reference images. Remove one before adding more.`);
       for(const file of files){
       const form=new FormData();form.append("file",file);
@@ -682,7 +700,7 @@ class ArtistStudio {
       if(epoch!==this.resetEpoch)return;
       asset.url=api.apiURL("/view?"+new URLSearchParams({filename:asset.file.split("/").pop(),subfolder:asset.file.split("/").slice(0,-1).join("/"),type:"input"}));
       if(type==="audio"){
-        const config={...this.readConfig(),audio_id:asset.id,audio_start:0,lip_sync:!this.config.preserve_people,refine_lips:false};
+        const config=this.referenceAudioConfig(asset);
         if(this.project){const id=this.project.id,updated=await request(`/projects/${id}/config`,this.configBody(config));if(epoch!==this.resetEpoch)return;if(this.project?.id===id)this.project=updated;}
         this.audio=asset;this.pendingReference=false;this.config=config;this.syncForm();
       }else if(type==="opening"){
@@ -861,7 +879,7 @@ class ArtistStudio {
     const modelSegment=this.container.querySelector('.gs-settings fieldset .gs-segment');
     if(modelSegment)modelSegment.style.gridTemplateColumns=viewport||camera?"1fr":"repeat(2,minmax(0,1fr))";
     this.$("engine-legend").textContent=relight?"Relight model":"Generate with";
-    const helpKey=(relight?"relight:"+(this.config.relight_engine||"h3")+":":camera?"camera:":head?"head:":viewport?"viewport:":"character:")+this.config.engine;
+    const helpKey=(relight?"relight:"+(this.config.relight_engine||"h3")+":":camera?"camera:":head?"head:":viewport?"viewport:":"character:")+this.config.engine+":"+(this.config.h3_character_method||"control");
     if(help && help.dataset.verified!==helpKey){
       const text=relight?(this.config.relight_engine==="wan21"?"Wan 2.1 keeps the original acting and soundtrack while applying your reviewed lighting frame. It follows the supplied chained 4-step recipe in 81-frame sections at 720p. Longer clips need more sections; inspect the joins on your shot.":"MiniMax H3 relights the full shot from your reviewed lighting frame. Describe the light, optionally add lighting references, then review the first frame before animating. Original audio is kept. Up to five seconds."):camera?"Preview mode based on your two-pass H3 workflow. Create and review a new camera still, then animate the original performance from that angle. Camera directions are approximate; check the middle and end for drift. Up to five seconds; requires original audio. Review the output for camera drift.":this.config.engine==="wan2"?"Transfer a character’s body, hands and facial movement while generating a new background. Full-frame only: no edit mask. Distilled 10-step LCM with CPU INT8 pose cache, up to 81 frames at 24 fps and 480p-class output. Local quality and speed have not been approved yet.":head?"Swap the head and face from your first portrait reference. Tracks a face crop, follows the original facial landmarks and audio, then blends it back into the source. Tested at two seconds, eight steps with Comfy Kitchen. Review identity and the blend on each shot.":viewport?(this.config.engine==="h3"
         ?"Turn a grey viewport into a finished scene. H3 reads the camera move and animation from your video, with up to nine appearance references. Start with a two-second shot; maximum five seconds. Original audio is kept when present."
@@ -878,7 +896,7 @@ class ArtistStudio {
         description=document.createElement("p");description.className="gs-note";description.dataset.workflowDescription="";
         body.prepend(description);help.querySelector("summary").textContent="About this workflow";
       }
-      description.textContent=text;help.dataset.verified=helpKey;
+      description.textContent=this.openjutsu()?"OpenJutsu is the recommended full-character method for a single performer and one reference sheet. Keeps source audio and performance. Keep the original background, or build and approve a new complete scene first. Native masked H3, 8 steps; start with the 480 tier on 16 GB. Maximum five seconds. Legacy H3 retains the separately approved dubbing controls.":text;help.dataset.verified=helpKey;
     }
     const voice=this.$("voice-mode");if(voice?.closest("details"))voice.closest("details").hidden=true;
     const stages=head?["auto","h3"]:["auto",...(!camera?["prepare"]:[]),"design","animate",...(relight&&this.config.relight_engine==="wan21"?["wan21_relight"]:this.config.engine==="h3"?["h3",...(!viewport&&!camera?["h3_enhance"]:[])]:this.config.engine==="local"?["restyle"]:["wan_speech"])];
@@ -1006,6 +1024,13 @@ class ArtistStudio {
     this.$("h3_steps").value=this.config.h3_steps || (this.config.quality==="fast"?8:40);
     this.$("sampling-setting").hidden=!["h3","wan"].includes(this.config.engine);
     this.syncAttentionBackend();
+    const canTest=this.config.engine==="h3" && this.config.workflow_mode==="swap" && this.config.scope==="person" && !this.config.audio_id && !this.config.h3_head_swap;
+    this.$("openjutsu-setting").hidden=!canTest;
+    this.$("h3_character_method").value=this.config.h3_character_method || "control";
+    this.$("openjutsu_resolution").value=this.config.openjutsu_resolution || "480";
+    this.$("openjutsu_background").value=this.config.openjutsu_background || "keep";
+    this.$("openjutsu-background-setting").hidden=!canTest || this.config.h3_character_method!=="openjutsu";
+    this.$("openjutsu-resolution-setting").hidden=!canTest || this.config.h3_character_method!=="openjutsu";
     this.container.querySelectorAll('input[name="gs-look"]').forEach(input=>input.checked=input.value===(this.directViewport()?"direct":this.lookMode));
   }
   syncAttentionBackend() {
@@ -1061,7 +1086,7 @@ class ArtistStudio {
       const epoch=this.resetEpoch,project=await request("/projects/"+id);
       if(epoch!==this.resetEpoch)return;
       this.project=project;
-      this.source=this.project.source;this.character=this.project.character;this.audio=this.project.audio || this.project.reference_audio || null;this.pendingReference=false;this.config={...defaults,...this.project.config};
+      this.source=this.project.source;this.character=this.project.character;this.audio=this.project.audio || this.project.reference_audio || null;this.pendingReference=false;this.config={...defaults,h3_character_method:"control",openjutsu_direct:false,...this.project.config};
       this.references=this.project.references || (this.character?[this.character]:[]);this.readyAsset=this.project.starting_asset || null;this.lookMode=this.project.look_mode || "build";
       if(!this.project.config.workflow_mode){
         this.config.workflow_mode=this.project.config.edit_area==="scene"||(!this.project.config.edit_area&&this.project.config.background==="restyle")?"motion":"swap";
@@ -1177,7 +1202,7 @@ class ArtistStudio {
     this.$("ready-group").hidden=this.lookMode!=="ready";
     const readyChoice=this.container.querySelector('input[name="gs-look"][value="ready"]');
     const directChoice=this.container.querySelector('input[name="gs-look"][value="direct"]');
-    directChoice.closest("label").hidden=!(viewport && this.config.engine==="h3");
+    directChoice.closest("label").hidden=!(viewport && this.config.engine==="h3" || this.openjutsu() && this.config.openjutsu_background!=="replace");
     directChoice.closest("label").style.gridColumn="1 / -1";
     const designGraphChoice=this.$("graph-stage").querySelector('option[value="design"]');
     designGraphChoice.disabled=this.directViewport();
@@ -1187,6 +1212,7 @@ class ArtistStudio {
     this.$("look-note").textContent=relight&&this.lookMode!=="ready"?"Describe the lighting below. Optional images guide the light and colour.":this.lookMode==="ready"?"Use an already-composed frame. No image generation.":viewport&&this.config.engine==="h3"?"Build and approve a starting frame. H3 also receives the blockout video and your look references.":viewport?"Build one scene plate from up to three references. Match the viewport composition; LTX uses this plate for appearance.":"Combine up to three references into one starting frame.";
     this.$("character-label").textContent=relight?"Lighting references · optional":this.lookMode==="ready"?"Appearance references · optional":"Reference images";
     if(this.directViewport())this.$("look-note").textContent="Recommended for blockouts. H3 uses your source camera and motion with up to nine look references. No starting frame is generated.";
+    if(this.openjutsu())this.$("look-note").textContent=this.directViewport()?"Recommended: use one character image or reference sheet directly. Review the selected person, then generate.":this.config.openjutsu_background==="replace"?"Create or upload a complete scene with the new character and background. Approve it before animation.":"Optionally create or upload a starting frame. The original background remains protected during video generation.";
     this.$("build-look-label").textContent=relight?"Create lighting reference":viewport&&this.config.engine==="h3"?"Build starting frame":"Build from references";
     this.$("prompt-label").textContent=relight?"Lighting prompt":"Video prompt";
     this.$("prompt-optional").hidden=relight;
@@ -1208,7 +1234,18 @@ class ArtistStudio {
     this.$("create-voice").disabled=!!this.voiceJob||this.busy||this.project?.phase==="working";
     this.$("sampling-setting").hidden=!["h3","wan"].includes(this.config.engine);
     const h3Quality=this.config.engine==="h3";
-    this.$("h3-steps-setting").hidden=!h3Quality;
+    const openjutsu=h3Quality && this.config.workflow_mode==="swap" && this.config.h3_character_method==="openjutsu";
+    this.$("h3-steps-setting").hidden=!h3Quality || openjutsu;
+    this.$("quality").disabled=openjutsu || this.busy || this.project?.phase==="working";
+    this.$("resolution").disabled=openjutsu || this.busy || this.project?.phase==="working";
+    this.$("openjutsu-setting").hidden=!h3Quality || this.config.workflow_mode!=="swap" || this.config.scope!=="person";
+    this.$("openjutsu-resolution-setting").hidden=!openjutsu;
+    this.$("openjutsu-background-setting").hidden=!openjutsu;
+    if(openjutsu){
+      this.$("performer").closest(".gs-two").hidden=true;
+      this.$("remove_text").closest("label").hidden=true;
+      this.$("selection-note").textContent=this.config.openjutsu_background==="replace"?"Replace the character and whole scene. Review the new frame’s appearance and framing before animation.":"Replace one automatically selected person and keep the surroundings. Best with one clear performer.";
+    }
     this.syncAttentionBackend();
     this.$("sampling-label").textContent=h3Quality?"H3 sampling mode":"Detail level";
     this.$("h3-steps-note").textContent=this.config.quality==="fast"?"8 steps recommended with Turbo. Custom counts are unbenchmarked.":"40 steps is the standard default. Lower counts run faster; check the result.";
@@ -1375,6 +1412,10 @@ class ArtistStudio {
     if(this.directViewport() && hasAssets && !working){
       if(p?.phase==="review"){label="Use source motion & generate";note="Check the camera and movement. H3 will use your references directly.";}
       else if(p?.approval){label=phase==="done"?"Generate another take":"Generate video";note="Use the reviewed blockout and your look references, without a generated starting frame.";}
+      if(this.openjutsu()){
+        label=p?.phase==="review"?"Use selection & generate":p?.approval?(phase==="done"?"Generate another take":"Generate video"):"Review person";
+        note="Check the selected person. OpenJutsu uses your character reference directly and keeps the background.";
+      }
     }
     if(workflow==="camera" && hasAssets && !working){
       label=p?.opening_input?(phase==="done"?"Generate another take":"Use this angle & generate"):(this.lookMode==="ready"?"Review camera still":"Create camera still");
@@ -1409,11 +1450,13 @@ class ArtistStudio {
     const unsupportedViewport=viewport && this.config.engine==="wan";
     if(unsupportedViewport && !working){label="Choose H3";note="H3 is the approved viewport option. Character performance offers Wan, H3 and LTX.";}
     if(unsupportedSubject && !working){label="Start a new shot";note=verifiedNotice;}
+    const openjutsuUnavailable=this.openjutsu() && !!this.modelStatus && !this.modelStatus.engine_ready?.openjutsu;
+    if(openjutsuUnavailable && !working && !this.busy){label="OpenJutsu setup needed";note="Install the optional OpenJutsu node pack and weights, or choose Legacy H3 in Settings. Check Model guide & setup.";}
     this.$("trim-start").hidden=this.config.length_mode==="original";
     const recoverLength=invalidLength && !working && !this.busy;
     if(recoverLength){label="Choose clip length";this.$("action-note").classList.add("is-warning");}
     else this.$("action-note").classList.remove("is-warning");
-    btn.innerHTML=escape(label)+icon(working?"frames":"arrow");btn.disabled=working || this.busy || (!recoverLength && (!hasAssets || missingSelection || (reference && !this.audio) || enhancementUnavailable || unsupportedViewport || unsupportedRelight || wan21RelightUnavailable || unsupportedSubject));
+    btn.innerHTML=escape(label)+icon(working?"frames":"arrow");btn.disabled=working || this.busy || (!recoverLength && (!hasAssets || missingSelection || (reference && !this.audio) || enhancementUnavailable || unsupportedViewport || unsupportedRelight || wan21RelightUnavailable || unsupportedSubject || openjutsuUnavailable));
     this.$("action-note").textContent=note;this.$("cancel").hidden=!working;this.$("cancel").disabled=this.busy;
     this.$("image-editor").hidden=this.directViewport() || working || this.lookMode==="ready" || this.config.engine==="seedance" || !hasAssets || ["done","draft"].includes(phase);
     this.$("video-options").hidden=!p?.opening_input && !this.directViewport() && !this.headSwap();
@@ -1551,9 +1594,9 @@ class ArtistStudio {
     const viewport=this.config.workflow_mode==="viewport";
     const camera=this.config.workflow_mode==="camera";
     const cameraStatus=this.modelStatus.h3_camera?.[this.project?.opening_input||this.lookMode==="ready"?"video":"still"];
-    const route=camera?"h3_camera":this.headSwap()?"h3_head_swap":viewport&&engine==="local"?"local_viewport":viewport&&engine==="h3"?"h3_viewport":engine==="local"&&this.config.edit_area==="scene"?"local_scene":engine;
+    const route=this.openjutsu()?"openjutsu":camera?"h3_camera":this.headSwap()?"h3_head_swap":viewport&&engine==="local"?"local_viewport":viewport&&engine==="h3"?"h3_viewport":engine==="local"&&this.config.edit_area==="scene"?"local_scene":engine;
     const openingStatus=this.openingModelStatus();
-    const needsImage=this.lookMode!=="ready" && !this.project?.opening_input;
+    const needsImage=!this.directViewport() && this.lookMode!=="ready" && !this.project?.opening_input;
     const openingReady=!needsImage || (openingStatus?.ready ?? this.modelStatus.engine_ready?.design);
     const baseReady=wan21Relight?openingReady:((camera?cameraStatus?.ready:undefined) ?? this.modelStatus.engine_ready?.[route] ?? (route==="local" && this.modelStatus.ready));
     const enhancementReady=!enhancementRequested || this.modelStatus.h3_enhancement?.ready===true;
@@ -1565,9 +1608,10 @@ class ArtistStudio {
     if(wan21Relight)this.$("models").textContent=ready?"Wan 2.1 · Relight ready":"Wan 2.1 · Relight setup needed";
     if(this.headSwap())this.$("models").textContent=baseReady?"H3 · Head & face ready":"Head & face setup needed";
     if(camera)this.$("models").textContent=baseReady?"H3 · Camera ready":"Camera setup needed";
+    if(this.openjutsu())this.$("models").textContent=baseReady?"OpenJutsu · Character ready":"OpenJutsu setup needed";
     this.$("models").classList.toggle("needs-attention",!ready);
     const files=wan21Relight?[...(needsImage?(openingStatus?.model_files||this.modelStatus.model_files?.design||[]):[]),...(wan21Status.model_files||[])]:((camera?cameraStatus?.model_files:null)||(this.headSwap()?this.modelStatus.h3_head_swap?.model_files:null)||this.modelStatus.model_files?.[route]||[]);
-    const missingNodeField={wan2:"missing_wan2_nodes",h3_head_swap:"missing_h3_head_swap_nodes",local:"missing_ltx_nodes",local_scene:"missing_ltx_scene_nodes",local_viewport:"missing_ltx_viewport_nodes",h3:"missing_h3_nodes",h3_viewport:"missing_h3_viewport_nodes",wan:"missing_wan_nodes"}[route];
+    const missingNodeField={openjutsu:"missing_openjutsu_nodes",wan2:"missing_wan2_nodes",h3_head_swap:"missing_h3_head_swap_nodes",local:"missing_ltx_nodes",local_scene:"missing_ltx_scene_nodes",local_viewport:"missing_ltx_viewport_nodes",h3:"missing_h3_nodes",h3_viewport:"missing_h3_viewport_nodes",wan:"missing_wan_nodes"}[route];
     const missingNodes=wan21Relight?[...(needsImage?(openingStatus?.missing_nodes||this.modelStatus.missing_design_nodes||[]):[]),...(wan21Status.missing_nodes||[])]:((camera?cameraStatus?.missing_nodes:null)||(this.headSwap()?this.modelStatus.h3_head_swap?.missing_nodes:null)||this.modelStatus[missingNodeField]||[]);
     this.$("model-checklist").innerHTML=engine==="seedance"?'<p class="gs-note">Uses the paid provider. Check credits and cost before rendering.</p>':files.map(item=>`<p class="gs-note">${item.ready?"Ready":"Missing"}: <code>${escape(item.path||`models/${item.folder}/${item.filename}`)}</code>${!item.ready&&item.url?` · <a href="${escape(item.url)}" target="_blank" rel="noopener noreferrer">Download</a>`:""}</p>`).join("")+(missingNodes.length?`<p class="gs-note">Missing nodes: ${missingNodes.map(escape).join(", ")}. Install the matching packs listed in the setup guide, then restart ComfyUI.</p>`:"<p class=\"gs-note\">Required native node checks passed. Optional speech or enhancement has its own setup.</p>");
   }
@@ -1579,7 +1623,7 @@ class ArtistStudio {
         try{
           const job=await request("/voice/"+identity);if(epoch!==this.resetEpoch)return;this.voiceJob=job;
           if(job.state==="complete"&&this.project?.phase!=="working"){
-            const config={...this.readConfig(),audio_id:job.audio.id,audio_start:0,lip_sync:!this.config.preserve_people,refine_lips:false};
+            const config=this.referenceAudioConfig(job.audio);
             if(this.project){const id=this.project.id,updated=await request(`/projects/${id}/config`,this.configBody(config));if(epoch!==this.resetEpoch||this.project?.id!==id)return;this.project=updated;}
             this.audio=job.audio;this.pendingReference=false;this.config=config;this.voiceJob=null;localStorage.removeItem("zura-studio-voice-job");
             this.$("voice-note").textContent="Voice ready. It is selected as your reference audio.";this.syncForm();this.render();

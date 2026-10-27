@@ -10,9 +10,9 @@ The graph follows Comfy's distilled blueprint (10 LCM steps, CFG 1, shift 5,
 simple scheduler) and pins the repacked checkpoint filenames. Its bounded
 route limits output to 480p-class dimensions and 81 frames. The cache uses
 CPU/int8 by default because the local 16 GB GPU cannot safely hold the model
-and pose cache together. None of these choices have been performance- or
-quality-validated on this workstation; the model weights were not installed
-when this prototype was created.
+and pose cache together. A local three-second character-and-background test
+completed on the 16 GB workstation at 464 x 832 in 162.323 seconds. This is
+one measured run, not a general speed claim; quality awaits user review.
 
 References:
 * https://github.com/Wan-Video/Wan-Animate-2
