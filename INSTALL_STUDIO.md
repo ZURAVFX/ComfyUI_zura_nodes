@@ -103,3 +103,7 @@ Studio lists each missing model and native node in About this workflow. The exac
 Choose Character performance, MiniMax H3, then Head & face. Upload a source video with audio and a portrait or character sheet as your first reference. Choose a clip up to two seconds. The portrait is used directly, without starting-image generation. This route keeps the source body and background through crop compositing. Use Full character for replacement dialogue or silent footage.
 
 Studio lists each missing model and native node in About this workflow. Exact model/adapter names and strengths are listed in [the head-swap recipe](docs/H3_HEAD_SWAP_DEV.md). In addition to the H3 encoders/VAEs and SAM checkpoint, it requires NKD Basic Tools and Sigmas Curve nodes, MaskVidExperiments subject crop/uncrop, DW pose preprocessing, the LayerStyle batch-padding node and Comfy core background removal/Kitchen attention. Install missing node packs through Manager and restart; do not substitute similarly named weights.
+
+## Optional FastH3 draft
+
+Normal H3 remains the default. For faster image-reference drafts, select **Video > Reference to video > FastH3 · draft** beside the model selector. This requires separate FastH3 weights, the latent upscaler and SelfLift. Follow the [FastH3 setup and measured quality trade-offs](docs/FASTH3_DRAFT.md) before enabling it.

@@ -1,6 +1,15 @@
 # Release notes
 
-## Unreleased - Repository maintenance
+## 1.3.35 - 27 October 2026
+
+- Add optional FastH3 draft beside normal H3 in Reference to video. Normal H3 remains the default; draft mode clearly warns about softer detail and possible framing/camera changes.
+- Use the tested INT8 FastH3 Omni, native Kitchen/VSA attention and SelfLift progressive sampler for image-reference drafts of 56–124 frames (2.33–5.17 seconds). Check optional dependencies independently so normal H3 remains available.
+- Show low- and full-resolution sampling phases separately. Reject unsupported audio/video references and first-frame guides with a clear explanation rather than silently changing the input.
+- Add live megapixel sizing and editable custom dimensions across Studio image/video controls, respecting each model's grid and pixel budget. Keep relight image and video resolutions independent.
+- Allow frame-range and dimension numbers to be selected and replaced before validation, retaining Paintout setup recovery.
+- Preserve the Paintout workspace, masking and import fixes from 1.3.32–1.3.34.
+
+Repository maintenance included in this release:
 
 - Simplify the README and add indexed guides and contributor checks.
 - Archive the 1.3.24 candidate, label dated scope evidence and correct stale installation/testing version labels.

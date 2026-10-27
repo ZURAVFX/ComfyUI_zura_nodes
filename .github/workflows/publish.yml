@@ -125,6 +125,8 @@ jobs:
           node tests/test_ltx_frame_video_recipes.mjs
           node tests/test_reference_video_recipes.mjs
           node tests/test_reference_video_ui.mjs
+          node tests/test_studio_resolution.mjs
+          node tests/test_studio_mode_build_transition.mjs
           node tests/test_studio_popovers.mjs
           node tests/test_studio_live_preview.mjs
           node tests/test_studio_length.mjs

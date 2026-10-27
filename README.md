@@ -22,9 +22,11 @@ Click the visible **Zura Studio** or **Paintout Studio** button at the bottom-ri
 
 Use your own ComfyUI host and port if they differ.
 
-## Current development build
+## Current release
 
-**1.3.34 is a testing release submitted to Comfy Registry for processing.** Submission does not mean approval or immediate availability through Manager. The [1.3.34 testing release](https://github.com/ZURAVFX/ComfyUI_zura_nodes/releases/tag/v1.3.34) is available on GitHub.
+**1.3.35** adds an optional **FastH3 draft** preset beside normal H3 in **Video > Reference to video**, plus clearer resolution controls. FastH3 trades fine detail and framing consistency for faster image-reference drafts. See the [tested limits, setup and quality trade-offs](docs/FASTH3_DRAFT.md).
+
+The [1.3.35 release](https://github.com/ZURAVFX/ComfyUI_zura_nodes/releases/tag/v1.3.35) is available on GitHub. Registry submission does not mean approval or immediate availability through Manager.
 
 Paintout is integrated into **Studio > Video > Paintout / clean plate**. Its separate Paintout Studio entry opens the same working page and controller. Disable an earlier standalone Zura Paintout installation before using this integration to avoid duplicate nodes and routes.
 
