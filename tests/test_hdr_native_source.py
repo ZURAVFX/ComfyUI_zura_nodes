@@ -55,5 +55,12 @@ class NativeHDRInputTests(unittest.TestCase):
         with patch.object(paintout,'describe',return_value=info), self.assertRaisesRegex(ValueError,'past the source'):
             native.load_native_hdr_frames('hdr.mp4',1,2)
 
+    def test_native_padding_preserves_frame_pixels_and_extends_tail(self):
+        source=torch.rand(10,224,384,3)
+        padded,w,h,count,pw,ph,n=native.ZuraHDRNativePrepare().prepare(source)
+        self.assertEqual((w,h,count,pw,ph,n),(384,224,10,512,512,17))
+        self.assertTrue(torch.equal(padded[:10,:224,:384],source))
+        self.assertTrue(torch.equal(padded[-1],padded[9]))
+
 
 if __name__ == '__main__': unittest.main()

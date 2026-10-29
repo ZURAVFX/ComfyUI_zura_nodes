@@ -91,24 +91,32 @@ HLG/PQ video and ACEScg, ACEScct or linear Rec.709 EXR sequences. It converts
 source pixels to the model's ACEScct working space using Paintout's existing
 colour transforms. Synthetic tests check that extended ACEScg highlights
 survive and that encoded HLG passes through the native colour conversion. This
-helper is not registered in Studio; it has not been validated against real HDR
-camera footage or a full native HDR render. The official TiledFusion sampler,
-its EXR/video upload, and native HDR input/output UX remain to be implemented
-and tested before advertising HDR-to-HDR support. The example names an
+helper underlies Studio's separate HLG-video preview route. It has not been
+validated against HDR camera originals, PQ inputs or EXR sequence uploads.
+The example names an
 unidentified `ltx25_general_refine.safetensors`; Lightricks' official 2.5
 Refine Details IC-LoRA is available and checksum-verified locally, but its
 equivalence to that custom-named file is not established.
 
-`hdr_native_graph.py` provides a separate, unexposed two-stage TiledFusion
+`hdr_native_graph.py` provides a separate two-stage TiledFusion
 experiment using the official Refine Details adapter, native EXR loader,
 float32 video VAE and the example's 8+3-step schedules. Its loader documents
 EXR sequences as well as stills, but the supplied workflow itself repeats one
 EXR still. A real GPU run used nine 64 x 64 engineering EXRs scaled to 512 x
 512, and wrote nine 10-bit BT.2020/HLG video frames and nine ACEScg EXRs with
 finite values up to 7.01. The run took 78.45 seconds using 256 x 256 tiles;
-the saved prototype now uses the example's 1024 x 576 tile setting, which has
-not been re-tested. This verifies a narrow sequence-to-HDR render, not
-quality, native moving-camera footage or input colour fidelity. There is no
-audio restoration, Studio UI, sequence upload or validated HLG/PQ video path
-in this prototype. It also resizes to supplied dimensions, so it must not be
-exposed until proportional geometry and padded 8n+1 trim are implemented.
+the current graph uses the example's 1024 x 576 tile setting.
+
+Studio now offers an explicitly labelled HLG-video-to-HDR preview: an uploaded
+or selected LTX HLG video is converted to ACEScct; the source is padded rather
+than stretched, the last frame is held internally to 8n+1, and padding is cropped
+after inference. Selected source audio is restored. A real engineering test on a
+384 x 224 generated HLG clip selected frames 5–13 and delivered exactly nine
+frames at the same raster, with one AAC soundtrack, a 10-bit BT.2020 HLG master,
+nine ACEScg EXRs and a viewable SDR proxy. It ran in 63.24 seconds. It confirms
+plumbing and the revised tile setting, not representative HDR visual quality,
+retention of the source's motion, seamless long clips, or HDR monitor playback.
+Current inputs are HLG video only, with 1–121 frames, even source dimensions
+of 32–2048 pixels per side, and a 40-million padded-pixel-frame cap. Tagged PQ
+and EXR sequences are rejected in Studio until independently qualified. Image
+sequence support and a full desktop UI review remain outstanding.

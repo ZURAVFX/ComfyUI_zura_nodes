@@ -31,5 +31,18 @@ class NativeHDRGraphTests(unittest.TestCase):
             with self.subTest(change=change),self.assertRaises(ValueError):
                 native.build_native_exr_graph(**{**self.args(),**change})
 
+    def test_video_graph_crops_padding_and_preserves_range_audio(self):
+        g=native.build_native_video_graph(source='source.mp4',start_frame=5,frame_count=10,
+            fps=24,width=384,height=224,prefix='video_test',has_audio=True)
+        self.assertEqual(g['source']['class_type'],'ZuraHDRLoadNativeSource')
+        self.assertEqual(g['source']['inputs']['start_frame'],5)
+        self.assertEqual(g['empty']['inputs']['length'],17)
+        self.assertEqual(g['resize2']['inputs']['image'],['native_pad',0])
+        self.assertEqual(g['trim_raster']['inputs']['width'],384)
+        self.assertEqual(g['trim_raster']['inputs']['height'],224)
+        self.assertEqual(g['trim_frames']['inputs']['length'],10)
+        self.assertEqual(g['zura_hdr_video']['inputs']['audio'],['native_audio',0])
+        self.assertEqual(g['native_audio']['inputs']['start_frame'],5)
+
 
 if __name__=='__main__':unittest.main()

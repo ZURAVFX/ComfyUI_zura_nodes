@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import math
 import torch
+import torch.nn.functional as F
 
 from .hdr_source import MAX_FRAMES, MAX_PIXEL_FRAMES
 
@@ -62,3 +63,48 @@ def load_native_hdr_frames(path, start_frame, frame_count, colour_space='auto', 
     if len(result) != frame_count:
         raise ValueError('The source ended before the selected frame range.')
     return torch.cat(result), float(fps)
+
+
+class ZuraHDRLoadNativeSource:
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {'required': {'source': ('STRING', {'default': ''}),
+            'start_frame': ('INT', {'default': 0, 'min': 0}),
+            'frame_count': ('INT', {'default': 25, 'min': 1, 'max': MAX_FRAMES}),
+            'colour_space': (['auto', *HDR_VIDEO_SPACES, *HDR_SEQUENCE_SPACES],),
+            'sequence_fps': ('FLOAT', {'default': 24., 'min': 1., 'max': 120.})}}
+    RETURN_TYPES = ('IMAGE', 'FLOAT')
+    RETURN_NAMES = ('acescct_frames', 'fps')
+    FUNCTION = 'load'
+    CATEGORY = 'Zura/Artist Studio'
+    @classmethod
+    def IS_CHANGED(cls, **kwargs): return float('nan')
+    def load(self, source, start_frame, frame_count, colour_space, sequence_fps):
+        return load_native_hdr_frames(source, start_frame, frame_count, colour_space, sequence_fps)
+
+
+class ZuraHDRNativePrepare:
+    @classmethod
+    def INPUT_TYPES(cls): return {'required': {'images': ('IMAGE',)}}
+    RETURN_TYPES = ('IMAGE', 'INT', 'INT', 'INT', 'INT', 'INT', 'INT')
+    RETURN_NAMES = ('frames', 'source_width', 'source_height', 'source_count',
+                    'canvas_width', 'canvas_height', 'padded_count')
+    FUNCTION = 'prepare'
+    CATEGORY = 'Zura/Artist Studio'
+    def prepare(self, images):
+        if not isinstance(images, torch.Tensor) or images.ndim != 4 or images.shape[-1] != 3 or not torch.isfinite(images).all():
+            raise ValueError('Expected finite ACEScct RGB frames.')
+        count, height, width, _ = images.shape
+        if count < 1 or count > MAX_FRAMES or min(width,height) < 32 or max(width,height) > 2048:
+            raise ValueError('Choose 1–121 frames between 32 and 2048 pixels per side.')
+        # Pad rather than distort the source; remove the padding after decoding.
+        pw=max(512,math.ceil(width/64)*64); ph=max(512,math.ceil(height/64)*64)
+        images=F.pad(images.permute(0,3,1,2),(0,pw-width,0,ph-height),mode='replicate').permute(0,2,3,1)
+        padded=max(9,1+8*((count-1+7)//8))
+        if padded>count: images=torch.cat((images,images[-1:].expand(padded-count,-1,-1,-1)),0)
+        return images,width,height,count,pw,ph,padded
+
+
+NODE_CLASS_MAPPINGS={'ZuraHDRLoadNativeSource':ZuraHDRLoadNativeSource,'ZuraHDRNativePrepare':ZuraHDRNativePrepare}
+NODE_DISPLAY_NAME_MAPPINGS={'ZuraHDRLoadNativeSource':'Zura · Load Native HDR Source',
+                            'ZuraHDRNativePrepare':'Zura · Prepare Native HDR Frames'}

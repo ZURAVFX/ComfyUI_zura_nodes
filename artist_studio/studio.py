@@ -2402,6 +2402,8 @@ def register():
     register_model_downloads(routes, response)
     from .hdr_studio import register as register_hdr_studio
     register_hdr_studio(studio, routes, response, check_asset)
+    from .hdr_native_studio import register as register_hdr_native_studio
+    register_hdr_native_studio(studio, routes, response, check_asset)
     from .outpaint_jobs import register as register_outpaint_jobs
     register_outpaint_jobs(studio, routes, response)
 

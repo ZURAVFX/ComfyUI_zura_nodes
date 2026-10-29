@@ -61,3 +61,54 @@ def build_native_exr_graph(*, source, frame_count, fps, width, height, prefix,
     }
     g.update(ltx_hdr_delivery(['decode',0],fps,output=output,prefix=prefix,working_space='ltx25_acescct_qualified'))
     return g
+
+
+def build_native_video_graph(*, source, start_frame, frame_count, fps, width, height,
+                             prefix, colour_space='auto', has_audio=False, output='hlg_and_exr'):
+    """Bounded HDR-video post-pass, padded for LTX then cropped to source raster.
+
+    This preserves frame count and source soundtrack; the model may alter scene
+    appearance and movement. The caller must validate real HDR colour metadata.
+    """
+    if type(start_frame) is not int or start_frame < 0 or type(frame_count) is not int or not 1 <= frame_count <= 121:
+        raise ValueError('Choose a valid range of up to 121 frames.')
+    if any(type(v) is not int or v < 32 or v > 2048 or v % 2 for v in (width,height)):
+        raise ValueError('Choose an even-sized HDR source between 32 and 2048 pixels per side.')
+    if width*height*frame_count > 40_000_000:
+        raise ValueError('This range is too large; choose fewer frames.')
+    if colour_space not in ('auto','hlg_rec2020','pq_rec2020'):
+        raise ValueError('Choose HLG or PQ source colour.')
+    pw=max(512,math.ceil(width/64)*64);ph=max(512,math.ceil(height/64)*64)
+    padded=max(9,1+8*((frame_count-1+7)//8))
+    if pw*ph*padded > 40_000_000:
+        raise ValueError('This padded range is too large; choose fewer frames.')
+    g=build_native_exr_graph(source=source,frame_count=padded,fps=fps,width=pw,height=ph,prefix=prefix,output=output)
+    def n(kind, **inputs):return {'class_type':kind,'inputs':inputs}
+    g['source']=n('ZuraHDRLoadNativeSource',source=source,start_frame=start_frame,frame_count=frame_count,
+                  colour_space=colour_space,sequence_fps=float(fps))
+    g['native_pad']=n('ZuraHDRNativePrepare',images=['source',0])
+    g['resize1']['inputs']['image']=['native_pad',0]
+    g['resize2']['inputs']['image']=['native_pad',0]
+    g['trim_frames']=n('ImageFromBatch',image=['decode',0],batch_index=0,length=frame_count)
+    g['trim_raster']=n('ImageCrop',image=['trim_frames',0],width=width,height=height,x=0,y=0)
+    # Rebuild delivery against cropped ACEScct, never the padded canvas.
+    for key in list(g):
+        if key.startswith('zura_hdr_'):del g[key]
+    audio=None
+    if has_audio:
+        g['native_audio']=n('ZuraHDRLoadAudioRange',source=source,start_frame=start_frame,frame_count=frame_count,fps=float(fps))
+        audio=['native_audio',0]
+    g.update(ltx_hdr_delivery(['trim_raster',0],fps,output=output,prefix=prefix,
+                              working_space='ltx25_acescct_qualified',audio=audio))
+    if output in ('acescg_exr','hlg_and_exr'):
+        g['zura_hdr_archive']=n('ZuraHDRPackageEXR',images=['zura_hdr_exr',0],prefix=prefix)
+        preview=['zura_hdr_exr',0]
+    else:
+        g['zura_hdr_preview_tonemap']=n('LTXVHDRDecodePostprocess',image=['trim_raster',0],transfer='acescct',save_exr=False,
+            exr_color_space='acescg',output_dir='genj/hdr/'+prefix,filename_prefix='frame',half_precision=True)
+        preview=['zura_hdr_preview_tonemap',0]
+    video={'images':preview,'fps':float(fps)}
+    if audio:video['audio']=audio
+    g['zura_hdr_preview_video']=n('CreateVideo',**video)
+    g['zura_hdr_save_preview']=n('SaveVideo',video=['zura_hdr_preview_video',0],filename_prefix='genj/hdr/'+prefix+'_preview',format='mp4',**{'format.codec':'h264'})
+    return g
