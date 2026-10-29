@@ -41,6 +41,7 @@ STAGES = {
 STAGES.update({"ltx25_" + phase: "LTX 2.5 " + phase for phase in
                ("text", "motion", "stage1", "upscale", "refine", "decode", "cleanup")})
 DEFAULTS = {"engine": "local", "background": "keep", "scope": "person", "prompt": "", "image_prompt": "",
+            "custom_loras": [],
             "h3_character_method": "control", "openjutsu_resolution": "480",
             "openjutsu_background": "keep", "openjutsu_direct": False,
             "opening_model": "klein9b",
@@ -99,6 +100,14 @@ def design_readiness(node_mappings, get_full_path, model="klein9b"):
 
 def clean_config(value):
     c = {**DEFAULTS, **{k: v for k, v in value.items() if k in DEFAULTS}}
+    # Copy list-valued preferences: one shot must never mutate another shot's adapters.
+    adapters = c.get("custom_loras")
+    if not isinstance(adapters, list) or len(adapters) > 4:
+        raise ValueError("Choose up to four custom LoRAs.")
+    c["custom_loras"] = copy.deepcopy(adapters)
+    for adapter in c["custom_loras"]:
+        if not isinstance(adapter, dict) or not isinstance(adapter.get("name"), str) or not adapter["name"]:
+            raise ValueError("Choose an installed custom LoRA.")
     # Preserve the former two-way edit selector on older saved shots. The
     # viewport route is opt-in and never inferred from a legacy scene edit.
     if "workflow_mode" not in value:
@@ -633,10 +642,32 @@ def ltx25_native_plan(project):
     if factor == 2 and str(metadata_factor) != "2":
         raise ValueError("The selected LTX adapter does not declare the required guide downscale factor.")
     pins = {name: _ltx25_model_pin(path) for name, path in paths.items()}
+    # Bind adapter identities to the same plan used for every cache receipt.
+    # The regular model-only validator checks family metadata, special adapter
+    # types and explicit confirmation before we read file identity.
+    selected = project.get("config", {}).get("custom_loras") or []
+    loras = []
+    if selected:
+        from .custom_loras import apply_to_graph
+        paths_by_name = {item.get("name"): folder_paths.get_full_path("loras", item.get("name")) for item in selected}
+        if any(not path for path in paths_by_name.values()):
+            raise ValueError("The selected LTX LoRA is no longer installed.")
+        adapter_pins = {name: _ltx25_model_pin(path) for name, path in paths_by_name.items()}
+        sentinel = {"model": {"class_type": "UNETLoader", "inputs": {"unet_name": model_set["model"]}}}
+        validated = apply_to_graph(sentinel, "ltx25", selected,
+                                   folder_paths.get_filename_list("loras"),
+                                   lambda folder, name: paths_by_name.get(name) if folder == "loras" else None)
+        for index, item in enumerate(selected):
+            node = validated["zura_custom_lora_0_" + str(index)]["inputs"]
+            pin = _ltx25_model_pin(paths_by_name[item["name"]])
+            if pin != adapter_pins[item["name"]]:
+                raise ValueError("The LTX LoRA changed while preparing the render. Try again.")
+            loras.append({"name": node["lora_name"], "strength": node["strength_model"],
+                          "pin": pin})
     return build_plan(_viewport_project(project), scenario=scenario, timeline=timeline,
         models=dict(model_set), text_encoder_inputs=encoder, model_pins=pins,
         approval_key=prep_key(project), original_audio_sha=project["source"]["sha"],
-        union_downscale_factor=factor)
+        union_downscale_factor=factor, custom_loras=loras)
 
 
 def ltx25_phase_graph(project, phase):
@@ -651,19 +682,54 @@ def ltx25_phase_graph(project, phase):
                       input_directory=folder_paths.get_input_directory())
 
 
+def custom_lora_family(config):
+    """Only advertise video routes whose native model path can be patched."""
+    if config.get("workflow_mode") == "relight" and config.get("relight_engine") == "wan21":
+        return "wan21"
+    if config.get("engine") == "h3":
+        if config.get("delivery_mode") == "enhanced1080":
+            return None  # Enhancement is a separate unqualified model pass.
+        return "h3"
+    if config.get("engine") == "wan" and config.get("lip_sync"):
+        return None  # MultiTalk is a separate Wan sampler with its own loader.
+    if config.get("engine") == "local" and config.get("edit_area") == "scene":
+        return "ltx25"  # Both LTX sampling phases use the pinned plan.
+    return {"wan": "wan22", "wan2": "wan_animate2"}.get(config.get("engine"))
+
+
+def apply_video_loras(project, stage, graph):
+    """Patch every actual video sampler, leaving preparation and stills untouched."""
+    selected = project.get("config", {}).get("custom_loras") or []
+    if not selected or stage not in ("h3", "wan", "wan2", "wan21_relight"):
+        return graph
+    # The first Wan graph can be a motion-preparation job, not a sampler.
+    if stage == "wan" and "wan_save" in graph:
+        return graph
+    family = custom_lora_family(project["config"])
+    if family is None:
+        raise ValueError("Custom LoRAs aren't supported on this video route yet. Remove them or select a supported model.")
+    from .custom_loras import apply_to_graph
+    return apply_to_graph(graph, family, selected, folder_paths.get_filename_list("loras"), folder_paths.get_full_path)
+
+
 def build_graph(project, stage, use_cache=True, run_id=None):
     from .opening_subject import directed_source_subject
     from .opening_edit import replacement_target, target_position
+    if (project.get("config", {}).get("custom_loras") and
+            (stage in ("draft", "final", "h3_enhance", "wan_speech") or
+             stage in ("background", "restyle") and not ltx25_scene_route(project, stage) or
+             stage.startswith("ltx25_") and stage != "ltx25_cleanup" and custom_lora_family(project["config"]) != "ltx25")):
+        raise ValueError("Custom LoRAs aren't available on this video graph yet. Remove them or select a supported model.")
     if camera_setup(project["config"]):
         from .h3_camera import build_studio_graph, build_studio_still_graph
         if stage == "design":
             return build_studio_still_graph(project, check_asset)
         if stage == "h3":
-            return build_studio_graph(project, check_asset)
+            return apply_video_loras(project, stage, build_studio_graph(project, check_asset))
         raise ValueError("Create the camera frame before generating video.")
     if stage == "wan21_relight":
         from .wan21_relight import build_studio_graph
-        return build_studio_graph(project, check_asset)
+        return apply_video_loras(project, stage, build_studio_graph(project, check_asset))
     """Fill known native node inputs; no new subgraph interfaces are fabricated."""
     require_relight_direction(project.get("config", {}), supplied_image=project.get("look_mode") == "ready" and bool(project.get("starting_asset")))
     if project.get("config", {}).get("workflow_mode") == "relight" and project["config"].get("engine") != "h3":
@@ -676,7 +742,7 @@ def build_graph(project, stage, use_cache=True, run_id=None):
     if stage == "wan2":
         assert_approved(project)
         from .wan_animate2 import build_studio_graph
-        return build_studio_graph(project, check_asset)
+        return apply_video_loras(project, stage, build_studio_graph(project, check_asset))
     if stage == "wan_speech":
         from .wan_speech import build_graph as speech_graph
         return speech_graph(project)
@@ -692,12 +758,12 @@ def build_graph(project, stage, use_cache=True, run_id=None):
             if not h3_viewport_direct(project) and (project.get("opening_approval") != project.get("opening_key") or not project.get("opening_input")):
                 raise ValueError("Review your starting frame before the OpenJutsu test.")
             from .openjutsu import build_graph as openjutsu_graph
-            return openjutsu_graph(project, check_asset)
+            return apply_video_loras(project, stage, openjutsu_graph(project, check_asset))
         if head_swap_setup(project.get("config", {})):
             from .h3_head_swap import build_studio_graph
-            return build_studio_graph(project, check_asset)
+            return apply_video_loras(project, stage, build_studio_graph(project, check_asset))
         from .h3 import build_h3_graph
-        return build_h3_graph(_viewport_project(project), use_cache=use_cache)
+        return apply_video_loras(project, stage, build_h3_graph(_viewport_project(project), use_cache=use_cache))
     if stage == "design" and h3_viewport_direct(project):
         raise ValueError("Choose Build starting frame to generate an opening, or generate video using references directly.")
     if stage == "h3_enhance":
@@ -705,7 +771,7 @@ def build_graph(project, stage, use_cache=True, run_id=None):
         return enhancement_graph(project, project.get("h3_enhancement_base"), run_id=run_id)
     if stage == "wan":
         from .wan import build_wan_graph
-        return build_wan_graph(_viewport_project(project), use_cache=use_cache)
+        return apply_video_loras(project, stage, build_wan_graph(_viewport_project(project), use_cache=use_cache))
     if stage == "design" and project.get("look_mode") == "ready":
         if project.get("config", {}).get("preserve_people"):
             raise ValueError("Keep original people currently requires Build from references so the opening can be registered to the protected source.")
@@ -1191,6 +1257,9 @@ def editable_graph(project, stage="auto"):
         else:
             stage = (p["config"]["engine"] if p["config"]["engine"] in ("h3", "wan", "wan2") else
                  "background" if p["config"]["background"] == "keep" else "restyle")
+    if p["config"].get("custom_loras") and (stage in ("draft", "final", "h3_enhance", "wan_speech") or
+            stage in ("background", "restyle") and not ltx25_scene_route(p, stage)):
+        raise ValueError("Custom LoRAs aren't available on this video graph yet. Remove them before opening this stage.")
     if stage in ("h3", "wan21_relight") and p.get("opening_input") and not h3_viewport_direct(p):
         p["opening_approval"] = p["opening_key"]
     if stage == "wan":
@@ -1348,9 +1417,19 @@ def public_project(project):
         a["url"] = media_url({"filename": Path(a["file"]).name,
                               "subfolder": str(Path(a["file"]).parent).replace("\\", "/"), "type": "input"})
     for a in [p, *([p["source"]] if p.get("source") else [])]:
+        from .preview_proxy import describe_existing
+        describe_existing(a, folder_paths.get_input_directory())
         if a.get("thumbnail_file"):
             a["thumbnail_url"] = media_url({"filename": Path(a["thumbnail_file"]).name,
                 "subfolder": str(Path(a["thumbnail_file"]).parent).replace("\\", "/"), "type": "input"})
+        if a.get("preview_file"):
+            preview = Path(folder_paths.get_input_directory()) / a["preview_file"]
+            if preview.is_file():
+                a["preview_url"] = media_url({"filename": preview.name,
+                    "subfolder": str(Path(a["preview_file"]).parent).replace("\\", "/"), "type": "input"})
+                a["preview_status"] = "ready"
+            else:
+                a["preview_status"] = "preparing"
     for action in p.get("actions", []):
         action.pop("graph", None)
     p.pop("ltx25_run", None)  # Native graphs, histories and cache paths stay private.
@@ -2067,6 +2146,10 @@ class Studio:
                          else "background" if p["config"]["background"] == "keep" else "restyle")
         if stage == "final":
             p["accepted_draft"] = p.get("draft_task")
+        if (p["config"].get("custom_loras") and
+                stage in ("h3", "wan", "wan2", "wan21_relight", "background", "restyle", "draft", "final", "h3_enhance") and
+                custom_lora_family(p["config"]) is None):
+            raise ValueError("Custom LoRAs are not available on this video route. Remove them or choose H3, Wan 2.2, Wan Animate 2 or Wan 2.1 Relight.")
         if stage not in STAGES:
             raise ValueError("Choose an available action.")
         # Prevent replay of a completed request caused by duplicate network delivery.
@@ -2271,6 +2354,30 @@ def register():
     server._zura_artist_studio_registered = True
     studio = Studio(server)
     routes = server.routes
+    proxy_jobs = {}
+    proxy_errors = {}
+
+    def ensure_preview(asset):
+        from .preview_proxy import describe_existing
+        describe_existing(asset, folder_paths.get_input_directory())
+        if not asset.get("preview_file"):
+            return
+        identity = asset["id"]
+        target = Path(folder_paths.get_input_directory()) / asset["preview_file"]
+        if target.is_file() or identity in proxy_jobs or identity in proxy_errors:
+            return
+        async def make_preview():
+            try:
+                from .preview_proxy import build_proxy
+                from . import ffmpeg
+                source = await asyncio.to_thread(check_asset, asset)
+                await asyncio.to_thread(build_proxy, source, target, ffmpeg)
+            except Exception as exc:
+                logging.exception("Zura Studio: playback proxy failed")
+                proxy_errors[identity] = str(exc)
+            finally:
+                proxy_jobs.pop(identity, None)
+        proxy_jobs[identity] = asyncio.create_task(make_preview())
 
     def same_origin(request):
         origin = request.headers.get("Origin")
@@ -2291,6 +2398,33 @@ def register():
     register_opening(studio, routes, response)
     from .content import register as register_content
     register_content(studio, routes, response)
+    from .model_downloads import register as register_model_downloads
+    register_model_downloads(routes, response)
+    from .hdr_studio import register as register_hdr_studio
+    register_hdr_studio(studio, routes, response, check_asset)
+    from .outpaint_jobs import register as register_outpaint_jobs
+    register_outpaint_jobs(studio, routes, response)
+
+    @routes.get("/zura/studio/loras")
+    @routes.get("/genj/studio/loras")
+    @response
+    async def list_custom_loras(request):
+        from .custom_loras import catalogue
+        entries = await asyncio.to_thread(catalogue, folder_paths.get_filename_list("loras"), folder_paths.get_full_path)
+        return web.json_response({"loras": entries})
+
+    @routes.post("/zura/studio/image-loras/validate")
+    @routes.post("/genj/studio/image-loras/validate")
+    @response
+    async def validate_image_loras(request):
+        from .custom_loras import validate_image_loras as validate
+        data = await request.json()
+        selections = data.get("loras", [])
+        if not isinstance(selections, list):
+            raise ValueError("Choose a list of installed LoRAs.")
+        result = await asyncio.to_thread(validate, data.get("model"), selections,
+            folder_paths.get_filename_list("loras"), folder_paths.get_full_path)
+        return web.json_response({"loras": result})
 
     @routes.get("/zura/studio/status")
     @routes.get("/genj/studio/status")
@@ -2447,7 +2581,10 @@ def register():
                     if not math.isfinite(duration) or duration <= 0:
                         raise ValueError("The clip length could not be read. Export an MP4 and upload it again.")
                     details = {"duration": duration, "width": stream.width, "height": stream.height,
-                               "has_audio": bool(video.streams.audio)}
+                               "has_audio": bool(video.streams.audio), "video_codec": stream.codec_context.name}
+                    from .preview_proxy import needs_proxy
+                    if needs_proxy(stream.codec_context.name):
+                        details["preview_file"] = str(Path(relative).parent / "preview.mp4").replace("\\", "/")
                     frame = next(video.decode(video=0), None)
                     if frame is None:
                         raise ValueError("The video has no readable frames. Export an MP4 and try again.")
@@ -2480,7 +2617,22 @@ def register():
                  "sha": (await asyncio.to_thread(sha, path)) if kind == "audio" and suffix in supported["video"] else digest.hexdigest(),
                  "name": Path(part.filename).name, **details}
         studio.store.save(asset)
+        ensure_preview(asset)
         return web.json_response(public_project(asset))
+
+    @routes.get("/zura/studio/assets/{identity}/preview")
+    @routes.get("/genj/studio/assets/{identity}/preview")
+    @response
+    async def preview_status(request):
+        asset = studio.store.load(request.match_info["identity"])
+        if asset.get("asset_kind") != "video":
+            raise ValueError("Choose an uploaded video.")
+        ensure_preview(asset)
+        visible = public_project(asset)
+        if asset["id"] in proxy_errors:
+            visible["preview_status"] = "error"
+            visible["preview_error"] = "Could not create a playback preview. The original remains available for generation."
+        return web.json_response(visible)
 
     @routes.post("/zura/studio/voice")
     @routes.post("/genj/studio/voice")

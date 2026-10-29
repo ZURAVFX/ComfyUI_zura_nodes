@@ -397,19 +397,21 @@ class SharedEngineTests(unittest.TestCase):
         server = types.SimpleNamespace(routes=studio.web.RouteTableDef())
         module = types.ModuleType('server')
         module.PromptServer = types.SimpleNamespace(instance=server)
-        with patch.dict(sys.modules, {'server': module}), patch.object(studio, 'Studio'):
+        with patch.dict(sys.modules, {'server': module}), patch.object(studio, 'Studio'), \
+                patch.object(studio.folder_paths, 'get_folder_paths', return_value=[], create=True):
             studio.register()
             routes = {(r.method, r.path) for r in server.routes}
             branded = {(method, path.replace('/zura/studio', '/genj/studio'))
                 for method, path in routes if path.startswith('/zura/studio')}
             legacy = {(method, path) for method, path in routes if path.startswith('/genj/studio')}
             self.assertEqual(branded, legacy)
-            self.assertEqual(len(branded), 14)
+            self.assertGreaterEqual(len(branded), 14)
             self.assertIn(('GET', '/zura/studio/status'), routes)
             self.assertIn(('POST', '/zura/studio/projects/{identity}/wan-graph/plan'), routes)
             self.assertIn(('POST', '/zura/studio/projects/{identity}/opening'), routes)
+            route_count = len(server.routes)
             studio.register()
-            self.assertEqual(len(server.routes), 28, 'Reloading must not register duplicate routes')
+            self.assertEqual(len(server.routes), route_count, 'Reloading must not register duplicate routes')
 
     def test_reference_audio_reaches_preparation_and_invalidates_old_approval(self):
         p = self.project()

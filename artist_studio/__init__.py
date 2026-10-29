@@ -169,6 +169,7 @@ class GenjSelectClip:
             available = float(stream.duration * stream.time_base) if stream.duration else float(c.duration / av.time_base)
             width, height = video.get_dimensions()
             has_audio = bool(c.streams.audio)
+            audio_codec_name = c.streams.audio[0].codec_context.name if has_audio else None
         if use_original_length:
             start_seconds, duration_seconds = 0.0, available
         if start_seconds >= available:
@@ -189,7 +190,10 @@ class GenjSelectClip:
         path = root() / "clips" / (key + ".mp4")
         path.parent.mkdir(exist_ok=True)
         if not path.exists():
-            audio_codec = ["-c:a", "copy"] if details["full_source"] and has_audio and audio is None else ["-c:a", "aac", "-b:a", "256k"]
+            # ProRes MOV commonly carries PCM, which is not reliably accepted
+            # in our intermediate MP4 container. Preserve AAC when possible;
+            # convert other source codecs to AAC for broad compatibility.
+            audio_codec = ["-c:a", "copy"] if details["full_source"] and audio_codec_name == "aac" and audio is None else ["-c:a", "aac", "-b:a", "256k"]
             second = (["-i", details["audio_source"]] if audio is not None else
                       [] if has_audio else ["-f", "lavfi", "-i", "anullsrc=r=48000:cl=stereo"])
             ffmpeg("-ss", start_seconds, "-i", source, *second, "-t", duration, "-map", "0:v:0", "-map", "1:a:0" if second else "0:a:0",
@@ -602,7 +606,9 @@ class GenjRestoreSoundtrack:
             raise ValueError("The reference audio changed after review.")
         soundtrack = external or source
         offset = 0 if external else clip_details["start"]
-        audio = ["-c:a", "copy"] if clip_details["full_source"] and not external else ["-c:a", "aac", "-b:a", "256k"]
+        with av.open(str(soundtrack)) as media:
+            audio_codec_name = media.streams.audio[0].codec_context.name if media.streams.audio else None
+        audio = ["-c:a", "copy"] if clip_details["full_source"] and not external and audio_codec_name == "aac" else ["-c:a", "aac", "-b:a", "256k"]
         vf = "fps=24"
         if clip_details.get("export_width") and clip_details.get("export_height"):
             vf += f",scale={clip_details['export_width']}:{clip_details['export_height']}:flags=lanczos"

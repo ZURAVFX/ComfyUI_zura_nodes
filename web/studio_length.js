@@ -7,7 +7,7 @@ export function clipLength(config,sourceDuration) {
   const chainedRelight=config.workflow_mode==="relight"&&config.relight_engine==="wan21";
   const maximum=chainedRelight?null:config.engine==="wan2"?81/24:config.engine==="h3"?5:config.engine==="local"&&scene?(viewport?15:5):config.engine==="wan"&&config.audio_id&&config.lip_sync?30:null;
   const invalid=Number.isFinite(source)&&source>0&&(seconds<=0 || (!chainedRelight&&["h3","wan2"].includes(config.engine)&&frames<5) || (maximum!==null&&frames>maximum*24));
-  return {seconds,frames,maximum,invalid};
+  return {seconds,frames,outputSeconds:frames/24,maximum,invalid};
 }
 
 export function recoverClipLength(config,sourceDuration) {

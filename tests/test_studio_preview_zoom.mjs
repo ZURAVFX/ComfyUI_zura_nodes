@@ -1,0 +1,37 @@
+import assert from 'node:assert/strict';
+import {parseHTML} from '../../ui-check/node_modules/linkedom/esm/index.js';
+import {PreviewZoom} from '../web/studio_preview_zoom.js';
+
+const {document,window}=parseHTML('<main><img id="frame"><video id="video"></video></main>');
+globalThis.document=document;
+const root=document.querySelector('main'),frame=document.querySelector('#frame'),video=document.querySelector('#video');
+root.getBoundingClientRect=()=>({left:0,top:0,width:800,height:500,bottom:500});
+video.getBoundingClientRect=()=>({left:0,top:0,width:800,height:500,bottom:500});
+let paused=true,scheduled=0,cancelled=0;
+Object.defineProperties(video,{videoWidth:{value:1920},videoHeight:{value:1080},paused:{get:()=>paused}});
+globalThis.requestAnimationFrame=()=>++scheduled;
+globalThis.cancelAnimationFrame=()=>{cancelled++;};
+let current=frame;
+const zoom=new PreviewZoom(root,()=>current);
+let prevented=false;
+zoom.wheel({target:frame,deltaY:-500,preventDefault(){prevented=true;}});
+assert.ok(prevented && zoom.scale>1);assert.match(frame.style.transform,/scale/);
+zoom.down({target:frame,button:0,pointerId:1,clientX:100,clientY:100,preventDefault(){}});
+zoom.move({pointerId:1,clientX:160,clientY:130});zoom.up({pointerId:1});
+assert.equal(zoom.x,60);assert.equal(zoom.y,30);
+zoom.update('different image');assert.equal(zoom.scale,1);assert.equal(frame.style.transform,'');
+current=video;let draws=0;
+zoom.overlay.getContext=()=>({setTransform(){},fillRect(){},drawImage(){draws++;}});
+zoom.update('video');zoom.setScale(2);
+assert.ok(draws>0);assert.equal(zoom.overlay.hidden,false);
+assert.equal(video.style.transform,''); // Native playback controls do not scale or move.
+const pausedDraws=draws;video.dispatchEvent(new window.Event('seeked'));assert.ok(draws>pausedDraws,'Seeking while paused redraws the zoomed frame');
+paused=false;video.dispatchEvent(new window.Event('play'));assert.ok(scheduled>0,'Starting playback starts the live zoom redraw');
+const playingDraws=draws;video.dispatchEvent(new window.Event('timeupdate'));assert.ok(draws>playingDraws,'Playback updates redraw the visible frame');
+paused=true;video.dispatchEvent(new window.Event('pause'));assert.ok(cancelled>0,'Pausing stops the live redraw loop');
+zoom.down({target:video,button:0,pointerId:2,clientX:100,clientY:495,preventDefault(){throw Error('blocked video transport');}});
+assert.equal(zoom.drag,null);
+zoom.reset();assert.equal(zoom.overlay.hidden,true);assert.equal(zoom.scale,1);
+zoom.dispose();assert.equal(root.querySelector('.gs-zoom-tools'),null);
+const disposedDraws=draws;video.dispatchEvent(new window.Event('seeked'));assert.equal(draws,disposedDraws,'Disposal removes playback listeners');
+console.log('Preview zoom, pan, reset, media changes and stationary video transport pass.');

@@ -129,6 +129,7 @@ class Wan21RelightTests(unittest.TestCase):
         self.assertEqual(graph["272:407:89"]["inputs"]["height"], 704)
         self.assertEqual(graph["272:408:275:190"]["inputs"]["width"], 1280)
         self.assertEqual(graph["272:408:275:190"]["inputs"]["height"], 704)
+        self.assertEqual(graph["272:408:275:190"]["inputs"]["crop_position"], graph["272:407:89"]["inputs"]["crop_position"])
         self.assertEqual(graph["272:407:277:19"]["inputs"]["noise_seed"], 123)
         self.assertIn("Soft warm window light", graph["272:408:274:3"]["inputs"]["text"])
         self.assertEqual(graph["wan21_export"]["class_type"], "GenjRestoreSoundtrack")

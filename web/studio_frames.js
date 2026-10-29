@@ -4,6 +4,7 @@ import {composerIcons as icons} from './studio_composer.js';
 import {tidyArtistGraph} from './artist_graph.js';
 import {ENDPOINT_RECIPES,endpointRecipe,endpointLengths,endpointPresetSize} from './video_recipe_catalog.js';
 import {attachWorkspaceSamplePreview,nativePreviewMethod} from './studio_live_preview.js';
+import {PreviewZoom} from './studio_preview_zoom.js';
 const KEY='zura-first-last-v1';
 const escape=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const view=(api,file,type='output')=>api.apiURL('/view?'+new URLSearchParams({filename:file.filename,subfolder:file.subfolder||'',type}));
@@ -49,6 +50,7 @@ export class FrameVideoWorkspace{
         <p id="zf-note" aria-live="polite">Add a first frame to begin. The last frame is optional.</p>
       </form>`;
     owner.root.append(this.page);
+    this.previewZoom=new PreviewZoom(this.page.querySelector('.zf-viewer'),()=>!this.$('result').hidden?this.$('result'):!this.$('image-slot').hidden?this.$('image-slot').querySelector('img'):null);
     const draft=saved.draft||{};this.$('engine').value=endpointRecipe(draft.engine).id;this.setLengths(draft.length);this.$('steps').value=this.recipe().defaultSteps;
     for(const id of ['prompt','width','height','length','steps','seed'])if(draft[id]!==undefined)this.$(id).value=draft[id];
     this.normaliseDimensions();
@@ -124,6 +126,7 @@ export class FrameVideoWorkspace{
   preview(slot='first'){
     if(!this.$('result').hidden)return;const asset=this.assets[slot]||this.assets.first||this.assets.last;
     this.$('image-slot').hidden=!asset;this.$('empty').hidden=!!asset;if(asset){let image=this.$('image-slot').querySelector('img');if(!image){image=document.createElement('img');image.alt='Selected endpoint';this.$('image-slot').append(image);}image.src=view(this.api,asset,'input');}
+    this.previewZoom?.update(asset?.file||'');
   }
   render(){
     const busy=this.busy(),c=this.config(),cap=this.recipe();let error='';try{this.build(c);}catch(e){error=e.message;}
@@ -148,7 +151,7 @@ export class FrameVideoWorkspace{
     this.$('note').hidden=!error&&!setup&&!this.dimensionNotice&&!longClip;
   }
   renderHistory(){this.$('takes').innerHTML=this.items.map((item,i)=>`<button type="button" data-take="${i}">${escape(item.config.prompt.slice(0,60))} · ${(item.config.frames/24).toFixed(2)}s</button>`).join('');this.$('takes').onclick=e=>{const button=e.target.closest('[data-take]');if(button)this.showResult(this.items[Number(button.dataset.take)].file);};if(this.items[0])this.showResult(this.items[0].file);}
-  showResult(file){this.nativeSamplePreview?.clear();this.$('empty').hidden=true;this.$('image-slot').hidden=true;this.$('result').hidden=false;this.$('result').src=view(this.api,file);this.$('history').open=false;}
+  showResult(file){this.nativeSamplePreview?.clear();this.$('empty').hidden=true;this.$('image-slot').hidden=true;this.$('result').hidden=false;this.$('result').src=view(this.api,file);this.previewZoom?.update(this.$('result').src);this.$('history').open=false;}
   elapsed(step,max){const elapsed=Math.floor((Date.now()-this.job.started)/1000);const sampleElapsed=this.sampleStarted?(Date.now()-this.sampleStarted)/1000:0;if(!this.sampleStarted&&step)this.sampleStarted=Date.now();return step>1&&sampleElapsed>0?`About ${Math.ceil(sampleElapsed/(step-1)*(max-step))}s left in sampling · ${elapsed}s elapsed`:`${elapsed}s elapsed`;}
   async generate(){if(['width','height'].some(k=>this.$(k).commitDimension?.()===false)){this.message('Enter a whole number for width and height.');return;}
     if(this.busy())return;this.submitting=true;this.message('');this.render();
@@ -166,6 +169,6 @@ export class FrameVideoWorkspace{
   }
   async cancel(){if(!this.job)return;try{const id=this.job.id;await this.fetch('/queue',{delete:[id]});await this.fetch('/interrupt',{prompt_id:id});this.message('Cancellation requested.');await this.poll();}catch(e){this.message(e.message);}}
   stopPolling(){clearInterval(this.timer);this.timer=null;}
-  close(){this.save();this.stopPolling();this.nativeSamplePreview?.dispose();this.nativeSamplePreview=null;}
+  close(){this.save();this.stopPolling();this.previewZoom?.dispose();this.nativeSamplePreview?.dispose();this.nativeSamplePreview=null;}
   async graph(){try{const config=this.job?.config||this.config(),graph=this.build(config),original=(this.app.rootGraph||this.app.graph)?.serialize?.();if(!original||typeof this.app.loadApiJson!=='function')throw new Error('Update ComfyUI to open this editable graph.');try{await this.app.loadApiJson(graph,`Zura ${endpointRecipe(config.engine).label} First and Last Frame · ${Date.now()}.json`);await import('./vendor/elk.bundled.js');await tidyArtistGraph(this.app,graph,'first_last',window.ELK);}catch(e){await this.app.loadGraphData(original);throw e;}this.studio.close();}catch(e){this.message(e.message);}}
 }

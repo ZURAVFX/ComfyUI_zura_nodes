@@ -1,4 +1,5 @@
 import {VideoResolutionControl} from './studio_resolution.js';
+import {clipLength} from './studio_length.js';
 const svg=body=>`<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${body}</svg>`;
 export const composerIcons={
   video:svg('<rect x="3" y="5" width="18" height="14" rx="3"/><path d="m10 9 5 3-5 3z"/>'),
@@ -16,7 +17,7 @@ export const composerIcons={
   takes:svg('<rect x="3" y="7" width="18" height="14" rx="2"/><path d="M7 3h10m-8 9 6 3-6 3z"/>'),
   download:svg('<path d="M12 3v12m-4-4 4 4 4-4M4 17v4h16v-4"/>'),
 };
-export const VIDEO_WORKFLOWS=[['swap','Character replacement'],['viewport','Viewport to final'],['camera','Change camera angle'],['relight','Relight'],['paintout','Paintout / clean plate'],['frames','First & last frame'],['references','Reference to video']];
+export const VIDEO_WORKFLOWS=[['swap','Character replacement'],['viewport','Viewport to final'],['camera','Change camera angle'],['relight','Relight'],['paintout','Paintout / clean plate'],['outpaint','Frame extension · preview'],['frames','First & last frame'],['references','Reference to video']];
 
 /** A compact surface over the existing controls, never a second configuration. */
 export class VideoComposer {
@@ -83,7 +84,7 @@ export class VideoComposer {
     this.composer=composer;this.sync();
   }
   selectWorkflow(value){
-    if(['frames','references','paintout'].includes(value)){this.workspace.show(value);return;}
+    if(['frames','references','paintout','outpaint'].includes(value)){this.workspace.show(value);return;}
     if(!VIDEO_WORKFLOWS.some(([id])=>id===value))return;
     const input=this.root.querySelector(`input[name="gs-workflow"][value="${value}"]`);
     if(input&&!input.disabled){
@@ -96,13 +97,13 @@ export class VideoComposer {
     // Reuse the same control and handler in both composers. Its place in the
     // tool row stays immediately after the model, including endpoint video.
     const select=this.task.querySelector('select'),focused=this.root.ownerDocument.activeElement===select;
-    const model=mode==='frames'?this.workspace.frames.page.querySelector('.zf-model'):mode==='references'?this.workspace.referencesVideo.page.querySelector('.zf-model'):mode==='paintout'?this.workspace.paintout.page.querySelector('.zf-model'):this.imageModel;
+    const model=mode==='frames'?this.workspace.frames.page.querySelector('.zf-model'):mode==='references'?this.workspace.referencesVideo.page.querySelector('.zf-model'):mode==='paintout'?this.workspace.paintout.page.querySelector('.zf-model'):mode==='outpaint'?this.workspace.outpaint.page.querySelector('.zo-model'):this.imageModel;
     if(model.nextElementSibling!==this.task)model.after(this.task);
     this.syncWorkflow();
     if(focused)select.focus({preventScroll:true});
   }
   syncWorkflow(){
-    const independent=['frames','references','paintout'].includes(this.workspace.mode),select=this.task.querySelector('select');
+    const independent=['frames','references','paintout','outpaint'].includes(this.workspace.mode),select=this.task.querySelector('select');
     select.value=independent?this.workspace.mode:this.studio.config.workflow_mode==='motion'?'swap':this.studio.config.workflow_mode;
     select.disabled=!independent&&(this.studio.busy||this.studio.project?.phase==='working');
     for(const option of select.querySelectorAll('option')){
@@ -151,7 +152,10 @@ export class VideoComposer {
     this.syncWorkflow();
     this.resolution.hidden=false;this.settings.hidden=stage!=='video'||['relight','camera'].includes(s.config.workflow_mode);this.audio.hidden=s.$('audio-settings').hidden||stage!=='video';
     this.root.querySelector('#zc-tool-resolution').textContent=s.$('resolution').selectedOptions?.[0]?.textContent?.split(' Â· ')[0]||'Resolution';
-    this.root.querySelector('#zc-tool-length').textContent=s.config.length_mode==='original'?'Full clip':`${s.config.duration}s`;
+    const length=clipLength(s.config,s.source?.duration),lengthLabel=this.root.querySelector('#zc-tool-length');
+    const local24=['wan','wan2','h3','local'].includes(s.config.engine);
+    lengthLabel.textContent=local24&&Number.isFinite(length.outputSeconds)?`${length.outputSeconds.toFixed(2)}s · ${length.frames}f`:(s.config.length_mode==='original'?'Full clip':`${s.config.duration}s`);
+    lengthLabel.title=local24&&Number.isFinite(length.frames)?`${length.frames} frames at 24 fps`:'';
     const audioSummary=s.$('audio-summary');audioSummary.textContent=s.config.audio_id?'Reference audio':'Original audio';audioSummary.title='Audio and facial performance';
     const source=s.source?{...s.source,url:s.source.thumbnail_url}:null;
     this.attachment('source',source,s.source?'Source video':'Add video');

@@ -1,6 +1,12 @@
 import assert from 'node:assert/strict';
 import {IMAGE_MODELS,buildImageGraph,imageAvailability} from '../web/image_recipes.js';
 const refs=[{file:'edit/source.png'},{file:'edit/style.png'},{file:'edit/subject.png'}];
+const create=buildImageGraph({model:'flux2',prompt:'A natural portrait',width:1024,height:1024});
+assert.equal(create.model.inputs.unet_name,'flux-2-klein-9b-fp8.safetensors');
+assert.equal(create.text.inputs.clip_name,'qwen_3_8b_fp4mixed.safetensors');
+assert.equal(create.schedule.class_type,'Flux2Scheduler');
+assert.equal(create.schedule.inputs.steps,4);
+assert.equal(IMAGE_MODELS.find(m=>m.id==='flux3').name,'Flux 3 Klein','Flux 3 remains available');
 for(const model of ['qwen2511','klein9b']){
   assert.throws(()=>buildImageGraph({model,prompt:'Edit the image'}),/image you want to edit/);
   assert.throws(()=>buildImageGraph({model,prompt:'Edit',references:[{file:'../escape.png'}]}),/Upload/);
@@ -24,6 +30,14 @@ for(const model of ['qwen2511','klein9b']){
     assert.equal(graph.kv_cache.class_type,'FluxKVCache');assert.equal(graph.noise.inputs.noise_seed,17);
   }
 }
+// Image LoRAs precede each model's existing optimisations and reach the sampler.
+for(const model of ['flux2','flux3','klein9b','qwen2511','zimage']){
+  const graph=buildImageGraph({model,prompt:'Check',references:IMAGE_MODELS.find(m=>m.id===model).minReferences?[refs[0]]:[],loras:[{name:'face.safetensors',strength:.75}]});
+  assert.deepEqual(graph.custom_image_lora_1.inputs.model,['model',0]);
+  const consumer=model==='qwen2511'?graph.lightning:model==='flux2'||model==='klein9b'?graph.kv_cache:model==='zimage'?graph.sampling:graph.sample;
+  assert.deepEqual(consumer.inputs.model,['custom_image_lora_1',0]);
+}
+assert.throws(()=>buildImageGraph({model:'flux2',prompt:'Check',loras:[{name:'x',strength:3}]}),/strength/);
 // ComfyUI's current COMBO schema and its earlier array schema both resolve.
 const info={};
 for(const m of IMAGE_MODELS)for(const n of Object.values(buildImageGraph({model:m.id,prompt:'Check',references:m.minReferences?[refs[0]]:[]})))info[n.class_type]={input:{required:{}}};

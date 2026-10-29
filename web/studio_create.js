@@ -5,6 +5,8 @@ import {FrameVideoWorkspace} from "./studio_frames.js";
 import {ReferenceVideoWorkspace} from "./studio_references.js";
 import {getPaintoutWorkspace} from "./paintout_studio/paintout_shared.js";
 import {installPopoverDismissal} from "./studio_popovers.js";
+import {PreviewZoom} from "./studio_preview_zoom.js";
+import {OutpaintWorkspace} from "./studio_outpaint.js";
 
 const escape=value=>String(value??"").replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const arrow=()=>'<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12h16m-6-6 6 6-6 6"/></svg>';
@@ -22,6 +24,7 @@ export class CreativeWorkspace {
     this.disposePopovers=installPopoverDismissal(this.root);
     const saved=read();this.items=Array.isArray(saved.items)?saved.items.slice(0,30):[];
     this.job=saved.job||null;this.draft=saved.draft||{};this.models=[];this.submitting=false;this.uploading=false;this.references=Array.isArray(this.draft.references)?this.draft.references:[];
+    this.imageLoras=Array.isArray(this.draft.loras)?this.draft.loras.map(l=>({...l})):[];this.imageLoraCatalog=[];
     const nav=document.createElement("nav");nav.className="zc-nav";nav.setAttribute("aria-label","Workspace");
     nav.innerHTML='<button type="button" data-space="home">Home</button><button type="button" data-space="image">Image</button><button type="button" data-space="video">Video</button>';
     this.root.querySelector(".gs-top").insertBefore(nav,this.root.querySelector(".gs-top-actions"));
@@ -37,6 +40,13 @@ export class CreativeWorkspace {
     const page=document.createElement("section");page.className="zc-image-page";
     page.innerHTML=`<aside class="zc-image-settings"><button id="zc-settings-close" class="zc-mobile-tools" type="button">Done</button><h2>Image settings</h2><label for="zc-model">Model</label><select id="zc-model" disabled><option>Checking installed models…</option></select><p id="zc-model-hint" class="zc-hint"></p><span class="zc-field-label">Shape</span><div class="zc-shapes" role="group" aria-label="Image shape">${Object.keys(IMAGE_SIZES).map(s=>`<button type="button" data-shape="${s}"><span class="zc-shape-icon ${s}" aria-hidden="true"></span>${s[0].toUpperCase()+s.slice(1)}</button>`).join("")}</div><select id="zc-shape" hidden aria-hidden="true" tabindex="-1">${Object.keys(IMAGE_SIZES).map(s=>`<option value="${s}">${s}</option>`).join("")}</select><div class="zc-dimensions"><label for="zc-width">Width (px)<input id="zc-width" type="number" min="256" max="2048" step="16" value="1024"/></label><button id="zc-swap-size" type="button" aria-label="Swap width and height">Swap</button><label for="zc-height">Height (px)<input id="zc-height" type="number" min="256" max="2048" step="16" value="1024"/></label></div><p id="zc-size" class="zc-hint" aria-live="polite"></p><details class="zc-advanced"><summary>More control</summary><label for="zc-seed">Seed</label><input id="zc-seed" type="number" min="0" step="1" value="42"/><label class="zc-check"><input id="zc-random" type="checkbox" checked/> New variation each time</label></details><details class="zc-advanced"><summary>Models & setup</summary><div id="zc-setup"></div><button type="button" id="zc-refresh">Refresh models</button><p class="zc-hint">Tested at 1024px on a 16 GB RTX 4080 with ComfyUI offloading. Other hardware and apps affect speed.</p></details><p class="zc-local">Local generation · No API credits</p></aside><main class="zc-image-main"><div class="zc-image-scroll"><div class="zc-image-heading"><div><h2>Images</h2></div><div class="zc-image-tools"><button type="button" id="zc-settings-toggle" class="zc-mobile-tools" aria-expanded="false">Settings</button><button type="button" id="zc-new">New prompt</button><button type="button" id="zc-clear-history">Clear history</button><button type="button" id="zc-undo-history" hidden>Undo clear</button></div></div><div id="zc-gallery" class="zc-gallery"></div><div id="zc-image-empty" class="zc-image-empty"><svg class="zc-empty-symbol" aria-hidden="true" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="7" y="7" width="34" height="34" rx="6"/><circle cx="18" cy="18" r="3"/><path d="m8 33 10-9 8 7 7-5 8 7"/></svg><h3>Create your first image</h3><p>Add references below, or start with a prompt.</p><div class="zc-suggestions"><button type="button" data-suggestion="A cinematic photograph of a quiet coastal house at blue hour, warm light through the windows, soft mist, natural materials">A cinematic scene</button><button type="button" data-suggestion="Studio product photograph of a sculptural ceramic vase, pale lavender background, soft directional lighting, precise material detail">A product shot</button><button type="button" data-suggestion="An illustrated character sheet of an adventurous botanist wearing a moss green coat, expressive face, warm hand-painted textures, neutral background">A character idea</button></div></div></div><form class="zc-image-composer"><div id="zc-progress" class="zc-progress" hidden><div><strong id="zc-progress-title">Queued</strong><button id="zc-cancel" type="button">Cancel</button></div><progress id="zc-bar" max="100" aria-label="Image generation progress"></progress><small id="zc-progress-detail">Waiting for ComfyUI</small></div><p id="zc-message" role="status" aria-live="polite" hidden></p><section class="zc-references" id="zc-reference-drop" aria-label="Reference images"><div id="zc-reference-list" class="zc-reference-list"></div><div class="zc-reference-toolbar"><button id="zc-add-references" type="button">${plusIcon()} Add reference images</button><button id="zc-clear-references" type="button" hidden>Remove all</button><span id="zc-reference-hint"></span></div><input id="zc-reference-files" type="file" accept="image/png,image/jpeg,image/webp" multiple hidden/></section><label for="zc-prompt">Your prompt</label><textarea id="zc-prompt" rows="3" placeholder="Describe the image you have in mind…" required maxlength="12000"></textarea><div class="zc-composer-bottom"><span id="zc-recipe-label">Local image generation</span><button id="zc-generate" type="submit" class="gs-primary" disabled>Generate image ${arrow()}</button></div></form></main>`;
     this.root.append(page);
+    const imageLoraSettings=document.createElement('details');imageLoraSettings.className='zc-advanced zc-image-loras';imageLoraSettings.id='zc-image-lora-settings';
+    imageLoraSettings.innerHTML='<summary>Image LoRAs</summary><p class="zc-hint">Optional model-only adapters for this image. Video has separate settings.</p><label for="zc-image-lora-picker">Installed LoRA</label><select id="zc-image-lora-picker"><option value="">Open to load installed LoRAs</option></select><button type="button" id="zc-image-lora-add">Add LoRA</button><div id="zc-image-lora-list"></div><p id="zc-image-lora-message" class="zc-hint" role="status"></p>';
+    page.querySelector('.zc-image-settings .zc-advanced').before(imageLoraSettings);
+    imageLoraSettings.addEventListener('toggle',()=>{if(imageLoraSettings.open)this.loadImageLoras();});
+    this.$('image-lora-add').onclick=()=>{const name=this.$('image-lora-picker').value;if(this.job||this.submitting||!name||this.imageLoras.length>=4||this.imageLoras.some(item=>item.name===name))return;this.imageLoras.push({name,strength:1,confirm_unknown:false});this.save();this.renderImageLoras();};
+    this.$('image-lora-list').addEventListener('click',event=>{if(this.job||this.submitting)return;const button=event.target.closest('[data-image-lora-remove]');if(!button)return;this.imageLoras.splice(Number(button.dataset.imageLoraRemove),1);this.save();this.renderImageLoras();});
+    this.$('image-lora-list').addEventListener('change',event=>{if(this.job||this.submitting)return;const input=event.target,index=Number(input.dataset.imageLoraIndex),item=this.imageLoras[index];if(!item)return;if(input.dataset.imageLoraField==='strength')item.strength=Number(input.value);if(input.dataset.imageLoraField==='confirm')item.confirm_unknown=!!input.checked;this.save();this.renderImageLoras();});
     // One action, alongside the prompt, in both workspaces. Existing IDs and
     // handlers remain the source of truth for every approved video route.
     const composer=this.root.querySelector(".gs-composer");
@@ -81,7 +91,7 @@ export class CreativeWorkspace {
     this.$("seed").value=Number.isSafeInteger(this.draft.seed)?this.draft.seed:42;
     this.$("random").checked=this.draft.random!==false;
     this.$("prompt").oninput=()=>{this.save();this.render();};
-    this.$("model").onchange=()=>{this.save();this.render();};
+    this.$("model").onchange=()=>{this.save();this.render();this.renderImageLoras();};
     for(const id of ["width","height"])this.$(id).oninput=()=>{this.save();this.render();};
     for(const key of ['width','height'])editableDimension(this.$(key),()=>{this.imageSizeRatio=Number(this.$('width').value)/Number(this.$('height').value);this.save();this.render();},()=>({step:16,min:256,max:2048}));
     this.$("swap-size").onclick=()=>{const w=this.$("width").value;this.$("width").value=this.$("height").value;this.$("height").value=w;this.save();this.render();};
@@ -123,7 +133,7 @@ export class CreativeWorkspace {
       this.references=item.references||[];this.$("prompt").value=item.prompt;this.$("model").value=item.model;this.$("shape").value=item.shape;
       const size=imageDimensions(item);this.$("width").value=size[0];this.$("height").value=size[1];this.$("seed").value=item.seed;this.$("random").checked=false;this.save();this.render();
     };
-    this.root.querySelector("#gs-exit").onclick=()=>this.mode==="image"?this.graph():this.mode==="frames"?this.frames.graph():this.mode==="references"?this.referencesVideo.graph():this.mode==="paintout"?this.paintout.graph():studio.graphView();
+    this.root.querySelector("#gs-exit").onclick=()=>this.mode==="image"?this.graph():this.mode==="frames"?this.frames.graph():this.mode==="references"?this.referencesVideo.graph():this.mode==="paintout"?this.paintout.graph():this.mode==="outpaint"?this.outpaint.graph():studio.graphView();
     this.api.addEventListener?.("progress",event=>{const d=event.detail;if(!this.job||d.prompt_id!==this.job.id)return;this.$("bar").value=100*d.value/d.max;this.$("progress-title").textContent=`Generating · Step ${d.value} of ${d.max}`;this.$("progress-detail").textContent=this.elapsed();});
     this.api.addEventListener?.("executing",event=>{const d=event.detail;if(!this.job||d.prompt_id!==this.job.id||!d.node)return;const names={text:"Loading text encoder",prompt:"Reading your prompt",model:"Loading image model",sample:"Generating image",decode:"Decoding image",save:"Saving image"};this.$("bar").removeAttribute("value");this.$("progress-title").textContent=names[d.node]||"Preparing image";});
     for(const [id,hint] of [["zc-swap-size","Swap image width and height"],["zc-clear-history","Hide previous images from this workspace. Saved files stay on disk."],["zc-add-references","Upload reference images, or paste an image with Ctrl+V."],["zc-settings-toggle","Choose a model, exact dimensions and seed."],["gs-exit","Open the editable ComfyUI graph with your current media."]]){
@@ -222,7 +232,23 @@ export class CreativeWorkspace {
   }
   $(id){return this.root.querySelector("#zc-"+id);}
   async fetch(path,body){const r=await this.api.fetchApi(path,body===undefined?{}:{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});let data;try{data=await r.json();}catch{if(r.ok)return {};throw new Error("ComfyUI is unavailable. Reconnect and try again.");}if(!r.ok)throw new Error(data.error?.message||data.error||"ComfyUI could not complete this request.");return data;}
-  config(){return {operation:this.imageOperation,model:this.$("model").value||(this.imageOperation==='edit'?'qwen2511':'flux3'),prompt:this.$("prompt").value,shape:this.$("shape").value,references:this.references.map(r=>({...r})),width:Number(this.$("width").value),height:Number(this.$("height").value),seed:Number(this.$("seed").value),random:this.$("random").checked};}
+  imageLoraFamily(){return {flux2:'flux2_klein9b',klein9b:'flux2_klein9b',flux3:'flux3_klein',qwen2511:'qwen2511',zimage:'zimage'}[this.$('model').value]||null;}
+  async loadImageLoras(){try{const data=await this.fetch('/zura/studio/loras');this.imageLoraCatalog=Array.isArray(data.loras)?data.loras:[];this.$('image-lora-message').textContent='';this.renderImageLoras();}catch(error){this.$('image-lora-message').textContent=error.message;}}
+  renderImageLoras(){
+    const picker=this.$('image-lora-picker'),list=this.$('image-lora-list'),family=this.imageLoraFamily(),selected=picker.value;
+    picker.innerHTML='<option value="">Choose an installed LoRA</option>'+this.imageLoraCatalog.map(entry=>{const unusable=!entry.usable||/ic[-_]lora/i.test(entry.name)||entry.metadata_family&&entry.metadata_family!==family;return `<option value="${escape(entry.name)}" ${unusable?'disabled':''}>${escape(entry.name)}${unusable?' · incompatible':''}</option>`;}).join('');
+    picker.value=selected;
+    list.innerHTML=this.imageLoras.map((item,index)=>{const info=this.imageLoraCatalog.find(entry=>entry.name===item.name),unknown=!info?.metadata_family;return `<div class="zc-image-lora-row"><strong>${escape(item.name)}</strong><button type="button" data-image-lora-remove="${index}" aria-label="Remove ${escape(item.name)}">Remove</button><label>Strength<input type="number" min="-2" max="2" step="0.05" value="${escape(item.strength)}" data-image-lora-index="${index}" data-image-lora-field="strength"/></label>${unknown?`<label class="zc-check"><input type="checkbox" data-image-lora-index="${index}" data-image-lora-field="confirm" ${item.confirm_unknown?'checked':''}/> I checked this LoRA matches the selected image model</label>`:''}</div>`;}).join('');
+    this.$('image-lora-add').disabled=!family||this.imageLoras.length>=4||!!this.job||this.submitting;
+    picker.disabled=!!this.job||this.submitting;list.querySelectorAll('input,button').forEach(control=>control.disabled=!!this.job||this.submitting);
+  }
+  async imageGraph(config){
+    if(!config.loras?.length)return buildImageGraph(config);
+    const result=await this.fetch('/zura/studio/image-loras/validate',{model:config.model,loras:config.loras});
+    if(!Array.isArray(result.loras)||result.loras.length!==config.loras.length)throw new Error('Could not validate the selected image LoRAs.');
+    return buildImageGraph({...config,loras:result.loras});
+  }
+  config(){return {operation:this.imageOperation,model:this.$("model").value||(this.imageOperation==='edit'?'qwen2511':'flux2'),prompt:this.$("prompt").value,shape:this.$("shape").value,references:this.references.map(r=>({...r})),loras:this.imageLoras.map(l=>({...l})),width:Number(this.$("width").value),height:Number(this.$("height").value),seed:Number(this.$("seed").value),random:this.$("random").checked};}
   setImageOperation(operation){
     if(this.job||this.submitting||this.uploading)return;
     this.imageOperation=operation;
@@ -241,18 +267,20 @@ export class CreativeWorkspace {
     if(mode==='frames')this.frames??=new FrameVideoWorkspace(this);
     if(mode==='references')this.referencesVideo??=new ReferenceVideoWorkspace(this);
     if(mode==='paintout')this.paintout=getPaintoutWorkspace(this);
+    if(mode==='outpaint')this.outpaint??=new OutpaintWorkspace(this);
     this.videoComposer?.mountWorkflow(mode);
     // Set real visibility as well as the CSS state, so another page cannot
     // cover navigation when the workspace changes or styles are still loading.
-    const pages={'.zc-home':'home','.zc-image-page':'image','.zf-page:not(.zr-page):not(.zp-page)':'frames','.zr-page':'references','.zp-page':'paintout','.gs-workspace':'video','.gs-steps':'video'};
+    const pages={'.zc-home':'home','.zc-image-page':'image','.zf-page:not(.zr-page):not(.zp-page)':'frames','.zr-page':'references','.zp-page':'paintout','.zo-page':'outpaint','.gs-workspace':'video','.gs-steps':'video'};
     for(const child of this.root.children)for(const [selector,space] of Object.entries(pages))if(child.matches(selector))child.hidden=mode!==space;
-    for(const b of this.root.querySelectorAll('.zc-nav [data-space]'))b.setAttribute('aria-current',b.dataset.space===(['frames','references','paintout'].includes(mode)?'video':mode)?'page':'false');
+    for(const b of this.root.querySelectorAll('.zc-nav [data-space]'))b.setAttribute('aria-current',b.dataset.space===(['frames','references','paintout','outpaint'].includes(mode)?'video':mode)?'page':'false');
     this.root.querySelectorAll('video,audio').forEach(m=>m.pause());
     if(mode==='video')this.videoComposer?.sync();
     if(mode==='image'&&!this.models.length)this.loadModels();
     if(mode==='frames')this.frames.open();
     if(mode==='references')this.referencesVideo.open();
     if(mode==='paintout')this.paintout.open();
+    if(mode==='outpaint')this.outpaint.open();
     if(this.job)this.startPolling();
   }
   async loadModels(){
@@ -261,14 +289,50 @@ export class CreativeWorkspace {
       const types=[...new Set(IMAGE_MODELS.flatMap(m=>Object.values(buildImageGraph({model:m.id,prompt:"check",references:m.minReferences?[{file:"availability-check.png"}]:[]})).map(n=>n.class_type)).concat("ReferenceMultiLatent","LoadImage"))];
       const parts=await Promise.all(types.map(t=>this.fetch("/object_info/"+t)));
       this.models=imageAvailability(Object.assign({},...parts));const edit=this.imageOperation==='edit';
+      let available=[];try{available=(await this.fetch('/zura/studio/model-downloads')).models||[];}catch{}
+      const map={flux2:'flux2_klein_9b',flux3:'flux3_klein',klein9b:'flux2_klein_9b'};
+      for(const model of this.models){const pack=available.find(p=>p.id===map[model.id]);for(const file of pack?.files||[])if(file.incomplete){model.ready=false;model.missing.push(`${file.filename} (wrong size)`);}}
       this.$("model").innerHTML=this.models.map(m=>`<option value="${m.id}" ${!!m.edit===edit?'':'hidden'} ${m.ready?"":"disabled"}>${escape(m.name)}${m.ready?"":" · Setup needed"}</option>`).join("");
       this.$("model").value=this.models.find(m=>m.id===this.draft.model&&m.ready&&!!m.edit===edit)?.id||this.models.find(m=>m.ready&&!!m.edit===edit)?.id||"";
-      this.$("setup").innerHTML=this.models.map(m=>`<div class="zc-model-setup"><strong>${escape(m.name)}</strong><p>${m.ready?(m.edit?"Installed · Imported artist recipe; render test pending":"Installed · Native recipe tested on 16 GB"):escape("Missing: "+m.missing.join(", "))}</p><a href="${m.url}" target="_blank" rel="noopener noreferrer">Model files & instructions</a></div>`).join("");
+      this.$("setup").innerHTML=this.models.map(m=>{
+        const pack=available.find(p=>p.id===map[m.id]);
+        const gb=n=>(n/1e9).toFixed(2)+' GB';
+        const files=pack?.files?.map(f=>`${escape(f.filename)} · ${gb(f.size_bytes)}${f.installed?' · installed':f.incomplete?' · existing file has the wrong size; check or move it':''}`).join('<br>')||'';
+        const blocked=pack?.files?.some(f=>f.incomplete);
+        const download=pack&&pack.remaining_bytes?`<p>${files}</p><p>${gb(pack.remaining_bytes)} to download. Sign in and accept the licence if required.</p><a href="${escape(pack.license_url)}" target="_blank" rel="noopener noreferrer">Review licence and access</a> <button type="button" data-download-model="${escape(pack.id)}" ${blocked?'disabled':''}>${blocked?'Check existing files':'Download model'}</button> <button type="button" data-download-cancel="${escape(pack.id)}" hidden>Cancel</button><progress data-download-progress="${escape(pack.id)}" max="100" value="0" hidden></progress><p data-download-status="${escape(pack.id)}" aria-live="polite"></p>`:'';
+        return `<div class="zc-model-setup"><strong>${escape(m.name)}</strong><p>${m.ready?"Installed":escape("Missing: "+m.missing.join(", "))}</p>${download||`<a href="${escape(m.url)}" target="_blank" rel="noopener noreferrer">Model files & instructions</a>`}</div>`;
+      }).join("");
+      this.$('setup').onclick=event=>{const button=event.target.closest('[data-download-model]');if(button)this.startModelDownload(button.dataset.downloadModel);const cancel=event.target.closest('[data-download-cancel]');if(cancel&&this.modelDownloadJob)this.fetch('/zura/studio/model-downloads/'+encodeURIComponent(this.modelDownloadJob)+'/cancel',{}).catch(error=>this.message(error.message));};
     }
     catch(e){this.message(e.message);}finally{this.loading=false;this.render();}
   }
+  async startModelDownload(modelId){
+    const entries=()=>[...this.$('setup').querySelectorAll(`[data-download-status="${modelId}"]`)];
+    const set=text=>entries().forEach(e=>e.textContent=text);
+    if(this.modelDownloadActive){set('A model download is already running.');return;}
+    this.modelDownloadActive=true;
+    try{
+      set('Starting download…');
+      const job=await this.fetch('/zura/studio/model-downloads',{model_id:modelId});
+      if(!job.id)throw new Error('Download could not be started.');
+      this.modelDownloadJob=job.id;
+      this.$('setup').querySelectorAll(`[data-download-cancel="${modelId}"],[data-download-progress="${modelId}"]`).forEach(e=>e.hidden=false);
+      for(;;){
+        const status=await this.fetch('/zura/studio/model-downloads/'+encodeURIComponent(job.id));
+        if(status.phase==='failed')throw new Error(status.error||'Download failed.');
+        if(status.phase==='cancelled'){set('Download cancelled.');break;}
+        if(status.phase==='done'){set('Installed. Refreshing models…');await this.loadModels();break;}
+        const percent=status.total_bytes?Math.min(100,Math.floor(100*status.done_bytes/status.total_bytes)):0;
+        this.$('setup').querySelectorAll(`[data-download-progress="${modelId}"]`).forEach(e=>e.value=percent);
+        set(`Downloading ${status.current_file||'model'} · ${percent}%`);
+        await new Promise(resolve=>setTimeout(resolve,1000));
+      }
+    }catch(error){set(error.message||'Download failed.');}
+    finally{this.modelDownloadActive=false;this.modelDownloadJob=null;this.$('setup').querySelectorAll(`[data-download-cancel="${modelId}"]`).forEach(e=>e.hidden=true);}
+  }
   render(){
     this.styleControls();
+    if(this.$('image-lora-settings').open)this.renderImageLoras();
     const c=this.config(),m=this.models.find(m=>m.id===c.model),busy=!!this.job||this.submitting||this.uploading;
     let size,error;try{size=imageDimensions(c);}catch(e){error=e.message;}
     this.$("generate").disabled=busy||!m?.ready||!c.prompt.trim()||!!error||this.references.length<(m?.minReferences||0)||this.references.length>(m?.maxReferences||0)||!!this.references.length&&!m?.referenceReady;this.$("generate").firstChild.textContent=busy?"Generating… ":this.imageOperation==='edit'?"Apply edit ":"Generate image ";
@@ -298,9 +362,12 @@ export class CreativeWorkspace {
     for(const b of this.root.querySelectorAll("[data-shape]")){b.setAttribute("aria-pressed",String(!!size&&IMAGE_SIZES[b.dataset.shape].every((v,i)=>v===size[i])));b.disabled=busy;}
   }
   renderGallery(){
+    this.imageZoom?.dispose();this.imageZoom=null;
     this.$("image-empty").hidden=!!this.items.length;
     this.selectedImage=Math.min(this.selectedImage||0,Math.max(0,this.items.length-1));
     this.$("gallery").innerHTML=this.items.map((item,i)=>i!==this.selectedImage?'':`<figure><a href="${escape(this.api.apiURL(view(item.file)))}" target="_blank" rel="noopener"><img src="${escape(this.api.apiURL(view(item.file)))}" alt="${escape(item.prompt)}"/></a><figcaption><span>${escape(IMAGE_MODELS.find(m=>m.id===item.model)?.name||item.model)}${item.seconds?` · ${Math.round(item.seconds)}s`:""}</span><div><button type="button" data-reuse="${i}">Reuse prompt</button><a href="${escape(this.api.apiURL(view(item.file)))}" download="${escape(item.file.filename)}">Download</a></div></figcaption></figure>`).join("");
+    const frame=this.$("gallery").querySelector('figure');
+    if(frame && typeof PreviewZoom!=="undefined"){this.imageZoom=new PreviewZoom(frame,()=>frame.querySelector('a>img'));this.imageZoom.update(String(this.selectedImage));}
     this.$('image-history').innerHTML=this.items.map((item,i)=>`<button type="button" data-view-image="${i}" aria-pressed="${i===this.selectedImage}"><img src="${escape(this.api.apiURL(view(item.file)))}" alt="" loading="lazy"/><span>${escape(item.prompt)}</span></button>`).join('')||'<p>No saved images yet.</p>';
   }
   async pasteReferences(event){
@@ -346,7 +413,7 @@ export class CreativeWorkspace {
     if(['width','height'].some(k=>this.$(k).commitDimension?.()===false)){this.message('Enter a whole number for width and height.');return;}
     if(this.job||this.submitting||this.uploading)return;
     this.submitting=true;this.message("");this.render();
-    try{const c=this.config();if(!this.models.find(m=>m.id===c.model)?.ready)throw new Error("Install this model first, then refresh models.");if(c.random)c.seed=crypto.getRandomValues(new Uint32Array(1))[0];const graph=buildImageGraph(c);this.$("bar").removeAttribute("value");this.$("progress-title").textContent="Submitting image";const result=await this.fetch("/prompt",{prompt:graph,client_id:this.api.clientId,extra_data:{zura_image:true}});if(!result.prompt_id)throw new Error("ComfyUI did not confirm this run. Check the queue before retrying.");this.job={id:result.prompt_id,started:Date.now(),config:c};this.$("progress-title").textContent="Queued";this.save();this.startPolling();}
+    try{const c=this.config();if(!this.models.find(m=>m.id===c.model)?.ready)throw new Error("Install this model first, then refresh models.");if(c.random)c.seed=crypto.getRandomValues(new Uint32Array(1))[0];const graph=await this.imageGraph(c);this.$("bar").removeAttribute("value");this.$("progress-title").textContent="Submitting image";const result=await this.fetch("/prompt",{prompt:graph,client_id:this.api.clientId,extra_data:{zura_image:true}});if(!result.prompt_id)throw new Error("ComfyUI did not confirm this run. Check the queue before retrying.");this.job={id:result.prompt_id,started:Date.now(),config:c};this.$("progress-title").textContent="Queued";this.save();this.startPolling();}
     catch(e){this.message(e.message);}finally{this.submitting=false;this.render();}
   }
   startPolling(){if(this.timer)return;this.timer=setInterval(()=>this.poll(),1500);this.poll();}
@@ -363,8 +430,8 @@ export class CreativeWorkspace {
   }
   async cancel(){if(!this.job)return;try{const id=this.job.id;await this.fetch("/queue",{delete:[id]});await this.fetch("/interrupt",{prompt_id:id});this.message("Cancellation requested.");await this.poll();}catch(e){this.message(e.message);}}
   stopPolling(){clearInterval(this.timer);this.timer=null;}
-  close(){this.save();this.stopPolling();this.frames?.close();this.referencesVideo?.close();if(this.paintout?.owner===this)this.paintout.close();this.disposePopovers?.();}
+  close(){this.save();this.stopPolling();this.imageZoom?.dispose();this.frames?.close();this.referencesVideo?.close();this.outpaint?.dispose();if(this.paintout?.owner===this)this.paintout.close();this.disposePopovers?.();}
   async graph(){
-    try{const graph=buildImageGraph(this.job?.config||this.config());if(typeof this.app.loadApiJson!=="function")throw new Error("Update ComfyUI to open this image graph.");const original=(this.app.rootGraph||this.app.graph)?.serialize?.();if(!original)throw new Error("Your current graph could not be backed up.");try{await this.app.loadApiJson(graph,"Zura Image · "+Date.now()+".json");}catch(e){await this.app.loadGraphData(original);throw e;}this.studio.close();}catch(e){this.message(e.message);}
+    try{const graph=await this.imageGraph(this.job?.config||this.config());if(typeof this.app.loadApiJson!=="function")throw new Error("Update ComfyUI to open this image graph.");const original=(this.app.rootGraph||this.app.graph)?.serialize?.();if(!original)throw new Error("Your current graph could not be backed up.");try{await this.app.loadApiJson(graph,"Zura Image · "+Date.now()+".json");}catch(e){await this.app.loadGraphData(original);throw e;}this.studio.close();}catch(e){this.message(e.message);}
   }
 }

@@ -10,9 +10,12 @@ import { ShotComparison } from "./studio_compare.js";
 import { ClipTrimmer } from "./studio_trim.js";
 import { CreativeWorkspace } from "./studio_create.js";
 import { installNativeSamplePreview } from "./studio_live_preview.js";
+import { StudioModelDownloads } from "./studio_model_download.js";
+import { PreviewZoom } from "./studio_preview_zoom.js";
+import { HDRSourceTool } from "./studio_hdr.js";
 
 const ROOT = "/zura/studio";
-const defaults = {h3_character_method:"openjutsu",openjutsu_resolution:"480",openjutsu_background:"keep",openjutsu_direct:true,engine:"h3", relight_engine:"h3", background:"keep", scope:"person", prompt:"", image_prompt:"", start:0, duration:2, size:512, performer:-1, margin:20, pitch:false, seed:42, render_size:0, h3_head_swap:false, h3_preset:"take_fast", h3_steps:0, h3_attention:"native", remove_text:false, resolution:1280, delivery_mode:"native", quality:"fast", audio_id:"", audio_start:0, length_mode:"custom", lip_sync:false, refine_lips:false, workflow_mode:"swap", preserve_people:false, preserve_identity:false, edit_area:"mask", mask_method:"auto", mask_prompt:"person", mask_points:[],subject_mode:"people",finished_frame_position:"first",finished_frame_number:1};
+const defaults = {custom_loras:[],h3_character_method:"openjutsu",openjutsu_resolution:"480",openjutsu_background:"keep",openjutsu_direct:true,engine:"h3", relight_engine:"h3", background:"keep", scope:"person", prompt:"", image_prompt:"", start:0, duration:2, size:512, performer:-1, margin:20, pitch:false, seed:42, render_size:0, h3_head_swap:false, h3_preset:"take_fast", h3_steps:0, h3_attention:"native", remove_text:false, resolution:1280, delivery_mode:"native", quality:"fast", audio_id:"", audio_start:0, length_mode:"custom", lip_sync:false, refine_lips:false, workflow_mode:"swap", preserve_people:false, preserve_identity:false, edit_area:"mask", mask_method:"auto", mask_prompt:"person", mask_points:[],subject_mode:"people",finished_frame_position:"first",finished_frame_number:1};
 // Keep saved experimental projects readable without silently converting their recipe.
 function verifiedSetup(c={}) {
   if(c.engine==="h3" && c.workflow_mode==="swap" && c.h3_character_method==="openjutsu")return c.scope==="person" && c.mask_method==="auto" && c.edit_area===(c.openjutsu_background==="replace"?"scene":"mask") && !["audio_id","lip_sync","refine_lips","preserve_people","remove_text","h3_head_swap"].some(k=>c[k]);
@@ -142,6 +145,7 @@ class ArtistStudio {
             <p class="gs-note">Upload an existing voice track or use Create a voice track. The video model uses that audio to guide the face; voice cloning is a separate step.</p>
           <a href="https://github.com/ZURAVFX/ComfyUI_zura_nodes/blob/main/INSTALL_STUDIO.md" target="_blank" rel="noopener noreferrer">Installation guide</a>
           <details class="gs-advanced"><summary>Installed files & nodes</summary><div class="gs-advanced-body" id="gs-model-checklist"></div></details>
+          <details class="gs-advanced" id="gs-model-downloads"></details>
           </div></details>
         </fieldset>
         <div id="gs-video-options"><div class="gs-two"><label id="gs-quality-setting"><span class="gs-label">Resolution</span><select id="gs-resolution"><option value="512">512 px · small test</option><option value="768">768 px</option><option value="1280">720p · HD</option><option value="1920">1080p · Full HD</option><option value="1920-enhanced">1080p · Enhanced after H3</option></select></label>
@@ -157,6 +161,7 @@ class ArtistStudio {
           <label id="gs-openjutsu-setting" hidden><span class="gs-label">H3 character method</span><select id="gs-h3_character_method"><option value="openjutsu">OpenJutsu · recommended</option><option value="control">Legacy H3 · dubbing & special controls</option></select><small>One person, one reference sheet, original audio. Native H3 masked replacement at 8 steps. Choose Legacy H3 for replacement speech.</small></label>
           <label id="gs-openjutsu-resolution-setting" hidden><span class="gs-label">OpenJutsu size</span><select id="gs-openjutsu_resolution"><option value="480">480 tier · recommended on 16 GB</option><option value="768">768 tier · slower, more memory</option></select><small>Follows the source shape on the model grid. Five seconds measured about 4 minutes at 480, or 10 minutes at 768 on this RTX 4080. Loading and references affect time.</small></label>
           <label id="gs-h3-attention-setting" hidden><span class="gs-label">H3 attention</span><select id="gs-h3_attention"><option value="native">Native · default</option><option value="kitchen" disabled>Comfy Kitchen</option><option value="sage_sol" disabled>Sage + Sol · experimental</option></select><small id="gs-h3-attention-note">Choose an installed sampling backend.</small></label>
+          <details id="gs-lora-settings" class="gs-advanced gs-custom-loras"><summary>Custom video LoRAs</summary><div class="gs-advanced-body"><p class="gs-note" id="gs-lora-note">Select installed model-only LoRAs for video generation. Starting images use their own model.</p><label><span class="gs-label">Installed LoRA</span><select id="gs-lora-picker"><option value="">Open to load installed LoRAs</option></select></label><button type="button" id="gs-lora-add" class="gs-quiet">Add LoRA</button><div id="gs-lora-list"></div></div></details>
           <label><span class="gs-label">Subject guidance</span><select id="gs-subject_mode"><option value="auto">Auto · detect from video</option><option value="people">People</option><option value="objects">Objects & scenery</option></select><small>Each model uses its own motion guidance.</small></label>
           <label id="gs-audio-start-setting" hidden><span class="gs-label">Reference audio start (seconds)</span><input id="gs-audio_start" type="number" min="0" max="86400" step="0.1" value="0"/><small>Aligned to the start of your selected clip. Shorter tracks are padded with silence.</small></label>
           <label id="gs-refine-lips-setting" class="gs-checkbox" hidden><input id="gs-refine_lips" type="checkbox"/><span>Refine lips after generation<small>Optional local mouth correction after the model's own speech method. It can soften detail or change the expression.</small></span></label>
@@ -197,6 +202,8 @@ class ArtistStudio {
         </div><footer class="gs-composer" aria-label="Prompt and source range"><div id="gs-trim-controls"></div><section id="gs-trimmer" hidden aria-label="Source video trim timeline"></section><details id="gs-trim-precision" class="gs-advanced" hidden><summary>Precise timing</summary><div class="gs-two"></div></details><div id="gs-prompt-stage" class="gs-prompt-stage" aria-label="Current generation stage"><strong id="gs-prompt-heading"></strong><button id="gs-edit-frame" type="button" hidden>Edit image</button><button id="gs-keep-frame" type="button" hidden>Keep current image</button></div><div id="gs-prompt-composer"></div></footer>
       </main></div>`;
     if(this.container.querySelector){
+      if(typeof StudioModelDownloads!=="undefined")this.modelDownloads=new StudioModelDownloads(this.$("model-downloads"),request,async()=>{this.modelStatus=await request("/status");this.syncForm();this.render();});
+      if(typeof HDRSourceTool!=="undefined")this.hdrTool=new HDRSourceTool(this.container.querySelector('.gs-settings'),api,()=>({id:this.source?.id,projectId:this.project?.id,busy:this.busy||this.project?.phase==='working'}));
       const clip=this.container.querySelector(".gs-clip-length");
       this.$("trim-controls").appendChild(clip);
       this.$("trim-precision").querySelector(".gs-two").append(this.$("trim-start"),this.$("duration-setting"));
@@ -206,9 +213,12 @@ class ArtistStudio {
       this.$("canvas").onfullscreenchange=()=>this.updateFullscreenLabel();
       this.trimTimeline=new ClipTrimmer(this.$("trimmer"),{onCommit:range=>this.setTrim(range),onSeek:time=>this.seekSource(time)});
       const player=this.$("player");
-      player.addEventListener("timeupdate",()=>{if(this.lastVideo===this.source?.url){this.trimTimeline.setPlayhead(player.currentTime);if(!player.paused && player.currentTime>=this.trimTimeline.range.end)player.pause();}});
-      player.addEventListener("play",()=>{if(this.lastVideo===this.source?.url){const {start,end}=this.trimTimeline.range;if(player.currentTime<start || player.currentTime>=end)player.currentTime=start;}});
-      player.addEventListener("loadedmetadata",()=>{if(this.lastVideo===this.source?.url)player.currentTime=Math.min(this.trimSeekTime ?? this.trimTimeline.range.start,Math.max(0,this.source.duration-.001));});
+      if(typeof PreviewZoom!=="undefined"){
+        this.previewZoom=new PreviewZoom(this.$("canvas"),()=>!player.hidden?player:!this.$("opening").hidden?this.$("opening"):null);
+      }
+      player.addEventListener("timeupdate",()=>{if(this.lastVideo===this.sourcePlayback()){this.trimTimeline.setPlayhead(player.currentTime);if(!player.paused && player.currentTime>=this.trimTimeline.range.end)player.pause();}});
+      player.addEventListener("play",()=>{if(this.lastVideo===this.sourcePlayback()){const {start,end}=this.trimTimeline.range;if(player.currentTime<start || player.currentTime>=end)player.currentTime=start;}});
+      player.addEventListener("loadedmetadata",()=>{if(this.lastVideo===this.sourcePlayback())player.currentTime=Math.min(this.trimSeekTime ?? this.trimTimeline.range.start,Math.max(0,this.source.duration-.001));});
     }
     this.liveSampleAction=null;this.liveSampleData=null;
     this.connectNativePreview();
@@ -217,7 +227,7 @@ class ArtistStudio {
     if(typeof CreativeWorkspace!=="undefined")this.creative=new CreativeWorkspace(this,api,app);
   }
   comparisonTarget(url) {
-    const p=this.project,source=p?.selected_url || this.source?.url;
+    const p=this.project,source=p?.selected_url || this.sourcePlayback();
     if(!p || !source || p.phase==="working")return null;
     const image=!url && !!p.opening_url && (this.composerStage()!=="video" || this.preview==="look" || !p.results?.length);
     const result=url || (image?p.opening_url:p.results?.at(-1)?.url);
@@ -372,6 +382,7 @@ class ArtistStudio {
     const el=this.$("message"); el.hidden=!text; el.textContent=text || "";
     el.classList.toggle("is-error", error);
   }
+  sourcePlayback(){return this.source?.preview_file ? (this.source.preview_url || null) : this.source?.url;}
   readConfig() {
     const c={...this.config};
     c.camera_preset=this.$("camera_preset")?.value ?? c.camera_preset ?? "Left three-quarter";
@@ -443,6 +454,10 @@ class ArtistStudio {
       this.$(this.config.workflow_mode==="camera"?"camera_prompt":"image_prompt").focus({preventScroll:true});
   }
   bind() {
+    this.$("lora-settings").addEventListener("toggle",()=>{if(this.$("lora-settings").open && !this.loraCatalog)this.loadCustomLoras();});
+    this.$("lora-add").onclick=()=>{const name=this.$("lora-picker").value;if(!name)return;const entries=this.config.custom_loras||[];if(entries.length>=4 || entries.some(item=>item.name===name))return;this.saveCustomLoras([...entries,{name,strength:1,confirm_unknown:false}]);};
+    this.$("lora-list").addEventListener("click",event=>{const button=event.target.closest("[data-lora-remove]");if(!button)return;const entries=[...(this.config.custom_loras||[])];entries.splice(Number(button.dataset.loraRemove),1);this.saveCustomLoras(entries);});
+    this.$("lora-list").addEventListener("change",event=>{const input=event.target,index=Number(input.dataset.loraIndex);if(!Number.isInteger(index))return;const entries=(this.config.custom_loras||[]).map(item=>({...item}));if(!entries[index])return;if(input.dataset.loraField==="strength")entries[index].strength=Number(input.value);if(input.dataset.loraField==="confirm")entries[index].confirm_unknown=!!input.checked;this.saveCustomLoras(entries);});
     this.$("edit-frame").onclick=()=>this.editStartingFrame();
     this.$("keep-frame").onclick=()=>{this.promptStage="review";this.render();};
     this.container.addEventListener("keydown",event=>{if(event.key==="Escape"){this.$("canvas").classList.remove("is-expanded");this.updateFullscreenLabel();}});
@@ -542,7 +557,7 @@ class ArtistStudio {
       });
     };
     this.container.querySelectorAll("select,textarea,input:not([type=file])").forEach(input=>{
-      if(input.id==="gs-head-replacement"||input.name==="gs-look"||input.id==="gs-image_prompt"||input.id==="gs-camera_prompt"||input.id==="gs-graph-stage"||input.id.startsWith("gs-voice-"))return;
+      if(input.id==="gs-head-replacement"||input.name==="gs-look"||input.id==="gs-image_prompt"||input.id==="gs-camera_prompt"||input.id==="gs-graph-stage"||input.id.startsWith("gs-voice-")||input.id.startsWith("gs-lora-"))return;
       input.addEventListener("change",()=>input.id==="gs-prompt" && this.config.workflow_mode==="relight"?this.render():this.perform(async(epoch)=>{
         if(input.id==="gs-audio-mode"){
           this.pendingReference=input.value==="reference" && !this.audio;
@@ -616,7 +631,8 @@ class ArtistStudio {
     });
     const config=this.readConfig(),start=config.length_mode==="original"?0:config.start;
     try {
-      await wait("loadeddata",()=>{video.src=this.source.url;video.load();});
+      if(!this.sourcePlayback())throw new Error("The playback preview is still being prepared. Try selecting the frame again shortly.");
+      await wait("loadeddata",()=>{video.src=this.sourcePlayback();video.load();});
       if(epoch!==this.resetEpoch)return;
       if(start>=video.duration)throw new Error("Choose a start inside your source clip before selecting points.");
       if(start>0)await wait("seeked",()=>{video.currentTime=start;});
@@ -1032,6 +1048,18 @@ class ArtistStudio {
     this.$("openjutsu-background-setting").hidden=!canTest || this.config.h3_character_method!=="openjutsu";
     this.$("openjutsu-resolution-setting").hidden=!canTest || this.config.h3_character_method!=="openjutsu";
     this.container.querySelectorAll('input[name="gs-look"]').forEach(input=>input.checked=input.value===(this.directViewport()?"direct":this.lookMode));
+    this.renderCustomLoras();
+  }
+  customLoraFamily(){if(this.config.workflow_mode==="relight"&&this.config.relight_engine==="wan21")return "wan21";if(this.config.engine==="h3")return this.config.delivery_mode==="enhanced1080"?null:"h3";if(this.config.engine==="wan"&&this.config.lip_sync)return null;if(this.config.engine==="local"&&this.config.edit_area==="scene")return "ltx25";return ({wan:"wan22",wan2:"wan_animate2"})[this.config.engine]||null;}
+  async loadCustomLoras(){try{const data=await request("/loras");this.loraCatalog=data.loras||[];this.renderCustomLoras();}catch(error){this.message(error.message,true);}}
+  saveCustomLoras(entries){this.perform(async epoch=>{const config={...this.readConfig(),custom_loras:entries};if(this.project){const id=this.project.id,updated=await request(`/projects/${id}/config`,this.configBody(config));if(epoch!==this.resetEpoch||this.project?.id!==id)return;this.project=updated;}this.config=config;this.renderCustomLoras();});}
+  renderCustomLoras(){
+    const picker=this.$("lora-picker"),list=this.$("lora-list"),note=this.$("lora-note");if(!picker||!list||!note)return;
+    const entries=this.config.custom_loras||[],family=this.customLoraFamily(),busy=this.busy||this.project?.phase==="working",selected=picker.value;
+    note.textContent=family?"For video only. Choose a LoRA trained for this model; unknown metadata requires your confirmation. Results and speed may change.":"Custom LoRAs aren't available for this video route yet. Remove any selected LoRAs before generating.";
+    picker.innerHTML='<option value="">'+(this.loraCatalog?"Choose an installed LoRA":"Open to load installed LoRAs")+'</option>'+(this.loraCatalog||[]).map(item=>`<option value="${escape(item.name)}" ${!item.usable || item.metadata_family&&item.metadata_family!==family?'disabled':''}>${escape(item.name)}${item.error?' · unavailable':item.metadata_family?' · '+escape(item.metadata_family):' · check model'}</option>`).join('');
+    picker.value=selected;picker.disabled=busy||!family;this.$("lora-add").disabled=busy||!family||entries.length>=4;
+    list.innerHTML=entries.map((item,index)=>{const info=this.loraCatalog?.find(candidate=>candidate.name===item.name),unknown=!info?.metadata_family;return `<div class="gs-custom-lora-row"><div><strong>${escape(item.name)}</strong><button type="button" class="gs-quiet" data-lora-remove="${index}" aria-label="Remove ${escape(item.name)}" ${busy?'disabled':''}>Remove</button></div><label><span class="gs-label">Strength</span><input type="number" min="-2" max="2" step="0.05" value="${escape(item.strength)}" data-lora-field="strength" data-lora-index="${index}" ${busy?'disabled':''}/></label>${unknown?`<label class="gs-checkbox"><input type="checkbox" data-lora-field="confirm" data-lora-index="${index}" ${item.confirm_unknown?'checked':''} ${busy?'disabled':''}/><span>I checked this LoRA matches the video model.</span></label>`:''}</div>`;}).join('');
   }
   syncAttentionBackend() {
     const select=this.$("h3_attention"),setting=this.$("h3-attention-setting"),note=this.$("h3-attention-note");
@@ -1152,7 +1180,7 @@ class ArtistStudio {
     this.$("prompt").setAttribute("aria-label","Video direction");
     this.$("image_prompt").setAttribute("aria-label","Starting image direction");
     const info=clipLength(this.config,this.source?.duration);
-    this.trimTimeline?.update(this.source,this.config,{disabled:this.busy||working,maximum:info.maximum});
+    this.trimTimeline?.update(this.source?{...this.source,url:this.sourcePlayback()}:null,this.config,{disabled:this.busy||working,maximum:info.maximum});
     this.$("trim-controls").hidden=!this.source;
     this.$("trim-precision").hidden=!this.source || this.config.length_mode==="original";
     if(review && !working && !this.busy){
@@ -1348,6 +1376,7 @@ class ArtistStudio {
       reference?"Choose an audio file, extract audio from a video, or create a voice track below.":"Follows the original facial performance and keeps the video's audio. Silent videos work too.";
     if(preservePeople)this.$("audio-note").textContent=activeReference?"Uses your track as the soundtrack. People keep their original facial performance.":"Keeps the original audio and facial performance. You can replace the soundtrack.";
     const p=this.project,working=p?.phase==="working",phase=p?.phase || "new";
+    const loraLocked=working||this.busy;this.$("lora-picker").disabled=loraLocked||!this.customLoraFamily();this.$("lora-add").disabled=loraLocked||!this.customLoraFamily()||(this.config.custom_loras||[]).length>=4;this.$("lora-list").querySelectorAll("input,button").forEach(control=>control.disabled=loraLocked);
     this.$("duration-setting").hidden=this.config.length_mode==="original";
     const originalOption=this.$("length_mode").querySelector('option[value="original"]');
     originalOption.textContent="Use source"+(this.source?.duration?` (${Number(this.source.duration).toFixed(2)}s)`:"");
@@ -1493,15 +1522,16 @@ class ArtistStudio {
     for(const view of ["mask","guide"])this.$("preview-tabs").querySelector(`[data-view="${view}"]`).hidden=workflow==="camera";
     this.$("preview-tabs").querySelector('[data-view="look"]').hidden=!p?.opening_input;
     this.$("preview-tabs").querySelectorAll("button").forEach(b=>b.classList.toggle("active",b.dataset.view===this.preview));
-    let video=this.source?.url,opening=null,title=this.source?"Your source video":"Create a new look",description=this.source?"Video loaded. Choose what changes and add your starting look.":"Start with footage or a viewport render.";
-    if(p?.review){video=({mask:p.mask_url,guide:p.guide_url||p.selected_url,source:p.selected_url})[this.preview] || p.selected_url || this.source?.url;title="Check the selection";description=wholeScene?"The whole frame is selected. Review the source movement and framing before creating the look.":this.config.remove_text?"Watch the full clip. The orange mask should cover the selected area and all titles and subtitles you want removed.":"Watch the full clip. Make sure the orange mask covers the selected area throughout the shot.";}
+    let video=this.sourcePlayback(),opening=null,title=this.source?"Your source video":"Create a new look",description=this.source?"Video loaded. Choose what changes and add your starting look.":"Start with footage or a viewport render.";
+    if(this.source?.preview_file && !video){opening=this.source.thumbnail_url || null;description=this.source.preview_status==="error"?"Playback preview could not be prepared. The original video is still available for generation.":"Preparing a playback preview. Your original video is ready to use.";}
+    if(p?.review){opening=null;video=({mask:p.mask_url,guide:p.guide_url||p.selected_url,source:p.selected_url})[this.preview] || p.selected_url || this.sourcePlayback();title="Check the selection";description=wholeScene?"The whole frame is selected. Review the source movement and framing before creating the look.":this.config.remove_text?"Watch the full clip. The orange mask should cover the selected area and all titles and subtitles you want removed.":"Watch the full clip. Make sure the orange mask covers the selected area throughout the shot.";}
     if(p?.review && preservePeople){title="Review the surroundings";description="The orange area will change. People should stay outside the mask throughout the clip.";}
     if(p?.review && relight){title="Review the source";description="Keep this composition and performance. Next, create a lighting frame to review.";}
     if(p?.review && !wholeScene && p.tracking_coverage?.cut_reselection_requires_review)description+=" Check that the correct person or object stays selected after each camera cut.";
     if(p?.review && !wholeScene && p.tracking_coverage?.near_empty_frames)description+=" The selection is missing in part of the clip. Check whether the subject has left the picture or the mask needs correcting.";
     if(p?.opening_url && this.preview==="look" && (!["done","draft"].includes(phase) || this.composerStage()!=="video")){opening=p.opening_url;video=null;title=working?"Your approved starting frame":this.lookMode==="ready"?"Review your finished frame":"Review your starting frame";description=relight?"Check the lighting. Subjects, objects and composition should match the source.":"Check the appearance and framing before animation.";if(relight)title=working?"Your approved lighting frame":"Review your lighting frame";}
     if(this.preview==="original" && this.composerStage()==="image" && this.source){
-      video=this.source.url;opening=null;title="Original footage";
+      video=this.sourcePlayback();opening=video?null:this.source.thumbnail_url;title="Original footage";
       description="Regenerate the selected starting frame from this source, using your references and revised prompt.";
     }
     if((phase==="draft" || phase==="done") && p.results?.length && this.composerStage()==="video"){video=p.results.at(-1).url;title=phase==="draft"?"Review your draft":"Your finished take";description="The selected soundtrack is restored. Watch the entire take before keeping it.";}
@@ -1509,8 +1539,9 @@ class ArtistStudio {
       if(phase==="opening"&&this.preview==="look"){title="Review your camera still";description="Check the angle, identity and framing before generating video.";}
       else if(phase==="done"){description="Check the middle and end for camera drift and motion changes. The original audio is restored.";}
     }
-    if(this.trimSeeking && this.source){video=this.source.url;opening=null;title="Trim your source";description="Drag the edges to choose the range. Click the strip to find a frame.";}
+    if(this.trimSeeking && this.source){video=this.sourcePlayback();opening=video?null:this.source.thumbnail_url;title="Trim your source";description=video?"Drag the edges to choose the range. Click the strip to find a frame.":"Preparing a playback preview.";}
     this.$("preview-title").textContent=title;this.$("preview-description").textContent=description;
+    if(this.hdrTool)this.hdrTool.root.hidden=this.config.engine!=="local";
     const player=this.$("player"),image=this.$("opening");player.hidden=!video;image.hidden=!opening;
     image.alt=workflow==="camera"?"Changed camera view":"Starting frame for this shot";
     const expand=this.$("preview-fullscreen");if(expand)expand.hidden=!video&&!opening;
@@ -1518,6 +1549,7 @@ class ArtistStudio {
     if(video && video!==this.lastVideo){player.src=video;player.load();this.lastVideo=video;}
     if(!video && this.lastVideo){player.pause();player.removeAttribute("src");player.load();this.lastVideo=null;}
     if(opening && image.getAttribute("src")!==opening)image.src=opening;
+    this.previewZoom?.update(video||opening||"");
     this.$("empty").hidden=!!video || !!opening;
     const target=this.comparisonTarget(this.compareActive&&this.compareKind==="video"?this.compareResult:undefined),canCompare=!!target;
     this.$("compare-toggle").hidden=!canCompare;
@@ -1616,6 +1648,19 @@ class ArtistStudio {
     this.$("model-checklist").innerHTML=engine==="seedance"?'<p class="gs-note">Uses the paid provider. Check credits and cost before rendering.</p>':files.map(item=>`<p class="gs-note">${item.ready?"Ready":"Missing"}: <code>${escape(item.path||`models/${item.folder}/${item.filename}`)}</code>${!item.ready&&item.url?` · <a href="${escape(item.url)}" target="_blank" rel="noopener noreferrer">Download</a>`:""}</p>`).join("")+(missingNodes.length?`<p class="gs-note">Missing nodes: ${missingNodes.map(escape).join(", ")}. Install the matching packs listed in the setup guide, then restart ComfyUI.</p>`:"<p class=\"gs-note\">Required native node checks passed. Optional speech or enhancement has its own setup.</p>");
   }
   async poll() {
+    if(this.container.isConnected && this.source?.preview_file && !this.source.preview_url && this.source.preview_status!=="error" && !this.previewPolling){
+      const identity=this.source.id,epoch=this.resetEpoch;this.previewPolling=true;
+      try{
+        const state=await request(`/assets/${identity}/preview`);
+        if(epoch===this.resetEpoch && this.source?.id===identity){
+          this.source.preview_status=state.preview_status;
+          if(state.preview_url)this.source.preview_url=api.apiURL(state.preview_url);
+          if(state.preview_status==="error")this.message(state.preview_error,true);
+          this.render();
+        }
+      }catch{/* Keep the poster visible and retry after a connection interruption. */}
+      finally{this.previewPolling=false;}
+    }
     if(this.container.isConnected&&!this.busy&&!this.voicePolling){
       const identity=this.voiceJob?.id||localStorage.getItem("zura-studio-voice-job");
       if(identity){
@@ -1642,7 +1687,7 @@ class ArtistStudio {
     }catch(e){if(epoch===this.resetEpoch)this.message("Connection interrupted. Your job is saved. Reopen this view when ComfyUI reconnects.",true);}
     finally{if(epoch===this.resetEpoch)this.polling=false;}
   }
-  close(){this.nativeSamplePreview?.dispose();this.nativeSamplePreview=null;this.creative?.close();this.comparison?.hide();this.trimTimeline?.close();this.$("canvas").classList.remove("is-expanded");if(document.fullscreenElement===this.$("canvas"))document.exitFullscreen?.().catch(()=>{});this.container.querySelectorAll("video,audio").forEach(media=>media.pause());this.container.remove();document.documentElement.classList.remove("genj-open");clearInterval(this.timer);}
+  close(){this.nativeSamplePreview?.dispose();this.nativeSamplePreview=null;this.previewZoom?.dispose();this.hdrTool?.close();this.creative?.close();this.comparison?.hide();this.trimTimeline?.close();this.$("canvas").classList.remove("is-expanded");if(document.fullscreenElement===this.$("canvas"))document.exitFullscreen?.().catch(()=>{});this.container.querySelectorAll("video,audio").forEach(media=>media.pause());this.container.remove();document.documentElement.classList.remove("genj-open");clearInterval(this.timer);}
 }
 
 let registeredStudio;
@@ -1665,7 +1710,7 @@ app.registerExtension({
     installArtistLinkRendering(app);
     const css=document.createElement("link");css.rel="stylesheet";css.href=new URL("./studio.css",import.meta.url).href;document.head.appendChild(css);
     for(const path of ["./vendor/studio-components.css","./studio_components.css"]){const link=document.createElement("link");link.rel="stylesheet";link.href=new URL(path,import.meta.url).href;document.head.appendChild(link);}
-    for(const path of ["./studio_create.css","./studio_composer.css","./paintout_studio/paintout_integrated.css"]){const link=document.createElement("link");link.rel="stylesheet";link.href=new URL(path,import.meta.url).href;document.head.appendChild(link);}
+    for(const path of ["./studio_create.css","./studio_composer.css","./studio_outpaint.css","./paintout_studio/paintout_integrated.css"]){const link=document.createElement("link");link.rel="stylesheet";link.href=new URL(path,import.meta.url).href;document.head.appendChild(link);}
     import("./vendor/studio-components.js").then(()=>{
       document.getElementById("genj-studio")?.classList.add("zc-components-ready");
       for(const tip of document.querySelectorAll("#genj-studio wa-tooltip")){document.getElementById(tip.getAttribute("for"))?.removeAttribute("title");}

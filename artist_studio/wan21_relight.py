@@ -152,6 +152,9 @@ def build_studio_graph(project: Mapping[str, Any], check_asset) -> dict[str, dic
     }
     for key in ("272:407:89", "272:408:275:190"):
         graph[key]["inputs"].update(width=width, height=height)
+    # Crop the lighting reference at the same position as source frames.  The
+    # supplied recipe used top for the anchor and centre for every other frame.
+    graph["272:408:275:190"]["inputs"]["crop_position"] = "center"
     graph["272:408:274:3"]["inputs"]["text"] = prompt
     graph["272:407:277:19"]["inputs"]["noise_seed"] = int(config.get("seed", 42))
     graph["wan21_video"] = {

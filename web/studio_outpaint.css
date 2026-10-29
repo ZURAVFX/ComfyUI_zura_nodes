@@ -1,0 +1,19 @@
+#genj-studio .zo-page{flex:1;min-height:0;display:flex;flex-direction:column;gap:12px;padding:12px 20px;color:var(--zc-text)}
+#genj-studio .zo-page[hidden]{display:none}
+#genj-studio .zo-page header{display:flex;align-items:center;justify-content:space-between;gap:12px}
+#genj-studio .zo-page header h2{font-size:16px;margin:0}
+#genj-studio .zo-stage{flex:1;min-height:160px;display:flex;align-items:center;justify-content:center;overflow:hidden;background:var(--gs-bg);border:1px solid var(--gs-line);border-radius:12px}
+#genj-studio .zo-canvas{position:relative;width:min(100%,1050px);height:auto;max-height:100%;background:#000;overflow:hidden;touch-action:none}
+#genj-studio .zo-canvas video{position:absolute;object-fit:contain;cursor:grab}
+#genj-studio .zo-border{position:absolute;border:1px solid var(--gs-accent);pointer-events:none}
+#genj-studio .zo-result{width:100%;height:100%;object-fit:contain}
+#genj-studio .zo-composer{width:min(100%,1050px);align-self:center;border:1px solid var(--gs-line);border-radius:12px;background:var(--zc-composer);padding:16px;display:grid;gap:12px}
+#genj-studio .zo-sources,#genj-studio .zo-settings,#genj-studio .zo-action{display:flex;align-items:end;gap:12px;flex-wrap:wrap}
+#genj-studio .zo-settings label,#genj-studio .zo-sources label{display:grid;gap:5px;font-size:12px}
+#genj-studio .zo-settings input{width:110px;min-height:36px;padding:6px 10px}
+#genj-studio .zo-composer p{margin:0;color:var(--gs-muted);font-size:12px}
+#genj-studio .zo-composer textarea{min-height:50px;resize:vertical;background:transparent;border:0;color:var(--zc-text);padding:8px 0;font:inherit}
+#genj-studio .zo-action span{flex:1;min-width:180px;font-size:12px;color:var(--gs-muted)}
+#genj-studio .zo-action button,#genj-studio .zo-action a,#genj-studio .zo-sources button,#genj-studio .zo-page header button{min-height:38px;padding:8px 14px;border:1px solid var(--gs-line);border-radius:8px;background:var(--gs-panel);color:var(--zc-text)}
+#genj-studio .zo-action [data-generate]{background:var(--gs-accent);border-color:var(--gs-accent);color:var(--gs-ink)}
+@media(max-width:900px){#genj-studio .zo-page{padding:12px;overflow:auto}#genj-studio .zo-settings input{width:90px}}

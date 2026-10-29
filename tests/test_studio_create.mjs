@@ -66,7 +66,8 @@ for(const id of ['zc-attach-source','zc-attach-refs','zc-video-model','gs-resolu
 const workflowMenu=ui.videoComposer.task;
 assert.equal(workflowMenu.tagName,'DETAILS');
 assert.equal(workflowMenu.querySelector('select').hidden,true,'OS-native workflow dropdown is hidden behind the styled menu');
-assert.equal(workflowMenu.querySelectorAll('[role="menuitemradio"]').length,7);
+assert.equal(workflowMenu.querySelectorAll('[role="menuitemradio"]').length,8);
+assert.ok(workflowMenu.querySelector('[data-workflow="outpaint"]'),'Frame extension is available as a preview workflow');
 assert.equal(workflowMenu.querySelector('[data-workflow="swap"]').getAttribute('aria-checked'),'true');
 const removedInputs=[],savedRemoveInput=studio.removeInput;studio.removeInput=type=>removedInputs.push(type);
 for(const id of ['source','refs','frame'])studio.container.querySelector('#zc-remove-'+id).onclick();
@@ -258,6 +259,11 @@ task.value='frames';task.dispatchEvent(new window.Event('change'));assert.equal(
 task.value='references';task.dispatchEvent(new window.Event('change'));assert.equal(navUi.referencesVideo.assets.images[0].file,'ingredient.png');assert.match(navUi.referencesVideo.$('prompt').value,/<Picture 1>/);
 while(navStudio.busy)await new Promise(resolve=>setTimeout(resolve,1));
 task.value='swap';task.dispatchEvent(new window.Event('change'));assert.equal(navUi.mode,'video');assert.equal(navUi.referencesVideo.page.hidden,true);
+task.value='outpaint';task.dispatchEvent(new window.Event('change'));
+assert.equal(navUi.mode,'outpaint');assert.equal(navUi.outpaint.page.hidden,false);
+assert.equal(navUi.outpaint.page.querySelector('#zc-video-task'),task,'Frame extension retains the same workflow selector');
+while(navStudio.busy)await new Promise(resolve=>setTimeout(resolve,1));
+task.value='swap';task.dispatchEvent(new window.Event('change'));assert.equal(navUi.mode,'video');assert.equal(navUi.outpaint.page.hidden,true);
 task.value='paintout';task.dispatchEvent(new window.Event('change'));
 assert.equal(navUi.mode,'paintout');assert.equal(navUi.paintout.page.hidden,false);assert.equal(navUi.frames.page.hidden,true);assert.equal(navUi.referencesVideo.page.hidden,true);
 assert.equal(navUi.paintout.page.querySelector('#zc-video-task'),task,'Paintout retains the workflow menu beside its model');
@@ -296,6 +302,15 @@ for(const mode of ['frames','references']){
 }
 assert.match(source,/this\.creative\?\.open\(\)/,'Opening Studio restores the retained creative workspace');
 navUi.close();navStudio.container.remove();
+// Generation and Graph view both use the same backend-validated LoRA graph.
+const oldImageFetch=ui.fetch.bind(ui),imageLoraCalls=[];
+ui.fetch=async(path,body)=>{if(path==='/zura/studio/image-loras/validate'){imageLoraCalls.push(body);if(!body.loras[0].confirm_unknown)throw new Error('Confirm compatibility');return {loras:[{name:body.loras[0].name,strength:body.loras[0].strength}]};}return oldImageFetch(path,body);};
+const imageLoraConfig={model:'flux2',prompt:'An image',loras:[{name:'face.safetensors',strength:.8,confirm_unknown:true}]};
+const imageLoraGraph=await ui.imageGraph(imageLoraConfig);
+assert.equal(imageLoraGraph.custom_image_lora_1.inputs.lora_name,'face.safetensors');
+assert.equal(imageLoraCalls[0].model,'flux2');
+await assert.rejects(ui.imageGraph({...imageLoraConfig,loras:[{name:'face.safetensors',strength:1,confirm_unknown:false}]}),/Confirm compatibility/);
+ui.fetch=oldImageFetch;
 ui.close();
 assert.equal(JSON.parse(storage['zura-image-workspace-v1']).items.length,1);
 const oldFiles=ui.items.map(i=>i.file.filename);ui.$('clear-history').onclick();assert.equal(ui.items.length,0);assert.equal(ui.$('gallery').querySelectorAll('img').length,0);assert.equal(ui.$('image-empty').hidden,false);ui.$('undo-history').onclick();assert.deepEqual(ui.items.map(i=>i.file.filename),oldFiles);ui.$('clear-history').onclick();

@@ -92,9 +92,40 @@ def _asset(asset, label):
     return {"file": asset["file"], "sha": asset["sha"]}
 
 
+def _checked_loras(selections):
+    """Accept only the already validated and file-pinned adapter specifications."""
+    if selections is None:
+        return []
+    if not isinstance(selections, list) or len(selections) > 4:
+        raise ValueError("Choose up to four pinned LTX LoRAs.")
+    result = []
+    for item in selections:
+        if not isinstance(item, dict) or not isinstance(item.get("name"), str) or not item["name"]:
+            raise ValueError("Resolve each installed LTX LoRA before planning.")
+        strength = item.get("strength")
+        if type(strength) not in (float, int) or not math.isfinite(strength) or not -2 <= strength <= 2:
+            raise ValueError("Choose a valid LTX LoRA strength.")
+        pin = item.get("pin")
+        if (not isinstance(pin, dict) or not isinstance(pin.get("path"), str) or not pin["path"] or
+                type(pin.get("size")) is not int or pin["size"] <= 0 or not str(pin.get("mtime_ns", "")).isdigit() or
+                not _HEX.fullmatch(str(pin.get("prefix_sha256", "")))):
+            raise ValueError("The LTX LoRA file must be pinned before planning.")
+        result.append({"name": item["name"], "strength": float(strength), "pin": copy.deepcopy(pin)})
+    if len({item["name"] for item in result}) != len(result):
+        raise ValueError("Choose each LTX LoRA only once.")
+    return result
+
+
+def _add_custom_loras(graph, node, model, selections):
+    for index, adapter in enumerate(selections):
+        model = node(graph, "custom_lora_" + str(index), "LoraLoaderModelOnly", model=model,
+                     lora_name=adapter["name"], strength_model=adapter["strength"])
+    return model
+
+
 def build_plan(project, *, scenario, timeline, models, text_encoder_inputs,
                model_pins, approval_key, original_audio_sha=None,
-               union_downscale_factor=None):
+               union_downscale_factor=None, custom_loras=None):
     """Return serial native API phases plus dependency/artifact specifications.
 
     Call Studio's assert_approved/check_asset before this function. ``timeline``
@@ -113,7 +144,8 @@ def build_plan(project, *, scenario, timeline, models, text_encoder_inputs,
         return build_viewport_plan(project, scenario=scenario, timeline=timeline,
                                    models=models, text_encoder_inputs=text_encoder_inputs,
                                    model_pins=model_pins, approval_key=approval_key,
-                                   union_downscale_factor=union_downscale_factor)
+                                   union_downscale_factor=union_downscale_factor,
+                                   custom_loras=custom_loras)
     if union_downscale_factor is None:
         union_downscale_factor = 2
     if scenario not in ("original", "replacement", "silent"):
@@ -221,6 +253,9 @@ def build_plan(project, *, scenario, timeline, models, text_encoder_inputs,
         basis["guide_type"] = "canny_objects"
     if finished_anchor is not None:
         basis["finished_frame_index"] = finished_anchor
+    custom_loras = _checked_loras(custom_loras)
+    if custom_loras:
+        basis["custom_loras"] = copy.deepcopy(custom_loras)
     key = digest(basis)
     keys = {name: digest({"plan": key, "artifact": name}) for name in
             ("text", "guided_text", "initial_video", "audio", "stage1_video", "upscaled_video", "stage2_video")}
@@ -354,6 +389,7 @@ def build_plan(project, *, scenario, timeline, models, text_encoder_inputs,
         frozen = node(g, "frozen_audio", "SetLatentNoiseMask", samples=aud, mask=mask)
         av = node(g, "concat", "LTXVConcatAVLatent", video_latent=video, audio_latent=frozen)
         model = node(g, "model", "UNETLoader", unet_name=models["model"], weight_dtype="default")
+        model = _add_custom_loras(g, node, model, custom_loras)
         if union:
             model = node(g, "union", "LTXICLoRALoaderModelOnly", model=model, lora_name=models["union"], strength_model=1)
         guider = node(g, "guider", "CFGGuider", model=model, positive=cond, negative=[cond[0], 1], cfg=1)
@@ -440,7 +476,7 @@ def build_plan(project, *, scenario, timeline, models, text_encoder_inputs,
 
 
 def build_viewport_plan(project, *, scenario, timeline, models, text_encoder_inputs,
-                        model_pins, approval_key, union_downscale_factor=1):
+                        model_pins, approval_key, union_downscale_factor=1, custom_loras=None):
     """Plan the native LTX 2.5 Layout-to-Render viewport route.
 
     The approved opening must be a composed final scene plate. It is an
@@ -514,6 +550,9 @@ def build_viewport_plan(project, *, scenario, timeline, models, text_encoder_inp
              "sigmas": [STAGE1_SIGMAS, STAGE2_SIGMAS]}
     if finished_anchor is not None:
         basis["finished_frame_index"] = finished_anchor
+    custom_loras = _checked_loras(custom_loras)
+    if custom_loras:
+        basis["custom_loras"] = copy.deepcopy(custom_loras)
     key = digest(basis)
     phases, dependencies, artifacts = {}, {}, {}
 
@@ -569,6 +608,7 @@ def build_viewport_plan(project, *, scenario, timeline, models, text_encoder_inp
         cond = node(g, "conditioning", "LTXVConditioning", positive=text, negative=[text[0], 1], frame_rate=fps)
         vae = node(g, "video_vae", "VAELoader", vae_name=models["video_vae"])
         model = node(g, "model", "UNETLoader", unet_name=models["model"], weight_dtype="default")
+        model = _add_custom_loras(g, node, model, custom_loras)
         adapter = node(g, "layout_adapter", "LTXICLoRALoaderModelOnly", model=model,
                        lora_name=models["union"], strength_model=1)
         adapter_factor = [adapter[0], 1]

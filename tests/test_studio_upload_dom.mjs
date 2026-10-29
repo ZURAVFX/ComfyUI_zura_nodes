@@ -380,3 +380,25 @@ assert.equal(trimRequests[0].body.config.start,10.5);assert.equal(trimRequests[0
 assert.equal(trimRequests[0].body.config.length_mode,'custom');assert.equal(trimRequests[0].body.config.mask_points.length,0);
 assert.equal(ui.$('start').value,'10.5');assert.equal(ui.$('duration').value,'2.5');
 console.log('Camera still/fullscreen, persistent stage-aware prompts and saved timeline range handoffs pass.');
+
+// Browser playback for ProRes switches to the asynchronous proxy, while the
+// source asset retains its original file for generation.
+ui.project=null;
+ui.source={id:'b'.repeat(32),file:'genj_studio/original.mov',url:'/view?original',duration:3,width:1920,height:1080,thumbnail_url:'/poster.jpg',preview_file:'genj_studio/preview.mp4',preview_status:'preparing'};
+api.fetchApi=async path=>({ok:true,json:async()=>({preview_status:'ready',preview_url:'/view?preview'})});
+ui.render();assert.equal(ui.sourcePlayback(),null);assert.equal(ui.$('opening').getAttribute('src'),'/poster.jpg');
+await ui.poll();assert.equal(ui.sourcePlayback(),'/view?preview');assert.equal(ui.source.file,'genj_studio/original.mov');
+console.log('ProRes preview switches to a browser-compatible copy without changing the generation source.');
+
+// The advanced video LoRA control persists a real selection and makes users
+// explicitly confirm compatibility when a file lacks base-model metadata.
+ui.project=null;ui.config={...ui.config,engine:'h3',workflow_mode:'swap',scope:'person',custom_loras:[],delivery_mode:'native',lip_sync:false};
+ui.loraCatalog=[{name:'custom.safetensors',usable:true,metadata_family:null}];ui.syncForm();
+ui.$('lora-picker').value='custom.safetensors';ui.$('lora-add').click();await new Promise(resolve=>setTimeout(resolve,0));
+assert.equal(ui.config.custom_loras[0].name,'custom.safetensors');
+assert.equal(ui.config.custom_loras[0].confirm_unknown,false);
+const loraConfirm=ui.$('lora-list').querySelector('[data-lora-field="confirm"]');loraConfirm.checked=true;loraConfirm.dispatchEvent(new window.Event('change',{bubbles:true}));await new Promise(resolve=>setTimeout(resolve,0));
+assert.equal(ui.config.custom_loras[0].confirm_unknown,true);
+ui.config.engine='local';ui.syncForm();assert.match(ui.$('lora-note').textContent,/not.*available|aren't available/i);
+ui.$('lora-list').querySelector('[data-lora-remove]').click();await new Promise(resolve=>setTimeout(resolve,0));assert.equal(ui.config.custom_loras.length,0);
+console.log('Custom video LoRAs require compatibility confirmation and can be removed on unsupported routes.');
