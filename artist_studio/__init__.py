@@ -383,7 +383,9 @@ class GenjLoadReviewedShot:
                 "optional": {"render_long_edge": ("INT", {"default": 0, "min": 0, "max": 1920,
                     "tooltip": "0 uses the reviewed preview. Higher values reread the original footage and resize the approved mask."}),
                     "output_scale": ("INT", {"default": 1, "min": 1, "max": 2}),
-                    "preview_seconds": ("FLOAT", {"default": 0, "min": 0, "max": 30})}}
+                    "preview_seconds": ("FLOAT", {"default": 0, "min": 0, "max": 30}),
+                    "preserve_aspect": ("BOOLEAN", {"default": False,
+                        "tooltip": "Keep source proportions before the downstream model resize."})}}
 
     RETURN_TYPES = ("VIDEO", "VIDEO", "VIDEO", "GENJ_CLIP", "VIDEO")
     RETURN_NAMES = ("source_clip", "performer_mask", "seedance_guide", "clip_details", "genuine_performer_mask")
@@ -391,14 +393,14 @@ class GenjLoadReviewedShot:
     CATEGORY = CATEGORY
 
     @classmethod
-    def IS_CHANGED(cls, shot_id, approved_shot_id, render_long_edge=0, output_scale=1, preview_seconds=0):
+    def IS_CHANGED(cls, shot_id, approved_shot_id, render_long_edge=0, output_scale=1, preview_seconds=0, preserve_aspect=False):
         if shot_id and shot_id == approved_shot_id:
             directory, manifest = verify_review(shot_id)
             source_hash = digest_file(manifest["clip"]["source"]) if render_long_edge else ""
-            return digest_file(directory / "review.json") + source_hash + str((render_long_edge, output_scale, preview_seconds))
+            return digest_file(directory / "review.json") + source_hash + str((render_long_edge, output_scale, preview_seconds, preserve_aspect))
         return float("nan")
 
-    def load(self, shot_id, approved_shot_id, render_long_edge=0, output_scale=1, preview_seconds=0):
+    def load(self, shot_id, approved_shot_id, render_long_edge=0, output_scale=1, preview_seconds=0, preserve_aspect=False):
         if not shot_id or shot_id != approved_shot_id:
             raise ValueError("Approve the reviewed mask in Zura Studio before generation. Standalone graphs require matching reviewed and approved shot IDs.")
         directory, manifest = verify_review(shot_id)
@@ -417,13 +419,15 @@ class GenjLoadReviewedShot:
             scale = render_long_edge / max(sw, sh)
             if output_scale not in (1, 2):
                 raise ValueError("Unsupported output scale.")
-            w, h = max(64, round(sw * scale / output_scale / 64) * 64), max(64, round(sh * scale / output_scale / 64) * 64)
+            grid = 2 if preserve_aspect else 64
+            minimum = 2 if preserve_aspect else 64
+            w, h = max(minimum, round(sw * scale / output_scale / grid) * grid), max(minimum, round(sh * scale / output_scale / grid) * grid)
             target_w, target_h = max(2, round(sw * scale / 2) * 2), max(2, round(sh * scale / 2) * 2)
             if preview_seconds:
                 details["frames"] = min(details["frames"], max(1, int(preview_seconds * 24)))
                 details["duration"] = details["frames"] / 24
                 details["full_source"] = False
-            cache = directory / f"render_audio_v2_{render_long_edge}_x{output_scale}_{details['frames']}f"
+            cache = directory / f"render_audio_v2_{render_long_edge}_x{output_scale}_{details['frames']}f{'_aspect' if preserve_aspect else ''}"
             cache.mkdir(exist_ok=True)
             high_source, high_mask = cache / "source.mp4", cache / "mask.mp4"
             if not high_source.exists():

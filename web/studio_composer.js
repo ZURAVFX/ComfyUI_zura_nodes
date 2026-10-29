@@ -1,4 +1,5 @@
 import {VideoResolutionControl} from './studio_resolution.js';
+import {OpeningLoraControl} from './studio_opening_loras.js';
 import {clipLength} from './studio_length.js';
 const svg=body=>`<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${body}</svg>`;
 export const composerIcons={
@@ -51,6 +52,7 @@ export class VideoComposer {
     imageModel.addEventListener('click',e=>{if(studio.busy||studio.project?.phase==='working'){e.preventDefault();return;}const option=e.target.closest('[data-opening-model]');if(option&&!option.disabled){imageModel.open=false;studio.changeOpeningModel(option.dataset.openingModel);}const ready=e.target.closest('[data-use-finished-image]');if(ready&&!ready.disabled){imageModel.open=false;const input=this.root.querySelector('input[name="gs-look"][value="ready"]');if(input&&!input.disabled){input.checked=true;input.dispatchEvent(new this.root.ownerDocument.defaultView.Event('change',{bubbles:true}));studio.$('ready').click();}}});
     imageModel.addEventListener('keydown',e=>{if(!['ArrowDown','ArrowUp','Home','End'].includes(e.key)||studio.busy||studio.project?.phase==='working')return;e.preventDefault();imageModel.open=true;const items=[...imageModel.querySelectorAll('[role="menuitemradio"]')].filter(b=>!b.disabled),index=items.indexOf(this.root.ownerDocument.activeElement),next=e.key==='Home'?0:e.key==='End'?items.length-1:index<0?0:(index+(e.key==='ArrowUp'?-1:1)+items.length)%items.length;items[next]?.focus({preventScroll:true});});
     recipeTools.append(imageModel,task);this.imageModel=imageModel;this.model=model;
+    this.openingLoras=new OpeningLoraControl(studio,tools);
     const outputTools=document.createElement('div');outputTools.className='zc-tool-group';outputTools.setAttribute('role','group');outputTools.setAttribute('aria-label','Video size and length');tools.append(outputTools);
     const nativeQuality=studio.$('quality-setting');
     this.resolution=this.popup('resolution','Resolution',composerIcons.size,nativeQuality);outputTools.append(this.resolution);
@@ -149,6 +151,7 @@ export class VideoComposer {
     if(select.dataset.choices!==key){select.replaceChildren();for(const radio of radios){const option=document.createElement('option');option.value=radio.value;option.textContent={local:'LTX 2.5',h3:'MiniMax H3',wan:'Wan 2.2',wan2:'Wan Animate 2',wan21:'Wan 2.1',seedance:'Seedance'}[radio.value];option.disabled=radio.disabled;select.append(option);}select.dataset.choices=key;}
     select.value=s.config.engine;select.disabled=working;this.model.hidden=stage!=='video';this.imageModel.hidden=stage==='video';
     this.syncOpeningModel(working);
+    this.openingLoras.sync(stage);
     this.syncWorkflow();
     this.resolution.hidden=false;this.settings.hidden=stage!=='video'||['relight','camera'].includes(s.config.workflow_mode);this.audio.hidden=s.$('audio-settings').hidden||stage!=='video';
     const size=this.sizeControl.sync(),sizeContext=this.sizeControl.context();

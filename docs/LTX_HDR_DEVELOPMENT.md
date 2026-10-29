@@ -116,7 +116,19 @@ frames at the same raster, with one AAC soundtrack, a 10-bit BT.2020 HLG master,
 nine ACEScg EXRs and a viewable SDR proxy. It ran in 63.24 seconds. It confirms
 plumbing and the revised tile setting, not representative HDR visual quality,
 retention of the source's motion, seamless long clips, or HDR monitor playback.
-Current inputs are HLG video only, with 1–121 frames, even source dimensions
-of 32–2048 pixels per side, and a 40-million padded-pixel-frame cap. Tagged PQ
-and EXR sequences are rejected in Studio until independently qualified. Image
-sequence support and a full desktop UI review remain outstanding.
+The preview now also accepts PQ video and uploaded EXR sequences, with explicit
+EXR colour space and frame rate. The loader was exercised with two frames of a
+10-bit BT.2020 PQ clip converted from the earlier HLG output and two frames of
+the earlier ACEScg EXR output; both decoded to finite ACEScct frames and the
+sequence retained its selected 25 fps. Both sources were subsequently run
+through the full LTX model on nine 384 × 224 frames. The PQ run took 55.5 s;
+the EXR run took 30 s with warm models. Both wrote nine-frame 10-bit BT.2020
+HLG videos and ACEScg EXRs. The EXR GPU smoke test used a local sequence
+directly; the multipart upload endpoint and manifest validation were separately
+exercised with two real EXR frames. Uploaded sequence frames are checked against an integrity manifest before
+decoding. Neither source has been visually qualified on an HDR monitor.
+
+All preview inputs remain limited to 1–121 frames, even source dimensions of
+32–2048 pixels per side, and a 40-million padded-pixel-frame cap. Seamless long
+clips, colour accuracy on representative camera sources, and full desktop UI
+review remain outstanding.

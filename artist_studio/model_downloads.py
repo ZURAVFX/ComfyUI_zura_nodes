@@ -68,6 +68,32 @@ CATALOG = {
         ]),
 }
 
+CATALOG.update({
+    "flux2_klein_start": dict(name="FLUX.2 Klein 9B · video starting frame", gated=True,
+        license_url="https://huggingface.co/black-forest-labs/FLUX.2-klein-9b-fp8",
+        note="Starting-frame workflow files; its text encoder and VAE differ from the image workspace. Review each source's terms.",
+        files=[
+            CATALOG["flux2_klein_9b"]["files"][0],
+            _file("text_encoders", "qwen_3_8b_fp8mixed.safetensors", SHARED, "1138ce884c8e977cdacacbe779784fec4426bb3f", "split_files/text_encoders/qwen_3_8b_fp8mixed.safetensors", 8664848742, "abad16806e0cbabc54e0325d6565847443fe396d5f0be38bb3cd3fe75a1201d6"),
+            _file("vae", "full_encoder_small_decoder.safetensors", "black-forest-labs/FLUX.2-small-decoder", "a3efc24f613ef42d9428af62fdbd6f5fd8856c4a", "full_encoder_small_decoder.safetensors", 249519092, "ea4273f02d1fafbf8e1d1c2cf6018ed8748652eb0bf34f2dd91171f16f15ab62"),
+        ]),
+    "ltx25_full_vae": dict(name="LTX 2.5 · full video VAE", gated=True,
+        license_url="https://huggingface.co/Lightricks/LTX-2.5",
+        note="Full video VAE used by the native HDR workflow. The LTX 2.5 core model and workflow-specific files are also required.",
+        files=[_file("vae", "ltx-2.5-video-vae-bf16.safetensors", "Lightricks/LTX-2.5", "49b093a39c19169a8a81721dcc541e07e945232f", "vae/ltx-2.5-video-vae-bf16.safetensors", 1472223346, "847e14ca7f3355debca0cea4eaa24ac0fbcdf0061da054ac89ca638a869ddba3")]),
+    "ltx25_refine": dict(name="LTX 2.5 · HDR detail adapter", gated=True,
+        license_url="https://huggingface.co/Lightricks/LTX-2.5-22b-IC-LoRA-Refine-Details",
+        note="Native HDR detail adapter. Also install the full VAE and the other files required by the HDR workflow.",
+        files=[_file("loras", "ltx-2.5-22b-ic-lora-refine-details-1.0.safetensors", "Lightricks/LTX-2.5-22b-IC-LoRA-Refine-Details", "4912c478b35dd96b6cdcc5f7c7ff9d72c2c57929", "ltx-2.5-22b-ic-lora-refine-details-1.0.safetensors", 1308787534, "771a84f70e143af89867fc714ebbf7bd6edcaa4974c0360cba4a2d292a99f0e6")]),
+    "ltx25_sdr_hdr": dict(name="LTX 2.5 · SDR to HDR adapter", gated=True,
+        license_url="https://huggingface.co/Lightricks/LTX-2.5-22b-IC-LoRA-SDR-To-HDR",
+        note="SDR-to-HDR adapter and its conditioning. LTX 2.5 core and other workflow dependencies are separate.",
+        files=[
+            _file("loras", "ltx-2.5-22b-ic-lora-sdr-to-hdr-1.0.safetensors", "Lightricks/LTX-2.5-22b-IC-LoRA-SDR-To-HDR", "c7578ebddb54f4210e534e4d8cad698a5a520692", "ltx-2.5-22b-ic-lora-sdr-to-hdr-1.0.safetensors", 1308787472, "0b39eac09672c18d0d10f401d5e71a68a73225f1169df826b092b7e5ef489675"),
+            _file("embeddings", "ltx-2.5-22b-ic-lora-sdr-to-hdr-scene-emb.safetensors", "Lightricks/LTX-2.5-22b-IC-LoRA-SDR-To-HDR", "c7578ebddb54f4210e534e4d8cad698a5a520692", "ltx-2.5-22b-ic-lora-sdr-to-hdr-scene-emb.safetensors", 12614165, "63c03987a1984f6d4b3d3440c15deee66b0310c01950496329f983f5dc8c88bd"),
+        ]),
+})
+
 def inspect(model_id, locations):
     """Return required files and exact remaining bytes, including shared files."""
     if model_id not in CATALOG:

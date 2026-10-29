@@ -49,6 +49,8 @@ def plan(source, *, start, duration, mode, width, height, left=0, top=0,
         raise ValueError('Black threshold must be between 0 and 0.1.')
     if mode == 'black' and (int(source.get('width', 0)), int(source.get('height', 0))) != (width, height):
         raise ValueError('Use source dimensions for a black-padded clip.')
+    if mode == 'black' and (width % 2 or height % 2):
+        raise ValueError('MP4 export needs even dimensions. Add a one-pixel border to the source and try again.')
     if mode == 'black' and any((left, top, right, bottom)):
         raise ValueError('Margins apply to canvas expansion, not a black-padded clip.')
     values = {'source_sha': str(source['sha']), 'start': start, 'frames': frames,
@@ -156,6 +158,28 @@ def build_studio_graph(source, selection, *, review_key, prompt='', seed=42, out
     if not re.fullmatch(r'genj/outpaint/[a-zA-Z0-9_-]{1,96}', str(output_prefix)):
         raise ValueError('Choose a safe outpaint output destination.')
     check_asset(source)
+    if expected['mode'] == 'black':
+        # A black guide on its own can be interpreted as a permanent letterbox.
+        # For explicitly selected black areas, use the separately tested native
+        # in/outpainting guide so the reviewed mask reaches the sampler.
+        from .ltx_outpaint import build_test_graph
+        g = build_test_graph(source['file'], output_prefix, expected['padded_frames'], FPS,
+            expected['padded_width'], expected['padded_height'], mode='black',
+            prompt=prompt, seed=seed, black_threshold=expected['black_threshold'])
+        g['source_range'] = {'class_type': 'GenjSelectClip', 'inputs': {
+            'video': ['source', 0], 'start_seconds': expected['start'],
+            'duration_seconds': expected['duration'], 'long_edge': 1920}}
+        g['components']['inputs']['video'] = ['source_range', 0]
+        g['temporal_hold'] = {'class_type': 'ZuraOutpaintTemporalHold', 'inputs': {
+            'images': ['components', 0], 'audio': ['components', 1], 'expected_frames': expected['frames']}}
+        g['canvas']['inputs']['images'] = ['temporal_hold', 0]
+        g['audio_encoded']['inputs']['audio'] = ['temporal_hold', 1]
+        g['trim_result'] = {'class_type': 'ImageFromBatch', 'inputs': {
+            'image': ['blend_high', 0], 'batch_index': 0, 'length': expected['frames']}}
+        g['unpad_result'] = {'class_type': 'ImageCrop', 'inputs': {'image': ['trim_result', 0],
+            'width': expected['width'], 'height': expected['height'], 'x': 0, 'y': 0}}
+        g['assemble']['inputs'].update(images=['unpad_result', 0], audio=['components', 1])
+        return g
     def n(kind, **inputs): return {'class_type': kind, 'inputs': inputs}
     g = {
         'source': n('LoadVideo', file=source['file']),

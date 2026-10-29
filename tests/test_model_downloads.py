@@ -21,6 +21,20 @@ class Response:
 
 
 class ModelDownloadTest(unittest.TestCase):
+    def test_starting_image_and_hdr_packages_include_workflow_dependencies(self):
+        packages = downloads.CATALOG
+        opening = {(f['folder'], f['filename']) for f in packages['flux2_klein_start']['files']}
+        self.assertIn(('text_encoders', 'qwen_3_8b_fp8mixed.safetensors'), opening)
+        self.assertIn(('vae', 'full_encoder_small_decoder.safetensors'), opening)
+        self.assertEqual(packages['flux2_klein_start']['files'][0], packages['flux2_klein_9b']['files'][0])
+        hdr = {(f['folder'], f['filename']) for f in packages['ltx25_sdr_hdr']['files']}
+        self.assertIn(('embeddings', 'ltx-2.5-22b-ic-lora-sdr-to-hdr-scene-emb.safetensors'), hdr)
+        for name in ('flux2_klein_start', 'ltx25_full_vae', 'ltx25_refine', 'ltx25_sdr_hdr'):
+            for f in packages[name]['files']:
+                self.assertEqual(len(f['revision']), 40)
+                self.assertEqual(len(f['sha256']), 64)
+                self.assertGreater(f['size_bytes'], 0)
+
     def setUp(self):
         self.directory = tempfile.TemporaryDirectory()
         self.addCleanup(self.directory.cleanup)

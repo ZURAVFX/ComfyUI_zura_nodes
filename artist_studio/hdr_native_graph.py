@@ -1,4 +1,4 @@
-"""Experimental native EXR-to-HDR tiled-fusion recipe. Not yet a Studio route.
+"""Experimental native HDR tiled-fusion recipes used by Studio's preview.
 
 Based on Lightricks' 2.5 V2V_TiledFusion_HDR_to_HDR example. Unlike the example
 (which repeats one still), this accepts an 8n+1 sequence using the official EXR
@@ -64,7 +64,8 @@ def build_native_exr_graph(*, source, frame_count, fps, width, height, prefix,
 
 
 def build_native_video_graph(*, source, start_frame, frame_count, fps, width, height,
-                             prefix, colour_space='auto', has_audio=False, output='hlg_and_exr'):
+                             prefix, colour_space='auto', has_audio=False, output='hlg_and_exr',
+                             sequence_manifest='', manifest_sha=''):
     """Bounded HDR-video post-pass, padded for LTX then cropped to source raster.
 
     This preserves frame count and source soundtrack; the model may alter scene
@@ -76,8 +77,11 @@ def build_native_video_graph(*, source, start_frame, frame_count, fps, width, he
         raise ValueError('Choose an even-sized HDR source between 32 and 2048 pixels per side.')
     if width*height*frame_count > 40_000_000:
         raise ValueError('This range is too large; choose fewer frames.')
-    if colour_space not in ('auto','hlg_rec2020','pq_rec2020'):
-        raise ValueError('Choose HLG or PQ source colour.')
+    choices = ('auto','acescg','acescct','linear_rec709') if sequence_manifest else ('auto','hlg_rec2020','pq_rec2020')
+    if colour_space not in choices:
+        raise ValueError('Choose a supported source colour space.')
+    if sequence_manifest and (not manifest_sha or has_audio):
+        raise ValueError('The EXR sequence must have a verified manifest and no source audio.')
     pw=max(512,math.ceil(width/64)*64);ph=max(512,math.ceil(height/64)*64)
     padded=max(9,1+8*((frame_count-1+7)//8))
     if pw*ph*padded > 40_000_000:
@@ -86,6 +90,8 @@ def build_native_video_graph(*, source, start_frame, frame_count, fps, width, he
     def n(kind, **inputs):return {'class_type':kind,'inputs':inputs}
     g['source']=n('ZuraHDRLoadNativeSource',source=source,start_frame=start_frame,frame_count=frame_count,
                   colour_space=colour_space,sequence_fps=float(fps))
+    if sequence_manifest:
+        g['source']['inputs'].update(manifest=sequence_manifest,manifest_sha=manifest_sha)
     g['native_pad']=n('ZuraHDRNativePrepare',images=['source',0])
     g['resize1']['inputs']['image']=['native_pad',0]
     g['resize2']['inputs']['image']=['native_pad',0]

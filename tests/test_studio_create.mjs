@@ -8,6 +8,7 @@ import {ContentDetection} from '../web/studio_content.js';
 import {ClipTrimmer} from '../web/studio_trim.js';
 import {clipLength,recoverClipLength} from '../web/studio_length.js';
 import {stageProgress} from '../web/studio_progress.js';
+import {OpeningLoraControl} from '../web/studio_opening_loras.js';
 
 const {document,window}=parseHTML('<html><body></body></html>');
 // This DOM fixture checks navigation and state, not canvas pixels.
@@ -20,6 +21,18 @@ Object.defineProperty(window.HTMLInputElement.prototype,'checked',{configurable:
 for(const method of ['pause','play','load'])window.HTMLElement.prototype[method]=()=>{};
 let storage={};const localStorage={getItem:k=>storage[k]||null,setItem:(k,v)=>storage[k]=v,removeItem:k=>delete storage[k]};
 Object.assign(globalThis,{document,window,localStorage,ResizeObserver});
+{
+  const host=document.createElement('div'); document.body.append(host);
+  const state={config:{opening_model:'klein9b',opening_loras:[],custom_loras:[]},lookMode:'build',loraCatalog:[{name:'portrait.safetensors',usable:true,metadata_family:'flux2_klein9b'}],directViewport:()=>false,headSwap:()=>false,readConfig(){return this.config;},perform(fn){return fn(0);},render(){},resetEpoch:0};
+  const control=new OpeningLoraControl(state,host);control.sync('image');
+  assert.equal(control.el.hidden,false,'Generated starting images offer their own LoRAs');
+  const picker=control.el.querySelector('[data-picker]');picker.value='portrait.safetensors';control.el.querySelector('[data-add]').click();
+  assert.equal(state.config.opening_loras[0].name,'portrait.safetensors');
+  assert.deepEqual(state.config.custom_loras,[],'Image LoRAs do not affect video LoRAs');
+  control.sync('video');assert.equal(control.el.hidden,true,'Image LoRA control stays out of video generation');
+  state.lookMode='ready';control.sync('image');assert.equal(control.el.hidden,true,'No image LoRA is offered for a supplied frame');
+  host.remove();
+}
 const info={};
 for(const m of IMAGE_MODELS)for(const n of Object.values(buildImageGraph({model:m.id,prompt:'test',references:m.minReferences?[{file:'source.png'}]:[]})))info[n.class_type]={input:{required:{}}};
 info.UNETLoader.input.required.unet_name=[IMAGE_MODELS.map(m=>m.model)];info.CLIPLoader.input.required={clip_name:[IMAGE_MODELS.map(m=>m.text)],type:[IMAGE_MODELS.map(m=>m.type)]};info.VAELoader.input.required.vae_name=[IMAGE_MODELS.map(m=>m.vae)];info.LoraLoaderModelOnly.input.required.lora_name=[IMAGE_MODELS.map(m=>m.lora).filter(Boolean)];

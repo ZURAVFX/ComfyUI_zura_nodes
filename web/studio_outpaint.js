@@ -39,7 +39,7 @@ export class OutpaintWorkspace {
   paint(){
     const has=!!this.source,black=this.mode==='black',busy=!!this.job||this.submitting;this.$('width').disabled=black||busy;this.$('height').disabled=black||busy;
     for(const id of ['source','mode','start','duration'])this.$(id).disabled=busy;this.$('scale').disabled=black||busy;
-    this.$('help').textContent=black?'Black pixels are selected for generation, including dark clothing or shadows. Review the whole selection.':'Drag the footage to position it inside the new frame.';
+    this.$('help').textContent=black?'Black pixels are selected for masked generation, including dark clothing or shadows. Review the whole selection.':'Drag the footage to position it inside the new frame.';
     this.$('review').disabled=!has||busy;this.$('generate').hidden=!this.review||busy;this.$('cancel').hidden=!this.job;
     if(!has||!this.box)return;
     const w=Number(this.$('width').value),h=Number(this.$('height').value),b=this.box;

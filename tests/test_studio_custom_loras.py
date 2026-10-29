@@ -70,3 +70,32 @@ class StudioCustomLoraTests(fixtures.unittest.TestCase):
         self.assertEqual(source['custom_loras'][0]['strength'], .7)
         with self.assertRaises(ValueError):
             studio.clean_config({'custom_loras': [{'name': ''}]})
+
+    def test_starting_image_loras_apply_to_image_model_only(self):
+        from ComfyUI_zura_nodes.artist_studio.opening_models import MODELS
+        for model, declared in [('klein9b', 'flux2_klein_9b'), ('flux3', 'flux3_klein'),
+                                ('qwen2511', 'qwen_image_2511'), ('qwen21', 'qwen_image_2.1')]:
+            with self.subTest(model=model):
+                header=json.dumps({'__metadata__': {'base_model': declared}, 'diffusion_model.x': {}}).encode()
+                self.path.write_bytes(len(header).to_bytes(8,'little')+header)
+                project=fixtures.SharedEngineTests().project()
+                project['config'].update(opening_model=model, opening_loras=[self.lora])
+                project['references']=[project['character']]
+                with patch.object(studio, 'assert_approved'), patch.object(studio, 'check_asset'), \
+                     patch.object(studio.folder_paths, 'get_filename_list', return_value=[self.path.name], create=True), \
+                     patch.object(studio.folder_paths, 'get_full_path', return_value=str(self.path), create=True):
+                    graph=studio.build_graph(project, 'design', use_cache=False)
+                self.assertIn('zura_custom_lora_0_0', graph)
+                self.assertEqual(graph['zura_custom_lora_0_0']['inputs']['lora_name'],self.path.name)
+                self.assertEqual(graph['92:107']['inputs']['unet_name'],MODELS[model]['files'][0][1])
+                self.assertTrue(any(n.get('inputs',{}).get('model')==['zura_custom_lora_0_0',0] for n in graph.values()))
+
+    def test_starting_image_lora_changes_invalidate_old_approval(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            controller=studio.Studio.__new__(studio.Studio)
+            controller.store=studio.Store(tmp);controller.collect=lambda project: project
+            project=fixtures.SharedEngineTests().project()
+            project['approval']=studio.prep_key(project);project['prepared_key']=project['approval']
+            controller.configure(project,{**project['config'],'opening_loras':[self.lora]})
+            self.assertIsNone(project['opening_input'])
+            self.assertIsNone(project['opening_approval'])

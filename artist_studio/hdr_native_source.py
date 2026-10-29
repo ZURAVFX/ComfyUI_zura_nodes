@@ -1,8 +1,8 @@
 """Experimental, bounded native HDR input for the LTX 2.5 HDR workflow.
 
-This module prepares images for an eventual native HDR generation graph. It
-does not implement the official TiledFusion sampler, and is deliberately not
-registered or exposed in Studio until the full path is validated.
+This loader prepares native sources for Studio's bounded experimental HDR
+graph. Its colour transforms and end-to-end visual quality still need
+qualification on representative HDR camera footage.
 """
 from __future__ import annotations
 
@@ -72,14 +72,18 @@ class ZuraHDRLoadNativeSource:
             'start_frame': ('INT', {'default': 0, 'min': 0}),
             'frame_count': ('INT', {'default': 25, 'min': 1, 'max': MAX_FRAMES}),
             'colour_space': (['auto', *HDR_VIDEO_SPACES, *HDR_SEQUENCE_SPACES],),
-            'sequence_fps': ('FLOAT', {'default': 24., 'min': 1., 'max': 120.})}}
+            'sequence_fps': ('FLOAT', {'default': 24., 'min': 1., 'max': 120.})},
+            'optional': {'manifest': ('STRING', {'default': ''}), 'manifest_sha': ('STRING', {'default': ''})}}
     RETURN_TYPES = ('IMAGE', 'FLOAT')
     RETURN_NAMES = ('acescct_frames', 'fps')
     FUNCTION = 'load'
     CATEGORY = 'Zura/Artist Studio'
     @classmethod
     def IS_CHANGED(cls, **kwargs): return float('nan')
-    def load(self, source, start_frame, frame_count, colour_space, sequence_fps):
+    def load(self, source, start_frame, frame_count, colour_space, sequence_fps, manifest='', manifest_sha=''):
+        if manifest:
+            from .hdr_sequence import validate_manifest
+            source, _ = validate_manifest(manifest, manifest_sha, start_frame, frame_count)
         return load_native_hdr_frames(source, start_frame, frame_count, colour_space, sequence_fps)
 
 

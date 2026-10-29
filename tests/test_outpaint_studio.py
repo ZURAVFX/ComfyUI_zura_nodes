@@ -64,10 +64,21 @@ class StudioOutpaintTests(unittest.TestCase):
                 module.plan(self.source, **{**self.options, **extra})
         black = module.plan(self.source, **{**self.options, 'mode': 'black', 'width': 768,
                                             'height': 432, 'left': 0, 'right': 0})
+        odd_source = dict(self.source, width=767)
+        with self.assertRaisesRegex(ValueError, 'even dimensions'):
+            module.plan(odd_source, **{**self.options, 'mode': 'black', 'width': 767,
+                                      'height': 432, 'left': 0, 'right': 0})
         self.assertEqual(black['mode'], 'black')
         self.assertEqual((black['padded_width'], black['padded_height']), (768, 448))
         g = module.build_studio_graph(self.source, black, review_key=black['review_key'], output_prefix='genj/outpaint/black')
         self.assertEqual(g['unpad_result']['inputs']['height'], 432)
+        self.assertEqual(g['inpaint']['inputs']['mask'], ['low_mask', 0], 'The reviewed mask must reach LTX before sampling')
+        self.assertEqual(g['low_mask_image']['inputs']['image'], ['mask_image', 0])
+        self.assertEqual(g['mask_image']['inputs']['mask'], ['canvas', 1])
+        self.assertEqual(g['canvas']['inputs']['images'], ['temporal_hold', 0])
+        self.assertEqual(g['audio_encoded']['inputs']['audio'], ['temporal_hold', 1])
+        self.assertEqual(g['trim_result']['inputs']['length'], 48)
+        self.assertEqual(g['assemble']['inputs']['audio'], ['components', 1])
         image = torch.ones((1, 130, 130, 3)); image[:, :, :10] = 0
         canvas = importlib.import_module('ComfyUI_zura_nodes.artist_studio.ltx_outpaint')
         padded, mask = canvas.prepare_canvas(image, 'black', 192, 192)

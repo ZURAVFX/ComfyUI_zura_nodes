@@ -232,6 +232,36 @@ class BoundedSpeechGuardTests(unittest.TestCase):
         self.assertEqual(graph["wan_cfg"]["inputs"]["value"],1.0)
 
     @unittest.skipUnless(FFMPEG,"CPU FFmpeg executable unavailable")
+    def test_relight_review_loader_preserves_source_aspect_and_separates_cache(self):
+        path = fixtures.v2_bootstrap.ROOT / "artist_studio" / "__init__.py"
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        definition = next(node for node in tree.body if isinstance(node, ast.ClassDef) and node.name == "GenjLoadReviewedShot")
+        source = media.write_video(self.fixture.base / "aspect-source.mov", count=24, width=48,
+                                   source_audio=media.wave(samples=24000, channels=1, rate=24000))
+        directory = self.fixture.base / "aspect-review"
+        directory.mkdir()
+        for name in ("source.mp4", "mask.mp4", "guide.mp4"):
+            shutil.copy2(source, directory / name)
+        details = {"source": str(source), "source_hash": io.file_digest(source), "start": 0,
+                   "duration": 1.0, "frames": 24, "fps": 24}
+        manifest = {"clip": details, "files": {}}
+        def ffmpeg(*args):
+            subprocess.run([FFMPEG, "-hide_banner", "-loglevel", "error", "-y", *map(str,args)],
+                           capture_output=True, text=True, check=True)
+        namespace = {"CATEGORY":"Zura/Artist Studio", "Path":Path, "InputImpl":media.InputImpl,
+                     "av":media.av, "digest_file":io.file_digest, "ffmpeg":ffmpeg,
+                     "verify_review":lambda _shot:(directory, manifest)}
+        exec(compile(ast.Module(body=[definition],type_ignores=[]),str(path),"exec"), namespace)
+        loader = namespace["GenjLoadReviewedShot"]()
+        default = loader.load("shot", "shot", render_long_edge=256)
+        relight = loader.load("shot", "shot", render_long_edge=256, preserve_aspect=True)
+        self.assertEqual((default[3]["width"], default[3]["height"]), (256, 192))
+        self.assertEqual((relight[3]["width"], relight[3]["height"]), (256, 170))
+        self.assertNotEqual(default[3]["selected_path"], relight[3]["selected_path"])
+        with media.av.open(relight[3]["selected_path"]) as clip:
+            self.assertEqual((clip.streams.video[0].width, clip.streams.video[0].height), (256, 170))
+
+    @unittest.skipUnless(FFMPEG,"CPU FFmpeg executable unavailable")
     def test_real_final_soundtrack_restore_uses_normalized_wav_with_zero_offset(self):
         # Load the unchanged production export class without importing/registering
         # the whole Studio extension. Run its actual FFmpeg mux on tiny CPU media.

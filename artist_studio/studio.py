@@ -41,7 +41,7 @@ STAGES = {
 STAGES.update({"ltx25_" + phase: "LTX 2.5 " + phase for phase in
                ("text", "motion", "stage1", "upscale", "refine", "decode", "cleanup")})
 DEFAULTS = {"engine": "local", "background": "keep", "scope": "person", "prompt": "", "image_prompt": "",
-            "custom_loras": [],
+            "custom_loras": [], "opening_loras": [],
             "h3_character_method": "control", "openjutsu_resolution": "480",
             "openjutsu_background": "keep", "openjutsu_direct": False,
             "opening_model": "klein9b",
@@ -101,13 +101,14 @@ def design_readiness(node_mappings, get_full_path, model="klein9b"):
 def clean_config(value):
     c = {**DEFAULTS, **{k: v for k, v in value.items() if k in DEFAULTS}}
     # Copy list-valued preferences: one shot must never mutate another shot's adapters.
-    adapters = c.get("custom_loras")
-    if not isinstance(adapters, list) or len(adapters) > 4:
-        raise ValueError("Choose up to four custom LoRAs.")
-    c["custom_loras"] = copy.deepcopy(adapters)
-    for adapter in c["custom_loras"]:
-        if not isinstance(adapter, dict) or not isinstance(adapter.get("name"), str) or not adapter["name"]:
-            raise ValueError("Choose an installed custom LoRA.")
+    for key in ("custom_loras", "opening_loras"):
+        adapters = c.get(key)
+        if not isinstance(adapters, list) or len(adapters) > 4:
+            raise ValueError("Choose up to four custom LoRAs.")
+        c[key] = copy.deepcopy(adapters)
+        for adapter in c[key]:
+            if not isinstance(adapter, dict) or not isinstance(adapter.get("name"), str) or not adapter["name"]:
+                raise ValueError("Choose an installed custom LoRA.")
     # Preserve the former two-way edit selector on older saved shots. The
     # viewport route is opt-in and never inferred from a legacy scene edit.
     if "workflow_mode" not in value:
@@ -712,6 +713,19 @@ def apply_video_loras(project, stage, graph):
     return apply_to_graph(graph, family, selected, folder_paths.get_filename_list("loras"), folder_paths.get_full_path)
 
 
+def apply_opening_loras(project, graph, *, camera=False):
+    """Apply image adapters only to the starting-frame model, never the video model."""
+    config = project.get("config", {})
+    selected = config.get("opening_loras") or []
+    if not selected:
+        return graph
+    if project.get("look_mode") == "ready":
+        raise ValueError("A finished frame cannot use image LoRAs. Choose image generation or remove them.")
+    family = "flux3_klein" if camera else {"klein9b": "flux2_klein9b", "flux3": "flux3_klein", "qwen2511": "qwen2511", "qwen21": "qwen21"}.get(config.get("opening_model", "klein9b"))
+    from .custom_loras import apply_to_graph
+    return apply_to_graph(graph, family, selected, folder_paths.get_filename_list("loras"), folder_paths.get_full_path)
+
+
 def build_graph(project, stage, use_cache=True, run_id=None):
     from .opening_subject import directed_source_subject
     from .opening_edit import replacement_target, target_position
@@ -723,7 +737,7 @@ def build_graph(project, stage, use_cache=True, run_id=None):
     if camera_setup(project["config"]):
         from .h3_camera import build_studio_graph, build_studio_still_graph
         if stage == "design":
-            return build_studio_still_graph(project, check_asset)
+            return apply_opening_loras(project, build_studio_still_graph(project, check_asset), camera=True)
         if stage == "h3":
             return apply_video_loras(project, stage, build_studio_graph(project, check_asset))
         raise ValueError("Create the camera frame before generating video.")
@@ -1066,6 +1080,7 @@ def build_graph(project, stage, use_cache=True, run_id=None):
                 constrain_sampling(graph, ["zura_look_boundary", 0])
         from .opening_models import apply_model
         apply_model(graph, c.get("opening_model", "klein9b"), references)
+        graph = apply_opening_loras(project, graph)
         if c.get("opening_width") and c.get("opening_height"):
             graph["92:111"] = {"class_type": "ImageScale", "inputs": {
                 "image": ["125", 0], "width": c["opening_width"], "height": c["opening_height"],
@@ -2088,7 +2103,7 @@ class Studio:
                 p["opening_approval"] = None
                 p.pop("ltx25_run", None)
             if (any(prior[k] != config[k] for k in ("openjutsu_direct", "openjutsu_background", "h3_character_method")) or prior["opening_model"] != config["opening_model"] or prior["h3_viewport_direct"] != config["h3_viewport_direct"] or prior["workflow_mode"] != config["workflow_mode"] or prior["image_prompt"] != config["image_prompt"] or (prior["prompt"] != config["prompt"] and not config["image_prompt"])
-                    or any(prior[k] != config[k] for k in ("camera_preset", "camera_prompt", "camera_width", "camera_height", "opening_width", "opening_height"))):
+                    or any(prior[k] != config[k] for k in ("camera_preset", "camera_prompt", "camera_width", "camera_height", "opening_width", "opening_height", "opening_loras"))):
                 p.update(opening_input=None, opening_key=None, opening_url=None, opening_approval=None)
             p["phase"] = ("opening" if p.get("opening_input") and p["config"]["engine"] in ("local", "h3", "wan", "wan2")
                           else "approved" if p.get("approval") else "review" if p.get("review") else "new")

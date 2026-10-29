@@ -15,7 +15,7 @@ import { PreviewZoom } from "./studio_preview_zoom.js";
 import { HDRSourceTool } from "./studio_hdr.js";
 
 const ROOT = "/zura/studio";
-const defaults = {custom_loras:[],h3_character_method:"openjutsu",openjutsu_resolution:"480",openjutsu_background:"keep",openjutsu_direct:true,engine:"h3", relight_engine:"h3", background:"keep", scope:"person", prompt:"", image_prompt:"", start:0, duration:2, size:512, performer:-1, margin:20, pitch:false, seed:42, render_size:0, h3_head_swap:false, h3_preset:"take_fast", h3_steps:0, h3_attention:"native", remove_text:false, resolution:1280, delivery_mode:"native", quality:"fast", audio_id:"", audio_start:0, length_mode:"custom", lip_sync:false, refine_lips:false, workflow_mode:"swap", preserve_people:false, preserve_identity:false, edit_area:"mask", mask_method:"auto", mask_prompt:"person", mask_points:[],subject_mode:"people",finished_frame_position:"first",finished_frame_number:1};
+const defaults = {custom_loras:[],opening_loras:[],h3_character_method:"openjutsu",openjutsu_resolution:"480",openjutsu_background:"keep",openjutsu_direct:true,engine:"h3", relight_engine:"h3", background:"keep", scope:"person", prompt:"", image_prompt:"", start:0, duration:2, size:512, performer:-1, margin:20, pitch:false, seed:42, render_size:0, h3_head_swap:false, h3_preset:"take_fast", h3_steps:0, h3_attention:"native", remove_text:false, resolution:1280, delivery_mode:"native", quality:"fast", audio_id:"", audio_start:0, length_mode:"custom", lip_sync:false, refine_lips:false, workflow_mode:"swap", preserve_people:false, preserve_identity:false, edit_area:"mask", mask_method:"auto", mask_prompt:"person", mask_points:[],subject_mode:"people",finished_frame_position:"first",finished_frame_number:1};
 // Keep saved experimental projects readable without silently converting their recipe.
 function verifiedSetup(c={}) {
   if(c.engine==="h3" && c.workflow_mode==="swap" && c.h3_character_method==="openjutsu")return c.scope==="person" && c.mask_method==="auto" && c.edit_area===(c.openjutsu_background==="replace"?"scene":"mask") && !["audio_id","lip_sync","refine_lips","preserve_people","remove_text","h3_head_swap"].some(k=>c[k]);
@@ -360,6 +360,7 @@ class ArtistStudio {
        this.$("camera_preset").value!==(saved.camera_preset||"Left three-quarter"));
   }
   configBody(config){return {config,reference_roles:this.referenceRoles()};}
+  requestOpeningLoraConfig(id,config){return request(`/projects/${id}/config`,this.configBody(config));}
   projectBody(){const generatedOnly=this.config.preserve_people;return {source:this.source.id,character:this.character?.id,look_mode:generatedOnly?"build":this.lookMode,
     references:this.references.map(a=>a.id),reference_roles:this.references.map(a=>a.role||"auto"),starting_image:generatedOnly?undefined:this.readyAsset?.id,config:this.config};}
   invalidateLook(){this.character=this.references[0] || this.readyAsset;this.project=null;localStorage.removeItem("genj-studio-project");}
