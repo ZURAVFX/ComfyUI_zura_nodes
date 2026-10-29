@@ -19,13 +19,16 @@ export class HDRSourceTool {
     host.append(this.root);this.$('start-job').onclick=()=>this.start();this.$('cancel').onclick=()=>this.cancel();
     this.$('mode').onchange=()=>this.updateMode();this.$('source-kind').onchange=()=>this.updateMode();
     this.$('add-sequence').onclick=()=>this.$('sequence-files').click();this.$('sequence-files').onchange=event=>this.uploadSequence(event.target.files);this.updateMode();
-    this.onProgress=event=>{const p=event.detail;if(!this.job||p.prompt_id!==this.job)return;const bar=this.$('progress');bar.hidden=false;if(p.max>0)bar.value=100*p.value/p.max;this.status(`Generating · step ${p.value} of ${p.max}`);};
+    this.onExecuting=event=>{const p=event.detail;if(!p||!this.job||p.prompt_id!==this.job||!p.node)return;this.currentNode=p.node;this.$('progress').hidden=false;this.$('progress').removeAttribute('value');this.status(this.nodeLabel(p.node));};
+    this.onProgress=event=>{const p=event.detail;if(!p||!this.job||p.prompt_id!==this.job||!(p.max>0)||!Number.isFinite(p.value))return;if(p.node)this.currentNode=p.node;const bar=this.$('progress'),sampling=['sample1','sample2','hdr_sample'].includes(this.currentNode);bar.hidden=false;bar.value=Math.max(0,Math.min(100,100*p.value/p.max));this.status(`${this.nodeLabel(this.currentNode)} · ${sampling?'step':'progress'} ${p.value} of ${p.max}`);};
     api.addEventListener?.('progress',this.onProgress);
+    api.addEventListener?.('executing',this.onExecuting);
     try{this.job=localStorage.getItem('zura-hdr-active-job');}catch{}
     if(this.job){this.busy=true;this.root.open=true;this.$('start-job').disabled=true;this.$('cancel').hidden=false;this.$('progress').hidden=false;this.$('progress').removeAttribute('value');this.status('Reconnecting to your HDR conversion…');this.poll();}
   }
   $(id){return this.root.querySelector(`[data-hdr="${id}"]`);}
   status(text){this.$('status').textContent=text;}
+  nodeLabel(node){return ({zura_hdr_source:'Reading source frames',zura_hdr_audio_source:'Reading source audio',zura_hdr_prepare:'Preparing HDR frames',hdr_model:'Loading LTX 2.5',model:'Loading LTX 2.5',hdr_lora:'Loading HDR adapter',lora:'Loading HDR adapter',hdr_vae_loader:'Loading video decoder',vae:'Loading video decoder',hdr_audio_vae:'Loading audio model',hdr_conditioning:'Preparing HDR conditioning',hdr_guide_input:'Preparing colour guidance',hdr_guide:'Preparing video guidance',guide1:'Preparing video guidance',guide2:'Preparing detail guidance',hdr_sample:'Generating HDR video',sample1:'Generating HDR video · pass 1 of 2',sample2:'Generating HDR video · pass 2 of 2',upsample:'Upscaling HDR detail',hdr_decode:'Decoding HDR video',decode:'Decoding HDR video',zura_hdr_exr:'Converting to EXR',zura_hdr_archive:'Packaging EXR frames',zura_hdr_hlg:'Converting to HLG',zura_hdr_save_video:'Saving HDR video',zura_hdr_preview_tonemap:'Preparing SDR preview',zura_hdr_save_preview:'Saving preview'})[node]||'Processing HDR video';}
   updateMode(){
     const native=this.$('mode').value==='native';
     const option=this.$('source-kind').querySelector('option[value="sequence"]');option.hidden=!native;option.disabled=!native;
@@ -64,7 +67,7 @@ export class HDRSourceTool {
       const prepared=await this.request(route,{source_kind:sourceKind,source_id:sourceKind==='sequence'?this.sequenceAsset.id:asset?.id,project_id:asset?.projectId,start_frame:start,frame_count:count,sequence_fps:Number(this.$('sequence-fps').value),colour_space:this.$('colour').value,output:this.$('output').value});
       const queued=await this.request('/prompt',{prompt:prepared.graph,client_id:this.api.clientId||'zura-hdr'});
       if(!queued.prompt_id)throw new Error('ComfyUI did not accept the HDR conversion.');
-      this.job=queued.prompt_id;try{localStorage.setItem('zura-hdr-active-job',this.job);}catch{}this.$('cancel').hidden=false;this.status('Queued · preparing LTX 2.5…');this.poll();
+      this.job=queued.prompt_id;this.currentNode=null;try{localStorage.setItem('zura-hdr-active-job',this.job);}catch{}this.$('cancel').hidden=false;this.status('Queued · waiting for ComfyUI…');this.poll();
     }catch(error){this.status(error.message);this.finish();}
   }
   url(file){return this.api.apiURL('/view?'+new URLSearchParams({filename:file.filename,subfolder:file.subfolder||'',type:file.type||'output'}));}
@@ -75,6 +78,7 @@ export class HDRSourceTool {
       if(!item){
         const queue=await this.request('/queue');
         const pending=[...(queue.queue_pending||[]),...(queue.queue_running||[])];
+        if(!this.currentNode){const running=(queue.queue_running||[]).some(entry=>entry[1]===this.job);this.status(running?'Loading models and preparing HDR video…':'Queued · waiting for ComfyUI…');}
         if(!pending.some(entry=>entry[1]===this.job)){
           const again=await this.request('/history/'+encodeURIComponent(this.job));
           if(!again[this.job])throw new Error('This conversion is no longer in the ComfyUI queue. Start it again.');
@@ -91,5 +95,5 @@ export class HDRSourceTool {
   }
   async cancel(){if(!this.job)return;try{await this.request('/queue',{delete:[this.job]});await this.request('/interrupt',{prompt_id:this.job});this.status('Cancellation requested.');this.finish();}catch(error){this.status(error.message);}}
   finish(){clearTimeout(this.timer);this.timer=null;this.job=null;try{localStorage.removeItem('zura-hdr-active-job');}catch{}this.busy=false;this.$('start-job').disabled=false;this.$('cancel').hidden=true;this.$('progress').hidden=true;}
-  close(){clearTimeout(this.timer);this.api.removeEventListener?.('progress',this.onProgress);this.$('preview').pause?.();this.root.remove();}
+  close(){clearTimeout(this.timer);this.api.removeEventListener?.('progress',this.onProgress);this.api.removeEventListener?.('executing',this.onExecuting);this.$('preview').pause?.();this.root.remove();}
 }

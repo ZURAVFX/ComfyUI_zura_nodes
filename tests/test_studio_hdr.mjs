@@ -16,6 +16,11 @@ const api={apiURL:p=>p,clientId:'test',addEventListener(){},removeEventListener(
   return {ok:true,async json(){return data;}};
 }};
 const tool=new HDRSourceTool(document.querySelector('#host'),api,()=>({id:'source-id',projectId:'project-id'}));
+tool.job='progress-job';
+tool.onExecuting({detail:{prompt_id:'progress-job',node:'model'}});assert.equal(tool.$('status').textContent,'Loading LTX 2.5');assert.equal(tool.$('progress').hasAttribute('value'),false);
+tool.onProgress({detail:{prompt_id:'other-job',node:'sample1',value:3,max:8}});assert.equal(tool.$('status').textContent,'Loading LTX 2.5');
+tool.onProgress({detail:{prompt_id:'progress-job',node:'sample1',value:3,max:8}});assert.match(tool.$('status').textContent,/pass 1 of 2 · step 3 of 8/);assert.equal(Number(tool.$('progress').value),37.5);
+tool.onExecuting({detail:{prompt_id:'progress-job',node:'decode'}});assert.equal(tool.$('status').textContent,'Decoding HDR video');assert.equal(tool.$('progress').hasAttribute('value'),false);tool.job=null;
 tool.$('count').value='10';tool.$('start').value='7';tool.$('output').value='hlg_and_exr';
 await Promise.all([tool.start(),tool.start()]);await new Promise(resolve=>setTimeout(resolve,5));
 assert.equal(calls.filter(c=>c[0]==='/prompt').length,1,'Repeated click queues only once');

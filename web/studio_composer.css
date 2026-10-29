@@ -198,6 +198,13 @@
 #genj-studio .zc-workflow-menu>button[aria-checked=true]{background:var(--zc-hover);font-weight:650}
 #genj-studio .zc-workflow-menu>button[aria-checked=true]>span{width:7px;height:7px;border-radius:50%;background:var(--gs-accent)}
 #genj-studio .zc-task-control>summary[aria-disabled=true]{opacity:.5;cursor:not-allowed}
+/* The open workflow chooser is one connected control. The selected name
+   appears in the menu, while the accessible trigger remains available to close it. */
+#genj-studio .zc-task-control[open]>summary{background:var(--gs-panel);border:1px solid var(--gs-line);border-radius:0 0 8px 8px;padding:8px 12px}
+#genj-studio .zc-task-control[open]>summary [data-workflow-label]{display:none}
+#genj-studio .zc-task-control[open]>summary svg{transform:rotate(180deg)}
+@media(min-width:701px){#genj-studio .zc-task-control>.zc-workflow-menu{bottom:calc(100% - 1px);border-bottom-left-radius:0}}
+
 #genj-studio .zc-attachment-slot{position:relative;display:inline-flex;flex:none;max-width:240px}
 #genj-studio .zc-composer-attachments{padding:6px 4px;margin:-6px -4px;gap:12px}
 #genj-studio .zc-attachment-slot>.zc-remove-input{top:-9px;right:-9px}

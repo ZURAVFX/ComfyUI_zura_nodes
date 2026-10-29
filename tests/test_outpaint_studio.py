@@ -86,6 +86,13 @@ class StudioOutpaintTests(unittest.TestCase):
         self.assertTrue(torch.equal(padded[:, :130, :130], image))
         self.assertTrue(bool(mask[:, 130:, :].all()))
 
+    def test_minimum_duration_matches_clip_loader(self):
+        with self.assertRaisesRegex(ValueError, '3 frames'):
+            module.plan(self.source, **{**self.options, 'duration': 2 / 24})
+        selection = module.plan(self.source, **{**self.options, 'duration': 3 / 24})
+        graph = module.build_review_graph(self.source, selection, output_prefix='genj/outpaint/minimum')
+        self.assertGreaterEqual(graph['source_range']['inputs']['duration_seconds'], .1)
+
 
 if __name__ == '__main__':
     unittest.main()

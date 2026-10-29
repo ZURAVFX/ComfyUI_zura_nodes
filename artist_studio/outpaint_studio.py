@@ -29,8 +29,10 @@ def plan(source, *, start, duration, mode, width, height, left=0, top=0,
     if not math.isfinite(start) or not math.isfinite(duration) or start < 0 or duration <= 0:
         raise ValueError('Choose a valid start and duration.')
     frames = int(duration * FPS + 1e-6)
-    if not 1 <= frames <= MAX_FRAMES:
-        raise ValueError('This preview supports up to five seconds at 24 fps.')
+    # GenjSelectClip requires a duration of at least 0.1 seconds. At 24 fps,
+    # three frames are the first valid duration (2 / 24 is too short).
+    if not 3 <= frames <= MAX_FRAMES:
+        raise ValueError('Choose between 3 frames and five seconds at 24 fps.')
     available = float(source.get('duration', 0))
     if not math.isfinite(available) or available <= 0 or start + frames / FPS > available + 1e-4:
         raise ValueError('The selection extends past the source video.')

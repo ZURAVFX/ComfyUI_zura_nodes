@@ -554,6 +554,37 @@ class AudioAdapterTests(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     self.ns['reference_audio']({'duration': 2}, audio, offset)
 
+    def test_trim_resamples_non_24fps_sources_to_the_selected_frame_count(self):
+        """Real 25 and 29.97 fps sources must deliver the advertised 24 fps trim."""
+        import av
+        import folder_paths
+        import numpy as np
+        for rate in (Fraction(24000, 1001), Fraction(25), Fraction(30000, 1001)):
+            with self.subTest(rate=rate), tempfile.TemporaryDirectory() as tmp, \
+                    patch.object(folder_paths, 'get_output_directory', return_value=tmp, create=True):
+                source = Path(tmp) / 'source.mp4'
+                with av.open(str(source), mode='w') as out:
+                    stream = out.add_stream('libx264', rate=rate)
+                    stream.width, stream.height, stream.pix_fmt = 64, 64, 'yuv420p'
+                    for index in range(round(float(rate) * 2)):
+                        image = np.full((64, 64, 3), index * 3 % 256, dtype=np.uint8)
+                        frame = av.VideoFrame.from_ndarray(image, format='rgb24')
+                        for packet in stream.encode(frame):
+                            out.mux(packet)
+                    for packet in stream.encode():
+                        out.mux(packet)
+                video = self.ns['InputImpl'].VideoFromFile(str(source))
+                selected, details, _ = self.ns['GenjSelectClip']().select(video, .3, 1.25, 256)
+                self.assertEqual(details['frames'], 30)
+                self.assertEqual(details['duration'], 1.25)
+                with av.open(selected.path) as media:
+                    self.assertEqual(media.streams.video[0].average_rate, Fraction(24))
+                    self.assertEqual(sum(1 for _ in media.decode(video=0)), 30)
+                whole, whole_details, _ = self.ns['GenjSelectClip']().select(
+                    video, 0, 1, 256, use_original_length=True)
+                with av.open(whole.path) as media:
+                    self.assertEqual(sum(1 for _ in media.decode(video=0)), whole_details['frames'])
+
     def test_original_length_selects_all_frames_and_adds_silence_track(self):
         import av
         import folder_paths

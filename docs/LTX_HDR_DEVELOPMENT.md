@@ -132,3 +132,49 @@ All preview inputs remain limited to 1–121 frames, even source dimensions of
 32–2048 pixels per side, and a 40-million padded-pixel-frame cap. Seamless long
 clips, colour accuracy on representative camera sources, and full desktop UI
 review remain outstanding.
+
+## Longer native HDR experiment
+
+An internal, unexposed executor plans 8n+1-compatible memory-bounded chunks,
+queues them sequentially through native Comfy, stages float32 ACEScct on disk,
+and streams 10-bit HLG with the original audio and/or an ACEScg EXR ZIP. It
+performs model/output, encoder and free-space checks before queueing, verifies
+staged chunk integrity, and targets only its own current prompt on cancel.
+These pieces are not yet restart-recoverable or integrated into Studio.
+
+A two-chunk LTX GPU test using ten 384 × 224 PQ frames produced exactly ten
+10-bit Rec.2020 HLG frames and ten EXRs, with scene-linear highlights above 1.
+Linear-light crossfade showed visible ghosting around moving pedestrians. A
+minimum-error hard cut reduced that ghosting in this example but can create a
+motion jump; an optical-flow experiment still showed warping and was rejected.
+The test did not contain source audio; an independent FFmpeg test verified audio
+offset and duration. Neither result is representative HDR monitor validation or
+a licence to lift the Studio limit. Keep the 121-frame guard until temporal
+quality, real source audio, cancellation, recovery and display are verified.
+
+A second matched GPU test chained the previous chunk's corresponding generated
+frame through `LTXVAddGuide` at the start of both sampling passes, while keeping
+the source video IC-LoRA guide. It completed both chunks, but the moving-person
+overlap still showed ghosting and became progressively darker than the
+unanchored result (mean scene-linear value at frame 9: 0.330 versus 0.352).
+This single short test does not justify enabling the option or removing the
+121-frame limit. The anchor graph remains internal and defaults off.
+
+A follow-up tested the artist-approved outpaint approach: `LTXVImgToVideoInplace`
+sets the previous render's timestamp-aligned frame in both sampling passes,
+with the source HDR IC-LoRA guide preserved and nine same-time frames feathered
+in linear light. A real 26-frame 384 × 224 HLG test completed with 26 10-bit HLG
+frames and 26 ACEScg EXRs. Although technically successful, the two independently
+generated windows placed moving pedestrians differently and the feather visibly
+doubled them around frames 20–22. Same-time tone-mapped mean RGB difference grew
+from 0.015 to 0.033 through the overlap. One short synthetic-source example is
+not enough to establish HDR quality; this method remains experimental and the
+public limit remains in place.
+
+Private follow-up comparisons tried restricting the feather to areas where the
+windows agree and using a hard cut over moving regions. In this example the
+output-difference mask covered 86% of the frame after dilation; a source-flow
+mask covered 92%. Both were effectively near-global cuts. The least-error cut
+had a mean tone-mapped frame difference of 0.032 at the transition versus 0.016
+in the previous natural frame. These are diagnostic proxies, not a successful
+motion-quality test; the selective strategies are not exposed.

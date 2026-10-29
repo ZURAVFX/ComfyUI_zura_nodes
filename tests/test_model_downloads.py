@@ -29,7 +29,13 @@ class ModelDownloadTest(unittest.TestCase):
         self.assertEqual(packages['flux2_klein_start']['files'][0], packages['flux2_klein_9b']['files'][0])
         hdr = {(f['folder'], f['filename']) for f in packages['ltx25_sdr_hdr']['files']}
         self.assertIn(('embeddings', 'ltx-2.5-22b-ic-lora-sdr-to-hdr-scene-emb.safetensors'), hdr)
-        for name in ('flux2_klein_start', 'ltx25_full_vae', 'ltx25_refine', 'ltx25_sdr_hdr'):
+        self.assertEqual(packages['ltx25_text_encoder']['files'][0]['filename'], 'gemma4-12b-with-proj-ltx-2.5-nvfp4.safetensors')
+        self.assertEqual(packages['ltx25_outpaint']['files'][0]['filename'], 'ltx-2.3-22b-ic-lora-outpaint.safetensors')
+        self.assertEqual(packages['ltx25_in_outpaint']['files'][0]['filename'], 'ltx-2.3-22b-ic-lora-in-outpainting-0.9.safetensors')
+        self.assertTrue(packages['ltx25_in_outpaint']['gated'])
+        self.assertEqual(packages['h3_control']['files'][0]['folder'], 'model_patches')
+        self.assertIn('CrossView', packages['h3_crossview']['files'][0]['filename'])
+        for name in ('flux2_klein_start', 'ltx25_full_vae', 'ltx25_refine', 'ltx25_sdr_hdr', 'ltx25_text_encoder', 'ltx25_outpaint', 'ltx25_in_outpaint', 'ltx_control', 'ltx25_layout', 'h3_int8_vae', 'h3_control', 'h3_crossview'):
             for f in packages[name]['files']:
                 self.assertEqual(len(f['revision']), 40)
                 self.assertEqual(len(f['sha256']), 64)

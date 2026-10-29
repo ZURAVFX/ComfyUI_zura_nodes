@@ -186,7 +186,9 @@ class GenjSelectClip:
                    "full_source": start_seconds == 0 and abs(duration - available) <= 1 / 24, "has_audio": has_audio}
         if audio is not None:
             _, details = reference_audio(details, audio, audio_start_seconds)
-        key = hashlib.sha256(json.dumps(details, sort_keys=True).encode()).hexdigest()[:16]
+        # Include the selection algorithm version so previously cached files
+        # with a missing final frame are never reused after this fix.
+        key = hashlib.sha256((json.dumps(details, sort_keys=True) + "|selection-v2").encode()).hexdigest()[:16]
         path = root() / "clips" / (key + ".mp4")
         path.parent.mkdir(exist_ok=True)
         if not path.exists():
@@ -197,8 +199,20 @@ class GenjSelectClip:
             second = (["-i", details["audio_source"]] if audio is not None else
                       [] if has_audio else ["-f", "lavfi", "-i", "anullsrc=r=48000:cl=stereo"])
             ffmpeg("-ss", start_seconds, "-i", source, *second, "-t", duration, "-map", "0:v:0", "-map", "1:a:0" if second else "0:a:0",
-                   "-vf", f"fps=24,scale={w}:{h}:flags=lanczos", "-frames:v", frames,
+                   # Some sources (notably 23.976 fps) end one frame short
+                   # after seeking and resampling. Hold the last frame only
+                   # when needed; -frames:v keeps the requested exact count.
+                   "-vf", f"setpts=PTS-STARTPTS,fps=24,scale={w}:{h}:flags=lanczos,tpad=stop_mode=clone:stop=1", "-frames:v", frames,
                    "-c:v", "libx264", "-crf", 16, "-pix_fmt", "yuv420p", *audio_codec, "-movflags", "+faststart", path)
+        # Never advertise a duration the prepared clip cannot actually supply.
+        # MP4 stores the frame count in its video stream; decode as a fallback
+        # if the container does not provide it.
+        with av.open(str(path)) as prepared:
+            prepared_stream = prepared.streams.video[0]
+            actual_frames = prepared_stream.frames or sum(1 for _ in prepared.decode(video=0))
+            if actual_frames != frames:
+                raise ValueError(f"The selected clip produced {actual_frames} of {frames} requested frames. "
+                                 "Try a slightly shorter selection or re-encode the source.")
         details["selected_path"] = str(path)
         return (InputImpl.VideoFromFile(str(path)), details, f"{duration:.3f}s from {start_seconds:.3f}s | {frames} frames | {w} x {h} | 24 fps")
 

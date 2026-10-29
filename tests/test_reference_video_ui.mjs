@@ -58,6 +58,7 @@ assert.equal(ui.$('first-frame').disabled,true,'Cannot change a running job firs
 assert.ok(Object.values(prompt).some(n=>n.class_type==='MiniMaxH3ReferenceToVideo'));assert.equal(ui.job.id,'ref-job');assert.equal(ui.$('generate').disabled,true);
 events.get('progress')({detail:{prompt_id:'foreign',value:7,max:8}});assert.notEqual(ui.$('bar').value,87.5);
 events.get('progress')({detail:{prompt_id:'ref-job',value:3,max:8}});assert.equal(ui.$('bar').value,37.5);
+events.get('executing')({detail:{prompt_id:'ref-job',node:'decode'}});events.get('progress')({detail:{prompt_id:'ref-job',node:'decode',value:2,max:4}});assert.match(ui.$('progress-title').textContent,/Progress 2 of 4/);assert.doesNotMatch(ui.$('progress-title').textContent,/Step/);
 await ui.cancel();assert.ok(calls.some(c=>c.path==='/interrupt'&&c.body.prompt_id==='ref-job'));
 ui.job=null;ui.$('model').value='viggle';ui.$('model').dispatchEvent(new window.Event('change'));assert.equal(ui.config().speedup,'quality');assert.equal(ui.config().steps,40);assert.equal(ui.$('speedup').querySelector('[value="turbo"]').disabled,true);
 ui.save();const restored=new ReferenceVideoWorkspace({...owner,root:document.createElement('section')});assert.equal(restored.config().model,'viggle');assert.equal(restored.assets.images.length,2);assert.equal(restored.assets.videos[0].duration,4);assert.equal(restored.config().prompt,ui.config().prompt);

@@ -8,7 +8,7 @@ export class StudioModelDownloads {
   }
   el(tag,text){const e=document.createElement(tag);e.textContent=text;return e;}
   async load(){
-    try{const data=await this.request('/model-downloads');this.packages=(data.models||[]).filter(p=>['openjutsu_h3','wan_animate_2','ltx25_core','ltx25_full_vae','ltx25_refine','ltx25_sdr_hdr','flux2_klein_start'].includes(p.id));
+    try{const data=await this.request('/model-downloads');this.packages=(data.models||[]).filter(p=>['openjutsu_h3','wan_animate_2','h3_int8_vae','h3_control','h3_crossview','ltx25_core','ltx25_full_vae','ltx25_refine','ltx25_sdr_hdr','ltx25_text_encoder','ltx25_outpaint','ltx25_in_outpaint','ltx_control','flux2_klein_start'].includes(p.id));
       const previous=this.select.value;this.select.replaceChildren(...this.packages.map(p=>{const e=this.el('option',p.name);e.value=p.id;return e;}));if(this.packages.some(p=>p.id===previous))this.select.value=previous;this.render();
     }catch(e){this.progress.textContent=e.message||'Could not load model packages.';}
   }
