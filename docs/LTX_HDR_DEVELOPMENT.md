@@ -93,6 +93,22 @@ colour transforms. Synthetic tests check that extended ACEScg highlights
 survive and that encoded HLG passes through the native colour conversion. This
 helper is not registered in Studio; it has not been validated against real HDR
 camera footage or a full native HDR render. The official TiledFusion sampler,
-its required `ltx25_general_refine.safetensors` (not found in the configured
-model folders), EXR/video upload, and native HDR input/output UX remain to be
-implemented and tested before advertising HDR-to-HDR support.
+its EXR/video upload, and native HDR input/output UX remain to be implemented
+and tested before advertising HDR-to-HDR support. The example names an
+unidentified `ltx25_general_refine.safetensors`; Lightricks' official 2.5
+Refine Details IC-LoRA is available and checksum-verified locally, but its
+equivalence to that custom-named file is not established.
+
+`hdr_native_graph.py` provides a separate, unexposed two-stage TiledFusion
+experiment using the official Refine Details adapter, native EXR loader,
+float32 video VAE and the example's 8+3-step schedules. Its loader documents
+EXR sequences as well as stills, but the supplied workflow itself repeats one
+EXR still. A real GPU run used nine 64 x 64 engineering EXRs scaled to 512 x
+512, and wrote nine 10-bit BT.2020/HLG video frames and nine ACEScg EXRs with
+finite values up to 7.01. The run took 78.45 seconds using 256 x 256 tiles;
+the saved prototype now uses the example's 1024 x 576 tile setting, which has
+not been re-tested. This verifies a narrow sequence-to-HDR render, not
+quality, native moving-camera footage or input colour fidelity. There is no
+audio restoration, Studio UI, sequence upload or validated HLG/PQ video path
+in this prototype. It also resizes to supplied dimensions, so it must not be
+exposed until proportional geometry and padded 8n+1 trim are implemented.
