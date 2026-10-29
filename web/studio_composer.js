@@ -151,7 +151,8 @@ export class VideoComposer {
     this.syncOpeningModel(working);
     this.syncWorkflow();
     this.resolution.hidden=false;this.settings.hidden=stage!=='video'||['relight','camera'].includes(s.config.workflow_mode);this.audio.hidden=s.$('audio-settings').hidden||stage!=='video';
-    this.root.querySelector('#zc-tool-resolution').textContent=s.$('resolution').selectedOptions?.[0]?.textContent?.split(' Â· ')[0]||'Resolution';
+    const size=this.sizeControl.sync(),sizeContext=this.sizeControl.context();
+    this.root.querySelector('#zc-tool-resolution').textContent=sizeContext.exact?`${size.width} × ${size.height}`:(s.$('resolution').selectedOptions?.[0]?.textContent?.split(' · ')[0]||'Resolution');
     const length=clipLength(s.config,s.source?.duration),lengthLabel=this.root.querySelector('#zc-tool-length');
     const local24=['wan','wan2','h3','local'].includes(s.config.engine);
     lengthLabel.textContent=local24&&Number.isFinite(length.outputSeconds)?`${length.outputSeconds.toFixed(2)}s · ${length.frames}f`:(s.config.length_mode==='original'?'Full clip':`${s.config.duration}s`);

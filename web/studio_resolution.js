@@ -41,8 +41,14 @@ export function megapixelSlider(select,{min=.25,max=1,step=.05}={}) {
   input.oninput=()=>{update();handler?.call(input);};input.onchange=input.oninput;input.updateReadout=update;update();return input;
 }
 
-export const RESOLUTION_SHAPES=[['source','Source proportions',null],['landscape','Widescreen · 16:9',16/9],['portrait','Portrait · 9:16',9/16],['square','Square · 1:1',1],['standard','Landscape · 4:3',4/3],['vertical','Portrait · 3:4',3/4],['custom','Custom dimensions',null]];
-export function resolutionMarkup(prefix){return `<strong>Resolution</strong><label>Shape<select id="${prefix}-shape">${RESOLUTION_SHAPES.map(([id,label])=>`<option value="${id}">${label}</option>`).join('')}</select></label><label>Megapixels<input id="${prefix}-mp" type="range" min="0.25" max="1" step="0.05" value="1"/><output id="${prefix}-mp-label" class="zc-resolution-readout"></output></label><div class="zf-dimensions" id="${prefix}-custom"><label>Width (px)<input id="${prefix}-width" value="1280"/></label><label>Height (px)<input id="${prefix}-height" value="720"/></label></div><output id="${prefix}-dimensions" class="zc-resolution-dimensions" aria-live="polite"></output><p id="${prefix}-hint"></p>`;}
+export const RESOLUTION_SHAPES=[['source_size','Use source resolution',null],['source','Match source proportions',null],['landscape','Widescreen · 16:9',16/9],['portrait','Portrait · 9:16',9/16],['square','Square · 1:1',1],['standard','Landscape · 4:3',4/3],['vertical','Portrait · 3:4',3/4],['custom','Custom dimensions',null]];
+export function sourceResolution(width,height,cap){
+  if(!(width>0&&height>0))return null;
+  if(Number.isInteger(width)&&Number.isInteger(height)&&width>=cap.min&&height>=cap.min&&width<=cap.max&&height<=cap.max&&width%cap.step===0&&height%cap.step===0&&width*height<=cap.maxPixels)return {width,height};
+  const scale=Math.min(1,cap.max/width,cap.max/height,Math.sqrt(cap.maxPixels/(width*height)));
+  return resolutionSize(width/height,width*height*scale*scale/1e6,cap);
+}
+export function resolutionMarkup(prefix){return `<div class="zc-resolution-header"><strong>Resolution</strong><output id="${prefix}-dimensions" class="zc-resolution-dimensions" aria-live="polite"></output></div><label class="zc-resolution-field"><span>Size</span><select id="${prefix}-shape">${RESOLUTION_SHAPES.map(([id,label])=>`<option value="${id}">${label}</option>`).join('')}</select></label><label class="zc-resolution-field zc-resolution-mp" id="${prefix}-mp-setting"><span class="zc-resolution-field-heading"><span>Megapixels</span><output id="${prefix}-mp-label" class="zc-resolution-readout"></output></span><input id="${prefix}-mp" type="range" min="0.25" max="1" step="0.05" value="1"/></label><div class="zf-dimensions" id="${prefix}-custom"><label>Width (px)<input id="${prefix}-width" value="1280"/></label><label>Height (px)<input id="${prefix}-height" value="720"/></label></div><p class="zc-resolution-hint" id="${prefix}-hint"></p>`;}
 
 /** Uses actual pipeline controls; fixed recipes expose their supported sizes. */
 export class VideoResolutionControl {
@@ -68,7 +74,8 @@ export class VideoResolutionControl {
       x.s.config.resolution=Number(x.s.$('resolution').value);this.sync();return;
     }
     const ratio=shape==='custom'?(x.c[x.key+'_width']/x.c[x.key+'_height']||x.ratio):RESOLUTION_SHAPES.find(p=>p[0]===shape)?.[2]||x.ratio;
-    let size=custom?{width:Number(this.$('width').value),height:Number(this.$('height').value)}:resolutionSize(ratio,mp,x.cap);
+    let size=shape==='source_size'?sourceResolution(x.source.width,x.source.height,x.cap):custom?{width:Number(this.$('width').value),height:Number(this.$('height').value)}:resolutionSize(ratio,mp,x.cap);
+    if(!size){this.$('hint').textContent='Add a source video to use its resolution.';return;}
     if(Object.values(size).some(n=>!Number.isInteger(n)||n<x.cap.min||n>x.cap.max||n%x.cap.step)){this.$('hint').textContent=`Enter both dimensions in multiples of ${x.cap.step}.`;return;}
     if(size.width*size.height>x.cap.maxPixels){this.$('hint').textContent='Reduce the dimensions to fit this model’s pixel limit.';return;}
     if(custom)this.$('shape').value='custom';
@@ -80,18 +87,23 @@ export class VideoResolutionControl {
     const x=this.context(),busy=x.s.busy||x.s.project?.phase==='working';
     const sourceWidth=x.source.width||1280,sourceHeight=x.source.height||720;
     const fallback=x.opening?resolutionSize(x.ratio,1,x.cap):x.camera?{width:768,height:448}:{width:Math.max(256,Math.round(sourceWidth*1280/Math.max(sourceWidth,sourceHeight)/16)*16),height:Math.max(256,Math.round(sourceHeight*1280/Math.max(sourceWidth,sourceHeight)/16)*16)};
-    const size=x.exact?{width:x.c[x.key+'_width']||fallback.width,height:x.c[x.key+'_height']||fallback.height}:resolutionSize(x.ratio,(Number(x.c.resolution)||1280)**2/Math.max(x.ratio,1/x.ratio)/1e6,{step:x.c.engine==='wan2'?16:64,min:64,max:1920});
+    const sourceSize=x.relight&&!x.opening&&x.c[x.key+'_shape']==='source_size'?sourceResolution(x.source.width,x.source.height,x.cap):null;
+    if(sourceSize)Object.assign(x.c,{[x.key+'_width']:sourceSize.width,[x.key+'_height']:sourceSize.height});
+    const size=x.exact?(sourceSize||{width:x.c[x.key+'_width']||fallback.width,height:x.c[x.key+'_height']||fallback.height}):resolutionSize(x.ratio,(Number(x.c.resolution)||1280)**2/Math.max(x.ratio,1/x.ratio)/1e6,{step:x.c.engine==='wan2'?16:64,min:64,max:1920});
     if(x.opening&&x.camera){size.width=1024;size.height=576;}
     if(this.nativeQuality)this.nativeQuality.hidden=x.exact;
     this.$('mp').max=x.opening?2:x.camera?1.6:x.exact?2:2.1;
     this.$('mp').value=x.exact?(x.c[x.key+'_megapixels']??size.width*size.height/1e6):size.width*size.height/1e6;
     this.$('mp-label').textContent=`${(size.width*size.height/1e6).toFixed(2)} MP`;
     this.$('shape').value=x.exact?(x.c[x.key+'_shape']||'source'):'source';this.$('shape').disabled=busy||!x.exact||x.opening&&x.camera;
+    const sourceOption=this.$('shape').querySelector('option[value="source_size"]');sourceOption.disabled=!x.relight||x.opening||!(x.source.width>=2&&x.source.height>=2&&x.source.width<=16384&&x.source.height<=16384);
+    this.$('mp-setting').hidden=this.$('shape').value==='source_size'||this.$('shape').value==='custom';
     this.$('custom').hidden=this.$('shape').value!=='custom';
     for(const key of ['width','height']){const field=this.$(key);if(field!==this.panel.ownerDocument.activeElement)field.value=size[key];field.disabled=busy;}
     this.$('mp').disabled=busy||x.opening&&x.camera||(!x.exact&&(x.c.engine==='wan2'||x.c.h3_head_swap));
-    this.$('dimensions').textContent=`${size.width} × ${size.height} px`;
-    this.$('hint').textContent=x.opening&&x.camera?'Camera still uses the verified 1024 × 576 recipe. Choose animation resolution at the video stage.':x.opening?`Image generation · ${x.cap.step}-pixel grid. Saved frame stays ${sourceWidth} × ${sourceHeight}; the original shot is preserved.`:x.exact?`${x.camera?'H3':'Wan 2.1'} · ${x.cap.step}-pixel grid. Images fit proportionally and crop to fill; no stretching.`:'Keeps the source framing. The slider selects supported native sizes for this verified workflow.';
-    return size;
+    const output=sourceSize?{width:sourceWidth-sourceWidth%2,height:sourceHeight-sourceHeight%2}:size;
+    this.$('dimensions').textContent=`${output.width} × ${output.height} px`;
+    this.$('hint').textContent=x.opening&&x.camera?'Camera still uses the verified 1024 × 576 recipe. Choose animation resolution at the video stage.':sourceSize?`${output.width===sourceWidth&&output.height===sourceHeight?'Output matches the source.':'Output adjusted to even pixels for MP4.'} ${sourceSize.width===output.width&&sourceSize.height===output.height?'':`Generated at ${sourceSize.width} × ${sourceSize.height} on Wan’s ${x.cap.step}-pixel grid, then fitted to the output.`}`.trim():x.opening?`Image generation · ${x.cap.step}-pixel grid. Saved frame stays ${sourceWidth} × ${sourceHeight}.`:x.exact?`${x.camera?'H3':'Wan 2.1'} · ${x.cap.step}-pixel grid. Images are fitted without stretching.`:'The slider selects supported native sizes for this workflow.';
+    return output;
   }
 }

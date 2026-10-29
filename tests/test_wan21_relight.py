@@ -98,6 +98,17 @@ class Wan21RelightTests(unittest.TestCase):
             self.assertEqual(graph[key]["inputs"]["width"], 720)
             self.assertEqual(graph[key]["inputs"]["height"], 1280)
             self.assertEqual(graph[key]["inputs"]["keep_proportion"], "crop")
+        self.assertEqual(graph["wan21_export"]["inputs"]["output_width"], 720)
+        self.assertEqual(graph["wan21_export"]["inputs"]["output_height"], 1280)
+
+    def test_source_size_exports_original_even_resolution(self):
+        project = self.project()
+        project["config"].update(relight_shape="source_size", relight_width=1920, relight_height=1088)
+        with patch.object(wan21, "_source_size", return_value=(1920, 1080)):
+            graph = self.build(project)
+        self.assertEqual(graph["272:407:89"]["inputs"]["height"], 1088)
+        self.assertEqual(graph["wan21_export"]["inputs"]["output_width"], 1920)
+        self.assertEqual(graph["wan21_export"]["inputs"]["output_height"], 1080)
 
     def test_opening_resolution_keeps_original_frame_and_final_source_size(self):
         for model in ("flux3", "klein9b", "qwen2511", "qwen21"):

@@ -273,6 +273,10 @@ class BoundedSpeechGuardTests(unittest.TestCase):
         result = namespace["GenjRestoreSoundtrack"]().restore(short,{**self.details,"full_source":False},"short_take")
         self.assertEqual(io.inspect_video(result["result"][0]).frames,24)
         self.assertIn('tpad=stop_mode=clone:stop=1', calls[-1][calls[-1].index('-vf')+1])
+        sized = namespace["GenjRestoreSoundtrack"]().restore(generated,{**self.details,"full_source":False},"sized_take",output_width=96,output_height=64)
+        with media.av.open(str(sized["result"][0].get_stream_source())) as container:
+            self.assertEqual((container.streams.video[0].width,container.streams.video[0].height),(96,64))
+        self.assertIn('force_original_aspect_ratio=increase',calls[-1][calls[-1].index('-vf')+1])
 
 
 if __name__ == "__main__":

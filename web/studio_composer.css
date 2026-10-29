@@ -223,4 +223,16 @@
 #genj-studio .zc-tool-panel .zf-dimensions{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px;margin-top:16px}
 #genj-studio .zc-tool-panel .zf-dimensions input{width:100%;min-width:0;font-variant-numeric:tabular-nums}
 #genj-studio .zc-tool-panel label{line-height:1.5}
-#genj-studio .zc-tool-panel [aria-invalid=true]{outline:1px solid var(--gs-error,#f58b78)}
+#genj-studio .zc-tool-panel [aria-invalid=true]{outline:1px solid var(--gs-error,#e77e70)}
+#genj-studio .zc-resolution-header{display:flex;align-items:baseline;justify-content:space-between;gap:16px;margin-bottom:18px}
+#genj-studio .zc-resolution-header strong{font-size:14px;line-height:20px}
+#genj-studio .zc-resolution-header .zc-resolution-dimensions{margin:0;color:var(--zc-text);font-size:14px;line-height:20px;white-space:nowrap}
+#genj-studio .zc-resolution-field{display:block;margin:0 0 16px;font-size:12px;color:var(--gs-muted)}
+#genj-studio .zc-resolution-field>span:first-child{display:block;margin-bottom:8px}
+#genj-studio .zc-resolution-field select{display:block;min-height:40px}
+#genj-studio .zc-resolution-field-heading{display:flex!important;justify-content:space-between;gap:12px;align-items:baseline}
+#genj-studio .zc-resolution-field-heading output{color:var(--zc-text)}
+#genj-studio .zc-resolution-mp input[type=range]{margin:0}
+#genj-studio .zc-resolution-hint{margin:0;color:var(--gs-muted);font-size:12px;line-height:1.5}
+#genj-studio .zc-tool-panel .zf-dimensions{margin:0 0 16px}
+#genj-studio .zc-resolution-field[hidden],#genj-studio .zc-tool-panel .zf-dimensions[hidden]{display:none}

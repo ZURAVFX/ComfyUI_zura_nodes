@@ -574,14 +574,16 @@ class GenjRestoreSoundtrack:
     def INPUT_TYPES(cls):
         return {"required": {"video": ("VIDEO",), "clip_details": ("GENJ_CLIP",),
                              "take_name": ("STRING", {"default": "replacement", "multiline": False})},
-                "optional": {"output_subfolder": (["final", "studio_intermediate"],)}}
+                "optional": {"output_subfolder": (["final", "studio_intermediate"],),
+                             "output_width": ("INT", {"default": 0, "min": 0, "max": 16384}),
+                             "output_height": ("INT", {"default": 0, "min": 0, "max": 16384})}}
 
     RETURN_TYPES = ("VIDEO",)
     FUNCTION = "restore"
     CATEGORY = CATEGORY
     OUTPUT_NODE = True
 
-    def restore(self, video, clip_details, take_name, output_subfolder="final"):
+    def restore(self, video, clip_details, take_name, output_subfolder="final", output_width=0, output_height=0):
         if not re.fullmatch(r"[A-Za-z0-9_-]{1,80}", take_name):
             raise ValueError("Take name can contain letters, numbers, underscores and hyphens.")
         if output_subfolder not in ("final", "studio_intermediate"):
@@ -613,7 +615,11 @@ class GenjRestoreSoundtrack:
         # The duration check above still rejects larger shortages; holding just
         # one frame gives the selected soundtrack an exact frame-aligned end.
         vf = "fps=24,tpad=stop_mode=clone:stop=1"
-        if clip_details.get("export_width") and clip_details.get("export_height"):
+        if output_width or output_height:
+            if any(type(v) is not int or v < 2 or v > 16384 or v % 2 for v in (output_width, output_height)):
+                raise ValueError("Output width and height must be even numbers from 2 to 16384.")
+            vf += f",scale={output_width}:{output_height}:force_original_aspect_ratio=increase:flags=lanczos,crop={output_width}:{output_height}"
+        elif clip_details.get("export_width") and clip_details.get("export_height"):
             vf += f",scale={clip_details['export_width']}:{clip_details['export_height']}:flags=lanczos"
         ffmpeg("-i", generated, "-ss", offset, "-i", soundtrack, "-map", "0:v:0", "-map", "1:a:0?",
                "-t", target_duration, "-vf", vf, "-frames:v", clip_details["frames"],

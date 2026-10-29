@@ -85,6 +85,8 @@ assert.equal(studio.container.querySelector('input[value="relight"]').closest('l
 assert.equal(studio.config.engine,'h3');assert.equal(studio.$('audio-settings').hidden,true);
 assert.equal(studio.$('preserve-identity-setting').hidden,true,'Wan relight hides the H3 identity guide');
 assert.equal(studio.config.relight_engine,'wan21','Relight defaults to the supplied Wan recipe');
+assert.match(studio.container.querySelector('#zc-tool-resolution').textContent,/\d+ × \d+/,'Relight shows its output dimensions');
+assert.doesNotMatch(studio.container.querySelector('#zc-tool-resolution').textContent,/H3/i,'Wan 2.1 relight must not show H3 in the resolution control');
 assert.equal(studio.container.querySelector('input[name="gs-engine"][value="h3"]').closest('label').hidden,true,'H3 relight video is removed from Studio');
 assert.equal(studio.$('image-editor').hidden,false);
 assert.equal(studio.$('head-replacement-setting').hidden,true);

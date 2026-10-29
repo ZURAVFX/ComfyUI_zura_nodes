@@ -2021,6 +2021,8 @@ class Studio:
                 from .enhancement import checked_output_path, inspect_video
                 path = checked_output_path(video)
                 actual = inspect_video(path, expected_frames=action.get("expected_frames"),
+                                       expected_width=action.get("output_raster", {}).get("width"),
+                                       expected_height=action.get("output_raster", {}).get("height"),
                                        expected_fps=24)
                 item.update(label="Wan 2.1 Relight", delivery_mode="native",
                             generation_resolution=action.get("generation_resolution"),
@@ -2301,6 +2303,9 @@ class Studio:
                           generation_raster={"width": size["width"], "height": size["height"]},
                           expected_frames=manifest["clip"]["frames"],
                           relight_recipe="wan21-relight-switchx-v1")
+            delivery = graph["wan21_export"]["inputs"]
+            if delivery.get("output_width") and delivery.get("output_height"):
+                action["output_raster"] = {"width": delivery["output_width"], "height": delivery["output_height"]}
         elif stage == "h3_enhance":
             base = p.get("h3_enhancement_base") or {}
             action["delivery_mode"] = "enhanced1080"

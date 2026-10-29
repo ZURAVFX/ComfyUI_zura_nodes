@@ -77,7 +77,7 @@ def _node(graph: dict[str, dict[str, Any]], key: str, class_type: str,
     return [key, 0]
 
 
-def _output_size(source_path: str | Path) -> tuple[int, int]:
+def _source_size(source_path: str | Path) -> tuple[int, int]:
     with av.open(str(source_path)) as container:
         if not container.streams.video:
             raise Wan21RelightError("Upload a video containing a video track.")
@@ -85,6 +85,11 @@ def _output_size(source_path: str | Path) -> tuple[int, int]:
         source_width, source_height = int(stream.width), int(stream.height)
     if source_width < 1 or source_height < 1:
         raise Wan21RelightError("The source video's dimensions could not be read.")
+    return source_width, source_height
+
+
+def _output_size(source_path: str | Path) -> tuple[int, int]:
+    source_width, source_height = _source_size(source_path)
     scale = LONG_EDGE / max(source_width, source_height)
     width = max(64, round(source_width * scale / 16) * 16)
     height = max(64, round(source_height * scale / 16) * 16)
@@ -169,4 +174,11 @@ def build_studio_graph(project: Mapping[str, Any], check_asset) -> dict[str, dic
                    "take_name": "studio_" + str(project["id"])[:8] + "_wan21_relight"},
         "_meta": {"title": "Save relight with original soundtrack"},
     }
+    if config.get("relight_shape") == "source_size":
+        source_width, source_height = _source_size(source_path)
+        # H.264 yuv420p requires even output dimensions.
+        graph["wan21_export"]["inputs"].update(output_width=source_width - source_width % 2,
+                                                 output_height=source_height - source_height % 2)
+    elif config.get("relight_width") and config.get("relight_height"):
+        graph["wan21_export"]["inputs"].update(output_width=width, output_height=height)
     return graph

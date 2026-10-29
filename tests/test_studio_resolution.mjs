@@ -20,6 +20,11 @@ field('mp').value='.65';field('mp').oninput();assert.equal(studio.config.opening
 const imageWidth=studio.config.opening_width;stage='video';control.sync();assert.match(field('dimensions').textContent,/1280 × 720/,'Existing relight default matches its graph');
 field('shape').value='portrait';field('shape').onchange();assert.ok(studio.config.relight_height>studio.config.relight_width);assert.equal(studio.config.opening_width,imageWidth,'Image and video sizes stay independent');
 field('shape').value='custom';field('shape').onchange();field('width').value='720';field('height').value='1280';field('width').commitDimension();assert.equal(studio.config.relight_width,720);assert.equal(studio.config.relight_height,1280);
+studio.source={width:1920,height:1088};control.sync();field('shape').value='source_size';field('shape').onchange();
+assert.equal(studio.config.relight_width,1920);assert.equal(studio.config.relight_height,1088);assert.match(field('hint').textContent,/Output matches the source/);assert.equal(field('mp-setting').hidden,true);
+studio.source={width:1920,height:1080};control.sync();assert.equal(studio.config.relight_width,1920);assert.equal(studio.config.relight_height,1088);assert.match(field('hint').textContent,/Generated at 1920 × 1088/);assert.match(field('dimensions').textContent,/1920 × 1080/);
+studio.source={width:3840,height:2160};control.sync();assert.ok(studio.config.relight_width<=1920);assert.ok(studio.config.relight_height<=1920);assert.ok(studio.config.relight_width*studio.config.relight_height<=1920*1088);assert.match(field('hint').textContent,/Generated at/);assert.match(field('dimensions').textContent,/3840 × 2160/);
+field('shape').value='source';field('shape').onchange();assert.equal(field('mp-setting').hidden,false,'Source proportions still offers a megapixel slider');
 studio.busy=true;control.sync();assert.equal(field('mp').disabled,true);assert.equal(field('width').disabled,true);
 for(const recipe of ENDPOINT_RECIPES)for(const shape of ['landscape','portrait','square','standard','vertical'])for(let i=5;i<=20;i++){
   const size=endpointPresetSize(recipe.id,shape,i/20);
