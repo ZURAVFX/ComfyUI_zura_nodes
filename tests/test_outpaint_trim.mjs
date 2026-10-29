@@ -6,10 +6,17 @@ const {document}=parseHTML(`<section><div class="settings"><label>Start <input d
 globalThis.document=document;
 const page=document.querySelector('section'),video=page.querySelector('video');
 const workspace={page,video,source:{duration:4.25},job:null,submitting:false,mode:'expand',longReady:false,
-  $(name){return page.querySelector(`[data-${name}]`);},invalidate(){this.invalidated=(this.invalidated||0)+1;}};
+  $(name){return page.querySelector(`${name==='duration'||name==='start'?'input':''}[data-${name}]`);},invalidate(){this.invalidated=(this.invalidated||0)+1;}};
 const trim=new OutpaintTrim(workspace);
 trim.initial();
 assert.equal(Number(workspace.$('duration').value),4.25,'short sources default to their complete length');
+assert.equal(!!trim.menu.open,false,'the timeline starts collapsed so the preview and action remain visible');
+assert.equal(trim.selection.textContent,'4.25s','the collapsed control still shows the selected duration');
+trim.menu.open=true;trim.menu.dispatchEvent(new document.defaultView.Event('toggle'));
+assert.equal(trim.trimmer.host.hidden,false,'opening the control makes the draggable timeline available');
+const outside=document.createElement('button');document.body.append(outside);
+outside.dispatchEvent(new document.defaultView.Event('pointerdown',{bubbles:true}));
+assert.equal(trim.menu.open,false,'clicking outside dismisses the timeline');
 assert.equal(trim.button.disabled,false);
 trim.commit({start:1,duration:2});
 assert.equal(workspace.$('start').value,'1');
@@ -31,6 +38,7 @@ assert.equal(Number(workspace.$('duration').value),2,'selection cannot extend pa
 workspace.longReady=true;trim.update();
 assert.equal(trim.longOption.hidden,false);assert.equal(trim.button.disabled,false,'verified long backend enables full-source selection');
 trim.button.click();assert.equal(trim.long,true);assert.equal(Number(workspace.$('duration').value),10,'entire source selects a long range explicitly');
+assert.equal(trim.selection.textContent,'10s · long','the collapsed label identifies a long selection');
 trim.commit({start:1,duration:8});assert.equal(Number(workspace.$('duration').value),8,'dragged long range remains intact');
 workspace.mode='black';trim.modeChanged();assert.equal(trim.long,false);assert.equal(Number(workspace.$('duration').value),5,'unsupported black-area mode returns to its short limit');
 workspace.mode='expand';trim.update();trim.longMode.checked=true;trim.modeChanged();trim.longMode.checked=false;trim.longMode.onchange();assert.ok(Number(workspace.$('duration').value)<=5,'turning long mode off clamps the existing range');

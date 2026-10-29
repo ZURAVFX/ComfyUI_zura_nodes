@@ -9,7 +9,9 @@ assert.equal(trimEdge({start:1,end:3,total:10},'end',-2).end,1.25);
 assert.equal(trimEdge({start:1,end:3,total:10},'end',30).end,10,'Source duration bounds the end');
 assert.equal(trimEdge({start:1,end:3,total:10},'end',9,5).start,4,'The range stays within the model limit');
 assert.equal(trimEdge({start:1,end:3,total:10},'start',1.019).start,1,'Timing snaps to the pipeline frame rate');
-assert.equal(trimTime(61.5),'1:01.12');
+assert.equal(trimTime(61.5),'1:01.50');
+assert.equal(trimTime(32.625),'0:32.63');
+assert.equal(trimTime(59.999),'1:00.00');
 
 const {document,window}=parseHTML('<html><body><section id="trim"></section></body></html>');
 window.HTMLElement.prototype.focus=()=>{};

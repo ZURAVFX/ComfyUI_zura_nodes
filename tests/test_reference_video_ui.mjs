@@ -9,7 +9,7 @@ Object.defineProperty(window.HTMLInputElement.prototype,'checked',{configurable:
 window.HTMLElement.prototype.pause=()=>{};
 const stored={},events=new Map(),calls=[];
 Object.assign(globalThis,{document,window,localStorage:{getItem:k=>stored[k],setItem:(k,v)=>stored[k]=v}});
-const owner={root:document.querySelector('#root'),studio:{close(){}},app:{},api:{apiURL:p=>p,clientId:'test',addEventListener:(n,h)=>events.set(n,h),fetchApi:async(path,options)=>{calls.push({path,options});const file=options.body.get('image');return {ok:true,json:async()=>({name:file.name,subfolder:'zura_references'})};}},fetch:async(path,body)=>{calls.push({path,body});if(path==='/prompt')return {prompt_id:'ref-job'};if(path==='/queue')return {queue_running:[[0,'ref-job']],queue_pending:[]};return {};}};
+const owner={root:document.querySelector('#root'),studio:{close(){}},app:{},api:{apiURL:p=>p,clientId:'test',addEventListener:(n,h)=>events.set(n,h),fetchApi:async(path,options)=>{calls.push({path,options});const file=options.body.get('image');return {ok:true,json:async()=>({name:file.name,subfolder:'zura_references'})};}},fetch:async(path,body)=>{calls.push({path,body});if(path==='/zura/studio/loras/apply')return {graph:{...body.graph,custom_test:{class_type:'LoraLoaderModelOnly',inputs:{}}}};if(path==='/prompt')return {prompt_id:'ref-job'};if(path==='/queue')return {queue_running:[[0,'ref-job']],queue_pending:[]};return {};}};
 const ui=new ReferenceVideoWorkspace(owner);ui.startPolling=()=>{};
 assert.ok(VIDEO_WORKFLOWS.some(([id])=>id==='references'));
 assert.equal(ui.$('generate').disabled,true);
@@ -47,7 +47,9 @@ assert.equal(ui.config().firstFrame,'zura_references/coat.png','Removing an earl
 assert.equal(ui.$('first-frame').querySelector('option[selected]').textContent,'Start: Picture 1');
 let pasted=false;await ui.paste({preventDefault(){pasted=true;},stopPropagation(){},clipboardData:{items:[{kind:'file',type:'image/png',getAsFile:()=>file('pasted.png')}]}});assert.equal(pasted,true);assert.equal(ui.assets.images.length,2);
 ui.$('prompt').value='The character from <Picture 1> follows the motion in <Video 1>.';ui.$('random').checked=false;ui.availability={ready:true};ui.render();assert.equal(ui.$('generate').disabled,false);
+ui.loras.setValue([{name:'custom-h3.safetensors',strength:.7,confirm_unknown:true}]);
 await ui.generate();const prompt=calls.find(c=>c.path==='/prompt').body.prompt;
+assert.equal(calls.find(c=>c.path==='/zura/studio/loras/apply').body.family,'h3');assert.equal(prompt.custom_test.class_type,'LoraLoaderModelOnly');
 assert.equal(prompt.vocal_guide.class_type,'MiniMaxH3AddGuide');
 assert.equal(prompt.first_guide.class_type,'MiniMaxH3AddGuide');
 assert.deepEqual(prompt.vocal_guide.inputs.positive,['first_guide',0]);
@@ -83,6 +85,8 @@ fastUi.assets.images=[{file:'refs/person.png',filename:'person.png'}];fastUi.$('
 assert.equal(fastUi.$('speedup').value,'turbo','New users keep the established preset');
 assert.equal(fastUi.$('speedup').closest('.zc-tool-group').getAttribute('aria-label'),'Model and workflow','Preset stays next to the model, outside advanced settings');
 fastUi.$('speedup').value='progressive';fastUi.$('speedup').dispatchEvent(new window.Event('change'));
+assert.equal(fastUi.loras.family(),null,'Unqualified FastH3 does not silently accept generic H3 adapters');
+await assert.rejects(()=>fastUi.loras.patch({},[{name:'unknown.safetensors',strength:1,confirm_unknown:true}]),/not available/);
 assert.equal(fastUi.$('profile-note').hidden,false);assert.match(fastUi.$('profile-note').textContent,/softer.*detail.*framing/i);
 assert.equal(fastUi.$('generate').disabled,false);
 assert.equal(Number(fastUi.$('steps').value),8);assert.equal(fastUi.$('steps').disabled,true);

@@ -16,6 +16,8 @@ const owner={root:document.querySelector('#genj-studio'),api:{clientId:'studio-c
 const ui=new OutpaintWorkspace(owner);
 ui.source={id:'a'.repeat(32),width:768,height:432,duration:4};ui.reframe();ui.invalidate();ui.paint();
 ui.trim.initial();
+assert.equal(ui.page.querySelector('[data-timeline] [data-duration]').tagName,'OUTPUT');
+assert.equal(ui.$('duration').tagName,'INPUT','timeline readout must never shadow the submitted numeric duration');
 assert.equal(ui.config().duration,4,'a short video initially uses its entire source length');
 ui.trim.commit({start:1,duration:2.5});
 assert.equal(ui.config().start,1);assert.equal(ui.config().duration,2.5,'the drag selection reaches the graph request');
@@ -33,6 +35,7 @@ assert.equal(ui.config().strategy,undefined,'short canvas renders keep the origi
 ui.longReady=true;ui.source.duration=10;ui.trim.useSource();assert.equal(ui.config().strategy,'anchored_masked');assert.equal(ui.config().duration,10,'long selection reaches the request');
 ui.longReady=false;ui.trim.modeChanged();assert.equal(ui.config().strategy,undefined,'long selections are unavailable without backend capability');
 ui.source.duration=4;ui.trim.commit({start:1,duration:2.5});
+ui.loras.items=[{name:'test-style.safetensors',strength:.6,confirm_unknown:true}];
 ui.job={id:'progress-job',kind:'render'};ui.jobStarted=Date.now();ui.paint();
 assert.equal(ui.$('progress-wrap').hidden,false);
 ui.executing({detail:{prompt_id:'progress-job',node:'model'}});assert.equal(ui.$('status').textContent,'Loading LTX 2.5');assert.equal(ui.$('progress').hasAttribute('value'),false);
@@ -50,6 +53,7 @@ await ui.generate();await new Promise(r=>setTimeout(r,0));
 assert.equal(ui.review,null);assert.equal(ui.result.hidden,false);
 assert.deepEqual(calls.slice(0,4).map(c=>c[0]),['/zura/studio/outpaint/review','/zura/studio/outpaint/jobs/review','/zura/studio/outpaint/jobs/review/approve','/zura/studio/outpaint/jobs/review/render']);
 assert.equal(calls[3][1].client_id,'studio-client');
+assert.deepEqual(calls[3][1].custom_loras,[{name:'test-style.safetensors',strength:.6,confirm_unknown:true}],'selected LTX adapters reach the render request');
 ui.review={id:'old'};ui.invalidate();assert.equal(ui.review,null,'changing source geometry invalidates review');
 ui.$('mode').value='black';ui.reframe();assert.equal(Number(ui.$('width').value),768);assert.equal(Number(ui.$('height').value),432);
 ui.$('mode').value='expand';ui.longReady=false;ui.trim.update();assert.equal(ui.trim.longOption.hidden,true,'long controls stay hidden until backend capability is checked');

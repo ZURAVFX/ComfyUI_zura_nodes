@@ -199,6 +199,10 @@ html.genj-open,html.genj-open body{overflow:clip!important;overscroll-behavior:n
 .gs-trim-handle:disabled{cursor:default}.gs-trim-playhead{position:absolute;top:-3px;bottom:-3px;width:2px;background:var(--zc-text);pointer-events:none;z-index:1}
 .gs-preview-fullscreen{position:absolute;right:14px;top:14px;z-index:4;display:flex;align-items:center;gap:8px;border:1px solid var(--gs-muted);border-radius:6px;background:color-mix(in srgb,var(--gs-bg) 90%,transparent);color:var(--zc-text);padding:10px 12px;font:inherit;cursor:pointer}
 #genj-studio #gs-model-downloads .gs-advanced-body{display:grid;gap:10px;min-width:0;overflow-wrap:anywhere}
+#genj-studio #gs-model-downloads [data-model-files]{display:grid;gap:10px;min-width:0}
+#genj-studio #gs-model-downloads [data-model-files] p{margin:0}
+#genj-studio #gs-model-downloads .gs-model-package{display:grid;gap:8px;padding-top:12px;border-top:1px solid var(--gs-line)}
+#genj-studio #gs-model-downloads .gs-model-package button{min-height:40px;padding:8px 12px;justify-self:start}
 #genj-studio #gs-model-downloads [data-model-actions]{display:flex;flex-wrap:wrap;gap:8px}
 #genj-studio #gs-model-downloads [data-model-actions] button{min-height:40px;padding:8px 12px}
 .gs-canvas.is-camera-still>img{max-height:none}

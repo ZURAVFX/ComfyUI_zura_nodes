@@ -14,7 +14,7 @@ verifying their SHA-256 checksums and reading their licences:
   SHA-256 `7b758f5c1d494da7675dbebd8309f36c3dcaf4aa67a3349f667403c7a681187e`.
   It targets restoration and upscaling; the author reports a small identity and
   colour improvement in their limited face test and warns of overly textured
-  skin on clean portraits. It was not tested in Zura in this comparison.
+  skin on clean portraits.
 
 Both are under the FLUX Kommunity License, detailed on their publisher pages.
 Neither safetensors header declares a recognised base-family field; Studio's
@@ -34,3 +34,20 @@ adapter `source-comparison.jpg`, `face-comparison.jpg`, `comparison-results.json
 and the reproducible API-graph script. Timings (10.06 s baseline, 5.04 s adapter)
 include different model warm-up and polling states; they are not a speed test.
 No public distribution of model weights or private inputs is included.
+
+## Controlled Restore comparison
+
+The locally installed Restore adapter was subsequently tested on the same
+source, prompt, 512 × 928 dimensions, seed, 16-step sampler and strength 1.0
+as the original baseline and Consistency comparisons. The native Comfy graph
+completed successfully and produced `restore_00001_.png`; private evidence is
+in `work/openjutsu-benchmark/flux3-test/restore-four-faces.jpg`,
+`restore-comparison.jpg`, `restore-results.json` and `compare_restore.py`.
+
+In this one example Restore adds facial texture, but the face still differs
+from the source and there is no clear visual proof that identity is better
+preserved than the baseline. It also changes appearance compared with the
+Consistency output. One portrait and one edit are insufficient to recommend
+either adapter as an identity lock or enable it by default. The result took
+10.07 seconds including a cold isolated-server load and polling; this is not
+a controlled speed comparison with the earlier runs.

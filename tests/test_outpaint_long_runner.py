@@ -221,10 +221,11 @@ class OutpaintLongCancellation(unittest.IsolatedAsyncioTestCase):
                 strategy='anchored_masked')
             instance = jobs_module.OutpaintJobs(SimpleNamespace())
             serial = 0
-            anchors = []
-            async def fake_submit(kind, asset, subplan, prompt='', seed=42, client_id=None, anchor_file=None, strategy=None):
+            anchors = []; selected_loras=[]
+            async def fake_submit(kind, asset, subplan, prompt='', seed=42, client_id=None, anchor_file=None, strategy=None, custom_loras=None):
                 nonlocal serial
                 self.assertEqual(strategy, 'anchored_masked')
+                selected_loras.append((kind,custom_loras))
                 if anchor_file:
                     from PIL import Image
                     anchor_path = root / anchor_file
@@ -244,6 +245,7 @@ class OutpaintLongCancellation(unittest.IsolatedAsyncioTestCase):
             with patch.object(folder_paths, 'get_output_directory', return_value=str(root)), \
                  patch.object(folder_paths, 'get_input_directory', return_value=str(root)), \
                  patch.object(jobs_module, 'check_asset', return_value=audio), \
+                 patch('ComfyUI_zura_nodes.artist_studio.custom_loras.apply_installed_ltx_loras', side_effect=lambda graph, selected:graph), \
                  patch.object(jobs_module.shutil, 'which', return_value=ffmpeg):
                 review = await instance.submit_long('review', source, selection, anchor=True)
                 await instance.jobs[review['id']]['task']
@@ -252,13 +254,16 @@ class OutpaintLongCancellation(unittest.IsolatedAsyncioTestCase):
                 with self.assertRaisesRegex(ValueError, 'approve'):
                     await instance.submit_long('render', source, selection, reviewed=reviewed, anchor=True)
                 reviewed['approved'] = True
-                final = await instance.submit_long('render', source, selection, reviewed=reviewed, anchor=True)
+                choice=[{'name':'style.safetensors','strength':.6,'confirm_unknown':True}]
+                final = await instance.submit_long('render', source, selection, reviewed=reviewed, anchor=True, custom_loras=choice)
                 await instance.jobs[final['id']]['task']
                 result = instance.state(final['id'])
                 self.assertEqual(result['state'], 'complete', result.get('error'))
                 from ComfyUI_zura_nodes.artist_studio.enhancement import inspect_video
                 media = inspect_video(out/result['artifact']['filename'], expected_frames=150, expected_fps=24)
                 self.assertEqual(media['audio_tracks'], 1)
+                self.assertTrue(all(items==choice for kind,items in selected_loras if kind=='render'), 'Every rendered window receives the same custom LoRA')
+                self.assertTrue(all(items is None for kind,items in selected_loras if kind=='review'), 'Review graphs do not load user LoRAs')
                 self.assertEqual(len(anchors), 1, 'Only the second render window needs the previous last frame.')
                 self.assertTrue(all(not path.exists() for path in anchors), 'Temporary anchor frames must be removed.')
 

@@ -21,6 +21,15 @@ class Response:
 
 
 class ModelDownloadTest(unittest.TestCase):
+    def test_optional_model_folder_can_register_after_routes_load(self):
+        class Folders:
+            paths = {'loras': ['/models/loras']}
+            def get_folder_paths(self, name): return self.paths[name]
+        folders = Folders()
+        self.assertEqual(downloads.folder_locations(folders, {'detection', 'loras'})['detection'], [])
+        folders.paths['detection'] = ['/models/detection']
+        self.assertEqual(downloads.folder_locations(folders, {'detection'})['detection'], ['/models/detection'])
+
     def test_starting_image_and_hdr_packages_include_workflow_dependencies(self):
         packages = downloads.CATALOG
         opening = {(f['folder'], f['filename']) for f in packages['flux2_klein_start']['files']}
@@ -35,7 +44,13 @@ class ModelDownloadTest(unittest.TestCase):
         self.assertTrue(packages['ltx25_in_outpaint']['gated'])
         self.assertEqual(packages['h3_control']['files'][0]['folder'], 'model_patches')
         self.assertIn('CrossView', packages['h3_crossview']['files'][0]['filename'])
-        for name in ('flux2_klein_start', 'ltx25_full_vae', 'ltx25_refine', 'ltx25_sdr_hdr', 'ltx25_text_encoder', 'ltx25_outpaint', 'ltx25_in_outpaint', 'ltx_control', 'ltx25_layout', 'h3_int8_vae', 'h3_control', 'h3_crossview'):
+        wan22 = packages['wan22_animate_core']['files']
+        self.assertEqual(wan22[0]['filename'], 'Wan2_2-Animate-14B_fp8_scaled_e4m3fn_KJ_v2.safetensors')
+        self.assertEqual(wan22[1:], packages['wan_animate_2']['files'][1:])
+        self.assertIn('separately', packages['wan22_animate_core']['note'])
+        self.assertEqual({f['folder'] for f in packages['wan22_pose']['files']}, {'detection'})
+        self.assertEqual(packages['h3_birefnet']['files'][0]['folder'], 'background_removal')
+        for name in ('flux2_klein_start', 'ltx25_full_vae', 'ltx25_refine', 'ltx25_sdr_hdr', 'ltx25_text_encoder', 'ltx25_outpaint', 'ltx25_in_outpaint', 'ltx_control', 'ltx25_layout', 'h3_int8_vae', 'h3_control', 'h3_crossview', 'wan22_animate_core', 'wan22_pose', 'h3_birefnet', 'h3_head_acceleration'):
             for f in packages[name]['files']:
                 self.assertEqual(len(f['revision']), 40)
                 self.assertEqual(len(f['sha256']), 64)
@@ -83,6 +98,18 @@ class ModelDownloadTest(unittest.TestCase):
             self.assertEqual(self.wait(manager, manager.start('example'))['phase'], 'failed')
             self.assertFalse((Path(self.directory.name) / 'example.safetensors').exists())
             self.assertEqual(list(Path(self.directory.name).iterdir()), [])
+
+    def test_complete_copy_in_later_model_root_is_preferred(self):
+        with tempfile.TemporaryDirectory() as second, patch.dict(downloads.CATALOG, self.recipe, clear=True):
+            broken = Path(self.directory.name) / 'example.safetensors'
+            complete = Path(second) / 'example.safetensors'
+            broken.write_bytes(b'partial')
+            complete.write_bytes(self.data)
+            plan = downloads.inspect('example', {'diffusion_models': [self.directory.name, second]})
+            self.assertTrue(plan['files'][0]['installed'])
+            self.assertFalse(plan['files'][0]['incomplete'])
+            self.assertEqual(plan['files'][0]['destination'], str(complete))
+            self.assertEqual(plan['remaining_bytes'], 0)
 
     def test_hardlink_unavailable_uses_atomic_noreplace_rename(self):
         with patch.dict(downloads.CATALOG, self.recipe, clear=True), \

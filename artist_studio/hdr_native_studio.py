@@ -81,6 +81,8 @@ def register(studio,routes,response,check_asset):
                 raise ValueError('Choose the requested source type.')
             graph,details=await asyncio.to_thread(build_asset_graph,asset,body,check_asset)
         else:raise ValueError('Choose source footage or the latest LTX result.')
+        from .custom_loras import apply_installed_ltx_loras
+        graph = await asyncio.to_thread(apply_installed_ltx_loras, graph, body.get('custom_loras', []))
         if details['output'] in ('acescg_exr','hlg_and_exr'):
             from .hdr_package import preflight_archive
             await asyncio.to_thread(preflight_archive,folder_paths.get_output_directory())

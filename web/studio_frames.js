@@ -5,6 +5,7 @@ import {tidyArtistGraph} from './artist_graph.js';
 import {ENDPOINT_RECIPES,endpointRecipe,endpointLengths,endpointPresetSize} from './video_recipe_catalog.js';
 import {attachWorkspaceSamplePreview,nativePreviewMethod} from './studio_live_preview.js';
 import {PreviewZoom} from './studio_preview_zoom.js';
+import {LTXLoras} from './studio_ltx_loras.js';
 const KEY='zura-first-last-v1';
 const escape=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const view=(api,file,type='output')=>api.apiURL('/view?'+new URLSearchParams({filename:file.filename,subfolder:file.subfolder||'',type}));
@@ -50,8 +51,16 @@ export class FrameVideoWorkspace{
         <p id="zf-note" aria-live="polite">Add a first frame to begin. The last frame is optional.</p>
       </form>`;
     owner.root.append(this.page);
+    this.loras=new LTXLoras(this.page.querySelector('.zc-prompt-tools'),(path,body)=>this.fetch(path,body),()=>this.busy(),()=>({h3:'h3',ltx:'ltx25'})[this.$('engine').value]||null,true);
+    // Wan 2.2 has separate high and low models; never share one phase's
+    // adapter with the other without an explicit selection.
+    this.wanHighLoras=new LTXLoras(this.page.querySelector('.zc-prompt-tools'),(path,body)=>this.fetch(path,body),()=>this.busy(),()=>this.$('engine').value==='wan'?'wan22_high':null,true,'High-noise LoRAs');
+    this.wanLowLoras=new LTXLoras(this.page.querySelector('.zc-prompt-tools'),(path,body)=>this.fetch(path,body),()=>this.busy(),()=>this.$('engine').value==='wan'?'wan22_low':null,true,'Low-noise LoRAs');
+    for(const control of [this.loras,this.wanHighLoras,this.wanLowLoras])control.onchange=()=>this.save();
     this.previewZoom=new PreviewZoom(this.page.querySelector('.zf-viewer'),()=>!this.$('result').hidden?this.$('result'):!this.$('image-slot').hidden?this.$('image-slot').querySelector('img'):null);
     const draft=saved.draft||{};this.$('engine').value=endpointRecipe(draft.engine).id;this.setLengths(draft.length);this.$('steps').value=this.recipe().defaultSteps;
+    this.loras.setValue(draft.custom_loras);
+    this.wanHighLoras.setValue(draft.wan_high_loras);this.wanLowLoras.setValue(draft.wan_low_loras);
     for(const id of ['prompt','width','height','length','steps','seed'])if(draft[id]!==undefined)this.$(id).value=draft[id];
     this.normaliseDimensions();
     const width=Number(this.$('width').value),height=Number(this.$('height').value);
@@ -59,7 +68,7 @@ export class FrameVideoWorkspace{
     this.$('megapixels').value=Number(draft.megapixels)>=.25&&Number(draft.megapixels)<=1?draft.megapixels:FRAME_MEGAPIXELS.reduce((best,mp)=>Math.abs(mp-width*height/1e6)<Math.abs(best-width*height/1e6)?mp:best,1);
     this.$('audio-enabled').checked=this.recipe().supportsAudioReference&&draft.audioEnabled===true;this.$('random').checked=draft.random!==false;
     this.$('refresh').onclick=()=>this.loadModels();
-    this.$('engine').onchange=()=>{const cap=this.recipe();this.$('steps').value=cap.defaultSteps;this.setLengths(cap.defaultFrames);if(!cap.supportsAudioReference)this.$('audio-enabled').checked=false;this.normaliseDimensions();this.selectAvailability();this.save();this.render();};
+    this.$('engine').onchange=()=>{const cap=this.recipe();for(const control of [this.loras,this.wanHighLoras,this.wanLowLoras])control.items.forEach(item=>{item.confirm_unknown=false;});this.$('steps').value=cap.defaultSteps;this.setLengths(cap.defaultFrames);if(!cap.supportsAudioReference)this.$('audio-enabled').checked=false;this.normaliseDimensions();this.selectAvailability();this.save();this.render();};
     this.$('clear').onclick=()=>{this.items=[];this.renderHistory();this.$('result').pause();this.$('result').hidden=true;this.$('result').removeAttribute('src');this.preview();this.save();};
     this.page.querySelector('form').onsubmit=e=>{e.preventDefault();this.generate();};
     for(const id of ['prompt','width','height','length','steps','seed','audio-enabled','random'])for(const event of ['input','change'])this.$(id).addEventListener(event,()=>{if(id==='width'||id==='height')this.normaliseDimensions();this.save();this.render();});
@@ -97,7 +106,8 @@ export class FrameVideoWorkspace{
     for(const id of ['width','height']){const input=this.$(id),value=Number(input.value);input.step=cap.dimensionStep;input.min=cap.minDimension||256;input.max=cap.maxDimension||1536;if(Number.isFinite(value)&&value>=Number(input.min)&&value<=Number(input.max)&&value%cap.dimensionStep!==0){input.value=Math.round(value/cap.dimensionStep)*cap.dimensionStep;changed=true;}}
     if(changed)this.dimensionNotice=`Adjusted to ${this.$('width').value} × ${this.$('height').value} on ${cap.label}’s ${cap.dimensionStep}-pixel grid.`;
   }
-  config(){return {engine:this.$('engine').value,first:this.assets.first,last:this.assets.last,audio:this.assets.audio,audioEnabled:this.$('audio-enabled').checked,prompt:this.$('prompt').value,width:Number(this.$('width').value),height:Number(this.$('height').value),sizePreset:this.$('size-preset').value,megapixels:Number(this.$('megapixels').value),frames:Number(this.$('length').value),steps:Number(''+this.$('steps').value),seed:Number(this.$('seed').value),random:this.$('random').checked};}
+  config(){return {engine:this.$('engine').value,first:this.assets.first,last:this.assets.last,audio:this.assets.audio,audioEnabled:this.$('audio-enabled').checked,prompt:this.$('prompt').value,width:Number(this.$('width').value),height:Number(this.$('height').value),sizePreset:this.$('size-preset').value,megapixels:Number(this.$('megapixels').value),frames:Number(this.$('length').value),steps:Number(''+this.$('steps').value),seed:Number(this.$('seed').value),random:this.$('random').checked,custom_loras:this.loras.value(),wan_high_loras:this.wanHighLoras.value(),wan_low_loras:this.wanLowLoras.value()};}
+  async patchLoras(graph,config){if(config.engine==='wan'){graph=await this.wanHighLoras.patch(graph,config.wan_high_loras||[]);return this.wanLowLoras.patch(graph,config.wan_low_loras||[]);}return this.loras.patch(graph,config.custom_loras||[]);}
   save(){const c=this.config();try{localStorage.setItem(KEY,JSON.stringify({assets:this.assets,draft:{...c,length:c.frames},job:this.job,items:this.items}));}catch{this.message('Browser storage is full. Outputs still save in ComfyUI/output/zura/first_last.');}}
   busy(){return !!(this.job||this.submitting||this.uploading);}
   message(text){this.$('message').hidden=!text;this.$('message').textContent=text;}
@@ -131,6 +141,7 @@ export class FrameVideoWorkspace{
   render(){
     const busy=this.busy(),c=this.config(),cap=this.recipe();let error='';try{this.build(c);}catch(e){error=e.message;}
     for(const id of ['engine','prompt','width','height','size-preset','megapixels','length','steps','seed','audio-enabled','random','swap','clear'])this.$(id).disabled=busy;
+    this.loras.root.hidden=c.engine==='wan';this.wanHighLoras.root.hidden=c.engine!=='wan';this.wanLowLoras.root.hidden=c.engine!=='wan';for(const control of [this.loras,this.wanHighLoras,this.wanLowLoras])control.setBusy(busy);
     this.$('steps').min=cap.minSteps;this.$('steps').max=cap.maxSteps;this.$('steps').disabled=busy||cap.minSteps===cap.maxSteps;this.$('recipe-hint').textContent=cap.hint;
     this.$('audio-enabled').closest('label').hidden=!cap.supportsAudioReference;
     for(const slot of ['first','last']){const button=this.page.querySelector(`[data-frame="${slot}"]`),asset=this.assets[slot],remove=this.$('remove-'+slot);button.disabled=busy;remove.disabled=busy;remove.hidden=!asset;let image=button.querySelector('img');if(asset){if(!image){image=document.createElement('img');image.alt='';button.prepend(image);}image.src=view(this.api,asset,'input');button.title=`${slot==='first'?'First':'Last'} frame · ${asset.name||asset.filename}`;}else {image?.remove();button.title=`Choose ${slot} frame`;}button.classList.toggle('has-media',!!asset);}
@@ -155,7 +166,7 @@ export class FrameVideoWorkspace{
   elapsed(step,max){const elapsed=Math.floor((Date.now()-this.job.started)/1000);const sampleElapsed=this.sampleStarted?(Date.now()-this.sampleStarted)/1000:0;if(!this.sampleStarted&&step)this.sampleStarted=Date.now();return step>1&&sampleElapsed>0?`About ${Math.ceil(sampleElapsed/(step-1)*(max-step))}s left in sampling · ${elapsed}s elapsed`:`${elapsed}s elapsed`;}
   async generate(){if(['width','height'].some(k=>this.$(k).commitDimension?.()===false)){this.message('Enter a whole number for width and height.');return;}
     if(this.busy())return;this.submitting=true;this.message('');this.render();
-    try{if(!this.availability?.ready)throw new Error(`Install the required ${this.recipe().label} models and refresh.`);const config=this.config();if(config.random)config.seed=crypto.getRandomValues(new Uint32Array(1))[0];const graph=this.build(config),previewMethod=await nativePreviewMethod(this.api,config.engine);const response=await this.fetch('/prompt',{prompt:graph,client_id:this.api.clientId,extra_data:{zura_first_last:true,preview_method:previewMethod}});if(!response.prompt_id)throw new Error('ComfyUI did not confirm this run. Check the queue before retrying.');this.job={id:response.prompt_id,started:Date.now(),config,previewMethod,stages:Object.fromEntries(Object.entries(graph).map(([id,node])=>[id,node._meta?.title]).filter(([,title])=>title))};this.sampleStarted=null;this.save();this.startPolling();}
+    try{if(!this.availability?.ready)throw new Error(`Install the required ${this.recipe().label} models and refresh.`);const config=this.config();if(config.random)config.seed=crypto.getRandomValues(new Uint32Array(1))[0];const graph=await this.patchLoras(this.build(config),config),previewMethod=await nativePreviewMethod(this.api,config.engine);const response=await this.fetch('/prompt',{prompt:graph,client_id:this.api.clientId,extra_data:{zura_first_last:true,preview_method:previewMethod}});if(!response.prompt_id)throw new Error('ComfyUI did not confirm this run. Check the queue before retrying.');this.job={id:response.prompt_id,started:Date.now(),config,previewMethod,stages:Object.fromEntries(Object.entries(graph).map(([id,node])=>[id,node._meta?.title]).filter(([,title])=>title))};this.sampleStarted=null;this.save();this.startPolling();}
     catch(e){this.message(e.message);}finally{this.submitting=false;this.render();}
   }
   startPolling(){if(this.timer)return;this.timer=setInterval(()=>this.poll(),1500);this.poll();}
@@ -170,5 +181,5 @@ export class FrameVideoWorkspace{
   async cancel(){if(!this.job)return;try{const id=this.job.id;await this.fetch('/queue',{delete:[id]});await this.fetch('/interrupt',{prompt_id:id});this.message('Cancellation requested.');await this.poll();}catch(e){this.message(e.message);}}
   stopPolling(){clearInterval(this.timer);this.timer=null;}
   close(){this.save();this.stopPolling();this.previewZoom?.dispose();this.nativeSamplePreview?.dispose();this.nativeSamplePreview=null;}
-  async graph(){try{const config=this.job?.config||this.config(),graph=this.build(config),original=(this.app.rootGraph||this.app.graph)?.serialize?.();if(!original||typeof this.app.loadApiJson!=='function')throw new Error('Update ComfyUI to open this editable graph.');try{await this.app.loadApiJson(graph,`Zura ${endpointRecipe(config.engine).label} First and Last Frame · ${Date.now()}.json`);await import('./vendor/elk.bundled.js');await tidyArtistGraph(this.app,graph,'first_last',window.ELK);}catch(e){await this.app.loadGraphData(original);throw e;}this.studio.close();}catch(e){this.message(e.message);}}
+  async graph(){try{const config=this.job?.config||this.config(),graph=await this.patchLoras(this.build(config),config),original=(this.app.rootGraph||this.app.graph)?.serialize?.();if(!original||typeof this.app.loadApiJson!=='function')throw new Error('Update ComfyUI to open this editable graph.');try{await this.app.loadApiJson(graph,`Zura ${endpointRecipe(config.engine).label} First and Last Frame · ${Date.now()}.json`);await import('./vendor/elk.bundled.js');await tidyArtistGraph(this.app,graph,'first_last',window.ELK);}catch(e){await this.app.loadGraphData(original);throw e;}this.studio.close();}catch(e){this.message(e.message);}}
 }

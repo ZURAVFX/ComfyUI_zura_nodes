@@ -98,7 +98,7 @@ class OutpaintJobs:
     def public(job):
         return {k: job.get(k) for k in ('id', 'kind', 'state', 'url', 'error', 'selection', 'approved', 'window', 'windows', 'active_prompt_id', 'estimated_bytes')}
 
-    async def submit_long(self, kind, source, selection, *, reviewed=None, prompt='', seed=42, client_id=None, anchor=False):
+    async def submit_long(self, kind, source, selection, *, reviewed=None, prompt='', seed=42, client_id=None, anchor=False, custom_loras=None):
         """Private bounded executor, not yet exposed by the Studio routes.
 
         Full-range review and generated-window continuity must be verified on
@@ -114,6 +114,10 @@ class OutpaintJobs:
             raise ValueError('The source or canvas changed. Review the full selection again.')
         if kind not in ('review', 'render'):
             raise ValueError('Choose a valid outpaint job.')
+        if kind == 'render' and custom_loras:
+            from .custom_loras import apply_installed_ltx_loras
+            sentinel = {'model': {'class_type': 'UNETLoader', 'inputs': {'unet_name': 'ltx-2.5-22b-distilled-transformer-comfy-int8-convrot.safetensors'}}}
+            await asyncio.to_thread(apply_installed_ltx_loras, sentinel, custom_loras)
         if client_id is not None and (not isinstance(client_id, str) or not client_id or len(client_id) > 128):
             raise ValueError('Invalid Studio connection. Reload Studio and try again.')
         if current.get('strategy') == 'anchored_masked' and not anchor:
@@ -167,7 +171,12 @@ class OutpaintJobs:
                 await asyncio.to_thread(extract_frame, previous[0], frame_path, previous[1])
                 anchor_file = frame_path.relative_to(Path(folder_paths.get_input_directory())).as_posix()
             args = (child_kind, asset, subplan, prompt, seed, client_id, anchor_file)
-            child = await self.submit(*args, strategy=current.get('strategy')) if current.get('strategy') else await self.submit(*args)
+            options = {}
+            if current.get('strategy'):
+                options['strategy'] = current['strategy']
+            if child_kind == 'render' and custom_loras:
+                options['custom_loras'] = custom_loras
+            child = await self.submit(*args, **options)
             job['active_prompt_id'] = child['id']
             return child['id']
 
@@ -229,7 +238,7 @@ class OutpaintJobs:
         job['task'] = asyncio.create_task(execute())
         return self.public(job)
 
-    async def submit(self, kind, source, selection, prompt='', seed=42, client_id=None, anchor_file=None, strategy=None):
+    async def submit(self, kind, source, selection, prompt='', seed=42, client_id=None, anchor_file=None, strategy=None, custom_loras=None):
         import execution
         identity = uuid.uuid4().hex
         prefix = 'genj/outpaint/' + identity
@@ -243,6 +252,9 @@ class OutpaintJobs:
         if kind == 'render':
             kwargs.update(review_key=selection['review_key'], prompt=prompt, seed=seed)
         graph = await asyncio.to_thread(builder, source, selection, **kwargs)
+        if kind == 'render' and custom_loras:
+            from .custom_loras import apply_installed_ltx_loras
+            graph = await asyncio.to_thread(apply_installed_ltx_loras, graph, custom_loras)
         if anchor_file is not None:
             if kind != 'render':
                 raise ValueError('Image anchors apply only to rendering.')
@@ -348,10 +360,10 @@ def register(studio, routes, response):
                     raise ValueError('Long frame extension is not available in this version yet.')
                 result = await jobs.submit_long('render', review_job['source'], review_job['selection'],
                     reviewed=review_job, prompt=body.get('prompt', ''), seed=seed,
-                    client_id=body.get('client_id'), anchor=True)
+                    client_id=body.get('client_id'), anchor=True, custom_loras=body.get('custom_loras', []))
             else:
                 result = await jobs.submit('render', review_job['source'], review_job['selection'], body.get('prompt', ''), seed,
-                                           client_id=body.get('client_id'))
+                                           client_id=body.get('client_id'), custom_loras=body.get('custom_loras', []))
             review_job['render_id'] = result['id']
             return web.json_response(result)
 
@@ -372,6 +384,8 @@ def register(studio, routes, response):
             graph = await asyncio.to_thread(build_studio_graph, review_job['source'], review_job['selection'],
                 review_key=review_job['selection']['review_key'], prompt=prompt, seed=seed,
                 output_prefix='genj/outpaint/' + uuid.uuid4().hex, check_asset=check_asset)
+            from .custom_loras import apply_installed_ltx_loras
+            graph = await asyncio.to_thread(apply_installed_ltx_loras, graph, body.get('custom_loras', []))
             return web.json_response({'graph': graph})
 
     @routes.post('/zura/studio/outpaint/jobs/{identity}/cancel')

@@ -4,13 +4,14 @@ import vm from 'node:vm';
 import {parseHTML} from '../../ui-check/node_modules/linkedom/esm/index.js';
 import {PaintoutWorkspace} from '../web/paintout_studio/studio_paintout.js';
 import {PaintoutEditor} from '../web/paintout_studio/paintout_editor.js';
+assert.ok(fs.existsSync(new URL('../web/vendor/elk.bundled.js',import.meta.url)), 'The native graph layout dependency exists at the integrated workspace import path');
 
 const messages=[],events=[];
 function workspace(source=''){
  const w=Object.create(PaintoutWorkspace.prototype),fields=new Map();
  Object.assign(w,{state:{source,anchors:[]},busy:()=>false,render(){},save(){},renderAnchors(){},changed(){},preview(){},message:text=>messages.push(text),requestError:e=>e.message,$:id=>{if(!fields.has(id))fields.set(id,{hidden:false,value:'',removeAttribute(){}});return fields.get(id);},pick:async kind=>{events.push('pick:'+kind);return [];}});
  const editor=Object.create(PaintoutEditor.prototype);
- Object.assign(editor,{w,flushManual:async()=>events.push('flush'),ensureProject:async()=>{events.push('ensure');if(!w.state.source)throw Error('Add footage first.');},projectData:()=>({})});w.editor=editor;
+ Object.assign(editor,{w,viewer:{setTool:tool=>events.push('tool:'+tool)},setStage:async stage=>events.push('stage:'+stage),flushManual:async()=>events.push('flush'),ensureProject:async()=>{events.push('ensure');if(!w.state.source)throw Error('Add footage first.');},projectData:()=>({})});w.editor=editor;
  return w;
 }
 for(const kind of ['footage','sequence']){
@@ -20,7 +21,7 @@ for(const kind of ['footage','sequence']){
  assert.deepEqual(messages,[]);assert.equal(w.picking,false);assert.equal(w.state.source,'');
 }
 const w=workspace();w.pick=async()=>['plate.mp4'];w.info=async()=>({frames:120,width:1920,height:1080});
-await w.pickSource('footage');assert.equal(w.state.source,'plate.mp4');assert.equal(w.state.frameCount,81);assert.equal(w.state.editorProject,null);assert.deepEqual(messages,[]);
+await w.pickSource('footage');assert.equal(w.state.source,'plate.mp4');assert.equal(w.state.frameCount,81);assert.equal(w.state.editorProject,null);assert.equal(w.state.activeMaskSegment,null);assert.equal(w.state.maskSegmentDraft,null);assert.equal(w.state.editorStage,'mask');assert.deepEqual(events.slice(-2),['tool:include','stage:mask']);assert.deepEqual(messages,[]);
 // Replacing footage must still save the old project before opening the picker.
 const previous=workspace('old.mp4');events.length=0;
 previous.fetch=async()=>({revision:2});previous.editor.project='old';previous.editor.projectSource='old.mp4';

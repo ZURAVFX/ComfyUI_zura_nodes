@@ -110,6 +110,8 @@ def register(studio, routes, response, check_asset):
             asset=studio.store.load(data.get('source_id',''))
             graph,details=await asyncio.to_thread(build_asset_graph,asset,data,check_asset)
         else:raise ValueError('Choose source footage or the latest LTX result.')
+        from .custom_loras import apply_installed_ltx_loras
+        graph = await asyncio.to_thread(apply_installed_ltx_loras, graph, data.get('custom_loras', []))
         if details['output'] in ('acescg_exr','hlg_and_exr'):
             import folder_paths
             from .hdr_package import preflight_archive

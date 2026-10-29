@@ -1,4 +1,5 @@
 import {OutpaintTrim} from './studio_outpaint_trim.js';
+import {LTXLoras} from './studio_ltx_loras.js';
 // Experimental workspace. The owner must deliberately enable the entry point.
 // Review is mandatory and server-bound to the exact source and geometry.
 export class OutpaintWorkspace {
@@ -13,6 +14,7 @@ export class OutpaintWorkspace {
       <textarea data-prompt placeholder="Describe the extended scene" aria-label="Video prompt"></textarea>
       <div class="zo-action"><span class="zo-model">LTX 2.5 · Preview</span><span data-status role="status" aria-live="polite">Add a source video to begin.</span><a data-download download="zura-frame-extension.mp4" hidden>Download</a><button type="button" data-cancel hidden>Cancel run</button><button type="button" data-review disabled>Review selection</button><button type="button" data-generate hidden>Approve &amp; generate</button></div><div data-progress-wrap class="zo-progress" hidden><progress data-progress max="100" aria-label="Current outpaint stage progress"></progress><span data-progress-detail></span></div></div>`;
     this.root.append(this.page);this.stage=this.page.querySelector('.zo-stage');this.canvas=this.page.querySelector('.zo-canvas');this.video=this.canvas.querySelector('video');this.result=this.page.querySelector('.zo-result');
+    this.loras=new LTXLoras(this.page.querySelector('.zo-composer'),path=>this.fetch(path),()=>!!this.job||this.submitting);this.$('prompt').after(this.loras.root);
     this.page.querySelector('[data-back]').onclick=()=>owner.show('video');
     this.$('source').onclick=()=>this.page.querySelector('input[type=file]').click();
     this.page.querySelector('input[type=file]').onchange=e=>{const file=e.target.files?.[0];e.target.value='';if(file)this.upload(file);};
@@ -28,7 +30,7 @@ export class OutpaintWorkspace {
     this.api.addEventListener?.('progress',this.progress);
     this.api.addEventListener?.('executing',this.executing);
   }
-  $(name){return this.page.querySelector(`[data-${name}]`);}
+  $(name){return this.page.querySelector(`${name==='duration'||name==='start'?'input':''}[data-${name}]`);}
   ownsPrompt(id){return !!id && !!this.job && (id===this.job.id || id===this.job.active_prompt_id);}
   async fetch(path,body){return this.owner.fetch(path,body);}
   message(text){this.$('status').textContent=text;}
@@ -54,6 +56,7 @@ export class OutpaintWorkspace {
   }
   paint(){
     const has=!!this.source,black=this.mode==='black',busy=!!this.job||this.submitting;this.$('width').disabled=black||busy;this.$('height').disabled=black||busy;
+    this.loras.setBusy(busy);
     for(const id of ['source','mode','start','duration'])this.$(id).disabled=busy;this.$('scale').disabled=black||busy;
     this.$('help').textContent=black?'Black pixels are selected for masked generation, including dark clothing or shadows. Review the whole selection.':'Drag the footage to position it inside the new frame.';
     this.$('duration').max=this.trim?.long?String(this.source?.duration||86400):'5';
@@ -84,7 +87,7 @@ export class OutpaintWorkspace {
   async pollPreview(id){for(let i=0;i<300&&this.source?.id===id;i++){await new Promise(r=>setTimeout(r,1000));try{const a=await this.fetch('/zura/studio/assets/'+encodeURIComponent(id)+'/preview');if(a.preview_status==='ready'){this.video.src=a.preview_url;this.video.load();this.trim.update();return;}if(a.preview_status==='error'){this.message(a.preview_error||'Could not prepare the video preview.');return;}}catch{this.message('Reconnecting to video preview…');}}}
   config(){return {source:this.source?.id,mode:this.mode,start:Number(this.$('start').value),duration:Number(this.$('duration').value),...this.dimensions(),...this.box,black_threshold:2/255,...(this.trim.long?{strategy:'anchored_masked'}:{})};}
   async reviewSelection(){if(this.job||this.submitting||!this.source)return;this.submitting=true;this.progressNode=null;this.jobStarted=Date.now();this.$('progress').removeAttribute('value');this.progressDetail();this.paint();try{this.message('Preparing selection preview…');this.job=await this.fetch('/zura/studio/outpaint/review',{...this.config(),client_id:this.api.clientId||null});this.poll();}catch(e){this.job=null;this.message(e.message);}finally{this.submitting=false;this.paint();}}
-  async generate(){if(this.job||this.submitting||!this.review)return;this.submitting=true;this.progressNode=null;this.jobStarted=Date.now();this.$('progress').removeAttribute('value');this.progressDetail();this.paint();try{await this.fetch('/zura/studio/outpaint/jobs/'+this.review.id+'/approve',{});this.message('Starting LTX outpaint…');this.job=await this.fetch('/zura/studio/outpaint/jobs/'+this.review.id+'/render',{prompt:this.$('prompt').value,seed:42,client_id:this.api.clientId||null});this.poll();}catch(e){this.job=null;this.message(e.message);}finally{this.submitting=false;this.paint();}}
+  async generate(){if(this.job||this.submitting||!this.review)return;this.submitting=true;this.progressNode=null;this.jobStarted=Date.now();this.$('progress').removeAttribute('value');this.progressDetail();this.paint();try{await this.fetch('/zura/studio/outpaint/jobs/'+this.review.id+'/approve',{});this.message('Starting LTX outpaint…');this.job=await this.fetch('/zura/studio/outpaint/jobs/'+this.review.id+'/render',{prompt:this.$('prompt').value,seed:42,custom_loras:this.loras.value(),client_id:this.api.clientId||null});this.poll();}catch(e){this.job=null;this.message(e.message);}finally{this.submitting=false;this.paint();}}
   async poll(){if(!this.job)return;const identity=this.job.id;try{const state=await this.fetch('/zura/studio/outpaint/jobs/'+identity);if(this.job?.id!==identity)return;
     if(this.job.active_prompt_id!==(state.active_prompt_id||null)){this.progressNode=null;this.$('progress').removeAttribute('value');}
     this.job.active_prompt_id=state.active_prompt_id||null;this.job.window=state.window;this.job.windows=state.windows;
@@ -99,7 +102,7 @@ export class OutpaintWorkspace {
     if(!this.review){this.message('Review the selection before opening its graph.');return;}
     if(this.review.selection?.strategy==='anchored_masked'){this.message('Long clips render in sections and cannot be opened as a single graph.');return;}
     try{await this.fetch('/zura/studio/outpaint/jobs/'+this.review.id+'/approve',{});
-      const data=await this.fetch('/zura/studio/outpaint/jobs/'+this.review.id+'/graph',{prompt:this.$('prompt').value,seed:42});
+      const data=await this.fetch('/zura/studio/outpaint/jobs/'+this.review.id+'/graph',{prompt:this.$('prompt').value,seed:42,custom_loras:this.loras.value()});
       const app=this.owner.app,original=(app.rootGraph||app.graph)?.serialize?.();
       if(!original||typeof app.loadApiJson!=='function')throw new Error('Update ComfyUI to open this graph.');
       try{await app.loadApiJson(data.graph,'Zura frame extension.json');}catch(error){await app.loadGraphData(original);throw error;}

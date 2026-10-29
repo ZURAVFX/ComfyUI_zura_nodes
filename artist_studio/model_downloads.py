@@ -69,6 +69,28 @@ CATALOG = {
 }
 
 CATALOG.update({
+    "wan22_pose": dict(name="Wan 2.2 Animate · pose models", gated=False,
+        license_url="https://huggingface.co/Wan-AI/Wan2.2-Animate-14B",
+        note="YOLO and ViTPose models for the Wan Animate preprocessing nodes. Install ComfyUI-WanAnimatePreprocess first; review the source terms for both models.",
+        files=[
+            _file("detection", "yolov10m.onnx", "Wan-AI/Wan2.2-Animate-14B", "cb93a225fbaf1ca100f54e79da8f994995b689b3", "process_checkpoint/det/yolov10m.onnx", 61659339, "89b526498a6d55f869a6ab52e3a2eb20ad45b3711c1f7de3dd9ca0b399dfd6d7"),
+            _file("detection", "vitpose-l-wholebody.onnx", "JunkyByte/easy_ViTPose", "e83805274e89428969355ec4afffcbc413e79188", "onnx/wholebody/vitpose-l-wholebody.onnx", 1234579166, "89bdf6692d9224dbd5004dcef23a9ba2d54c5776212b359d5a5b5068ac14fd08"),
+        ]),
+    "h3_birefnet": dict(name="H3 head swap · background removal", gated=False,
+        license_url="https://huggingface.co/Comfy-Org/BiRefNet",
+        note="BiRefNet used by the head-swap workflow; H3 models, acceleration adapters and other dependencies are separate.",
+        files=[_file("background_removal", "birefnet.safetensors", "Comfy-Org/BiRefNet", "884af709e9b795d89dafbf97f29c8d6a2386f5c6", "background_removal/birefnet.safetensors", 444473596, "9ab37426bf4de0567af6b5d21b16151357149139362e6e8992021b8ce356a154")]),
+    "h3_head_acceleration": dict(name="H3 head swap · acceleration", gated=False,
+        license_url="https://huggingface.co/alibaba-pai/MiniMax-H3-Acc-LoRAs",
+        note="Eight-step FL2VA acceleration adapter used by H3 head swap. Review the MiniMax H3 Community License and install the other required models separately.",
+        files=[_file("loras", "MiniMax-H3-FL2VA-Acc-8Step.safetensors", "alibaba-pai/MiniMax-H3-Acc-LoRAs", "335001fb9e5455d68a0caa18ec2e319072150328", "MiniMax-H3-FL2VA-Acc-8Step.safetensors", 1372450680, "0b29be7042d883970eb0c20774a9ba03d95669ed80a721bb4d21be8ea0d0a196")]),
+    "wan22_animate_core": dict(name="Wan 2.2 Animate · core files", gated=False,
+        license_url="https://huggingface.co/Kijai/WanVideo_comfy_fp8_scaled",
+        note="Wan 2.2 Animate model and shared text, vision and VAE files. Pose detectors, acceleration and other workflow-specific adapters and nodes must currently be installed separately.",
+        files=[
+            _file("diffusion_models", "Wan2_2-Animate-14B_fp8_scaled_e4m3fn_KJ_v2.safetensors", "Kijai/WanVideo_comfy_fp8_scaled", "033a4e487f60220b3d6e469599a6aebc46e13cee", "Wan22Animate/Wan2_2-Animate-14B_fp8_scaled_e4m3fn_KJ_v2.safetensors", 17317143060, "b1cd5a67e968e5bb38fcf84dab58f2fb551e0889fd463acb2a657259a70bbbf6"),
+            *CATALOG["wan_animate_2"]["files"][1:],
+        ]),
     "h3_int8_vae": dict(name="MiniMax H3 · compact video VAE", gated=False,
         license_url="https://huggingface.co/Comfy-Org/MiniMax-H3",
         note="INT8 video VAE used by H3 camera and guided workflows. The H3 model, text and audio encoders are separate.",
@@ -136,8 +158,12 @@ def inspect(model_id, locations):
         roots = locations.get(item['folder'], [])
         if not roots:
             raise ValueError("ComfyUI has no configured model folder for " + item['folder'])
-        existing = next((Path(root) / item['filename'] for root in roots
-                         if (Path(root) / item['filename']).is_file()), None)
+        candidates = [Path(root) / item['filename'] for root in roots
+                      if (Path(root) / item['filename']).is_file()]
+        # A broken copy in an earlier search root must not hide a usable copy
+        # in a later root. Never overwrite either copy during installation.
+        existing = next((path for path in candidates if path.stat().st_size == item['size_bytes']),
+                        candidates[0] if candidates else None)
         incomplete = bool(existing and existing.stat().st_size != item['size_bytes'])
         files.append({**item, 'installed': bool(existing) and not incomplete, 'incomplete': incomplete,
                       'destination': str(existing or (Path(roots[0]) / item['filename']))})
@@ -297,17 +323,29 @@ class DownloadManager:
                 self._active = None
 
 
+def folder_locations(folder_paths, folders):
+    """Discover currently registered model categories without assuming import order."""
+    locations = {}
+    for folder in folders:
+        try:
+            locations[folder] = folder_paths.get_folder_paths(folder)
+        except KeyError:
+            locations[folder] = []
+    return locations
+
+
 def register(routes, response):
     """Register same-origin Studio endpoints; no network call until POST start."""
     import folder_paths
     from aiohttp import web
     folders = {item['folder'] for model in CATALOG.values() for item in model['files']}
-    manager = DownloadManager({folder: folder_paths.get_folder_paths(folder) for folder in folders})
+    manager = DownloadManager(folder_locations(folder_paths, folders))
 
     @routes.get('/zura/studio/model-downloads')
     @routes.get('/genj/studio/model-downloads')
     @response
     async def catalogue(request):
+        manager.locations = folder_locations(folder_paths, folders)
         models = []
         for name, recipe in CATALOG.items():
             try:
@@ -321,6 +359,7 @@ def register(routes, response):
     @response
     async def start(request):
         data = await request.json()
+        manager.locations = folder_locations(folder_paths, folders)
         return web.json_response({'id': manager.start(data.get('model_id'))})
 
     @routes.get('/zura/studio/model-downloads/{identity}')

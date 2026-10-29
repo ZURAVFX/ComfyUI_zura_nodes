@@ -2435,6 +2435,19 @@ def register():
         entries = await asyncio.to_thread(catalogue, folder_paths.get_filename_list("loras"), folder_paths.get_full_path)
         return web.json_response({"loras": entries})
 
+    @routes.post("/zura/studio/loras/apply")
+    @routes.post("/genj/studio/loras/apply")
+    @response
+    async def apply_custom_loras_to_graph(request):
+        # Patches a supplied in-memory prompt only. It does not queue or execute
+        # it, and accepts adapters only from Comfy's registered LoRA directories.
+        from .custom_loras import apply_studio_video_loras
+        data = await request.json()
+        family, graph, selected = data.get('family'), data.get('graph'), data.get('loras')
+        patched = await asyncio.to_thread(apply_studio_video_loras, graph, family, selected,
+            folder_paths.get_filename_list('loras'), folder_paths.get_full_path)
+        return web.json_response({'graph': patched})
+
     @routes.post("/zura/studio/image-loras/validate")
     @routes.post("/genj/studio/image-loras/validate")
     @response

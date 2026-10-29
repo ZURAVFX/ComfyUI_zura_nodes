@@ -16,7 +16,8 @@ export function trimEdge(range,edge,time,maximum=null){
 }
 export function trimTime(seconds){
   const frames=Math.max(0,Math.round((Number(seconds)||0)*24));
-  return `${Math.floor(frames/1440)}:${String(Math.floor(frames/24)%60).padStart(2,'0')}.${String(frames%24).padStart(2,'0')}`;
+  const hundredths=Math.round(frames*100/24),minutes=Math.floor(hundredths/6000);
+  return `${minutes}:${(hundredths%6000/100).toFixed(2).padStart(5,'0')}`;
 }
 
 /** Local source trimming. One commit on release, never an API call per pointer move. */

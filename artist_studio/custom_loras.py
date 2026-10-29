@@ -96,7 +96,7 @@ def catalogue(names, get_path):
     return entries
 
 
-def apply_to_graph(graph, family, selections, registered_names, get_path):
+def apply_to_graph(graph, family, selections, registered_names, get_path, *, target_ids=None, namespace=None):
     """Return a patched graph; reject unsupported adapters and model paths.
 
     selections: [{name, strength, confirm_unknown}] from the user interface.
@@ -143,13 +143,17 @@ def apply_to_graph(graph, family, selections, registered_names, get_path):
     targets = [identity for identity, node in result.items()
                if node.get("class_type") == "UNETLoader"
                and model_family(node.get("inputs", {}).get("unet_name")) == family]
+    if target_ids is not None:
+        if not isinstance(target_ids, (list, tuple)) or not target_ids or any(identity not in targets for identity in target_ids):
+            raise ValueError('The selected model phase is not available in this workflow.')
+        targets = list(target_ids)
     if not targets:
         raise ValueError("This workflow does not expose a compatible native model loader for custom LoRAs.")
     for target_index, identity in enumerate(targets):
         current = [identity, 0]
         additions = []
         for index, (name, strength) in enumerate(checked):
-            new_id = f"zura_custom_lora_{target_index}_{index}"
+            new_id = f"zura_custom_lora_{namespace + '_' if namespace else ''}{target_index}_{index}"
             if new_id in result:
                 raise ValueError("Custom LoRAs have already been added to this graph.")
             additions.append((new_id, {"class_type": "LoraLoaderModelOnly", "inputs":
@@ -162,6 +166,44 @@ def apply_to_graph(graph, family, selections, registered_names, get_path):
                     node["inputs"][key] = current.copy()
         result.update(additions)
     return result
+
+
+def apply_installed_ltx_loras(graph, selections):
+    """Validate installed adapters and insert them before LTX guidance adapters.
+
+    Running this for each graph (including every long-render window) also
+    catches missing or incompatible selections before submission.
+    """
+    if not selections:
+        return copy.deepcopy(graph)
+    import folder_paths
+    return apply_to_graph(graph, 'ltx25', selections,
+                          folder_paths.get_filename_list('loras'),
+                          folder_paths.get_full_path)
+
+
+def apply_studio_video_loras(graph, family, selections, registered_names, get_path):
+    """Patch a supplied prompt without executing it, with distinct Wan phases."""
+    if family not in ('h3', 'wan22_high', 'wan22_low', 'ltx25') or not isinstance(graph, dict) or not 1 <= len(graph) <= 512 or not isinstance(selections, list):
+        raise ValueError('Choose a supported video model and installed LoRAs.')
+    if any(not isinstance(node, dict) or not isinstance(node.get('inputs', {}), dict) for node in graph.values()):
+        raise ValueError('The video graph is not valid.')
+    target = None
+    if family in ('wan22_high', 'wan22_low'):
+        phase = family.rsplit('_', 1)[-1]
+        identity = phase + '_model'
+        node = graph.get(identity, {})
+        if not isinstance(node, dict) or not isinstance(node.get('inputs'), dict):
+            raise ValueError('The selected Wan noise phase does not match this graph.')
+        name = str(node['inputs'].get('unet_name', '')).lower().replace('\\', '/')
+        if node.get('class_type') != 'UNETLoader' or ('_' + phase + '_noise_') not in name or 'wan2.2' not in name:
+            raise ValueError('The selected Wan noise phase does not match this graph.')
+        other = 'low' if phase == 'high' else 'high'
+        if any(isinstance(item, dict) and (other + '_noise') in str(item.get('name', '')).lower().replace('-', '_') for item in selections):
+            raise ValueError('This LoRA is named for the other Wan noise phase. Choose the matching phase.')
+        target = {'target_ids': [identity], 'namespace': phase}
+        family = 'wan22'
+    return apply_to_graph(graph, family, selections, registered_names, get_path, **(target or {}))
 
 
 IMAGE_FAMILIES = {

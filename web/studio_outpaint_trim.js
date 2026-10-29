@@ -10,7 +10,7 @@ export class OutpaintTrim {
     const doc=workspace.page.ownerDocument;
     this.container=doc.createElement('section');
     this.container.className='zo-trim';
-    this.container.innerHTML=`<div class="zo-trim-toolbar"><strong>Clip length</strong><div><button type="button" data-play>Play selection</button><button type="button" data-use-source>Use entire source</button></div></div><label class="zo-long-option" data-long-option hidden><input type="checkbox" data-long-mode> <span>Long clip · blend transitions</span></label><p data-limit></p><div data-timeline></div><details><summary>Precise timing</summary><div data-precision></div></details>`;
+    this.container.innerHTML=`<details class="zo-trim-menu"><summary aria-label="Trim footage"><span>Trim footage</span><span data-selection></span><span aria-hidden="true">⌄</span></summary><div class="zo-trim-panel"><div class="zo-trim-toolbar"><strong>Clip length</strong><div><button type="button" data-play>Play selection</button><button type="button" data-use-source>Use entire source</button></div></div><label class="zo-long-option" data-long-option hidden><input type="checkbox" data-long-mode> <span>Long clip · blend transitions</span></label><p data-limit></p><div data-timeline></div><details class="zo-precision"><summary>Precise timing</summary><div data-precision></div></details></div></details>`;
     workspace.$('prompt').before(this.container);
     const precision=this.container.querySelector('[data-precision]');
     for(const id of ['start','duration'])precision.append(workspace.$(id).closest('label'));
@@ -19,6 +19,14 @@ export class OutpaintTrim {
     this.limit=this.container.querySelector('[data-limit]');
     this.longOption=this.container.querySelector('[data-long-option]');
     this.longMode=this.container.querySelector('[data-long-mode]');
+    this.menu=this.container.querySelector('.zo-trim-menu');
+    this.selection=this.container.querySelector('[data-selection]');
+    this.onOutside=e=>{if(this.menu.open&&!this.container.contains(e.target))this.menu.open=false;};
+    this.onEscape=e=>{if(e.key==='Escape'&&this.menu.open){e.preventDefault();e.stopPropagation();this.menu.open=false;this.menu.querySelector('summary').focus({preventScroll:true});}};
+    this.menu.addEventListener('toggle',()=>{
+      if(this.menu.open){doc.addEventListener('pointerdown',this.onOutside,true);doc.addEventListener('keydown',this.onEscape,true);this.update();}
+      else {doc.removeEventListener('pointerdown',this.onOutside,true);doc.removeEventListener('keydown',this.onEscape,true);}
+    });
     this.longMode.onchange=()=>this.commit({start:Number(workspace.$('start').value),duration:Number(workspace.$('duration').value)});
     this.trimmer=new ClipTrimmer(this.container.querySelector('[data-timeline]'),{
       onCommit:range=>this.commit(range),
@@ -80,8 +88,10 @@ export class OutpaintTrim {
     this.button.disabled=busy||total<3||total>MAX_START_SECONDS*FPS||(total>MAX_FRAMES&&!this.canLong());
     this.play.disabled=busy||total<3;
     this.limit.textContent=total<3?'Choose a source at least 3 frames long.':total>MAX_START_SECONDS*FPS?'Select a range within the first 24 hours of the source.':this.long?'Long clips use guided, blended sections; rendering takes longer.':total>MAX_FRAMES?(this.canLong()?'Use the full source or enable long clips to select more than 5 seconds.':'Up to 5 seconds per render. Trim the source to continue.'):'Your output uses the selected source range at 24 fps.';
+    const duration=Number(w.$('duration').value)||0;
+    this.selection.textContent=`${duration.toFixed(2).replace(/\.?0+$/,'')}s${this.long?' · long':''}`;
     const url=w.video.currentSrc||w.video.src||'';
     this.trimmer.update(source?{...source,url}:null,{length_mode:'custom',start:Number(w.$('start').value),duration:Number(w.$('duration').value)},{disabled:busy,maximum:this.long?null:MAX_FRAMES/FPS});
   }
-  close(){this.trimmer.close();}
+  close(){this.menu.open=false;const doc=this.workspace.page.ownerDocument;doc.removeEventListener('pointerdown',this.onOutside,true);doc.removeEventListener('keydown',this.onEscape,true);this.trimmer.close();}
 }
