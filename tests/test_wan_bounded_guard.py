@@ -267,6 +267,13 @@ class BoundedSpeechGuardTests(unittest.TestCase):
         self.assertGreater(float(actual["waveform"][...,:1000].abs().mean()),.02)
         self.assertLess(float(actual["waveform"][...,4800:].abs().max()),.001)
 
+        # A decoder can lose exactly one 24 fps frame to timebase rounding.
+        # The delivery must hold the final frame, not shorten the selection.
+        short = media.NativeFile(str(media.write_video(self.fixture.base/"neutral-short.mov",count=23)))
+        result = namespace["GenjRestoreSoundtrack"]().restore(short,{**self.details,"full_source":False},"short_take")
+        self.assertEqual(io.inspect_video(result["result"][0]).frames,24)
+        self.assertIn('tpad=stop_mode=clone:stop=1', calls[-1][calls[-1].index('-vf')+1])
+
 
 if __name__ == "__main__":
     unittest.main()

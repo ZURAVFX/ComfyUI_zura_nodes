@@ -13,7 +13,7 @@ export const LTX_FRAME_VIDEO_CAPABILITIES=Object.freeze({
   maxPixels:1344*768,
   nodeTypes:['LoadImage','ImageScale','UNETLoader','ModelAttentionBackend','CLIPLoader','CLIPTextEncode','VAELoader',
     'LTXVConditioning','EmptyLTXVLatentVideo','LTXVPreprocess','LTXVAddGuide','LTXVCropGuides','LTXVEmptyLatentAudio',
-    'LoadAudio','TrimAudioDuration','LTXVAudioVAEEncode','SolidMask','SetLatentNoiseMask','LTXVConcatAVLatent',
+    'LoadAudio','TrimAudioDuration','EmptyAudio','AudioConcat','LTXVAudioVAEEncode','SolidMask','SetLatentNoiseMask','LTXVConcatAVLatent',
     'CFGGuider','KSamplerSelect','RandomNoise','ManualSigmas','SamplerCustomAdvanced','LTXVSeparateAVLatent',
     'VAEDecodeTiled','LTXVAudioVAEDecode','CreateVideo','SaveVideo'],
 });
@@ -53,7 +53,10 @@ export function buildLtxFrameVideoGraph(c){
   let audioLatent;
   if(c.audioEnabled){
     node('audio_ref','LoadAudio',{audio:c.audio.file},'Load reference soundtrack');
-    node('trim_audio','TrimAudioDuration',{audio:ref('audio_ref'),start_index:audioStart,duration:frames/24},'Trim reference soundtrack');
+    node('audio_window','TrimAudioDuration',{audio:ref('audio_ref'),start_index:audioStart,duration:frames/24},'Select reference soundtrack');
+    node('audio_silence','EmptyAudio',{duration:frames/24,sample_rate:48000,channels:2},'Extend short reference with silence');
+    node('audio_padded','AudioConcat',{audio1:ref('audio_window'),audio2:ref('audio_silence'),direction:'after'},'Keep the original audio followed by silence');
+    node('trim_audio','TrimAudioDuration',{audio:ref('audio_padded'),start_index:0,duration:frames/24},'Match reference soundtrack to output length');
     node('encode_audio','LTXVAudioVAEEncode',{audio:ref('trim_audio'),audio_vae:ref('audio_vae')});
     node('freeze_audio_mask','SolidMask',{value:0,width:1024,height:1024});
     node('freeze_audio','SetLatentNoiseMask',{samples:ref('encode_audio'),mask:ref('freeze_audio_mask')},'Preserve reference audio tokens');

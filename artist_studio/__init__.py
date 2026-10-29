@@ -609,7 +609,10 @@ class GenjRestoreSoundtrack:
         with av.open(str(soundtrack)) as media:
             audio_codec_name = media.streams.audio[0].codec_context.name if media.streams.audio else None
         audio = ["-c:a", "copy"] if clip_details["full_source"] and not external and audio_codec_name == "aac" else ["-c:a", "aac", "-b:a", "256k"]
-        vf = "fps=24"
+        # Model decoding can end up one frame short after timebase rounding.
+        # The duration check above still rejects larger shortages; holding just
+        # one frame gives the selected soundtrack an exact frame-aligned end.
+        vf = "fps=24,tpad=stop_mode=clone:stop=1"
         if clip_details.get("export_width") and clip_details.get("export_height"):
             vf += f",scale={clip_details['export_width']}:{clip_details['export_height']}:flags=lanczos"
         ffmpeg("-i", generated, "-ss", offset, "-i", soundtrack, "-map", "0:v:0", "-map", "1:a:0?",
