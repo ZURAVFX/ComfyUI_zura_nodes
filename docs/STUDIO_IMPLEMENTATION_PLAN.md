@@ -116,3 +116,10 @@ crop and requested dimensions as the performance video. A real 448 × 768
 portrait still rendered successfully on ComfyUI, and 13 camera graph tests
 passed (one skipped); the generated image's appearance was not artist-reviewed.
 The installed source was updated and needs a ComfyUI restart to take effect.
+
+A follow-up real H3 camera render used that portrait still with a 0.3-second
+source trim. The result was 448 × 768, 48 frames at 24 fps, with a two-second
+audio stream. The opening retains the portrait composition, while the generated
+background lettering changes later; this is an engineering check, not artist
+approval or proof of perfect camera stability. Output:
+C:/Users/ellio/ComfyUI-Shared/output/genj/final/zura_camera_portrait_test_00001.mp4
