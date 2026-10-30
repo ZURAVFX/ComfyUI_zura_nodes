@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import asyncio
+import json
+import re
 from pathlib import Path
 
 from .hdr_jobs import HDRJobs
@@ -14,7 +16,7 @@ class HDRLongService:
         self.output_root=Path(output_root).resolve()
         self.create_sdr=create_sdr or create_sdr_job
         self.create_native=create_native or create_native_job
-        self.jobs=HDRJobs();self._preparing=asyncio.Lock()
+        self.jobs=HDRJobs();self._preparing=asyncio.Lock();self._requests={}
 
     def _asset(self, body):
         kind=body.get('source_kind','upload')
@@ -39,17 +41,38 @@ class HDRLongService:
         if not isinstance(body,dict):raise ValueError('Choose HDR conversion settings.')
         mode=body.get('mode')
         if mode not in ('sdr','native'):raise ValueError('Choose SDR to HDR or HDR to HDR.')
+        request_id=body.get('request_id')
+        if request_id is not None and (not isinstance(request_id,str) or not re.fullmatch(r'[a-f0-9]{32}',request_id)):
+            raise ValueError('Invalid HDR request ID.')
+        fingerprint=json.dumps(body,sort_keys=True,separators=(',',':'))
         async with self._preparing:
+            old=self._requests.get(request_id) if request_id else None
+            if old:
+                if old['fingerprint']!=fingerprint:raise ValueError('This HDR request ID belongs to different settings.')
+                return self.status(old['id'])
             if any(not task.done() for task in self.jobs.tasks.values()):
                 raise ValueError('An HDR conversion is already running.')
             asset,check=self._asset(body)
             factory=self.create_sdr if mode=='sdr' else self.create_native
             # A modest continuation anchor is deliberately fixed for this
             # private evaluation; no artist-facing quality claim is implied.
-            job,details=await asyncio.to_thread(factory,self.server,asset,body,check,
-                self.output_root,anchor_strength=0.75)
-            identity=self.jobs.start(job,details)
+            if request_id:self._requests[request_id]={'fingerprint':fingerprint,'id':None}
+            try:
+                job,details=await asyncio.to_thread(factory,self.server,asset,body,check,
+                    self.output_root,anchor_strength=0.75)
+                identity=self.jobs.start(job,details)
+            except Exception:
+                if request_id:self._requests.pop(request_id,None)
+                raise
+            if request_id:self._requests[request_id]['id']=identity
+            self._requests={key:value for key,value in self._requests.items() if value['id'] is None or value['id'] in self.jobs.jobs}
             return self.status(identity)
+
+    def request_status(self, request_id):
+        record=self._requests.get(request_id)
+        if not record:raise ValueError('HDR submission is unavailable. Check the ComfyUI queue before starting again.')
+        if record['id'] is None:return {'state':'preparing','request_id':request_id}
+        return self.status(record['id'])
 
     def status(self, identity):
         snapshot=self.jobs.status(identity)
@@ -80,6 +103,12 @@ def register(routes, response, service):
     @response
     async def start(request):
         return web.json_response(await service.start(await request.json()))
+
+    @routes.get('/zura/studio/hdr/requests/{identity}')
+    @routes.get('/genj/studio/hdr/requests/{identity}')
+    @response
+    async def request_status(request):
+        return web.json_response(service.request_status(request.match_info['identity']))
 
     @routes.get('/zura/studio/hdr/jobs/{identity}')
     @routes.get('/genj/studio/hdr/jobs/{identity}')

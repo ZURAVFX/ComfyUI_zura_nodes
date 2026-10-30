@@ -18,4 +18,13 @@ state='cancelled';await client.poll();assert.equal(client.busy,false);assert.equ
 const missing=new HDRLongJobClient({async fetchApi(){return {ok:false,status:400,json:async()=>({error:'Job unavailable. It was not restarted.'})};}},value=>updates.push(value));
 missing.reconnect('old');await new Promise(resolve=>setTimeout(resolve,5));
 assert.equal(missing.busy,false);assert.match(updates.at(-1).error,/not restarted/);
+let submits=0,recoveries=0;
+const dropped=new HDRLongJobClient({async fetchApi(path){
+  if(path.endsWith('/jobs')){submits++;throw Error('response lost');}
+  if(path.includes('/requests/')){recoveries++;return {ok:true,status:200,json:async()=>({id:'recovered',state:'rendering'})};}
+  return {ok:true,status:200,json:async()=>({id:'recovered',state:'complete'})};
+}},value=>updates.push(value));
+await dropped.start({mode:'sdr'});await new Promise(resolve=>setTimeout(resolve,5));
+assert.equal(submits,1);assert.equal(recoveries,1);assert.equal(dropped.busy,false);
+assert.equal(values.size,0,'recovered completion clears both saved IDs');
 console.log('Long HDR client keeps one job, reconnects safely and waits for cancellation.');

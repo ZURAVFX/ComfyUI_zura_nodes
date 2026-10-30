@@ -55,6 +55,9 @@ streaming, frame count, audio selection and cancellation pass local tests.
 The HDR panel now has a gated longer-clip control, section progress, reconnects,
 cancellation and output preview. Interface simulations pass; the control is
 disabled by default and requires full desktop and artist validation.
+Long-HDR submissions now use a recoverable request ID: the service recognises
+repeated requests and the client can recover a lost submission response without
+resubmitting. A ComfyUI restart still loses in-memory job state and is reported.
 An isolated HTTP-to-GPU long SDR-to-HDR test processed 130 frames in two
 sections at 512 × 288, delivered 130 ACEScg EXRs, 130 HLG 10-bit frames and
 a 130-frame SDR preview. Source audio measured zero lag in the HLG file. The

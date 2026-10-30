@@ -38,7 +38,7 @@ export class HDRSourceTool {
     api.addEventListener?.('executing',this.onExecuting);
     try{this.job=localStorage.getItem('zura-hdr-active-job');}catch{}
     if(this.job){this.busy=true;this.loras.setBusy(true);this.root.open=true;this.$('start-job').disabled=true;this.$('cancel').hidden=false;this.$('progress').hidden=false;this.$('progress').removeAttribute('value');this.status('Reconnecting to your HDR conversion…');this.poll();}
-    if(longAvailable&&!this.job){let active;try{active=localStorage.getItem('zura-hdr-long-job');}catch{}if(active){this.root.open=true;this.longClient.reconnect(active);}}
+    if(longAvailable&&!this.job){let active,pending;try{active=localStorage.getItem('zura-hdr-long-job');pending=localStorage.getItem('zura-hdr-long-request');}catch{}if(active||pending){this.root.open=true;if(active)this.longClient.reconnect(active);else this.longClient.reconnectRequest(pending);}}
   }
   $(id){return this.root.querySelector(`[data-hdr="${id}"]`);}
   status(text){this.$('status').textContent=text;}
@@ -103,7 +103,7 @@ export class HDRSourceTool {
   url(file){return this.api.apiURL('/view?'+new URLSearchParams({filename:file.filename,subfolder:file.subfolder||'',type:file.type||'output'}));}
   longUpdate(job){
     const state=job.state;this.busy=!['complete','cancelled','failed','unknown'].includes(state);this.loras.setBusy(this.busy);
-    this.$('start-job').disabled=this.busy;this.$('cancel').hidden=!this.busy;this.$('cancel').disabled=state==='cancelling';
+    this.$('start-job').disabled=this.busy;this.$('cancel').hidden=!this.busy||!this.longClient.id;this.$('cancel').disabled=state==='cancelling';
     this.longPrompt=job.active_prompt_id||null;
     this.longSection=Number.isInteger(job.total)&&job.total>0?`Section ${Math.min(job.completed+1,job.total)} of ${job.total}`:null;
     if(state==='complete'){

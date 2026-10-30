@@ -65,9 +65,16 @@ class HDRLongServiceTests(unittest.IsolatedAsyncioTestCase):
             service.register(routes,response,client_service)
             app=web.Application();app.add_routes(routes)
             async with TestClient(TestServer(app)) as client:
-                response1=await client.post('/zura/studio/hdr/jobs',json={'mode':'sdr','source_id':'video'})
+                body={'mode':'sdr','source_id':'video','request_id':'d'*32}
+                response1=await client.post('/zura/studio/hdr/jobs',json=body)
                 self.assertEqual(response1.status,200);self.assertEqual((await response1.json())['id'],'b'*32)
                 await created[0].entered.wait()
+                recovered=await client.get('/zura/studio/hdr/requests/'+'d'*32)
+                self.assertEqual((await recovered.json())['id'],'b'*32)
+                duplicate=await client.post('/zura/studio/hdr/jobs',json=body)
+                self.assertEqual((await duplicate.json())['id'],'b'*32);self.assertEqual(len(created),1)
+                conflict=await client.post('/zura/studio/hdr/jobs',json={**body,'source_id':'different'})
+                self.assertEqual(conflict.status,400)
                 status=await client.get('/zura/studio/hdr/jobs/'+'b'*32)
                 self.assertEqual((await status.json())['state'],'rendering')
                 cancel=await client.post('/zura/studio/hdr/jobs/'+'b'*32+'/cancel')
