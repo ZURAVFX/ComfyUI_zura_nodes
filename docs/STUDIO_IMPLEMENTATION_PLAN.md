@@ -41,6 +41,9 @@ the revised files are installed locally and require a ComfyUI restart. This
 A separate 512 × 288 ten-frame real-footage GPU test produced the correct HLG
 metadata, ten EXRs and zero measured source-audio lag at a five-frame trim.
 Longer and 1080p visual quality remain unverified.
+Head-swap setup now links its missing crop, pose, padding, mask and sigma nodes
+to the corresponding installed packs' declared upstream repositories. Automatic
+node-pack installation remains outstanding.
 The private long-HDR coordinator now has a tested in-memory job manager for
 reconnection, single-job scheduling and cancellation. Its service validates
 Studio asset references and emits output-relative file references. Start,

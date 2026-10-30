@@ -30,6 +30,10 @@ assert.match(component.files.textContent,/required.safetensors/);assert.match(co
 assert.equal(component.files.querySelectorAll('.gs-model-package').length,1,'matched files map to their verified package');
 component.setMissingContext('ltx_outpaint_long',['LTXVInpaintPreprocess']);
 assert.ok([...component.files.querySelectorAll('a')].some(a=>a.href==='https://github.com/Lightricks/ComfyUI-LTXVideo'),'missing LTX nodes link to their verified pack');
+component.setMissingContext('h3_head_swap',['MVEx_SubjectCrop','MVEx_SubjectUncrop','LayerUtility: Pad Image Batch to 8n+1','DWPreprocessor','NKDMaskOps','NKDAVLatent','NKDSigmasCurve']);
+for(const url of ['https://github.com/drozbay/MaskVidExperiments','https://github.com/chflame163/ComfyUI_LayerStyle','https://github.com/Fannovel16/comfyui_controlnet_aux','https://github.com/Nekodificador/ComfyUI-NKD-Basic-Tools','https://github.com/Nekodificador/ComfyUI-NKD-Sigmas-Curve'])
+  assert.ok([...component.files.querySelectorAll('a')].some(a=>a.href===url),`missing head-swap nodes link to ${url}`);
+assert.doesNotMatch(component.files.textContent,/Other nodes:/);
 // Route-specific setup uses real readiness evidence, deduplicates shared files,
 // and reports unsupported dependencies instead of claiming complete setup.
 component.packages=[{...pack,files:[{folder:'diffusion_models',filename:'model.safetensors',repo:'Comfy-Org/Wan-Animate-2',size_bytes:1000000000,installed:false}],license_url:'https://huggingface.co/Comfy-Org/Wan-Animate-2'},

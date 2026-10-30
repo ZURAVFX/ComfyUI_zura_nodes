@@ -7,6 +7,11 @@ const NODE_PACKS=[
   {name:'ComfyUI-WanAnimatePreprocess',url:'https://github.com/kijai/ComfyUI-WanAnimatePreprocess',nodes:['OnnxDetectionModelLoader','PoseAndFaceDetection','DrawViTPose']},
   {name:'ComfyUI-CrossViewWarp',url:'https://github.com/cseti007/ComfyUI-CrossViewWarp',nodes:['CrossViewWarp']},
   {name:'ComfyUI-LTXVideo',url:'https://github.com/Lightricks/ComfyUI-LTXVideo',nodes:['LTXVInpaintPreprocess','LTXAddVideoICLoRAGuide','LTXAddVideoICLoRAGuideAdvanced','LTXICLoRALoaderModelOnly','LTXVLaplacianPyramidBlend','LTXVSetAudioRefTokens','LTXVLoadConditioning','LTXVHDRDecodePostprocess','LTXVVAEForceFloat32','LTXVTiledFusionSampler']},
+  {name:'MaskVidExperiments',url:'https://github.com/drozbay/MaskVidExperiments',nodes:['MVEx_SubjectCrop','MVEx_SubjectUncrop']},
+  {name:'ComfyUI LayerStyle',url:'https://github.com/chflame163/ComfyUI_LayerStyle',nodes:['LayerUtility: Pad Image Batch to 8n+1']},
+  {name:'ComfyUI ControlNet Aux',url:'https://github.com/Fannovel16/comfyui_controlnet_aux',nodes:['DWPreprocessor']},
+  {name:'NKD Basic Tools',url:'https://github.com/Nekodificador/ComfyUI-NKD-Basic-Tools',nodes:['NKDMaskOps','NKDMaskOpsLean','NKDAVLatent']},
+  {name:'NKD Sigmas Curve',url:'https://github.com/Nekodificador/ComfyUI-NKD-Sigmas-Curve',nodes:['NKDSigmasCurve']},
 ];
 const MANUAL_SOURCES={
   'wan_2.1_idv2v_int8_convrot.safetensors':{url:'https://huggingface.co/Kijai/Wan_ID_V2V_comfy',note:'The conversion publisher does not state a licence. Review its terms and the upstream ID-V2V licence.'},
