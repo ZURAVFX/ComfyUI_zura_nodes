@@ -45,6 +45,10 @@ assert.equal(component.files.querySelectorAll('.gs-model-package').length,1,'sha
 assert.match(component.files.textContent,/custom-lora.safetensors/);assert.match(component.files.textContent,/UnmappedNode/);
 assert.ok([...component.files.querySelectorAll('a')].some(a=>a.href==='https://github.com/kijai/ComfyUI-WanAnimatePreprocess'));
 assert.match(component.files.textContent,/restart ComfyUI/);
+component.setContext({route:'openjutsu',files:[],missingNodes:['H3CharacterSwapController','H3CharacterSwapPrepareVideo']});
+assert.ok([...component.files.querySelectorAll('a')].some(a=>a.href==='https://github.com/akatz-labs/h3-character-swap-tool/tree/0670e4fdf95adf2262caa4b81afed2a9c4ae4b7b/worker_nodes/h3_character_swap'));
+assert.ok([...component.files.querySelectorAll('a')].some(a=>a.href==='https://github.com/Comfy-Org/comfy-openjutsu/blob/70ec62df0eda7c58697ea3ac2050588513651583/build/h3_character_swap.patch'));
+assert.match(component.files.textContent,/compatibility patch before installation/);assert.doesNotMatch(component.files.textContent,/Other nodes:/);
 component.packages=[{...pack,id:'h3_dmd_ref2va',name:'H3 eight-step adapter',license_url:'https://huggingface.co/RunningHubAI/rh-minimax-h3-dmd-ref2va-8step-turbo-pruned.safetensors-lora',files:[{folder:'loras',filename:'minimax_h3_dmd_ref2va_8step_turbo_pruned.safetensors',repo:'RunningHubAI/test',size_bytes:2285989092,installed:false}]}];
 component.setContext({route:'h3',files:[{folder:'loras',filename:'minimax_h3_dmd_ref2va_8step_turbo_pruned.safetensors',ready:false}],missingNodes:[]});
 assert.match(component.files.textContent,/H3 eight-step adapter/);
