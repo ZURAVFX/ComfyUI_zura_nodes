@@ -1339,7 +1339,7 @@ class ArtistStudio {
     this.$("duration").step="any";
     if(relight && this.config.relight_engine==="wan21"){
       this.$("duration").max=String(Math.min(Number(this.source?.duration)||30,30));
-      this.$("limit-note").textContent="Custom selections support up to 30 seconds. Use source processes the full clip in 81-frame sections; inspect the joins.";
+      this.$("limit-note").textContent="Custom selections support up to 30 seconds. Use source processes the full clip in 81-frame sections; inspect the joins. Longer clips and larger frames need more system memory.";
     }
     const reference=this.$("audio-mode").value==="reference",activeReference=reference && !!this.audio;
     const speechGraphOption=this.$("graph-stage").querySelector('option[value="wan_speech"]');

@@ -21,3 +21,9 @@ Completion means each exposed control changes the actual rendered result, preser
 existing approved paths, and has truthful limits and actionable errors. Maintain
 notes on unsupported model capabilities rather than claiming generic HDR, LoRA or
 duration support without evidence.
+
+Latest duration check: a 30-second Wan 2.1 relight on a looped 512 × 288 fixture
+produced 720 frames at 24 fps with zero measured audio lag in 200 seconds. Observed
+available system memory fell from about 33.7 to 9.6 GiB during the run. This is a
+timing and resource check, not a visual sign-off or a guarantee for 720p footage.
+Additional source rates and the full desktop path still need verification.

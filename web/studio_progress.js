@@ -23,7 +23,7 @@ export function stageProgress(progress, fallback={}) {
   const elapsed=typeof p.stage_elapsed_seconds==="number" && Number.isFinite(p.stage_elapsed_seconds)
     ?Math.max(0,p.stage_elapsed_seconds):null;
   const steps=active && Number.isInteger(p.step)&&Number.isInteger(p.total_steps)&&p.total_steps>0
-    ?`Step ${Math.max(0,p.step)} of ${p.total_steps}`:null;
+    ?`${fallback.stage==='wan21_relight'?'Current section · ':''}Step ${Math.max(0,p.step)} of ${p.total_steps}`:null;
   const title=fallback.label || p.stage_label || "Preparing your shot";
   // Older backends label every sampler/decoder as video. Keep image-stage
   // wording correct immediately, including before the backend is restarted.

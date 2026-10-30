@@ -77,6 +77,7 @@ class ProgressEstimatorTests(unittest.TestCase):
 
     def test_comfy_loader_labels_name_slow_h3_initialization_steps(self):
         self.assertEqual(_progress._friendly_node("UNETLoader"), "Loading H3 video model")
+        self.assertEqual(_progress._friendly_node("UNETLoader", "wan21_relight"), "Loading video model")
         self.assertEqual(_progress._friendly_node("CLIPLoader"), "Loading H3 text encoder")
         self.assertEqual(_progress._friendly_node("VAELoader"), "Loading H3 decoder")
         self.assertEqual(_progress._friendly_node("DepthAnythingV2Preprocessor"), "Building depth guidance")

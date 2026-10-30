@@ -17,6 +17,11 @@ def _friendly_node(class_type, stage=None):
         if "loraloader" in low: return "Loading image adapter"
         if "vaedecode" in low or "decodeimage" in low: return "Decoding image"
         if "sampler" in low: return "Generating image"
+    if stage in ("wan", "wan2", "wan21_relight"):
+        if "unetloader" in low: return "Loading video model"
+        if "cliploader" in low: return "Loading text encoder"
+        if "vaeloader" in low: return "Loading video decoder"
+        if "loraloader" in low: return "Loading video adapter"
     if "depthanything" in low:
         return "Building depth guidance"
     if "genjh3framepad" in low:
