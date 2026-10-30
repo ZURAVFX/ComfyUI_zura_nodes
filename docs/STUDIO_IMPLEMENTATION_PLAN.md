@@ -41,3 +41,7 @@ the revised files are installed locally and require a ComfyUI restart. This
 A separate 512 × 288 ten-frame real-footage GPU test produced the correct HLG
 metadata, ten EXRs and zero measured source-audio lag at a five-frame trim.
 Longer and 1080p visual quality remain unverified.
+The private long-HDR coordinator now has a tested in-memory job manager for
+reconnection, single-job scheduling and cancellation. HTTP routes, Studio
+controls and restart recovery messaging still need implementation and testing;
+it remains unavailable to users pending visual review.
