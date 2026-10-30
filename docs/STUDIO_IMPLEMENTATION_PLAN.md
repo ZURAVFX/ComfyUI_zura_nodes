@@ -169,3 +169,9 @@ ComfyUI modules on PYTHONPATH. Both bounded and long-HDR client tests also
 passed. An initial run without the ComfyUI path produced four missing-module
 errors from the standalone test stubs; rerunning with the real installation
 resolved them. These checks do not replace the pending desktop visual test.
+
+The separate first/last-frame validation already includes real maximum-length
+GPU runs at 256 × 256: H3 produced 362 frames and Wan 2.2 and LTX 2.5 each
+produced 361, all at 24 fps with both endpoints connected. Those runs used the
+same image at each end and are not high-resolution or visual-quality approval;
+see STUDIO_VIDEO_VALIDATION.md for timings and limits.
