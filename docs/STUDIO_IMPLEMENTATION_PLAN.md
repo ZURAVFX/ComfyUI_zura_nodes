@@ -184,3 +184,8 @@ Studio upload endpoint converted a 130-frame SDR source in two sections and
 returned 130 frames of HLG video and a tone-mapped preview; the HLG video has
 a 5.4167-second video and a 5.416-second audio stream. Unit and UI tests pass.
 Desktop validation is pending; this is not installed in the normal Studio.
+
+Long HDR's status polling no longer erases live sampler progress when it sees
+the same running section. The indicator returns to an indeterminate state when
+the prompt or phase changes. A UI regression test covers both transitions; this
+change is in the test worktree, not the installed normal Studio.

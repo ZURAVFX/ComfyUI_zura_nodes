@@ -128,9 +128,10 @@ export class HDRSourceTool {
   }
   url(file){return this.api.apiURL('/view?'+new URLSearchParams({filename:file.filename,subfolder:file.subfolder||'',type:file.type||'output'}));}
   longUpdate(job){
-    const state=job.state;this.busy=!['complete','cancelled','failed','unknown'].includes(state);this.loras.setBusy(this.busy);
+    const state=job.state,previousPrompt=this.longPrompt,previousState=this.longState;this.busy=!['complete','cancelled','failed','unknown'].includes(state);this.loras.setBusy(this.busy);
     this.$('start-job').disabled=this.busy;this.$('cancel').hidden=!this.busy||!this.longClient.id;this.$('cancel').disabled=state==='cancelling';
     this.longPrompt=job.active_prompt_id||null;
+    this.longState=state;
     this.longSection=Number.isInteger(job.total)&&job.total>0?`Section ${Math.min(job.completed+1,job.total)} of ${job.total}`:null;
     if(state==='complete'){
       const files=job.result?.files||[],preview=job.result?.preview,hlg=files.find(f=>f.filename.endsWith('.mp4')),exr=files.find(f=>f.filename.endsWith('.zip'));
@@ -139,6 +140,10 @@ export class HDRSourceTool {
       this.$('result').hidden=false;this.status('HDR conversion complete.');this.finish();return;
     }
     if(state==='cancelled'||state==='failed'||state==='unknown'){this.status(job.error|| (state==='cancelled'?'HDR conversion cancelled.':'HDR conversion failed.'));this.finish();return;}
+    // Polling repeats the same section status every two seconds. Preserve live
+    // sampler progress until the active prompt or processing phase changes.
+    if(state==='rendering'&&previousState==='rendering'&&this.longPrompt&&this.longPrompt===previousPrompt&&this.currentNode)return;
+    if(this.longPrompt!==previousPrompt||state!=='rendering')this.currentNode=null;
     this.$('progress').hidden=false;this.$('progress').removeAttribute('value');
     this.status(state==='cancelling'?'Cancelling HDR conversion…':state==='reconnecting'?'Reconnecting to your HDR conversion…':state==='cancel-error'?(job.error||'Could not cancel. Try again.'):state==='exporting'?'Saving HDR video and EXRs…':this.longSection?`${this.longSection} · processing`:'Preparing HDR conversion…');
   }

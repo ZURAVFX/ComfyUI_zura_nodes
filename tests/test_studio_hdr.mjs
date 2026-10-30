@@ -106,6 +106,11 @@ await longTool.start();await new Promise(resolve=>setTimeout(resolve,5));clearTi
 assert.equal(longCalls.filter(([path])=>path==='/zura/studio/hdr/jobs').length,1);
 longTool.onProgress({detail:{prompt_id:'own-prompt',node:'sample1',value:2,max:8}});
 assert.match(longTool.$('status').textContent,/Section 2 of 2.*step 2 of 8/);
+longTool.longUpdate({state:'rendering',completed:1,total:2,active_prompt_id:'own-prompt'});
+assert.match(longTool.$('status').textContent,/Section 2 of 2.*step 2 of 8/,'polling must not erase live sampler progress');
+assert.equal(Number(longTool.$('progress').value),25);
+longTool.longUpdate({state:'rendering',completed:1,total:2,active_prompt_id:'new-prompt'});
+assert.match(longTool.$('status').textContent,/Section 2 of 2 · processing/);assert.equal(longTool.$('progress').hasAttribute('value'),false);
 longState='complete';await longTool.longClient.poll();
 assert.equal(longTool.$('result').hidden,false);assert.match(longTool.$('preview').src,/preview.mp4/);
 assert.match(longTool.$('hlg').href,/hdr.mp4/);assert.match(longTool.$('exr').href,/exr.zip/);
