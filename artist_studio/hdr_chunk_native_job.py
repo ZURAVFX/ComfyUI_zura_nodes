@@ -21,7 +21,7 @@ from .hdr_chunk_video import export_hlg_video
 from .hdr_native_studio import build_asset_graph
 
 
-def create_native_job(server, asset, body, check_asset, output_root, *, ffmpeg=None, max_chunk_frames=121, overlap=8, anchor_strength=None, anchor_mode='guide'):
+def create_native_job(server, asset, body, check_asset, output_root, *, ffmpeg=None, max_chunk_frames=121, overlap=8, anchor_strength=None, anchor_mode='guide', _graph_builder=None, _image_node='trim_raster', _prefix='native'):
     """Validate a whole selection and construct a bounded sequential job."""
     from ..paintout.paintout import describe
     manifest=check_asset(asset)
@@ -38,7 +38,8 @@ def create_native_job(server, asset, body, check_asset, output_root, *, ffmpeg=N
     if start+count>info['count']:raise ValueError('The selected range extends past the source.')
     plan=plan_chunks(start,count,info['width'],info['height'],overlap=overlap,max_frames=max_chunk_frames)
     chunk_body=dict(body,start_frame=plan[0].start,frame_count=plan[0].count)
-    _,details=build_asset_graph(asset,chunk_body,check_asset)
+    builder=_graph_builder or build_asset_graph
+    _,details=builder(asset,chunk_body,check_asset)
     output=details['output']
     # Fail before running the expensive GPU graph if the final outputs cannot
     # be encoded or safely published. The staged float32 size is predictable;
@@ -72,17 +73,17 @@ def create_native_job(server, asset, body, check_asset, output_root, *, ffmpeg=N
     store=HDRChunkStore(staging,identity,plan,details['width'],details['height'],create=True)
 
     def make_graph(part):
-        graph,_=build_asset_graph(asset,dict(body,start_frame=part.start,frame_count=part.count),check_asset)
+        graph,_=builder(asset,dict(body,start_frame=part.start,frame_count=part.count),check_asset)
         return graph
-    renderer=ComfyHDRRenderer(server,store,make_graph,'trim_raster',anchor_strength,anchor_mode)
+    renderer=ComfyHDRRenderer(server,store,make_graph,_image_node,anchor_strength,anchor_mode)
 
     async def export(staged):
         paths=[]
         try:
             if output in ('acescg_exr','hlg_and_exr'):
-                paths.append(await asyncio.to_thread(export_exr_zip,staged,output_root,'native_'+identity))
+                paths.append(await asyncio.to_thread(export_exr_zip,staged,output_root,_prefix+'_'+identity))
             if output in ('hlg_video','hlg_and_exr'):
-                paths.append(await asyncio.to_thread(export_hlg_video,staged,output_root,'native_'+identity,
+                paths.append(await asyncio.to_thread(export_hlg_video,staged,output_root,_prefix+'_'+identity,
                     fps=details['fps'],audio_source=str(source) if details['has_audio'] else None,
                     audio_start_frame=start,ffmpeg=ffmpeg))
             if staged.cancelled.is_set():raise HDRChunkCancelled('HDR conversion cancelled.')
@@ -96,3 +97,12 @@ def create_native_job(server, asset, body, check_asset, output_root, *, ffmpeg=N
     job=HDRChunkRunner(store,renderer.submit,export,renderer.cancel)
     return job,{'id':identity,'chunks':len(plan),'frames':count,'fps':details['fps'],
                 'width':details['width'],'height':details['height'],'output':output}
+
+
+def create_sdr_job(server, asset, body, check_asset, output_root, *, ffmpeg=None, max_chunk_frames=121, overlap=8):
+    """Private SDR-to-HDR chunk prototype; no Studio route is registered."""
+    if asset.get('asset_kind')!='video':raise ValueError('Choose an SDR source video.')
+    from .hdr_studio import build_asset_graph as build_sdr_graph
+    return create_native_job(server,asset,body,check_asset,output_root,ffmpeg=ffmpeg,
+        max_chunk_frames=max_chunk_frames,overlap=overlap,_graph_builder=build_sdr_graph,
+        _image_node='hdr_unpad_raster',_prefix='sdr')

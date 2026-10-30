@@ -20,12 +20,13 @@ for name,path in [('ComfyUI_zura_nodes.artist_studio','artist_studio'),('ComfyUI
 native=importlib.import_module('ComfyUI_zura_nodes.artist_studio.hdr_chunk_native_job')
 adapter=importlib.import_module('ComfyUI_zura_nodes.artist_studio.hdr_chunk_comfy')
 paintout=importlib.import_module('ComfyUI_zura_nodes.paintout.paintout')
+sdr=importlib.import_module('ComfyUI_zura_nodes.artist_studio.hdr_studio')
 
 
 class SimulatedQueue:
-    def __init__(self):self.queue=[];self.history={};self.submissions=0
+    def __init__(self):self.queue=[];self.history={};self.submissions=0;self.graphs=[]
     def put(self,item):
-        self.queue.append(item);self.submissions+=1
+        self.queue.append(item);self.submissions+=1;self.graphs.append(item[2])
         asyncio.get_running_loop().call_soon(self.complete,item)
     def complete(self,item):
         identity=item[1];inputs=item[2]['zura_hdr_stage_chunk']['inputs'].copy();inputs.pop('images')
@@ -40,6 +41,28 @@ class SimulatedQueue:
 
 
 class HDRNativeLongJobTests(unittest.IsolatedAsyncioTestCase):
+    async def test_sdr_conversion_stages_actual_hdr_graph_in_bounded_chunks(self):
+        with tempfile.TemporaryDirectory() as root:
+            queue=SimulatedQueue();server=types.SimpleNamespace(prompt_queue=queue,number=0,trigger_on_prompt=lambda value:value,
+                node_replace_manager=types.SimpleNamespace(apply_replacements=lambda graph:None))
+            async def validate(*args):return True,None,['zura_hdr_stage_chunk'],{}
+            details={'width':32,'height':32,'fps':24.,'has_audio':False,'output':'acescg_exr'}
+            def graph(asset,body,check):
+                return sdr.build_hdr_graph(source='source.mp4',start_frame=body['start_frame'],frame_count=body['frame_count'],fps=24,output='acescg_exr',prefix='test'),details
+            with patch.object(native,'staging_root',return_value=Path(root)/'stage'), \
+                 patch.object(adapter,'staging_root',return_value=Path(root)/'stage'), \
+                 patch.object(sdr,'build_asset_graph',side_effect=graph), \
+                 patch.object(paintout,'describe',return_value={'count':122,'width':32,'height':32}), \
+                 patch.object(paintout,'native_colour',side_effect=lambda frames,*args:frames), \
+                 patch.dict(sys.modules,{'execution':types.SimpleNamespace(validate_prompt=validate)}):
+                job,summary=native.create_sdr_job(server,{'asset_kind':'video'},
+                    {'start_frame':0,'frame_count':122,'output':'acescg_exr'},lambda _:Path(root)/'source.mp4',root)
+                result=await job.run()
+            self.assertEqual((summary['chunks'],queue.submissions,job.state),(2,2,'complete'))
+            self.assertEqual([g['zura_hdr_source']['inputs']['frame_count'] for g in queue.graphs],[121,9])
+            self.assertEqual([g['zura_hdr_stage_chunk']['inputs']['images'] for g in queue.graphs],[['hdr_unpad_raster',0]]*2)
+            with zipfile.ZipFile(result['files'][0]) as archive:self.assertEqual(len(archive.namelist()),122)
+
     async def test_insufficient_staging_disk_fails_before_queueing(self):
         with tempfile.TemporaryDirectory() as root:
             queue=SimulatedQueue();server=types.SimpleNamespace(prompt_queue=queue)
