@@ -156,6 +156,13 @@ ui.show('image');await ui.loadModels();
 // First show starts loading. Wait for that bounded set of mocked requests.
 for(let i=0;i<10&&ui.loading;i++)await Promise.resolve();
 assert.equal(ui.models.length,IMAGE_MODELS.length);
+const originalFetch=ui.fetch;
+ui.fetch=async function(path,body){if(path==='/zura/studio/model-downloads')return {models:[{id:'qwen2511',license_url:'https://huggingface.co/Qwen/Qwen-Image-Edit-2511',note:'Review model source terms.',remaining_bytes:181,files:[{filename:'qwen.safetensors',repo:'gree9515/Qwen-Image-Edit-2511-ConvRot',size_bytes:181,installed:false}]}]};return originalFetch.call(this,path,body);};
+await ui.loadModels();
+assert.ok(ui.$('setup').querySelector('[data-download-model="qwen2511"]'),'Qwen edit exposes the verified model package');
+assert.match(ui.$('setup').textContent,/Review model source terms/);
+assert.ok([...ui.$('setup').querySelectorAll('a')].some(a=>a.href==='https://huggingface.co/gree9515/Qwen-Image-Edit-2511-ConvRot'));
+ui.fetch=originalFetch;
 ui.setImageOperation('edit');assert.equal(ui.$('model').value,'qwen2511');assert.equal(ui.$('generate').disabled,true,'Editing needs a source image');
 assert.equal(ui.$('model').querySelector('option[value="flux3"]').hidden,true);
 ui.references=[{file:'edit-source.png',name:'source.png'}];ui.$('prompt').value='Make the wall blue';ui.render();assert.equal(ui.$('generate').disabled,false);

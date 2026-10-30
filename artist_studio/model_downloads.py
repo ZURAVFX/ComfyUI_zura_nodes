@@ -69,6 +69,15 @@ CATALOG = {
 }
 
 CATALOG.update({
+    "qwen2511": dict(name="Qwen Image Edit 2511 · INT8", gated=False,
+        license_url="https://huggingface.co/Qwen/Qwen-Image-Edit-2511",
+        note="Includes the exact INT8 model, text encoder, VAE and four-step Lightning adapter used by Studio. The INT8 mirror does not state a licence; review its terms and the upstream licences before use.",
+        files=[
+            _file("diffusion_models", "qwen_image_edit_2511_int8_convrot.safetensors", "gree9515/Qwen-Image-Edit-2511-ConvRot", "9d56e8e9c4e7fca83fdd808c3b55a36c8b29eea8", "qwen_image_edit_2511_int8_convrot.safetensors", 20499083824, "11b5af5ac601821d73930c84846c9a158e67177356daf927ce1c8d10f3963829"),
+            _file("text_encoders", "qwen_2.5_vl_7b_fp8_scaled.safetensors", "Comfy-Org/Qwen-Image_ComfyUI", "1f12b17be14c89b026c51a91d67c32f84bb047bc", "split_files/text_encoders/qwen_2.5_vl_7b_fp8_scaled.safetensors", 9384670680, "cb5636d852a0ea6a9075ab1bef496c0db7aef13c02350571e388aea959c5c0b4"),
+            _file("vae", "qwen_image_vae.safetensors", "Comfy-Org/Qwen-Image_ComfyUI", "1f12b17be14c89b026c51a91d67c32f84bb047bc", "split_files/vae/qwen_image_vae.safetensors", 253806246, "a70580f0213e67967ee9c95f05bb400e8fb08307e017a924bf3441223e023d1f"),
+            _file("loras", "Qwen-Image-Edit-2511-Lightning-4steps-V1.0-bf16.safetensors", "lightx2v/Qwen-Image-Edit-2511-Lightning", "107d238d68b8387e32843d0b4a2e24ceb0d3ad86", "Qwen-Image-Edit-2511-Lightning-4steps-V1.0-bf16.safetensors", 849608296, "22226e8d05d354bb356627d428809f5afd7819399b077238a2b70a82883a904f"),
+        ]),
     "h3_head_adapters": dict(name="H3 head swap · additional adapters", gated=False,
         license_url="https://huggingface.co/Jojocodex/minimax-h3-Camera-Motion-lora",
         note="Four-step turbo and camera-motion adapters used by the approved head swap recipe. Its other models, TaoMate adapter and node packs are separate; review every source and upstream terms.",

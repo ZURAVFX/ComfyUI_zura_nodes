@@ -60,6 +60,11 @@ class ModelDownloadTest(unittest.TestCase):
         self.assertEqual(taomate['filename'],'minimax_h3_taomate_3step_lora_avg_rank_19_bf16.safetensors')
         self.assertEqual(taomate['size_bytes'],181697688)
         self.assertEqual(taomate['sha256'],'de9663d974a884b477556748239c6f28239f7ca1825be270f98f023ff5dab6a7')
+        qwen=packages['qwen2511']['files']
+        self.assertEqual({f['folder'] for f in qwen},{'diffusion_models','text_encoders','vae','loras'})
+        self.assertEqual(qwen[0]['size_bytes'],20499083824)
+        self.assertEqual(qwen[0]['sha256'],'11b5af5ac601821d73930c84846c9a158e67177356daf927ce1c8d10f3963829')
+        self.assertIn('does not state a licence',packages['qwen2511']['note'])
         relight = packages['wan21_relight']['files']
         self.assertEqual(relight[0]['filename'], 'wan_2.1_idv2v_int8_convrot.safetensors')
         self.assertEqual(relight[1:4], packages['wan_animate_2']['files'][1:])

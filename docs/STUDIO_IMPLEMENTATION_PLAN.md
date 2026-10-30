@@ -41,9 +41,16 @@ the revised files are installed locally and require a ComfyUI restart. This
 A separate 512 × 288 ten-frame real-footage GPU test produced the correct HLG
 metadata, ten EXRs and zero measured source-audio lag at a five-frame trim.
 Longer and 1080p visual quality remain unverified.
+An isolated native-HDR HTTP/GPU test also delivered 129 frames in two sections,
+129 EXRs, HLG 10-bit and an SDR preview with zero measured source-audio lag.
+The first 121-frame section took about 397 seconds at 384 × 216, so performance
+is not qualified and the result still needs visual review.
 Head-swap setup now links its missing crop, pose, padding, mask and sigma nodes
 to the corresponding installed packs' declared upstream repositories. Automatic
 node-pack installation remains outstanding.
+Qwen Image Edit 2511 now has an in-app package for its exact INT8 model, encoder,
+VAE and Lightning adapter. Their pinned hashes match the files on this system;
+the INT8 mirror does not state a licence and setup identifies its source.
 The private long-HDR coordinator now has a tested in-memory job manager for
 reconnection, single-job scheduling and cancellation. Its service validates
 Studio asset references and emits output-relative file references. Start,
