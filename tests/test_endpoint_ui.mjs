@@ -31,7 +31,7 @@ assert.equal(ui.$('generate').disabled,false);const assets=ui.assets;
 const change=id=>{ui.$('engine').value=id;ui.$('engine').dispatchEvent(new window.Event('change'));};
 change('wan');assert.equal(ui.assets,assets);assert.equal(ui.$('prompt').value,'The character turns towards the camera.');
 assert.equal(ui.config().frames,81);assert.equal(ui.config().steps,4);assert.equal(ui.$('steps').disabled,true);
-assert.equal(ui.$('audio-enabled').checked,false);assert.equal(ui.$('audio-enabled').closest('label').hidden,true);assert.equal(ui.$('audio-file-button').hidden,true);
+assert.equal(ui.$('audio-enabled').checked,false);assert.equal(ui.$('audio-enabled').closest('label').hidden,true);assert.equal(ui.$('audio-slot').hidden,true);
 assert.equal(ui.assets.audio.file,'voice.wav','Switching to silent Wan retains the audio asset for other engines');
 assert.deepEqual(Array.from(ui.$('length').querySelectorAll('option')).map(o=>Number(o.value)),endpointLengths('wan'));
 ui.$('size-preset').value='custom';ui.$('width').value=721;ui.$('height').value=416;ui.$('width').dispatchEvent(new window.Event('input'));
@@ -42,6 +42,9 @@ events.get('executing')({detail:{prompt_id:ui.job.id,node:'low_sample'}});assert
 ui.job=null;ui.render();change('ltx');assert.equal(ui.config().width,736);assert.equal(ui.config().frames,49);assert.equal(ui.config().steps,8);assert.equal(ui.$('steps').disabled,true);assert.equal(ui.$('audio-enabled').closest('label').hidden,false);
 ui.$('audio-enabled').checked=true;ui.render();await ui.generate();assert.equal(submissions[1].model.inputs.unet_name,ltx.model);assert.equal(submissions[1].guide_last.inputs.frame_idx,48);assert.deepEqual(submissions[1].video.inputs.audio,['trim_audio',0]);
 ui.job=null;ui.render();ui.save();const restored=new FrameVideoWorkspace({...owner,root:document.createElement('section')});assert.equal(restored.config().engine,'ltx');assert.equal(restored.config().frames,49);assert.equal(restored.config().width,736);restored.close();
+assert.equal(ui.$('remove-audio').hidden,false);ui.$('remove-audio').click();
+assert.equal(ui.assets.audio,undefined);assert.equal(ui.$('audio-enabled').checked,false);assert.equal(ui.$('audio-slot').hidden,true);
+const restoredWithoutAudio=new FrameVideoWorkspace({...owner,root:document.createElement('section')});assert.equal(restoredWithoutAudio.assets.audio,undefined);restoredWithoutAudio.close();
 // A missing optional engine must not prevent H3 or Wan from being used.
 missingLtx=true;await ui.loadModels();assert.equal(ui.availability.ready,false);assert.match(ui.$('setup').textContent,/LTXVAddGuide/);
 change('h3');assert.equal(ui.availability.ready,true);assert.equal(ui.$('generate').disabled,false);assert.equal(ui.config().frames,73);assert.equal(ui.$('steps').disabled,false);

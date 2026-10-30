@@ -32,7 +32,7 @@ export class FrameVideoWorkspace{
         <div class="zc-composer-attachments">
           ${['first','last'].map(id=>`<div class="zf-frame-slot"><button type="button" class="zc-attachment" data-frame="${id}" aria-label="Choose ${id} frame">${icons.image}<span>${id==='first'?'First frame':'Last frame · optional'}</span></button><button type="button" class="zf-remove-frame" id="zf-remove-${id}" aria-label="Remove ${id} frame" title="Remove ${id} frame" hidden><svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><path d="m4 4 8 8M12 4l-8 8"/></svg></button><input id="zf-${id}" type="file" accept="image/png,image/jpeg,image/webp" hidden/></div>`).join('')}
           <button type="button" id="zf-swap" class="zc-tool" aria-label="Swap first and last frames" title="Swap first and last frames" hidden><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8h16m-4-4 4 4-4 4M20 16H4m4-4-4 4 4 4"/></svg></button>
-          <button type="button" id="zf-audio-file-button" class="zc-attachment" hidden>${icons.audio}<span>Add audio reference</span></button><input id="zf-audio-file" type="file" accept="audio/*,.wav,.mp3,.m4a,.flac,.ogg" hidden/>
+          <div class="zf-frame-slot" id="zf-audio-slot" hidden><button type="button" id="zf-audio-file-button" class="zc-attachment">${icons.audio}<span>Add audio reference</span></button><button type="button" class="zf-remove-frame" id="zf-remove-audio" aria-label="Remove audio reference" title="Remove audio reference" hidden><svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><path d="m4 4 8 8M12 4l-8 8"/></svg></button><input id="zf-audio-file" type="file" accept="audio/*,.wav,.mp3,.m4a,.flac,.ogg" hidden/></div>
         </div>
         <label for="zf-prompt" class="zc-sr-only">Describe your video</label><textarea id="zf-prompt" placeholder="Describe the movement, camera and action…" maxlength="12000" required></textarea>
         <div class="zc-prompt-bottom"><div class="zc-prompt-tools"><div class="zc-tool-group" role="group" aria-label="Model and workflow">
@@ -90,6 +90,7 @@ export class FrameVideoWorkspace{
       this.$('remove-'+id).onclick=()=>this.removeFrame(id);
     }
     this.$('swap').onclick=()=>{if(this.busy())return;[this.assets.first,this.assets.last]=[this.assets.last,this.assets.first];this.save();this.render();this.$('result').pause();this.$('result').hidden=true;this.preview();};
+    this.$('remove-audio').onclick=()=>{if(this.busy())return;delete this.assets.audio;this.$('audio-enabled').checked=false;this.$('audio-file').value='';this.save();this.render();this.$('audio-enabled').focus({preventScroll:true});};
     this.$('audio-file-button').onclick=()=>this.$('audio-file').click();this.$('audio-file').onchange=e=>{const file=e.target.files?.[0];e.target.value='';if(file)this.upload('audio',file);};
     this.$('cancel').onclick=()=>this.cancel();
     this.page.addEventListener('keydown',e=>{if(e.key==='Escape')for(const d of this.page.querySelectorAll('details'))if(d.open){d.open=false;d.querySelector('summary').focus({preventScroll:true});e.stopPropagation();}});
@@ -147,7 +148,7 @@ export class FrameVideoWorkspace{
     this.$('steps').min=cap.minSteps;this.$('steps').max=cap.maxSteps;this.$('steps').disabled=busy||cap.minSteps===cap.maxSteps;this.$('recipe-hint').textContent=cap.hint;
     this.$('audio-enabled').closest('label').hidden=!cap.supportsAudioReference;
     for(const slot of ['first','last']){const button=this.page.querySelector(`[data-frame="${slot}"]`),asset=this.assets[slot],remove=this.$('remove-'+slot);button.disabled=busy;remove.disabled=busy;remove.hidden=!asset;let image=button.querySelector('img');if(asset){if(!image){image=document.createElement('img');image.alt='';button.prepend(image);}image.src=view(this.api,asset,'input');button.title=`${slot==='first'?'First':'Last'} frame · ${asset.name||asset.filename}`;}else {image?.remove();button.title=`Choose ${slot} frame`;}button.classList.toggle('has-media',!!asset);}
-    this.$('audio-file-button').hidden=!cap.supportsAudioReference||!c.audioEnabled;this.$('audio-file-button').disabled=busy;this.$('audio-file-button').querySelector('span').textContent=this.assets.audio?.name||'Add audio reference';
+    this.$('audio-slot').hidden=!cap.supportsAudioReference||(!c.audioEnabled&&!this.assets.audio);this.$('audio-file-button').disabled=busy;this.$('remove-audio').hidden=!this.assets.audio;this.$('remove-audio').disabled=busy;this.$('audio-file-button').querySelector('span').textContent=this.assets.audio?.name||'Add audio reference';
     this.$('swap').hidden=!this.assets.first||!this.assets.last;
     this.page.querySelector('[data-frame="last"] span').textContent=this.assets.last?'Last frame':'Last frame · optional';
     this.$('custom-size').hidden=c.sizePreset!=='custom';
