@@ -71,4 +71,25 @@ assert.deepEqual(requests.find(([path])=>path==='/interrupt')[1],{prompt_id:'liv
 tool.job='live-job';tool.busy=true;tool.$('cancel').hidden=false;
 tool.request=async()=>{throw Error('offline');};await tool.cancel();assert.equal(tool.job,'live-job');assert.equal(tool.busy,true);assert.equal(tool.$('cancel').disabled,false);assert.match(tool.$('status').textContent,/Could not request cancellation/);tool.finish();
 tool.close();
+// Longer conversion is gated, but when enabled it presents the resulting
+// preview and files and labels sampler progress as belonging to a section.
+let longState='rendering';const longCalls=[];
+const longApi={...api,async fetchApi(path,options){
+  longCalls.push([path,options]);
+  const file=filename=>({filename,subfolder:'genj/hdr',type:'output'});
+  const data=path==='/zura/studio/hdr/jobs'?{id:'long-job',state:'ready',completed:0,total:2}:
+    {id:'long-job',state:longState,completed:1,total:2,active_prompt_id:'own-prompt',
+      result:longState==='complete'?{preview:file('preview.mp4'),files:[file('hdr.mp4'),file('exr.zip')]}:null};
+  return {ok:true,status:200,json:async()=>data};
+}};
+const longTool=new HDRSourceTool(document.querySelector('#host'),longApi,()=>({id:'source-id'}),{longAvailable:true});
+assert.equal(longTool.$('long-control').hidden,false);longTool.$('long').checked=true;longTool.$('long').onchange();longTool.$('count').value='130';
+await longTool.start();await new Promise(resolve=>setTimeout(resolve,5));clearTimeout(longTool.longClient.timer);
+assert.equal(longCalls.filter(([path])=>path==='/zura/studio/hdr/jobs').length,1);
+longTool.onProgress({detail:{prompt_id:'own-prompt',node:'sample1',value:2,max:8}});
+assert.match(longTool.$('status').textContent,/Section 2 of 2.*step 2 of 8/);
+longState='complete';await longTool.longClient.poll();
+assert.equal(longTool.$('result').hidden,false);assert.match(longTool.$('preview').src,/preview.mp4/);
+assert.match(longTool.$('hlg').href,/hdr.mp4/);assert.match(longTool.$('exr').href,/exr.zip/);
+assert.equal(longTool.busy,false);longTool.close();
 console.log('LTX SDR-to-HDR source range, single submission, result preview and downloads pass.');
