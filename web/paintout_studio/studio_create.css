@@ -86,7 +86,7 @@
 #zura-paintout-app[data-workspace] :is(input,textarea)::placeholder{color:var(--gs-muted);opacity:1}
 #zura-paintout-app[data-workspace] :is(input,textarea){caret-color:var(--gs-accent-soft)}
 #zura-paintout-app[data-workspace] :is(button,a,input,select,textarea,summary):focus-visible{outline:2px solid var(--gs-focus);outline-offset:3px}
-#zura-paintout-app[data-workspace] ::selection{background:var(--gs-selected);color:var(--zc-text)}
+#zura-paintout-app[data-workspace] ::selection,#zura-paintout-app[data-workspace] :is(input,textarea)::selection{background:#caff00;color:#101010;text-shadow:none}
 #zura-paintout-app[data-workspace] .gs-segment{background:var(--gs-input);border:0;padding:3px;gap:3px}
 #zura-paintout-app[data-workspace] .gs-segment span{background:none;color:var(--gs-muted);font-size:12px;padding:10px 6px;min-height:40px}
 #zura-paintout-app[data-workspace] .gs-segment input:checked+span{background:var(--zc-hover);color:var(--zc-text);box-shadow:none;border:0}

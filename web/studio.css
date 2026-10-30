@@ -15,6 +15,7 @@
 #genj-studio button:disabled{cursor:default;opacity:.45}
 #genj-studio :focus-visible,#genj-studio-launch:focus-visible{outline:2px solid var(--gs-focus,var(--gs-focus));outline-offset:4px}
 #genj-studio ::selection{background:var(--gs-accent);color:var(--gs-ink)}
+#genj-studio input::selection,#genj-studio textarea::selection{background:#caff00;color:#101010;text-shadow:none}
 #genj-studio input,#genj-studio textarea{caret-color:var(--gs-accent)}
 .gs-top{display:flex;justify-content:space-between;align-items:center;gap:24px;height:68px;border-bottom:1px solid var(--gs-line);padding:0 30px}
 .gs-brand,.gs-top-actions,.gs-section-heading,.gs-control-heading{display:flex;align-items:center;gap:12px}
