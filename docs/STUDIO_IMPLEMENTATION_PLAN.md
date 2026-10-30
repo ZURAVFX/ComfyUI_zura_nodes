@@ -123,3 +123,10 @@ audio stream. The opening retains the portrait composition, while the generated
 background lettering changes later; this is an engineering check, not artist
 approval or proof of perfect camera stability. Output:
 C:/Users/ellio/ComfyUI-Shared/output/genj/final/zura_camera_portrait_test_00001.mp4
+
+A real H3 head-swap timing test selected two seconds starting 0.3 seconds into
+an audio-bearing source. The render delivered 48 frames at 24 fps and video and
+audio stream durations of two seconds. A mono waveform comparison at the target
+start had mean absolute error 0.0062 versus 0.34–0.43 at offsets of ±10–20 ms;
+this supports the intended soundtrack alignment but is not a visual quality
+review. Output: C:/Users/ellio/ComfyUI-Shared/output/genj/final/zura_head_timing_test_00001.mp4
