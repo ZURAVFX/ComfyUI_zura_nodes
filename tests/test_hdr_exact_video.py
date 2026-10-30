@@ -78,5 +78,27 @@ class HDRExactVideoTests(unittest.TestCase):
             self.assertTrue(all(np.array_equal(a,b) for a,b in zip(*frames)))
             self.assertTrue(np.array_equal(*audio))
 
+    @unittest.skipUnless(shutil.which('ffmpeg'),'requires FFmpeg')
+    def test_unusual_fractional_rate_preserves_every_frame_with_bounded_rounding(self):
+        rate=Fraction(6007500,200273)
+        with tempfile.TemporaryDirectory() as temp:
+            before=Path(temp)/'before.mp4'; after=Path(temp)/'after.mp4'
+            subprocess.run(['ffmpeg','-v','error','-f','lavfi','-i','testsrc2=size=64x64:rate=29997/1000',
+                '-f','lavfi','-i','sine=frequency=440:sample_rate=48000:duration=5',
+                '-frames:v','121','-c:v','libx264','-pix_fmt','yuv420p','-c:a','aac',str(before)],check=True)
+            exact.retime_without_reencoding(before,after,float(rate))
+            with av.open(str(before)) as a, av.open(str(after)) as b:
+                actual=b.streams.video[0].average_rate
+                self.assertLessEqual(abs(Fraction(121,1)/actual-Fraction(121,1)/rate),Fraction(1,1000))
+                original=[f.to_ndarray(format='rgb24') for f in a.decode(video=0)]
+                delivered=[f.to_ndarray(format='rgb24') for f in b.decode(video=0)]
+                self.assertEqual((len(original),len(delivered)),(121,121))
+                self.assertTrue(all(np.array_equal(x,y) for x,y in zip(original,delivered)))
+            audio=[]
+            for path in (before,after):
+                with av.open(str(path)) as container:
+                    audio.append(np.concatenate([frame.to_ndarray().reshape(-1) for frame in container.decode(audio=0)]))
+            self.assertTrue(np.array_equal(*audio))
+
 
 if __name__=='__main__':unittest.main()

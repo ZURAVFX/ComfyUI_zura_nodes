@@ -270,3 +270,23 @@ an idle target queue, at least 32 GiB available RAM, 15,500 MiB total and
 It provides a signal to stop only the caller's own active job below 6 GiB
 available RAM. Fresh measurements, orchestration, a working video UI and
 broader testing are still required before this can be used publicly.
+
+An additional isolated test used a real PQ/Rec.2020 10-bit, 360 × 640,
+241-frame clip from the [CHUG HDR-UGC research dataset](https://www.colorado.edu/lab/live/chug-crowdsourced-user-generated-hdr-video-quality-dataset),
+provided by the Laboratory for Image and Video Engineering at UT Austin. The
+sample is a low-bitrate transcode; its copyright notice accompanies the private
+sample and test outputs. The experimental 121-frame, 65-frame temporal-window
+graph completed in 117.44 seconds and delivered 121 10-bit Rec.2020 HLG frames.
+The source had no audio. The MP4 output retained its requested average duration
+to within 0.060 ms, with no frame loss. Sampled SDR previews show scene details
+changing and a different appearance; the previews use different tone-mapping
+paths, so they do not isolate colour accuracy. Full-motion artist review and
+representative higher-resolution HDR tests remain outstanding.
+
+This source exposed a saver failure with the unusual rational frame rate
+6007500/200273. MP4's default video timescale rounded the final frame duration,
+causing the previous strict equality check to reject the otherwise valid file.
+The saver now requests a track timescale matching the reconstructed rate and
+accepts at most 1 ms total duration error, while still checking frame count,
+colour tags and audio track count. Real FFmpeg regression tests preserve every
+decoded frame and audio sample; common rates remain exactly represented.

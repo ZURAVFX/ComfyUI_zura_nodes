@@ -18,7 +18,11 @@ def exact_rate(fps):
 
 
 def retime_without_reencoding(source, output, fps, *, executable=None):
-    """Rebuild CFR timestamps without changing encoded video/audio packets."""
+    """Rebuild CFR timestamps without changing encoded video/audio packets.
+
+    MP4 can round the final packet duration for unusual rational rates. Limit
+    that discrepancy to one millisecond across the entire video.
+    """
     import av
     rate=exact_rate(fps)
     executable=executable or shutil.which('ffmpeg')
@@ -32,12 +36,17 @@ def retime_without_reencoding(source, output, fps, *, executable=None):
         colour=(stream.codec_context.color_primaries,stream.codec_context.color_trc,stream.codec_context.colorspace)
         audio_count=len(original.streams.audio)
     result=subprocess.run([str(executable),'-hide_banner','-loglevel','error','-r',f'{rate.numerator}/{rate.denominator}',
-        '-i',str(source),'-map','0','-c','copy','-movflags','+faststart',str(output)],capture_output=True)
+        '-i',str(source),'-map','0','-c','copy','-video_track_timescale',str(rate.numerator),
+        '-movflags','+faststart',str(output)],capture_output=True)
     if result.returncode:raise ValueError('Could not preserve the source frame rate in the HDR video.')
     with av.open(str(output)) as checked:
         stream=checked.streams.video[0]
         actual=(stream.codec_context.color_primaries,stream.codec_context.color_trc,stream.codec_context.colorspace)
-        if stream.average_rate!=rate or (frame_count and stream.frames!=frame_count) or actual!=colour or len(checked.streams.audio)!=audio_count:
+        delivered_rate=stream.average_rate
+        duration_error=(abs(Fraction(frame_count,1)/delivered_rate-Fraction(frame_count,1)/rate)
+                        if frame_count and delivered_rate else None)
+        if (duration_error is None or duration_error>Fraction(1,1000) or
+            (frame_count and stream.frames!=frame_count) or actual!=colour or len(checked.streams.audio)!=audio_count):
             raise ValueError('The exact-rate HDR output did not retain its expected frames, colour tags or audio.')
     return rate
 
