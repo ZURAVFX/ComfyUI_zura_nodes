@@ -133,7 +133,9 @@ class ComfyHDRRenderer:
         queue=self.server.prompt_queue
         missing_since=None
         while True:
-            if self.store.cancelled.is_set():raise HDRChunkCancelled('HDR conversion cancelled.')
+            if self.store.cancelled.is_set():
+                await self._wait_until_stopped(identity)
+                raise HDRChunkCancelled('HDR conversion cancelled.')
             history=queue.get_history(identity).get(identity)
             if history:
                 if history.get('status',{}).get('status_str')!='success':
@@ -150,7 +152,17 @@ class ComfyHDRRenderer:
                     raise RuntimeError('The HDR chunk disappeared from the Comfy queue; it was not resubmitted.')
             await asyncio.sleep(1)
 
+    async def _wait_until_stopped(self,identity):
+        """Do not report cancellation while this prompt is still executing."""
+        queue=self.server.prompt_queue
+        while True:
+            running,pending=queue.get_current_queue_volatile()
+            if not any(item[1]==identity for item in (*running,*pending)):
+                return
+            await asyncio.sleep(.25)
+
     async def cancel(self,identity):
         queue=self.server.prompt_queue
         queue.interrupt_if_running(identity)
         queue.delete_queue_item(lambda item:item[1]==identity)
+        await self._wait_until_stopped(identity)

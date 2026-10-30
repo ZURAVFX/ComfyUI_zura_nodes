@@ -17,6 +17,7 @@ chunks=importlib.import_module('ComfyUI_zura_nodes.artist_studio.hdr_chunks')
 storage=importlib.import_module('ComfyUI_zura_nodes.artist_studio.hdr_chunk_store')
 adapter=importlib.import_module('ComfyUI_zura_nodes.artist_studio.hdr_chunk_comfy')
 native=importlib.import_module('ComfyUI_zura_nodes.artist_studio.hdr_native_graph')
+runner=importlib.import_module('ComfyUI_zura_nodes.artist_studio.hdr_chunk_runner')
 
 
 class Queue:
@@ -86,6 +87,46 @@ class HDRChunkComfyTests(unittest.IsolatedAsyncioTestCase):
         store=types.SimpleNamespace(cancelled=asyncio.Event())
         with self.assertRaisesRegex(RuntimeError,'did not stage'):
             await adapter.ComfyHDRRenderer(server,store,None,None)._wait(identity)
+
+    async def test_running_cancellation_waits_for_own_prompt_to_leave_queue(self):
+        identity='d'*32;other='e'*32
+        class RunningQueue(Queue):
+            def __init__(self):super().__init__();self.running=[(0,identity),(1,other)]
+            def get_current_queue_volatile(self):return self.running,self.items
+        queue=RunningQueue();store=types.SimpleNamespace(cancelled=asyncio.Event())
+        renderer=adapter.ComfyHDRRenderer(types.SimpleNamespace(prompt_queue=queue),store,None,None)
+        store.cancelled.set()
+        waiting=asyncio.create_task(renderer._wait(identity));cancelling=asyncio.create_task(renderer.cancel(identity))
+        await asyncio.sleep(.05)
+        self.assertFalse(waiting.done());self.assertFalse(cancelling.done())
+        self.assertEqual(queue.interrupted,[identity])
+        queue.running=[(1,other)]
+        await asyncio.wait_for(cancelling,1)
+        with self.assertRaises(storage.HDRChunkCancelled):await asyncio.wait_for(waiting,1)
+        self.assertEqual(queue.running,[(1,other)],'another prompt is never interrupted or awaited')
+
+    async def test_runner_does_not_finish_while_cancelled_prompt_is_running(self):
+        class RunningQueue(Queue):
+            def __init__(self):super().__init__();self.running=[]
+            def put(self,item):self.running.append(item)
+            def get_current_queue_volatile(self):return self.running,self.items
+        with tempfile.TemporaryDirectory() as root:
+            plan=chunks.plan_chunks(0,2,32,32);store=storage.HDRChunkStore(root,'f'*32,plan,32,32,create=True)
+            queue=RunningQueue();server=types.SimpleNamespace(prompt_queue=queue,number=0,
+                trigger_on_prompt=lambda value:value,node_replace_manager=types.SimpleNamespace(apply_replacements=lambda graph:None))
+            async def validate(*args):return True,None,['zura_hdr_stage_chunk'],{}
+            async def export(_):self.fail('Cancelled HDR must not export.')
+            with patch.dict(sys.modules,{'execution':types.SimpleNamespace(validate_prompt=validate)}):
+                renderer=adapter.ComfyHDRRenderer(server,store,lambda part:{'trim':{'class_type':'stub','inputs':{}}},'trim')
+                job=runner.HDRChunkRunner(store,renderer.submit,export,renderer.cancel)
+                task=asyncio.create_task(job.run())
+                while job.current_prompt is None:await asyncio.sleep(.01)
+                cancelled=asyncio.create_task(job.cancel());await asyncio.sleep(.05)
+                self.assertFalse(task.done());self.assertFalse(cancelled.done());self.assertEqual(job.state,'rendering')
+                queue.running=[]
+                await asyncio.wait_for(cancelled,2)
+                with self.assertRaises(storage.HDRChunkCancelled):await asyncio.wait_for(task,2)
+                self.assertEqual(job.state,'cancelled')
 
 
 if __name__=='__main__':unittest.main()
