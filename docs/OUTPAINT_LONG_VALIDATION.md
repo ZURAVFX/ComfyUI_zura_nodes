@@ -74,3 +74,11 @@ the full 150-frame review and approval. Long mode cannot be exported as one
 editable Comfy graph because it comprises multiple jobs. The tested servers
 were stopped without changing the user's running Comfy session. Restart
 recovery and broader visual testing across scenes remain future work.
+# Cancellation status check
+
+After the guided long workflow was installed, a separate 150-frame local test
+cancelled an active child render through Studio's production endpoint. The
+parent first reported `cancelling`, then `cancelled` only after that child had
+left the isolated Comfy queue. Automated tests also cover a child which remains
+running after the interruption request and ensure unrelated queue entries do
+not delay or get cancelled by the short-job status check.

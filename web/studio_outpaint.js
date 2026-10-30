@@ -25,8 +25,8 @@ export class OutpaintWorkspace {
     this.trim=new OutpaintTrim(this);
     this.$('review').onclick=()=>this.reviewSelection();this.$('generate').onclick=()=>this.generate();this.$('cancel').onclick=()=>this.cancel();
     this.canvas.onpointerdown=e=>this.dragStart(e);this.canvas.onpointermove=e=>this.dragMove(e);this.canvas.onpointerup=e=>this.dragEnd(e);this.canvas.onpointercancel=e=>this.dragEnd(e);
-    this.executing=e=>{const p=e.detail;if(!p||!this.ownsPrompt(p.prompt_id)||!p.node)return;this.progressNode=p.node;this.$('progress').removeAttribute('value');this.message(this.nodeLabel(p.node));this.progressDetail();};
-    this.progress=e=>{const p=e.detail;if(!p||!this.ownsPrompt(p.prompt_id)||!(p.max>0)||!Number.isFinite(p.value))return;if(p.node)this.progressNode=p.node;this.$('progress').value=Math.max(0,Math.min(100,100*p.value/p.max));this.message(`${this.nodeLabel(this.progressNode)} · ${this.progressNode==='sample'||String(this.progressNode).endsWith('_sample')?'step':'progress'} ${p.value} of ${p.max}`);this.progressDetail();};
+    this.executing=e=>{const p=e.detail;if(!p||this.job?.cancelling||!this.ownsPrompt(p.prompt_id)||!p.node)return;this.progressNode=p.node;this.$('progress').removeAttribute('value');this.message(this.nodeLabel(p.node));this.progressDetail();};
+    this.progress=e=>{const p=e.detail;if(!p||this.job?.cancelling||!this.ownsPrompt(p.prompt_id)||!(p.max>0)||!Number.isFinite(p.value))return;if(p.node)this.progressNode=p.node;this.$('progress').value=Math.max(0,Math.min(100,100*p.value/p.max));this.message(`${this.nodeLabel(this.progressNode)} · ${this.progressNode==='sample'||String(this.progressNode).endsWith('_sample')?'step':'progress'} ${p.value} of ${p.max}`);this.progressDetail();};
     this.api.addEventListener?.('progress',this.progress);
     this.api.addEventListener?.('executing',this.executing);
   }
@@ -61,7 +61,7 @@ export class OutpaintWorkspace {
     this.$('help').textContent=black?'Black pixels are selected for masked generation, including dark clothing or shadows. Review the whole selection.':'Drag the footage to position it inside the new frame.';
     this.$('duration').max=this.trim?.long?String(this.source?.duration||86400):'5';
     this.$('method-info').textContent=this.trim?.long?'Long clip: guided, blended sections. The original footage may also change.':'The original footage can also change.';
-    this.$('review').disabled=!has||busy||Number(this.source?.duration)<.125;this.$('generate').hidden=!this.review||busy;this.$('cancel').hidden=!this.job;this.$('progress-wrap').hidden=!busy;this.trim?.update();
+    this.$('review').disabled=!has||busy||Number(this.source?.duration)<.125;this.$('generate').hidden=!this.review||busy;this.$('cancel').hidden=!this.job;this.$('cancel').disabled=!!this.job?.cancelling;this.$('progress-wrap').hidden=!busy;this.trim?.update();
     if(!has||!this.box)return;
     const {width:w,height:h}=this.dimensions(),b=this.box;
     this.canvas.style.aspectRatio=`${w}/${h}`;this.fitCanvas();
@@ -95,9 +95,9 @@ export class OutpaintWorkspace {
       if(state.kind==='review'){this.review=state;this.$('download').hidden=true;this.message('Orange marks the target area. This method may also redraw the original footage. Check the whole clip, then approve.');}else{this.review=null;this.$('download').href=this.api.apiURL(state.url);this.$('download').hidden=false;this.message('Your extended video is ready.');}
       this.paint();return;}
     if(['failed','cancelled','interrupted'].includes(state.state)){this.job=null;this.message(state.error||'The job stopped. Review and try again.');this.paint();return;}
-    if(state.state==='queued'){this.progressNode=null;this.$('progress').removeAttribute('value');this.message('Waiting for ComfyUI…');}else if(state.state==='assembling'){this.progressNode=null;this.$('progress').removeAttribute('value');this.message('Combining sections and audio…');}else if(!this.progressNode)this.message(state.kind==='review'?'Preparing selection preview…':'Loading models and preparing video…');this.progressDetail();
+    if(state.state==='cancelling'||this.job.cancelling){this.job.cancelling=true;this.progressNode=null;this.$('progress').removeAttribute('value');this.message('Cancelling frame extension…');this.paint();}else if(state.state==='queued'){this.progressNode=null;this.$('progress').removeAttribute('value');this.message('Waiting for ComfyUI…');}else if(state.state==='assembling'){this.progressNode=null;this.$('progress').removeAttribute('value');this.message('Combining sections and audio…');}else if(!this.progressNode)this.message(state.kind==='review'?'Preparing selection preview…':'Loading models and preparing video…');this.progressDetail();
   }catch{this.message('Connection interrupted. Reconnecting…');}if(this.job?.id===identity)this.timer=setTimeout(()=>this.poll(),1500);}
-  async cancel(){if(!this.job)return;try{await this.fetch('/zura/studio/outpaint/jobs/'+this.job.id+'/cancel',{});this.job=null;this.message('Stopped this run.');this.paint();}catch(e){this.message(e.message);}}
+  async cancel(){if(!this.job||this.job.cancelling)return;const identity=this.job.id;this.job.cancelling=true;this.message('Cancelling frame extension…');this.paint();try{await this.fetch('/zura/studio/outpaint/jobs/'+identity+'/cancel',{});clearTimeout(this.timer);await this.poll();}catch(e){if(this.job?.id===identity){this.job.cancelling=false;this.message('Could not request cancellation. Try again.');this.paint();}}}
   async graph(){
     if(!this.review){this.message('Review the selection before opening its graph.');return;}
     if(this.review.selection?.strategy==='anchored_masked'){this.message('Long clips render in sections and cannot be opened as a single graph.');return;}

@@ -171,8 +171,9 @@ class OutpaintLongCancellation(unittest.IsolatedAsyncioTestCase):
     async def test_progress_exposes_the_active_child_prompt_and_clears_on_cancel(self):
         import folder_paths
         from types import SimpleNamespace
+        active = {'running': True}
         queue = SimpleNamespace(get_history=lambda identity: {},
-            get_current_queue_volatile=lambda: ([(0, 'child')], []),
+            get_current_queue_volatile=lambda: ([(0, 'child')] if active['running'] else [], []),
             interrupt_if_running=lambda identity: None,
             delete_queue_item=lambda predicate: None)
         instance = jobs_module.OutpaintJobs(SimpleNamespace(server=SimpleNamespace(prompt_queue=queue)))
@@ -196,10 +197,16 @@ class OutpaintLongCancellation(unittest.IsolatedAsyncioTestCase):
                     break
                 await asyncio.sleep(.01)
             self.assertEqual(instance.public(job)['active_prompt_id'], 'child')
+            job['state'] = 'cancelling'
             job['task'].cancel()
+            await asyncio.sleep(.05)
+            self.assertFalse(job['task'].done(), 'do not report cancellation while the child is still running')
+            self.assertEqual(instance.state(job['id'])['state'], 'cancelling')
+            active['running'] = False
             with self.assertRaises(asyncio.CancelledError):
                 await job['task']
             self.assertIsNone(instance.public(job)['active_prompt_id'])
+            self.assertEqual(instance.public(job)['state'], 'cancelled')
 
     async def test_executor_reviews_and_renders_entire_range_with_audio(self):
         ffmpeg = shutil.which('ffmpeg') or 'D:/ComfyUI/python_embeded/ffmpeg-bin/ffmpeg.exe'

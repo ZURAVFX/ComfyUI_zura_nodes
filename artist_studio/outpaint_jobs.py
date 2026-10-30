@@ -70,6 +70,11 @@ class OutpaintJobs:
             # Comfy queue entry bearing the parent job ID.
             return job
         queue = self.studio.server.prompt_queue
+        if job['state'] == 'cancelling':
+            running, pending = queue.get_current_queue_volatile()
+            if not any(item[1] == identity for item in (*running, *pending)):
+                job.update(state='cancelled', error='Stopped this outpaint job.')
+            return job
         entry = queue.get_history(identity).get(identity)
         if entry:
             if entry.get('status', {}).get('status_str') != 'success':
@@ -202,6 +207,15 @@ class OutpaintJobs:
             queue.interrupt_if_running(child_id)
             queue.delete_queue_item(lambda item: item[1] == child_id)
             child = self.jobs.get(child_id)
+            if child:
+                child.update(state='cancelling')
+            # Interrupt is cooperative: wait for this specific prompt to leave
+            # the queue before reporting that the long job has stopped.
+            while True:
+                running, pending = queue.get_current_queue_volatile()
+                if not any(item[1] == child_id for item in (*running, *pending)):
+                    break
+                await asyncio.sleep(.25)
             if child:
                 child.update(state='cancelled', error='Stopped this outpaint job.')
 
@@ -395,11 +409,11 @@ def register(studio, routes, response):
         async with jobs.lock:
             job = jobs.state(request.match_info['identity'])
             if job['state'] in ('queued', 'running', 'assembling'):
+                job.update(state='cancelling', error=None)
                 if job.get('long') and job.get('task'):
                     job['task'].cancel()
                 else:
                     queue = studio.server.prompt_queue
                     queue.interrupt_if_running(job['id'])
                     queue.delete_queue_item(lambda item: item[1] == job['id'])
-                job.update(state='cancelled', error='Stopped this outpaint job.')
-            return web.json_response(jobs.public(job))
+            return web.json_response(jobs.public(jobs.state(job['id'])))

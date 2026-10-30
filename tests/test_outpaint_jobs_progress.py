@@ -8,6 +8,15 @@ import test_artist_studio  # establishes the package fixture
 jobs_module = importlib.import_module('ComfyUI_zura_nodes.artist_studio.outpaint_jobs')
 
 class OutpaintProgressRoutingTests(unittest.IsolatedAsyncioTestCase):
+    async def test_cancellation_waits_until_own_prompt_leaves_queue(self):
+        active={'running': True}
+        queue=SimpleNamespace(get_current_queue_volatile=lambda: ([(0,'mine'),(0,'unrelated')] if active['running'] else [(0,'unrelated')], []))
+        manager=jobs_module.OutpaintJobs(SimpleNamespace(server=SimpleNamespace(prompt_queue=queue)))
+        manager.jobs['mine']={'id':'mine','state':'cancelling','kind':'render'}
+        self.assertEqual(manager.state('mine')['state'],'cancelling')
+        active['running']=False
+        self.assertEqual(manager.state('mine')['state'],'cancelled')
+
     async def test_events_are_routed_to_the_requesting_client(self):
         import execution
         queued=[]; triggered=[]

@@ -58,4 +58,10 @@ ui.review={id:'old'};ui.invalidate();assert.equal(ui.review,null,'changing sourc
 ui.$('mode').value='black';ui.reframe();assert.equal(Number(ui.$('width').value),768);assert.equal(Number(ui.$('height').value),432);
 ui.$('mode').value='expand';ui.longReady=false;ui.trim.update();assert.equal(ui.trim.longOption.hidden,true,'long controls stay hidden until backend capability is checked');
 ui.open();await new Promise(r=>setTimeout(r,0));assert.equal(ui.longReady,true);assert.equal(ui.trim.longOption.hidden,false,'verified capability makes the long option available');
+let cancellingState='cancelling';
+ui.job={id:'cancel-test',kind:'render'};ui.paint();
+ui.fetch=async(path,body)=>{if(path.endsWith('/cancel'))return {id:'cancel-test',state:'cancelling'};if(path.endsWith('/cancel-test'))return {id:'cancel-test',kind:'render',state:cancellingState,error:cancellingState==='cancelled'?'Stopped this outpaint job.':null};throw Error(path);};
+await ui.cancel();assert.equal(ui.job.id,'cancel-test');assert.equal(ui.$('cancel').disabled,true);assert.equal(ui.$('review').disabled,true);assert.match(ui.$('status').textContent,/Cancelling/);
+ui.progress({detail:{prompt_id:'cancel-test',node:'sample',value:6,max:8}});assert.match(ui.$('status').textContent,/Cancelling/);
+clearTimeout(ui.timer);cancellingState='cancelled';await ui.poll();assert.equal(ui.job,null);assert.match(ui.$('status').textContent,/Stopped/);
 ui.dispose();console.log('Outpaint prototype requires review and approval before rendering, and invalidates stale selection.');
