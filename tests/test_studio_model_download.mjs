@@ -28,6 +28,8 @@ component.setMissingContext('h3_first_last',['required.safetensors','unlisted.sa
 assert.equal(component.select.value,'__workflow__');assert.match(component.files.textContent,/H3 first & last frame/);
 assert.match(component.files.textContent,/required.safetensors/);assert.match(component.files.textContent,/unlisted.safetensors/);assert.match(component.files.textContent,/MissingNode/);
 assert.equal(component.files.querySelectorAll('.gs-model-package').length,1,'matched files map to their verified package');
+component.setMissingContext('ltx_outpaint_long',['LTXVInpaintPreprocess']);
+assert.ok([...component.files.querySelectorAll('a')].some(a=>a.href==='https://github.com/Lightricks/ComfyUI-LTXVideo'),'missing LTX nodes link to their verified pack');
 // Route-specific setup uses real readiness evidence, deduplicates shared files,
 // and reports unsupported dependencies instead of claiming complete setup.
 component.packages=[{...pack,files:[{folder:'diffusion_models',filename:'model.safetensors',repo:'Comfy-Org/Wan-Animate-2',size_bytes:1000000000,installed:false}],license_url:'https://huggingface.co/Comfy-Org/Wan-Animate-2'},

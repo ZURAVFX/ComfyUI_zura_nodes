@@ -8,7 +8,7 @@ Object.defineProperty(window.HTMLSelectElement.prototype,'value',{configurable:t
 for(const name of ['load','pause','play'])window.HTMLElement.prototype[name]=()=>{};
 const calls=[];
 const owner={root:document.querySelector('#genj-studio'),api:{clientId:'studio-client',apiURL:u=>u,addEventListener(){},removeEventListener(){}},show(){},
-  async fetch(path,body){calls.push([path,body]);if(path==='/zura/studio/outpaint/capabilities')return {anchored_masked:true};if(path==='/zura/studio/outpaint/review')return {id:'review',kind:'review',state:'queued'};
+  async fetch(path,body){calls.push([path,body]);if(path==='/zura/studio/outpaint/capabilities')return {anchored_masked:true,dependencies:{missing_files:['missing.safetensors'],missing_nodes:['MissingNode']}};if(path==='/zura/studio/outpaint/review')return {id:'review',kind:'review',state:'queued'};
     if(path.endsWith('/review/approve'))return {id:'review',approved:true};
     if(path.endsWith('/review/render'))return {id:'render',kind:'render',state:'queued'};
     if(path.endsWith('/jobs/review'))return {id:'review',kind:'review',state:'complete',url:'/view?review=1'};
@@ -58,6 +58,10 @@ ui.review={id:'old'};ui.invalidate();assert.equal(ui.review,null,'changing sourc
 ui.$('mode').value='black';ui.reframe();assert.equal(Number(ui.$('width').value),768);assert.equal(Number(ui.$('height').value),432);
 ui.$('mode').value='expand';ui.longReady=false;ui.trim.update();assert.equal(ui.trim.longOption.hidden,true,'long controls stay hidden until backend capability is checked');
 ui.open();await new Promise(r=>setTimeout(r,0));assert.equal(ui.longReady,true);assert.equal(ui.trim.longOption.hidden,false,'verified capability makes the long option available');
+assert.equal(ui.$('model-downloads').querySelector('summary').textContent,'Models');
+assert.equal(ui.modelDownloads.context.route,'ltx_outpaint_long');
+assert.equal(ui.modelDownloads.context.files[0].filename,'missing.safetensors');
+assert.deepEqual(ui.modelDownloads.context.missingNodes,['MissingNode']);
 let cancellingState='cancelling';
 ui.job={id:'cancel-test',kind:'render'};ui.paint();
 ui.fetch=async(path,body)=>{if(path.endsWith('/cancel'))return {id:'cancel-test',state:'cancelling'};if(path.endsWith('/cancel-test'))return {id:'cancel-test',kind:'render',state:cancellingState,error:cancellingState==='cancelled'?'Stopped this outpaint job.':null};throw Error(path);};

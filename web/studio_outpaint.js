@@ -1,5 +1,6 @@
 import {OutpaintTrim} from './studio_outpaint_trim.js';
 import {LTXLoras} from './studio_ltx_loras.js';
+import {StudioModelDownloads} from './studio_model_download.js';
 // Experimental workspace. The owner must deliberately enable the entry point.
 // Review is mandatory and server-bound to the exact source and geometry.
 export class OutpaintWorkspace {
@@ -12,9 +13,13 @@ export class OutpaintWorkspace {
       <p data-help>Drag the footage to position it inside the new frame.</p><p data-canvas-info aria-live="polite"></p><p data-method-info>The original footage can also change.</p>
       <div class="zo-settings"><label>Width <input type="number" data-width min="128" max="1920" step="64" value="1152"/></label><label>Height <input type="number" data-height min="128" max="1920" step="64" value="640"/></label><label>Footage size <input type="range" data-scale min="30" max="100" step="1" value="72"/></label><label>Start (seconds) <input type="number" data-start min="0" step="0.041667" value="0"/></label><label>Length (seconds) <input type="number" data-duration min="0.125" max="5" step="0.041667" value="2"/></label></div>
       <textarea data-prompt placeholder="Describe the extended scene" aria-label="Video prompt"></textarea>
-      <div class="zo-action"><span class="zo-model">LTX 2.5 · Preview</span><span data-status role="status" aria-live="polite">Add a source video to begin.</span><a data-download download="zura-frame-extension.mp4" hidden>Download</a><button type="button" data-cancel hidden>Cancel run</button><button type="button" data-review disabled>Review selection</button><button type="button" data-generate hidden>Approve &amp; generate</button></div><div data-progress-wrap class="zo-progress" hidden><progress data-progress max="100" aria-label="Current outpaint stage progress"></progress><span data-progress-detail></span></div></div>`;
+      <div class="zo-action"><span class="zo-model">LTX 2.5 · Preview</span><span data-status role="status" aria-live="polite">Add a source video to begin.</span><details data-model-downloads class="zc-tool-popup gs-model-help"></details><a data-download download="zura-frame-extension.mp4" hidden>Download</a><button type="button" data-cancel hidden>Cancel run</button><button type="button" data-review disabled>Review selection</button><button type="button" data-generate hidden>Approve &amp; generate</button></div><div data-progress-wrap class="zo-progress" hidden><progress data-progress max="100" aria-label="Current outpaint stage progress"></progress><span data-progress-detail></span></div></div>`;
     this.root.append(this.page);this.stage=this.page.querySelector('.zo-stage');this.canvas=this.page.querySelector('.zo-canvas');this.video=this.canvas.querySelector('video');this.result=this.page.querySelector('.zo-result');
     this.loras=new LTXLoras(this.page.querySelector('.zo-composer'),path=>this.fetch(path),()=>!!this.job||this.submitting);this.$('prompt').after(this.loras.root);
+    this.modelDownloads=new StudioModelDownloads(this.$('model-downloads'),(path,body)=>this.fetch('/zura/studio'+path,body),()=>this.checkCapabilities());
+    this.closeModels=e=>{const panel=this.$('model-downloads');if(panel.open&&!panel.contains(e.target))panel.open=false;};
+    this.closeModelsOnEscape=e=>{const panel=this.$('model-downloads');if(e.key==='Escape'&&panel.open){panel.open=false;panel.querySelector('summary').focus();}};
+    this.page.ownerDocument.addEventListener('pointerdown',this.closeModels,true);this.page.ownerDocument.addEventListener('keydown',this.closeModelsOnEscape,true);
     this.page.querySelector('[data-back]').onclick=()=>owner.show('video');
     this.$('source').onclick=()=>this.page.querySelector('input[type=file]').click();
     this.page.querySelector('input[type=file]').onchange=e=>{const file=e.target.files?.[0];e.target.value='';if(file)this.upload(file);};
@@ -109,7 +114,8 @@ export class OutpaintWorkspace {
       this.owner.studio.close();
     }catch(error){this.message(error.message);}
   }
-  open(){this.page.hidden=false;this.paint();if(this.job)this.poll();this.fetch('/zura/studio/outpaint/capabilities').then(c=>{this.longReady=c?.anchored_masked===true;this.trim.modeChanged();this.paint();}).catch(()=>{this.longReady=false;this.trim.modeChanged();this.paint();});}
+  async checkCapabilities(){try{const c=await this.fetch('/zura/studio/outpaint/capabilities');this.longReady=c?.anchored_masked===true;const d=c?.dependencies;this.modelDownloads.setMissingContext('ltx_outpaint_long',d?[...(d.missing_files||[]),...(d.missing_nodes||[])]:null);}catch{this.longReady=false;this.modelDownloads.setMissingContext('ltx_outpaint_long',null);}this.trim.modeChanged();this.paint();}
+  open(){this.page.hidden=false;this.paint();if(this.job)this.poll();this.checkCapabilities();}
   close(){clearTimeout(this.timer);this.trim.close();this.video.pause();this.result.pause();this.page.hidden=true;}
-  dispose(){this.close();this.resizeObserver?.disconnect();this.api.removeEventListener?.('progress',this.progress);this.api.removeEventListener?.('executing',this.executing);this.page.remove();}
+  dispose(){this.close();this.modelDownloads.dispose();this.page.ownerDocument.removeEventListener('pointerdown',this.closeModels,true);this.page.ownerDocument.removeEventListener('keydown',this.closeModelsOnEscape,true);this.resizeObserver?.disconnect();this.api.removeEventListener?.('progress',this.progress);this.api.removeEventListener?.('executing',this.executing);this.page.remove();}
 }
