@@ -263,6 +263,10 @@ def selected_space(d,space):
     if space!='auto':
         if d['kind']=='video' and space in ('acescg','acescct','linear_rec709'):
             raise ValueError('For MOV/video choose its encoded colour space: Rec.709, HLG or PQ. Camera log footage needs a colour transform first.')
+        if d['kind']=='video' and space in ('hlg_rec2020','pq_rec2020'):
+            primaries=d.get('primaries')
+            if primaries not in (None, '', 'unknown', 'unspecified', 'bt2020'):
+                raise ValueError(f'This video declares {primaries} colour primaries, which cannot be interpreted as Rec.2020. Convert it to Rec.2020 HDR before loading.')
         return video_space(space) if d['kind']=='video' else space
     if d['kind']=='video':
         transfer=d.get('transfer'); primaries=d.get('primaries')
@@ -272,16 +276,54 @@ def selected_space(d,space):
         if transfer=='bt709' and primaries in ('bt709',None,'unknown'):return video_space('rec709_oetf')
         if transfer=='iec61966-2-1':return video_space('srgb_display')
         raise ValueError('This video has no supported colour tags. Choose its actual colour space. Convert camera log footage before loading.')
+    if Path(d['files'][0]).suffix.lower()!='.exr':return 'srgb_display'
+    first = None
+    for path in d['files']:
+        if Path(path).suffix.lower() != '.exr':
+            raise ValueError('Image sequence contains mixed EXR and non-EXR frames.')
+        try:
+            current = _exr_auto_space(path)
+        except ValueError as exc:
+            raise ValueError(f'EXR colour metadata for {Path(path).name}: {exc}') from exc
+        if first is None:first = current
+        elif current != first:
+            raise ValueError(f'EXR sequence has inconsistent colour spaces: {Path(path).name} is {current}, expected {first}. Convert the frames to one colour space before loading.')
+    return first
+
+
+def _exr_auto_space(path):
     import OpenImageIO as oiio
-    inp=oiio.ImageInput.open(d['files'][0])
+    inp=oiio.ImageInput.open(path)
+    if inp is None:
+        raise ValueError('Cannot open EXR header. Check that the frame is readable and not damaged.')
     try:
         spec=inp.spec();tag=str(spec.getattribute('oiio:ColorSpace') or spec.getattribute('colorSpace') or '').lower()
         chroma=spec.getattribute('chromaticities')
     finally:inp.close()
-    if 'acescct' in tag:return 'acescct'
-    if 'acescg' in tag or (chroma and abs(chroma[0]-.713)<.002):return 'acescg'
-    if Path(d['files'][0]).suffix.lower()!='.exr':return 'srgb_display'
-    if chroma and abs(chroma[0]-.64)<.002:return 'linear_rec709'
+    tagged = ('acescct' if 'acescct' in tag else 'acescg' if 'acescg' in tag or tag == 'lin_ap1_scene' else
+              'linear_rec709' if tag in ('linear rec.709','linear rec709','lin_rec709','linear_rec709','lin_rec709_scene') else None)
+    standards = {
+        'acescg': (.713,.293,.165,.830,.128,.044,.32168,.33767),
+        'linear_rec709': (.64,.33,.30,.60,.15,.06,.3127,.3290),
+    }
+    detected = None
+    if chroma:
+        try:
+            values = tuple(float(v) for v in chroma)
+            detected = next((name for name, expected in standards.items()
+                             if len(values) == 8 and all(abs(a-b) < .002 for a,b in zip(values,expected))), None)
+        except (TypeError, ValueError):
+            detected = None
+        if detected is None:
+            raise ValueError('EXR has unsupported or invalid chromaticities. Convert to ACEScg or linear Rec.709, or explicitly select its correct supported colour space.')
+    if tagged:
+        tag_primaries = 'acescg' if tagged == 'acescct' else tagged
+        if detected and detected != tag_primaries:
+            raise ValueError('EXR colour-space tag conflicts with its chromaticities. Correct the metadata or explicitly select the correct supported colour space.')
+        return tagged
+    if tag and tag not in ('linear', 'scene_linear', 'scene-linear', 'unknown'):
+        raise ValueError('EXR has an unsupported colour-space tag. Convert it to ACEScg or linear Rec.709, or explicitly select its correct supported colour space.')
+    if detected:return detected
     raise ValueError('Untagged EXR: choose ACEScg, ACEScct or linear Rec.709 to match the file.')
 
 def resize(x,h,w,mode='bilinear'):

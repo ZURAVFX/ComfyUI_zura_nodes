@@ -3,6 +3,8 @@ import importlib
 import sys
 import types
 import unittest
+import tempfile
+from pathlib import Path
 from unittest.mock import patch
 
 import numpy as np
@@ -20,6 +22,87 @@ paintout = importlib.import_module('ComfyUI_zura_nodes.paintout.paintout')
 
 
 class NativeHDRInputTests(unittest.TestCase):
+    def test_real_oiio_linear_rec709_exr_roundtrip(self):
+        try:
+            import OpenImageIO as oiio
+        except ImportError:
+            self.skipTest('OpenImageIO is not installed')
+        with tempfile.TemporaryDirectory() as directory:
+            path = str(Path(directory) / 'linear.exr')
+            spec = oiio.ImageSpec(2, 2, 3, oiio.FLOAT)
+            spec.attribute('oiio:ColorSpace', 'lin_rec709_scene')
+            spec.attribute('chromaticities', oiio.TypeDesc('float[8]'), (.64,.33,.30,.60,.15,.06,.3127,.3290))
+            output = oiio.ImageOutput.create(path)
+            self.assertTrue(output.open(path, spec))
+            self.assertTrue(output.write_image(np.full((2,2,3), 0.25, np.float32)))
+            output.close()
+            source = oiio.ImageInput.open(path)
+            self.assertEqual(source.spec().getattribute('oiio:ColorSpace'), 'lin_rec709_scene')
+            source.close()
+            self.assertEqual(paintout.selected_space({'kind':'sequence','files':[path]}, 'auto'), 'linear_rec709')
+
+    def test_exr_sequence_auto_checks_all_headers_and_override_skips_them(self):
+        rec709 = (.64,.33,.30,.60,.15,.06,.3127,.3290)
+        acescg = (.713,.293,.165,.830,.128,.044,.32168,.33767)
+        opened = []
+        def open_header(path):
+            opened.append(path)
+            chroma = rec709 if path == 'a.exr' else acescg
+            spec = types.SimpleNamespace(getattribute=lambda key: chroma if key == 'chromaticities' else None)
+            return types.SimpleNamespace(spec=lambda: spec, close=lambda: None)
+        oiio = types.SimpleNamespace(ImageInput=types.SimpleNamespace(open=open_header))
+        info = {'kind':'sequence', 'files':['a.exr','b.exr']}
+        with patch.dict(sys.modules, {'OpenImageIO': oiio}):
+            with self.assertRaisesRegex(ValueError, 'b.exr.*acescg.*linear_rec709'):
+                paintout.selected_space(info, 'auto')
+            self.assertEqual(opened, ['a.exr','b.exr'])
+            opened.clear()
+            self.assertEqual(paintout.selected_space(info, 'acescg'), 'acescg')
+            self.assertEqual(opened, [])
+
+    def test_exr_colour_detection_uses_all_primaries_and_white_point(self):
+        rec709 = (.64,.33,.30,.60,.15,.06,.3127,.3290)
+        acescg = (.713,.293,.165,.830,.128,.044,.32168,.33767)
+        # Same red x as Rec.709 is insufficient to establish the gamut.
+        other_gamut = (.64,.33,.265,.69,.15,.06,.3127,.3290)
+        cases = [('', rec709, 'linear_rec709'), ('', acescg, 'acescg'),
+                 ('ACEScct', acescg, 'acescct'), ('ACEScg', None, 'acescg'),
+                 ('lin_ap1_scene', acescg, 'acescg')]
+        for tag, chroma, expected in cases:
+            with self.subTest(tag=tag, chroma=chroma):
+                spec = types.SimpleNamespace(getattribute=lambda key: tag if key == 'oiio:ColorSpace' else chroma if key == 'chromaticities' else None)
+                reader = types.SimpleNamespace(spec=lambda: spec, close=lambda: None)
+                oiio = types.SimpleNamespace(ImageInput=types.SimpleNamespace(open=lambda _: reader))
+                with patch.dict(sys.modules, {'OpenImageIO': oiio}):
+                    self.assertEqual(paintout.selected_space({'kind':'sequence','files':['frame.exr']}, 'auto'), expected)
+        for tag, chroma in [('', other_gamut), ('ACEScg', rec709), ('sRGB', rec709), ('', None)]:
+            with self.subTest(tag=tag, chroma=chroma):
+                spec = types.SimpleNamespace(getattribute=lambda key: tag if key == 'oiio:ColorSpace' else chroma if key == 'chromaticities' else None)
+                reader = types.SimpleNamespace(spec=lambda: spec, close=lambda: None)
+                oiio = types.SimpleNamespace(ImageInput=types.SimpleNamespace(open=lambda _: reader))
+                with patch.dict(sys.modules, {'OpenImageIO': oiio}), self.assertRaises(ValueError):
+                    paintout.selected_space({'kind':'sequence','files':['frame.exr']}, 'auto')
+                self.assertEqual(paintout.selected_space({'kind':'sequence','files':['frame.exr']}, 'acescg'), 'acescg')
+
+    def test_unreadable_exr_header_has_actionable_error(self):
+        oiio = types.SimpleNamespace(ImageInput=types.SimpleNamespace(open=lambda _: None))
+        with patch.dict(sys.modules, {'OpenImageIO': oiio}), self.assertRaisesRegex(ValueError, 'frame.exr.*Cannot open EXR header'):
+            paintout.selected_space({'kind':'sequence','files':['frame.exr']}, 'auto')
+
+    def test_explicit_hdr_video_space_rejects_conflicting_tagged_primaries(self):
+        for space in ('pq_rec2020', 'hlg_rec2020'):
+            with self.subTest(space=space):
+                info = {'kind': 'video', 'primaries': 'smpte432'}
+                with self.assertRaisesRegex(ValueError, 'smpte432.*Rec.2020.*Convert'):
+                    paintout.selected_space(info, space)
+
+    def test_explicit_hdr_video_space_accepts_bt2020_and_untagged(self):
+        for space in ('pq_rec2020', 'hlg_rec2020'):
+            for primaries in ('bt2020', None, 'unknown', 'unspecified'):
+                with self.subTest(space=space, primaries=primaries):
+                    info = {'kind': 'video', 'primaries': primaries}
+                    self.assertEqual(paintout.selected_space(info, space), space)
+
     def test_acescg_exr_extended_highlights_survive(self):
         info = {'kind':'sequence', 'files':['f0.exr','f1.exr'], 'count':2, 'width':2, 'height':2}
         source = [np.full((2,2,3), value, np.float32) for value in (1.0, 4.0)]
