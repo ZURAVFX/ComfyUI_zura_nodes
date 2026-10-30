@@ -27,6 +27,14 @@ validation documents a one-second Wan 2.1 render and other five-second model
 renders; 23.976, 25 and 29.97 fps source-selection fixtures are also tested
 with real FFmpeg, but not yet GPU-rendered at each input rate.
 
+The full-resolution reviewed-shot reload previously dropped one frame on some
+non-zero trims, even though the initial 24 fps selection had the correct count.
+A 0.21-second trim reproduced this at 23.976, 25 and 29.97 fps. The reload now
+resets timestamps, holds at most one final frame, uses a new cache version and
+checks its actual frame count. Real FFmpeg loader tests confirm 30 frames for
+each of those rates and reject a shortened cached render. GPU rendering across
+these rates is still unqualified.
+
 A fresh isolated GPU test of the Studio Wan 2.2 first/last recipe produced exactly
 25 decoded frames at 24 fps, 256 × 256, lasting 1.04167 seconds, and correctly
 contained no audio. First, middle and last frames maintained consistent cropping

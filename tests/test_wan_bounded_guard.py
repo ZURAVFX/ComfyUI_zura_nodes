@@ -262,6 +262,41 @@ class BoundedSpeechGuardTests(unittest.TestCase):
             self.assertEqual((clip.streams.video[0].width, clip.streams.video[0].height), (256, 170))
 
     @unittest.skipUnless(FFMPEG,"CPU FFmpeg executable unavailable")
+    def test_review_loader_keeps_selected_frames_at_fractional_source_rates(self):
+        path = fixtures.v2_bootstrap.ROOT / "artist_studio" / "__init__.py"
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        definition = next(node for node in tree.body if isinstance(node, ast.ClassDef) and node.name == "GenjLoadReviewedShot")
+        def ffmpeg(*args):
+            subprocess.run([FFMPEG, "-hide_banner", "-loglevel", "error", "-y", *map(str,args)],
+                           capture_output=True, text=True, check=True)
+        for rate in ("24000/1001", "30000/1001", "25"):
+            with self.subTest(rate=rate):
+                source = self.fixture.base / ("fractional-" + rate.replace('/', '-') + ".mp4")
+                ffmpeg("-f", "lavfi", "-i", f"testsrc2=size=96x64:rate={rate}",
+                       "-f", "lavfi", "-i", "sine=frequency=440:sample_rate=48000", "-t", "2",
+                       "-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac", source)
+                directory = self.fixture.base / ("review-" + rate.replace('/', '-'))
+                directory.mkdir()
+                for name in ("source.mp4", "mask.mp4", "guide.mp4"):
+                    shutil.copy2(source, directory / name)
+                details = {"source": str(source), "source_hash": io.file_digest(source), "start": .21,
+                           "duration": 1.25, "frames": 30, "fps": 24}
+                manifest = {"clip": details, "files": {}}
+                namespace = {"CATEGORY":"Zura/Artist Studio", "Path":Path, "InputImpl":media.InputImpl,
+                             "av":media.av, "digest_file":io.file_digest, "ffmpeg":ffmpeg,
+                             "verify_review":lambda _shot:(directory, manifest)}
+                exec(compile(ast.Module(body=[definition],type_ignores=[]),str(path),"exec"), namespace)
+                selected = namespace["GenjLoadReviewedShot"]().load("shot", "shot", render_long_edge=256, preserve_aspect=True)
+                with media.av.open(selected[3]["selected_path"]) as clip:
+                    self.assertEqual(sum(1 for _ in clip.decode(video=0)), 30)
+                if rate == "24000/1001":
+                    short = directory / "short.mp4"
+                    ffmpeg("-i", source, "-frames:v", "5", "-c:v", "libx264", "-c:a", "aac", short)
+                    shutil.copy2(short, selected[3]["selected_path"])
+                    with self.assertRaisesRegex(ValueError, "5 of 30 requested frames"):
+                        namespace["GenjLoadReviewedShot"]().load("shot", "shot", render_long_edge=256, preserve_aspect=True)
+
+    @unittest.skipUnless(FFMPEG,"CPU FFmpeg executable unavailable")
     def test_real_final_soundtrack_restore_uses_normalized_wav_with_zero_offset(self):
         # Load the unchanged production export class without importing/registering
         # the whole Studio extension. Run its actual FFmpeg mux on tiny CPU media.

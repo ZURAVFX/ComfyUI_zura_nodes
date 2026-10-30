@@ -441,7 +441,9 @@ class GenjLoadReviewedShot:
                 details["frames"] = min(details["frames"], max(1, int(preview_seconds * 24)))
                 details["duration"] = details["frames"] / 24
                 details["full_source"] = False
-            cache = directory / f"render_audio_v2_{render_long_edge}_x{output_scale}_{details['frames']}f{'_aspect' if preserve_aspect else ''}"
+            # Version the cache when changing frame selection so older short
+            # renders are not reused for a reviewed shot.
+            cache = directory / f"render_audio_v3_{render_long_edge}_x{output_scale}_{details['frames']}f{'_aspect' if preserve_aspect else ''}"
             cache.mkdir(exist_ok=True)
             high_source, high_mask = cache / "source.mp4", cache / "mask.mp4"
             if not high_source.exists():
@@ -449,8 +451,13 @@ class GenjLoadReviewedShot:
                 # Reread full-resolution RGB, but preserve that exact audio selection.
                 ffmpeg("-ss", details["start"], "-i", source, "-i", directory / "source.mp4",
                        "-t", details["duration"], "-map", "0:v:0", "-map", "1:a:0",
-                       "-vf", f"fps=24,scale={w}:{h}:flags=lanczos", "-frames:v", details["frames"],
+                       "-vf", f"setpts=PTS-STARTPTS,fps=24,scale={w}:{h}:flags=lanczos,tpad=stop_mode=clone:stop=1", "-frames:v", details["frames"],
                        "-c:v", "libx264", "-crf", 16, "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "256k", high_source)
+            with av.open(str(high_source)) as prepared:
+                stream = prepared.streams.video[0]
+                actual_frames = stream.frames or sum(1 for _ in prepared.decode(video=0))
+                if actual_frames != details["frames"]:
+                    raise ValueError(f"The full-resolution source has {actual_frames} of {details['frames']} requested frames. Prepare the shot again or select a shorter section.")
             if not high_mask.exists():
                 ffmpeg("-i", directory / "mask.mp4", "-vf", "fps=24",
                        "-frames:v", details["frames"], "-an", "-c:v", "libx264", "-crf", 0, "-pix_fmt", "yuv420p", high_mask)
