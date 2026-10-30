@@ -319,7 +319,13 @@ export class CreativeWorkspace {
       this.modelDownloadJob=job.id;
       this.$('setup').querySelectorAll(`[data-download-cancel="${modelId}"],[data-download-progress="${modelId}"]`).forEach(e=>e.hidden=false);
       for(;;){
-        const status=await this.fetch('/zura/studio/model-downloads/'+encodeURIComponent(job.id));
+        let status;
+        try{status=await this.fetch('/zura/studio/model-downloads/'+encodeURIComponent(job.id));}
+        catch(error){
+          if(/unknown model download/i.test(error.message||'')){set('Download status is no longer available. Refresh models and check the files before retrying.');break;}
+          set('Connection lost. Reconnecting to the existing download…');
+          await new Promise(resolve=>setTimeout(resolve,1000));continue;
+        }
         if(status.phase==='failed')throw new Error(status.error||'Download failed.');
         if(status.phase==='cancelled'){set('Download cancelled.');break;}
         if(status.phase==='done'){set('Installed. Refreshing models…');await this.loadModels();break;}

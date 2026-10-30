@@ -109,12 +109,19 @@ export class StudioModelDownloads {
   async start(id){
     if(this.job)return;
     try{this.progress.textContent='Starting download…';const result=await this.request('/model-downloads',{model_id:id});this.job=result.id;this.select.disabled=true;this.render();
-      while(this.job && !this.closed){const state=await this.request(`/model-downloads/${this.job}`);const percent=state.total_bytes?Math.floor(state.done_bytes/state.total_bytes*100):0;
+      while(this.job && !this.closed){let state;
+        try{state=await this.request(`/model-downloads/${this.job}`);}
+        catch(error){
+          if(/unknown model download/i.test(error.message||'')){this.progress.textContent='Download status is no longer available. Refresh setup and check the files before retrying.';this.job=null;this.select.disabled=false;this.render();break;}
+          this.progress.textContent='Connection lost. Reconnecting to the existing download…';
+          await new Promise(resolve=>setTimeout(resolve,1000));continue;
+        }
+        const percent=state.total_bytes?Math.floor(state.done_bytes/state.total_bytes*100):0;
         this.progress.textContent=state.phase==='done'?'Download complete.':state.phase==='failed'?state.error:state.phase==='cancelled'?'Download cancelled.':`${state.current_file||'Preparing download'} · ${percent}%`;
         if(['done','failed','cancelled'].includes(state.phase)){this.job=null;this.select.disabled=false;await this.load();if(state.phase==='done')await this.onInstalled?.();break;}
         await new Promise(resolve=>setTimeout(resolve,1000));
       }
-    }catch(e){this.progress.textContent=e.message||'Download failed.';this.job=null;this.select.disabled=false;this.render();}
+    }catch(e){this.progress.textContent=e.message||'Could not confirm the download started. Refresh setup before retrying.';this.job=null;this.select.disabled=false;this.render();}
   }
   dispose(){this.closed=true;this.panel.ontoggle=null;}
 }

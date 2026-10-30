@@ -63,5 +63,16 @@ component.select.value='wan_animate_2';component.render();
 await component.start('wan_animate_2');
 assert.ok(refreshed);assert.equal(component.progress.textContent,'Download complete.');
 assert.equal(paths.filter(([path,body])=>path==='/model-downloads' && body).length,1);
+let polls=0,starts=0;
+component.request=async(path,body)=>{
+  if(path==='/model-downloads'&&body){starts++;return {id:'reconnect-job'};}
+  if(path==='/model-downloads/reconnect-job'){if(++polls===1)throw Error('Network unavailable');return {phase:'done',total_bytes:1,done_bytes:1};}
+  if(path==='/model-downloads')return {models:[pack]};throw Error(path);
+};
+const reconnect=component.start('wan_animate_2');
+await new Promise(resolve=>setTimeout(resolve,20));
+assert.equal(component.job,'reconnect-job');assert.equal(component.select.disabled,true);
+assert.match(component.progress.textContent,/Reconnecting/);
+await reconnect;assert.equal(starts,1);assert.equal(polls,2);assert.equal(component.progress.textContent,'Download complete.');
 component.dispose();
 console.log('Video package sizes, source licences, explicit download and completion refresh pass.');

@@ -162,6 +162,18 @@ await ui.loadModels();
 assert.ok(ui.$('setup').querySelector('[data-download-model="qwen2511"]'),'Qwen edit exposes the verified model package');
 assert.match(ui.$('setup').textContent,/Review model source terms/);
 assert.ok([...ui.$('setup').querySelectorAll('a')].some(a=>a.href==='https://huggingface.co/gree9515/Qwen-Image-Edit-2511-ConvRot'));
+let imagePolls=0,imageStarts=0;
+const setupFetch=ui.fetch;
+ui.fetch=async function(path,body){
+  if(path==='/zura/studio/model-downloads'&&body){imageStarts++;return {id:'image-download'};}
+  if(path==='/zura/studio/model-downloads/image-download'){if(++imagePolls===1)throw Error('Network unavailable');return {phase:'done'};}
+  return setupFetch.call(this,path,body);
+};
+const imageDownload=ui.startModelDownload('qwen2511');
+await new Promise(resolve=>setTimeout(resolve,20));
+assert.equal(ui.modelDownloadJob,'image-download');assert.equal(ui.modelDownloadActive,true);
+assert.match(ui.$('setup').querySelector('[data-download-status="qwen2511"]').textContent,/Reconnecting/);
+await imageDownload;assert.equal(imageStarts,1);assert.equal(imagePolls,2);assert.equal(ui.modelDownloadActive,false);
 ui.fetch=originalFetch;
 ui.setImageOperation('edit');assert.equal(ui.$('model').value,'qwen2511');assert.equal(ui.$('generate').disabled,true,'Editing needs a source image');
 assert.equal(ui.$('model').querySelector('option[value="flux3"]').hidden,true);
