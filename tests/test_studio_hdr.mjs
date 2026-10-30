@@ -39,5 +39,20 @@ tool.sequenceAsset={id:'exr-id',count:12,width:384,height:224};tool.$('source-ki
 await tool.start();await new Promise(resolve=>setTimeout(resolve,5));
 const exr=calls.filter(c=>c[0]==='/zura/studio/hdr/native-graph').at(-1)[1];assert.equal(exr.source_id,'exr-id');assert.equal(exr.sequence_fps,25);assert.equal(exr.colour_space,'acescg');
 assert.deepEqual(exr.custom_loras,[{name:'style.safetensors',strength:.8,confirm_unknown:true}]);
+// A transient connection failure must not forget a live job or enable another
+// render. Cancellation stays visible until the queue confirms it has stopped.
+tool.job='live-job';tool.busy=true;tool.$('start-job').disabled=true;tool.$('cancel').hidden=false;
+let running=true,failOnce=true;const requests=[];
+tool.request=async(path,body)=>{requests.push([path,body]);if(path==='/history/live-job'){if(failOnce){failOnce=false;throw Error('network');}return {};}
+  if(path==='/queue'&&!body)return {queue_running:running?[[0,'live-job']]:[],queue_pending:[]};
+  if(path==='/queue'||path==='/interrupt')return {};throw Error(path);};
+await tool.poll();assert.equal(tool.job,'live-job');assert.equal(tool.busy,true);assert.equal(tool.$('start-job').disabled,true);assert.match(tool.$('status').textContent,/Reconnecting/);clearTimeout(tool.timer);
+await tool.cancel();assert.equal(tool.job,'live-job');assert.equal(tool.busy,true);assert.equal(tool.$('cancel').disabled,true);assert.match(tool.$('status').textContent,/Cancelling/);
+tool.onProgress({detail:{prompt_id:'live-job',node:'sample1',value:4,max:8}});assert.match(tool.$('status').textContent,/Cancelling/);
+await tool.poll();assert.equal(tool.job,'live-job');clearTimeout(tool.timer);
+running=false;await tool.poll();assert.equal(tool.job,null);assert.equal(tool.busy,false);assert.match(tool.$('status').textContent,/cancelled/);
+assert.deepEqual(requests.find(([path])=>path==='/interrupt')[1],{prompt_id:'live-job'});
+tool.job='live-job';tool.busy=true;tool.$('cancel').hidden=false;
+tool.request=async()=>{throw Error('offline');};await tool.cancel();assert.equal(tool.job,'live-job');assert.equal(tool.busy,true);assert.equal(tool.$('cancel').disabled,false);assert.match(tool.$('status').textContent,/Could not request cancellation/);tool.finish();
 tool.close();
 console.log('LTX SDR-to-HDR source range, single submission, result preview and downloads pass.');

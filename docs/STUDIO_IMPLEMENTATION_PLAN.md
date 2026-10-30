@@ -15,7 +15,7 @@ until a release is explicitly requested and the relevant flows are verified.
 - [x] Confirm FLUX.2 Klein 9B is the image generation default, and investigate face-identity and realistic-skin LoRAs with credible compatibility evidence. FLUX.2 Klein 9B produced a real 512 × 512 render in 12 seconds including model loading. A controlled FLUX.3 Consistency LoRA comparison showed additional skin detail but did not establish better identity; a matched Restore comparison added texture but also altered the face, so neither adapter is a verified identity improvement or enabled by default.
 - [ ] Run focused automated tests and representative local GPU/UI tests; identify any quality-sensitive feature still requiring artist review and keep unverified modes clearly gated.
 
-- [ ] Show clear, truthful progress across all modes. Event routing and stage labels were fixed for frame extension and HDR, and sampler labels clarified for image, first/last and reference video. UI tests pass; live websocket progress was observed in isolated Comfy and full desktop flow remains to be checked.
+- [ ] Show clear, truthful progress across all modes. Event routing and stage labels were fixed for frame extension and HDR, and sampler labels clarified for image, first/last and reference video. HDR now retains an active job through transient connection errors and keeps controls disabled until cancellation is confirmed. UI tests pass; live websocket progress was observed in isolated Comfy and full desktop flow remains to be checked.
 
 Completion means each exposed control changes the actual rendered result, preserves
 existing approved paths, and has truthful limits and actionable errors. Maintain

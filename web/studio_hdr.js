@@ -2,7 +2,7 @@ import {LTXLoras} from './studio_ltx_loras.js';
 // Bounded LTX HDR post-passes use explicitly selected source assets.
 export class HDRSourceTool {
   constructor(host,api,getSource){
-    this.api=api;this.getSource=getSource;this.job=null;this.busy=false;this.timer=null;
+    this.api=api;this.getSource=getSource;this.job=null;this.busy=false;this.timer=null;this.cancelling=false;
     this.root=document.createElement('details');this.root.className='gs-hdr-tool';
     this.root.innerHTML=`<summary>HDR tools · LTX 2.5</summary><div class="gs-hdr-content">
       <label>Conversion<select data-hdr="mode"><option value="sdr">SDR to HDR</option><option value="native">HDR to HDR · preview</option></select></label>
@@ -20,8 +20,8 @@ export class HDRSourceTool {
     host.append(this.root);this.loras=new LTXLoras(this.root.querySelector('.gs-hdr-content'),path=>this.request(path),()=>this.busy);this.$('limits').after(this.loras.root);this.$('start-job').onclick=()=>this.start();this.$('cancel').onclick=()=>this.cancel();
     this.$('mode').onchange=()=>this.updateMode();this.$('source-kind').onchange=()=>this.updateMode();
     this.$('add-sequence').onclick=()=>this.$('sequence-files').click();this.$('sequence-files').onchange=event=>this.uploadSequence(event.target.files);this.updateMode();
-    this.onExecuting=event=>{const p=event.detail;if(!p||!this.job||p.prompt_id!==this.job||!p.node)return;this.currentNode=p.node;this.$('progress').hidden=false;this.$('progress').removeAttribute('value');this.status(this.nodeLabel(p.node));};
-    this.onProgress=event=>{const p=event.detail;if(!p||!this.job||p.prompt_id!==this.job||!(p.max>0)||!Number.isFinite(p.value))return;if(p.node)this.currentNode=p.node;const bar=this.$('progress'),sampling=['sample1','sample2','hdr_sample'].includes(this.currentNode);bar.hidden=false;bar.value=Math.max(0,Math.min(100,100*p.value/p.max));this.status(`${this.nodeLabel(this.currentNode)} · ${sampling?'step':'progress'} ${p.value} of ${p.max}`);};
+    this.onExecuting=event=>{const p=event.detail;if(!p||!this.job||this.cancelling||p.prompt_id!==this.job||!p.node)return;this.currentNode=p.node;this.$('progress').hidden=false;this.$('progress').removeAttribute('value');this.status(this.nodeLabel(p.node));};
+    this.onProgress=event=>{const p=event.detail;if(!p||!this.job||this.cancelling||p.prompt_id!==this.job||!(p.max>0)||!Number.isFinite(p.value))return;if(p.node)this.currentNode=p.node;const bar=this.$('progress'),sampling=['sample1','sample2','hdr_sample'].includes(this.currentNode);bar.hidden=false;bar.value=Math.max(0,Math.min(100,100*p.value/p.max));this.status(`${this.nodeLabel(this.currentNode)} · ${sampling?'step':'progress'} ${p.value} of ${p.max}`);};
     api.addEventListener?.('progress',this.onProgress);
     api.addEventListener?.('executing',this.onExecuting);
     try{this.job=localStorage.getItem('zura-hdr-active-job');}catch{}
@@ -79,22 +79,22 @@ export class HDRSourceTool {
       if(!item){
         const queue=await this.request('/queue');
         const pending=[...(queue.queue_pending||[]),...(queue.queue_running||[])];
-        if(!this.currentNode){const running=(queue.queue_running||[]).some(entry=>entry[1]===this.job);this.status(running?'Loading models and preparing HDR video…':'Queued · waiting for ComfyUI…');}
+        if(!this.currentNode&&!this.cancelling){const running=(queue.queue_running||[]).some(entry=>entry[1]===this.job);this.status(running?'Loading models and preparing HDR video…':'Queued · waiting for ComfyUI…');}
         if(!pending.some(entry=>entry[1]===this.job)){
           const again=await this.request('/history/'+encodeURIComponent(this.job));
-          if(!again[this.job])throw new Error('This conversion is no longer in the ComfyUI queue. Start it again.');
+          if(!again[this.job]){this.status(this.cancelling?'HDR conversion cancelled.':'This conversion is no longer in the ComfyUI queue. Start it again.');this.finish();return;}
         }
         this.timer=setTimeout(()=>this.poll(),2000);return;
       }
-      if(item.status?.status_str==='error')throw new Error('HDR conversion failed. Check ComfyUI’s job details.');
+      if(item.status?.status_str==='error'){this.status(this.cancelling?'HDR conversion cancelled.':'HDR conversion failed. Check ComfyUI’s job details.');this.finish();return;}
       const outputs=item.outputs||{},preview=outputs.zura_hdr_save_preview?.images?.[0];
       const hlg=outputs.zura_hdr_save_video?.images?.[0],exr=outputs.zura_hdr_archive?.files?.[0];
-      if(!preview || (!hlg&&!exr))throw new Error('HDR conversion finished without the requested files.');
+      if(!preview || (!hlg&&!exr)){this.status('HDR conversion finished without the requested files.');this.finish();return;}
       this.$('preview').src=this.url(preview);for(const [name,file] of [['hlg',hlg],['exr',exr]]){this.$(name).hidden=!file;if(file)this.$(name).href=this.url(file);}
       this.$('result').hidden=false;this.status('HDR conversion complete.');this.finish();
-    }catch(error){this.status(error.message);this.finish();}
+    }catch(error){if(!this.job)return;this.currentNode=null;this.$('progress').removeAttribute('value');this.status('Connection interrupted. Reconnecting to your HDR conversion…');this.timer=setTimeout(()=>this.poll(),2000);}
   }
-  async cancel(){if(!this.job)return;try{await this.request('/queue',{delete:[this.job]});await this.request('/interrupt',{prompt_id:this.job});this.status('Cancellation requested.');this.finish();}catch(error){this.status(error.message);}}
-  finish(){clearTimeout(this.timer);this.timer=null;this.job=null;try{localStorage.removeItem('zura-hdr-active-job');}catch{}this.busy=false;this.loras.setBusy(false);this.$('start-job').disabled=false;this.$('cancel').hidden=true;this.$('progress').hidden=true;}
+  async cancel(){if(!this.job||this.cancelling)return;this.cancelling=true;this.$('cancel').disabled=true;this.status('Cancelling HDR conversion…');try{await this.request('/queue',{delete:[this.job]});await this.request('/interrupt',{prompt_id:this.job});}catch(error){this.cancelling=false;this.$('cancel').disabled=false;this.status('Could not request cancellation. Try again.');}}
+  finish(){clearTimeout(this.timer);this.timer=null;this.job=null;this.cancelling=false;try{localStorage.removeItem('zura-hdr-active-job');}catch{}this.busy=false;this.loras.setBusy(false);this.$('start-job').disabled=false;this.$('cancel').hidden=true;this.$('cancel').disabled=false;this.$('progress').hidden=true;}
   close(){clearTimeout(this.timer);this.api.removeEventListener?.('progress',this.onProgress);this.api.removeEventListener?.('executing',this.onExecuting);this.$('preview').pause?.();this.root.remove();}
 }
