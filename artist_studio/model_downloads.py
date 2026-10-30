@@ -69,6 +69,16 @@ CATALOG = {
 }
 
 CATALOG.update({
+    "fasth3_draft": dict(name="FastH3 · reference video draft", gated=False,
+        license_url="https://huggingface.co/FastVideo/FastH3-Omni-Comfy",
+        note="Experimental faster draft. Includes the shared MiniMax H3 encoder and VAEs; install the SelfLift node pack separately. Review all source repositories and upstream licences.",
+        files=[
+            _file("diffusion_models", "fasth3_omniref_8step_pruned_int8_convrot.safetensors", "FastVideo/FastH3-Omni-Comfy", "82eff2a6eee6c962846879f4bab52610a4df24d3", "diffusion_models/fasth3_omniref_8step_pruned_int8_convrot.safetensors", 22213723064, "851b2dc9670ed864b7f1e951ac9da047d83b1c04ded9bfcc1a9e5bba0ee33f80"),
+            _file("latent_upscale_models", "minimax_h3_latent_upscaler_3d_conv_v1_bf16.safetensors", "LBH-123-AI/Minimax_h3_latent_Upscaler", "3f941d5d182014dd5c0a5e16330420ee2d4aa0c6", "minimax_h3_latent_upscaler_3d_conv_v1/minimax_h3_latent_upscaler_3d_conv_v1_bf16.safetensors", 690592992, "4f57821f5837f32f7142b67d815606dbd7550f194e5c769f7d6c3f83b146a5e6"),
+            CATALOG["openjutsu_h3"]["files"][1],
+            _file("vae", "minimax_h3_video_vae_int8_convrot.safetensors", "FastVideo/FastH3-Omni-Comfy", "82eff2a6eee6c962846879f4bab52610a4df24d3", "vae/minimax_h3_video_vae_int8_convrot.safetensors", 2811065184, "52a2c8c73583c86e4f41cdcce3a6ad0ea562987bc0bf3d60a0cef5f5c8e60c0e"),
+            CATALOG["openjutsu_h3"]["files"][3],
+        ]),
     "qwen21": dict(name="Qwen Image 2.1 · INT8 starting frame", gated=False,
         license_url="https://huggingface.co/Qwen/Qwen-Image-2.1/blob/main/LICENSE",
         note="Experimental 40-step starting-image recipe. Comfy's repository identifies a Qwen research licence; review its terms and hardware needs before downloading.",

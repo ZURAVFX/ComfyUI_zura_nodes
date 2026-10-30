@@ -93,3 +93,18 @@ An isolated HTTP-to-GPU long SDR-to-HDR test processed 130 frames in two
 sections at 512 × 288, delivered 130 ACEScg EXRs, 130 HLG 10-bit frames and
 a 130-frame SDR preview. Source audio measured zero lag in the HLG file. The
 source repeats a short clip; the join and appearance await artist review.
+
+FastH3 draft setup now offers its exact pinned INT8 model, BF16 latent upscaler,
+shared H3 text encoder and video/audio VAEs through the explicit download flow;
+it also links the separately installed SelfLift nodes. The source repository
+metadata supplies the pinned sizes and SHA-256 values. Catalogue and UI tests
+pass without initiating a download. The local installed files were updated;
+ComfyUI needs a restart before its Python catalogue sees the change.
+
+For the private 130-frame SDR-to-HDR test, the eight-frame overlap covers output
+frames 113–120 (zero-based). At 128 × 72, mean absolute adjacent-frame RGB
+changes across this region measured 0.23–0.97 on an 8-bit scale, compared with
+0.39 median and 4.50 maximum across the output. The source's corresponding
+changes were 0.06–0.70; this is a coarse engineering check and does not establish
+visual continuity or colour quality. The longer route remains gated pending
+artist and desktop review.

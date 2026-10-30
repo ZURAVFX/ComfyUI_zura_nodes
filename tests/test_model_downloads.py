@@ -52,6 +52,15 @@ class ModelDownloadTest(unittest.TestCase):
         self.assertEqual({f['folder'] for f in packages['wan22_pose']['files']}, {'detection'})
         self.assertEqual(packages['h3_birefnet']['files'][0]['folder'], 'background_removal')
         self.assertEqual(packages['h3_dmd_ref2va']['files'][0]['filename'], 'minimax_h3_dmd_ref2va_8step_turbo_pruned.safetensors')
+        fast = packages['fasth3_draft']['files']
+        self.assertEqual({f['filename'] for f in fast}, {
+            'fasth3_omniref_8step_pruned_int8_convrot.safetensors',
+            'minimax_h3_latent_upscaler_3d_conv_v1_bf16.safetensors',
+            'qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors',
+            'minimax_h3_video_vae_int8_convrot.safetensors',
+            'minimax_h3_audio_vae_fp32.safetensors'})
+        self.assertTrue(all(len(f['revision']) == 40 and len(f['sha256']) == 64 and f['size_bytes'] > 0 for f in fast))
+        self.assertIn('SelfLift', packages['fasth3_draft']['note'])
         self.assertEqual(packages['h3_first_last']['files'][0]['filename'], 'minimax_h3_fl2va_pruned_int8_convrot.safetensors')
         self.assertEqual(packages['ltx25_text_int8']['files'][0]['filename'], 'gemma4-12b-with-proj-ltx-2.5-comfy-int8-convrot.safetensors')
         self.assertTrue(packages['ltx25_clean_plate']['gated'])
