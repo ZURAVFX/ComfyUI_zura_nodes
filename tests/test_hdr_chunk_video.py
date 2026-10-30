@@ -64,5 +64,33 @@ class HDRChunkVideoTests(unittest.TestCase):
                 video.export_hlg_video(self.stage,self.tmp.name,'cancelled',fps=10,ffmpeg=self.ffmpeg,progress=stop)
         self.assertEqual(list((Path(self.tmp.name)/'genj'/'hdr').iterdir()),[])
 
+    def test_fractional_fps_preserves_selected_audio_timing(self):
+        from scipy.signal import correlate, correlation_lags
+        fps=30000/1001
+        # A non-periodic signal exposes even small offsets that a single tone
+        # cannot distinguish. The export starts ten source frames in.
+        rng=np.random.default_rng(124)
+        samples=rng.integers(-14000,14000,size=144000,dtype=np.int16)
+        with wave.open(str(self.audio),'wb') as wav:
+            wav.setparams((1,2,48000,len(samples),'NONE','not compressed'))
+            wav.writeframes(samples.astype('<i2').tobytes())
+        with patch.object(paintout,'native_colour',side_effect=lambda frames,*args:frames):
+            path=video.export_hlg_video(self.stage,self.tmp.name,'fractional',fps=fps,
+                audio_source=self.audio,audio_start_frame=10,ffmpeg=self.ffmpeg)
+        with av.open(str(path)) as container:
+            stream=container.streams.video[0]
+            self.assertAlmostEqual(float(stream.average_rate),fps,places=4)
+            self.assertEqual(sum(1 for _ in container.decode(video=0)),14)
+        with av.open(str(path)) as container:
+            actual=np.concatenate([frame.to_ndarray().reshape(-1) for frame in container.decode(audio=0)])
+        begin=round(10/fps*48000)
+        expected=samples[begin:begin+round(14/fps*48000)].astype(np.float32)/32768
+        # Ignore the lossy codec's padded tail, and search within 100 ms.
+        actual=actual[:len(expected)]
+        cross=correlate(actual,expected,mode='full',method='fft')
+        lags=correlation_lags(len(actual),len(expected),mode='full')
+        near=np.abs(lags)<=4800
+        self.assertLessEqual(abs(int(lags[near][np.argmax(cross[near])])),1)
+
 
 if __name__=='__main__':unittest.main()

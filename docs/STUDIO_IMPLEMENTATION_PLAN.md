@@ -29,4 +29,6 @@ timing and resource check, not a visual sign-off or a guarantee for 720p footage
 Additional source rates and the full desktop path still need verification.
 The private long-HDR EXR exporter now preserves negative linear ACEScg
 components; a real half-float EXR round-trip verifies negative channels and
-highlights. Long HDR remains gated pending the artist and end-to-end checks.
+highlights. A synthetic 29.97 fps HLG export also retained all 14 frames and
+selected audio within one sample at a non-zero trim. Long HDR remains gated
+pending the artist and end-to-end checks.
