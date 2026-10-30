@@ -166,7 +166,7 @@ def _apply_qwen21(graph, references):
         return [identity, 0]
     files = MODELS["qwen21"]["files"]
     base = node("92:107", "UNETLoader", "Qwen Image 2.1 INT8", unet_name=files[0][1], weight_dtype="default")
-    clip = node("92:108", "CLIPLoader", "Qwen3-VL 8B on CPU", clip_name=files[1][1], type="qwen_image", device="cpu")
+    clip = node("92:108", "CLIPLoader", "Qwen3-VL 8B · automatic device", clip_name=files[1][1], type="qwen_image", device="default")
     vae = node("92:110", "VAELoader", "Qwen 2.1 VAE", vae_name=files[2][1])
     cached = node("zura_qwen21_cache", "QwenImage21Cache", "Lossless reference cache in RAM", model=base, device="cpu", dtype="default")
     graph["92:111"]["inputs"]["resolution_steps"] = 32

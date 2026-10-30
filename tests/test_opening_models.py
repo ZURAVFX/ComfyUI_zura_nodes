@@ -68,6 +68,7 @@ class OpeningModelTests(unittest.TestCase):
         self.assertEqual(graph["92:105"]["class_type"], "SplitImageWithAlpha")
         self.assertFalse(any(node["class_type"] in ("LoraLoaderModelOnly", "TextEncodeQwenImageEditPlus") for node in graph.values()))
         self.assertEqual(graph["92:108"]["inputs"]["clip_name"], "qwen3vl_8b_int8_convrot.safetensors")
+        self.assertEqual(graph["92:108"]["inputs"]["device"], "default", "Allow Comfy to use the GPU and offload as needed")
 
     def test_unknown_model_and_excess_references_fail_clearly(self):
         with self.assertRaisesRegex(ValueError, "Choose an available"):

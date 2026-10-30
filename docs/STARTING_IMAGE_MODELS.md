@@ -9,7 +9,7 @@ The model picker beside the prompt selects the starting-image generator. It also
 | Qwen Image Edit 2511 | 2 | INT8, dedicated Qwen encoder/VAE, four-step Lightning |
 | Qwen Image 2.1 | 9 | Experimental INT8 base, native 2.1 encoder/VAE, lossless CPU reference cache, 40 steps |
 
-Qwen 2.1 uses its own native conditioning. It does not use the older Edit 2511 Lightning LoRA. Its menu identifies it as experimental. Installed node and model choices have been checked, but GPU quality, speed and 16 GB memory use for the new model branches still need local testing. Additional references can increase memory use substantially.
+Qwen 2.1 uses its own native conditioning. It does not use the older Edit 2511 Lightning LoRA. Its menu identifies it as experimental. Installed node and model choices have been checked. One Qwen 2.1 384 × 640 generation with a full-size reference completed on a warm 16 GB RTX 4080 in 39.32 seconds using automatic device selection; output quality and broader memory limits still need artist testing. Additional references can increase memory use substantially.
 
 ## Relight
 
