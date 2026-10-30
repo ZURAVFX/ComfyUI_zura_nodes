@@ -94,6 +94,8 @@ class Wan21RelightTests(unittest.TestCase):
         project = self.project()
         project["config"].update(relight_width=720, relight_height=1280)
         graph = self.build(project)
+        self.assertTrue(graph["wan21_shot"]["inputs"]["preserve_aspect"])
+        self.assertEqual(graph["272:408:275:190"]["inputs"]["crop_position"], graph["272:407:89"]["inputs"]["crop_position"])
         for key in ("272:407:89", "272:408:275:190"):
             self.assertEqual(graph[key]["inputs"]["width"], 720)
             self.assertEqual(graph[key]["inputs"]["height"], 1280)

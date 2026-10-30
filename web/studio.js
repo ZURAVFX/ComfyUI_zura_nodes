@@ -695,7 +695,8 @@ class ArtistStudio {
         if(!this.references.some(a=>a.sha===asset.sha))this.references.push({...asset,role:"auto"});
         this.invalidateLook();
       }else if(type==="ready"){
-        this.readyAsset=asset;this.invalidateLook();
+        if(this.config.preserve_people)throw new Error("A finished frame is unavailable while preserving the original people.");
+        this.readyAsset=asset;this.lookMode="ready";this.invalidateLook();this.syncForm();
       }else{
         this[type]=asset;this.project=null;localStorage.removeItem("genj-studio-project");this.lastVideo=null;
       }

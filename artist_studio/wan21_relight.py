@@ -143,7 +143,8 @@ def build_studio_graph(project: Mapping[str, Any], check_asset) -> dict[str, dic
         # assert_approved checks the preparation hash above. The loader compares
         # shot IDs, not that hash, just like the other Studio animation graphs.
         "inputs": {"shot_id": project["review"], "approved_shot_id": project["review"],
-                   "render_long_edge": max(width, height), "output_scale": 1, "preview_seconds": 0},
+                   "render_long_edge": max(width, height), "output_scale": 1, "preview_seconds": 0,
+                   "preserve_aspect": True},
         "_meta": {"title": "Load approved source clip"},
     }
     graph["wan21_source_frames"] = {
@@ -152,6 +153,7 @@ def build_studio_graph(project: Mapping[str, Any], check_asset) -> dict[str, dic
     }
     for key in ("272:407:89", "272:408:275:190"):
         graph[key]["inputs"].update(width=width, height=height)
+    graph["272:408:275:190"]["inputs"]["crop_position"] = "center"
     graph["272:408:274:3"]["inputs"]["text"] = prompt
     graph["272:407:277:19"]["inputs"]["noise_seed"] = int(config.get("seed", 42))
     graph["wan21_video"] = {
