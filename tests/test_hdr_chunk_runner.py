@@ -32,6 +32,7 @@ class HDRChunkRunnerTests(unittest.IsolatedAsyncioTestCase):
             job=runner.HDRChunkRunner(store,render,export,cancel_prompt)
             self.assertEqual(await job.run(),14)
             self.assertEqual((seen,job.state,job.completed),([0,1],'complete',2))
+            self.assertFalse(store.directory.exists(),'completed jobs release their own staged frames')
             self.assertEqual(job.snapshot(),{'state':'complete','completed':2,'total':2,'active_prompt_id':None,'error':None,'result':14})
             self.assertFalse(await job.cancel(),'a completed export cannot be cancelled afterwards')
             with self.assertRaises(ValueError):await job.run()
@@ -51,6 +52,7 @@ class HDRChunkRunnerTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(job.snapshot()['state'],'cancelling');self.assertEqual(job.snapshot()['total'],1);release.set()
             with self.assertRaises(storage.HDRChunkCancelled):await task
             self.assertEqual(cancelled,['own-prompt']);self.assertEqual(job.state,'cancelled')
+            self.assertFalse(store.directory.exists(),'cancelled jobs release their staging')
 
     async def test_failed_render_does_not_export_or_submit_next(self):
         with tempfile.TemporaryDirectory() as root:
@@ -65,6 +67,7 @@ class HDRChunkRunnerTests(unittest.IsolatedAsyncioTestCase):
             job=runner.HDRChunkRunner(store,render,export,cancel_prompt)
             with self.assertRaisesRegex(RuntimeError,'sampler failed'):await job.run()
             self.assertEqual((submitted,job.state),([0],'failed'))
+            self.assertFalse(store.directory.exists(),'failed jobs release their staging')
 
 
 if __name__=='__main__':unittest.main()

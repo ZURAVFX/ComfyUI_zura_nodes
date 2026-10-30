@@ -8,6 +8,7 @@ not registered as a Studio route until those adapters are verified together.
 from __future__ import annotations
 
 import asyncio
+import logging
 
 from .hdr_chunk_store import HDRChunkCancelled
 
@@ -93,3 +94,9 @@ class HDRChunkRunner:
             self.current_prompt=None
             self._running=False
             self.cancelling=False
+            try:
+                await asyncio.to_thread(self.store.cleanup)
+            except (OSError,ValueError):
+                # A failed cleanup must not hide an otherwise valid export or
+                # remove anything outside the job's own staging directory.
+                logging.warning('Could not remove HDR staging files for job %s',self.store.identity,exc_info=True)

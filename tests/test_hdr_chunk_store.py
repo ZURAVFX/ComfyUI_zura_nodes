@@ -56,5 +56,18 @@ class HDRChunkStoreTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError,'non-finite'):staged.write(0,torch.full((3,1,1,3),float('nan')))
             with self.assertRaisesRegex(ValueError,'index'):staged.write(4,torch.zeros(3,1,1,3))
 
+    def test_cleanup_removes_only_owned_expected_files(self):
+        plan=[chunk.HDRChunk(0,3,0)]
+        with tempfile.TemporaryDirectory() as root:
+            staged=store.HDRChunkStore(root,'e'*32,plan,1,1,create=True)
+            staged.write(0,torch.zeros(3,1,1,3))
+            unrelated=staged.directory/'keep.txt';unrelated.write_text('keep')
+            reopened=store.HDRChunkStore(root,'e'*32,plan,1,1)
+            with self.assertRaisesRegex(ValueError,'creating job'):reopened.cleanup()
+            staged.cleanup()
+            self.assertEqual(unrelated.read_text(),'keep')
+            self.assertFalse((staged.directory/'000000.npy').exists())
+            unrelated.unlink();staged.cleanup();self.assertFalse(staged.directory.exists())
+
 
 if __name__=='__main__':unittest.main()

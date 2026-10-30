@@ -46,6 +46,7 @@ class HDRChunkStore:
         self.plan=list(plan)
         self.width,self.height=width,height
         self.cancelled=threading.Event()
+        self._owned=create
         if create:
             self.root.mkdir(parents=True,exist_ok=True)
             self.directory.mkdir(exist_ok=False)
@@ -54,6 +55,18 @@ class HDRChunkStore:
 
     def cancel(self):
         self.cancelled.set()
+
+    def cleanup(self):
+        """Remove only expected files from this instance's freshly created job."""
+        if not self._owned:raise ValueError('Only the creating job can clean HDR staging.')
+        if self.directory.is_symlink() or not self.directory.is_dir() or self.directory.resolve().parent!=self.root:
+            raise ValueError('HDR staging directory changed or is invalid.')
+        for index in range(len(self.plan)):
+            for suffix in ('npy','json','partial'):
+                path=self._path(index,suffix)
+                if not path.is_symlink() and path.is_file():path.unlink()
+        # Never recursively remove unknown files, directories or symlinks.
+        if not any(self.directory.iterdir()):self.directory.rmdir()
 
     def _check_cancelled(self):
         if self.cancelled.is_set(): raise HDRChunkCancelled('HDR conversion cancelled.')

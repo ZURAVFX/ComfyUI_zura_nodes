@@ -53,6 +53,9 @@ must be reviewed before adopting the faster section size.
 The private HDR panel offers an explicit shorter-section choice for native HDR
 with a more-joins warning. The existing longer-section setting remains default;
 the choice is gated with the rest of the long-HDR workflow pending review.
+Completed, failed and cancelled private long-HDR jobs now remove their own
+expected staging files without recursively deleting unknown files; tests cover
+each terminal state. Previous test artifacts are not automatically removed.
 Head-swap setup now links its missing crop, pose, padding, mask and sigma nodes
 to the corresponding installed packs' declared upstream repositories. Automatic
 node-pack installation remains outstanding.
