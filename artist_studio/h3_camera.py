@@ -149,8 +149,12 @@ def build_still_graph(r):
     else:
         # Decode just the selected first frame. No full-clip performance pass yet.
         source = node("source_still", "VHS_LoadVideoPath", video=r.source_path or r.source_video,
-                      force_rate=24, custom_width=1280, custom_height=720, frame_load_cap=1,
+                      force_rate=24, custom_width=0, custom_height=0, frame_load_cap=1,
                       skip_first_frames=math.floor(r.start_seconds * 24 + .5), select_every_nth=1, format="AnimateDiff")
+        # Use the same proportional centre crop and target raster as the video
+        # performance guide, including portrait and custom output sizes.
+        source = node("source_still_size", "ImageScale", image=source, upscale_method="lanczos",
+                      width=r.width, height=r.height, crop="center")
         model = node("still_model", "UNETLoader", unet_name=STILL_MODELS["flux"][1], weight_dtype="default")
         clip = node("still_text", "CLIPLoader", clip_name=STILL_MODELS["text"][1], type="flux3", device="default")
         vae = node("still_vae", "VAELoader", vae_name=STILL_MODELS["vae"][1])
@@ -160,7 +164,7 @@ def build_still_graph(r):
         inputs.update({f"images.image{i}": image for i, image in enumerate(_refs(r, node), 1)})
         positive = node("still_references", "ReferenceMultiLatent", positive=positive, negative=negative,
                         vae=vae, resolution="keep resolution", **inputs)
-        latent = node("still_latent", "EmptyFlux2LatentImage", width=1024, height=576, batch_size=1)
+        latent = node("still_latent", "EmptyFlux2LatentImage", width=r.width, height=r.height, batch_size=1)
         samples = node("still_sample", "KSampler", model=model, positive=positive,
                        negative=["still_references", 1], latent_image=latent, seed=r.seed, steps=16,
                        cfg=1., sampler_name="euler", scheduler="simple", denoise=1.)

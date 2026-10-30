@@ -71,8 +71,18 @@ class CameraGraphTests(unittest.TestCase):
         self.assertEqual(graph['source_still']['inputs']['skip_first_frames'], 36)
         self.assertEqual(graph['still_sample']['inputs']['steps'], 16)
         self.assertEqual(graph['still_sample']['inputs']['cfg'], 1.)
-        self.assertEqual(graph['still_latent']['inputs']['width'], 1024)
+        self.assertEqual((graph['source_still']['inputs']['custom_width'],graph['source_still']['inputs']['custom_height']), (0,0))
+        self.assertEqual((graph['still_latent']['inputs']['width'],graph['still_latent']['inputs']['height']), (r.width,r.height))
         self.assertFalse(any('minimax' in str(n['inputs']) for n in graph.values()))
+
+    def test_camera_still_and_video_use_the_same_portrait_raster_and_crop(self):
+        r = camera.CameraRequest('source.mp4', camera_image='approved.png', width=448, height=768)
+        still = camera.build_still_graph(camera.CameraRequest('source.mp4', width=448, height=768))
+        video = camera.build_graph(r)
+        self.assertEqual(still['still_references']['inputs']['images.image0'], ['source_still_size', 0])
+        for key in ('width','height','crop','upscale_method'):
+            self.assertEqual(still['source_still_size']['inputs'][key], video['performance_size']['inputs'][key])
+        self.assertEqual((still['still_latent']['inputs']['width'],still['still_latent']['inputs']['height']), (448,768))
 
     def test_uploaded_camera_still_omits_all_inference(self):
         graph = camera.build_still_graph(self.request())

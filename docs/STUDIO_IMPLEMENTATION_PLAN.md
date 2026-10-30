@@ -108,3 +108,11 @@ changes across this region measured 0.23–0.97 on an 8-bit scale, compared with
 changes were 0.06–0.70; this is a coarse engineering check and does not establish
 visual continuity or colour quality. The longer route remains gated pending
 artist and desktop review.
+
+The camera-angle still graph previously stretched source footage to 1280 × 720
+and generated a fixed 1024 × 576 still, independently of the selected video
+raster. It now keeps the decoded source proportions and uses the same centre
+crop and requested dimensions as the performance video. A real 448 × 768
+portrait still rendered successfully on ComfyUI, and 13 camera graph tests
+passed (one skipped); the generated image's appearance was not artist-reviewed.
+The installed source was updated and needs a ComfyUI restart to take effect.
