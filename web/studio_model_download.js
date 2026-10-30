@@ -1,6 +1,6 @@
 // Model packages are allowlisted by the backend. Fetching the list never starts a download.
 const PACKAGE_IDS=['openjutsu_h3','wan_animate_2','wan21_relight','wan22_animate_core','wan22_pose','h3_birefnet','h3_head_acceleration','h3_head_adapters','h3_dmd_ref2va','h3_int8_vae','h3_control','h3_crossview','h3_first_last','ltx25_core','ltx25_full_vae','ltx25_refine','ltx25_sdr_hdr','ltx25_text_encoder','ltx25_text_int8','ltx25_clean_plate','ltx25_outpaint','ltx25_in_outpaint','ltx_control','flux2_klein_start'];
-const ROUTE_NAMES={openjutsu:'OpenJutsu character replacement',wan2:'Wan Animate 2',wan:'Wan 2.2 character replacement',wan21_relight:'Wan 2.1 relight',h3_camera:'H3 camera angle',h3_head_swap:'H3 head swap',h3_viewport:'H3 viewport to final',h3:'MiniMax H3',local:'LTX 2.5',local_scene:'LTX 2.5 whole scene'};
+const ROUTE_NAMES={openjutsu:'OpenJutsu character replacement',wan2:'Wan Animate 2',wan:'Wan 2.2 character replacement',wan21_relight:'Wan 2.1 relight',h3_camera:'H3 camera angle',h3_head_swap:'H3 head swap',h3_viewport:'H3 viewport to final',h3:'MiniMax H3',local:'LTX 2.5',local_scene:'LTX 2.5 whole scene',h3_first_last:'H3 first & last frame',ltx_first_last:'LTX first & last frame',wan_first_last:'Wan first & last frame',h3_reference:'H3 reference video'};
 const NODE_PACKS=[
   {name:'ComfyUI-KJNodes',url:'https://github.com/kijai/ComfyUI-KJNodes',nodes:['PathchSageAttentionKJ','ImageResizeKJv2']},
   {name:'ComfyUI-Easy-Use',url:'https://github.com/yolain/ComfyUI-Easy-Use',nodes:['easy int']},
@@ -17,14 +17,15 @@ const fileKey=file=>`${file.folder||''}/${file.filename||''}`.toLowerCase();
 export class StudioModelDownloads {
   constructor(panel, request, onInstalled) {
     this.panel=panel;this.request=request;this.onInstalled=onInstalled;this.packages=[];this.job=null;this.closed=false;this.context=null;
-    panel.innerHTML='<summary>Download video models</summary><div class="gs-advanced-body"><label>Model package <select data-model-package aria-label="Model package"></select></label><div data-model-files></div><div data-model-actions></div><p data-model-progress role="status" aria-live="polite"></p></div>';
+    const floating=panel.classList.contains('zc-tool-popup');panel.classList.add('gs-model-downloads');
+    panel.innerHTML=`<summary>${floating?'Models':'Download video models'}</summary><div class="gs-advanced-body${floating?' zc-tool-panel':''}"><label>Model package <select data-model-package aria-label="Model package"></select></label><div data-model-files></div><div data-model-actions></div><p data-model-progress role="status" aria-live="polite"></p></div>`;
     this.select=panel.querySelector('[data-model-package]');this.files=panel.querySelector('[data-model-files]');this.actions=panel.querySelector('[data-model-actions]');this.progress=panel.querySelector('[data-model-progress]');
     this.select.onchange=()=>this.render();panel.ontoggle=()=>{if(panel.open && !this.packages.length)this.load();};
   }
   el(tag,text){const e=document.createElement(tag);e.textContent=text;return e;}
   async load(){
     try{const data=await this.request('/model-downloads');this.packages=(data.models||[]).filter(p=>PACKAGE_IDS.includes(p.id));
-      const previous=this.select.value;const overview=this.el('option','Current workflow');overview.value='__workflow__';this.select.replaceChildren(overview,...this.packages.map(p=>{const e=this.el('option',p.name);e.value=p.id;return e;}));if(previous==='__workflow__'||this.packages.some(p=>p.id===previous))this.select.value=previous;else if(!this.context&&this.packages.length)this.select.value=this.packages[0].id;this.render();
+      const previous=this.select.value;const overview=this.el('option','Current workflow');overview.value='__workflow__';this.select.replaceChildren(overview,...this.packages.map(p=>{const e=this.el('option',p.name);e.value=p.id;return e;}));if(previous==='__workflow__'||this.packages.some(p=>p.id===previous))this.select.value=previous;else if(!this.context&&this.packages.length)this.select.value=this.packages[0].id;if(this.missingContext)this.applyMissingContext();this.render();
     }catch(e){this.progress.textContent=e.message||'Could not load model packages.';}
   }
   setContext(context){
@@ -33,6 +34,22 @@ export class StudioModelDownloads {
     this.context=next;
     if(changed&&next&&this.packages.length&&!this.job)this.select.value='__workflow__';
     if(this.packages.length && this.select.value==='__workflow__')this.render();
+  }
+  setMissingContext(route,missing){
+    this.missingContext=Array.isArray(missing)?{route,missing}:null;
+    this.applyMissingContext();
+  }
+  applyMissingContext(){
+    if(!this.missingContext){this.setContext(null);return;}
+    const {route,missing}=this.missingContext,files=[],missingNodes=[];
+    for(const name of missing){
+      if(typeof name!=='string')continue;
+      if(/\.(safetensors|onnx|pt|pth|ckpt)$/i.test(name)){
+        const match=this.packages.flatMap(pack=>pack.files||[]).find(file=>file.filename?.toLowerCase()===name.toLowerCase());
+        files.push({folder:match?.folder||'',filename:name,ready:false});
+      }else missingNodes.push(name);
+    }
+    this.setContext({route,files,missingNodes});
   }
   link(label,url){const link=this.el('a',label);link.href=url;link.target='_blank';link.rel='noopener noreferrer';return link;}
   renderWorkflow(){

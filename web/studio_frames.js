@@ -6,6 +6,7 @@ import {ENDPOINT_RECIPES,endpointRecipe,endpointLengths,endpointPresetSize} from
 import {attachWorkspaceSamplePreview,nativePreviewMethod} from './studio_live_preview.js';
 import {PreviewZoom} from './studio_preview_zoom.js';
 import {LTXLoras} from './studio_ltx_loras.js';
+import {StudioModelDownloads} from './studio_model_download.js';
 const KEY='zura-first-last-v1';
 const escape=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const view=(api,file,type='output')=>api.apiURL('/view?'+new URLSearchParams({filename:file.filename,subfolder:file.subfolder||'',type}));
@@ -46,11 +47,12 @@ export class FrameVideoWorkspace{
           </details>
           <label class="zc-tool zc-model-control">${icons.clock}<span class="zc-sr-only">Clip length</span><select id="zf-length" aria-label="Clip length">${FRAME_LENGTHS.map(n=>`<option value="${n}" ${n===73?'selected':''}>${(n/24).toFixed(2)}s</option>`).join('')}</select>${icons.chevron}</label>
           </div><label class="zc-tool zf-audio-switch"><input type="checkbox" id="zf-audio-enabled" role="switch"/>Audio reference</label>
-          <details class="zc-tool-popup"><summary aria-label="Advanced generation settings">${icons.settings}</summary><div class="zc-tool-panel"><label>Sampling steps<input type="number" id="zf-steps" min="4" max="40" value="8"/></label><p id="zf-recipe-hint"></p><label>Seed<input id="zf-seed" type="number" min="0" max="9007199254740991" value="42"/></label><label class="zf-check"><input type="checkbox" id="zf-random" checked/>New variation</label><div id="zf-setup"></div><button id="zf-refresh" type="button">Refresh installed models</button></div></details>
+          <details class="zc-tool-popup"><summary aria-label="Advanced generation settings">${icons.settings}</summary><div class="zc-tool-panel"><label>Sampling steps<input type="number" id="zf-steps" min="4" max="40" value="8"/></label><p id="zf-recipe-hint"></p><label>Seed<input id="zf-seed" type="number" min="0" max="9007199254740991" value="42"/></label><label class="zf-check"><input type="checkbox" id="zf-random" checked/>New variation</label><div id="zf-setup"></div><button id="zf-refresh" type="button">Refresh installed models</button></div></details><details id="zf-model-downloads" class="zc-tool-popup gs-model-help"></details>
         </div><div class="zc-prompt-submit"><button id="zf-generate" class="gs-primary" type="submit" aria-describedby="zf-note" disabled>Generate video</button></div></div>
         <p id="zf-note" aria-live="polite">Add a first frame to begin. The last frame is optional.</p>
       </form>`;
     owner.root.append(this.page);
+    this.modelDownloads=new StudioModelDownloads(this.$('model-downloads'),(path,body)=>this.fetch('/zura/studio'+path,body),()=>this.loadModels());
     this.loras=new LTXLoras(this.page.querySelector('.zc-prompt-tools'),(path,body)=>this.fetch(path,body),()=>this.busy(),()=>({h3:'h3',ltx:'ltx25'})[this.$('engine').value]||null,true);
     // Wan 2.2 has separate high and low models; never share one phase's
     // adapter with the other without an explicit selection.
@@ -91,7 +93,7 @@ export class FrameVideoWorkspace{
     this.$('audio-file-button').onclick=()=>this.$('audio-file').click();this.$('audio-file').onchange=e=>{const file=e.target.files?.[0];e.target.value='';if(file)this.upload('audio',file);};
     this.$('cancel').onclick=()=>this.cancel();
     this.page.addEventListener('keydown',e=>{if(e.key==='Escape')for(const d of this.page.querySelectorAll('details'))if(d.open){d.open=false;d.querySelector('summary').focus({preventScroll:true});e.stopPropagation();}});
-    this.page.addEventListener('toggle',e=>{if(e.target.tagName==='DETAILS'&&e.target.open)for(const d of this.page.querySelectorAll('details'))if(d!==e.target)d.open=false;},true);
+    this.page.addEventListener('toggle',e=>{if(e.target.tagName==='DETAILS'&&e.target.open)for(const d of this.page.querySelectorAll('details'))if(d!==e.target&&!d.contains(e.target))d.open=false;},true);
     this.api.addEventListener?.('progress',e=>{const d=e.detail;if(!this.job||d?.prompt_id!==this.job.id||!Number.isFinite(d.value)||!(d.max>0))return;const node=d.node||this.job.currentNode||'sample',sampling=node==='sample'||node.endsWith('_sample'),label=this.job.stages?.[node]||(sampling?'Generating video':'Processing video');this.$('bar').value=Math.max(0,Math.min(100,100*d.value/d.max));this.$('progress-title').textContent=`${label} · ${sampling?'Step':'Progress'} ${d.value} of ${d.max}`;this.$('progress-detail').textContent=sampling?this.elapsed(d.value,d.max):this.elapsed();});
     this.api.addEventListener?.('executing',e=>{const d=e.detail;if(!this.job||d?.prompt_id!==this.job.id||!d.node)return;this.job.currentNode=d.node;this.sampleStarted=null;this.$('bar').removeAttribute('value');this.$('progress-title').textContent=this.job.stages?.[d.node]||({text:'Loading text encoder',endpoints:'Reading first and last frames',audio_ref:'Loading audio reference',audio_guide:'Encoding audio reference',model:`Loading ${endpointRecipe(this.job.config.engine).label}`,turbo:'Preparing Turbo adapter',sample:'Generating video',decode:'Decoding video',decode_audio:'Decoding audio',save:'Saving video'})[d.node]||'Preparing video';});
     this.render();this.renderHistory();this.preview();
@@ -100,7 +102,7 @@ export class FrameVideoWorkspace{
   recipe(){return endpointRecipe(this.$('engine').value);}
   build(c=this.config()){return endpointRecipe(c.engine).build(c);}
   setLengths(preferred){const cap=this.recipe(),values=endpointLengths(cap.id);this.$('length').innerHTML=values.map(n=>`<option value="${n}">${(n/cap.fps).toFixed(2)}s</option>`).join('');this.$('length').value=values.includes(Number(preferred))?preferred:cap.defaultFrames;}
-  selectAvailability(){if(this.modelInfo)this.availability=this.recipe().availability(this.modelInfo,this.config());}
+  selectAvailability(){if(this.modelInfo)this.availability=this.recipe().availability(this.modelInfo,this.config());this.modelDownloads?.setMissingContext(`${this.recipe().id}_first_last`,this.availability?.missing);}
   normaliseDimensions(){
     let changed=false;this.dimensionNotice='';const cap=this.recipe();
     for(const id of ['width','height']){const input=this.$(id),value=Number(input.value);input.step=cap.dimensionStep;input.min=cap.minDimension||256;input.max=cap.maxDimension||1536;if(Number.isFinite(value)&&value>=Number(input.min)&&value<=Number(input.max)&&value%cap.dimensionStep!==0){input.value=Math.round(value/cap.dimensionStep)*cap.dimensionStep;changed=true;}}
@@ -180,6 +182,6 @@ export class FrameVideoWorkspace{
   }
   async cancel(){if(!this.job)return;try{const id=this.job.id;await this.fetch('/queue',{delete:[id]});await this.fetch('/interrupt',{prompt_id:id});this.message('Cancellation requested.');await this.poll();}catch(e){this.message(e.message);}}
   stopPolling(){clearInterval(this.timer);this.timer=null;}
-  close(){this.save();this.stopPolling();this.previewZoom?.dispose();this.nativeSamplePreview?.dispose();this.nativeSamplePreview=null;}
+  close(){this.save();this.stopPolling();this.previewZoom?.dispose();this.nativeSamplePreview?.dispose();this.nativeSamplePreview=null;this.modelDownloads?.dispose();}
   async graph(){try{const config=this.job?.config||this.config(),graph=await this.patchLoras(this.build(config),config),original=(this.app.rootGraph||this.app.graph)?.serialize?.();if(!original||typeof this.app.loadApiJson!=='function')throw new Error('Update ComfyUI to open this editable graph.');try{await this.app.loadApiJson(graph,`Zura ${endpointRecipe(config.engine).label} First and Last Frame · ${Date.now()}.json`);await import('./vendor/elk.bundled.js');await tidyArtistGraph(this.app,graph,'first_last',window.ELK);}catch(e){await this.app.loadGraphData(original);throw e;}this.studio.close();}catch(e){this.message(e.message);}}
 }
