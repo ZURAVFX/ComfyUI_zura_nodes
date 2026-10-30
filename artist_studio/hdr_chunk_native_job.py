@@ -99,10 +99,10 @@ def create_native_job(server, asset, body, check_asset, output_root, *, ffmpeg=N
                 'width':details['width'],'height':details['height'],'output':output}
 
 
-def create_sdr_job(server, asset, body, check_asset, output_root, *, ffmpeg=None, max_chunk_frames=121, overlap=8):
+def create_sdr_job(server, asset, body, check_asset, output_root, *, ffmpeg=None, max_chunk_frames=121, overlap=8, anchor_strength=None):
     """Private SDR-to-HDR chunk prototype; no Studio route is registered."""
     if asset.get('asset_kind')!='video':raise ValueError('Choose an SDR source video.')
     from .hdr_studio import build_asset_graph as build_sdr_graph
     return create_native_job(server,asset,body,check_asset,output_root,ffmpeg=ffmpeg,
-        max_chunk_frames=max_chunk_frames,overlap=overlap,_graph_builder=build_sdr_graph,
+        max_chunk_frames=max_chunk_frames,overlap=overlap,anchor_strength=anchor_strength,anchor_mode='i2v',_graph_builder=build_sdr_graph,
         _image_node='hdr_unpad_raster',_prefix='sdr')

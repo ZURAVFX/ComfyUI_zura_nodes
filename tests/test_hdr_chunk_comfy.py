@@ -18,6 +18,7 @@ storage=importlib.import_module('ComfyUI_zura_nodes.artist_studio.hdr_chunk_stor
 adapter=importlib.import_module('ComfyUI_zura_nodes.artist_studio.hdr_chunk_comfy')
 native=importlib.import_module('ComfyUI_zura_nodes.artist_studio.hdr_native_graph')
 runner=importlib.import_module('ComfyUI_zura_nodes.artist_studio.hdr_chunk_runner')
+sdr=importlib.import_module('ComfyUI_zura_nodes.artist_studio.hdr_studio')
 
 
 class Queue:
@@ -30,6 +31,20 @@ class Queue:
 
 
 class HDRChunkComfyTests(unittest.IsolatedAsyncioTestCase):
+    async def test_sdr_anchor_matches_reflect_padding_and_retains_hdr_values(self):
+        anchor=torch.full((1,34,46,3),1.2)
+        padded=adapter.ZuraHDRPadSDRAnchor().prepare(anchor)[0]
+        self.assertEqual(tuple(padded.shape),(1,64,64,3))
+        self.assertTrue(torch.allclose(padded,torch.full_like(padded,1.2)))
+        with tempfile.TemporaryDirectory() as root:
+            plan=chunks.plan_chunks(0,130,384,224);store=storage.HDRChunkStore(root,'9'*32,plan,384,224,create=True)
+            graph=sdr.build_hdr_graph(source='input.mp4',start_frame=plan[1].start,frame_count=plan[1].count,fps=24,prefix='test')
+            prepared=adapter.chunk_graph(graph,store,1,'hdr_unpad_raster',anchor_strength=1,anchor_mode='i2v')
+            self.assertEqual(prepared['hdr_guide']['inputs']['latent'],['zura_hdr_sdr_anchor',0])
+            self.assertEqual(prepared['zura_hdr_sdr_anchor']['inputs']['image'],['zura_hdr_anchor_pad',0])
+            self.assertEqual(prepared['zura_hdr_anchor_pad']['class_type'],'ZuraHDRPadSDRAnchor')
+            with self.assertRaisesRegex(ValueError,'only an I2V'):adapter.chunk_graph(graph,store,1,'hdr_unpad_raster',anchor_strength=1,anchor_mode='guide')
+
     async def test_real_graph_is_pruned_and_its_output_staged(self):
         with tempfile.TemporaryDirectory() as root:
             plan=chunks.plan_chunks(3,130,384,224)

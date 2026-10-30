@@ -62,9 +62,29 @@ class ZuraHDRReadChunkAnchor:
         return (previous[offset:offset+1].clone(),)
 
 
-NODE_CLASS_MAPPINGS={'ZuraHDRWriteChunk':ZuraHDRWriteChunk,'ZuraHDRReadChunkAnchor':ZuraHDRReadChunkAnchor}
+class ZuraHDRPadSDRAnchor:
+    """Pad a generated ACEScct anchor exactly like the SDR source guide."""
+    @classmethod
+    def INPUT_TYPES(cls):return {'required':{'images':('IMAGE',)}}
+    RETURN_TYPES=('IMAGE',)
+    FUNCTION='prepare'
+    CATEGORY='Zura/Artist Studio'
+    def prepare(self,images):
+        import torch
+        import torch.nn.functional as F
+        if not isinstance(images,torch.Tensor) or images.ndim!=4 or images.shape[-1]!=3 or len(images)!=1 or not torch.isfinite(images).all():
+            raise ValueError('Expected one finite ACEScct anchor frame.')
+        height,width=images.shape[1:3]
+        if min(width,height)<32 or max(width,height)>2048:raise ValueError('Invalid HDR anchor dimensions.')
+        right=(-width)%32;bottom=(-height)%32
+        if right or bottom:images=F.pad(images.permute(0,3,1,2),(0,right,0,bottom),mode='reflect').permute(0,2,3,1)
+        return (images,)
+
+
+NODE_CLASS_MAPPINGS={'ZuraHDRWriteChunk':ZuraHDRWriteChunk,'ZuraHDRReadChunkAnchor':ZuraHDRReadChunkAnchor,'ZuraHDRPadSDRAnchor':ZuraHDRPadSDRAnchor}
 NODE_DISPLAY_NAME_MAPPINGS={'ZuraHDRWriteChunk':'Zura · Stage HDR Chunk',
-                            'ZuraHDRReadChunkAnchor':'Zura · Read HDR Continuation Anchor'}
+                            'ZuraHDRReadChunkAnchor':'Zura · Read HDR Continuation Anchor',
+                            'ZuraHDRPadSDRAnchor':'Zura · Pad SDR-to-HDR Anchor'}
 
 
 def chunk_graph(graph, store, index, image_node, anchor_strength=None, anchor_mode='guide'):
@@ -85,11 +105,20 @@ def chunk_graph(graph, store, index, image_node, anchor_strength=None, anchor_mo
         if isinstance(anchor_strength,bool) or not isinstance(anchor_strength,(int,float)) or not 0<anchor_strength<=1:
             raise ValueError('Choose an HDR anchor strength above zero and at most one.')
         if anchor_mode not in ('guide','i2v'):raise ValueError('Unknown HDR anchor mode.')
-        if not {'guide1','sample1','guide2','sample2','vae','empty','upsample'} <= graph.keys():
+        is_sdr={'hdr_guide','hdr_vae','hdr_empty_video'} <= graph.keys()
+        if not is_sdr and not {'guide1','sample1','guide2','sample2','vae','empty','upsample'} <= graph.keys():
             raise ValueError('This HDR graph does not support the experimental continuation anchor.')
+        if is_sdr and anchor_mode!='i2v':raise ValueError('SDR-to-HDR continuation supports only an I2V anchor.')
         inputs=graph['zura_hdr_stage_chunk']['inputs']
         graph['zura_hdr_previous_anchor']={'class_type':'ZuraHDRReadChunkAnchor','inputs':{
             key:inputs[key] for key in ('job_id','start_frame','total_frames','width','height','max_frames','overlap','chunk_index')}}
+        if is_sdr:
+            graph['zura_hdr_anchor_pad']={'class_type':'ZuraHDRPadSDRAnchor','inputs':{'images':['zura_hdr_previous_anchor',0]}}
+            graph['zura_hdr_sdr_anchor']={'class_type':'LTXVImgToVideoInplace','inputs':{'vae':['hdr_vae',0],
+                'image':['zura_hdr_anchor_pad',0],'latent':['hdr_empty_video',0],
+                'strength':float(anchor_strength),'bypass':False}}
+            graph['hdr_guide']['inputs']['latent']=['zura_hdr_sdr_anchor',0]
+            return graph
         graph['zura_hdr_anchor_pad']={'class_type':'ZuraHDRNativePrepare','inputs':{'images':['zura_hdr_previous_anchor',0]}}
         graph['zura_hdr_anchor_first']={'class_type':'ImageFromBatch','inputs':{'image':['zura_hdr_anchor_pad',0],'batch_index':0,'length':1}}
         for stage in (1,2):
