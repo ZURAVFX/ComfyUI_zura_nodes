@@ -38,3 +38,6 @@ Real EXR and graph tests pass. An isolated GPU run of the revised SDR-to-HDR
 graph delivered ten ACEScg-tagged EXRs and ten HLG 10-bit frames with audio;
 the revised files are installed locally and require a ComfyUI restart. This
 64 × 64 test establishes integration, not production-resolution visual quality.
+A separate 512 × 288 ten-frame real-footage GPU test produced the correct HLG
+metadata, ten EXRs and zero measured source-audio lag at a five-frame trim.
+Longer and 1080p visual quality remain unverified.
