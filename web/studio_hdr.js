@@ -1,4 +1,5 @@
 import {LTXLoras} from './studio_ltx_loras.js';
+import {StudioModelDownloads} from './studio_model_download.js';
 // Bounded LTX HDR post-passes use explicitly selected source assets.
 export class HDRSourceTool {
   constructor(host,api,getSource){
@@ -13,11 +14,15 @@ export class HDRSourceTool {
       <label>Source colour<select data-hdr="colour"><option value="auto">Read source tags</option><option value="rec709_oetf">Rec.709</option><option value="rec709_gamma24">Rec.709 gamma 2.4</option><option value="srgb_display">sRGB</option></select></label>
       <label>Deliver<select data-hdr="output"><option value="hlg_and_exr">HLG video + EXR sequence</option><option value="hlg_video">HLG video</option><option value="acescg_exr">EXR sequence</option></select></label>
       <p data-hdr="limits">Up to 121 frames per run. Large frame selections may need to be shorter.</p>
+      <details data-hdr="models" class="gs-advanced"></details>
       <div class="gs-hdr-actions"><button data-hdr="start-job" type="button">Convert source</button><button data-hdr="cancel" type="button" hidden>Cancel</button></div>
       <p data-hdr="status" role="status" aria-live="polite"></p><progress data-hdr="progress" max="100" hidden></progress>
       <div data-hdr="result" hidden><video data-hdr="preview" controls playsinline></video><p>SDR preview only</p><a data-hdr="hlg" download hidden>Download HLG video</a> <a data-hdr="exr" download hidden>Download EXR sequence</a></div>
     </div>`;
     host.append(this.root);this.loras=new LTXLoras(this.root.querySelector('.gs-hdr-content'),path=>this.request(path),()=>this.busy);this.$('limits').after(this.loras.root);this.$('start-job').onclick=()=>this.start();this.$('cancel').onclick=()=>this.cancel();
+    this.models=new StudioModelDownloads(this.$('models'),(path,body)=>this.request('/zura/studio'+path,body),()=>this.selectModelPackage());
+    this.$('models').querySelector('summary').textContent='HDR model packages';
+    this.$('models').ontoggle=async()=>{if(this.$('models').open&&!this.models.packages.length){await this.models.load();this.selectModelPackage();}};
     this.$('mode').onchange=()=>this.updateMode();this.$('source-kind').onchange=()=>this.updateMode();
     this.$('add-sequence').onclick=()=>this.$('sequence-files').click();this.$('sequence-files').onchange=event=>this.uploadSequence(event.target.files);this.updateMode();
     this.onExecuting=event=>{const p=event.detail;if(!p||!this.job||this.cancelling||p.prompt_id!==this.job||!p.node)return;this.currentNode=p.node;this.$('progress').hidden=false;this.$('progress').removeAttribute('value');this.status(this.nodeLabel(p.node));};
@@ -38,7 +43,9 @@ export class HDRSourceTool {
     this.$('colour').innerHTML=sequence?'<option value="auto">Read EXR tags</option><option value="acescg">ACEScg</option><option value="acescct">ACEScct</option><option value="linear_rec709">Linear Rec.709</option>':native?'<option value="auto">Read source tags</option><option value="hlg_rec2020">HLG · Rec.2020</option><option value="pq_rec2020">PQ · Rec.2020</option>':'<option value="auto">Read source tags</option><option value="rec709_oetf">Rec.709</option><option value="rec709_gamma24">Rec.709 gamma 2.4</option><option value="srgb_display">sRGB</option>';
     this.$('limits').textContent=native?'Preview: HLG/PQ video or EXR sequence. 1–121 frames per run, even dimensions between 32 and 2048 px; large selections need fewer frames. Requires the LTX 2.5 Refine Details LoRA. The model may alter motion or appearance.':'Up to 121 frames per run. Large frame selections may need to be shorter.';
     this.$('start-job').textContent=native?'Process HDR video':'Convert source';
+    this.selectModelPackage();
   }
+  selectModelPackage(){if(this.models?.job||!this.models?.packages.length)return;const id=this.$('mode').value==='native'?'ltx25_refine':'ltx25_sdr_hdr';if(this.models.packages.some(pack=>pack.id===id)){this.models.select.value=id;this.models.render();}}
   async uploadSequence(files){
     if(this.busy||!files?.length)return;
     this.busy=true;this.loras.setBusy(true);this.$('start-job').disabled=true;this.$('add-sequence').disabled=true;this.status('Uploading EXR frames…');
@@ -96,5 +103,5 @@ export class HDRSourceTool {
   }
   async cancel(){if(!this.job||this.cancelling)return;this.cancelling=true;this.$('cancel').disabled=true;this.status('Cancelling HDR conversion…');try{await this.request('/queue',{delete:[this.job]});await this.request('/interrupt',{prompt_id:this.job});}catch(error){this.cancelling=false;this.$('cancel').disabled=false;this.status('Could not request cancellation. Try again.');}}
   finish(){clearTimeout(this.timer);this.timer=null;this.job=null;this.cancelling=false;try{localStorage.removeItem('zura-hdr-active-job');}catch{}this.busy=false;this.loras.setBusy(false);this.$('start-job').disabled=false;this.$('cancel').hidden=true;this.$('cancel').disabled=false;this.$('progress').hidden=true;}
-  close(){clearTimeout(this.timer);this.api.removeEventListener?.('progress',this.onProgress);this.api.removeEventListener?.('executing',this.onExecuting);this.$('preview').pause?.();this.root.remove();}
+  close(){clearTimeout(this.timer);this.models.dispose();this.api.removeEventListener?.('progress',this.onProgress);this.api.removeEventListener?.('executing',this.onExecuting);this.$('preview').pause?.();this.root.remove();}
 }

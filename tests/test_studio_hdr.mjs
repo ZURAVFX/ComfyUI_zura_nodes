@@ -12,10 +12,13 @@ const outputs={
 };
 const api={apiURL:p=>p,clientId:'test',addEventListener(){},removeEventListener(){},async fetchApi(path,options){
   calls.push([path,options?.body&&JSON.parse(options.body)]);
-  const data=path==='/zura/studio/hdr/graph'||path==='/zura/studio/hdr/native-graph'?{graph:{verified:true}}:path==='/prompt'?{prompt_id:'job-1'}:path==='/history/job-1'?{'job-1':{status:{status_str:'success'},outputs}}:{};
+  const data=path==='/zura/studio/model-downloads'?{models:['ltx25_sdr_hdr','ltx25_refine'].map(id=>({id,name:id,files:[],remaining_bytes:0}))}:path==='/zura/studio/hdr/graph'||path==='/zura/studio/hdr/native-graph'?{graph:{verified:true}}:path==='/prompt'?{prompt_id:'job-1'}:path==='/history/job-1'?{'job-1':{status:{status_str:'success'},outputs}}:{};
   return {ok:true,async json(){return data;}};
 }};
 const tool=new HDRSourceTool(document.querySelector('#host'),api,()=>({id:'source-id',projectId:'project-id'}));
+assert.equal(tool.$('models').querySelector('summary').textContent,'HDR model packages');
+await tool.models.load();tool.selectModelPackage();assert.equal(tool.models.select.value,'ltx25_sdr_hdr');
+assert.equal(calls.filter(([path,body])=>path==='/zura/studio/model-downloads'&&body).length,0,'listing HDR packages does not download them');calls.length=0;
 tool.job='progress-job';
 tool.onExecuting({detail:{prompt_id:'progress-job',node:'model'}});assert.equal(tool.$('status').textContent,'Loading LTX 2.5');assert.equal(tool.$('progress').hasAttribute('value'),false);
 tool.onProgress({detail:{prompt_id:'other-job',node:'sample1',value:3,max:8}});assert.equal(tool.$('status').textContent,'Loading LTX 2.5');
@@ -30,6 +33,7 @@ assert.deepEqual(calls[0][1].custom_loras,[{name:'style.safetensors',strength:.8
 assert.equal(tool.$('result').hidden,false);assert.match(tool.$('hlg').href,/hdr.mp4/);assert.match(tool.$('exr').href,/sequence.zip/);
 assert.equal(tool.$('preview').src.includes('preview.mp4'),true);
 tool.$('mode').value='native';tool.$('mode').onchange();
+assert.equal(tool.models.select.value,'ltx25_refine','switching HDR workflow selects its adapter package');
 assert.match(tool.$('limits').textContent,/HLG\/PQ video or EXR sequence/);
 assert.ok(tool.$('colour').querySelector('option[value="pq_rec2020"]'));
 await tool.start();await new Promise(resolve=>setTimeout(resolve,5));
