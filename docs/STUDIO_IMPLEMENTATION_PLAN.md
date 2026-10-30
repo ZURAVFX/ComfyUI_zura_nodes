@@ -158,3 +158,8 @@ Rec.2020 video and a viewable SDR preview. The source has no audio, so this
 run does not validate audio; visual quality and longer 1080p clips remain to
 be reviewed. Observed available system memory stayed above roughly 12 GiB.
 The isolated server was stopped after the job; the main ComfyUI was left open.
+
+The user also accepted the 1080 × 1920 native-HDR test through its join for
+preview use. This confirms visual preview acceptance of that short sample;
+it does not validate HDR display brightness, longer takes, audio or the full
+Studio desktop flow. Long HDR remains gated pending the desktop checks.
