@@ -115,4 +115,21 @@ longTool.$('sections').value='25';await longTool.start();await new Promise(resol
 const nativeSubmission=longCalls.filter(([path])=>path==='/zura/studio/hdr/jobs').at(-1);
 assert.equal(JSON.parse(nativeSubmission[1].body).section_frames,25,'the shorter native section setting reaches the service');
 longTool.close();
+// A saved preview job must reconnect only after the server confirms the
+// guarded feature is available, without starting a second conversion.
+const savedJobs=new Map([['zura-hdr-long-job','existing-long-job']]);
+globalThis.localStorage={getItem:key=>savedJobs.get(key)||null,setItem:(key,value)=>savedJobs.set(key,value),removeItem:key=>savedJobs.delete(key)};
+const resumedCalls=[];
+const resumedApi={...api,async fetchApi(path,options){
+  resumedCalls.push([path,options]);
+  const data=path.startsWith('/zura/studio/hdr/readiness?')?{route:'hdr_sdr',files:[],missingNodes:[],longPreview:true}:
+    path==='/zura/studio/model-downloads'?{models:[]}:
+    path==='/zura/studio/hdr/jobs/existing-long-job'?{id:'existing-long-job',state:'complete',completed:1,total:1,result:{preview:{filename:'restored.mp4',subfolder:'genj/hdr',type:'output'},files:[{filename:'hdr.mp4',subfolder:'genj/hdr',type:'output'}]}}:{};
+  return {ok:true,status:200,json:async()=>data};
+}};
+const resumedTool=new HDRSourceTool(document.querySelector('#host'),resumedApi,()=>({id:'source-id'}));
+await new Promise(resolve=>setTimeout(resolve,10));
+assert.ok(resumedCalls.some(([path])=>path==='/zura/studio/hdr/jobs/existing-long-job'));
+assert.ok(!resumedCalls.some(([path,options])=>path==='/zura/studio/hdr/jobs'&&options?.method==='POST'));
+assert.match(resumedTool.$('preview').src,/restored.mp4/);assert.equal(savedJobs.has('zura-hdr-long-job'),false);resumedTool.close();
 console.log('LTX SDR-to-HDR source range, single submission, result preview and downloads pass.');
