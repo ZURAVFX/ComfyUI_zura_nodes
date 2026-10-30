@@ -1,5 +1,5 @@
 // Model packages are allowlisted by the backend. Fetching the list never starts a download.
-const PACKAGE_IDS=['openjutsu_h3','wan_animate_2','wan21_relight','wan22_animate_core','wan22_pose','h3_birefnet','h3_head_acceleration','h3_dmd_ref2va','h3_int8_vae','h3_control','h3_crossview','ltx25_core','ltx25_full_vae','ltx25_refine','ltx25_sdr_hdr','ltx25_text_encoder','ltx25_outpaint','ltx25_in_outpaint','ltx_control','flux2_klein_start'];
+const PACKAGE_IDS=['openjutsu_h3','wan_animate_2','wan21_relight','wan22_animate_core','wan22_pose','h3_birefnet','h3_head_acceleration','h3_head_adapters','h3_dmd_ref2va','h3_int8_vae','h3_control','h3_crossview','ltx25_core','ltx25_full_vae','ltx25_refine','ltx25_sdr_hdr','ltx25_text_encoder','ltx25_outpaint','ltx25_in_outpaint','ltx_control','flux2_klein_start'];
 const ROUTE_NAMES={openjutsu:'OpenJutsu character replacement',wan2:'Wan Animate 2',wan:'Wan 2.2 character replacement',wan21_relight:'Wan 2.1 relight',h3_camera:'H3 camera angle',h3_head_swap:'H3 head swap',h3_viewport:'H3 viewport to final',h3:'MiniMax H3',local:'LTX 2.5',local_scene:'LTX 2.5 whole scene'};
 const NODE_PACKS=[
   {name:'ComfyUI-KJNodes',url:'https://github.com/kijai/ComfyUI-KJNodes',nodes:['PathchSageAttentionKJ','ImageResizeKJv2']},

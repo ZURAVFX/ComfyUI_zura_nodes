@@ -69,6 +69,13 @@ CATALOG = {
 }
 
 CATALOG.update({
+    "h3_head_adapters": dict(name="H3 head swap · additional adapters", gated=False,
+        license_url="https://huggingface.co/Jojocodex/minimax-h3-Camera-Motion-lora",
+        note="Four-step turbo and camera-motion adapters used by the approved head swap recipe. Its other models, TaoMate adapter and node packs are separate; review every source and upstream terms.",
+        files=[
+            _file("loras", "minimax_h3_fl2v_turbo_4step_v1.0_768p_comfyui_bf16.safetensors", "Comfy-Org/MiniMax-H3", "912b6e38b2092ec4d2e86d24183e0d59ea059d48", "loras/minimax_h3_fl2v_turbo_4step_v1.0_768p_comfyui_bf16.safetensors", 1956192992, "c396a9a06f58399e9df9754b18299818d84a2ddd371724ba48fe4a41221437dc"),
+            _file("loras", "camera_motion_h3_lora_v1_1000_pruned.safetensors", "Jojocodex/minimax-h3-Camera-Motion-lora", "fac88d6196ca84f3cee014ec79c71dc73572ab0a", "camera_motion_h3_lora_v1_1000_pruned.safetensors", 155109488, "c126738c887804ace3a4be4a3156fcca70517613c7a7ece4e5938d372419186b"),
+        ]),
     "wan21_relight": dict(name="Wan 2.1 · relight", gated=False,
         license_url="https://huggingface.co/Kijai/Wan_ID_V2V_comfy",
         note="Includes the exact ID-V2V model and LightX2V adapter used by relight, plus shared encoders and VAE. Review each source and upstream licence; custom nodes are separate.",
