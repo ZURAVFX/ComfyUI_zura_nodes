@@ -12,12 +12,13 @@ const outputs={
 };
 const api={apiURL:p=>p,clientId:'test',addEventListener(){},removeEventListener(){},async fetchApi(path,options){
   calls.push([path,options?.body&&JSON.parse(options.body)]);
-  const data=path==='/zura/studio/model-downloads'?{models:['ltx25_sdr_hdr','ltx25_refine'].map(id=>({id,name:id,files:[],remaining_bytes:0}))}:path==='/zura/studio/hdr/graph'||path==='/zura/studio/hdr/native-graph'?{graph:{verified:true}}:path==='/prompt'?{prompt_id:'job-1'}:path==='/history/job-1'?{'job-1':{status:{status_str:'success'},outputs}}:{};
+  const data=path.startsWith('/zura/studio/hdr/readiness?')?{route:path.includes('mode=native')?'hdr_native':'hdr_sdr',files:[{folder:'vae',filename:'needed.safetensors',ready:false}],missingNodes:['LTXVInpaintPreprocess']}:path==='/zura/studio/model-downloads'?{models:['ltx25_sdr_hdr','ltx25_refine'].map(id=>({id,name:id,files:[],remaining_bytes:0}))}:path==='/zura/studio/hdr/graph'||path==='/zura/studio/hdr/native-graph'?{graph:{verified:true}}:path==='/prompt'?{prompt_id:'job-1'}:path==='/history/job-1'?{'job-1':{status:{status_str:'success'},outputs}}:{};
   return {ok:true,async json(){return data;}};
 }};
 const tool=new HDRSourceTool(document.querySelector('#host'),api,()=>({id:'source-id',projectId:'project-id'}));
 assert.equal(tool.$('models').querySelector('summary').textContent,'HDR model packages');
-await tool.models.load();tool.selectModelPackage();assert.equal(tool.models.select.value,'ltx25_sdr_hdr');
+assert.match(tool.$('models').textContent,/Source and frame limits/);
+await tool.refreshModelSetup();assert.equal(tool.models.select.value,'__workflow__');assert.match(tool.models.files.textContent,/SDR to HDR/);assert.match(tool.models.files.textContent,/needed.safetensors/);
 assert.equal(calls.filter(([path,body])=>path==='/zura/studio/model-downloads'&&body).length,0,'listing HDR packages does not download them');calls.length=0;
 tool.job='progress-job';
 tool.onExecuting({detail:{prompt_id:'progress-job',node:'model'}});assert.equal(tool.$('status').textContent,'Loading LTX 2.5');assert.equal(tool.$('progress').hasAttribute('value'),false);
@@ -33,7 +34,7 @@ assert.deepEqual(calls[0][1].custom_loras,[{name:'style.safetensors',strength:.8
 assert.equal(tool.$('result').hidden,false);assert.match(tool.$('hlg').href,/hdr.mp4/);assert.match(tool.$('exr').href,/sequence.zip/);
 assert.equal(tool.$('preview').src.includes('preview.mp4'),true);
 tool.$('mode').value='native';tool.$('mode').onchange();
-assert.equal(tool.models.select.value,'ltx25_refine','switching HDR workflow selects its adapter package');
+await tool.refreshModelSetup();assert.equal(tool.models.context.route,'hdr_native','switching HDR workflow checks its own dependencies');
 assert.match(tool.$('limits').textContent,/HLG\/PQ video or EXR sequence/);
 assert.ok(tool.$('colour').querySelector('option[value="pq_rec2020"]'));
 await tool.start();await new Promise(resolve=>setTimeout(resolve,5));
@@ -43,6 +44,17 @@ tool.sequenceAsset={id:'exr-id',count:12,width:384,height:224};tool.$('source-ki
 await tool.start();await new Promise(resolve=>setTimeout(resolve,5));
 const exr=calls.filter(c=>c[0]==='/zura/studio/hdr/native-graph').at(-1)[1];assert.equal(exr.source_id,'exr-id');assert.equal(exr.sequence_fps,25);assert.equal(exr.colour_space,'acescg');
 assert.deepEqual(exr.custom_loras,[{name:'style.safetensors',strength:.8,confirm_unknown:true}]);
+// Slow readiness responses must not overwrite the latest selected conversion.
+const originalRequest=tool.request.bind(tool),pending=[];
+tool.request=path=>new Promise(resolve=>pending.push({path,resolve}));
+tool.$('mode').value='sdr';const first=tool.refreshModelSetup();
+tool.$('mode').value='native';const second=tool.refreshModelSetup();
+pending[1].resolve({route:'hdr_native',files:[],missingNodes:[]});await second;
+pending[0].resolve({route:'hdr_sdr',files:[],missingNodes:[]});await first;
+assert.equal(tool.models.context.route,'hdr_native','late responses cannot switch setup back to the previous mode');
+tool.request=async()=>{throw Error('offline');};await tool.refreshModelSetup();
+assert.equal(tool.models.context,null);assert.match(tool.models.progress.textContent,/Could not check HDR dependencies/);
+tool.request=originalRequest;
 // A transient connection failure must not forget a live job or enable another
 // render. Cancellation stays visible until the queue confirms it has stopped.
 tool.job='live-job';tool.busy=true;tool.$('start-job').disabled=true;tool.$('cancel').hidden=false;
