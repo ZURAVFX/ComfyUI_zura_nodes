@@ -285,6 +285,14 @@ class DownloadManager:
                 raise ValueError('Unknown model download.')
             return {key: value for key, value in job.items() if key != 'cancel'}
 
+    def active(self):
+        """Expose the active job for reconnecting; never starts a download."""
+        with self._lock:
+            job = self._jobs.get(self._active)
+            if not job or job['phase'] in ('done', 'failed', 'cancelled'):
+                return None
+            return {key: value for key, value in job.items() if key != 'cancel'}
+
     def cancel(self, job_id):
         with self._lock:
             job = self._jobs.get(job_id)
@@ -411,7 +419,7 @@ def register(routes, response):
                 models.append(inspect(name, manager.locations))
             except ValueError as exc:
                 models.append({'id': name, 'name': recipe['name'], 'error': str(exc), 'files': []})
-        return web.json_response({'models': models})
+        return web.json_response({'models': models, 'active': manager.active()})
 
     @routes.post('/zura/studio/model-downloads')
     @routes.post('/genj/studio/model-downloads')

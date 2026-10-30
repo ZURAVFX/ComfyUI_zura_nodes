@@ -132,10 +132,15 @@ class ModelDownloadTest(unittest.TestCase):
             job = manager.start('example')
             try:
                 self.assertTrue(sent.wait(5))
+                active = manager.active()
+                self.assertEqual(active['id'], job)
+                self.assertEqual(active['model_id'], 'example')
+                self.assertNotIn('cancel', active)
                 manager.cancel(job)
             finally:
                 release.set()
             self.assertEqual(self.wait(manager, job)['phase'], 'cancelled')
+            self.assertIsNone(manager.active())
             self.assertFalse((Path(self.directory.name) / 'example.safetensors').exists())
             self.assertEqual(list(Path(self.directory.name).iterdir()), [])
 

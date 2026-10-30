@@ -289,7 +289,7 @@ export class CreativeWorkspace {
       const types=[...new Set(IMAGE_MODELS.flatMap(m=>Object.values(buildImageGraph({model:m.id,prompt:"check",references:m.minReferences?[{file:"availability-check.png"}]:[]})).map(n=>n.class_type)).concat("ReferenceMultiLatent","LoadImage"))];
       const parts=await Promise.all(types.map(t=>this.fetch("/object_info/"+t)));
       this.models=imageAvailability(Object.assign({},...parts));const edit=this.imageOperation==='edit';
-      let available=[];try{available=(await this.fetch('/zura/studio/model-downloads')).models||[];}catch{}
+      let available=[],activeDownload=null;try{const catalogue=await this.fetch('/zura/studio/model-downloads');available=catalogue.models||[];activeDownload=catalogue.active||null;}catch{}
       const map={flux2:'flux2_klein_9b',flux3:'flux3_klein',klein9b:'flux2_klein_9b',qwen2511:'qwen2511'};
       for(const model of this.models){const pack=available.find(p=>p.id===map[model.id]);for(const file of pack?.files||[])if(file.incomplete){model.ready=false;model.missing.push(`${file.filename} (wrong size)`);}}
       this.$("model").innerHTML=this.models.map(m=>`<option value="${m.id}" ${!!m.edit===edit?'':'hidden'} ${m.ready?"":"disabled"}>${escape(m.name)}${m.ready?"":" · Setup needed"}</option>`).join("");
@@ -304,17 +304,18 @@ export class CreativeWorkspace {
         return `<div class="zc-model-setup"><strong>${escape(m.name)}</strong><p>${m.ready?"Installed":escape("Missing: "+m.missing.join(", "))}</p>${download||`<a href="${escape(m.url)}" target="_blank" rel="noopener noreferrer">Model files & instructions</a>`}</div>`;
       }).join("");
       this.$('setup').onclick=event=>{const button=event.target.closest('[data-download-model]');if(button)this.startModelDownload(button.dataset.downloadModel);const cancel=event.target.closest('[data-download-cancel]');if(cancel&&this.modelDownloadJob)this.fetch('/zura/studio/model-downloads/'+encodeURIComponent(this.modelDownloadJob)+'/cancel',{}).catch(error=>this.message(error.message));};
+      if(activeDownload?.id&&!this.modelDownloadActive&&this.$('setup').querySelector(`[data-download-status="${activeDownload.model_id}"]`))void this.startModelDownload(activeDownload.model_id,activeDownload.id);
     }
     catch(e){this.message(e.message);}finally{this.loading=false;this.render();}
   }
-  async startModelDownload(modelId){
+  async startModelDownload(modelId,existingJobId=null){
     const entries=()=>[...this.$('setup').querySelectorAll(`[data-download-status="${modelId}"]`)];
     const set=text=>entries().forEach(e=>e.textContent=text);
     if(this.modelDownloadActive){set('A model download is already running.');return;}
     this.modelDownloadActive=true;
     try{
-      set('Starting download…');
-      const job=await this.fetch('/zura/studio/model-downloads',{model_id:modelId});
+      set(existingJobId?'Reconnecting to the existing download…':'Starting download…');
+      const job=existingJobId?{id:existingJobId}:await this.fetch('/zura/studio/model-downloads',{model_id:modelId});
       if(!job.id)throw new Error('Download could not be started.');
       this.modelDownloadJob=job.id;
       this.$('setup').querySelectorAll(`[data-download-cancel="${modelId}"],[data-download-progress="${modelId}"]`).forEach(e=>e.hidden=false);

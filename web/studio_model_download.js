@@ -32,6 +32,7 @@ export class StudioModelDownloads {
   async load(){
     try{const data=await this.request('/model-downloads');this.packages=(data.models||[]).filter(p=>PACKAGE_IDS.includes(p.id));
       const previous=this.select.value;const overview=this.el('option','Current workflow');overview.value='__workflow__';this.select.replaceChildren(overview,...this.packages.map(p=>{const e=this.el('option',p.name);e.value=p.id;return e;}));if(previous==='__workflow__'||this.packages.some(p=>p.id===previous))this.select.value=previous;else if(!this.context&&this.packages.length)this.select.value=this.packages[0].id;if(this.missingContext)this.applyMissingContext();this.render();
+      if(data.active?.id&&!this.job&&!this.closed){this.job=data.active.id;this.select.disabled=true;this.progress.textContent='Reconnecting to the existing download…';this.render();void this.poll();}
     }catch(e){this.progress.textContent=e.message||'Could not load model packages.';}
   }
   setContext(context){
@@ -108,7 +109,11 @@ export class StudioModelDownloads {
   }
   async start(id){
     if(this.job)return;
-    try{this.progress.textContent='Starting download…';const result=await this.request('/model-downloads',{model_id:id});this.job=result.id;this.select.disabled=true;this.render();
+    try{this.progress.textContent='Starting download…';const result=await this.request('/model-downloads',{model_id:id});if(!result.id)throw new Error('Could not confirm the download started. Refresh setup before retrying.');this.job=result.id;this.select.disabled=true;this.render();await this.poll();
+    }catch(e){this.progress.textContent=e.message||'Could not confirm the download started. Refresh setup before retrying.';this.job=null;this.select.disabled=false;this.render();}
+  }
+  async poll(){
+    try{
       while(this.job && !this.closed){let state;
         try{state=await this.request(`/model-downloads/${this.job}`);}
         catch(error){
@@ -121,7 +126,7 @@ export class StudioModelDownloads {
         if(['done','failed','cancelled'].includes(state.phase)){this.job=null;this.select.disabled=false;await this.load();if(state.phase==='done')await this.onInstalled?.();break;}
         await new Promise(resolve=>setTimeout(resolve,1000));
       }
-    }catch(e){this.progress.textContent=e.message||'Could not confirm the download started. Refresh setup before retrying.';this.job=null;this.select.disabled=false;this.render();}
+    }catch(e){this.progress.textContent=e.message||'Could not refresh model setup.';this.job=null;this.select.disabled=false;this.render();}
   }
   dispose(){this.closed=true;this.panel.ontoggle=null;}
 }

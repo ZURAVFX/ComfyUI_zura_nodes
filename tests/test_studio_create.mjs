@@ -174,6 +174,17 @@ await new Promise(resolve=>setTimeout(resolve,20));
 assert.equal(ui.modelDownloadJob,'image-download');assert.equal(ui.modelDownloadActive,true);
 assert.match(ui.$('setup').querySelector('[data-download-status="qwen2511"]').textContent,/Reconnecting/);
 await imageDownload;assert.equal(imageStarts,1);assert.equal(imagePolls,2);assert.equal(ui.modelDownloadActive,false);
+let releaseImageStatus;const imageStatus=new Promise(resolve=>{releaseImageStatus=resolve;});let resumedImageStarts=0;
+ui.fetch=async function(path,body){
+  if(path==='/zura/studio/model-downloads'&&body){resumedImageStarts++;throw Error('must not submit');}
+  if(path==='/zura/studio/model-downloads'&&!body){const catalogue=await setupFetch.call(this,path,body);return {...catalogue,active:releaseImageStatus?{id:'existing-image',model_id:'qwen2511'}:null};}
+  if(path==='/zura/studio/model-downloads/existing-image')return imageStatus;
+  return setupFetch.call(this,path,body);
+};
+await ui.loadModels();assert.equal(ui.modelDownloadJob,'existing-image');assert.equal(ui.modelDownloadActive,true);
+assert.match(ui.$('setup').querySelector('[data-download-status="qwen2511"]').textContent,/Reconnecting/);
+const finishImage=releaseImageStatus;releaseImageStatus=null;finishImage({phase:'done'});await new Promise(resolve=>setTimeout(resolve,20));
+assert.equal(ui.modelDownloadActive,false);assert.equal(resumedImageStarts,0);
 ui.fetch=originalFetch;
 ui.setImageOperation('edit');assert.equal(ui.$('model').value,'qwen2511');assert.equal(ui.$('generate').disabled,true,'Editing needs a source image');
 assert.equal(ui.$('model').querySelector('option[value="flux3"]').hidden,true);

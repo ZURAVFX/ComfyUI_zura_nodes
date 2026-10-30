@@ -74,5 +74,16 @@ await new Promise(resolve=>setTimeout(resolve,20));
 assert.equal(component.job,'reconnect-job');assert.equal(component.select.disabled,true);
 assert.match(component.progress.textContent,/Reconnecting/);
 await reconnect;assert.equal(starts,1);assert.equal(polls,2);assert.equal(component.progress.textContent,'Download complete.');
+let releaseStatus;const resumedStatus=new Promise(resolve=>{releaseStatus=resolve;});let resumedStarts=0;
+const resumedPanel=document.createElement('details');document.body.append(resumedPanel);
+const resumed=new StudioModelDownloads(resumedPanel,async(path,body)=>{
+  if(path==='/model-downloads'&&!body)return {models:[pack],active:releaseStatus?{id:'existing',model_id:'wan_animate_2'}:null};
+  if(path==='/model-downloads'&&body){resumedStarts++;throw Error('must not submit');}
+  if(path==='/model-downloads/existing')return resumedStatus;throw Error(path);
+});
+await resumed.load();assert.equal(resumed.job,'existing');assert.equal(resumed.select.disabled,true);
+assert.match(resumed.progress.textContent,/Reconnecting/);assert.equal(resumedStarts,0);
+const finish=releaseStatus;releaseStatus=null;finish({phase:'done'});await new Promise(resolve=>setTimeout(resolve,10));
+assert.equal(resumed.job,null);assert.equal(resumedStarts,0);resumed.dispose();
 component.dispose();
 console.log('Video package sizes, source licences, explicit download and completion refresh pass.');
