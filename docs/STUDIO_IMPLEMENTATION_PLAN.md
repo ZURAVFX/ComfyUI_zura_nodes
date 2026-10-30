@@ -45,6 +45,11 @@ An isolated native-HDR HTTP/GPU test also delivered 129 frames in two sections,
 129 EXRs, HLG 10-bit and an SDR preview with zero measured source-audio lag.
 The first 121-frame section took about 397 seconds at 384 × 216, so performance
 is not qualified and the result still needs visual review.
+The same 129-frame source rendered with eight overlapping 25-frame sections in
+159 seconds of combined model execution (50 seconds initial load, then about
+14–16 seconds per section), with all 129 frames and audio in both exports.
+This does not include final export time and adds seven joins; visual continuity
+must be reviewed before adopting the faster section size.
 Head-swap setup now links its missing crop, pose, padding, mask and sigma nodes
 to the corresponding installed packs' declared upstream repositories. Automatic
 node-pack installation remains outstanding.
