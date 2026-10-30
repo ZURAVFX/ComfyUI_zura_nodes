@@ -48,6 +48,13 @@ class WanAnimate2StudioTests(unittest.TestCase):
         self.assertLessEqual(values["width"] * values["height"], animate2.MAX_OUTPUT_PIXELS)
         self.assertEqual(values["length"], 73)
 
+    def test_custom_range_cannot_silently_shorten_at_source_end(self):
+        with self.assertRaisesRegex(ValueError, 'shorter range'):
+            self.build(self.project(start=.5,duration=3.25),duration=3.74)
+        graph=self.build(self.project(start=.5,duration=3.25),duration=4.)
+        self.assertEqual(graph['trim_output']['inputs']['num_frames'],78)
+        self.assertEqual(graph['animate2_conditioning']['inputs']['length'],81)
+
     def test_unapproved_look_unsupported_features_and_too_long_rejected(self):
         project = self.project()
         project["opening_approval"] = None

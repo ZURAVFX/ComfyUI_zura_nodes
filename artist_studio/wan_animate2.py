@@ -332,8 +332,9 @@ def _studio_selection(project, check_asset):
     duration = available if original else float(c.get("duration", 2.))
     if not all(math.isfinite(v) for v in (available, start, duration)) or start < 0 or duration <= 0 or start >= available:
         raise WanAnimate2GraphError("Choose a valid source interval.")
-    duration = min(duration, available - start)
     frames = int(duration * OUTPUT_FPS + 1e-6)
+    if frames > int((available - start) * OUTPUT_FPS + 1e-6):
+        raise WanAnimate2GraphError("The selected range extends past the end of the source video. Choose a shorter range.")
     if not MIN_FRAME_COUNT <= frames <= MAX_FRAME_COUNT:
         raise WanAnimate2GraphError("Wan Animate 2 supports 5 to 81 frames at 24 fps (0.21 to 3.375 seconds). Choose a custom clip length.")
     if min(source_width, source_height) < 1:
