@@ -55,6 +55,17 @@ assert.equal(tool.models.context.route,'hdr_native','late responses cannot switc
 tool.request=async()=>{throw Error('offline');};await tool.refreshModelSetup();
 assert.equal(tool.models.context,null);assert.match(tool.models.progress.textContent,/Could not check HDR dependencies/);
 tool.request=originalRequest;
+// The displayed limit comes from the backend for the current source geometry;
+// it is a software bound, not a promise that the user's GPU can run it.
+let currentSource={id:'source-id',width:1920,height:1080};const limitRequests=[];
+const limitApi={...api,async fetchApi(path){limitRequests.push(path);return {ok:true,async json(){return path.startsWith('/zura/studio/hdr/readiness?')?{route:'hdr_sdr',files:[],missingNodes:[],frameLimit:{width:currentSource.width,height:currentSource.height,maxFrames:17}}:{models:[]};}};}};
+const limitTool=new HDRSourceTool(document.querySelector('#host'),limitApi,()=>currentSource);
+limitTool.root.open=true;limitTool.sourceChanged();await new Promise(resolve=>setTimeout(resolve,5));
+assert.match(limitTool.$('limits').textContent,/17 frames.*1920 × 1080.*software limit/);
+assert.ok(limitRequests.some(path=>path.includes('width=1920')&&path.includes('height=1080')));
+currentSource={id:'other',width:1280,height:720};limitTool.sourceChanged();await new Promise(resolve=>setTimeout(resolve,5));
+assert.match(limitTool.$('limits').textContent,/1280 × 720/);
+limitTool.$('source-kind').value='result';limitTool.updateMode();assert.doesNotMatch(limitTool.$('limits').textContent,/1280 × 720/,'a result with unknown dimensions must not retain the source limit');limitTool.close();
 // A transient connection failure must not forget a live job or enable another
 // render. Cancellation stays visible until the queue confirms it has stopped.
 tool.job='live-job';tool.busy=true;tool.$('start-job').disabled=true;tool.$('cancel').hidden=false;

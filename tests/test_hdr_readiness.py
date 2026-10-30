@@ -14,6 +14,12 @@ native=importlib.import_module(name+'.hdr_native_graph')
 
 
 class HDRReadinessTests(unittest.TestCase):
+    def test_frame_limits_use_the_actual_padding_budget(self):
+        self.assertEqual(setup.frame_limit('sdr',1920,1080),17)
+        self.assertEqual(setup.frame_limit('native',1920,1080),17)
+        self.assertEqual(setup.frame_limit('native',512,512),121)
+        self.assertEqual(setup.frame_limit('sdr',4096,4096),0)
+        self.assertIsNone(setup.frame_limit('native',1921,1080))
     def test_sdr_checks_full_vae_and_conditioning_used_by_graph(self):
         graph=sdr.build_hdr_graph(source='source.mp4',start_frame=0,frame_count=9,fps=24,output='hlg_and_exr',prefix='test')
         nodes={node['class_type']:object() for node in graph.values()}

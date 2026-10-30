@@ -16,7 +16,7 @@ export class HDRSourceTool {
       <label>Deliver<select data-hdr="output"><option value="hlg_and_exr">HLG video + EXR sequence</option><option value="hlg_video">HLG video</option><option value="acescg_exr">EXR sequence</option></select></label>
       <label data-hdr="long-control" hidden><input data-hdr="long" type="checkbox"/> Longer clip · process in sections</label>
       <label data-hdr="sections-control" hidden>Section size<select data-hdr="sections"><option value="121">Longer sections · fewer joins</option><option value="25">Shorter sections · potentially faster, more joins</option></select></label>
-      <p data-hdr="limits">Up to 121 frames per run. Large frame selections may need to be shorter.</p>
+      <p data-hdr="limits" role="status" aria-live="polite">Up to 121 frames per run. Large frame selections may need to be shorter.</p>
       <details data-hdr="models" class="gs-advanced"></details>
       <div class="gs-hdr-actions"><button data-hdr="start-job" type="button">Convert source</button><button data-hdr="cancel" type="button" hidden>Cancel</button></div>
       <p data-hdr="status" role="status" aria-live="polite"></p><progress data-hdr="progress" max="100" hidden></progress>
@@ -30,6 +30,7 @@ export class HDRSourceTool {
     this.$('models').querySelector('summary').textContent='HDR model packages';
     const setupNote=document.createElement('p');setupNote.textContent='Checks for installed files and nodes. Source and frame limits are checked when you start.';this.$('models').querySelector('.gs-advanced-body').prepend(setupNote);
     this.$('models').ontoggle=()=>{if(this.$('models').open)this.refreshModelSetup();};
+    this.root.ontoggle=()=>{if(this.root.open)this.sourceChanged();};
     this.$('mode').onchange=()=>this.updateMode();this.$('source-kind').onchange=()=>this.updateMode();
     this.$('output').onchange=()=>{if(this.$('models').open)this.refreshModelSetup();};
     this.$('add-sequence').onclick=()=>this.$('sequence-files').click();this.$('sequence-files').onchange=event=>this.uploadSequence(event.target.files);this.updateMode();
@@ -53,17 +54,30 @@ export class HDRSourceTool {
     const longer=this.longAvailable&&this.$('long').checked;
     this.$('sections-control').hidden=!longer||!native;
     this.$('count').max=longer?'10000':'121';
-    this.$('limits').textContent=longer?'Longer clips use overlapping sections. Check the joins and allow extra time and disk space.':native?'Preview: HLG/PQ video or EXR sequence. 1–121 frames per run, even dimensions between 32 and 2048 px; large selections need fewer frames. Requires the LTX 2.5 Refine Details LoRA. The model may alter motion or appearance.':'Up to 121 frames per run. Large frame selections may need to be shorter.';
+    this.$('limits').textContent=this.defaultLimitText();
     this.$('start-job').textContent=native?'Process HDR video':'Convert source';
-    if(this.$('models').open)this.refreshModelSetup();
+    if(this.root.open)this.sourceChanged();
+    this.showFrameLimit();
   }
+  sourceChanged(){
+    if(!this.root.open)return;
+    const kind=this.$('source-kind').value,asset=kind==='sequence'?this.sequenceAsset:kind==='upload'?this.getSource():null;
+    const key=JSON.stringify([this.$('mode').value,this.$('output').value,kind,asset?.width,asset?.height]);
+    if(key!==this.modelSetupKey){this.modelSetupKey=key;this.frameLimit=null;this.$('limits').textContent=this.defaultLimitText();void this.refreshModelSetup();}
+  }
+  defaultLimitText(){return this.longAvailable&&this.$('long').checked?'Longer clips use overlapping sections. Check the joins and allow extra time and disk space.':this.$('mode').value==='native'?'Preview: HLG/PQ video or EXR sequence. 1–121 frames per run, even dimensions between 32 and 2048 px; large selections need fewer frames. Requires the LTX 2.5 Refine Details LoRA. The model may alter motion or appearance.':'Up to 121 frames per run. Large frame selections may need to be shorter.';}
+  showFrameLimit(){if(this.frameLimit&&!(this.longAvailable&&this.$('long').checked)){const {width,height,maxFrames}=this.frameLimit;this.$('limits').textContent=maxFrames?`Up to ${maxFrames} frames per conversion at ${width} × ${height} (software limit). Available memory may require less.${this.$('mode').value==='native'?' The model may alter motion or appearance.':''}`:`This resolution exceeds the per-conversion padding limit. Choose smaller footage.`;}}
   async refreshModelSetup(){
     const revision=this.modelSetupRevision=(this.modelSetupRevision||0)+1;
+    const kind=this.$('source-kind').value,asset=kind==='sequence'?this.sequenceAsset:kind==='upload'?this.getSource():null;
     const query=new URLSearchParams({mode:this.$('mode').value,output:this.$('output').value});
+    if(Number.isInteger(asset?.width)&&Number.isInteger(asset?.height)){query.set('width',asset.width);query.set('height',asset.height);}
     try{
       const context=await this.request('/zura/studio/hdr/readiness?'+query);
       if(revision!==this.modelSetupRevision)return;
       this.models.setContext(context);
+      this.frameLimit=context.frameLimit||null;
+      this.showFrameLimit();
       if(!this.models.packages.length)await this.models.load();
       if(revision===this.modelSetupRevision&&(this.models.packages.length||!this.models.progress.textContent))this.models.progress.textContent='';
     }catch(error){if(revision===this.modelSetupRevision){this.models.setContext(null);this.models.progress.textContent='Could not check HDR dependencies. Restart ComfyUI and try again.';}}
@@ -77,7 +91,7 @@ export class HDRSourceTool {
       const asset=await response.json();if(!response.ok)throw new Error(asset.error?.message||asset.error||'Could not upload EXR sequence.');
       if(!asset.id)throw new Error('EXR sequence was not accepted.');
       this.sequenceAsset=asset;this.$('sequence-name').textContent=`${asset.count} frames · ${asset.width} × ${asset.height}`;
-      this.$('count').value=String(Math.min(asset.count,121));this.status('EXR frames ready.');
+      this.$('count').value=String(Math.min(asset.count,121));this.sourceChanged();this.status('EXR frames ready.');
     }catch(error){this.status(error.message||'Could not upload EXR sequence.');}
     finally{this.busy=false;this.loras.setBusy(false);this.$('start-job').disabled=false;this.$('add-sequence').disabled=false;this.$('sequence-files').value='';}
   }

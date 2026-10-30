@@ -203,7 +203,7 @@ class ArtistStudio {
       </main></div>`;
     if(this.container.querySelector){
       if(typeof StudioModelDownloads!=="undefined")this.modelDownloads=new StudioModelDownloads(this.$("model-downloads"),request,async()=>{this.modelStatus=await request("/status");this.syncForm();this.render();});
-      if(typeof HDRSourceTool!=="undefined")this.hdrTool=new HDRSourceTool(this.container.querySelector('.gs-settings'),api,()=>({id:this.source?.id,projectId:this.project?.id,busy:this.busy||this.project?.phase==='working'}));
+      if(typeof HDRSourceTool!=="undefined")this.hdrTool=new HDRSourceTool(this.container.querySelector('.gs-settings'),api,()=>({id:this.source?.id,width:this.source?.width,height:this.source?.height,projectId:this.project?.id,busy:this.busy||this.project?.phase==='working'}));
       const clip=this.container.querySelector(".gs-clip-length");
       this.$("trim-controls").appendChild(clip);
       this.$("trim-precision").querySelector(".gs-two").append(this.$("trim-start"),this.$("duration-setting"));
@@ -1617,6 +1617,7 @@ class ArtistStudio {
     clearInterval(this.timer);this.timer=setInterval(()=>this.poll(),2000);
   }
   updateModelStatus() {
+    this.hdrTool?.sourceChanged();
     if(!this.modelStatus)return;
     const engine=this.config.engine;
     const wan21Relight=this.config.workflow_mode==="relight" && this.config.relight_engine==="wan21";
