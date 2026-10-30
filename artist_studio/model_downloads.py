@@ -346,11 +346,19 @@ class DownloadManager:
                         raise RuntimeError('Download failed its size or integrity check.')
                     # Hard link or exclusive rename publishes a verified file
                     # atomically and refuses to replace a concurrent install.
-                    _publish_verified(temporary, destination)
+                    # Serialize the final cancellation check with publication:
+                    # a cancel accepted before this point must not install the
+                    # just-downloaded file.
+                    with self._lock:
+                        if self._jobs[job_id]['cancel'].is_set():
+                            self._jobs[job_id]['phase'] = 'cancelled'
+                            return
+                        _publish_verified(temporary, destination)
                 finally:
                     temporary.unlink(missing_ok=True)
             with self._lock:
-                self._jobs[job_id].update(phase='done', current_file='')
+                job = self._jobs[job_id]
+                job.update(phase='cancelled' if job['cancel'].is_set() else 'done', current_file='')
         except Exception as exc:
             with self._lock:
                 # Avoid exposing request URLs, tokens or machine paths to the UI.

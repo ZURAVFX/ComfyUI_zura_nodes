@@ -1,6 +1,7 @@
 import hashlib
 import importlib.util
 import tempfile
+import threading
 import time
 import unittest
 from pathlib import Path
@@ -105,6 +106,27 @@ class ModelDownloadTest(unittest.TestCase):
              patch('requests.get', return_value=Response(b'wrong model bytes')):
             manager = downloads.DownloadManager(self.locations)
             self.assertEqual(self.wait(manager, manager.start('example'))['phase'], 'failed')
+            self.assertFalse((Path(self.directory.name) / 'example.safetensors').exists())
+            self.assertEqual(list(Path(self.directory.name).iterdir()), [])
+
+    def test_cancel_after_last_network_chunk_does_not_install_file(self):
+        sent = threading.Event()
+        release = threading.Event()
+        class PausedResponse(Response):
+            def iter_content(self, chunk_size):
+                yield self.data
+                sent.set()
+                if not release.wait(5): raise RuntimeError('test timed out')
+        with patch.dict(downloads.CATALOG, self.recipe, clear=True), \
+             patch('requests.get', return_value=PausedResponse(self.data)):
+            manager = downloads.DownloadManager(self.locations)
+            job = manager.start('example')
+            try:
+                self.assertTrue(sent.wait(5))
+                manager.cancel(job)
+            finally:
+                release.set()
+            self.assertEqual(self.wait(manager, job)['phase'], 'cancelled')
             self.assertFalse((Path(self.directory.name) / 'example.safetensors').exists())
             self.assertEqual(list(Path(self.directory.name).iterdir()), [])
 
