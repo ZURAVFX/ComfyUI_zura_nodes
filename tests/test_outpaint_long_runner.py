@@ -281,6 +281,7 @@ class OutpaintLongCancellation(unittest.IsolatedAsyncioTestCase):
                 await instance.jobs[final['id']]['task']
                 result = instance.state(final['id'])
                 self.assertEqual(result['state'], 'complete', result.get('error'))
+                self.assertEqual(instance.public(result)['artifact'], result['artifact'], 'HDR can select the completed output directly')
                 from ComfyUI_zura_nodes.artist_studio.enhancement import inspect_video
                 media = inspect_video(out/result['artifact']['filename'], expected_frames=150, expected_fps=24)
                 self.assertEqual(media['audio_tracks'], 1)
