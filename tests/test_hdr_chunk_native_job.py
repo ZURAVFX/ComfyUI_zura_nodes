@@ -21,6 +21,7 @@ native=importlib.import_module('ComfyUI_zura_nodes.artist_studio.hdr_chunk_nativ
 adapter=importlib.import_module('ComfyUI_zura_nodes.artist_studio.hdr_chunk_comfy')
 paintout=importlib.import_module('ComfyUI_zura_nodes.paintout.paintout')
 sdr=importlib.import_module('ComfyUI_zura_nodes.artist_studio.hdr_studio')
+loras=importlib.import_module('ComfyUI_zura_nodes.artist_studio.custom_loras')
 
 
 class SimulatedQueue:
@@ -41,6 +42,34 @@ class SimulatedQueue:
 
 
 class HDRNativeLongJobTests(unittest.IsolatedAsyncioTestCase):
+    async def test_custom_loras_are_validated_before_queue_and_applied_to_each_window(self):
+        with tempfile.TemporaryDirectory() as root:
+            queue=SimulatedQueue();server=types.SimpleNamespace(prompt_queue=queue,number=0,trigger_on_prompt=lambda value:value,
+                node_replace_manager=types.SimpleNamespace(apply_replacements=lambda graph:None))
+            async def validate(*args):return True,None,['zura_hdr_stage_chunk'],{}
+            details={'width':32,'height':32,'fps':24.,'has_audio':False,'output':'acescg_exr'}
+            def graph(asset,body,check):return {'trim_raster':{'class_type':'stub','inputs':{}}},details
+            def apply(graph,selections):
+                if selections!=[{'name':'style.safetensors','strength':.5}]:raise ValueError('Invalid LoRA')
+                return {**graph,'custom_test':{'class_type':'stub','inputs':{'strength':selections[0]['strength']}}}
+            body={'start_frame':0,'frame_count':122,'custom_loras':[{'name':'style.safetensors','strength':.5}]}
+            with patch.object(native,'staging_root',return_value=Path(root)/'stage'), \
+                 patch.object(adapter,'staging_root',return_value=Path(root)/'stage'), \
+                 patch.object(native,'build_asset_graph',side_effect=graph),patch.object(loras,'apply_installed_ltx_loras',side_effect=apply) as applied, \
+                 patch.object(paintout,'describe',return_value={'count':122,'width':32,'height':32}), \
+                 patch.object(paintout,'native_colour',side_effect=lambda frames,*args:frames), \
+                 patch.dict(sys.modules,{'execution':types.SimpleNamespace(validate_prompt=validate)}):
+                with self.assertRaisesRegex(ValueError,'Invalid LoRA'):
+                    native.create_native_job(server,{'asset_kind':'video'},{**body,'custom_loras':[{'name':'wrong'}]},lambda _:Path(root)/'source.mp4',root)
+                self.assertEqual(queue.submissions,0)
+                applied.reset_mock()
+                job,_=native.create_native_job(server,{'asset_kind':'video'},body,lambda _:Path(root)/'source.mp4',root)
+                self.assertEqual(applied.call_count,1,'invalid adapters fail before any prompt is queued')
+                await job.run()
+            self.assertEqual(queue.submissions,2)
+            self.assertEqual([g['custom_test']['inputs']['strength'] for g in queue.graphs],[.5,.5])
+            self.assertEqual(applied.call_count,3,'preflight and each window use the same adapter')
+
     async def test_sdr_conversion_stages_actual_hdr_graph_in_bounded_chunks(self):
         with tempfile.TemporaryDirectory() as root:
             queue=SimulatedQueue();server=types.SimpleNamespace(prompt_queue=queue,number=0,trigger_on_prompt=lambda value:value,

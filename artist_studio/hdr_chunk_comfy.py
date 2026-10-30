@@ -20,6 +20,19 @@ def staging_root():
     return Path(folder_paths.get_temp_directory())/'zura_hdr_staging'
 
 
+def validated_client_id(client_id):
+    if client_id is not None and (not isinstance(client_id,str) or not client_id or len(client_id)>128):
+        raise ValueError('Invalid Studio connection. Reload Studio and try again.')
+    return client_id or 'zura-hdr-chunks'
+
+
+def validate_anchor_settings(anchor_strength,anchor_mode):
+    if anchor_strength is None:return
+    if isinstance(anchor_strength,bool) or not isinstance(anchor_strength,(int,float)) or not 0<anchor_strength<=1:
+        raise ValueError('Choose an HDR anchor strength above zero and at most one.')
+    if anchor_mode not in ('guide','i2v'):raise ValueError('Unknown HDR anchor mode.')
+
+
 class ZuraHDRWriteChunk:
     @classmethod
     def INPUT_TYPES(cls):
@@ -102,9 +115,7 @@ def chunk_graph(graph, store, index, image_node, anchor_strength=None, anchor_mo
         'max_frames':store.plan[0].count if len(store.plan)>1 else 121,
         'overlap':store.plan[1].overlap if len(store.plan)>1 else 8,'chunk_index':index}}
     if index and anchor_strength is not None:
-        if isinstance(anchor_strength,bool) or not isinstance(anchor_strength,(int,float)) or not 0<anchor_strength<=1:
-            raise ValueError('Choose an HDR anchor strength above zero and at most one.')
-        if anchor_mode not in ('guide','i2v'):raise ValueError('Unknown HDR anchor mode.')
+        validate_anchor_settings(anchor_strength,anchor_mode)
         is_sdr={'hdr_guide','hdr_vae','hdr_empty_video'} <= graph.keys()
         if not is_sdr and not {'guide1','sample1','guide2','sample2','vae','empty','upsample'} <= graph.keys():
             raise ValueError('This HDR graph does not support the experimental continuation anchor.')
@@ -139,22 +150,24 @@ def chunk_graph(graph, store, index, image_node, anchor_strength=None, anchor_mo
 
 class ComfyHDRRenderer:
     """Submit one chunk, wait for its own history, then release its prompt."""
-    def __init__(self,server,store,make_graph,image_node,anchor_strength=None,anchor_mode='guide'):
+    def __init__(self,server,store,make_graph,image_node,anchor_strength=None,anchor_mode='guide',client_id=None):
+        validate_anchor_settings(anchor_strength,anchor_mode)
         self.server=server;self.store=store;self.make_graph=make_graph;self.image_node=image_node
         self.anchor_strength=anchor_strength
         self.anchor_mode=anchor_mode
+        self.client_id=validated_client_id(client_id)
 
     async def submit(self,index,part):
         import execution
         identity=uuid.uuid4().hex
         graph=chunk_graph(await asyncio.to_thread(self.make_graph,part),self.store,index,self.image_node,self.anchor_strength,self.anchor_mode)
         server=self.server
-        graph=server.trigger_on_prompt({'prompt':graph,'prompt_id':identity,'client_id':'zura-hdr-chunks'})['prompt']
+        graph=server.trigger_on_prompt({'prompt':graph,'prompt_id':identity,'client_id':self.client_id})['prompt']
         server.node_replace_manager.apply_replacements(graph)
         valid=await execution.validate_prompt(identity,graph,None)
         if not valid[0]:raise ValueError('ComfyUI cannot run this HDR chunk: '+str(valid[1])[:1200])
         number=server.number;server.number+=1
-        server.prompt_queue.put((number,identity,graph,{'client_id':'zura-hdr-chunks',
+        server.prompt_queue.put((number,identity,graph,{'client_id':self.client_id,
             'create_time':int(time.time()*1000),'comfy_usage_source':'zura-studio'},valid[2],{}))
         return identity,self._wait(identity)
 

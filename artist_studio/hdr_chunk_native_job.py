@@ -6,6 +6,7 @@ and restart/cancellation behaviour have been checked end-to-end.
 from __future__ import annotations
 
 import asyncio
+import copy
 import os
 import shutil
 import subprocess
@@ -13,7 +14,7 @@ import uuid
 from pathlib import Path
 
 from .hdr_chunks import plan_chunks
-from .hdr_chunk_comfy import ComfyHDRRenderer, staging_root
+from .hdr_chunk_comfy import ComfyHDRRenderer, staging_root, validated_client_id, validate_anchor_settings
 from .hdr_chunk_exr import export_exr_zip
 from .hdr_chunk_runner import HDRChunkRunner
 from .hdr_chunk_store import HDRChunkCancelled, HDRChunkStore
@@ -26,6 +27,8 @@ def create_native_job(server, asset, body, check_asset, output_root, *, ffmpeg=N
     from ..paintout.paintout import describe
     manifest=check_asset(asset)
     start=body.get('start_frame',0);count=body.get('frame_count')
+    client_id=validated_client_id(body.get('client_id'))
+    validate_anchor_settings(anchor_strength,anchor_mode)
     if type(start) is not int or start<0 or type(count) is not int or count<1:
         raise ValueError('Choose a valid HDR source range.')
     sequence=asset.get('asset_kind')=='hdr_sequence'
@@ -39,7 +42,14 @@ def create_native_job(server, asset, body, check_asset, output_root, *, ffmpeg=N
     plan=plan_chunks(start,count,info['width'],info['height'],overlap=overlap,max_frames=max_chunk_frames)
     chunk_body=dict(body,start_frame=plan[0].start,frame_count=plan[0].count)
     builder=_graph_builder or build_asset_graph
-    _,details=builder(asset,chunk_body,check_asset)
+    first_graph,details=builder(asset,chunk_body,check_asset)
+    # Validate artist-selected LoRAs before starting a potentially expensive
+    # job, and apply the same validated selection to every subsequent window.
+    from .custom_loras import apply_installed_ltx_loras
+    selections=body.get('custom_loras',[])
+    if not isinstance(selections,list):raise ValueError('Choose a list of installed LTX LoRAs.')
+    selections=copy.deepcopy(selections)
+    apply_installed_ltx_loras(first_graph,selections)
     output=details['output']
     # Fail before running the expensive GPU graph if the final outputs cannot
     # be encoded or safely published. The staged float32 size is predictable;
@@ -74,8 +84,8 @@ def create_native_job(server, asset, body, check_asset, output_root, *, ffmpeg=N
 
     def make_graph(part):
         graph,_=builder(asset,dict(body,start_frame=part.start,frame_count=part.count),check_asset)
-        return graph
-    renderer=ComfyHDRRenderer(server,store,make_graph,_image_node,anchor_strength,anchor_mode)
+        return apply_installed_ltx_loras(graph,selections)
+    renderer=ComfyHDRRenderer(server,store,make_graph,_image_node,anchor_strength,anchor_mode,client_id)
 
     async def export(staged):
         paths=[]

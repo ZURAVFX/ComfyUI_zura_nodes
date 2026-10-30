@@ -87,13 +87,24 @@ class HDRChunkComfyTests(unittest.IsolatedAsyncioTestCase):
             async def validate(*args):return True,None,['zura_hdr_stage_chunk'],{}
             fake=types.SimpleNamespace(validate_prompt=validate)
             with patch.dict(sys.modules,{'execution':fake}):
-                renderer=adapter.ComfyHDRRenderer(server,store,lambda part:{'trim':{'class_type':'stub','inputs':{}}},'trim')
+                renderer=adapter.ComfyHDRRenderer(server,store,lambda part:{'trim':{'class_type':'stub','inputs':{}}},'trim',client_id='studio-client')
                 identity,completion=await renderer.submit(0,plan[0])
                 self.assertEqual(queue.items[0][1],identity)
+                self.assertEqual(queue.items[0][3]['client_id'],'studio-client','progress targets the requesting Studio session')
                 queue.history[identity]={'status':{'status_str':'success'},'outputs':{'zura_hdr_stage_chunk':{'text':['ok']}}}
                 self.assertIsNone(await completion)
                 await renderer.cancel(identity)
                 self.assertEqual(queue.interrupted,[identity]);self.assertEqual(queue.items,[])
+
+    async def test_invalid_client_id_is_rejected(self):
+        for invalid in ('', 'x'*129, 123):
+            with self.subTest(client_id=invalid),self.assertRaisesRegex(ValueError,'Studio connection'):
+                adapter.ComfyHDRRenderer(None,None,None,'trim',client_id=invalid)
+
+    async def test_invalid_continuation_settings_fail_before_submission(self):
+        for strength,mode in [(0,'i2v'),(1.1,'i2v'),(True,'i2v'),(.5,'unknown')]:
+            with self.subTest(strength=strength,mode=mode),self.assertRaises(ValueError):
+                adapter.ComfyHDRRenderer(None,None,None,'trim',anchor_strength=strength,anchor_mode=mode)
 
     async def test_missing_staging_output_is_rejected(self):
         queue=Queue();identity='c'*32

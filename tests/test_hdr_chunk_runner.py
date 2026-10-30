@@ -32,6 +32,8 @@ class HDRChunkRunnerTests(unittest.IsolatedAsyncioTestCase):
             job=runner.HDRChunkRunner(store,render,export,cancel_prompt)
             self.assertEqual(await job.run(),14)
             self.assertEqual((seen,job.state,job.completed),([0,1],'complete',2))
+            self.assertEqual(job.snapshot(),{'state':'complete','completed':2,'total':2,'active_prompt_id':None,'error':None,'result':14})
+            self.assertFalse(await job.cancel(),'a completed export cannot be cancelled afterwards')
             with self.assertRaises(ValueError):await job.run()
 
     async def test_cancel_during_submission_interrupts_its_prompt(self):
@@ -45,7 +47,8 @@ class HDRChunkRunnerTests(unittest.IsolatedAsyncioTestCase):
             async def cancel_prompt(prompt):cancelled.append(prompt)
             async def export(staged):self.fail('Cancelled job cannot export.')
             job=runner.HDRChunkRunner(store,render,export,cancel_prompt)
-            task=asyncio.create_task(job.run());await entered.wait();await job.cancel();release.set()
+            task=asyncio.create_task(job.run());await entered.wait();self.assertTrue(await job.cancel());
+            self.assertEqual(job.snapshot()['state'],'cancelling');self.assertEqual(job.snapshot()['total'],1);release.set()
             with self.assertRaises(storage.HDRChunkCancelled):await task
             self.assertEqual(cancelled,['own-prompt']);self.assertEqual(job.state,'cancelled')
 

@@ -24,15 +24,25 @@ class HDRChunkRunner:
         self.error=None
         self.result=None
         self._running=False
+        self.cancelling=False
+
+    def snapshot(self):
+        """Describe the current stage without inventing an overall ETA."""
+        state='cancelling' if self.cancelling and self.state not in ('complete','failed','cancelled') else self.state
+        return {'state':state,'completed':self.completed,'total':len(self.store.plan),
+                'active_prompt_id':self.current_prompt,'error':self.error,'result':self.result}
 
     def _check(self):
         if self.store.cancelled.is_set(): raise HDRChunkCancelled('HDR conversion cancelled.')
 
     async def cancel(self):
+        if self.state in ('complete','failed','cancelled'):return False
+        self.cancelling=True
         self.store.cancel()
         prompt=self.current_prompt
         if prompt is not None:
             await self.cancel_prompt(prompt)
+        return True
 
     async def run(self):
         """Render, stage and export once; never automatically resubmit a job."""
@@ -82,3 +92,4 @@ class HDRChunkRunner:
         finally:
             self.current_prompt=None
             self._running=False
+            self.cancelling=False
