@@ -69,6 +69,18 @@ CATALOG = {
 }
 
 CATALOG.update({
+    "wan21_relight": dict(name="Wan 2.1 · relight", gated=False,
+        license_url="https://huggingface.co/Kijai/Wan_ID_V2V_comfy",
+        note="Includes the exact ID-V2V model and LightX2V adapter used by relight, plus shared encoders and VAE. Review each source and upstream licence; custom nodes are separate.",
+        files=[
+            _file("diffusion_models", "wan_2.1_idv2v_int8_convrot.safetensors", "Kijai/Wan_ID_V2V_comfy", "72a0683760887daf321a15ffe1d0ffe186ec9fbe", "wan_2.1_idv2v_int8_convrot.safetensors", 20207009176, "c9e2e90ff33dc3b03b3d23f2ff87738dd8994581f7d1f0d2f790c3b4dc808565"),
+            *CATALOG["wan_animate_2"]["files"][1:],
+            _file("loras", "lightx2v_I2V_14B_480p_cfg_step_distill_rank64_bf16.safetensors", "Kijai/WanVideo_comfy", "8260d429d19fd7a72304cad059160b95d843913f", "Lightx2v/lightx2v_I2V_14B_480p_cfg_step_distill_rank64_bf16.safetensors", 738005744, "85c4a61c30e0497aa44b91d93a893b624708461a56fe5485183b28fa07e2dfb3"),
+        ]),
+    "h3_dmd_ref2va": dict(name="MiniMax H3 · Ref2VA eight-step adapter", gated=False,
+        license_url="https://huggingface.co/RunningHubAI/rh-minimax-h3-dmd-ref2va-8step-turbo-pruned.safetensors-lora",
+        note="Publisher says to follow the original project or upstream licence. Review its terms and the MiniMax H3 licence before use. H3 base files are separate.",
+        files=[_file("loras", "minimax_h3_dmd_ref2va_8step_turbo_pruned.safetensors", "RunningHubAI/rh-minimax-h3-dmd-ref2va-8step-turbo-pruned.safetensors-lora", "6148d2ca231f5b86acc3016d337c25717b203f5c", "minimax_h3_dmd_ref2va_8step_turbo_pruned.safetensors", 2285989092, "693f41129785f31a820d32100b698cdcc42182c27c291f37f47d1ca5f38f5c20")]),
     "wan22_pose": dict(name="Wan 2.2 Animate · pose models", gated=False,
         license_url="https://huggingface.co/Wan-AI/Wan2.2-Animate-14B",
         note="YOLO and ViTPose models for the Wan Animate preprocessing nodes. Install ComfyUI-WanAnimatePreprocess first; review the source terms for both models.",

@@ -8,7 +8,7 @@ globalThis.document=document;
 const paths=[];
 const pack={id:'wan_animate_2',name:'Wan Animate 2',note:'Separate nodes required.',remaining_bytes:1000000000,
   files:[{repo:'Comfy-Org/Wan-Animate-2',filename:'model.safetensors',size_bytes:1000000000,installed:false}]};
-const availablePackages=['wan22_animate_core','wan22_pose','h3_birefnet','h3_head_acceleration','ltx25_text_encoder','ltx25_outpaint','ltx25_in_outpaint','ltx_control','h3_int8_vae','h3_control','h3_crossview'];
+const availablePackages=['wan21_relight','wan22_animate_core','wan22_pose','h3_birefnet','h3_head_acceleration','h3_dmd_ref2va','ltx25_text_encoder','ltx25_outpaint','ltx25_in_outpaint','ltx_control','h3_int8_vae','h3_control','h3_crossview'];
 const ltxPackages=[...availablePackages,'ltx25_layout'].map(id=>({...pack,id,name:id}));
 const request=async(path,body)=>{paths.push([path,body]);if(path==='/model-downloads' && !body)return {models:[pack,...ltxPackages]};if(path==='/model-downloads' && body)return {id:'job'};if(path==='/model-downloads/job'){pack.remaining_bytes=0;pack.files[0].installed=true;return {phase:'done',done_bytes:1000000000,total_bytes:1000000000};}throw Error(path);};
 let refreshed=false;const component=new StudioModelDownloads(document.querySelector('#setup'),request,()=>{refreshed=true;});
@@ -29,6 +29,12 @@ assert.equal(component.files.querySelectorAll('.gs-model-package').length,1,'sha
 assert.match(component.files.textContent,/custom-lora.safetensors/);assert.match(component.files.textContent,/UnmappedNode/);
 assert.ok([...component.files.querySelectorAll('a')].some(a=>a.href==='https://github.com/kijai/ComfyUI-WanAnimatePreprocess'));
 assert.match(component.files.textContent,/restart ComfyUI/);
+component.packages=[{...pack,id:'h3_dmd_ref2va',name:'H3 eight-step adapter',license_url:'https://huggingface.co/RunningHubAI/rh-minimax-h3-dmd-ref2va-8step-turbo-pruned.safetensors-lora',files:[{folder:'loras',filename:'minimax_h3_dmd_ref2va_8step_turbo_pruned.safetensors',repo:'RunningHubAI/test',size_bytes:2285989092,installed:false}]}];
+component.setContext({route:'h3',files:[{folder:'loras',filename:'minimax_h3_dmd_ref2va_8step_turbo_pruned.safetensors',ready:false}],missingNodes:[]});
+assert.match(component.files.textContent,/H3 eight-step adapter/);
+assert.match(component.files.textContent,/2.29 GB/);
+assert.match(component.files.textContent,/Download missing files/);
+component.packages=[pack];
 component.select.value='wan_animate_2';component.render();
 component.setContext({route:'h3_camera',files:[],missingNodes:[]});
 assert.equal(component.select.value,'__workflow__','changing workflow returns setup to the current route');
