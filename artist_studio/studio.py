@@ -416,10 +416,11 @@ def validate_selection(project):
         selected_frame_count(project, check_asset)
         return
     wan2 = c["engine"] == "wan2"
-    h3 = c["engine"] == "h3"
+    wan21_relight = c.get("workflow_mode") == "relight" and c.get("relight_engine") == "wan21"
+    h3 = c["engine"] == "h3" and not wan21_relight
     ltx_scene = c["engine"] == "local" and c.get("edit_area") == "scene"
     wan_speech = c["engine"] == "wan" and bool(project.get("audio")) and c.get("lip_sync")
-    if not (h3 or ltx_scene or wan_speech or wan2):
+    if not (h3 or ltx_scene or wan_speech or wan2 or wan21_relight):
         return
     path = check_asset(project["source"])
     with av.open(str(path)) as container:

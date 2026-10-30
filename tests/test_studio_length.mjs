@@ -36,7 +36,10 @@ studio.chooseClipLength("bad");assert.equal(select.value,"custom");
 console.log("Visible Source/Custom buttons use the existing configuration change path and respect active runs.");
 
 const relight={engine:'h3',workflow_mode:'relight',relight_engine:'wan21',edit_area:'scene',length_mode:'custom',duration:15,start:0};
-assert.equal(clipLength(relight,15).maximum,null,'Chained Wan 2.1 relight does not inherit the H3 five-second limit');
+assert.equal(clipLength(relight,15).maximum,30,'Chained Wan 2.1 custom selections retain the backend 30-second limit, not the H3 five-second limit');
 assert.equal(clipLength(relight,15).invalid,false);
+assert.equal(clipLength({...relight,length_mode:'original'},45).maximum,null,'Full-source relight is not limited by the custom-selection cap');
+assert.equal(clipLength({...relight,length_mode:'original'},45).invalid,false);
+assert.equal(clipLength({...relight,duration:31},45).invalid,true,'Custom durations beyond the backend limit are rejected before submission');
 assert.equal(clipLength({...relight,relight_engine:'h3'},15).invalid,true,'The H3 relight limit remains enforced');
 assert.equal(clipLength({...relight,engine:'wan2',workflow_mode:'motion',duration:4},15).invalid,true,'Wan Animate 2 retains its real 81-frame limit');

@@ -1339,7 +1339,7 @@ class ArtistStudio {
     this.$("duration").step="any";
     if(relight && this.config.relight_engine==="wan21"){
       this.$("duration").max=String(Math.min(Number(this.source?.duration)||30,30));
-      this.$("limit-note").textContent="Choose any interval within your source. Wan 2.1 relights longer clips in 81-frame sections; inspect the joins.";
+      this.$("limit-note").textContent="Custom selections support up to 30 seconds. Use source processes the full clip in 81-frame sections; inspect the joins.";
     }
     const reference=this.$("audio-mode").value==="reference",activeReference=reference && !!this.audio;
     const speechGraphOption=this.$("graph-stage").querySelector('option[value="wan_speech"]');
@@ -1461,10 +1461,11 @@ class ArtistStudio {
     const invalidH3Length=this.config.engine==="h3" && !wan21Relight && Number.isFinite(sourceSeconds) && sourceSeconds>0 && (selectedFrames<5 || selectedFrames>120);
     const invalidWanSpeechLength=this.config.engine==="wan" && activeReference && this.config.lip_sync && selectedFrames>720;
     const invalidLtxLength=this.config.engine==="local"&&wholeScene&&Number.isFinite(sourceSeconds)&&sourceSeconds>0&&selectedFrames>(viewport?360:120);
-    const invalidLength=invalidH3Length || invalidWanSpeechLength || invalidLtxLength || (this.config.engine==="wan2" && Number.isFinite(sourceSeconds) && (selectedFrames<5 || selectedFrames>81));
+    const invalidCustomLength=this.config.length_mode!=="original" && Number(this.config.duration)>30;
+    const invalidLength=invalidCustomLength || invalidH3Length || invalidWanSpeechLength || invalidLtxLength || (this.config.engine==="wan2" && Number.isFinite(sourceSeconds) && (selectedFrames<5 || selectedFrames>81));
     const missingSelection=!wholeScene && !preservePeople && (method==="text"?!this.config.mask_prompt.trim():method==="points"?!points.some(p=>p.include):false);
     if(missingSelection && !working && !this.busy){label=method==="text"?"Describe the area":"Select on opening frame";note=method==="text"?"Describe the area to change before preparing the shot.":"Add at least one include point on the opening frame.";}
-    if(invalidLength && !working && !this.busy){label="Choose clip length";note=this.config.engine==="wan2"?"Wan Animate 2 supports 0.21 to 3.375 seconds. Choose a custom length.":invalidH3Length?(relight?"Relight supports up to 5 seconds. Choose clip length to trim your source.":viewport?"H3 viewport renders support 0.21 to 5 seconds. Choose a custom length.":"H3 currently supports 0.21 to 5 seconds. Choose a custom length, or switch to Wan."):invalidLtxLength?`LTX ${viewport?"viewport renders support up to 15 seconds":"whole-scene shots support up to 5 seconds"}. Choose a shorter length.`:"Wan replacement speech currently supports up to 30 seconds. Choose a custom length.";}
+    if(invalidLength && !working && !this.busy){label="Choose clip length";note=invalidCustomLength?"Custom selections support up to 30 seconds. Choose a shorter selection, or use the source length if this workflow supports it.":this.config.engine==="wan2"?"Wan Animate 2 supports 0.21 to 3.375 seconds. Choose a custom length.":invalidH3Length?(relight?"Relight supports up to 5 seconds. Choose clip length to trim your source.":viewport?"H3 viewport renders support 0.21 to 5 seconds. Choose a custom length.":"H3 currently supports 0.21 to 5 seconds. Choose a custom length, or switch to Wan."):invalidLtxLength?`LTX ${viewport?"viewport renders support up to 15 seconds":"whole-scene shots support up to 5 seconds"}. Choose a shorter length.`:"Wan replacement speech currently supports up to 30 seconds. Choose a custom length.";}
     const enhancementStatus=this.modelStatus?.h3_enhancement || {};
     const enhancementSetupCommand=enhancementStatus.setup_command || "Setup_H3_Enhancement_Windows.cmd";
     const enhancementUnavailable=this.config.engine==="h3"&&this.config.delivery_mode==="enhanced1080"&&this.modelStatus&&(!this.modelStatus.engine_ready?.h3||!enhancementStatus.ready);

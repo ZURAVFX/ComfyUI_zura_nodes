@@ -2,6 +2,7 @@
 import copy
 import importlib
 import tempfile
+import types
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -16,6 +17,23 @@ enhancement = importlib.import_module(studio.__package__ + '.enhancement')
 
 
 class RelightTests(unittest.TestCase):
+    def test_chained_wan_relight_uses_its_own_timeline_validation(self):
+        project=self.project()
+        stream=types.SimpleNamespace(duration=14,time_base=1)
+        class VideoContext:
+            streams=types.SimpleNamespace(video=[stream],audio=[])
+            duration=None
+            def __enter__(self):return self
+            def __exit__(self,*args):pass
+        container=VideoContext()
+        with patch.object(studio,'check_asset',return_value=Path('source.mp4')),patch.object(studio.av,'open',return_value=container):
+            project['config'].update(length_mode='custom',start=2,duration=6)
+            studio.validate_selection(project)
+            project['config'].update(length_mode='original',start=0)
+            studio.validate_selection(project)
+            project['config'].update(length_mode='custom',start=15,duration=6)
+            with self.assertRaisesRegex(ValueError,'beyond the end'):studio.validate_selection(project)
+
     def test_prompt_only_enhanced_delivery_has_a_direction_bound_generation_key(self):
         project = self.project()
         first = enhancement.generation_key(project)
