@@ -76,10 +76,14 @@ class ProgressEstimatorTests(unittest.TestCase):
         self.assertEqual(second["stage_elapsed_seconds"], 3.5)
 
     def test_comfy_loader_labels_name_slow_h3_initialization_steps(self):
-        self.assertEqual(_progress._friendly_node("UNETLoader"), "Loading H3 video model")
+        self.assertEqual(_progress._friendly_node("UNETLoader", "h3"), "Loading H3 video model")
+        self.assertEqual(_progress._friendly_node("UNETLoader"), "Loading video model")
         self.assertEqual(_progress._friendly_node("UNETLoader", "wan21_relight"), "Loading video model")
-        self.assertEqual(_progress._friendly_node("CLIPLoader"), "Loading H3 text encoder")
-        self.assertEqual(_progress._friendly_node("VAELoader"), "Loading H3 decoder")
+        self.assertEqual(_progress._friendly_node("CLIPLoader", "h3"), "Loading H3 text encoder")
+        self.assertEqual(_progress._friendly_node("VAELoader", "h3"), "Loading H3 decoder")
+        for stage in ('ltx25_sample','restyle','wan_speech','wan2'):
+            self.assertEqual(_progress._friendly_node("UNETLoader",stage), "Loading video model")
+            self.assertEqual(_progress._friendly_node("ModelPatchLoader",stage), "Loading guidance model")
         self.assertEqual(_progress._friendly_node("DepthAnythingV2Preprocessor"), "Building depth guidance")
 
     def test_rewind_node_change_and_maximum_change_reset_eta(self):

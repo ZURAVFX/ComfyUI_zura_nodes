@@ -17,7 +17,10 @@ def _friendly_node(class_type, stage=None):
         if "loraloader" in low: return "Loading image adapter"
         if "vaedecode" in low or "decodeimage" in low: return "Decoding image"
         if "sampler" in low: return "Generating image"
-    if stage in ("wan", "wan2", "wan21_relight"):
+    # Model loader classes are shared by Wan, LTX and image workflows. Only
+    # name H3 when the active action is actually an H3 stage.
+    is_h3=str(stage or '').startswith('h3')
+    if not is_h3:
         if "unetloader" in low: return "Loading video model"
         if "cliploader" in low: return "Loading text encoder"
         if "vaeloader" in low: return "Loading video decoder"
@@ -31,7 +34,7 @@ def _friendly_node(class_type, stage=None):
     if "imagefrombatch" in low:
         return "Selecting reference frames"
     if "modelpatchloader" in low:
-        return "Loading H3 control model"
+        return "Loading H3 control model" if is_h3 else "Loading guidance model"
     if "unetloader" in low:
         return "Loading H3 video model"
     if "cliploader" in low:
