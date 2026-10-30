@@ -17,6 +17,7 @@ video counts matched for these examples:
 | --- | --- | --- | --- |
 | H3 first/last frame | 73, 124, 243 | 24 fps | Within 1 ms of video |
 | LTX 2.5 first/last frame | 97 | 24 fps | Within 1 ms of video |
+| Wan 2.2 first/last frame | 25 | 24 fps | Silent by design; audio references are unsupported |
 | H3 reference to video | 192 | 24 fps | Matches to reported precision |
 | FastH3 reference to video | 56 | 24 fps | 8 ms shorter than video |
 
@@ -26,8 +27,13 @@ validation documents a one-second Wan 2.1 render and other five-second model
 renders; 23.976, 25 and 29.97 fps source-selection fixtures are also tested
 with real FFmpeg, but not yet GPU-rendered at each input rate.
 
-Remaining coverage includes real output timing for Wan 2.2 first/last-frame
-generation, the maximum-length and unusual-source-rate cases across modes,
+A fresh isolated GPU test of the Studio Wan 2.2 first/last recipe produced exactly
+25 decoded frames at 24 fps, 256 × 256, lasting 1.04167 seconds, and correctly
+contained no audio. First, middle and last frames maintained consistent cropping
+in this still-camera test; it does not establish quality at higher resolution or
+longer duration. Runtime was 16.13 seconds on the local system.
+
+Remaining coverage includes the maximum-length and unusual-source-rate cases across modes,
 and exact source/audio alignment across long multi-window outputs. Check each
 model's embedded requested frame count, decoded frame count, frame rate and
 audio duration or lag; a successful graph build alone is not sufficient.
