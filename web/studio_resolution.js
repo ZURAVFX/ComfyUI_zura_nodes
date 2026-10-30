@@ -61,12 +61,12 @@ export class VideoResolutionControl {
   context(){
     const s=this.studio,c=s.config,source=s.source||{},ratio=(source.width||16)/(source.height||9),opening=s.composerStage()!=='video',camera=c.workflow_mode==='camera',relight=c.workflow_mode==='relight';
     const exact=opening||camera||relight;
-    const cap=opening?{step:c.opening_model==='qwen21'?32:16,min:256,max:2048,maxPixels:2e6}:camera?{step:32,min:128,max:1280,maxPixels:1280*1280}:{step:16,min:256,max:1920,maxPixels:1920*1088};
-    return {s,c,source,ratio,opening,camera,relight,exact,cap,key:opening?'opening':camera?'camera':'relight'};
+    const cap=camera?{step:32,min:128,max:1280,maxPixels:1280*1280}:opening?{step:c.opening_model==='qwen21'?32:16,min:256,max:2048,maxPixels:2e6}:{step:16,min:256,max:1920,maxPixels:1920*1088};
+    return {s,c,source,ratio,opening,camera,relight,exact,cap,key:camera?'camera':opening?'opening':'relight'};
   }
   apply(custom=false){
     const x=this.context(),shape=this.$('shape').value,mp=Number(this.$('mp').value);
-    if(x.s.busy||x.s.project?.phase==='working'||x.opening&&x.camera)return;
+    if(x.s.busy||x.s.project?.phase==='working')return;
     if(!x.exact){
       const choices=[...x.s.$('resolution').options].filter(o=>!o.disabled&&!o.hidden&&o.value!=='1920-enhanced');
       const edge=Math.sqrt(mp*1e6*Math.max(x.ratio,1/x.ratio));
@@ -86,24 +86,23 @@ export class VideoResolutionControl {
   sync(){
     const x=this.context(),busy=x.s.busy||x.s.project?.phase==='working';
     const sourceWidth=x.source.width||1280,sourceHeight=x.source.height||720;
-    const fallback=x.opening?resolutionSize(x.ratio,1,x.cap):x.camera?{width:768,height:448}:{width:Math.max(256,Math.round(sourceWidth*1280/Math.max(sourceWidth,sourceHeight)/16)*16),height:Math.max(256,Math.round(sourceHeight*1280/Math.max(sourceWidth,sourceHeight)/16)*16)};
-    const sourceSize=x.relight&&!x.opening&&x.c[x.key+'_shape']==='source_size'?sourceResolution(x.source.width,x.source.height,x.cap):null;
+    const fallback=x.camera?{width:768,height:448}:x.opening?resolutionSize(x.ratio,1,x.cap):{width:Math.max(256,Math.round(sourceWidth*1280/Math.max(sourceWidth,sourceHeight)/16)*16),height:Math.max(256,Math.round(sourceHeight*1280/Math.max(sourceWidth,sourceHeight)/16)*16)};
+    const sourceSize=(x.camera||x.relight&&!x.opening)&&x.c[x.key+'_shape']==='source_size'?sourceResolution(x.source.width,x.source.height,x.cap):null;
     if(sourceSize)Object.assign(x.c,{[x.key+'_width']:sourceSize.width,[x.key+'_height']:sourceSize.height});
     const size=x.exact?(sourceSize||{width:x.c[x.key+'_width']||fallback.width,height:x.c[x.key+'_height']||fallback.height}):resolutionSize(x.ratio,(Number(x.c.resolution)||1280)**2/Math.max(x.ratio,1/x.ratio)/1e6,{step:x.c.engine==='wan2'?16:64,min:64,max:1920});
-    if(x.opening&&x.camera){size.width=1024;size.height=576;}
     if(this.nativeQuality)this.nativeQuality.hidden=x.exact;
-    this.$('mp').max=x.opening?2:x.camera?1.6:x.exact?2:2.1;
+    this.$('mp').max=x.camera?1.6:x.opening?2:x.exact?2:2.1;
     this.$('mp').value=x.exact?(x.c[x.key+'_megapixels']??size.width*size.height/1e6):size.width*size.height/1e6;
     this.$('mp-label').textContent=`${(size.width*size.height/1e6).toFixed(2)} MP`;
-    this.$('shape').value=x.exact?(x.c[x.key+'_shape']||'source'):'source';this.$('shape').disabled=busy||!x.exact||x.opening&&x.camera;
-    const sourceOption=this.$('shape').querySelector('option[value="source_size"]');sourceOption.disabled=!x.relight||x.opening||!(x.source.width>=2&&x.source.height>=2&&x.source.width<=16384&&x.source.height<=16384);
+    this.$('shape').value=x.exact?(x.c[x.key+'_shape']||'source'):'source';this.$('shape').disabled=busy||!x.exact;
+    const sourceOption=this.$('shape').querySelector('option[value="source_size"]');sourceOption.disabled=!(x.camera||x.relight&&!x.opening)||!(x.source.width>=2&&x.source.height>=2&&x.source.width<=16384&&x.source.height<=16384);
     this.$('mp-setting').hidden=this.$('shape').value==='source_size'||this.$('shape').value==='custom';
     this.$('custom').hidden=this.$('shape').value!=='custom';
     for(const key of ['width','height']){const field=this.$(key);if(field!==this.panel.ownerDocument.activeElement)field.value=size[key];field.disabled=busy;}
-    this.$('mp').disabled=busy||x.opening&&x.camera||(!x.exact&&(x.c.engine==='wan2'||x.c.h3_head_swap));
-    const output=sourceSize?{width:sourceWidth-sourceWidth%2,height:sourceHeight-sourceHeight%2}:size;
+    this.$('mp').disabled=busy||(!x.exact&&(x.c.engine==='wan2'||x.c.h3_head_swap));
+    const output=sourceSize&&x.relight?{width:sourceWidth-sourceWidth%2,height:sourceHeight-sourceHeight%2}:size;
     this.$('dimensions').textContent=`${output.width} × ${output.height} px`;
-    this.$('hint').textContent=x.opening&&x.camera?'Camera still uses the verified 1024 × 576 recipe. Choose animation resolution at the video stage.':sourceSize?`${output.width===sourceWidth&&output.height===sourceHeight?'Output matches the source.':'Output adjusted to even pixels for MP4.'} ${sourceSize.width===output.width&&sourceSize.height===output.height?'':`Generated at ${sourceSize.width} × ${sourceSize.height} on Wan’s ${x.cap.step}-pixel grid, then fitted to the output.`}`.trim():x.opening?`Image generation · ${x.cap.step}-pixel grid. Saved frame stays ${sourceWidth} × ${sourceHeight}.`:x.exact?`${x.camera?'H3':'Wan 2.1'} · ${x.cap.step}-pixel grid. Images are fitted without stretching.`:'The slider selects supported native sizes for this workflow.';
+    this.$('hint').textContent=x.camera?`Camera still and video use ${size.width} × ${size.height}. Images are fitted without stretching${sourceSize&&(size.width!==sourceWidth||size.height!==sourceHeight)?'; source size adjusted for H3':''}.`:sourceSize?`${output.width===sourceWidth&&output.height===sourceHeight?'Output matches the source.':'Output adjusted to even pixels for MP4.'} ${sourceSize.width===output.width&&sourceSize.height===output.height?'':`Generated at ${sourceSize.width} × ${sourceSize.height} on Wan’s ${x.cap.step}-pixel grid, then fitted to the output.`}`.trim():x.opening?`Image generation · ${x.cap.step}-pixel grid. Saved frame stays ${sourceWidth} × ${sourceHeight}.`:x.exact?`Wan 2.1 · ${x.cap.step}-pixel grid. Images are fitted without stretching.`:'The slider selects supported native sizes for this workflow.';
     return output;
   }
 }

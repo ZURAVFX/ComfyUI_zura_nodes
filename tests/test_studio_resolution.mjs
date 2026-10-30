@@ -26,6 +26,15 @@ studio.source={width:1920,height:1080};control.sync();assert.equal(studio.config
 studio.source={width:3840,height:2160};control.sync();assert.ok(studio.config.relight_width<=1920);assert.ok(studio.config.relight_height<=1920);assert.ok(studio.config.relight_width*studio.config.relight_height<=1920*1088);assert.match(field('hint').textContent,/Generated at/);assert.match(field('dimensions').textContent,/3840 × 2160/);
 field('shape').value='source';field('shape').onchange();assert.equal(field('mp-setting').hidden,false,'Source proportions still offers a megapixel slider');
 studio.busy=true;control.sync();assert.equal(field('mp').disabled,true);assert.equal(field('width').disabled,true);
+studio.busy=false;studio.config.workflow_mode='camera';studio.config.camera_width=768;studio.config.camera_height=448;studio.source={width:1080,height:1920};stage='image';control.sync();
+assert.equal(field('shape').disabled,false);assert.equal(field('mp').disabled,false);
+field('shape').value='source_size';field('shape').onchange();
+assert.ok(studio.config.camera_height>studio.config.camera_width);assert.equal(studio.config.camera_width%32,0);assert.equal(studio.config.camera_height%32,0);
+assert.match(field('hint').textContent,/Camera still and video use/);assert.match(field('hint').textContent,/adjusted for H3/);
+const cameraSize=[studio.config.camera_width,studio.config.camera_height];stage='video';control.sync();
+assert.deepEqual([studio.config.camera_width,studio.config.camera_height],cameraSize);assert.match(field('dimensions').textContent,new RegExp(`${cameraSize[0]} × ${cameraSize[1]}`));
+field('shape').value='custom';field('shape').onchange();field('width').value='448';field('height').value='768';field('width').commitDimension();
+assert.deepEqual([studio.config.camera_width,studio.config.camera_height],[448,768]);stage='image';control.sync();assert.match(field('dimensions').textContent,/448 × 768/);
 for(const recipe of ENDPOINT_RECIPES)for(const shape of ['landscape','portrait','square','standard','vertical'])for(let i=5;i<=20;i++){
   const size=endpointPresetSize(recipe.id,shape,i/20);
   assert.equal(size.width%recipe.dimensionStep,0);assert.equal(size.height%recipe.dimensionStep,0);assert.ok(size.width*size.height<=recipe.maxPixels);assert.ok(size.width>0&&size.height>0);

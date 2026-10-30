@@ -137,3 +137,10 @@ separate recommendation only when needed. A simulated empty setup selects the
 smaller matching package instead of pulling unrelated OpenJutsu/SAM files.
 Catalogue and interface tests pass; the installed Python catalogue needs a
 ComfyUI restart before this becomes available there.
+
+Camera resolution controls now edit the same H3 raster at both the still and
+video stages, replacing the stale fixed-landscape message. Source dimensions
+are snapped and limited to H3-supported values, and the resulting dimensions
+are shown before generation. Interface tests cover portrait source and custom
+sizes across both stages. The installed UI file was updated; a desktop visual
+check and ComfyUI restart for the related backend fix remain outstanding.
