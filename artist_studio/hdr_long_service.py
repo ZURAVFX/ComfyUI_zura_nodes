@@ -41,6 +41,9 @@ class HDRLongService:
         if not isinstance(body,dict):raise ValueError('Choose HDR conversion settings.')
         mode=body.get('mode')
         if mode not in ('sdr','native'):raise ValueError('Choose SDR to HDR or HDR to HDR.')
+        section_frames=body.get('section_frames',121)
+        if type(section_frames) is not int or section_frames not in ((25,121) if mode=='native' else (121,)):
+            raise ValueError('Choose an available HDR section setting.')
         request_id=body.get('request_id')
         if request_id is not None and (not isinstance(request_id,str) or not re.fullmatch(r'[a-f0-9]{32}',request_id)):
             raise ValueError('Invalid HDR request ID.')
@@ -59,7 +62,7 @@ class HDRLongService:
             if request_id:self._requests[request_id]={'fingerprint':fingerprint,'id':None}
             try:
                 job,details=await asyncio.to_thread(factory,self.server,asset,body,check,
-                    self.output_root,anchor_strength=0.75)
+                    self.output_root,anchor_strength=0.75,max_chunk_frames=section_frames)
                 identity=self.jobs.start(job,details)
             except Exception:
                 if request_id:self._requests.pop(request_id,None)

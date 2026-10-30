@@ -15,6 +15,7 @@ export class HDRSourceTool {
       <label>Source colour<select data-hdr="colour"><option value="auto">Read source tags</option><option value="rec709_oetf">Rec.709</option><option value="rec709_gamma24">Rec.709 gamma 2.4</option><option value="srgb_display">sRGB</option></select></label>
       <label>Deliver<select data-hdr="output"><option value="hlg_and_exr">HLG video + EXR sequence</option><option value="hlg_video">HLG video</option><option value="acescg_exr">EXR sequence</option></select></label>
       <label data-hdr="long-control" hidden><input data-hdr="long" type="checkbox"/> Longer clip · process in sections</label>
+      <label data-hdr="sections-control" hidden>Section size<select data-hdr="sections"><option value="121">Longer sections · fewer joins</option><option value="25">Shorter sections · potentially faster, more joins</option></select></label>
       <p data-hdr="limits">Up to 121 frames per run. Large frame selections may need to be shorter.</p>
       <details data-hdr="models" class="gs-advanced"></details>
       <div class="gs-hdr-actions"><button data-hdr="start-job" type="button">Convert source</button><button data-hdr="cancel" type="button" hidden>Cancel</button></div>
@@ -50,6 +51,7 @@ export class HDRSourceTool {
     const sequence=native&&this.$('source-kind').value==='sequence';this.$('sequence-controls').hidden=!sequence;
     this.$('colour').innerHTML=sequence?'<option value="auto">Read EXR tags</option><option value="acescg">ACEScg</option><option value="acescct">ACEScct</option><option value="linear_rec709">Linear Rec.709</option>':native?'<option value="auto">Read source tags</option><option value="hlg_rec2020">HLG · Rec.2020</option><option value="pq_rec2020">PQ · Rec.2020</option>':'<option value="auto">Read source tags</option><option value="rec709_oetf">Rec.709</option><option value="rec709_gamma24">Rec.709 gamma 2.4</option><option value="srgb_display">sRGB</option>';
     const longer=this.longAvailable&&this.$('long').checked;
+    this.$('sections-control').hidden=!longer||!native;
     this.$('count').max=longer?'10000':'121';
     this.$('limits').textContent=longer?'Longer clips use overlapping sections. Check the joins and allow extra time and disk space.':native?'Preview: HLG/PQ video or EXR sequence. 1–121 frames per run, even dimensions between 32 and 2048 px; large selections need fewer frames. Requires the LTX 2.5 Refine Details LoRA. The model may alter motion or appearance.':'Up to 121 frames per run. Large frame selections may need to be shorter.';
     this.$('start-job').textContent=native?'Process HDR video':'Convert source';
@@ -92,7 +94,7 @@ export class HDRSourceTool {
     if(!Number.isInteger(start)||start<0||!Number.isInteger(count)||count<1||count>limit){this.status(`Choose a valid first frame and 1–${limit} frames.`);return;}
     this.busy=true;this.loras.setBusy(true);this.$('start-job').disabled=true;this.$('result').hidden=true;this.$('progress').hidden=false;this.$('progress').removeAttribute('value');this.status('Checking source and model…');
     try{
-      if(longer){await this.longClient.start({mode:this.$('mode').value,source_kind:sourceKind,source_id:sourceKind==='sequence'?this.sequenceAsset.id:asset?.id,project_id:asset?.projectId,start_frame:start,frame_count:count,sequence_fps:Number(this.$('sequence-fps').value),colour_space:this.$('colour').value,output:this.$('output').value,custom_loras:this.loras.value(),client_id:this.api.clientId||'zura-hdr'});return;}
+      if(longer){await this.longClient.start({mode:this.$('mode').value,source_kind:sourceKind,source_id:sourceKind==='sequence'?this.sequenceAsset.id:asset?.id,project_id:asset?.projectId,start_frame:start,frame_count:count,sequence_fps:Number(this.$('sequence-fps').value),colour_space:this.$('colour').value,output:this.$('output').value,section_frames:this.$('mode').value==='native'?Number(this.$('sections').value):121,custom_loras:this.loras.value(),client_id:this.api.clientId||'zura-hdr'});return;}
       const route=this.$('mode').value==='native'?'/zura/studio/hdr/native-graph':'/zura/studio/hdr/graph';
       const prepared=await this.request(route,{source_kind:sourceKind,source_id:sourceKind==='sequence'?this.sequenceAsset.id:asset?.id,project_id:asset?.projectId,start_frame:start,frame_count:count,sequence_fps:Number(this.$('sequence-fps').value),colour_space:this.$('colour').value,output:this.$('output').value,custom_loras:this.loras.value()});
       const queued=await this.request('/prompt',{prompt:prepared.graph,client_id:this.api.clientId||'zura-hdr'});

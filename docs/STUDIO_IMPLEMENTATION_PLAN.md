@@ -50,6 +50,9 @@ The same 129-frame source rendered with eight overlapping 25-frame sections in
 14–16 seconds per section), with all 129 frames and audio in both exports.
 This does not include final export time and adds seven joins; visual continuity
 must be reviewed before adopting the faster section size.
+The private HDR panel offers an explicit shorter-section choice for native HDR
+with a more-joins warning. The existing longer-section setting remains default;
+the choice is gated with the rest of the long-HDR workflow pending review.
 Head-swap setup now links its missing crop, pose, padding, mask and sigma nodes
 to the corresponding installed packs' declared upstream repositories. Automatic
 node-pack installation remains outstanding.

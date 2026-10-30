@@ -33,6 +33,7 @@ class HDRLongServiceTests(unittest.IsolatedAsyncioTestCase):
             created=[]
             def create(server,asset,body,check,out,**kwargs):
                 self.assertEqual(check(asset),'verified');self.assertEqual(kwargs['anchor_strength'],.75)
+                self.assertEqual(kwargs['max_chunk_frames'],121)
                 job=Job(output);created.append(job);return job,{'id':'a'*32,'frames':130}
             client=service.HDRLongService(None,Store(),lambda asset:'verified',root,create_sdr=create)
             result=await client.start({'mode':'sdr','source_id':'video'});self.assertEqual(result['id'],'a'*32)
@@ -46,6 +47,19 @@ class HDRLongServiceTests(unittest.IsolatedAsyncioTestCase):
             client=service.HDRLongService(None,Store(),lambda asset:'verified',root)
             with self.assertRaisesRegex(ValueError,'source type'):await client.start({'mode':'native','source_kind':'sequence','source_id':'video'})
             with self.assertRaisesRegex(ValueError,'not restarted'):client.status('f'*32)
+            with self.assertRaisesRegex(ValueError,'section setting'):await client.start({'mode':'native','source_id':'video','section_frames':26})
+            with self.assertRaisesRegex(ValueError,'section setting'):await client.start({'mode':'sdr','source_id':'video','section_frames':25})
+
+    async def test_shorter_native_sections_reach_job_builder(self):
+        with tempfile.TemporaryDirectory() as root:
+            created=[]
+            def create(server,asset,body,check,out,**kwargs):
+                self.assertEqual(kwargs['max_chunk_frames'],25)
+                job=Job(Path(root)/'unused');created.append(job)
+                return job,{'id':'e'*32,'frames':129}
+            client=service.HDRLongService(None,Store(),lambda asset:'verified',root,create_native=create)
+            await client.start({'mode':'native','source_id':'video','section_frames':25})
+            await created[0].entered.wait();created[0].release.set();await client.jobs.tasks['e'*32]
 
     async def test_http_start_status_and_cancellation(self):
         from aiohttp import web
