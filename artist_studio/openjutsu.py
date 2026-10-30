@@ -15,6 +15,12 @@ REVISION = "70ec62df0eda7c58697ea3ac2050588513651583"
 TEMPLATE = Path(__file__).parent / "graphs" / "OpenJutsu_Experimental.json"
 
 
+def exact_source_clip(start, duration):
+    return {"class_type": "GenjSelectClip", "inputs": {
+        "video": ["30", 0], "start_seconds": start, "duration_seconds": duration,
+        "long_edge": 1920}, "_meta": {"title": "Select exact source range · 24 fps"}}
+
+
 def build_graph(project, check_asset=lambda asset: None):
     """Adapt the pinned official graph; preserve native masked regeneration."""
     c = project["config"]
@@ -32,8 +38,10 @@ def build_graph(project, check_asset=lambda asset: None):
     start = 0.0 if c.get("length_mode") == "original" else float(c.get("start", 0))
     if not math.isfinite(duration) or not 5/24 <= duration <= 5 or not math.isfinite(start) or start < 0:
         raise ValueError("Select up to five seconds for this OpenJutsu test.")
-    if source.get("duration") and start + duration > float(source["duration"]) + 1/24:
-        raise ValueError("The selected range extends past the end of the source video.")
+    if source.get("duration"):
+        available = float(source["duration"]) - start
+        if available <= 0 or math.floor(duration * 24 + 1e-6) > math.floor(available * 24 + 1e-6):
+            raise ValueError("The selected range extends past the end of the source video. Choose a shorter range.")
     tier = c.get("openjutsu_resolution", "480")
     if str(tier) not in ("480", "768"):
         raise ValueError("Choose the OpenJutsu 480 or 768 tier.")
@@ -44,7 +52,10 @@ def build_graph(project, check_asset=lambda asset: None):
     graph = json.loads(TEMPLATE.read_text(encoding="utf8"))
     graph["30"]["inputs"]["file"] = source["file"]
     graph["9"]["inputs"]["image"] = character["file"]
-    graph["trim"]["inputs"].update(start_time=start, duration=duration)
+    # Video Slice can decode one frame short after a non-frame-aligned seek.
+    # Prepare the requested 24 fps range once, with a one-frame tail hold if
+    # needed, before both the H3 preparation and the shot's source reference.
+    graph["trim"] = exact_source_clip(start, duration)
     graph["31"]["inputs"].update(resolution=int(tier), duration_seconds=duration)
     graph["801"]["inputs"]["seed"] = int(c.get("seed", 42))
     replace_background = c.get("openjutsu_background", "keep") == "replace"
@@ -104,6 +115,7 @@ def readiness(graph, node_info):
 def installed_readiness(node_mappings):
     """Check optional node pack and exact weights without loading any models."""
     graph = json.loads(TEMPLATE.read_text(encoding="utf8"))
+    graph["trim"] = exact_source_clip(0, 5)
     info = {}
     for kind in {node["class_type"] for node in graph.values()}:
         cls = node_mappings.get(kind)

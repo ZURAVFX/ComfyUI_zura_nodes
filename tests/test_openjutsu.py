@@ -23,7 +23,11 @@ class OpenJutsuTests(unittest.TestCase):
         self.assertFalse(graph["803"]["inputs"]["use_anchor"])
         self.assertTrue(graph["803"]["inputs"]["use_mask"])
         self.assertNotIn("anchor", graph["803"]["inputs"])
-        self.assertEqual(graph["trim"]["inputs"]["start_time"], 3)
+        self.assertEqual(graph["trim"]["class_type"], "GenjSelectClip")
+        self.assertEqual(graph["trim"]["inputs"]["start_seconds"], 3)
+        self.assertEqual(graph["trim"]["inputs"]["duration_seconds"], 5)
+        self.assertEqual(graph["31"]["inputs"]["video"], ["trim", 0])
+        self.assertEqual(graph["803"]["inputs"]["source_video"], ["trim", 0])
         for node in graph.values():
             for value in node["inputs"].values():
                 if isinstance(value, list) and len(value) == 2:
@@ -47,6 +51,13 @@ class OpenJutsuTests(unittest.TestCase):
             p["config"][key] = value
             with self.subTest(key=key), self.assertRaises(ValueError):
                 module.build_graph(p)
+
+    def test_source_end_cannot_silently_shorten_the_selection(self):
+        p=self.project();p['source']['duration']=3.24;p['config'].update(start=0,duration=3.25)
+        with self.assertRaisesRegex(ValueError, 'shorter range'):
+            module.build_graph(p)
+        p['config']['duration']=77/24
+        self.assertEqual(module.build_graph(p)['trim']['inputs']['duration_seconds'],77/24)
 
     def test_background_replacement_uses_native_unmasked_branch_and_scene_anchor(self):
         p = self.project()
@@ -87,6 +98,9 @@ class OpenJutsuTests(unittest.TestCase):
         r = module.readiness(g, {})
         self.assertFalse(r["ready"])
         self.assertIn("H3CharacterSwapController", r["missing"])
+        installed = module.installed_readiness({})
+        self.assertIn("GenjSelectClip", installed["missing_nodes"])
+        self.assertNotIn("Video Slice", installed["missing_nodes"])
 
 
 if __name__ == "__main__":
