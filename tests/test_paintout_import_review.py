@@ -169,6 +169,13 @@ class ImportReviewTests(unittest.TestCase):
         self.assertIn(unittest.mock.call('oiio:ColorSpace', 'Rec.2100 HLG'), spec.attribute.call_args_list)
         writer.close.assert_called_once()
 
+        with patch.dict('sys.modules', {'OpenImageIO': oiio}):
+            review._save_master(self.root / 'p3.exr', self.original, 'pq_display_p3')
+        np.testing.assert_array_equal(writer.write_image.call_args.args[0], self.original)
+        self.assertIn(unittest.mock.call('zura:colour_space', 'pq_display_p3'), spec.attribute.call_args_list)
+        self.assertIn(unittest.mock.call('chromaticities', 'float[8]',
+                                        (.680, .320, .265, .690, .150, .060, .3127, .3290)), spec.attribute.call_args_list)
+
     def test_changed_review_mask_and_failed_save_do_not_accept(self):
         result = review.review_import(self.body)
         mask_path = pathlib.Path(result['repair_file'])

@@ -12,7 +12,7 @@ import torch.nn.functional as F
 
 from .hdr_source import MAX_FRAMES, MAX_PIXEL_FRAMES
 
-HDR_VIDEO_SPACES = ('hlg_rec2020', 'pq_rec2020')
+HDR_VIDEO_SPACES = ('hlg_rec2020', 'pq_rec2020', 'pq_display_p3')
 HDR_SEQUENCE_SPACES = ('acescg', 'acescct', 'linear_rec709')
 
 
@@ -44,6 +44,8 @@ def load_native_hdr_frames(path, start_frame, frame_count, colour_space='auto', 
         raise ValueError('Native HDR image input requires EXR frames.')
     if info['kind'] == 'video' and info.get('transfer') in ('bt709', 'iec61966-2-1'):
         raise ValueError('This video is tagged SDR. Use the SDR-to-HDR workflow.')
+    if colour_space == 'pq_display_p3' and (info.get('transfer') != 'smpte2084' or info.get('primaries') != 'smpte432'):
+        raise ValueError('Display-P3 PQ requires matching source transfer and primaries tags.')
     selected = selected_space(info, colour_space)
     supported = HDR_VIDEO_SPACES if info['kind'] == 'video' else HDR_SEQUENCE_SPACES
     if selected not in supported:

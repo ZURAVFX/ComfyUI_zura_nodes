@@ -41,6 +41,28 @@ def expected_linear(signal, transfer):
 
 
 class HDRSwatchFixtureTests(unittest.TestCase):
+    def test_tagged_display_p3_pq_video_is_converted_to_acescg(self):
+        ffmpeg=shutil.which('ffmpeg')
+        if not ffmpeg or not shutil.which('ffprobe'):
+            self.skipTest('ffmpeg and ffprobe are required')
+        encoders=subprocess.run([ffmpeg,'-hide_banner','-encoders'],capture_output=True,text=True,check=True).stdout
+        if 'libx265' not in encoders:self.skipTest('libx265 is required')
+        y,cb,cr=500,460,600
+        frame=np.full((32,32),y,dtype='<u2').tobytes()+np.full((16,16),cb,dtype='<u2').tobytes()+np.full((16,16),cr,dtype='<u2').tobytes()
+        with tempfile.TemporaryDirectory() as directory:
+            raw=Path(directory)/'p3.yuv';raw.write_bytes(frame)
+            output=Path(directory)/'p3.mp4'
+            subprocess.run([ffmpeg,'-v','error','-f','rawvideo','-pix_fmt','yuv420p10le','-color_range','tv','-colorspace','bt709','-s','32x32','-r','24','-i',str(raw),'-frames:v','1','-c:v','libx265','-x265-params','lossless=1:log-level=error:pools=1:colorprim=smpte432:transfer=smpte2084:colormatrix=bt709','-pix_fmt','yuv420p10le','-color_primaries','smpte432','-color_trc','smpte2084','-colorspace','bt709','-color_range','tv','-y',str(output)],capture_output=True,check=True)
+            info=paintout.describe(str(output))
+            self.assertEqual((info['primaries'],info['transfer'],info['matrix']),('smpte432','smpte2084','bt709'))
+            encoded,_=native.load_native_hdr_frames(str(output),0,1)
+            result=paintout.decode_ct(encoded)[0,16,16].numpy()
+            luma=(y-64)/876;blue=(cb-512)/896;red=(cr-512)/896
+            rgb=np.array([luma+1.5748*red,luma-.187324*blue-.468124*red,luma+1.8556*blue])
+            linear=np.array([expected_linear(v,'smpte2084') for v in rgb])
+            matrix=np.array(((.73579791,.21216649,.05203560),(.04717988,.93804570,.01477441),(.00356366,.04114189,.95529445)))
+            np.testing.assert_allclose(result,matrix @ linear,rtol=.04,atol=.01)
+
     def test_lossless_encoded_pq_and_hlg_are_tagged_and_preserve_highlights(self):
         ffmpeg = shutil.which('ffmpeg')
         if not ffmpeg or not shutil.which('ffprobe'):

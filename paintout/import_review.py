@@ -181,15 +181,17 @@ def accept_import_review(body):
 
 def _save_master(path, pixels, space):
     # Encoded HDR samples stay encoded; this is a float container, not a grade.
-    if space not in ('hlg_rec2020', 'pq_rec2020'):
+    if space not in ('hlg_rec2020', 'pq_rec2020', 'pq_display_p3'):
         return core.save_exr(str(path), pixels, space, False)
     import OpenImageIO as oiio
     spec = oiio.ImageSpec(pixels.shape[1], pixels.shape[0], 3, oiio.FLOAT)
     spec.channelnames = ('R', 'G', 'B')
-    spec.attribute('oiio:ColorSpace', 'Rec.2100 HLG' if space == 'hlg_rec2020' else 'Rec.2100 PQ')
+    label = {'hlg_rec2020': 'Rec.2100 HLG', 'pq_rec2020': 'Rec.2100 PQ', 'pq_display_p3': 'Display P3 PQ'}[space]
+    spec.attribute('oiio:ColorSpace', label)
     spec.attribute('zura:colour_space', space)
     spec.attribute('compression', 'zip')
-    spec.attribute('chromaticities', oiio.TypeDesc('float[8]'), (.708, .292, .170, .797, .131, .046, .3127, .3290))
+    primaries = (.680, .320, .265, .690, .150, .060, .3127, .3290) if space == 'pq_display_p3' else (.708, .292, .170, .797, .131, .046, .3127, .3290)
+    spec.attribute('chromaticities', oiio.TypeDesc('float[8]'), primaries)
     writer = oiio.ImageOutput.create(str(path))
     if not writer:
         raise ValueError('Could not create the reviewed EXR.')

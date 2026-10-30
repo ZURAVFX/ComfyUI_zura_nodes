@@ -22,6 +22,27 @@ paintout = importlib.import_module('ComfyUI_zura_nodes.paintout.paintout')
 
 
 class NativeHDRInputTests(unittest.TestCase):
+    def test_tagged_display_p3_pq_uses_primaries_conversion(self):
+        rec_to_aces = ((.673459, .165661, .160880), (.034844, .946710, .018446), (.002647, .023144, .974209))
+        fake = types.ModuleType('comfy_extras.nodes_images')
+        fake._REC2020_TO_ACESCG = rec_to_aces
+        rgb = torch.tensor([[[[.4,.2,.1], [.1,.3,.5]]]])
+        # Independent calibrated ST 2084 linear-light values in units of 203 nits.
+        m1,m2,c1,c2,c3=2610/16384,2523/32,3424/4096,2413/128,2392/128
+        p=rgb.double().pow(1/m2)
+        linear=((p-c1).clamp_min(0)/(c2-c3*p)).pow(1/m1)*10000/203
+        matrix=torch.tensor(rec_to_aces,dtype=torch.float64)
+        faux=linear @ matrix.T
+        p3_to_aces=torch.tensor(((.73579791,.21216649,.05203560),(.04717988,.93804570,.01477441),(.00356366,.04114189,.95529445)),dtype=torch.float64)
+        with patch.dict(sys.modules, {'comfy_extras':types.ModuleType('comfy_extras'), 'comfy_extras.nodes_images':fake}), \
+             patch.object(paintout,'native_colour',return_value=paintout.encode_ct(faux.float())):
+            result=paintout.to_linear(rgb,'pq_display_p3')
+        torch.testing.assert_close(result.double(),linear @ p3_to_aces.T,rtol=2e-5,atol=1e-6)
+        info={'kind':'video','primaries':'smpte432','transfer':'smpte2084','matrix':'bt709','range':'tv'}
+        self.assertEqual(paintout.selected_space(info,'auto'),'pq_display_p3')
+        for bad in ({**info,'transfer':'arib-std-b67'}, {**info,'matrix':'unknown'}, {**info,'range':'unknown'}):
+            with self.assertRaises(ValueError):paintout.selected_space(bad,'auto')
+
     def test_real_oiio_linear_rec709_exr_roundtrip(self):
         try:
             import OpenImageIO as oiio

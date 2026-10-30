@@ -21,7 +21,7 @@ def cpu_frames(function):
         finally:
             if torch.get_num_threads()!=before:torch.set_num_threads(before)
     return run
-def is_hdr(space):return space in ('acescg','acescct','hlg_rec2020','pq_rec2020','linear_rec709')
+def is_hdr(space):return space in ('acescg','acescct','hlg_rec2020','pq_rec2020','pq_display_p3','linear_rec709')
 def string(default='', **kw): return ('STRING', {'default': default, **kw})
 def integer(default, lo=0, hi=100000): return ('INT', {'default': default, 'min': lo, 'max': hi})
 def floating(default, lo=0., hi=1.): return ('FLOAT', {'default': default, 'min': lo, 'max': hi, 'step': .01})
@@ -225,12 +225,27 @@ def matrix_rgb(x,inverse=False):
 
 def to_linear(x,space):
     # Compositing and VAE conditioning share scene-linear ACEScg / AP1.
+    if space == 'pq_display_p3':
+        # Comfy's PQ decoding provides the ST 2084 EOTF and 203-nit white.
+        # Undo its Rec.2020 primaries transform, then apply the Bradford-adapted
+        # Display-P3 D65 -> ACEScg D60 transform (colour-science 0.4.7).
+        from comfy_extras.nodes_images import _REC2020_TO_ACESCG
+        rec2020_to_aces=torch.tensor(_REC2020_TO_ACESCG,device=x.device,dtype=x.dtype)
+        p3_to_aces=torch.tensor(((.73579791,.21216649,.05203560),(.04717988,.93804570,.01477441),(.00356366,.04114189,.95529445)),device=x.device,dtype=x.dtype)
+        linear=decode_ct(native_colour(x,'HDR PQ','HDR ACEScct'))
+        return linear @ torch.linalg.inv(rec2020_to_aces).T @ p3_to_aces.T
     if space in ('hlg_rec2020','pq_rec2020'):
         return decode_ct(native_colour(x,'HDR' if space=='hlg_rec2020' else 'HDR PQ','HDR ACEScct'))
     if space in ('acescg','acescct'):return _decode_original(x,space)
     return matrix_rgb(_decode_original(x,space))
 
 def from_linear(x,space):
+    if space == 'pq_display_p3':
+        from comfy_extras.nodes_images import _REC2020_TO_ACESCG
+        rec2020_to_aces=torch.tensor(_REC2020_TO_ACESCG,device=x.device,dtype=x.dtype)
+        p3_to_aces=torch.tensor(((.73579791,.21216649,.05203560),(.04717988,.93804570,.01477441),(.00356366,.04114189,.95529445)),device=x.device,dtype=x.dtype)
+        faux_aces=x @ torch.linalg.inv(p3_to_aces).T @ rec2020_to_aces.T
+        return native_colour(encode_ct(faux_aces),'HDR ACEScct','HDR PQ')
     if space in ('hlg_rec2020','pq_rec2020'):
         return native_colour(encode_ct(x),'HDR ACEScct','HDR' if space=='hlg_rec2020' else 'HDR PQ')
     if space in ('acescg','acescct'):return _encode_original(x,space)
@@ -261,6 +276,10 @@ def selected_space(d,space):
             d['matrix']='bt2020nc' if value in ('hlg_rec2020','pq_rec2020') else 'bt709'
         return value
     if space!='auto':
+        if space=='pq_display_p3':
+            if d['kind']!='video' or d.get('transfer')!='smpte2084' or d.get('primaries')!='smpte432' or d.get('matrix') not in ('bt709','bt2020nc') or d.get('range') not in ('tv','pc'):
+                raise ValueError('Display-P3 PQ requires matching PQ transfer, P3-D65 primaries, a supported tagged YCbCr matrix and a tagged range.')
+            return space
         if d['kind']=='video' and space in ('acescg','acescct','linear_rec709'):
             raise ValueError('For MOV/video choose its encoded colour space: Rec.709, HLG or PQ. Camera log footage needs a colour transform first.')
         if d['kind']=='video' and space in ('hlg_rec2020','pq_rec2020'):
@@ -271,6 +290,10 @@ def selected_space(d,space):
     if d['kind']=='video':
         transfer=d.get('transfer'); primaries=d.get('primaries')
         if transfer in ('arib-std-b67','smpte2084'):
+            if transfer=='smpte2084' and primaries=='smpte432':
+                if d.get('matrix') not in ('bt709','bt2020nc') or d.get('range') not in ('tv','pc'):
+                    raise ValueError('Display-P3 PQ video requires a tagged range and supported tagged YCbCr matrix (BT.709 or BT.2020 non-constant). Convert the source or correct its tags.')
+                return 'pq_display_p3'
             if primaries!='bt2020':raise ValueError('HDR video must declare BT.2020 primaries, or choose its colour space explicitly.')
             return video_space('hlg_rec2020' if transfer=='arib-std-b67' else 'pq_rec2020')
         if transfer=='bt709' and primaries in ('bt709',None,'unknown'):return video_space('rec709_oetf')
@@ -464,7 +487,7 @@ class ZuraPaintoutAnchors:
             if is_hdr(plate['space']) and plate.get('processing')!='SDR (sRGB)' and Path(path).suffix.lower() not in ('.exr','.tif','.tiff'):raise ValueError('HDR anchors must be EXR or high bit depth TIFF. Export paint frames using this pack first.')
             strength=float(row.get('strength',.75))
             if not 0<strength<=1:raise ValueError('Anchor strength must be >0 and <=1')
-            anchor_space=row.get('colour_space') or ('acescg' if plate['space'] in ('hlg_rec2020','pq_rec2020') else plate['space'])
+            anchor_space=row.get('colour_space') or ('acescg' if plate['space'] in ('hlg_rec2020','pq_rec2020','pq_display_p3') else plate['space'])
             out.append((i,crop_work(a,plate,anchor_space),strength));report.append(f'Source {f} -> local {i}: {Path(path).name} ({strength:g})')
         if not out:raise ValueError('Add at least one enabled manually painted clean anchor')
         return sorted(out,key=lambda x:x[0]),'\n'.join(report)
@@ -497,7 +520,7 @@ def painted_bounds(d,rows,space,start,count,processing):
         painted=read_image(row['file'])
         if painted.shape!=(H,W,3):raise ValueError('Painted frames must keep the original full-frame dimensions and alignment')
         original=next(frames(d,f,1))
-        anchor_space=row.get('colour_space') or ('acescg' if space in ('hlg_rec2020','pq_rec2020') else space)
+        anchor_space=row.get('colour_space') or ('acescg' if space in ('hlg_rec2020','pq_rec2020','pq_display_p3') else space)
         source_work=working(torch.from_numpy(original),space,processing,is_hdr(space))
         paint_work=working(torch.from_numpy(painted),anchor_space,processing,is_hdr(space))
         changed=(source_work-paint_work).abs().amax(-1).numpy()>.025
