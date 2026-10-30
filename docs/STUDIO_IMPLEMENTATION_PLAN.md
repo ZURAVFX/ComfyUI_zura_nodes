@@ -27,3 +27,6 @@ produced 720 frames at 24 fps with zero measured audio lag in 200 seconds. Obser
 available system memory fell from about 33.7 to 9.6 GiB during the run. This is a
 timing and resource check, not a visual sign-off or a guarantee for 720p footage.
 Additional source rates and the full desktop path still need verification.
+The private long-HDR EXR exporter now preserves negative linear ACEScg
+components; a real half-float EXR round-trip verifies negative channels and
+highlights. Long HDR remains gated pending the artist and end-to-end checks.

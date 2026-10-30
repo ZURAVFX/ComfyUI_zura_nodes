@@ -65,5 +65,24 @@ class HDRChunkEXRTests(unittest.TestCase):
             self.assertAlmostEqual(float(image.read_image()[0,0,0]),2.,places=3)
         finally:image.close()
 
+    def test_real_exr_preserves_negative_acescg_channels(self):
+        import OpenImageIO as oiio
+        plan=[chunk.HDRChunk(0,1,0)]
+        stage=storage.HDRChunkStore(self.tmp.name,'b'*32,plan,1,1,create=True)
+        source=torch.tensor([[[[-0.003,0.18,2.0]]]])
+        stage.write(0,paintout.encode_ct(source))
+        path=export.export_exr_zip(stage,self.tmp.name,'wide-gamut')
+        with zipfile.ZipFile(path) as archive:
+            frame=Path(self.tmp.name)/'wide.exr'
+            frame.write_bytes(archive.read('frame_00000.exr'))
+        image=oiio.ImageInput.open(str(frame))
+        self.assertTrue(image)
+        try:
+            pixels=image.read_image()[0,0]
+            self.assertAlmostEqual(float(pixels[0]),-0.003,places=5)
+            self.assertAlmostEqual(float(pixels[1]),0.18,places=3)
+            self.assertAlmostEqual(float(pixels[2]),2.0,places=3)
+        finally:image.close()
+
 
 if __name__=='__main__':unittest.main()

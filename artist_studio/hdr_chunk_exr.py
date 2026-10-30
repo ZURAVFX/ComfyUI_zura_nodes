@@ -39,7 +39,10 @@ def export_exr_zip(staged, output_root, prefix, *, half_precision=True, progress
                     if staged.cancelled.is_set(): raise HDRChunkCancelled('HDR conversion cancelled.')
                     name=f'frame_{total:05d}.exr'
                     path=temporary/name
-                    linear=decode_ct(frame.float()).clamp(0,1e4).cpu().numpy()
+                    # Negative linear AP1 components are valid wide-gamut
+                    # values, including the toe of ACEScct. Preserve them in
+                    # the scene-linear EXR instead of clipping the gamut.
+                    linear=decode_ct(frame.float()).clamp(max=1e4).cpu().numpy()
                     save_exr(path,np.ascontiguousarray(linear),'acescg',half_precision)
                     out.write(path,arcname=name)
                     path.unlink()
