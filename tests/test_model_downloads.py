@@ -56,6 +56,10 @@ class ModelDownloadTest(unittest.TestCase):
         self.assertEqual(packages['ltx25_text_int8']['files'][0]['filename'], 'gemma4-12b-with-proj-ltx-2.5-comfy-int8-convrot.safetensors')
         self.assertTrue(packages['ltx25_clean_plate']['gated'])
         self.assertEqual({f['filename'] for f in packages['h3_head_adapters']['files']}, {'minimax_h3_fl2v_turbo_4step_v1.0_768p_comfyui_bf16.safetensors', 'camera_motion_h3_lora_v1_1000_pruned.safetensors'})
+        taomate=packages['h3_taomate']['files'][0]
+        self.assertEqual(taomate['filename'],'minimax_h3_taomate_3step_lora_avg_rank_19_bf16.safetensors')
+        self.assertEqual(taomate['size_bytes'],181697688)
+        self.assertEqual(taomate['sha256'],'de9663d974a884b477556748239c6f28239f7ca1825be270f98f023ff5dab6a7')
         relight = packages['wan21_relight']['files']
         self.assertEqual(relight[0]['filename'], 'wan_2.1_idv2v_int8_convrot.safetensors')
         self.assertEqual(relight[1:4], packages['wan_animate_2']['files'][1:])
