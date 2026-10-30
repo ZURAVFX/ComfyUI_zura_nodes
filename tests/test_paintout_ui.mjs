@@ -58,7 +58,7 @@ await ui.exportFrame();assert.equal(ui.$('export-link').hidden,false);assert.equ
 ui.$('size-mode').value='source';ui.$('size-mode').onchange();
 assert.equal(ui.config().width,1920);assert.equal(ui.config().height,1088);
 assert.match(ui.$('resolution-label').textContent,/Source/);
-assert.match(ui.$('size-help').textContent,/Saved output: 1920 Ã— 1080/);
+assert.match(ui.$('size-help').textContent,/Saved output: 1920 × 1080/);
 assert.equal(buildPaintoutGraph(ui.config()).source.inputs.framing_mode,'Source resolution (pad, no resize)');
 ui.$('size-mode').value='portrait';ui.$('size-mode').onchange();
 ui.$('megapixels').value='0.5';ui.$('megapixels').onchange();
