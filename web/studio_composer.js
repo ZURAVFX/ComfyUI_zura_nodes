@@ -157,8 +157,9 @@ export class VideoComposer {
     this.attachment('source',source,s.source?'Source video':'Add video');
     this.attachment('refs',s.references?.[0],s.references?.length?`${s.references.length} reference${s.references.length===1?'':'s'}`:'References');
     this.root.querySelector('#zc-remove-refs').setAttribute('aria-label',s.references?.length>1?'Remove all references':'Remove reference');this.root.querySelector('#zc-remove-refs').title=s.references?.length>1?'Remove all references':'Remove reference';
-    this.attachment('frame',s.readyAsset,s.readyAsset?'Finished frame':'Finished frame');
-    this.root.querySelector('#zc-attach-refs').parentElement.hidden=s.lookMode==='ready';this.root.querySelector('#zc-attach-frame').parentElement.hidden=s.lookMode!=='ready';
+    this.attachment('frame',s.readyAsset,s.readyAsset?'Finished frame':'Use finished frame');
+    this.root.querySelector('#zc-attach-refs').parentElement.hidden=s.lookMode==='ready';
+    this.root.querySelector('#zc-attach-frame').parentElement.hidden=(stage==='video'&&!s.directViewport())||s.headSwap()||s.config.engine==='seedance'||!!this.root.querySelector('input[name="gs-look"][value="ready"]')?.disabled;
     for(const button of this.composer.querySelectorAll('.zc-attachment'))button.disabled=working;
     this.length.querySelector('summary').setAttribute('aria-label','Clip length: '+this.root.querySelector('#zc-tool-length').textContent);
   }

@@ -84,6 +84,14 @@ assert.equal(studio.container.querySelector('input[value="relight"]').closest('l
 assert.equal(studio.config.engine,'h3');assert.equal(studio.$('audio-settings').hidden,true);
 assert.equal(studio.$('preserve-identity-setting').hidden,true,'Wan relight hides the H3 identity guide');
 assert.equal(studio.config.relight_engine,'wan21','Relight defaults to the supplied Wan recipe');
+assert.equal(studio.container.querySelector('#zc-attach-frame').parentElement.hidden,false,'A supplied lighting frame is visible in relight');
+{
+  const fetch=api.fetchApi;api.fetchApi=async(path,options)=>path==='/zura/studio/upload?kind=image'?{ok:true,json:async()=>({id:'finished-lighting',file:'genj_studio/lighting.png',name:'lighting.png'})}:fetch(path,options);
+  const file=Object.assign(new Blob(['image'],{type:'image/png'}),{name:'lighting.png'});
+  studio.source={id:'temporary-source',duration:3};await studio.upload('ready',file);api.fetchApi=fetch;
+  assert.equal(studio.lookMode,'ready');assert.equal(studio.readyAsset.id,'finished-lighting');assert.equal(studio.projectBody().starting_image,'finished-lighting');
+  studio.removeInput('ready');studio.source=null;
+}
 assert.equal(studio.container.querySelector('input[name="gs-engine"][value="h3"]').closest('label').hidden,true,'H3 relight video is removed from Studio');
 assert.equal(studio.$('image-editor').hidden,false);
 assert.equal(studio.$('head-replacement-setting').hidden,true);
