@@ -59,6 +59,9 @@ each terminal state. Previous test artifacts are not automatically removed.
 An isolated two-section SDR-to-HDR GPU run confirmed that the job's staging
 directory was removed after completion while its HLG, EXR and preview outputs
 remained available.
+An additional live multi-section GPU run was cancelled during sampling: its
+owned prompt stopped, the queue was empty, staging was removed and no partial
+deliverables were published.
 Head-swap setup now links its missing crop, pose, padding, mask and sigma nodes
 to the corresponding installed packs' declared upstream repositories. Automatic
 node-pack installation remains outstanding.
