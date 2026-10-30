@@ -9,6 +9,9 @@ assert.equal(recoverClipLength({...original,engine:'local'},20).duration,15);
 assert.equal(recoverClipLength({...original,engine:'local',workflow_mode:'motion'},20).duration,5);
 assert.equal(recoverClipLength({...original,engine:'wan',audio_id:'speech',lip_sync:true},45).duration,30);
 assert.equal(clipLength({...original,length_mode:'custom',duration:5},15).invalid,false);
+const legacyRelight={...original,workflow_mode:'relight',relight_engine:'h3'};
+assert.equal(clipLength(legacyRelight,15).invalid,false,'Legacy relight settings must not apply the H3 five-second limit');
+assert.equal(clipLength(legacyRelight,15).maximum,null,'Wan relight supports chained source-length clips');
 // Execute the actual CTA handler without browser APIs or any Comfy queue.
 const source=fs.readFileSync(new URL('../web/studio.js',import.meta.url),'utf8').replace(/^import .*;\r?\n/gm,'').replace(/^export /gm,'').split('app.registerExtension({')[0];
 const context={app:{registerExtension(){}},clipLength,recoverClipLength};
@@ -38,5 +41,5 @@ console.log("Visible Source/Custom buttons use the existing configuration change
 const relight={engine:'h3',workflow_mode:'relight',relight_engine:'wan21',edit_area:'scene',length_mode:'custom',duration:15,start:0};
 assert.equal(clipLength(relight,15).maximum,null,'Chained Wan 2.1 relight does not inherit the H3 five-second limit');
 assert.equal(clipLength(relight,15).invalid,false);
-assert.equal(clipLength({...relight,relight_engine:'h3'},15).invalid,true,'The H3 relight limit remains enforced');
+assert.equal(clipLength({...relight,relight_engine:'h3'},15).invalid,false,'Saved H3 relight choices migrate to Wan 2.1');
 assert.equal(clipLength({...relight,engine:'wan2',workflow_mode:'motion',duration:4},15).invalid,true,'Wan Animate 2 retains its real 81-frame limit');

@@ -141,13 +141,15 @@ def clean_config(value):
     if c["engine"] not in ("local", "h3") and c["finished_frame_position"] != "first":
         raise ValueError("Timed finished-frame references are supported by LTX and H3. Select First frame or switch models.")
     if c["workflow_mode"] == "relight" and c["engine"] != "h3":
-        raise ValueError("Relight currently supports MiniMax H3. Choose H3 for this task.")
+        raise ValueError("Relight uses the Wan 2.1 workflow. Reload Studio and choose Relight again.")
     if c["workflow_mode"] != "relight":
         c["relight_engine"] = "h3"
     else:
         # Migrate saved H3 choices when editing/exporting a shot. Running jobs
         # keep their queued graph and are never automatically resubmitted.
         c["relight_engine"] = "wan21"
+        c["finished_frame_position"] = "first"
+        c["finished_frame_number"] = 1
     c["preserve_people"] = bool(c["preserve_people"])
     c["preserve_identity"] = bool(c["preserve_identity"]) and c["workflow_mode"] == "relight"
     if c["preserve_people"] and (c["engine"] != "h3" or c["workflow_mode"] != "motion"):
@@ -382,10 +384,11 @@ def validate_selection(project):
         selected_frame_count(project, check_asset)
         return
     wan2 = c["engine"] == "wan2"
-    h3 = c["engine"] == "h3"
+    wan21_relight = c.get("workflow_mode") == "relight"
+    h3 = c["engine"] == "h3" and not wan21_relight
     ltx_scene = c["engine"] == "local" and c.get("edit_area") == "scene"
     wan_speech = c["engine"] == "wan" and bool(project.get("audio")) and c.get("lip_sync")
-    if not (h3 or ltx_scene or wan_speech or wan2):
+    if not (h3 or ltx_scene or wan_speech or wan2 or wan21_relight):
         return
     path = check_asset(project["source"])
     with av.open(str(path)) as container:
@@ -396,6 +399,8 @@ def validate_selection(project):
     if not math.isfinite(available) or available <= 0:
         raise ValueError("The source video has no valid duration. Upload it again.")
     start = 0 if c.get("length_mode") == "original" else c["start"]
+    if wan21_relight and c.get("length_mode") != "original" and int(c["duration"] * 24 + 1e-6) > int((available - start) * 24 + 1e-6):
+        raise ValueError("The selected range extends past the end of the source video. Choose Use source or a shorter range.")
     seconds = available if c.get("length_mode") == "original" else min(c["duration"], available - start)
     if seconds <= 0:
         raise ValueError("The start time is beyond the end of this video.")
@@ -1976,9 +1981,13 @@ class Studio:
 
     async def action(self, p, stage, body):
         self.collect(p)
-        approve_opening = stage == "animate"
+        # Existing H3 relight projects use Wan 2.1 for their next action.
+        # Never alter the graph of an action already running.
         if p.get("actions") and p["actions"][-1]["state"] in ("waiting", "submitting", "queued", "running"):
-            return p  # A double-click/reconnect never queues another job.
+            return p
+        if p.get("config", {}).get("workflow_mode") == "relight":
+            p["config"] = clean_config(p["config"])
+        approve_opening = stage == "animate"
         create_look = stage == "create_look"
         if create_look:
             require_verified_setup(p["config"], stage)
