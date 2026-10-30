@@ -1644,9 +1644,12 @@ class ArtistStudio {
     if(camera)this.$("models").textContent=baseReady?"H3 · Camera ready":"Camera setup needed";
     if(this.openjutsu())this.$("models").textContent=baseReady?"OpenJutsu · Character ready":"OpenJutsu setup needed";
     this.$("models").classList.toggle("needs-attention",!ready);
-    const files=wan21Relight?[...(needsImage?(openingStatus?.model_files||this.modelStatus.model_files?.design||[]):[]),...(wan21Status.model_files||[])]:((camera?cameraStatus?.model_files:null)||(this.headSwap()?this.modelStatus.h3_head_swap?.model_files:null)||this.modelStatus.model_files?.[route]||[]);
+    const includeOpening=needsImage&&!camera&&!this.headSwap()&&engine!=="seedance";
+    const videoFiles=wan21Relight?(wan21Status.model_files||[]):((camera?cameraStatus?.model_files:null)||(this.headSwap()?this.modelStatus.h3_head_swap?.model_files:null)||this.modelStatus.model_files?.[route]||[]);
+    const files=[...(includeOpening?(openingStatus?.model_files||this.modelStatus.model_files?.design||[]):[]),...videoFiles];
     const missingNodeField={openjutsu:"missing_openjutsu_nodes",wan2:"missing_wan2_nodes",h3_head_swap:"missing_h3_head_swap_nodes",local:"missing_ltx_nodes",local_scene:"missing_ltx_scene_nodes",local_viewport:"missing_ltx_viewport_nodes",h3:"missing_h3_nodes",h3_viewport:"missing_h3_viewport_nodes",wan:"missing_wan_nodes"}[route];
-    const missingNodes=wan21Relight?[...(needsImage?(openingStatus?.missing_nodes||this.modelStatus.missing_design_nodes||[]):[]),...(wan21Status.missing_nodes||[])]:((camera?cameraStatus?.missing_nodes:null)||(this.headSwap()?this.modelStatus.h3_head_swap?.missing_nodes:null)||this.modelStatus[missingNodeField]||[]);
+    const videoNodes=wan21Relight?(wan21Status.missing_nodes||[]):((camera?cameraStatus?.missing_nodes:null)||(this.headSwap()?this.modelStatus.h3_head_swap?.missing_nodes:null)||this.modelStatus[missingNodeField]||[]);
+    const missingNodes=[...new Set([...(includeOpening?(openingStatus?.missing_nodes||this.modelStatus.missing_design_nodes||[]):[]),...videoNodes])];
     this.modelDownloads?.setContext({route:wan21Relight?"wan21_relight":route,files,missingNodes});
     this.$("model-checklist").innerHTML=engine==="seedance"?'<p class="gs-note">Uses the paid provider. Check credits and cost before rendering.</p>':files.map(item=>`<p class="gs-note">${item.ready?"Ready":"Missing"}: <code>${escape(item.path||`models/${item.folder}/${item.filename}`)}</code>${!item.ready&&item.url?` · <a href="${escape(item.url)}" target="_blank" rel="noopener noreferrer">Download</a>`:""}</p>`).join("")+(missingNodes.length?`<p class="gs-note">Missing nodes: ${missingNodes.map(escape).join(", ")}. Install the matching packs listed in the setup guide, then restart ComfyUI.</p>`:"<p class=\"gs-note\">Required native node checks passed. Optional speech or enhancement has its own setup.</p>");
   }

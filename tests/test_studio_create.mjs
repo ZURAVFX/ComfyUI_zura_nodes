@@ -51,6 +51,16 @@ vm.createContext(context);
 const source=fs.readFileSync(new URL('../web/studio.js',import.meta.url),'utf8').replace(/^import .*;\r?\n/gm,'').replace(/^export /gm,'').split('app.registerExtension({')[0];
 vm.runInContext(source+'\nthis.Studio=ArtistStudio;',context);
 const studio=new context.Studio(),ui=studio.creative;
+{
+  const probe=Object.create(context.Studio.prototype),elements={models:{classList:{toggle(){}}},'model-checklist':{}};
+  Object.assign(probe,{config:{engine:'h3',workflow_mode:'swap',opening_model:'flux3',delivery_mode:'base',edit_area:'mask'},lookMode:'build',project:null,
+    modelStatus:{engine_ready:{h3:true},model_files:{h3:[{folder:'diffusion_models',filename:'video.safetensors',ready:true}]},missing_h3_nodes:[],opening_models:{flux3:{ready:false,model_files:[{folder:'diffusion_models',filename:'flux3-image-klein-int8-convrot.safetensors',ready:false}],missing_nodes:['ImageNode']}}},
+    modelDownloads:{setContext(value){this.context=value;}},$:id=>elements[id],openjutsu:()=>false,headSwap:()=>false,directViewport:()=>false});
+  probe.updateModelStatus();assert.deepEqual(Array.from(probe.modelDownloads.context.files,f=>f.filename),['flux3-image-klein-int8-convrot.safetensors','video.safetensors']);
+  assert.deepEqual(Array.from(probe.modelDownloads.context.missingNodes),['ImageNode']);
+  probe.lookMode='ready';probe.updateModelStatus();assert.deepEqual(Array.from(probe.modelDownloads.context.files,f=>f.filename),['video.safetensors'],'supplied image does not require an image generator');
+  probe.lookMode='build';probe.headSwap=()=>true;probe.modelStatus.h3_head_swap={model_files:[],missing_nodes:[]};probe.updateModelStatus();assert.equal(probe.modelDownloads.context.files.length,0,'head swap skips the starting-image generator');
+}
 studio.project={id:'preview-project',phase:'working',actions:[{id:'preview-action',stage:'h3'}]};studio.config.engine='h3';
 apiEvents.get('minimax_h3_preview')({detail:{node_id:'h3_live_preview_preview-project',webp:'Ynl0ZXM=',step:3,total_steps:8}});
 assert.equal(studio.$('live-preview').hidden,false,'A matching H3 sampler event shows a live sample during its render');
