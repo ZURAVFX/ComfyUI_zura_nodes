@@ -41,6 +41,14 @@ contained no audio. First, middle and last frames maintained consistent cropping
 in this still-camera test; it does not establish quality at higher resolution or
 longer duration. Runtime was 16.13 seconds on the local system.
 
+A separate isolated Wan 2.1 relight test used a 4-second, 96-frame section
+starting 0.21 seconds into a 60 fps source at 512 × 288. The Studio graph ran two
+overlapping generation windows and delivered 96 decoded frames at 24 fps in
+52.99 seconds. The delivered soundtrack correlated 0.9986 with the selected
+source at zero measured lag (mono 16 kHz comparison). This validates duration
+and alignment for that multi-window case, not maximum-length quality or every
+input frame rate.
+
 Remaining coverage includes the maximum-length and unusual-source-rate cases across modes,
 and exact source/audio alignment across long multi-window outputs. Check each
 model's embedded requested frame count, decoded frame count, frame rate and
