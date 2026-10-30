@@ -420,8 +420,6 @@ def validate_selection(project):
     h3 = c["engine"] == "h3" and not wan21_relight
     ltx_scene = c["engine"] == "local" and c.get("edit_area") == "scene"
     wan_speech = c["engine"] == "wan" and bool(project.get("audio")) and c.get("lip_sync")
-    if not (h3 or ltx_scene or wan_speech or wan2 or wan21_relight):
-        return
     path = check_asset(project["source"])
     with av.open(str(path)) as container:
         stream = container.streams.video[0]
@@ -431,9 +429,11 @@ def validate_selection(project):
     if not math.isfinite(available) or available <= 0:
         raise ValueError("The source video has no valid duration. Upload it again.")
     start = 0 if c.get("length_mode") == "original" else c["start"]
-    seconds = available if c.get("length_mode") == "original" else min(c["duration"], available - start)
-    if seconds <= 0:
+    seconds = available if c.get("length_mode") == "original" else c["duration"]
+    if start >= available:
         raise ValueError("The start time is beyond the end of this video.")
+    if int(seconds * 24 + 1e-6) > int((available - start) * 24 + 1e-6):
+        raise ValueError("The selected range extends past the end of the source video. Choose Use source or a shorter range.")
     frames = max(1, int(seconds * 24 + 1e-6))
     if h3 and not 5 <= frames <= 120:
         raise ValueError("H3 currently supports 0.21 to 5 seconds. Choose a shorter custom clip, or use Wan for a longer take.")

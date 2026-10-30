@@ -37,11 +37,13 @@ class SelectionLimitsTests(unittest.TestCase):
             studio.validate_selection(project)
 
     def test_h3_source_end_and_original_length_use_real_24fps_frame_count(self):
-        self.validate(self.project(duration=30), 120)
+        with self.assertRaisesRegex(ValueError, "shorter range"):
+            self.validate(self.project(duration=30), 120)
         self.validate(self.project(length_mode="original", duration=2), 120)
         with self.assertRaisesRegex(ValueError, "0.21 to 5 seconds"):
             self.validate(self.project(length_mode="original", duration=2), 121)
-        self.validate(self.project(start=5, duration=30), 240)
+        with self.assertRaisesRegex(ValueError, "shorter range"):
+            self.validate(self.project(start=5, duration=30), 240)
 
     def test_h3_too_short_and_out_of_range_start_fail(self):
         with self.assertRaisesRegex(ValueError, "0.21 to 5 seconds"):
@@ -51,10 +53,8 @@ class SelectionLimitsTests(unittest.TestCase):
         self.validate(self.project(duration=5), 120, stream_duration=False)
 
     def test_replacement_speech_length_does_not_limit_original_or_soundtrack_wan(self):
-        with patch.object(studio.av, "open") as opened:
-            studio.validate_selection(self.project("wan", length_mode="original"))
-            studio.validate_selection(self.project("wan", length_mode="original", audio_id="b" * 32, lip_sync=False))
-            self.assertFalse(opened.called)
+        self.validate(self.project("wan", length_mode="original"), 720)
+        self.validate(self.project("wan", length_mode="original", audio_id="b" * 32, lip_sync=False), 720)
         speech = self.project("wan", length_mode="original", audio_id="b" * 32, lip_sync=True)
         self.validate(speech, 720)
         with self.assertRaisesRegex(ValueError, "up to 30 seconds"):
@@ -83,9 +83,12 @@ class SelectionLimitsTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "up to 5 seconds"):
             self.validate(self.project("local", edit_area="scene", length_mode="original"), 121)
         self.validate(self.project("local", edit_area="scene", start=5, duration=5), 240)
-        with patch.object(studio.av, "open") as opened:
-            studio.validate_selection(self.project("local", edit_area="mask", length_mode="original"))
-            opened.assert_not_called()
+        self.validate(self.project("local", edit_area="mask", length_mode="original"), 240)
+
+    def test_custom_ranges_cannot_silently_shorten_any_engine(self):
+        for engine,extra in (("h3",{}),("wan",{}),("local",{"edit_area":"mask"}),("wan2",{})):
+            with self.subTest(engine=engine),self.assertRaisesRegex(ValueError,"shorter range"):
+                self.validate(self.project(engine,start=1,duration=3,**extra), 95)
 
 
 if __name__ == "__main__":
