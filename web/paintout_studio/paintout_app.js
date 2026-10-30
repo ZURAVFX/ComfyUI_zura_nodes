@@ -1,6 +1,7 @@
 import {app} from '/scripts/app.js';
 import {api} from '/scripts/api.js';
 import {getPaintoutWorkspace} from './paintout_shared.js';
+import {installPopoverDismissal} from '../studio_popovers.js';
 
 let workspace, root, owner;
 async function request(path, body) {
@@ -17,6 +18,7 @@ export async function openPaintout() {
     const logo=new URL('./assets/zura-logo.png',import.meta.url).href;
     root.innerHTML = `<header class="gs-top"><div class="gs-brand"><img class="gs-zura-mark" src="${logo}" alt=""/><strong>Paintout Studio</strong></div><nav class="zc-nav" aria-label="Workspace"><button type="button" aria-current="page">Paintout</button></nav><div class="gs-top-actions"><span class="gs-status">Local processing</span><button type="button" class="zc-theme-toggle gs-quiet" data-action="theme">Light mode</button><button type="button" class="gs-quiet" data-action="close" aria-label="Close Paintout Studio">Back to graph</button></div></header><main></main>`;
     document.body.append(root);
+    installPopoverDismissal(root);
     const close = () => {workspace?.close(); root.hidden = true;};
     root.querySelector('[data-action=close]').onclick = close;
     const theme=root.querySelector('[data-action=theme]');

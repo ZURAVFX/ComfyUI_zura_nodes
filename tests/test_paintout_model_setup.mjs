@@ -1,0 +1,22 @@
+import assert from 'node:assert/strict';
+import {parseHTML} from '../../ui-check/node_modules/linkedom/esm/index.js';
+import {PaintoutWorkspace} from '../web/paintout_studio/studio_paintout.js';
+
+const {document,window}=parseHTML('<html><body><section id="root"></section></body></html>');
+Object.defineProperty(window.HTMLSelectElement.prototype,'value',{configurable:true,get(){return this.querySelector('option[selected]')?.value??this.querySelector('option')?.value??'';},set(value){for(const option of this.querySelectorAll('option'))option.toggleAttribute('selected',option.value===String(value));}});
+window.HTMLCanvasElement.prototype.getContext=()=>({setTransform(){},clearRect(){}});
+window.HTMLElement.prototype.pause=()=>{};
+Object.assign(globalThis,{document,window,ResizeObserver:class {observe(){} disconnect(){}},localStorage:{getItem(){return null;},setItem(){}}});
+const calls=[];
+const owner={root:document.querySelector('#root'),studio:{close(){}},app:{},api:{clientId:'test',apiURL:p=>p,addEventListener(){},removeEventListener(){}},async fetch(path,body){calls.push({path,body});if(path==='/zura/studio/model-downloads')return {models:[]};if(path==='/object_info')return {};throw Error(path);}};
+const ui=new PaintoutWorkspace(owner);
+assert.equal(ui.$('model-downloads').querySelector('summary').textContent,'Models');
+ui.modelInfo={};ui.render();
+assert.equal(ui.modelDownloads.context.route,'paintout_targeted');
+assert.ok(ui.modelDownloads.context.files.length,'missing models come from actual workflow requirements');
+ui.state.mode='full';ui.render();assert.equal(ui.modelDownloads.context.route,'paintout_full');
+await ui.modelDownloads.load();
+assert.match(ui.modelDownloads.files.textContent,/Full-scene clean plate/);
+assert.equal(calls.filter(call=>call.body).length,0,'opening setup never starts a download');
+ui.close();
+console.log('Integrated Paintout setup tracks the selected workflow without starting downloads.');

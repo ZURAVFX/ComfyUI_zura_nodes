@@ -11,6 +11,7 @@ import {ShotComparison} from './studio_compare.js';
 import {tidyArtistGraph} from './artist_graph.js';
 import {PaintoutEditor,paintoutDraft} from './paintout_editor.js';
 import {LTXLoras} from '../studio_ltx_loras.js';
+import {StudioModelDownloads} from '../studio_model_download.js';
 
 
 
@@ -92,6 +93,7 @@ export class PaintoutWorkspace{
 
           <details class="zc-tool-popup"><summary class="zc-tool" aria-label="Paintout settings">${icons.settings}</summary><div class="zc-tool-panel"><strong>Processing & delivery</strong><p>INT8 · 8 steps · original-resolution delivery</p><label>Source colour space<select id="zps-colour">${options(colours,this.state.sourceColour)}</select></label><label>Process as<select id="zps-processing"><option>SDR (sRGB)</option><option>HDR (ACEScct)</option></select></label><label>Save as<select id="zps-output">${PAINTOUT_OUTPUT_MODES.map(mode=>`<option>${mode}</option>`).join('')}</select></label><label>Seed<input id="zps-seed" type="number" min="0" max="9007199254740991" step="1" value="42"/></label><div id="zps-setup"></div><button type="button" id="zps-refresh">Refresh models</button></div></details>
 
+          <details class="zc-tool-popup gs-model-help" id="zps-model-downloads"></details>
           <details class="zc-tool-popup" id="zps-anchor-settings" hidden><summary class="zc-tool">Painted frame ${icons.chevron}</summary><div class="zc-tool-panel"><strong id="zps-selected-name"></strong><div class="zps-anchor-shortcuts"><button type="button" data-anchor-frame="first">First selected</button><button type="button" data-anchor-frame="current">Use playhead</button><button type="button" data-anchor-frame="last">Last selected</button></div><label>Guide strength<input id="zps-anchor-strength" type="number" min="0.01" max="1" step="0.01" value="0.75"/></label><label>Image colour space<select id="zps-anchor-colour">${options(colours.filter(([id])=>id!=='auto'),'srgb_display')}</select></label><label class="zf-check"><input type="checkbox" id="zps-anchor-enabled" checked/>Use this painted frame</label><button type="button" id="zps-replace-anchor">Replace image</button></div></details>
 
         </div><div class="zc-prompt-submit"><button type="submit" class="gs-primary" id="zps-generate" disabled>Generate clean plate</button></div></div>
@@ -103,6 +105,7 @@ export class PaintoutWorkspace{
     owner.root.append(this.page);
 
     this.loras=new LTXLoras(this.page.querySelector('.zc-prompt-tools'),(path,body)=>this.fetch(path,body),()=>this.busy(),()=> 'ltx25',true);
+    this.modelDownloads=new StudioModelDownloads(this.$('model-downloads'),(path,body)=>this.fetch('/zura/studio'+path,body),()=>this.loadModels());
     this.loras.setValue(saved.draft?.custom_loras);this.loras.onchange=()=>{this.state.custom_loras=this.loras.value();this.save();};
 
     this.$('prompt').value=this.prompts[this.state.mode]||PAINTOUT_DEFAULT_PROMPTS[this.state.mode];
@@ -345,7 +348,7 @@ export class PaintoutWorkspace{
 
     if(!error&&targeted&&this.maskInfo&&this.maskInfo.frames>1&&this.maskInfo.frames<c.startFrame+c.frameCount)error='The mask does not cover the selected source range.';
 
-    this.validationError=error;this.availability=availability;
+    this.validationError=error;this.availability=availability;this.modelDownloads.setMissingContext(targeted?'paintout_targeted':'paintout_full',availability?.missing);
 
     this.page.querySelector('.zf-composer').hidden=!this.state.source;this.$('title').textContent='Review and render';this.$('workflow-label').textContent=targeted?'Targeted repair':'Full-scene clean plate';this.$('shot-summary').textContent=this.sourceInfo?`${name(this.state.source)} · ${this.sourceInfo.width} × ${this.sourceInfo.height} · ${this.fps()} fps · frames ${c.startFrame}–${c.startFrame+c.frameCount-1}`:'';
 
@@ -470,7 +473,7 @@ export class PaintoutWorkspace{
 
     if(invalid){this.message('Enter a valid '+(invalid.closest('label')?.firstChild?.textContent||'frame number').trim().toLowerCase()+'.');invalid.closest('details')?.setAttribute('open','');invalid.focus();return;}
 
-    if(this.validationError||!this.availability?.ready){const reason=this.validationError||this.$('setup').textContent;if(this.editor&&/mask section|removal mask|matching mask/i.test(reason)){await this.editor.setStage('mask');const covered=new Set(this.state.maskCoverage||[]),first=Array.from({length:this.state.frameCount},(_,i)=>this.state.startFrame+i).find(f=>!covered.has(f));if(first!=null)this.seek(first);this.editor.status(reason);return;}if(this.editor&&/painted clean frame|painted frame/i.test(reason)){await this.editor.setStage('clean');this.editor.status(reason);return;}this.message(reason);const id=/frame|range|mask.*cover/i.test(reason)?'range':/width|height|resolution|pixel/i.test(reason)?'resolution':null;if(id)this.$(id).open=true;else if(!this.availability?.ready)this.$('setup').closest('details').open=true;return;}
+    if(this.validationError||!this.availability?.ready){const reason=this.validationError||this.$('setup').textContent;if(this.validationError&&this.editor&&/mask section|removal mask|matching mask/i.test(reason)){await this.editor.setStage('mask');const covered=new Set(this.state.maskCoverage||[]),first=Array.from({length:this.state.frameCount},(_,i)=>this.state.startFrame+i).find(f=>!covered.has(f));if(first!=null)this.seek(first);this.editor.status(reason);return;}if(this.validationError&&this.editor&&/painted clean frame|painted frame/i.test(reason)){await this.editor.setStage('clean');this.editor.status(reason);return;}this.message(reason);const id=this.validationError?(/frame|range|mask.*cover/i.test(reason)?'range':/width|height|resolution|pixel/i.test(reason)?'resolution':null):null;if(id)this.$(id).open=true;else if(!this.availability?.ready)this.$('model-downloads').open=true;return;}
 
     this.submitting=true;this.message('');this.$('progress-title').textContent='Submitting clean plate';this.$('progress-detail').textContent='Sending your run to ComfyUI…';this.$('bar').removeAttribute('value');this.render();
 
@@ -506,6 +509,6 @@ export class PaintoutWorkspace{
 
   async graph(){try{const config=this.job?.config||this.config(),graph=await this.loras.patch(buildPaintoutGraph(config),config.custom_loras||[]),original=(this.app.rootGraph||this.app.graph)?.serialize?.();if(!original||typeof this.app.loadApiJson!=='function')throw new Error('Update ComfyUI to open this editable graph.');try{await this.app.loadApiJson(graph,`Zura Paintout · ${Date.now()}.json`);await import('../vendor/elk.bundled.js');await tidyArtistGraph(this.app,graph,'paintout',window.ELK);}catch(e){await this.app.loadGraphData(original);throw e;}this.studio.close();}catch(e){this.message(e.message);}}
 
-  close(){this.editor?.close();this.save();this.stopPolling();this.nativeSamplePreview?.dispose();this.nativeSamplePreview=null;this.comparison?.hide();this.$('video').pause();}
+  close(){this.editor?.close();this.save();this.stopPolling();this.nativeSamplePreview?.dispose();this.nativeSamplePreview=null;this.comparison?.hide();this.$('model-downloads').open=false;this.$('video').pause();}
 
 }

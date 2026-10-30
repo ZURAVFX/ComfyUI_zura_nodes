@@ -1,4 +1,9 @@
 /* Shared Studio styles own appearance; these rules only mount the standalone editor. */
+#zura-paintout-app .gs-model-downloads .gs-advanced-body,#zura-paintout-app .gs-model-downloads [data-model-files]{display:grid;gap:10px;min-width:0;overflow-wrap:anywhere}
+#zura-paintout-app .gs-model-downloads [data-model-files] p{margin:0}
+#zura-paintout-app .gs-model-downloads .gs-model-package{display:grid;gap:8px;padding-top:12px;border-top:1px solid var(--gs-line)}
+#zura-paintout-app .gs-model-downloads .gs-model-package button,#zura-paintout-app .gs-model-downloads [data-model-actions] button{min-height:40px;padding:8px 12px}
+#zura-paintout-app .gs-model-downloads [data-model-actions]{display:flex;flex-wrap:wrap;gap:8px}
 #zura-paintout-launch{position:fixed;right:22px;bottom:22px;z-index:1000;padding:12px 18px;border:0;border-radius:8px;background:#caff00;color:#17180f;font:600 13px 'Zura Manrope',system-ui;cursor:pointer}
 #zura-paintout-app{z-index:10001}
 #zura-paintout-app[hidden]{display:none!important}
