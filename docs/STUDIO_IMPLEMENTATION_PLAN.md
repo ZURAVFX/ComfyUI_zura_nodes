@@ -65,6 +65,10 @@ deliverables were published.
 Head-swap setup now links its missing crop, pose, padding, mask and sigma nodes
 to the corresponding installed packs' declared upstream repositories. Automatic
 node-pack installation remains outstanding.
+Qwen Image 2.1 also has an in-app package for its INT8 model, encoder and VAE.
+The pinned Comfy-Org repository identifies a research licence and all three local
+files matched its published hashes. The image recipe remains experimental and has
+not received a GPU quality or performance sign-off.
 Qwen Image Edit 2511 now has an in-app package for its exact INT8 model, encoder,
 VAE and Lightning adapter. Their pinned hashes match the files on this system;
 the INT8 mirror does not state a licence and setup identifies its source.

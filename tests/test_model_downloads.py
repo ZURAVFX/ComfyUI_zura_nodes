@@ -65,6 +65,13 @@ class ModelDownloadTest(unittest.TestCase):
         self.assertEqual(qwen[0]['size_bytes'],20499083824)
         self.assertEqual(qwen[0]['sha256'],'11b5af5ac601821d73930c84846c9a158e67177356daf927ce1c8d10f3963829')
         self.assertIn('does not state a licence',packages['qwen2511']['note'])
+        qwen21=packages['qwen21']
+        self.assertEqual({(f['folder'],f['filename']) for f in qwen21['files']}, {
+            ('diffusion_models','qwen_image_2.1_int8_convrot.safetensors'),
+            ('text_encoders','qwen3vl_8b_int8_convrot.safetensors'),
+            ('vae','qwen_image_2.1_vae_bf16.safetensors')})
+        self.assertTrue(all(f['repo']=='Comfy-Org/Qwen-Image-2.1' and len(f['revision'])==40 and len(f['sha256'])==64 for f in qwen21['files']))
+        self.assertIn('research licence',qwen21['note'])
         relight = packages['wan21_relight']['files']
         self.assertEqual(relight[0]['filename'], 'wan_2.1_idv2v_int8_convrot.safetensors')
         self.assertEqual(relight[1:4], packages['wan_animate_2']['files'][1:])
