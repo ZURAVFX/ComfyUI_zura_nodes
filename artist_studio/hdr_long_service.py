@@ -3,10 +3,16 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import re
 from pathlib import Path
 
 from .hdr_jobs import HDRJobs
+
+
+def preview_enabled():
+    """The integrated longer route is deliberately opt-in for desktop testing."""
+    return os.environ.get('ZURA_HDR_LONG_PREVIEW', '').strip() == '1'
 
 
 class HDRLongService:

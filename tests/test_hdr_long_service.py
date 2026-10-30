@@ -1,10 +1,12 @@
 """Long HDR submission uses validated assets and safe output references."""
 import asyncio
 import importlib
+import os
 import sys
 import tempfile
 import types
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 import v2_bootstrap
 
@@ -27,6 +29,14 @@ class Job:
     async def cancel(self):self.state='cancelled';self.release.set();return True
 
 class HDRLongServiceTests(unittest.IsolatedAsyncioTestCase):
+    async def test_integrated_preview_is_explicitly_opt_in(self):
+        with patch.dict(os.environ, {}, clear=True):
+            self.assertFalse(service.preview_enabled())
+        with patch.dict(os.environ, {'ZURA_HDR_LONG_PREVIEW': 'true'}, clear=True):
+            self.assertFalse(service.preview_enabled())
+        with patch.dict(os.environ, {'ZURA_HDR_LONG_PREVIEW': '1'}, clear=True):
+            self.assertTrue(service.preview_enabled())
+
     async def test_checked_asset_single_job_and_relative_output(self):
         with tempfile.TemporaryDirectory() as root:
             output=Path(root)/'genj'/'hdr'/'result.zip';output.parent.mkdir(parents=True);output.write_bytes(b'x')

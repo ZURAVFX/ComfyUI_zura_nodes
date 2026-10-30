@@ -14,7 +14,7 @@ export class HDRSourceTool {
       <div class="gs-hdr-fields"><label>First frame<input data-hdr="start" type="number" min="0" step="1" value="0"/></label><label>Number of frames<input data-hdr="count" type="number" min="1" max="121" step="1" value="25"/></label></div>
       <label>Source colour<select data-hdr="colour"><option value="auto">Read source tags</option><option value="rec709_oetf">Rec.709</option><option value="rec709_gamma24">Rec.709 gamma 2.4</option><option value="srgb_display">sRGB</option></select></label>
       <label>Deliver<select data-hdr="output"><option value="hlg_and_exr">HLG video + EXR sequence</option><option value="hlg_video">HLG video</option><option value="acescg_exr">EXR sequence</option></select></label>
-      <label data-hdr="long-control" hidden><input data-hdr="long" type="checkbox"/> Longer clip · process in sections</label>
+      <label data-hdr="long-control" hidden><input data-hdr="long" type="checkbox"/> Longer clip · preview · process in sections</label>
       <label data-hdr="sections-control" hidden>Section size<select data-hdr="sections"><option value="121">Longer sections · fewer joins</option><option value="25">Shorter sections · potentially faster, more joins</option></select></label>
       <p data-hdr="limits" role="status" aria-live="polite">Up to 121 frames per run. Large frame selections may need to be shorter.</p>
       <details data-hdr="models" class="gs-advanced"></details>
@@ -41,8 +41,16 @@ export class HDRSourceTool {
     try{this.job=localStorage.getItem('zura-hdr-active-job');}catch{}
     if(this.job){this.busy=true;this.loras.setBusy(true);this.root.open=true;this.$('start-job').disabled=true;this.$('cancel').hidden=false;this.$('progress').hidden=false;this.$('progress').removeAttribute('value');this.status('Reconnecting to your HDR conversion…');this.poll();}
     if(longAvailable&&!this.job){let active,pending;try{active=localStorage.getItem('zura-hdr-long-job');pending=localStorage.getItem('zura-hdr-long-request');}catch{}if(active||pending){this.root.open=true;if(active)this.longClient.reconnect(active);else this.longClient.reconnectRequest(pending);}}
+    if(!longAvailable&&!this.job){let saved;try{saved=localStorage.getItem('zura-hdr-long-job')||localStorage.getItem('zura-hdr-long-request');}catch{}if(saved)void this.refreshModelSetup();}
   }
   $(id){return this.root.querySelector(`[data-hdr="${id}"]`);}
+  setLongAvailable(available){
+    if(this.longAvailable===available)return;
+    this.longAvailable=available;this.$('long-control').hidden=!available;
+    if(!available)this.$('long').checked=false;
+    if(available&&!this.job&&!this.longClient.busy){let active,pending;try{active=localStorage.getItem('zura-hdr-long-job');pending=localStorage.getItem('zura-hdr-long-request');}catch{}if(active||pending){this.root.open=true;if(active)this.longClient.reconnect(active);else this.longClient.reconnectRequest(pending);}}
+    this.updateMode();
+  }
   status(text){this.$('status').textContent=text;}
   nodeLabel(node){return ({zura_hdr_source:'Reading source frames',zura_hdr_audio_source:'Reading source audio',zura_hdr_prepare:'Preparing HDR frames',hdr_model:'Loading LTX 2.5',model:'Loading LTX 2.5',hdr_lora:'Loading HDR adapter',lora:'Loading HDR adapter',hdr_vae_loader:'Loading video decoder',vae:'Loading video decoder',hdr_audio_vae:'Loading audio model',hdr_conditioning:'Preparing HDR conditioning',hdr_guide_input:'Preparing colour guidance',hdr_guide:'Preparing video guidance',guide1:'Preparing video guidance',guide2:'Preparing detail guidance',hdr_sample:'Generating HDR video',sample1:'Generating HDR video · pass 1 of 2',sample2:'Generating HDR video · pass 2 of 2',upsample:'Upscaling HDR detail',hdr_decode:'Decoding HDR video',decode:'Decoding HDR video',zura_hdr_exr:'Converting to EXR',zura_hdr_archive:'Packaging EXR frames',zura_hdr_hlg:'Converting to HLG',zura_hdr_save_video:'Saving HDR video',zura_hdr_preview_tonemap:'Preparing SDR preview',zura_hdr_save_preview:'Saving preview'})[node]||'Processing HDR video';}
   updateMode(){
@@ -74,6 +82,8 @@ export class HDRSourceTool {
     if(Number.isInteger(asset?.width)&&Number.isInteger(asset?.height)){query.set('width',asset.width);query.set('height',asset.height);}
     try{
       const context=await this.request('/zura/studio/hdr/readiness?'+query);
+      if(revision!==this.modelSetupRevision)return;
+      if(typeof context.longPreview==='boolean')this.setLongAvailable(context.longPreview);
       if(revision!==this.modelSetupRevision)return;
       this.models.setContext(context);
       this.frameLimit=context.frameLimit||null;

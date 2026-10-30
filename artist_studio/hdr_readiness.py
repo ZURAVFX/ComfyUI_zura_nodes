@@ -62,6 +62,8 @@ def register(routes,response):
         import nodes
         result=await asyncio.to_thread(readiness,request.query.get('mode','sdr'),
             request.query.get('output','hlg_and_exr'),folder_paths.get_full_path,nodes.NODE_CLASS_MAPPINGS)
+        from .hdr_long_service import preview_enabled
+        result['longPreview'] = preview_enabled()
         try:
             width=int(request.query['width']);height=int(request.query['height'])
         except (KeyError,TypeError,ValueError):

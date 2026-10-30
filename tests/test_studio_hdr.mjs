@@ -16,6 +16,12 @@ const api={apiURL:p=>p,clientId:'test',addEventListener(){},removeEventListener(
   return {ok:true,async json(){return data;}};
 }};
 const tool=new HDRSourceTool(document.querySelector('#host'),api,()=>({id:'source-id',projectId:'project-id'}));
+const gated=new HDRSourceTool(document.querySelector('#host'),api,()=>({id:'source-id'}));
+gated.models.packages=[{id:'existing'}];
+gated.request=async()=>({route:'hdr_sdr',files:[],missingNodes:[],longPreview:true});
+await gated.refreshModelSetup();assert.equal(gated.$('long-control').hidden,false);assert.match(gated.$('long-control').textContent,/preview/);
+gated.request=async()=>({route:'hdr_sdr',files:[],missingNodes:[],longPreview:false});
+await gated.refreshModelSetup();assert.equal(gated.$('long-control').hidden,true);assert.equal(gated.$('long').checked,false);gated.close();
 assert.equal(tool.$('models').querySelector('summary').textContent,'HDR model packages');
 assert.match(tool.$('models').textContent,/Source and frame limits/);
 await tool.refreshModelSetup();assert.equal(tool.models.select.value,'__workflow__');assert.match(tool.models.files.textContent,/SDR to HDR/);assert.match(tool.models.files.textContent,/needed.safetensors/);

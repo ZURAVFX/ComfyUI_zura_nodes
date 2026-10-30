@@ -175,3 +175,12 @@ GPU runs at 256 × 256: H3 produced 362 frames and Wan 2.2 and LTX 2.5 each
 produced 361, all at 24 fps with both endpoints connected. Those runs used the
 same image at each end and are not high-resolution or visual-quality approval;
 see STUDIO_VIDEO_VALIDATION.md for timings and limits.
+
+A guarded integration now registers the longer-HDR service only when
+ZURA_HDR_LONG_PREVIEW=1 is explicitly set at ComfyUI startup. Normal Studio keeps
+the control hidden. The UI discovers that capability from the server, labels it
+as a preview and reconnects to a saved job. An isolated instance using the real
+Studio upload endpoint converted a 130-frame SDR source in two sections and
+returned 130 frames of HLG video and a tone-mapped preview; the HLG video has
+a 5.4167-second video and a 5.416-second audio stream. Unit and UI tests pass.
+Desktop validation is pending; this is not installed in the normal Studio.
