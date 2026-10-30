@@ -21,7 +21,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           repository: ZURAVFX/Zura-Paintout
-          ref: 5dd138c536b9a39d34c8a025f45e8812e0f8ebad
+          ref: e9b6b4bc6a95aa8634f16f407c79904a5e21bd01
           persist-credentials: false
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0
         with:
