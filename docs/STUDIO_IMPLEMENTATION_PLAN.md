@@ -47,3 +47,5 @@ Studio asset references and emits output-relative file references. Start,
 status and cancellation HTTP handlers pass simulated request tests but are not
 registered yet. Studio controls and end-to-end testing remain; it remains
 unavailable to users pending visual review.
+Long jobs now also generate an SDR review video with the selected soundtrack;
+streaming, frame count, audio selection and cancellation pass local tests.

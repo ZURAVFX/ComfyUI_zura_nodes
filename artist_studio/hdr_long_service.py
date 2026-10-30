@@ -55,14 +55,15 @@ class HDRLongService:
         snapshot=self.jobs.status(identity)
         result=snapshot.get('result')
         if result:
-            files=[]
-            for name in result.get('files',[]):
+            def file_reference(name):
                 path=Path(name).resolve()
                 if not path.is_relative_to(self.output_root) or not path.is_file():
                     raise ValueError('An HDR output is unavailable.')
                 relative=path.relative_to(self.output_root)
-                files.append({'filename':relative.name,'subfolder':relative.parent.as_posix(),'type':'output'})
-            snapshot['result']={**result,'files':files}
+                return {'filename':relative.name,'subfolder':relative.parent.as_posix(),'type':'output'}
+            files=[file_reference(name) for name in result.get('files',[])]
+            preview=file_reference(result['preview']) if result.get('preview') else None
+            snapshot['result']={**result,'files':files,'preview':preview}
         return snapshot
 
     async def cancel(self, identity):

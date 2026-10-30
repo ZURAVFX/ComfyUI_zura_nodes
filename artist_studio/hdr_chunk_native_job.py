@@ -19,6 +19,7 @@ from .hdr_chunk_exr import export_exr_zip
 from .hdr_chunk_runner import HDRChunkRunner
 from .hdr_chunk_store import HDRChunkCancelled, HDRChunkStore
 from .hdr_chunk_video import export_hlg_video
+from .hdr_chunk_preview import export_sdr_preview
 from .hdr_native_studio import build_asset_graph
 
 
@@ -69,16 +70,18 @@ def create_native_job(server, asset, body, check_asset, output_root, *, ffmpeg=N
         raise ValueError('Not enough free temporary disk space for the HDR chunks.')
     if not same_device and shutil.disk_usage(output_dir).free < output_bytes+reserve:
         raise ValueError('Not enough free output disk space for the HDR deliverables.')
-    if output in ('hlg_video','hlg_and_exr'):
-        executable=ffmpeg or shutil.which('ffmpeg')
-        if not executable:raise ValueError('FFmpeg is required to export HDR video.')
-        try:
-            result=subprocess.run([str(executable),'-hide_banner','-encoders'],capture_output=True,text=True,timeout=30)
-        except (OSError,subprocess.TimeoutExpired) as exc:
-            raise ValueError('FFmpeg could not be checked before HDR rendering.') from exc
-        if result.returncode or 'libx265' not in result.stdout:
-            raise ValueError('FFmpeg needs a 10-bit HEVC encoder for HDR video.')
-        ffmpeg=str(executable)
+    # A viewable SDR preview is required for every delivery format.
+    executable=ffmpeg or shutil.which('ffmpeg')
+    if not executable:raise ValueError('FFmpeg is required to export the HDR preview.')
+    try:
+        result=subprocess.run([str(executable),'-hide_banner','-encoders'],capture_output=True,text=True,timeout=30)
+    except (OSError,subprocess.TimeoutExpired) as exc:
+        raise ValueError('FFmpeg could not be checked before HDR rendering.') from exc
+    if result.returncode or 'libx264' not in result.stdout:
+        raise ValueError('FFmpeg needs an H.264 encoder for the SDR preview.')
+    if output in ('hlg_video','hlg_and_exr') and 'libx265' not in result.stdout:
+        raise ValueError('FFmpeg needs a 10-bit HEVC encoder for HDR video.')
+    ffmpeg=str(executable)
     identity=uuid.uuid4().hex
     store=HDRChunkStore(staging,identity,plan,details['width'],details['height'],create=True)
 
@@ -96,8 +99,13 @@ def create_native_job(server, asset, body, check_asset, output_root, *, ffmpeg=N
                 paths.append(await asyncio.to_thread(export_hlg_video,staged,output_root,_prefix+'_'+identity,
                     fps=details['fps'],audio_source=str(source) if details['has_audio'] else None,
                     audio_start_frame=start,ffmpeg=ffmpeg))
+            preview=await asyncio.to_thread(export_sdr_preview,staged,output_root,_prefix+'_'+identity,
+                fps=details['fps'],audio_source=str(source) if details['has_audio'] else None,
+                audio_start_frame=start,ffmpeg=ffmpeg)
+            paths.append(preview)
             if staged.cancelled.is_set():raise HDRChunkCancelled('HDR conversion cancelled.')
-            return {'files':[str(path) for path in paths],'frames':count,'fps':details['fps']}
+            return {'files':[str(path) for path in paths if path!=preview],'preview':str(preview),
+                    'frames':count,'fps':details['fps']}
         except Exception:
             # Both paths were created exclusively by this call. Never touch a
             # pre-existing deliverable if a subsequent export fails.

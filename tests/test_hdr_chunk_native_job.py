@@ -128,6 +128,8 @@ class HDRNativeLongJobTests(unittest.IsolatedAsyncioTestCase):
                 result=await job.run()
             self.assertEqual((summary['chunks'],queue.submissions,job.state),(2,2,'complete'))
             paths=[Path(path) for path in result['files']]
+            with av.open(result['preview']) as preview:
+                self.assertEqual(sum(1 for _ in preview.decode(video=0)),122)
             with zipfile.ZipFile(next(path for path in paths if path.suffix=='.zip')) as archive:
                 self.assertEqual(len(archive.namelist()),122)
             with av.open(str(next(path for path in paths if path.suffix=='.mp4'))) as container:
