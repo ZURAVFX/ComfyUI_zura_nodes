@@ -168,7 +168,11 @@ def _selection(project, check_asset):
                      else float((container.duration or 0) / av.time_base))
         has_audio = bool(container.streams.audio)
     start = 0. if config.get("length_mode") == "original" else config["start"]
-    duration = available if config.get("length_mode") == "original" else min(config["duration"], available - start)
+    duration = available if config.get("length_mode") == "original" else config["duration"]
+    if not all(math.isfinite(v) for v in (available,start,duration)) or start < 0 or duration <= 0 or start >= available:
+        raise ValueError("Choose a valid source interval.")
+    if int(duration * 24 + 1e-6) > int((available - start) * 24 + 1e-6):
+        raise ValueError("The selected range extends past the end of the source video. Choose a shorter range.")
     frames = int(duration * 24 + 1e-6) if math.isfinite(duration) else 0
     if not has_audio:
         raise ValueError("Head & face requires original audio. Use Full character for silent footage or new dialogue.")

@@ -229,7 +229,11 @@ def _request(project, check_asset, video=False):
                      else float((container.duration or 0) / av.time_base))
         has_audio = bool(container.streams.audio)
     start = 0. if config.get("length_mode") == "original" else float(config.get("start", 0))
-    duration = available if config.get("length_mode") == "original" else min(float(config.get("duration", 2)), available-start)
+    duration = available if config.get("length_mode") == "original" else float(config.get("duration", 2))
+    if not all(math.isfinite(v) for v in (available,start,duration)) or start < 0 or duration <= 0 or start >= available:
+        raise ValueError("Choose a valid source interval.")
+    if int(duration * 24 + 1e-6) > int((available - start) * 24 + 1e-6):
+        raise ValueError("The selected range extends past the end of the source video. Choose a shorter range.")
     refs = []
     for asset in project.get("references", []):
         path = check_asset(asset)

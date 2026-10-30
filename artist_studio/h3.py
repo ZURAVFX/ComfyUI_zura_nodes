@@ -488,7 +488,9 @@ def build_h3_viewport_graph(project):
     start = 0.0 if original_length else c["start"]
     if start >= available:
         raise ValueError("The selected start time is beyond the end of this viewport video.")
-    selected_seconds = available if original_length else min(c["duration"], available - start)
+    selected_seconds = available if original_length else c["duration"]
+    if int(selected_seconds * 24 + 1e-6) > int((available - start) * 24 + 1e-6):
+        raise ValueError("The selected range extends past the end of the source video. Choose a shorter range.")
     selected_frames = max(1, int(selected_seconds * 24 + 1e-6))
     if not 5 <= selected_frames <= 120:
         raise ValueError("Local H3 viewport renders currently support 0.21–5 seconds per take. Choose a section up to five seconds long.")
