@@ -146,7 +146,7 @@ export class VideoComposer {
     const select=this.root.querySelector('#zc-video-model'),radios=Array.from(this.root.querySelectorAll('input[name="gs-engine"]')).filter(r=>!r.closest('label').hidden);
     const key=radios.map(r=>r.value+':'+r.disabled).join('|');
     if(select.dataset.choices!==key){select.replaceChildren();for(const radio of radios){const option=document.createElement('option');option.value=radio.value;option.textContent={local:'LTX 2.5',h3:'MiniMax H3',wan:'Wan 2.2',wan2:'Wan Animate 2',wan21:'Wan 2.1',seedance:'Seedance'}[radio.value];option.disabled=radio.disabled;select.append(option);}select.dataset.choices=key;}
-    select.value=s.config.engine;select.disabled=working;this.model.hidden=stage!=='video';this.imageModel.hidden=stage==='video';
+    select.value=s.config.workflow_mode==='relight'&&s.config.relight_engine==='wan21'?'wan21':s.config.engine;select.disabled=working;this.model.hidden=stage!=='video';this.imageModel.hidden=stage==='video';
     this.syncOpeningModel(working);
     this.syncWorkflow();
     this.resolution.hidden=false;this.settings.hidden=stage!=='video'||['relight','camera'].includes(s.config.workflow_mode);this.audio.hidden=s.$('audio-settings').hidden||stage!=='video';

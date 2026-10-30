@@ -390,7 +390,7 @@ class ArtistStudio {
     c.preserve_people=c.engine==="h3" && c.workflow_mode==="motion" && !!this.$("preserve_people")?.checked;
     c.preserve_identity=c.workflow_mode==="relight" && !!this.$("preserve_identity")?.checked;
     if(c.workflow_mode==="relight" && c.relight_engine==="wan21"){
-      c.remove_text=false;c.preserve_identity=false;c.resolution=1280;c.delivery_mode="native";
+      c.remove_text=false;c.preserve_identity=false;c.resolution=1280;c.delivery_mode="native";c.finished_frame_position="first";c.finished_frame_number=1;
       this.$("remove_text").checked=false;this.$("preserve_identity").checked=false;this.$("resolution").value="1280";
     }
     if(c.preserve_people)c.edit_area="mask";
@@ -1208,7 +1208,7 @@ class ArtistStudio {
     this.$("mask-points-note").textContent=points.length?`${points.filter(p=>p.include).length} include, ${points.filter(p=>!p.include).length} exclude. Tracked from the opening frame.`:"Include the area you want to change. Exclude anything selected by mistake.";
     this.$("create-voice").disabled=!!this.voiceJob||this.busy||this.project?.phase==="working";
     this.$("sampling-setting").hidden=!["h3","wan"].includes(this.config.engine);
-    const h3Quality=this.config.engine==="h3";
+    const h3Quality=this.config.engine==="h3" && !relight;
     this.$("h3-steps-setting").hidden=!h3Quality;
     this.syncAttentionBackend();
     this.$("sampling-label").textContent=h3Quality?"H3 sampling mode":"Detail level";
@@ -1233,9 +1233,9 @@ class ArtistStudio {
     if(relight)this.$("engine-hint").textContent=this.config.remove_text?"Relight from your approved lighting frame; remove source lettering.":"Relight from your approved lighting frame. Keeping lettering can leave darker patches around it.";
     const unsupportedSubject=this.config.engine==="wan" && this.config.subject_mode==="objects";
     if(this.config.engine==="wan" && content.kind==="objects")this.$("engine-hint").textContent="Character performance is for people. Object replacement is not yet available in Studio.";
-    this.$("output-note").textContent=this.config.engine==="seedance"?"The draft uses your selected resolution and clip length. Finishing an accepted draft is a separate paid 1080p step.":this.config.engine==="h3"&&this.config.delivery_mode==="enhanced1080"?"H3 creates motion at 720p, then enhances each frame to 1080p. The approved original or selected soundtrack is restored once.":this.config.engine==="h3"?"Native H3 renders at the selected size. Native 1080p is a separate, memory-intensive render.":"Keeps your video's shape. Renders the length you choose from the original footage.";
+    this.$("output-note").textContent=relight?"Wan 2.1 processes the selected footage in sections and retains the original audio.":this.config.engine==="seedance"?"The draft uses your selected resolution and clip length. Finishing an accepted draft is a separate paid 1080p step.":this.config.engine==="h3"&&this.config.delivery_mode==="enhanced1080"?"H3 creates motion at 720p, then enhances each frame to 1080p. The approved original or selected soundtrack is restored once.":this.config.engine==="h3"?"Native H3 renders at the selected size. Native 1080p is a separate, memory-intensive render.":"Keeps your video's shape. Renders the length you choose from the original footage.";
     for(const option of this.$("resolution").options){
-      const h3=this.config.engine==="h3";
+      const h3=this.config.engine==="h3" && !relight;
       option.hidden=h3&&["512","768"].includes(option.value);
       option.disabled=this.config.engine==="seedance" && option.value==="768";
       if(option.value==="512")option.textContent=this.config.engine==="seedance"?"480p · small test":"512 px · small test";
@@ -1245,7 +1245,7 @@ class ArtistStudio {
         option.hidden=!h3 || viewport;option.disabled=viewport;option.textContent="1080p · Enhanced H3";
       }
     }
-    const timedFrames=this.config.engine==="h3" || this.config.engine==="local" && wholeScene;
+    const timedFrames=!relight && (this.config.engine==="h3" || this.config.engine==="local" && wholeScene);
     const position=this.$("finished_frame_position");
     for(const option of position.options)option.disabled=!timedFrames && option.value!=="first";
     this.$("frame-number-setting").hidden=!timedFrames || this.config.finished_frame_position!=="frame";

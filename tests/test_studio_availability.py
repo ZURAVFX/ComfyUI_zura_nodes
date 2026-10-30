@@ -44,11 +44,11 @@ class AvailabilityTests(unittest.TestCase):
             require_verified_setup(config, stage)
         with self.assertRaisesRegex(ValueError, "selected Relight video graph"):
             require_verified_setup(config, "h3")
-        # An already-running legacy H3 job can still finish on its own backend.
+        # Saved legacy choices migrate for new actions; running jobs finish independently.
         legacy = {**config, "relight_engine": "h3"}
-        require_verified_setup(legacy, "h3")
+        require_verified_setup(legacy, "wan21_relight")
         with self.assertRaisesRegex(ValueError, "selected Relight video graph"):
-            require_verified_setup(legacy, "wan21_relight")
+            require_verified_setup(legacy, "h3")
         self.assertFalse(verified_setup({**config, "audio_id": "voice"}))
         self.assertFalse(verified_setup({**config, "engine": "wan"}))
 

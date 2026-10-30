@@ -79,8 +79,7 @@ def require_verified_setup(config, stage=None):
             raise ValueError("Create and review the camera frame, then generate the video.")
         return
     if config.get("workflow_mode") == "relight":
-        route = "wan21_relight" if config.get("relight_engine", "h3") == "wan21" else "h3"
-        if stage is not None and stage not in ("auto", "prepare", "approve", "design", "animate", "create_look", route):
+        if stage is not None and stage not in ("auto", "prepare", "approve", "design", "animate", "create_look", "wan21_relight"):
             raise ValueError("Choose the selected Relight video graph.")
         return
     if head_swap_setup(config):
