@@ -167,6 +167,25 @@ CATALOG.update({
         ]),
 })
 
+CATALOG.update({
+    "h3_first_last": dict(name="MiniMax H3 · first and last frame", gated=False,
+        license_url="https://huggingface.co/Comfy-Org/MiniMax-H3",
+        note="The H3 first/last-frame model, its eight-step adapter, text encoder and video/audio VAEs. Review the MiniMax H3 terms; custom nodes may be separate.",
+        files=[
+            _file("diffusion_models", "minimax_h3_fl2va_pruned_int8_convrot.safetensors", "Comfy-Org/MiniMax-H3", "912b6e38b2092ec4d2e86d24183e0d59ea059d48", "diffusion_models/minimax_h3_fl2va_pruned_int8_convrot.safetensors", 20970379616, "e889202c41dafb67b10d67b97f0d8541508036a6090af23425a5c2615d03c47a"),
+            CATALOG["openjutsu_h3"]["files"][1], CATALOG["h3_int8_vae"]["files"][0], CATALOG["openjutsu_h3"]["files"][3],
+            _file("loras", "minimax_h3_fl2v_turbo_8step_v1.0_comfyui_bf16.safetensors", "Comfy-Org/MiniMax-H3", "912b6e38b2092ec4d2e86d24183e0d59ea059d48", "loras/minimax_h3_fl2v_turbo_8step_v1.0_comfyui_bf16.safetensors", 1956193000, "2339acdf19bfe123f46b971ea35d367a84adb85de43627e1eceafa5a5b2b111e"),
+        ]),
+    "ltx25_text_int8": dict(name="LTX 2.5 · INT8 Gemma encoder", gated=True,
+        license_url="https://huggingface.co/Lightricks/LTX-2.5",
+        note="Official INT8 Gemma encoder used by LTX first/last-frame and paintout. Accept the model terms; the LTX model and workflow adapters are separate.",
+        files=[_file("text_encoders", "gemma4-12b-with-proj-ltx-2.5-comfy-int8-convrot.safetensors", "Lightricks/LTX-2.5", "49b093a39c19169a8a81721dcc541e07e945232f", "text_encoders/gemma4-12b-with-proj-ltx-2.5-comfy-int8-convrot.safetensors", 15372969374, "6ce688a0aa98a5fa36a9f1e6c3f42152a498cc2b53ee8c15674c64244f91487f")]),
+    "ltx25_clean_plate": dict(name="LTX 2.5 · clean plate adapter", gated=True,
+        license_url="https://huggingface.co/Lightricks/LTX-2.5-22b-IC-LoRA-Clean-Plate",
+        note="Adapter for the full-scene clean-plate workflow. Accept its source terms; the LTX model, encoder and VAEs are separate.",
+        files=[_file("loras", "ltx-2.5-22b-ic-lora-clean-plate-1.0.safetensors", "Lightricks/LTX-2.5-22b-IC-LoRA-Clean-Plate", "5cdacad3ee33574ecb11120b873dec320de79b37", "ltx-2.5-22b-ic-lora-clean-plate-1.0.safetensors", 327318439, "27f4f7ba552d3bf7273dd817291123a5934f17e7698ca9cd8945b079a5358393")]),
+})
+
 def inspect(model_id, locations):
     """Return required files and exact remaining bytes, including shared files."""
     if model_id not in CATALOG:
@@ -264,7 +283,7 @@ class DownloadManager:
         recipe = inspect(model_id, self.locations)
         incomplete = next((item for item in recipe['files'] if item['incomplete']), None)
         if incomplete:
-            raise ValueError('An existing model file has the wrong size: ' + incomplete['filename'] + '. Check or move it before downloading; it will not be overwritten.')
+            raise ValueError('An existing model file differs from this download: ' + incomplete['filename'] + '. It may be another version or incomplete. Check it before moving it; it will not be overwritten.')
         with self._lock:
             if self._active is not None:
                 raise ValueError('Another model download is already running.')

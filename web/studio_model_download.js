@@ -1,5 +1,5 @@
 // Model packages are allowlisted by the backend. Fetching the list never starts a download.
-const PACKAGE_IDS=['openjutsu_h3','wan_animate_2','wan21_relight','wan22_animate_core','wan22_pose','h3_birefnet','h3_head_acceleration','h3_head_adapters','h3_dmd_ref2va','h3_int8_vae','h3_control','h3_crossview','ltx25_core','ltx25_full_vae','ltx25_refine','ltx25_sdr_hdr','ltx25_text_encoder','ltx25_outpaint','ltx25_in_outpaint','ltx_control','flux2_klein_start'];
+const PACKAGE_IDS=['openjutsu_h3','wan_animate_2','wan21_relight','wan22_animate_core','wan22_pose','h3_birefnet','h3_head_acceleration','h3_head_adapters','h3_dmd_ref2va','h3_int8_vae','h3_control','h3_crossview','h3_first_last','ltx25_core','ltx25_full_vae','ltx25_refine','ltx25_sdr_hdr','ltx25_text_encoder','ltx25_text_int8','ltx25_clean_plate','ltx25_outpaint','ltx25_in_outpaint','ltx_control','flux2_klein_start'];
 const ROUTE_NAMES={openjutsu:'OpenJutsu character replacement',wan2:'Wan Animate 2',wan:'Wan 2.2 character replacement',wan21_relight:'Wan 2.1 relight',h3_camera:'H3 camera angle',h3_head_swap:'H3 head swap',h3_viewport:'H3 viewport to final',h3:'MiniMax H3',local:'LTX 2.5',local_scene:'LTX 2.5 whole scene'};
 const NODE_PACKS=[
   {name:'ComfyUI-KJNodes',url:'https://github.com/kijai/ComfyUI-KJNodes',nodes:['PathchSageAttentionKJ','ImageResizeKJv2']},
@@ -59,7 +59,7 @@ export class StudioModelDownloads {
     for(const pack of packs){
       const row=this.el('div','');row.className='gs-model-package';row.append(this.el('strong',pack.name),this.el('p',`${gb(pack.remaining_bytes)} to download${pack.note?' · '+pack.note:''}`));
       if(!pack.remaining_bytes)row.append(this.el('p','Files are present. Refresh setup or restart ComfyUI if the workflow still cannot see them.'));
-      for(const file of pack.files.filter(file=>!file.installed))row.append(this.el('p',`${file.incomplete?'Existing file has the wrong size':'Needed'} · ${file.filename} · ${gb(file.size_bytes)}`));
+      for(const file of pack.files.filter(file=>!file.installed))row.append(this.el('p',`${file.incomplete?'Existing file differs from this download; check its version':'Needed'} · ${file.filename} · ${gb(file.size_bytes)}`));
       for(const repo of [...new Set(pack.files.map(file=>file.repo).filter(Boolean))]) row.append(this.link(`Review ${repo}`,`https://huggingface.co/${repo}`),' ');
       const blocked=pack.files.some(file=>file.incomplete);const button=this.el('button',this.job?'Download in progress':blocked?'Check existing files':pack.remaining_bytes?'Download missing files':'Files installed');button.type='button';button.disabled=!!this.job||blocked||!pack.remaining_bytes;button.onclick=()=>this.start(pack.id);row.append(button);this.files.append(row);
     }
@@ -77,7 +77,7 @@ export class StudioModelDownloads {
     this.files.append(this.el('p',pack.note||''));
     if(pack.error){this.files.append(this.el('p',pack.error));return;}
     this.files.append(this.el('p',`${gb(pack.remaining_bytes)} to download`));
-    for(const file of pack.files){const p=this.el('p',`${file.installed?'Installed':file.incomplete?'Existing file has the wrong size; check or move it':'Needed'} · ${file.filename} · ${gb(file.size_bytes)}`);p.className='gs-note';this.files.append(p);}
+    for(const file of pack.files){const p=this.el('p',`${file.installed?'Installed':file.incomplete?'Existing file differs; check its version before moving it':'Needed'} · ${file.filename} · ${gb(file.size_bytes)}`);p.className='gs-note';this.files.append(p);}
     this.files.append(this.el('p','Review each source’s terms and access requirements before downloading:'));
     for(const repo of [...new Set(pack.files.map(file=>file.repo))]){const link=this.el('a',repo);link.href=`https://huggingface.co/${repo}`;link.target='_blank';link.rel='noopener noreferrer';this.files.append(link,document.createElement('br'));}
     const blocked=pack.files.some(file=>file.incomplete);const button=this.el('button',this.job?'Download in progress':blocked?'Check existing files':pack.remaining_bytes?'Download missing files':'Files installed');button.type='button';button.disabled=!!this.job||blocked||!pack.remaining_bytes;button.onclick=()=>this.start(pack.id);this.actions.append(button);

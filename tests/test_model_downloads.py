@@ -51,12 +51,15 @@ class ModelDownloadTest(unittest.TestCase):
         self.assertEqual({f['folder'] for f in packages['wan22_pose']['files']}, {'detection'})
         self.assertEqual(packages['h3_birefnet']['files'][0]['folder'], 'background_removal')
         self.assertEqual(packages['h3_dmd_ref2va']['files'][0]['filename'], 'minimax_h3_dmd_ref2va_8step_turbo_pruned.safetensors')
+        self.assertEqual(packages['h3_first_last']['files'][0]['filename'], 'minimax_h3_fl2va_pruned_int8_convrot.safetensors')
+        self.assertEqual(packages['ltx25_text_int8']['files'][0]['filename'], 'gemma4-12b-with-proj-ltx-2.5-comfy-int8-convrot.safetensors')
+        self.assertTrue(packages['ltx25_clean_plate']['gated'])
         self.assertEqual({f['filename'] for f in packages['h3_head_adapters']['files']}, {'minimax_h3_fl2v_turbo_4step_v1.0_768p_comfyui_bf16.safetensors', 'camera_motion_h3_lora_v1_1000_pruned.safetensors'})
         relight = packages['wan21_relight']['files']
         self.assertEqual(relight[0]['filename'], 'wan_2.1_idv2v_int8_convrot.safetensors')
         self.assertEqual(relight[1:4], packages['wan_animate_2']['files'][1:])
         self.assertEqual(relight[-1]['filename'], 'lightx2v_I2V_14B_480p_cfg_step_distill_rank64_bf16.safetensors')
-        for name in ('flux2_klein_start', 'ltx25_full_vae', 'ltx25_refine', 'ltx25_sdr_hdr', 'ltx25_text_encoder', 'ltx25_outpaint', 'ltx25_in_outpaint', 'ltx_control', 'ltx25_layout', 'h3_int8_vae', 'h3_control', 'h3_crossview', 'wan22_animate_core', 'wan22_pose', 'h3_birefnet', 'h3_head_acceleration', 'h3_head_adapters', 'h3_dmd_ref2va', 'wan21_relight'):
+        for name in ('flux2_klein_start', 'ltx25_full_vae', 'ltx25_refine', 'ltx25_sdr_hdr', 'ltx25_text_encoder', 'ltx25_outpaint', 'ltx25_in_outpaint', 'ltx_control', 'ltx25_layout', 'h3_int8_vae', 'h3_control', 'h3_crossview', 'wan22_animate_core', 'wan22_pose', 'h3_birefnet', 'h3_head_acceleration', 'h3_head_adapters', 'h3_dmd_ref2va', 'wan21_relight', 'h3_first_last', 'ltx25_text_int8', 'ltx25_clean_plate'):
             for f in packages[name]['files']:
                 self.assertEqual(len(f['revision']), 40)
                 self.assertEqual(len(f['sha256']), 64)
@@ -145,7 +148,7 @@ class ModelDownloadTest(unittest.TestCase):
             result = downloads.inspect('example', self.locations)
             self.assertFalse(result['files'][0]['installed'])
             self.assertTrue(result['files'][0]['incomplete'])
-            with self.assertRaisesRegex(ValueError, 'wrong size'):
+            with self.assertRaisesRegex(ValueError, 'differs from this download'):
                 downloads.DownloadManager(self.locations).start('example')
             self.assertEqual(path.read_bytes(), b'incomplete')
             get.assert_not_called()
