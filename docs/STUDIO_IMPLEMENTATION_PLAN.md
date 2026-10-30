@@ -34,5 +34,7 @@ selected audio within one sample at a non-zero trim. Long HDR remains gated
 pending the artist and end-to-end checks.
 The bounded HDR graph now packages ACEScct directly into ACEScg EXRs without
 clipping negative channels; the official decoder remains the SDR preview.
-Real EXR and graph tests pass, but the revised graph has not yet been exercised
-in a complete GPU render or installed into the running desktop instance.
+Real EXR and graph tests pass. An isolated GPU run of the revised SDR-to-HDR
+graph delivered ten ACEScg-tagged EXRs and ten HLG 10-bit frames with audio;
+the revised files are installed locally and require a ComfyUI restart. This
+64 × 64 test establishes integration, not production-resolution visual quality.
