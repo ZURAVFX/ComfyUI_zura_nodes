@@ -25,6 +25,13 @@ paintout=importlib.import_module('ComfyUI_zura_nodes.paintout.paintout')
 
 
 class HDRSourceTest(unittest.TestCase):
+    def test_1080p_padded_limit_is_reported_before_reading_frames(self):
+        info={'kind':'video','count':200,'width':1920,'height':1080,'fps':24,'transfer':'bt709'}
+        with patch.object(paintout,'describe',return_value=info), patch('av.open') as open_video:
+            with self.assertRaisesRegex(ValueError,'up to 17 frames'):
+                hdr_studio.build_asset_graph({'asset_kind':'video'}, {'frame_count':18}, lambda _: 'source.mp4')
+        open_video.assert_not_called()
+
     @unittest.skipUnless(shutil.which('ffmpeg'),'requires FFmpeg')
     def test_nonzero_audio_offset_selects_matching_source_segment(self):
         with tempfile.TemporaryDirectory() as temp:

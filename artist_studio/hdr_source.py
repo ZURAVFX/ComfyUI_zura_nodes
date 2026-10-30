@@ -7,10 +7,10 @@ import shutil
 import subprocess
 import numpy as np
 import torch
+from .hdr_prepare import MAX_PIXEL_FRAMES
 
 MAX_FRAMES = 121
 # Three float32 channels are approximately 480 MB at 40 million pixels.
-MAX_PIXEL_FRAMES = 40_000_000
 SDR_SPACES = ('srgb_display', 'rec709_oetf', 'rec709_gamma24')
 
 

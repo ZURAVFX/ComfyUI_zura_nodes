@@ -67,9 +67,10 @@ def build_asset_graph(asset, body, check_asset):
     if type(start) is not int or start<0 or type(count) is not int or not 1<=count<=MAX_FRAMES:
         raise ValueError(f'Choose 1–{MAX_FRAMES} frames and a non-negative start frame.')
     if start+count>info['count']:raise ValueError('The selected range extends past the source video.')
-    from .hdr_source import MAX_PIXEL_FRAMES
-    if info['width']*info['height']*count>MAX_PIXEL_FRAMES:
-        raise ValueError('This selection is too large for one HDR conversion. Choose fewer frames or smaller footage.')
+    from .hdr_prepare import sdr_frame_limit
+    maximum=sdr_frame_limit(info['width'],info['height'])
+    if count>maximum:
+        raise ValueError(f'This resolution supports up to {maximum} frames per HDR conversion within the padding budget. Choose fewer frames or smaller footage.')
     if info.get('transfer') in ('arib-std-b67','smpte2084'):
         raise ValueError('This source is HDR. The SDR-to-HDR route requires SDR footage.')
     colour=body.get('colour_space','auto')

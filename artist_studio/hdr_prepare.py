@@ -5,6 +5,16 @@ import math
 import torch
 import torch.nn.functional as F
 
+MAX_PIXEL_FRAMES = 40_000_000
+
+
+def sdr_frame_limit(width, height, frame_limit=121):
+    """Maximum source frames whose 32-pixel and 8n+1 padding fits the budget."""
+    padded_width = (width + 31) // 32 * 32
+    padded_height = (height + 31) // 32 * 32
+    budget = min(frame_limit, MAX_PIXEL_FRAMES // (padded_width * padded_height))
+    return 1 + 8 * ((budget - 1) // 8) if budget >= 9 else 0
+
 
 def pad_sdr_guide(images, frame_limit=121):
     """Pad right/bottom reflectively, hold the final frame to 8n+1.
@@ -15,13 +25,16 @@ def pad_sdr_guide(images, frame_limit=121):
     """
     if not isinstance(images, torch.Tensor) or images.ndim != 4 or images.shape[-1] != 3:
         raise ValueError('Expected RGB video frames.')
-    if not images.is_floating_point() or not bool(torch.isfinite(images).all()):
-        raise ValueError('Expected finite floating-point sRGB video frames.')
     count,height,width,_ = images.shape
     if count < 1 or count > frame_limit:
         raise ValueError(f'This HDR test supports 1–{frame_limit} source frames per render.')
     if height < 32 or width < 32 or height > 4096 or width > 4096:
         raise ValueError('Source dimensions must be between 32 and 4096 pixels.')
+    maximum = sdr_frame_limit(width, height, frame_limit)
+    if count > maximum:
+        raise ValueError(f'This resolution supports up to {maximum} frames per HDR conversion within the padding budget. Choose fewer frames or smaller footage.')
+    if not images.is_floating_point() or not bool(torch.isfinite(images).all()):
+        raise ValueError('Expected finite floating-point sRGB video frames.')
     if bool((images < 0).any()) or bool((images > 1).any()):
         raise ValueError('SDR-to-HDR input must be normalised sRGB in the range 0–1.')
     # LTX's official workflow reflect-pads edges and repeats the last frame.
