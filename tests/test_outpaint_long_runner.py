@@ -202,6 +202,7 @@ class OutpaintLongCancellation(unittest.IsolatedAsyncioTestCase):
         instance.submit = fake_submit
         with tempfile.TemporaryDirectory() as folder, \
              patch.object(folder_paths, 'get_output_directory', return_value=folder), \
+             patch.object(folder_paths, 'get_input_directory', return_value=folder), \
              patch.object(jobs_module, 'check_asset', return_value=Path(folder)), \
              patch.object(jobs_module.shutil, 'which', return_value='ffmpeg'):
             public = await instance.submit_long('review', source, selection, client_id='studio-test')
