@@ -143,6 +143,8 @@ class NativeAdapterTests(unittest.TestCase):
         result = adapter.project_progress(None, "server", {"id": "image", "state": "running", "stage": "design"})
         self.assertEqual(result["stage_label"], "Generating image")
         self.assertEqual(_progress._friendly_node("UNETLoader", "design"), "Loading image model")
+        self.assertEqual(_progress._friendly_node("TextEncodeQwenImage21", "design"), "Preparing image references and prompt")
+        self.assertEqual(_progress._friendly_node("TextEncodeQwenImageEditPlus", "design"), "Preparing image references and prompt")
         self.assertEqual(_progress._friendly_node("VAEDecode", "design"), "Decoding image")
         self.assertEqual(_progress._friendly_node("KSampler", "h3"), "Generating video")
 
