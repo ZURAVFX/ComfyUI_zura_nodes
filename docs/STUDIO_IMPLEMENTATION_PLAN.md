@@ -43,6 +43,7 @@ metadata, ten EXRs and zero measured source-audio lag at a five-frame trim.
 Longer and 1080p visual quality remain unverified.
 The private long-HDR coordinator now has a tested in-memory job manager for
 reconnection, single-job scheduling and cancellation. Its service validates
-Studio asset references and emits output-relative file references. HTTP routes,
-Studio controls and restart recovery messaging still need implementation and
-testing; it remains unavailable to users pending visual review.
+Studio asset references and emits output-relative file references. Start,
+status and cancellation HTTP handlers pass simulated request tests but are not
+registered yet. Studio controls and end-to-end testing remain; it remains
+unavailable to users pending visual review.

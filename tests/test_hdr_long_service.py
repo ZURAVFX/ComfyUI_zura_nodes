@@ -47,4 +47,33 @@ class HDRLongServiceTests(unittest.IsolatedAsyncioTestCase):
             with self.assertRaisesRegex(ValueError,'source type'):await client.start({'mode':'native','source_kind':'sequence','source_id':'video'})
             with self.assertRaisesRegex(ValueError,'not restarted'):client.status('f'*32)
 
+    async def test_http_start_status_and_cancellation(self):
+        from aiohttp import web
+        from aiohttp.test_utils import TestClient,TestServer
+        with tempfile.TemporaryDirectory() as root:
+            created=[]
+            def create(server,asset,body,check,out,**kwargs):
+                job=Job(Path(root)/'unused');created.append(job)
+                return job,{'id':'b'*32,'frames':130}
+            client_service=service.HDRLongService(None,Store(),lambda asset:'verified',root,create_sdr=create)
+            routes=web.RouteTableDef()
+            def response(fn):
+                async def wrapped(request):
+                    try:return await fn(request)
+                    except ValueError as error:return web.json_response({'error':str(error)},status=400)
+                return wrapped
+            service.register(routes,response,client_service)
+            app=web.Application();app.add_routes(routes)
+            async with TestClient(TestServer(app)) as client:
+                response1=await client.post('/zura/studio/hdr/jobs',json={'mode':'sdr','source_id':'video'})
+                self.assertEqual(response1.status,200);self.assertEqual((await response1.json())['id'],'b'*32)
+                await created[0].entered.wait()
+                status=await client.get('/zura/studio/hdr/jobs/'+'b'*32)
+                self.assertEqual((await status.json())['state'],'rendering')
+                cancel=await client.post('/zura/studio/hdr/jobs/'+'b'*32+'/cancel')
+                self.assertEqual((await cancel.json())['state'],'cancelled')
+                await client_service.jobs.tasks['b'*32]
+                missing=await client.get('/zura/studio/hdr/jobs/'+'c'*32)
+                self.assertEqual(missing.status,400);self.assertIn('not restarted',(await missing.json())['error'])
+
 if __name__=='__main__':unittest.main()

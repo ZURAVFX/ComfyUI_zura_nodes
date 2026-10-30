@@ -68,3 +68,26 @@ class HDRLongService:
     async def cancel(self, identity):
         await self.jobs.cancel(identity)
         return self.status(identity)
+
+
+def register(routes, response, service):
+    """Register only when the long HDR flow has passed its release gate."""
+    from aiohttp import web
+
+    @routes.post('/zura/studio/hdr/jobs')
+    @routes.post('/genj/studio/hdr/jobs')
+    @response
+    async def start(request):
+        return web.json_response(await service.start(await request.json()))
+
+    @routes.get('/zura/studio/hdr/jobs/{identity}')
+    @routes.get('/genj/studio/hdr/jobs/{identity}')
+    @response
+    async def status(request):
+        return web.json_response(service.status(request.match_info['identity']))
+
+    @routes.post('/zura/studio/hdr/jobs/{identity}/cancel')
+    @routes.post('/genj/studio/hdr/jobs/{identity}/cancel')
+    @response
+    async def cancel(request):
+        return web.json_response(await service.cancel(request.match_info['identity']))
