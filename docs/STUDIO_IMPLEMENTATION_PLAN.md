@@ -163,3 +163,9 @@ The user also accepted the 1080 × 1920 native-HDR test through its join for
 preview use. This confirms visual preview acceptance of that short sample;
 it does not validate HDR display brightness, longer takes, audio or the full
 Studio desktop flow. Long HDR remains gated pending the desktop checks.
+
+The full HDR Python regression suite passed 105 tests when run with the actual
+ComfyUI modules on PYTHONPATH. Both bounded and long-HDR client tests also
+passed. An initial run without the ComfyUI path produced four missing-module
+errors from the standalone test stubs; rerunning with the real installation
+resolved them. These checks do not replace the pending desktop visual test.
