@@ -61,6 +61,13 @@ class ModelDownloadTest(unittest.TestCase):
             'minimax_h3_audio_vae_fp32.safetensors'})
         self.assertTrue(all(len(f['revision']) == 40 and len(f['sha256']) == 64 and f['size_bytes'] > 0 for f in fast))
         self.assertIn('SelfLift', packages['fasth3_draft']['note'])
+        h3core = packages['h3_reference_core']['files']
+        self.assertEqual({f['filename'] for f in h3core}, {
+            'minimax_h3_ref2va_pruned_int8_convrot.safetensors',
+            'qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors',
+            'minimax_h3_video_vae_int8_convrot.safetensors',
+            'minimax_h3_audio_vae_fp32.safetensors'})
+        self.assertTrue(all(len(f['revision']) == 40 and len(f['sha256']) == 64 for f in h3core))
         self.assertEqual(packages['h3_first_last']['files'][0]['filename'], 'minimax_h3_fl2va_pruned_int8_convrot.safetensors')
         self.assertEqual(packages['ltx25_text_int8']['files'][0]['filename'], 'gemma4-12b-with-proj-ltx-2.5-comfy-int8-convrot.safetensors')
         self.assertTrue(packages['ltx25_clean_plate']['gated'])

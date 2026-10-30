@@ -8,7 +8,7 @@ globalThis.document=document;
 const paths=[];
 const pack={id:'wan_animate_2',name:'Wan Animate 2',note:'Separate nodes required.',remaining_bytes:1000000000,
   files:[{repo:'Comfy-Org/Wan-Animate-2',filename:'model.safetensors',size_bytes:1000000000,installed:false}]};
-const availablePackages=['fasth3_draft','wan21_relight','wan22_animate_core','wan22_pose','h3_birefnet','h3_head_acceleration','h3_head_adapters','h3_taomate','h3_dmd_ref2va','h3_first_last','ltx25_text_encoder','ltx25_text_int8','ltx25_clean_plate','ltx25_outpaint','ltx25_in_outpaint','ltx_control','h3_int8_vae','h3_control','h3_crossview','flux3_klein','qwen2511','qwen21'];
+const availablePackages=['fasth3_draft','h3_reference_core','wan21_relight','wan22_animate_core','wan22_pose','h3_birefnet','h3_head_acceleration','h3_head_adapters','h3_taomate','h3_dmd_ref2va','h3_first_last','ltx25_text_encoder','ltx25_text_int8','ltx25_clean_plate','ltx25_outpaint','ltx25_in_outpaint','ltx_control','h3_int8_vae','h3_control','h3_crossview','flux3_klein','qwen2511','qwen21'];
 const ltxPackages=[...availablePackages,'ltx25_layout'].map(id=>({...pack,id,name:id}));
 const request=async(path,body)=>{paths.push([path,body]);if(path==='/model-downloads' && !body)return {models:[pack,...ltxPackages]};if(path==='/model-downloads' && body)return {id:'job'};if(path==='/model-downloads/job'){pack.remaining_bytes=0;pack.files[0].installed=true;return {phase:'done',done_bytes:1000000000,total_bytes:1000000000};}throw Error(path);};
 const popup=document.createElement('details');popup.className='zc-tool-popup';document.body.append(popup);
@@ -34,6 +34,10 @@ component.packages=[{...pack,id:'fasth3_draft',name:'FastH3 draft',remaining_byt
 component.setMissingContext('h3_reference',['minimax_h3_latent_upscaler_3d_conv_v1_bf16.safetensors','SelfLiftH3Sampler']);
 assert.match(component.files.textContent,/FastH3 draft/);assert.match(component.files.textContent,/0.69 GB/);
 assert.ok([...component.files.querySelectorAll('a')].some(a=>a.href==='https://github.com/facok/comfyui-SelfLift'));
+const coreFile={folder:'diffusion_models',filename:'minimax_h3_ref2va_pruned_int8_convrot.safetensors',repo:'Comfy-Org/MiniMax-H3',size_bytes:1000000000,installed:false};
+component.packages=[{...pack,id:'openjutsu_h3',name:'OpenJutsu',remaining_bytes:3000000000,files:[coreFile,{folder:'checkpoints',filename:'sam.safetensors',size_bytes:2000000000,installed:false}]},{...pack,id:'h3_reference_core',name:'H3 reference video',remaining_bytes:1000000000,files:[coreFile]}];
+component.setMissingContext('h3_reference',[coreFile.filename]);
+assert.match(component.files.textContent,/H3 reference video/);assert.doesNotMatch(component.files.textContent,/OpenJutsu/);
 component.setMissingContext('h3_head_swap',['MVEx_SubjectCrop','MVEx_SubjectUncrop','LayerUtility: Pad Image Batch to 8n+1','DWPreprocessor','NKDMaskOps','NKDAVLatent','NKDSigmasCurve']);
 for(const url of ['https://github.com/drozbay/MaskVidExperiments','https://github.com/chflame163/ComfyUI_LayerStyle','https://github.com/Fannovel16/comfyui_controlnet_aux','https://github.com/Nekodificador/ComfyUI-NKD-Basic-Tools','https://github.com/Nekodificador/ComfyUI-NKD-Sigmas-Curve'])
   assert.ok([...component.files.querySelectorAll('a')].some(a=>a.href===url),`missing head-swap nodes link to ${url}`);

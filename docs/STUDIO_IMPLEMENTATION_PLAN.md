@@ -130,3 +130,10 @@ audio stream durations of two seconds. A mono waveform comparison at the target
 start had mean absolute error 0.0062 versus 0.34–0.43 at offsets of ±10–20 ms;
 this supports the intended soundtrack alignment but is not a visual quality
 review. Output: C:/Users/ellio/ComfyUI-Shared/output/genj/final/zura_head_timing_test_00001.mp4
+
+Standard H3 reference-video setup now has its own exact model, text encoder,
+compact video VAE and audio VAE package. Its eight-step adapter remains a
+separate recommendation only when needed. A simulated empty setup selects the
+smaller matching package instead of pulling unrelated OpenJutsu/SAM files.
+Catalogue and interface tests pass; the installed Python catalogue needs a
+ComfyUI restart before this becomes available there.

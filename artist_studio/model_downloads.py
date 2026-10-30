@@ -199,6 +199,11 @@ CATALOG.update({
 })
 
 CATALOG.update({
+    "h3_reference_core": dict(name="MiniMax H3 · reference video", gated=False,
+        license_url="https://huggingface.co/Comfy-Org/MiniMax-H3",
+        note="Reference-video model, text encoder and video/audio VAEs. The eight-step adapter is offered separately when the normal fast preset needs it. Review the MiniMax H3 terms.",
+        files=[CATALOG["openjutsu_h3"]["files"][0], CATALOG["openjutsu_h3"]["files"][1],
+               CATALOG["h3_int8_vae"]["files"][0], CATALOG["openjutsu_h3"]["files"][3]]),
     "h3_first_last": dict(name="MiniMax H3 · first and last frame", gated=False,
         license_url="https://huggingface.co/Comfy-Org/MiniMax-H3",
         note="The H3 first/last-frame model, its eight-step adapter, text encoder and video/audio VAEs. Review the MiniMax H3 terms; custom nodes may be separate.",
