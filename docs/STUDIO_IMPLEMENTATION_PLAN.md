@@ -144,3 +144,8 @@ are snapped and limited to H3-supported values, and the resulting dimensions
 are shown before generation. Interface tests cover portrait source and custom
 sizes across both stages. The installed UI file was updated; a desktop visual
 check and ComfyUI restart for the related backend fix remain outstanding.
+
+A Studio project persistence test now confirms that changing the camera raster
+saves the selected portrait dimensions and invalidates the previously approved
+still, so it cannot be accidentally reused at the old framing. All 30 shared
+Studio tests pass; this does not substitute for the desktop visual check.

@@ -47,6 +47,24 @@ class SharedEngineTests(unittest.TestCase):
             controller.configure(p, {**p['config'], 'duration': 2})
             self.assertIsNone(p['review'], 'Changing the selected interval requires a new review')
 
+    def test_camera_resolution_persists_and_invalidates_stale_still(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            controller = studio.Studio.__new__(studio.Studio)
+            controller.store = studio.Store(tmp)
+            controller.collect = lambda p: p
+            p = self.project()
+            p['config'] = studio.clean_config({'engine': 'h3', 'workflow_mode': 'camera',
+                'camera_width': 768, 'camera_height': 448})
+            p['opening_approval'] = p['opening_key']
+            controller.configure(p, {**p['config'], 'camera_width': 448, 'camera_height': 768,
+                                     'camera_shape': 'custom', 'camera_megapixels': .35})
+            self.assertEqual((p['config']['camera_width'], p['config']['camera_height']), (448, 768))
+            self.assertEqual(p['config']['camera_shape'], 'custom')
+            self.assertIsNone(p['opening_input'], 'The prior still has different framing')
+            self.assertIsNone(p['opening_approval'])
+            saved = controller.store.load(p['id'])
+            self.assertEqual((saved['config']['camera_width'], saved['config']['camera_height']), (448, 768))
+
     def test_finished_frame_config_validates_numbers_and_routes(self):
         for engine in ("local", "h3"):
             config = studio.clean_config({"engine": engine, "workflow_mode": "motion", "finished_frame_position": "frame", "finished_frame_number": 49})
