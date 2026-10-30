@@ -172,11 +172,11 @@ export class FrameVideoWorkspace{
   startPolling(){if(this.timer)return;this.timer=setInterval(()=>this.poll(),1500);this.poll();}
   async poll(){
     if(!this.job||this.polling)return;const job=this.job;this.polling=true;
-    try{const history=await this.fetch('/history/'+encodeURIComponent(job.id)),entry=history[job.id];if(this.job!==job)return;
+    try{const history=await this.fetch('/history/'+encodeURIComponent(job.id)),entry=history[job.id];if(this.job!==job)return;if(this.connectionLost){this.message('');this.connectionLost=false;}
       if(entry?.status?.completed||entry?.status?.status_str==='error'){
         const files=entry.outputs?.save?.images||[];for(const file of files)this.items.unshift({file,config:job.config});this.items=this.items.slice(0,12);this.job=null;this.nativeSamplePreview?.clear();this.stopPolling();this.save();this.renderHistory();this.render();if(!files.length)this.message(entry.status.messages?.find(m=>m[0]==='execution_error')?.[1]?.exception_message||'Generation stopped. Your previous takes are safe.');
-      }else{const queue=await this.fetch('/queue');if(this.job!==job)return;const running=queue.queue_running.some(r=>r[1]===job.id),pending=queue.queue_pending.some(r=>r[1]===job.id);if(!running&&!pending){this.job=null;this.nativeSamplePreview?.clear();this.stopPolling();this.save();this.message('This run is no longer in ComfyUI’s queue. It has not been resubmitted.');this.render();}else this.$('progress-detail').textContent=running?this.elapsed():'Waiting for other ComfyUI jobs';}
-    }catch{this.message('Connection interrupted. Reconnecting to your saved run…');}finally{this.polling=false;}
+      }else{const queue=await this.fetch('/queue');if(this.job!==job)return;const running=queue.queue_running.some(r=>r[1]===job.id),pending=queue.queue_pending.some(r=>r[1]===job.id);if(!running&&!pending){const again=await this.fetch('/history/'+encodeURIComponent(job.id));if(this.job!==job)return;if(again[job.id])return;this.job=null;this.nativeSamplePreview?.clear();this.stopPolling();this.save();this.message('This run is no longer in ComfyUI’s queue. It has not been resubmitted.');this.render();}else this.$('progress-detail').textContent=running?this.elapsed():'Waiting for other ComfyUI jobs';}
+    }catch{this.connectionLost=true;this.message('Connection interrupted. Reconnecting to your saved run…');}finally{this.polling=false;}
   }
   async cancel(){if(!this.job)return;try{const id=this.job.id;await this.fetch('/queue',{delete:[id]});await this.fetch('/interrupt',{prompt_id:id});this.message('Cancellation requested.');await this.poll();}catch(e){this.message(e.message);}}
   stopPolling(){clearInterval(this.timer);this.timer=null;}
