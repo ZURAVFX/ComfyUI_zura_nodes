@@ -8,7 +8,7 @@ Object.defineProperty(window.HTMLSelectElement.prototype,'value',{configurable:t
 for(const name of ['load','pause','play'])window.HTMLElement.prototype[name]=()=>{};
 const calls=[];
 const owner={root:document.querySelector('#genj-studio'),api:{clientId:'studio-client',apiURL:u=>u,addEventListener(){},removeEventListener(){}},show(){},
-  async fetch(path,body){calls.push([path,body]);if(path==='/zura/studio/outpaint/capabilities')return {anchored_masked:true,dependencies:{missing_files:['missing.safetensors'],missing_nodes:['MissingNode']}};if(path==='/zura/studio/outpaint/review')return {id:'review',kind:'review',state:'queued'};
+  async fetch(path,body){calls.push([path,body]);if(path==='/zura/studio/outpaint/capabilities')return {anchored_masked:true,dependencies:{missing_files:['missing.safetensors'],missing_nodes:['MissingNode']},short_dependencies:{expand:{missing_files:['expand.safetensors'],missing_nodes:[]},black:{missing_files:['black.safetensors'],missing_nodes:[]}}};if(path==='/zura/studio/outpaint/review')return {id:'review',kind:'review',state:'queued'};
     if(path.endsWith('/review/approve'))return {id:'review',approved:true};
     if(path.endsWith('/review/render'))return {id:'render',kind:'render',state:'queued'};
     if(path.endsWith('/jobs/review'))return {id:'review',kind:'review',state:'complete',url:'/view?review=1'};
@@ -59,6 +59,10 @@ ui.$('mode').value='black';ui.reframe();assert.equal(Number(ui.$('width').value)
 ui.$('mode').value='expand';ui.longReady=false;ui.trim.update();assert.equal(ui.trim.longOption.hidden,true,'long controls stay hidden until backend capability is checked');
 ui.open();await new Promise(r=>setTimeout(r,0));assert.equal(ui.longReady,true);assert.equal(ui.trim.longOption.hidden,false,'verified capability makes the long option available');
 assert.equal(ui.$('model-downloads').querySelector('summary').textContent,'Models');
+assert.equal(ui.modelDownloads.context.route,'ltx_outpaint_expand');
+assert.equal(ui.modelDownloads.context.files[0].filename,'expand.safetensors');
+ui.$('mode').value='black';ui.$('mode').onchange();assert.equal(ui.modelDownloads.context.route,'ltx_outpaint_black');assert.equal(ui.modelDownloads.context.files[0].filename,'black.safetensors');
+ui.$('mode').value='expand';ui.$('mode').onchange();ui.source.duration=10;ui.trim.useSource();
 assert.equal(ui.modelDownloads.context.route,'ltx_outpaint_long');
 assert.equal(ui.modelDownloads.context.files[0].filename,'missing.safetensors');
 assert.deepEqual(ui.modelDownloads.context.missingNodes,['MissingNode']);

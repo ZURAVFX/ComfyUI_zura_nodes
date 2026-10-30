@@ -61,6 +61,7 @@ export class OutpaintWorkspace {
   }
   paint(){
     const has=!!this.source,black=this.mode==='black',busy=!!this.job||this.submitting;this.$('width').disabled=black||busy;this.$('height').disabled=black||busy;
+    this.updateModelContext();
     this.loras.setBusy(busy);
     for(const id of ['source','mode','start','duration'])this.$(id).disabled=busy;this.$('scale').disabled=black||busy;
     this.$('help').textContent=black?'Black pixels are selected for masked generation, including dark clothing or shadows. Review the whole selection.':'Drag the footage to position it inside the new frame.';
@@ -114,7 +115,8 @@ export class OutpaintWorkspace {
       this.owner.studio.close();
     }catch(error){this.message(error.message);}
   }
-  async checkCapabilities(){try{const c=await this.fetch('/zura/studio/outpaint/capabilities');this.longReady=c?.anchored_masked===true;const d=c?.dependencies;this.modelDownloads.setMissingContext('ltx_outpaint_long',d?[...(d.missing_files||[]),...(d.missing_nodes||[])]:null);}catch{this.longReady=false;this.modelDownloads.setMissingContext('ltx_outpaint_long',null);}this.trim.modeChanged();this.paint();}
+  updateModelContext(){const route=this.trim?.long?'ltx_outpaint_long':`ltx_outpaint_${this.mode}`,d=this.trim?.long?this.capabilities?.dependencies:this.capabilities?.short_dependencies?.[this.mode];const missing=d?[...(d.missing_files||[]),...(d.missing_nodes||[])]:null;const key=JSON.stringify([route,missing]);if(key!==this.modelContextKey){this.modelContextKey=key;this.modelDownloads.setMissingContext(route,missing);}}
+  async checkCapabilities(){try{const c=await this.fetch('/zura/studio/outpaint/capabilities');this.capabilities=c;this.longReady=c?.anchored_masked===true;}catch{this.capabilities=null;this.longReady=false;}this.trim.modeChanged();this.paint();}
   open(){this.page.hidden=false;this.paint();if(this.job)this.poll();this.checkCapabilities();}
   close(){clearTimeout(this.timer);this.trim.close();this.video.pause();this.result.pause();this.page.hidden=true;}
   dispose(){this.close();this.modelDownloads.dispose();this.page.ownerDocument.removeEventListener('pointerdown',this.closeModels,true);this.page.ownerDocument.removeEventListener('keydown',this.closeModelsOnEscape,true);this.resizeObserver?.disconnect();this.api.removeEventListener?.('progress',this.progress);this.api.removeEventListener?.('executing',this.executing);this.page.remove();}

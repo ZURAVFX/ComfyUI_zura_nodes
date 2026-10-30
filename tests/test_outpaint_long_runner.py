@@ -88,6 +88,20 @@ class OutpaintLongPlanning(unittest.TestCase):
         self.assertEqual(result['missing_nodes'], [])
         self.assertIn('ltx25_in_outpaint', result['packages'])
 
+    def test_short_methods_check_their_actual_adapter_and_nodes(self):
+        import folder_paths
+        import nodes
+        with patch.dict(nodes.NODE_CLASS_MAPPINGS, {}, clear=True), \
+             patch.object(folder_paths, 'get_full_path', return_value=None):
+            expand = jobs_module.short_dependencies('expand')
+            black = jobs_module.short_dependencies('black')
+        self.assertIn('ltx-2.3-22b-ic-lora-outpaint.safetensors', expand['missing_files'])
+        self.assertNotIn('ltx-2.3-22b-ic-lora-in-outpainting-0.9.safetensors', expand['missing_files'])
+        self.assertIn('ltx-2.3-22b-ic-lora-in-outpainting-0.9.safetensors', black['missing_files'])
+        self.assertNotIn('ltx-2.3-22b-ic-lora-outpaint.safetensors', black['missing_files'])
+        self.assertIn('ZuraOutpaintReviewOverlay', expand['missing_nodes'])
+        self.assertIn('LTXVInpaintPreprocess', black['missing_nodes'])
+
 
 class OutpaintLongCancellation(unittest.IsolatedAsyncioTestCase):
     async def test_preflight_rejects_insufficient_disk_before_job_submission(self):

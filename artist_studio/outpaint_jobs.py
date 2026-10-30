@@ -46,6 +46,34 @@ def long_dependencies():
             'missing_nodes': missing_nodes,
             'packages': ['ltx25_core', 'ltx25_text_encoder', 'ltx25_in_outpaint']}
 
+
+def short_dependencies(mode):
+    """Report dependencies from the actual graph used by the chosen method."""
+    import folder_paths
+    import nodes
+    source = {'file': 'genj_studio/setup/source.mp4', 'sha': 'a' * 64,
+              'duration': 1, 'width': 128, 'height': 128}
+    selection = plan(source, start=0, duration=1, mode=mode, width=128, height=128)
+    graphs = [build_review_graph(source, selection, output_prefix='genj/outpaint/setup'),
+              build_studio_graph(source, selection, review_key=selection['review_key'],
+                                 output_prefix='genj/outpaint/setup')]
+    model_inputs = {'UNETLoader': ('diffusion_models', 'unet_name'),
+                    'CLIPLoader': ('text_encoders', 'clip_name'),
+                    'VAELoader': ('vae', 'vae_name'),
+                    'LTXICLoRALoaderModelOnly': ('loras', 'lora_name')}
+    required_files, required_nodes = set(), set()
+    for graph in graphs:
+        for node in graph.values():
+            kind = node['class_type']
+            required_nodes.add(kind)
+            if kind in model_inputs:
+                folder, name = model_inputs[kind]
+                required_files.add((folder, node['inputs'][name]))
+    missing_files = [name for folder, name in sorted(required_files) if not folder_paths.get_full_path(folder, name)]
+    missing_nodes = sorted(name for name in required_nodes if name not in nodes.NODE_CLASS_MAPPINGS)
+    return {'ready': not missing_files and not missing_nodes, 'missing_files': missing_files,
+            'missing_nodes': missing_nodes}
+
 class OutpaintJobs:
     def __init__(self, studio):
         self.studio = studio
@@ -305,9 +333,11 @@ def register(studio, routes, response):
     @response
     async def capabilities(request):
         from .outpaint_chunks import MAX_PIXEL_FRAMES, MAX_WINDOWS
+        short = {mode: short_dependencies(mode) for mode in ('expand', 'black')}
         return web.json_response({'anchored_masked': LONG_MODE_READY, 'min_frames': 3,
                                   'fps': 24, 'max_window_pixel_frames': MAX_PIXEL_FRAMES,
-                                  'max_windows': MAX_WINDOWS, 'dependencies': long_dependencies()})
+                                  'max_windows': MAX_WINDOWS, 'dependencies': long_dependencies(),
+                                  'short_dependencies': short})
 
     @routes.post('/zura/studio/outpaint/review')
     @routes.post('/genj/studio/outpaint/review')

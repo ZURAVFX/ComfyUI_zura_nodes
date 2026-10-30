@@ -73,7 +73,7 @@ export class OutpaintTrim {
     const count=Math.max(3,Math.min(maximum,total-start,Math.round((Number(range.duration)||0)*FPS)));
     w.$('start').value=String(start/FPS);
     w.$('duration').value=String(count/FPS);
-    w.invalidate();this.update();this.seek(start/FPS);
+    w.invalidate();w.updateModelContext?.();this.update();this.seek(start/FPS);
   }
   useSource(){
     const total=framesFor(this.workspace.source?.duration);
