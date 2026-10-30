@@ -178,3 +178,95 @@ mask covered 92%. Both were effectively near-global cuts. The least-error cut
 had a mean tone-mapped frame difference of 0.032 at the transition versus 0.016
 in the previous natural frame. These are diagnostic proxies, not a successful
 motion-quality test; the selective strategies are not exposed.
+
+## Single-canvas temporal fusion experiment
+
+The installed LTX tiled-fusion sampler supports one global latent canvas with
+overlapping temporal windows, when both IC-LoRA guide nodes use streaming with
+the same `tile_frames` as their samplers. A private two-stage test used 129
+frames at 384 × 216 and a 65-frame window. Logs confirmed three per-window
+guides and three corresponding sampler windows in each pass; canvas tensors
+were on CPU. It produced exactly 129 10-bit Rec.2020 HLG frames in 750 s on the
+local RTX 4080. Tiled VAE decode used the existing 128-frame temporal setting
+and saturated ~15.5 GB VRAM for several minutes. Per-node timestamps were not
+captured, so exact stage durations are unknown.
+
+Sampled window boundaries showed no obvious double-exposure in the SDR proxy,
+but this is one low-resolution street test whose HLG input was converted from
+SDR. It had no audio or EXR output and has not been reviewed on an HDR display.
+It therefore proves temporal-fusion plumbing, not representative HDR colour,
+quality, practical speed or long-duration readiness. The public Studio limit
+is unchanged. A smaller VAE temporal decode tile may improve memory pressure,
+but speed and decode seams require a controlled comparison.
+
+An additional short engineering test used a publicly available 3840 × 2160
+PQ/Rec.2020 sample, proportionally downscaled to 384 × 216 with its PQ tags
+and soundtrack retained. The 17-frame LTX run produced 10-bit HLG, 17 tagged
+ACEScg EXRs (sampled values up to 5.34), and audio with peak correlation 0.992
+at a one-sample offset at 16 kHz. It completed in 48 s. Source fps was
+24000/1001; Comfy's video writer represented output as 23.976 (2997/125).
+The HDR saver now losslessly remuxes using the source's reconstructed rational
+rate and verifies video count, colour metadata and audio. A real Comfy CPU graph
+produced 17 frames at exactly 24000/1001, 10-bit Rec.2020 HLG, with audio;
+an independent FFmpeg regression confirmed identical decoded frames and audio
+across the remux. FFmpeg is required for this output step.
+The source publisher warns about mastering, and the test does not qualify HDR
+colour accuracy or representative camera content. The original was untouched.
+
+This test revealed that AAC at fractional frame rates could decode a valid
+range up to 32 samples short. The audio loader now reads an additional source
+frame before trimming to the selected exact sample count, permits at most 1 ms
+of timestamp-related padding at an actual audio end, and rejects larger gaps.
+
+The latent was subsequently regenerated with the same seed and saved once;
+all short-decode variants below use that same saved latent. Sampling took 63 s.
+Temporal VAE tiles of 32/8, 64/16 and 64/32 decoded in 24, 30 and 36 s
+respectively. The 32/8 result visibly smeared pedestrians at tile boundaries;
+64/16 and 64/32 reduced but did not eliminate visible distortion. A private
+64/16 decoder selecting a single tile at each midpoint instead of blending
+also distorted moving people and increased one transition's mean adjacent
+SDR RGB difference from 7.99 to 9.78/255. The earlier 128-frame reference came
+from a separate sample, so its pixel differences cannot isolate decoder effects.
+These results do not justify substituting any short decode mode for the existing
+quality path or lifting the Studio cap.
+
+A 96/32 decode of the same saved latent took 33 s and looked cleaner at the
+sampled moving-person boundaries than the smaller tiles; a full-motion SDR
+side-by-side was prepared for artist review. A separate delivery graph using
+that saved latent produced 129 10-bit Rec.2020 HLG frames, 129 tagged ACEScg
+EXRs and source audio in 36 s. Sampled EXRs were finite and reached 1.07 in
+scene-linear highlights. Audio decoded to the same sample count as the source
+with 0.99935 zero-lag correlation. A targeted cancel during active GPU decode
+produced `execution_interrupted` and no final output, after approximately 28 s.
+
+An inspection of 206 video files in the shared Comfy input folder found none
+tagged HLG or PQ. The source for the above experiment was converted from SDR,
+and cannot establish colour accuracy on actual HDR camera footage. The 96/32
+workflow remains internal pending motion review, representative HDR footage,
+and a complete UI integration and validation; the 121-frame public cap remains.
+
+The 40-million padded-pixel-frame guard is a separate, often stricter limit:
+1920 × 1080 pads to 1920 × 1088, allowing at most 17 frames (0.71 s at 24 fps).
+The official sampler's temporal windows bound inference VRAM, but Studio's
+current loader, resize and decode nodes still materialise full video tensors in
+system RAM. At 129 frames a single 1080p float RGB tensor alone is ~3.23 GB,
+before other full-size copies, model weights, or EXR and ZIP disk space. A
+larger 1080p limit needs conservative RAM/disk preflight and representative
+GPU testing; the low-resolution test does not establish it is safe.
+
+A private 25-frame 1920 × 1080 test of the PQ sample temporarily raised only
+the isolated process's pixel bound to 60 million. Its two 17-frame temporal
+windows and 32/8 VAE decode produced 25 frames at 24000/1001, 10-bit HLG,
+25 ACEScg EXRs and source audio. Sampled free system RAM fell from 34.2 to
+12.95 GiB, peak GPU allocation was 15,308 MiB, and elapsed time was 160 s.
+Audio correlation peaked at 0.9968 with zero lag at 16 kHz. This is one test on
+potentially mis-mastered footage, not a quality or hardware compatibility
+guarantee. The public 40-million-pixel and 121-frame limits are unchanged.
+
+`hdr_1080_preflight.py` is a private, unregistered resource gate reflecting
+that single measurement. It accepts only 18–25 frames at exactly 1920 × 1080,
+an idle target queue, at least 32 GiB available RAM, 15,500 MiB total and
+14,500 MiB free GPU memory, and 10 GiB free in both temp and output storage.
+It provides a signal to stop only the caller's own active job below 6 GiB
+available RAM. Fresh measurements, orchestration, a working video UI and
+broader testing are still required before this can be used publicly.

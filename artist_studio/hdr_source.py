@@ -87,31 +87,53 @@ class ZuraHDRLoadAudioRange:
     @classmethod
     def IS_CHANGED(cls, **kwargs): return float('nan')
     def load(self, source, start_frame, frame_count, fps):
-        from ..paintout.paintout import resolve_input
-        import av
-        if type(start_frame) is not int or start_frame<0 or type(frame_count) is not int or not 1<=frame_count<=MAX_FRAMES or not isinstance(fps,(float,int)) or isinstance(fps,bool) or not math.isfinite(fps) or not 1<=fps<=120:
-            raise ValueError('Choose a valid audio frame range and frame rate.')
-        path=resolve_input(source)
-        executable=shutil.which('ffmpeg')
-        if not executable: raise ValueError('FFmpeg is required to restore the source audio.')
-        duration=frame_count/fps
-        result=subprocess.run([executable,'-hide_banner','-loglevel','error','-i',str(path),
-            '-ss',str(start_frame/fps),'-t',str(duration),'-map','0:a:0','-vn','-ac','2','-ar','48000',
-            '-c:a','pcm_f32le','-f','wav','pipe:1'],capture_output=True)
-        if result.returncode:
-            raise ValueError('Could not read the selected source audio.')
-        with av.open(io.BytesIO(result.stdout),format='wav') as container:
-            resampler=av.AudioResampler(format='fltp',layout='stereo',rate=48000)
-            chunks=[converted.to_ndarray() for frame in container.decode(audio=0) for converted in resampler.resample(frame)]
-            chunks.extend(frame.to_ndarray() for frame in resampler.resample(None))
-        if not chunks: raise ValueError('No audio was found in the selected range.')
-        samples=torch.from_numpy(np.concatenate(chunks,axis=-1).copy()).float()
-        expected=round(duration*48000)
-        if samples.shape[-1]<expected:
+        return load_hdr_audio_range(source,start_frame,frame_count,fps,MAX_FRAMES)
+
+
+def load_hdr_audio_range(source, start_frame, frame_count, fps, max_frames):
+    from ..paintout.paintout import resolve_input
+    import av
+    if type(max_frames) is not int or not 1<=max_frames<=257 or type(start_frame) is not int or start_frame<0 or type(frame_count) is not int or not 1<=frame_count<=max_frames or not isinstance(fps,(float,int)) or isinstance(fps,bool) or not math.isfinite(fps) or not 1<=fps<=120:
+        raise ValueError('Choose a valid audio frame range and frame rate.')
+    path=resolve_input(source)
+    executable=shutil.which('ffmpeg')
+    if not executable: raise ValueError('FFmpeg is required to restore the source audio.')
+    duration=frame_count/fps
+    # Decode one extra frame of audio, then trim to the exact video duration.
+    # AAC timestamp rounding at fractional frame rates can otherwise leave a
+    # valid selection a few samples short even when more audio follows.
+    result=subprocess.run([executable,'-hide_banner','-loglevel','error','-i',str(path),
+        '-ss',str(start_frame/fps),'-t',str(duration+1/fps),'-map','0:a:0','-vn','-ac','2','-ar','48000',
+        '-c:a','pcm_f32le','-f','wav','pipe:1'],capture_output=True)
+    if result.returncode:
+        raise ValueError('Could not read the selected source audio.')
+    with av.open(io.BytesIO(result.stdout),format='wav') as container:
+        resampler=av.AudioResampler(format='fltp',layout='stereo',rate=48000)
+        chunks=[converted.to_ndarray() for frame in container.decode(audio=0) for converted in resampler.resample(frame)]
+        chunks.extend(frame.to_ndarray() for frame in resampler.resample(None))
+    if not chunks: raise ValueError('No audio was found in the selected range.')
+    samples=torch.from_numpy(np.concatenate(chunks,axis=-1).copy()).float()
+    expected=round(duration*48000)
+    if samples.shape[-1]<expected:
+        short=expected-samples.shape[-1]
+        if short>48:
             raise ValueError('The source audio is shorter than the selected video range.')
-        return ({'waveform':samples[None, ..., :expected], 'sample_rate':48000},)
+        # At most 1 ms can be lost to container/AAC timestamp quantisation.
+        samples=torch.nn.functional.pad(samples,(0,short))
+    return ({'waveform':samples[None, ..., :expected], 'sample_rate':48000},)
+
+class ZuraHDRLoadAudioRangeLong(ZuraHDRLoadAudioRange):
+    """Internal long HDR experiment; not used by the public Studio graph."""
+    @classmethod
+    def INPUT_TYPES(cls):
+        inputs=super().INPUT_TYPES()
+        inputs['required']['frame_count']=('INT',{'default':129,'min':1,'max':257})
+        return inputs
+    def load(self,source,start_frame,frame_count,fps):
+        return load_hdr_audio_range(source,start_frame,frame_count,fps,257)
 
 
-NODE_CLASS_MAPPINGS={'ZuraHDRLoadSDRSource': ZuraHDRLoadSDRSource,'ZuraHDRLoadAudioRange':ZuraHDRLoadAudioRange}
+NODE_CLASS_MAPPINGS={'ZuraHDRLoadSDRSource': ZuraHDRLoadSDRSource,'ZuraHDRLoadAudioRange':ZuraHDRLoadAudioRange,
+                     'ZuraHDRLoadAudioRangeLong':ZuraHDRLoadAudioRangeLong}
 NODE_DISPLAY_NAME_MAPPINGS={'ZuraHDRLoadSDRSource': 'Zura · Load SDR Source for LTX HDR',
                            'ZuraHDRLoadAudioRange':'Zura · Load HDR Audio Range'}

@@ -26,10 +26,10 @@ def preflight_archive(output_root):
         destination.unlink(missing_ok=True)
 
 
-def package_sequence(output_root, prefix, count):
+def package_sequence(output_root, prefix, count, max_frames=121):
     if not isinstance(prefix, str) or not re.fullmatch(r'[a-zA-Z0-9_-]{1,100}', prefix):
         raise ValueError('Invalid HDR output name.')
-    if type(count) is not int or not 1 <= count <= 121:
+    if type(max_frames) is not int or not 1 <= max_frames <= 257 or type(count) is not int or not 1 <= count <= max_frames:
         raise ValueError('Invalid HDR sequence frame count.')
     parent=(Path(output_root)/'genj'/'hdr').resolve()
     directory=(parent/prefix).resolve()
@@ -69,5 +69,14 @@ class ZuraHDRPackageEXR:
                 'result':(str(path),)}
 
 
-NODE_CLASS_MAPPINGS={'ZuraHDRPackageEXR':ZuraHDRPackageEXR}
+class ZuraHDRPackageEXRLong(ZuraHDRPackageEXR):
+    """Internal experiment; preserves the public package node's limit."""
+    def package(self,images,prefix):
+        import folder_paths
+        path=package_sequence(folder_paths.get_output_directory(),prefix,len(images),257)
+        return {'ui':{'files':[{'filename':path.name,'subfolder':'genj/hdr','type':'output'}]},
+                'result':(str(path),)}
+
+
+NODE_CLASS_MAPPINGS={'ZuraHDRPackageEXR':ZuraHDRPackageEXR,'ZuraHDRPackageEXRLong':ZuraHDRPackageEXRLong}
 NODE_DISPLAY_NAME_MAPPINGS={'ZuraHDRPackageEXR':'Zura · Package HDR EXR Sequence'}

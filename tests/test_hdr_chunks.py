@@ -73,7 +73,7 @@ class HDRChunkTests(unittest.TestCase):
         self.assertTrue(torch.equal(result[:,0,0,0],torch.tensor([.1,.1,.1,.1,.1,.8,.9])))
 
     def test_invalid_input_fails_before_render(self):
-        for args in [(-1,1,512,512), (0,0,512,512), (0,10,511,512), (0,10,512,512,0)]:
+        for args in [(-1,1,512,512), (0,0,512,512), (0,10001,512,512), (0,10,511,512), (0,10,512,512,0)]:
             with self.assertRaises(ValueError): chunks.plan_chunks(*args)
         with self.assertRaises(ValueError): chunks.blend_acescct_overlap(torch.zeros(1,2,2,3),torch.zeros(2,2,2,3))
 

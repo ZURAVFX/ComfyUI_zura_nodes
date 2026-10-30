@@ -140,9 +140,9 @@ def ltx_hdr_delivery(images, fps, *, output, prefix, working_space, audio=None):
         if audio is not None:
             video["audio"] = list(audio)
         graph["zura_hdr_video"] = {"class_type": "CreateVideo", "inputs": video}
-        graph["zura_hdr_save_video"] = {"class_type": "SaveVideo", "inputs": {
+        graph["zura_hdr_save_video"] = {"class_type": "ZuraHDRSaveExactRate", "inputs": {
             "video": ["zura_hdr_video", 0], "filename_prefix": "genj/hdr/" + prefix,
-            "format": "mp4", "format.codec": "h264"}}
+            "fps": float(fps)}}
     if output in ("acescg_exr", "hlg_and_exr"):
         graph["zura_hdr_exr"] = {"class_type": "LTXVHDRDecodePostprocess", "inputs": {
             "image": list(images), "transfer": "acescct", "save_exr": True,

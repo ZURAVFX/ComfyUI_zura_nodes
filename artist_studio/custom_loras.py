@@ -21,7 +21,7 @@ FAMILIES = ("h3", "wan21", "wan22", "wan_animate2", "ltx25",
 def model_family(name):
     """Recognise only exact model families for which Studio builds a native UNET."""
     text = str(name).lower().replace("-", "_").replace(" ", "_")
-    if "minimax_h3" in text or text.startswith("h3_"):
+    if "minimax_h3" in text or text.startswith("h3_") or text.startswith("fasth3_omniref_8step_pruned_"):
         return "h3"
     if "wan_animate_2" in text or "wananimate2" in text:
         return "wan_animate2"

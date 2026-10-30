@@ -48,8 +48,8 @@ def build_hdr_graph(*, source, start_frame, frame_count, fps, colour_space='auto
     video={'images':preview,'fps':float(fps)}
     if has_audio:video['audio']=['zura_hdr_trim_audio',0]
     graph['zura_hdr_preview_video']=node('CreateVideo',**video)
-    graph['zura_hdr_save_preview']=node('SaveVideo',video=['zura_hdr_preview_video',0],
-        filename_prefix='genj/hdr/'+prefix+'_preview',format='mp4',**{'format.codec':'h264'})
+    graph['zura_hdr_save_preview']=node('ZuraHDRSaveExactRate',video=['zura_hdr_preview_video',0],
+        filename_prefix='genj/hdr/'+prefix+'_preview',fps=float(fps))
     return graph
 
 

@@ -74,5 +74,20 @@ class LTXCustomLoraTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError,'other Wan noise phase'):
             loras.apply_studio_video_loras(graph,'wan22_high',[bad_choice],[bad_choice['name']],resolve)
 
+    def test_fasth3_custom_lora_precedes_the_model_used_for_both_selflift_passes(self):
+        header=json.dumps({'__metadata__':{'base_model':'minimax_h3'},'diffusion_model.x':{}}).encode()
+        self.file.write_bytes(len(header).to_bytes(8,'little')+header)
+        graph={
+            'model':{'class_type':'UNETLoader','inputs':{'unet_name':'fasth3_omniref_8step_pruned_int8_convrot.safetensors'}},
+            'attention':{'class_type':'ModelAttentionBackend','inputs':{'model':['model',0]}},
+            'shift':{'class_type':'MiniMaxH3SigmaShift','inputs':{'model':['attention',0]}},
+            'sparse':{'class_type':'BlockSparseAttention','inputs':{'model':['shift',0]}},
+            'sample':{'class_type':'SelfLiftH3Sampler','inputs':{'model':['sparse',0]}}}
+        patched=loras.apply_studio_video_loras(graph,'h3',[self.choice],[self.file.name],lambda folder,name:str(self.file))
+        self.assertEqual(patched['attention']['inputs']['model'],['zura_custom_lora_0_0',0])
+        self.assertEqual(patched['zura_custom_lora_0_0']['inputs']['model'],['model',0])
+        self.assertEqual(patched['sample']['inputs']['model'],['sparse',0])
+        self.assertIsNone(loras.model_family('fasth3_unrelated_model.safetensors'))
+
 
 if __name__=='__main__':unittest.main()

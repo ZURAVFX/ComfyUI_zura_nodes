@@ -11,6 +11,8 @@ from dataclasses import dataclass
 
 from .hdr_source import MAX_FRAMES, MAX_PIXEL_FRAMES
 
+MAX_TOTAL_FRAMES = 10_000
+
 
 @dataclass(frozen=True)
 class HDRChunk:
@@ -25,8 +27,8 @@ def plan_chunks(start, count, width, height, overlap=8, max_frames=MAX_FRAMES):
     All offsets are absolute source-frame indices. A padded 8n+1 guide must
     fit both bounds even for the final, possibly shorter chunk.
     """
-    if type(start) is not int or start < 0 or type(count) is not int or count < 1:
-        raise ValueError('Choose a non-negative start and a positive frame count.')
+    if type(start) is not int or start < 0 or type(count) is not int or not 1 <= count <= MAX_TOTAL_FRAMES:
+        raise ValueError(f'Choose a non-negative start and 1–{MAX_TOTAL_FRAMES} frames.')
     if any(type(v) is not int or v < 32 or v > 2048 or v % 2 for v in (width, height)):
         raise ValueError('Use even source dimensions from 32 to 2048 pixels.')
     if type(overlap) is not int or overlap < 1:

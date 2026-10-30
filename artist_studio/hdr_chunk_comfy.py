@@ -24,7 +24,7 @@ class ZuraHDRWriteChunk:
     @classmethod
     def INPUT_TYPES(cls):
         return {'required':{'images':('IMAGE',),'job_id':('STRING',{'default':''}),
-            'start_frame':('INT',{'default':0,'min':0}),'total_frames':('INT',{'default':1,'min':1}),
+            'start_frame':('INT',{'default':0,'min':0}),'total_frames':('INT',{'default':1,'min':1,'max':10000}),
             'width':('INT',{'default':512,'min':32,'max':2048}),
             'height':('INT',{'default':512,'min':32,'max':2048}),
             'max_frames':('INT',{'default':121,'min':9,'max':121}),
@@ -44,7 +44,7 @@ class ZuraHDRReadChunkAnchor:
     @classmethod
     def INPUT_TYPES(cls):
         return {'required':{'job_id':('STRING',{'default':''}),
-            'start_frame':('INT',{'default':0,'min':0}),'total_frames':('INT',{'default':1,'min':1}),
+            'start_frame':('INT',{'default':0,'min':0}),'total_frames':('INT',{'default':1,'min':1,'max':10000}),
             'width':('INT',{'default':512,'min':32,'max':2048}),
             'height':('INT',{'default':512,'min':32,'max':2048}),
             'max_frames':('INT',{'default':121,'min':9,'max':121}),

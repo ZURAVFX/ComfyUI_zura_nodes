@@ -65,14 +65,19 @@ def build_native_exr_graph(*, source, frame_count, fps, width, height, prefix,
 
 def build_native_video_graph(*, source, start_frame, frame_count, fps, width, height,
                              prefix, colour_space='auto', has_audio=False, output='hlg_and_exr',
-                             sequence_manifest='', manifest_sha=''):
+                             sequence_manifest='', manifest_sha='', temporal_window=0):
     """Bounded HDR-video post-pass, padded for LTX then cropped to source raster.
 
     This preserves frame count and source soundtrack; the model may alter scene
     appearance and movement. The caller must validate real HDR colour metadata.
     """
-    if type(start_frame) is not int or start_frame < 0 or type(frame_count) is not int or not 1 <= frame_count <= 121:
-        raise ValueError('Choose a valid range of up to 121 frames.')
+    if type(temporal_window) is not int or (temporal_window and (not 9 <= temporal_window <= 121 or (temporal_window-1)%8)):
+        raise ValueError('The experimental HDR temporal window must be 8n+1 and at most 121 frames.')
+    limit=257 if temporal_window else 121
+    if type(start_frame) is not int or start_frame < 0 or type(frame_count) is not int or not 1 <= frame_count <= limit:
+        raise ValueError(f'Choose a valid range of up to {limit} frames.')
+    if temporal_window and (has_audio or output != 'hlg_video'):
+        raise ValueError('Long temporal HDR is experimental and currently supports silent HLG video only.')
     if any(type(v) is not int or v < 32 or v > 2048 or v % 2 for v in (width,height)):
         raise ValueError('Choose an even-sized HDR source between 32 and 2048 pixels per side.')
     if width*height*frame_count > 40_000_000:
@@ -86,13 +91,21 @@ def build_native_video_graph(*, source, start_frame, frame_count, fps, width, he
     padded=max(9,1+8*((frame_count-1+7)//8))
     if pw*ph*padded > 40_000_000:
         raise ValueError('This padded range is too large; choose fewer frames.')
-    g=build_native_exr_graph(source=source,frame_count=padded,fps=fps,width=pw,height=ph,prefix=prefix,output=output)
+    # Keep the public graph's validation unchanged. The internal temporal test
+    # constructs a valid short graph then expands its *single* latent canvas.
+    g=build_native_exr_graph(source=source,frame_count=min(padded,121),fps=fps,width=pw,height=ph,prefix=prefix,output=output)
+    if temporal_window:
+        g['empty']['inputs']['length']=padded
+        for name in ('guide1','guide2','sample1','sample2'):
+            g[name]['inputs']['tile_frames']=temporal_window
+        for name in ('sample1','sample2'):
+            g[name]['inputs']['canvas_device']='cpu'
     def n(kind, **inputs):return {'class_type':kind,'inputs':inputs}
-    g['source']=n('ZuraHDRLoadNativeSource',source=source,start_frame=start_frame,frame_count=frame_count,
+    g['source']=n('ZuraHDRLoadNativeSourceLong' if temporal_window else 'ZuraHDRLoadNativeSource',source=source,start_frame=start_frame,frame_count=frame_count,
                   colour_space=colour_space,sequence_fps=float(fps))
     if sequence_manifest:
         g['source']['inputs'].update(manifest=sequence_manifest,manifest_sha=manifest_sha)
-    g['native_pad']=n('ZuraHDRNativePrepare',images=['source',0])
+    g['native_pad']=n('ZuraHDRNativePrepareLong' if temporal_window else 'ZuraHDRNativePrepare',images=['source',0])
     g['resize1']['inputs']['image']=['native_pad',0]
     g['resize2']['inputs']['image']=['native_pad',0]
     g['trim_frames']=n('ImageFromBatch',image=['decode',0],batch_index=0,length=frame_count)
@@ -116,5 +129,5 @@ def build_native_video_graph(*, source, start_frame, frame_count, fps, width, he
     video={'images':preview,'fps':float(fps)}
     if audio:video['audio']=audio
     g['zura_hdr_preview_video']=n('CreateVideo',**video)
-    g['zura_hdr_save_preview']=n('SaveVideo',video=['zura_hdr_preview_video',0],filename_prefix='genj/hdr/'+prefix+'_preview',format='mp4',**{'format.codec':'h264'})
+    g['zura_hdr_save_preview']=n('ZuraHDRSaveExactRate',video=['zura_hdr_preview_video',0],filename_prefix='genj/hdr/'+prefix+'_preview',fps=float(fps))
     return g

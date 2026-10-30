@@ -6,6 +6,7 @@ import subprocess
 import sys
 import types
 import unittest
+import wave
 import zipfile
 from pathlib import Path
 from unittest.mock import patch
@@ -24,6 +25,39 @@ paintout=importlib.import_module('ComfyUI_zura_nodes.paintout.paintout')
 
 
 class HDRSourceTest(unittest.TestCase):
+    @unittest.skipUnless(shutil.which('ffmpeg'),'requires FFmpeg')
+    def test_nonzero_audio_offset_selects_matching_source_segment(self):
+        with tempfile.TemporaryDirectory() as temp:
+            raw=Path(temp)/'source.wav';encoded=Path(temp)/'source.m4a';rate=48000
+            index=np.arange(rate*3,dtype=np.float64)
+            frequency=np.where(index<rate,440.,880.)
+            samples=(np.sin(2*np.pi*frequency*index/rate)*16000).astype('<i2')
+            with wave.open(str(raw),'wb') as output:
+                output.setparams((1,2,rate,len(samples),'NONE','not compressed'))
+                output.writeframes(samples.tobytes())
+            subprocess.run(['ffmpeg','-v','error','-i',str(raw),'-c:a','aac',str(encoded)],check=True)
+            fps=24000/1001
+            selected=source.ZuraHDRLoadAudioRange().load(str(encoded),24,17,fps)[0]['waveform'][0,0].numpy()
+            self.assertEqual(len(selected),round(17/fps*rate))
+            # A non-zero start must select the 880 Hz segment, not the 440 Hz
+            # beginning. Compare projections at the actual frequency bins.
+            t=np.arange(len(selected))/rate
+            def energy(hz):return abs(np.dot(selected,np.exp(-2j*np.pi*hz*t)))
+            self.assertGreater(energy(880),energy(440)*20)
+
+    @unittest.skipUnless(shutil.which('ffmpeg'),'requires FFmpeg')
+    def test_fractional_fps_audio_range_is_sample_exact(self):
+        with tempfile.TemporaryDirectory() as temp:
+            path=Path(temp)/'source.m4a'
+            subprocess.run(['ffmpeg','-v','error','-f','lavfi','-i',
+                            'sine=frequency=440:sample_rate=48000:duration=3',
+                            '-c:a','aac',str(path)],check=True)
+            fps=24000/1001
+            audio=source.ZuraHDRLoadAudioRange().load(str(path),10,17,fps)[0]
+            self.assertEqual(audio['waveform'].shape[-1],round(17/fps*48000))
+            with self.assertRaisesRegex(ValueError,'shorter'):
+                source.ZuraHDRLoadAudioRange().load(str(path),70,17,fps)
+
     @unittest.skipUnless(shutil.which('ffmpeg') and shutil.which('ffprobe'),'requires FFmpeg')
     def test_real_trimmed_video_and_audio(self):
         with tempfile.TemporaryDirectory() as temp:
