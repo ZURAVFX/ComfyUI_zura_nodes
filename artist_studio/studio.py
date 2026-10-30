@@ -2429,7 +2429,6 @@ def register():
     register_hdr_readiness(routes, response)
     from .hdr_long_service import HDRLongService, preview_enabled, register as register_hdr_long
     if preview_enabled():
-        import folder_paths
         server._zura_hdr_long_preview = HDRLongService(server, studio.store, check_asset, folder_paths.get_output_directory())
         register_hdr_long(routes, response, server._zura_hdr_long_preview)
     from .outpaint_jobs import register as register_outpaint_jobs

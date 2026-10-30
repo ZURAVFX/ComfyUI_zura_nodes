@@ -60,6 +60,14 @@ class HDRLongServiceTests(unittest.IsolatedAsyncioTestCase):
             with self.assertRaisesRegex(ValueError,'section setting'):await client.start({'mode':'native','source_id':'video','section_frames':26})
             with self.assertRaisesRegex(ValueError,'section setting'):await client.start({'mode':'sdr','source_id':'video','section_frames':25})
 
+    async def test_selected_output_stays_inside_output_root(self):
+        with tempfile.TemporaryDirectory() as root:
+            path=Path(root)/'zura'/'take.mp4';path.parent.mkdir();path.write_bytes(b'video')
+            client=service.HDRLongService(None,Store(),lambda asset:'verified',root)
+            asset,check=client._asset({'source_kind':'output','output_ref':{'type':'output','subfolder':'zura','filename':'take.mp4'}})
+            self.assertEqual(asset['asset_kind'],'video');self.assertEqual(check(asset),path.resolve())
+            with self.assertRaises(ValueError):client._asset({'source_kind':'output','output_ref':{'type':'output','subfolder':'..','filename':'outside.mp4'}})
+
     async def test_shorter_native_sections_reach_job_builder(self):
         with tempfile.TemporaryDirectory() as root:
             created=[]

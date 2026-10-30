@@ -31,6 +31,10 @@ class HDRLongService:
             if (kind=='sequence') != (asset.get('asset_kind')=='hdr_sequence'):
                 raise ValueError('Choose the requested source type.')
             return asset,self.check_asset
+        if kind=='output':
+            from .hdr_output import selected_output
+            path=selected_output(self.output_root,body.get('output_ref'))
+            return {'asset_kind':'video'},lambda _:path
         if kind=='result':
             project=self.store.load(body.get('project_id',''))
             if project.get('config',{}).get('engine')!='local' or not project.get('results'):

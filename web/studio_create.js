@@ -26,7 +26,7 @@ export class CreativeWorkspace {
     this.job=saved.job||null;this.draft=saved.draft||{};this.models=[];this.submitting=false;this.uploading=false;this.references=Array.isArray(this.draft.references)?this.draft.references:[];
     this.imageLoras=Array.isArray(this.draft.loras)?this.draft.loras.map(l=>({...l})):[];this.imageLoraCatalog=[];
     const nav=document.createElement("nav");nav.className="zc-nav";nav.setAttribute("aria-label","Workspace");
-    nav.innerHTML='<button type="button" data-space="home">Home</button><button type="button" data-space="image">Image</button><button type="button" data-space="video">Video</button>';
+    nav.innerHTML='<button type="button" data-space="home">Home</button><button type="button" data-space="image">Image</button><button type="button" data-space="video">Video</button><button type="button" id="zc-open-hdr">HDR</button>';
     this.root.querySelector(".gs-top").insertBefore(nav,this.root.querySelector(".gs-top-actions"));
     this.root.querySelector(".gs-brand>span").textContent="";
     const theme=document.createElement("button");theme.id="zc-theme";theme.type="button";theme.className="zc-theme-toggle";
@@ -86,6 +86,7 @@ export class CreativeWorkspace {
     imageHistory.addEventListener('click',event=>{const button=event.target.closest('[data-view-image]');if(button){this.selectedImage=Number(button.dataset.viewImage);this.renderGallery();imageHistory.open=false;}});
     const imageStatus=document.createElement('div');imageStatus.className='zc-image-status';imageStatus.append(this.$('progress'),this.$('message'));page.querySelector('.zc-image-scroll').append(imageStatus);
     for(const button of this.root.querySelectorAll("[data-space]"))button.onclick=()=>this.show(button.dataset.space);
+    this.root.querySelector('#zc-open-hdr').onclick=()=>this.openHDR();
     this.$("prompt").value=this.draft.prompt||"";this.$("shape").value=IMAGE_SIZES[this.draft.shape]?this.draft.shape:"square";
     const initialSize=IMAGE_SIZES[this.$("shape").value];this.$("width").value=this.draft.width??initialSize[0];this.$("height").value=this.draft.height??initialSize[1];
     this.$("seed").value=Number.isSafeInteger(this.draft.seed)?this.draft.seed:42;
@@ -261,6 +262,20 @@ export class CreativeWorkspace {
   open(){
     this.disposePopovers=installPopoverDismissal(this.root);
     this.show(this.mode||'home');
+  }
+  openHDR(){
+    const tool=this.studio.hdrTool;if(!tool)return;
+    let ref=null;
+    if(this.mode==='frames'&&this.frames&&!this.frames.$('result').hidden){
+      const file=this.frames.selectedResult,item=this.frames.items.find(value=>value.file===file||value.file?.filename===file?.filename&&value.file?.subfolder===file?.subfolder);
+      if(item?.config?.engine==='ltx')ref=file;
+    }else if(this.mode==='outpaint'&&this.outpaint&&!this.outpaint.result.hidden)ref=this.outpaint.outputRef;
+    else if(this.mode==='paintout'&&this.paintout?.view==='result'){
+      const result=this.paintout.result;ref=[result?.master,result?.file].find(file=>/\.(mp4|mov|mkv|webm)$/i.test(file?.filename||''));
+    }else if(this.mode==='video'&&this.studio.config.engine==='local')ref=this.studio.project?.results?.at(-1)?.asset;
+    this.show('video');tool.setOutput(ref);
+    if(!ref&&!this.studio.source?.id){tool.$('source-kind').value='own';tool.updateMode();}
+    tool.root.open=true;this.studio.revealControl(tool.root,tool.root.querySelector('summary'));
   }
   show(mode){
     this.mode=mode;this.root.dataset.workspace=mode;

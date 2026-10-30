@@ -296,6 +296,14 @@ navStudio.source={id:'retained-video',name:'source.mp4'};navStudio.references=[{
 const navRequests=calls.filter(c=>c.path==='/prompt').length;
 const task=navStudio.container.querySelector('#zc-video-task');task.value='frames';task.dispatchEvent(new window.Event('change'));
 assert.equal(navUi.mode,'frames');assert.equal(navUi.frames.page.hidden,false);assert.equal(navUi.frames.page.querySelector('#zc-video-task'),task,'The same selector remains in the frame composer');assert.equal(task.value,'frames');assert.ok(task.closest('.zc-task-control').previousElementSibling.classList.contains('zf-model'));assert.equal(navUi.frames.page.querySelector('#zf-back'),null);assert.equal(navStudio.container.querySelector('.gs-workspace').hidden,true);
+const hdrRoot=document.createElement('details');hdrRoot.innerHTML='<summary>HDR tools</summary><select data-hdr="source-kind"><option value="own">Choose another video</option></select>';navStudio.container.querySelector('.gs-settings').append(hdrRoot);
+navStudio.hdrTool={root:hdrRoot,setOutput(ref){this.output=ref;},$(id){return hdrRoot.querySelector(`[data-hdr="${id}"]`);},updateMode(){},sourceChanged(){},close(){}};
+const ltxTake={type:'output',subfolder:'zura/first_last',filename:'ltx.mp4'};navUi.frames.items=[{file:ltxTake,config:{engine:'ltx'}}];navUi.frames.selectedResult=ltxTake;navUi.frames.$('result').hidden=false;
+navStudio.container.querySelector('#zc-open-hdr').click();assert.equal(navUi.mode,'video');assert.equal(navStudio.hdrTool.output,ltxTake);assert.equal(hdrRoot.open,true);assert.equal(navUi.$('panel-settings').hidden,false);
+const outpaintTake={type:'output',subfolder:'genj/outpaint',filename:'extended.mp4'};navUi.mode='outpaint';navUi.outpaint={result:{hidden:false},outputRef:outpaintTake};navStudio.container.querySelector('#zc-open-hdr').click();assert.equal(navStudio.hdrTool.output,outpaintTake);
+const paintTake={type:'output',subfolder:'genj/paintout',filename:'clean.mp4'};navUi.mode='paintout';navUi.paintout={view:'result',result:{file:paintTake}};navStudio.container.querySelector('#zc-open-hdr').click();assert.equal(navStudio.hdrTool.output,paintTake);
+navUi.outpaint=null;navUi.paintout=null;
+navUi.show('frames');
 navUi.frames.assets.first={file:'retained-first.png',filename:'retained-first.png'};navUi.frames.$('prompt').value='A slow camera move';navUi.frames.save();
 navUi.frames.loras.setValue([{name:'h3-style.safetensors',strength:.6,confirm_unknown:true}]);
 assert.equal(navUi.frames.config().custom_loras[0].name,'h3-style.safetensors');

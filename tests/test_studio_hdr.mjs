@@ -16,6 +16,16 @@ const api={apiURL:p=>p,clientId:'test',addEventListener(){},removeEventListener(
   return {ok:true,async json(){return data;}};
 }};
 const tool=new HDRSourceTool(document.querySelector('#host'),api,()=>({id:'source-id',projectId:'project-id'}));
+const outputTool=new HDRSourceTool(document.querySelector('#host'),api,()=>({}));
+const chosenOutput={type:'output',subfolder:'zura/first_last',filename:'take.mp4'},outputCalls=[];
+outputTool.request=async(path,body)=>{outputCalls.push([path,body]);return path==='/prompt'?{prompt_id:'output-test'}:{graph:{}};};outputTool.poll=()=>{};
+outputTool.setOutput(chosenOutput);assert.equal(outputTool.$('source-kind').value,'output');await outputTool.start();
+assert.equal(outputCalls[0][1].source_kind,'output');assert.deepEqual(outputCalls[0][1].output_ref,chosenOutput);outputTool.finish();outputTool.close();
+const ownApi={...api,async fetchApi(path,options){assert.equal(path,'/zura/studio/upload?kind=video');assert.equal(options.method,'POST');return {ok:true,json:async()=>({id:'uploaded-hdr-video',name:'own.mp4',width:512,height:288})};}};
+const ownTool=new HDRSourceTool(document.querySelector('#host'),ownApi,()=>({})),ownCalls=[];
+ownTool.$('source-kind').value='own';ownTool.updateMode();await ownTool.uploadVideo(new Blob(['video'],{type:'video/mp4'}));
+assert.equal(ownTool.$('video-name').textContent,'own.mp4');ownTool.request=async(path,body)=>{ownCalls.push([path,body]);return path==='/prompt'?{prompt_id:'own-test'}:{graph:{}};};ownTool.poll=()=>{};
+await ownTool.start();assert.equal(ownCalls[0][1].source_kind,'upload');assert.equal(ownCalls[0][1].source_id,'uploaded-hdr-video');ownTool.finish();ownTool.close();
 const gated=new HDRSourceTool(document.querySelector('#host'),api,()=>({id:'source-id'}));
 gated.models.packages=[{id:'existing'}];
 gated.request=async()=>({route:'hdr_sdr',files:[],missingNodes:[],longPreview:true});

@@ -97,7 +97,7 @@ export class OutpaintWorkspace {
   async poll(){if(!this.job)return;const identity=this.job.id;try{const state=await this.fetch('/zura/studio/outpaint/jobs/'+identity);if(this.job?.id!==identity)return;
     if(this.job.active_prompt_id!==(state.active_prompt_id||null)){this.progressNode=null;this.$('progress').removeAttribute('value');}
     this.job.active_prompt_id=state.active_prompt_id||null;this.job.window=state.window;this.job.windows=state.windows;
-    if(state.state==='complete'){this.job=null;this.result.src=this.api.apiURL(state.url);this.result.hidden=false;this.canvas.hidden=true;
+    if(state.state==='complete'){this.job=null;this.outputRef=state.kind==='render'?state.artifact:null;this.result.src=this.api.apiURL(state.url);this.result.hidden=false;this.canvas.hidden=true;
       if(state.kind==='review'){this.review=state;this.$('download').hidden=true;this.message('Orange marks the target area. This method may also redraw the original footage. Check the whole clip, then approve.');}else{this.review=null;this.$('download').href=this.api.apiURL(state.url);this.$('download').hidden=false;this.message('Your extended video is ready.');}
       this.paint();return;}
     if(['failed','cancelled','interrupted'].includes(state.state)){this.job=null;this.message(state.error||'The job stopped. Review and try again.');this.paint();return;}

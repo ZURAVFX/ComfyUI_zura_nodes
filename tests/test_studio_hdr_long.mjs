@@ -27,4 +27,17 @@ const dropped=new HDRLongJobClient({async fetchApi(path){
 await dropped.start({mode:'sdr'});await new Promise(resolve=>setTimeout(resolve,5));
 assert.equal(submits,1);assert.equal(recoveries,1);assert.equal(dropped.busy,false);
 assert.equal(values.size,0,'recovered completion clears both saved IDs');
+for(const status of [408,429,500,503]){
+  let starts=0,recovered=0;
+  const transient=new HDRLongJobClient({async fetchApi(path){
+    if(path.endsWith('/jobs')){starts++;return {ok:false,status,json:async()=>({error:'Temporary server error'})};}
+    if(path.includes('/requests/')){recovered++;return {ok:true,status:200,json:async()=>({id:'saved',state:'rendering'})};}
+    return {ok:true,status:200,json:async()=>({id:'saved',state:'complete'})};
+  }},()=>{});
+  await transient.start({mode:'sdr'});await new Promise(resolve=>setTimeout(resolve,5));
+  assert.equal(starts,1,`HTTP ${status} must not submit twice`);assert.equal(recovered,1,`HTTP ${status} recovers the original request`);assert.equal(transient.busy,false);
+}
+let failedUpdate;
+const rejected=new HDRLongJobClient({async fetchApi(){return {ok:false,status:400,json:async()=>({error:'Invalid selection'})};}},value=>failedUpdate=value);
+await rejected.start({mode:'sdr'});assert.equal(failedUpdate.state,'failed');assert.equal(rejected.busy,false);
 console.log('Long HDR client keeps one job, reconnects safely and waits for cancellation.');

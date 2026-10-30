@@ -129,7 +129,7 @@ class OutpaintJobs:
 
     @staticmethod
     def public(job):
-        return {k: job.get(k) for k in ('id', 'kind', 'state', 'url', 'error', 'selection', 'approved', 'window', 'windows', 'active_prompt_id', 'estimated_bytes')}
+        return {k: job.get(k) for k in ('id', 'kind', 'state', 'url', 'artifact', 'error', 'selection', 'approved', 'window', 'windows', 'active_prompt_id', 'estimated_bytes')}
 
     async def submit_long(self, kind, source, selection, *, reviewed=None, prompt='', seed=42, client_id=None, anchor=False, custom_loras=None):
         """Private bounded executor, not yet exposed by the Studio routes.

@@ -189,3 +189,17 @@ Long HDR's status polling no longer erases live sampler progress when it sees
 the same running section. The indicator returns to an indeterminate state when
 the prompt or phase changes. A UI regression test covers both transitions; this
 change is in the test worktree, not the installed normal Studio.
+
+The staged shared HDR entry is available from the video workspaces without
+changing their generation model. It can use the selected LTX first/last,
+frame-extension or paintout video, the current LTX shot output, a separately
+uploaded video, or an EXR sequence. Selected output paths are resolved inside
+ComfyUI's output folder before use. Isolated default-mode and longer-preview
+HTTP tests accepted valid output files; the longer route completed a real
+10-frame SDR-to-HLG output conversion. Invalid outside-folder references were
+rejected. This shared UI and backend are not yet installed in normal Studio;
+a desktop check and coordinated restart remain necessary.
+
+The first/last-frame audio attachment now has an accessible X and removes the
+saved reference without deleting its source file. Endpoint UI tests pass; the
+local frontend files are installed and require a page refresh.

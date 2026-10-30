@@ -1,4 +1,5 @@
 // Long HDR is opt-in and remains gated until its visual and end-to-end checks.
+const definitiveClientError=error=>error.status>=400&&error.status<500&&error.status!==408&&error.status!==429;
 export class HDRLongJobClient {
   constructor(api,onUpdate){this.api=api;this.onUpdate=onUpdate;this.id=null;this.requestId=null;this.busy=false;this.timer=null;this.cancelPending=false;}
   async request(path,body){
@@ -18,7 +19,7 @@ export class HDRLongJobClient {
       this.id=job.id;try{localStorage.setItem('zura-hdr-long-job',this.id);}catch{}
       this.onUpdate(job);this.poll();
     }catch(error){
-      if(error.status){this.onUpdate({state:'failed',error:error.message});this.finish();}
+      if(definitiveClientError(error)){this.onUpdate({state:'failed',error:error.message});this.finish();}
       else if(this.requestId){this.onUpdate({state:'reconnecting'});this.recover();}
       else{this.onUpdate({state:'failed',error:'Could not create a secure HDR request ID.'});this.finish();}
     }
@@ -35,7 +36,7 @@ export class HDRLongJobClient {
       this.onUpdate({state:'reconnecting'});this.timer=setTimeout(()=>this.recover(),2000);
     }catch(error){
       if(identity!==this.requestId)return;
-      if(error.status>=400 && error.status<500){this.onUpdate({state:'unknown',error:error.message});this.finish();return;}
+      if(definitiveClientError(error)){this.onUpdate({state:'unknown',error:error.message});this.finish();return;}
       this.onUpdate({state:'reconnecting'});this.timer=setTimeout(()=>this.recover(),2000);
     }
   }
@@ -50,7 +51,7 @@ export class HDRLongJobClient {
       this.timer=setTimeout(()=>this.poll(),2000);
     }catch(error){
       if(identity!==this.id)return;
-      if(error.status>=400 && error.status<500){this.onUpdate({state:'failed',error:error.message});this.finish();return;}
+      if(definitiveClientError(error)){this.onUpdate({state:'failed',error:error.message});this.finish();return;}
       this.onUpdate({state:'reconnecting'});this.timer=setTimeout(()=>this.poll(),2000);
     }
   }

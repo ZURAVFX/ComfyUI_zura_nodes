@@ -1543,7 +1543,6 @@ class ArtistStudio {
     }
     if(this.trimSeeking && this.source){video=this.sourcePlayback();opening=video?null:this.source.thumbnail_url;title="Trim your source";description=video?"Drag the edges to choose the range. Click the strip to find a frame.":"Preparing a playback preview.";}
     this.$("preview-title").textContent=title;this.$("preview-description").textContent=description;
-    if(this.hdrTool)this.hdrTool.root.hidden=this.config.engine!=="local";
     const player=this.$("player"),image=this.$("opening");player.hidden=!video;image.hidden=!opening;
     image.alt=workflow==="camera"?"Changed camera view":"Starting frame for this shot";
     const expand=this.$("preview-fullscreen");if(expand)expand.hidden=!video&&!opening;

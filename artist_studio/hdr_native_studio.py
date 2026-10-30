@@ -75,6 +75,10 @@ def register(studio,routes,response,check_asset):
             if ref.get('type')!='output' or not path.is_relative_to(root) or not path.is_file() or path.suffix.lower() not in ('.mp4','.mov','.mkv','.webm'):
                 raise ValueError('The saved LTX result is unavailable.')
             graph,details=await asyncio.to_thread(build_asset_graph,{'asset_kind':'video'},body,lambda _:path)
+        elif body.get('source_kind')=='output':
+            from .hdr_output import selected_output
+            path=selected_output(folder_paths.get_output_directory(),body.get('output_ref'))
+            graph,details=await asyncio.to_thread(build_asset_graph,{'asset_kind':'video'},body,lambda _:path)
         elif body.get('source_kind','upload') in ('upload','sequence'):
             asset=studio.store.load(body.get('source_id',''))
             if (body.get('source_kind')=='sequence') != (asset.get('asset_kind')=='hdr_sequence'):
