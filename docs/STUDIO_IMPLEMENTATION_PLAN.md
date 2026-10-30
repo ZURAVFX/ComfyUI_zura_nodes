@@ -49,3 +49,5 @@ registered yet. Studio controls and end-to-end testing remain; it remains
 unavailable to users pending visual review.
 Long jobs now also generate an SDR review video with the selected soundtrack;
 streaming, frame count, audio selection and cancellation pass local tests.
+An isolated browser-side job client handles reconnects and confirmed
+cancellation; the HDR panel has not yet been wired to it.
