@@ -290,3 +290,16 @@ The saver now requests a track timescale matching the reconstructed rate and
 accepts at most 1 ms total duration error, while still checking frame count,
 colour tags and audio track count. Real FFmpeg regression tests preserve every
 decoded frame and audio sample; common rates remain exactly represented.
+
+The CHUG reference version of that same scene was also tested at its original
+1080 × 1920 raster. A 17-frame public-limit GPU graph produced 17 correctly
+tagged 10-bit HLG frames with 0.009 ms total timing difference, in 120.65 s;
+available system RAM fell to at least 16.49 GiB. This silent sample does not
+qualify audio, longer 1080p clips, or colour appearance on an HDR display.
+The dataset notice is saved alongside both the sample and generated test files.
+
+A preallocated source-loader variant was compared with the existing loader in
+separate 64-frame 512 × 512 synthetic CPU processes. Peak RSS growth was
+approximately 391 MiB versus 393 MiB, with both taking 0.44 s in this test.
+That measurement does not establish a useful memory or speed improvement, so
+the change was not retained and the HDR limits remain unchanged.
