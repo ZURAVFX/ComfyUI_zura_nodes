@@ -149,3 +149,12 @@ A Studio project persistence test now confirms that changing the camera raster
 saves the selected portrait dimensions and invalidates the previously approved
 still, so it cannot be accidentally reused at the old framing. All 30 shared
 Studio tests pass; this does not substitute for the desktop visual check.
+
+The user accepted the 130-frame SDR-to-HDR result for preview use, including
+its section join. This is preview approval, not a release-quality claim.
+A separate isolated native-HDR test converted 26 frames of real 1080 × 1920
+PQ footage in two overlapping sections, producing 26 frames of 10-bit HLG
+Rec.2020 video and a viewable SDR preview. The source has no audio, so this
+run does not validate audio; visual quality and longer 1080p clips remain to
+be reviewed. Observed available system memory stayed above roughly 12 GiB.
+The isolated server was stopped after the job; the main ComfyUI was left open.
