@@ -131,7 +131,8 @@ def ltx_hdr_delivery(images, fps, *, output, prefix, working_space, audio=None):
 
     graph = {}
     # Official LTX-2.5 examples use ACEScct -> native Comfy HLG, CreateVideo
-    # at 10 bits, plus LTXVHDRDecodePostprocess for ACEScg float EXRs.
+    # at 10 bits. The official decoder is used for the SDR preview; EXR
+    # packaging uses the unclipped ACEScct output to retain negative AP1 values.
     if output in ("hlg_video", "hlg_and_exr"):
         graph["zura_hdr_hlg"] = {"class_type": "ImageColorSpace", "inputs": {
             "image": list(images), "source": "HDR ACEScct", "destination": "HDR"}}
@@ -145,7 +146,7 @@ def ltx_hdr_delivery(images, fps, *, output, prefix, working_space, audio=None):
             "fps": float(fps)}}
     if output in ("acescg_exr", "hlg_and_exr"):
         graph["zura_hdr_exr"] = {"class_type": "LTXVHDRDecodePostprocess", "inputs": {
-            "image": list(images), "transfer": "acescct", "save_exr": True,
+            "image": list(images), "transfer": "acescct", "save_exr": False,
             "exr_color_space": "acescg", "output_dir": "genj/hdr/" + prefix,
             "filename_prefix": "frame", "half_precision": True}}
     return graph

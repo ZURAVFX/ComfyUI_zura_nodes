@@ -38,6 +38,7 @@ class HDRDeliveryTest(unittest.TestCase):
         self.assertEqual(graph["zura_hdr_video"]["inputs"]["bit_depth"], 10)
         self.assertEqual(graph["zura_hdr_video"]["inputs"]["audio"], ["audio", 0])
         self.assertEqual(graph["zura_hdr_exr"]["inputs"]["exr_color_space"], "acescg")
+        self.assertFalse(graph["zura_hdr_exr"]["inputs"]["save_exr"])
 
     def test_rejects_unqualified_source_and_unsafe_output_paths(self):
         with self.assertRaises(ValueError):

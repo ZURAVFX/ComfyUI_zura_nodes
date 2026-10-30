@@ -120,7 +120,7 @@ def build_native_video_graph(*, source, start_frame, frame_count, fps, width, he
     g.update(ltx_hdr_delivery(['trim_raster',0],fps,output=output,prefix=prefix,
                               working_space='ltx25_acescct_qualified',audio=audio))
     if output in ('acescg_exr','hlg_and_exr'):
-        g['zura_hdr_archive']=n('ZuraHDRPackageEXR',images=['zura_hdr_exr',0],prefix=prefix)
+        g['zura_hdr_archive']=n('ZuraHDRPackageACEScct',images=['trim_raster',0],prefix=prefix)
         preview=['zura_hdr_exr',0]
     else:
         g['zura_hdr_preview_tonemap']=n('LTXVHDRDecodePostprocess',image=['trim_raster',0],transfer='acescct',save_exr=False,

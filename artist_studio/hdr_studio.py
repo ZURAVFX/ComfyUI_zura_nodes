@@ -36,7 +36,7 @@ def build_hdr_graph(*, source, start_frame, frame_count, fps, colour_space='auto
         video_vae=video_vae,audio_vae=audio_vae,output=output,prefix=prefix,seed=seed,
         audio=['zura_hdr_audio_source',0] if has_audio else None))
     if output in ('acescg_exr','hlg_and_exr'):
-        graph['zura_hdr_archive']=node('ZuraHDRPackageEXR',images=['zura_hdr_exr',0],prefix=prefix)
+        graph['zura_hdr_archive']=node('ZuraHDRPackageACEScct',images=['hdr_unpad_raster',0],prefix=prefix)
     # Native LTX tonemap produces a viewable SDR proxy; EXR/video retain HDR.
     if 'zura_hdr_exr' in graph:
         preview=['zura_hdr_exr',0]

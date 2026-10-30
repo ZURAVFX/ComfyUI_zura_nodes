@@ -34,7 +34,7 @@ class HDRReadinessTests(unittest.TestCase):
         self.assertIn('ltx-2.5-video-vae-bf16.safetensors',names)
         self.assertIn('gemma4-12b-with-proj-ltx-2.5-nvfp4.safetensors',names)
         both=setup.readiness('native','hlg_and_exr',lambda folder,name:'/installed',nodes)
-        self.assertIn('ZuraHDRPackageEXR',both['missingNodes'])
+        self.assertIn('ZuraHDRPackageACEScct',both['missingNodes'])
 
     def test_invalid_modes_and_outputs_are_rejected(self):
         for mode,output in [('sdr','invalid'),('unknown','hlg_video')]:

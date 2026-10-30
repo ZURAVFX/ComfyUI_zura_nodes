@@ -18,6 +18,7 @@ chunk=importlib.import_module('ComfyUI_zura_nodes.artist_studio.hdr_chunks')
 storage=importlib.import_module('ComfyUI_zura_nodes.artist_studio.hdr_chunk_store')
 export=importlib.import_module('ComfyUI_zura_nodes.artist_studio.hdr_chunk_exr')
 paintout=importlib.import_module('ComfyUI_zura_nodes.paintout.paintout')
+package=importlib.import_module('ComfyUI_zura_nodes.artist_studio.hdr_package')
 
 
 class HDRChunkEXRTests(unittest.TestCase):
@@ -81,6 +82,26 @@ class HDRChunkEXRTests(unittest.TestCase):
             pixels=image.read_image()[0,0]
             self.assertAlmostEqual(float(pixels[0]),-0.003,places=5)
             self.assertAlmostEqual(float(pixels[1]),0.18,places=3)
+            self.assertAlmostEqual(float(pixels[2]),2.0,places=3)
+        finally:image.close()
+
+    def test_bounded_node_publishes_real_exr_without_clipping(self):
+        import OpenImageIO as oiio
+        source=torch.tensor([[[[-0.003,0.18,2.0]]]])
+        folders=types.SimpleNamespace(get_output_directory=lambda:self.tmp.name)
+        with patch.dict(sys.modules,{'folder_paths':folders}):
+            result=package.ZuraHDRPackageACEScct().package(paintout.encode_ct(source),'short')
+            path=Path(result['result'][0])
+            with self.assertRaisesRegex(ValueError,'already exists'):
+                package.ZuraHDRPackageACEScct().package(paintout.encode_ct(source),'short')
+        with zipfile.ZipFile(path) as archive:
+            frame=Path(self.tmp.name)/'short.exr'
+            frame.write_bytes(archive.read('frame_00000.exr'))
+        image=oiio.ImageInput.open(str(frame))
+        self.assertTrue(image)
+        try:
+            pixels=image.read_image()[0,0]
+            self.assertAlmostEqual(float(pixels[0]),-0.003,places=5)
             self.assertAlmostEqual(float(pixels[2]),2.0,places=3)
         finally:image.close()
 

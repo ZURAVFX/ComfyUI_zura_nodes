@@ -32,3 +32,7 @@ components; a real half-float EXR round-trip verifies negative channels and
 highlights. A synthetic 29.97 fps HLG export also retained all 14 frames and
 selected audio within one sample at a non-zero trim. Long HDR remains gated
 pending the artist and end-to-end checks.
+The bounded HDR graph now packages ACEScct directly into ACEScg EXRs without
+clipping negative channels; the official decoder remains the SDR preview.
+Real EXR and graph tests pass, but the revised graph has not yet been exercised
+in a complete GPU render or installed into the running desktop instance.

@@ -134,7 +134,8 @@ class HDRSourceTest(unittest.TestCase):
                   has_audio=True,output='hlg_and_exr',prefix='job_1')
         self.assertEqual(graph['zura_hdr_source']['inputs']['start_frame'],7)
         self.assertEqual(graph['zura_hdr_audio_source']['inputs']['start_frame'],7)
-        self.assertEqual(graph['zura_hdr_archive']['inputs']['images'],['zura_hdr_exr',0])
+        self.assertEqual(graph['zura_hdr_archive']['inputs']['images'],['hdr_unpad_raster',0])
+        self.assertEqual(graph['zura_hdr_archive']['class_type'],'ZuraHDRPackageACEScct')
         self.assertEqual(graph['zura_hdr_preview_video']['inputs']['audio'],['zura_hdr_trim_audio',0])
         with self.assertRaises(ValueError):hdr_studio.build_hdr_graph(source='x',start_frame=0,frame_count=122,fps=24,prefix='x')
 

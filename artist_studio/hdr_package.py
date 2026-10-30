@@ -78,5 +78,36 @@ class ZuraHDRPackageEXRLong(ZuraHDRPackageEXR):
                 'result':(str(path),)}
 
 
-NODE_CLASS_MAPPINGS={'ZuraHDRPackageEXR':ZuraHDRPackageEXR,'ZuraHDRPackageEXRLong':ZuraHDRPackageEXRLong}
+class ZuraHDRPackageACEScct:
+    """Deliver bounded ACEScct model output as scene-linear ACEScg EXRs."""
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {'required':{'images':('IMAGE',), 'prefix':('STRING',{'default':''})}}
+    RETURN_TYPES=('STRING',)
+    RETURN_NAMES=('archive',)
+    OUTPUT_NODE=True
+    FUNCTION='package'
+    CATEGORY='Zura/Artist Studio'
+
+    def package(self, images, prefix):
+        import threading
+        import torch
+        import folder_paths
+        from .hdr_chunks import HDRChunk
+        from .hdr_chunk_exr import export_exr_zip
+        if (not isinstance(images,torch.Tensor) or images.ndim!=4 or images.shape[-1]!=3
+                or not 1<=len(images)<=121 or not torch.isfinite(images).all()):
+            raise ValueError('Expected 1–121 finite ACEScct RGB frames.')
+        class BoundedFrames:
+            plan=[HDRChunk(0,len(images),0)]
+            cancelled=threading.Event()
+            def stitched(self):
+                yield images
+        path=export_exr_zip(BoundedFrames(),folder_paths.get_output_directory(),prefix)
+        return {'ui':{'files':[{'filename':path.name,'subfolder':'genj/hdr','type':'output'}]},
+                'result':(str(path),)}
+
+
+NODE_CLASS_MAPPINGS={'ZuraHDRPackageEXR':ZuraHDRPackageEXR,'ZuraHDRPackageEXRLong':ZuraHDRPackageEXRLong,
+                     'ZuraHDRPackageACEScct':ZuraHDRPackageACEScct}
 NODE_DISPLAY_NAME_MAPPINGS={'ZuraHDRPackageEXR':'Zura · Package HDR EXR Sequence'}
