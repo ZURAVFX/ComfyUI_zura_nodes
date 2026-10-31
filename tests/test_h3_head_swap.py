@@ -5,6 +5,9 @@ import os
 from pathlib import Path
 import sys
 import unittest
+from unittest.mock import patch
+from types import SimpleNamespace
+from fractions import Fraction
 from dataclasses import replace
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -37,7 +40,9 @@ class HeadSwapTests(unittest.TestCase):
         self.assertEqual(graph['uncrop']['inputs']['cropped_images'], ['trim', 0])
         self.assertEqual(graph['uncrop']['inputs']['original_images'], ['pad', 0])
         self.assertEqual(graph['trim_output']['inputs']['num_frames'], ['source_size', 2])
-        self.assertEqual(graph['video']['inputs']['images'], ['trim_output', 0])
+        self.assertEqual(graph['hold_output']['inputs']['images'], ['trim_output', 0])
+        self.assertEqual(graph['hold_output']['inputs']['remainder'], 5)
+        self.assertEqual(graph['video']['inputs']['images'], ['hold_output', 0])
         self.assertEqual(graph['export']['inputs']['clip_details'], ['select', 1])
 
     def test_invalid_or_unqualified_requests_cannot_build(self):
@@ -47,6 +52,21 @@ class HeadSwapTests(unittest.TestCase):
                        {'object_indices':'0,invalid'}, {'reference_size':'unbounded'}):
             with self.subTest(change=change), self.assertRaises(ValueError):
                 head.build_graph(replace(self.request(), **change))
+
+    def test_fractional_studio_selection_preserves_artist_interval(self):
+        # A valid two-second, 30 fps source with a custom partial-frame trim.
+        stream = SimpleNamespace(duration=60, time_base=Fraction(1, 30))
+        container = SimpleNamespace(streams=SimpleNamespace(video=[stream], audio=[object()]))
+        import av
+        with patch.object(av, 'open') as opened:
+            opened.return_value.__enter__.return_value = container
+            start, duration, frames = head._selection(
+                {'source': {}, 'config': {'length_mode': 'custom', 'start': .125, 'duration': .97}},
+                lambda _: 'source.mp4')
+        self.assertEqual((start, duration, frames), (.125, .97, 24))
+        graph = head.build_graph(replace(self.request(), start_seconds=start, duration_seconds=duration))
+        self.assertEqual(graph['select']['inputs']['duration_seconds'], .97)
+        self.assertTrue(graph['select']['inputs']['round_up'])
 
     def test_static_schema_and_all_edges_against_supplied_snapshot(self):
         filename = os.environ.get('ZURA_OBJECT_INFO_PATH')

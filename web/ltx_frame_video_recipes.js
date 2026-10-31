@@ -5,6 +5,7 @@ export const LTX_FRAME_VIDEO_MODELS=Object.freeze({
   text:'gemma4-12b-with-proj-ltx-2.5-comfy-int8-convrot.safetensors',
   videoVae:'ltx-2.5-video-vae-conv-bf16.safetensors',
   audioVae:'ltx-2.5-audio-vae-bf16.safetensors',
+  latentUpscaler:'ltx-2.5-latent-spatial-upscaler-x2-bf16-1.0.safetensors',
 });
 export const LTX_DISTILLED_SIGMAS='1.0,0.99375,0.9875,0.98125,0.975,0.909375,0.725,0.421875,0.0';
 export const LTX_FRAME_VIDEO_CAPABILITIES=Object.freeze({
@@ -31,6 +32,11 @@ export function buildLtxFrameVideoGraph(c){
   if(c.audioEnabled&&!c.audio?.file)throw new Error('Add an audio reference, or switch Audio reference off.');
   const audioStart=Number(c.audioStart??0);
   if(!Number.isFinite(audioStart)||audioStart<0)throw new Error('Audio start must be zero or a positive number of seconds.');
+  const fast=c.fast===true;
+  // LTX samples on a 32-pixel grid. Pad the requested output to 64 before
+  // halving, then crop back after upscaling so 32-grid sizes stay exact.
+  const paddedWidth=fast?Math.ceil(width/64)*64:width,paddedHeight=fast?Math.ceil(height/64)*64:height;
+  const sampleWidth=fast?paddedWidth/2:width,sampleHeight=fast?paddedHeight/2:height;
   const g={},node=(id,class_type,inputs,title)=>{g[id]={class_type,inputs,_meta:{title:title||class_type}};};
   node('model','UNETLoader',{unet_name:LTX_FRAME_VIDEO_MODELS.model,weight_dtype:'default'},'Load LTX 2.5 distilled INT8');
   node('attention','ModelAttentionBackend',{model:ref('model'),attention:'comfy kitchen attention'},'Comfy Kitchen attention');
@@ -40,13 +46,22 @@ export function buildLtxFrameVideoGraph(c){
   node('positive','CLIPTextEncode',{clip:ref('text'),text:c.prompt},'Encode video prompt');
   node('negative','CLIPTextEncode',{clip:ref('text'),text:''});
   node('conditioning','LTXVConditioning',{positive:ref('positive'),negative:ref('negative'),frame_rate:24});
-  node('empty_video','EmptyLTXVLatentVideo',{width,height,length:frames,batch_size:1});
+  node('empty_video','EmptyLTXVLatentVideo',{width:sampleWidth,height:sampleHeight,length:frames,batch_size:1});
   let positive=ref('conditioning'),negative=ref('conditioning',1),latent=ref('empty_video');
   for(const [id,image,frame_idx] of [['first',c.first,0],['last',c.last,frames-1]]){
     if(!image?.file)continue;
     node(id,'LoadImage',{image:image.file},`Load ${id} frame`);
     node(`fit_${id}`,'ImageScale',{image:ref(id),upscale_method:'lanczos',width,height,crop:'center'},`Fit ${id} frame without stretching`);
-    node(`preprocess_${id}`,'LTXVPreprocess',{image:ref(`fit_${id}`),img_compression:18});
+    let guideImage=ref(`fit_${id}`);
+    if(fast){
+      if(paddedWidth!==width||paddedHeight!==height){
+        node(`pad_${id}`,'ImagePadForOutpaint',{image:guideImage,left:0,top:0,right:paddedWidth-width,bottom:paddedHeight-height,feathering:0},`Pad ${id} frame for the model grid`);
+        guideImage=ref(`pad_${id}`);
+      }
+      node(`small_${id}`,'ImageScale',{image:guideImage,upscale_method:'lanczos',width:sampleWidth,height:sampleHeight,crop:'disabled'},`Scale ${id} guide to sampling size`);
+      guideImage=ref(`small_${id}`);
+    }
+    node(`preprocess_${id}`,'LTXVPreprocess',{image:guideImage,img_compression:18});
     node(`guide_${id}`,'LTXVAddGuide',{positive,negative,vae:ref('video_vae'),latent,image:ref(`preprocess_${id}`),frame_idx,strength:1},`Anchor ${id} frame at frame ${frame_idx+1}`);
     positive=ref(`guide_${id}`);negative=ref(`guide_${id}`,1);latent=ref(`guide_${id}`,2);
   }
@@ -73,17 +88,33 @@ export function buildLtxFrameVideoGraph(c){
   node('sample','SamplerCustomAdvanced',{noise:ref('noise'),guider:ref('guider'),sampler:ref('sampler'),sigmas:ref('sigmas'),latent_image:ref('av_latent')},'Generate video and audio: 8 steps');
   node('separate','LTXVSeparateAVLatent',{av_latent:ref('sample')});
   node('crop_guides','LTXVCropGuides',{positive,negative,latent:ref('separate')},'Remove conditioning frames');
-  node('decode','VAEDecodeTiled',{samples:ref('crop_guides',2),vae:ref('video_vae'),tile_size:512,overlap:64,temporal_size:128,temporal_overlap:32},'Decode video');
+  let videoLatent=ref('crop_guides',2);
+  if(fast){
+    node('upscale_model','LatentUpscaleModelLoader',{model_name:LTX_FRAME_VIDEO_MODELS.latentUpscaler},'Load LTX 2.5 spatial upscaler');
+    node('upscale','LTXVLatentUpsampler',{samples:videoLatent,upscale_model:ref('upscale_model'),vae:ref('video_vae')},'Upscale sampled video');
+    videoLatent=ref('upscale');
+  }
+  node('decode','VAEDecodeTiled',{samples:videoLatent,vae:ref('video_vae'),tile_size:512,overlap:64,temporal_size:128,temporal_overlap:32},'Decode video');
+  let videoImages=ref('decode');
+  if(fast&&(paddedWidth!==width||paddedHeight!==height)){
+    node('crop_output','ImageCrop',{image:videoImages,width,height,x:0,y:0},'Restore requested output size');
+    videoImages=ref('crop_output');
+  }
   if(!c.audioEnabled)node('decode_audio','LTXVAudioVAEDecode',{samples:ref('separate',1),audio_vae:ref('audio_vae')},'Decode generated soundtrack');
-  node('video','CreateVideo',{images:ref('decode'),audio:ref(c.audioEnabled?'trim_audio':'decode_audio'),fps:24,bit_depth:8,color_space:'sRGB',codec:'none'});
+  node('video','CreateVideo',{images:videoImages,audio:ref(c.audioEnabled?'trim_audio':'decode_audio'),fps:24,bit_depth:8,color_space:'sRGB',codec:'none'});
   node('save','SaveVideo',{video:ref('video'),filename_prefix:'zura/first_last/ltx/result',format:'mp4','format.codec':'h264','format.codec.encoding':'auto'},'Save LTX video');
   return g;
 }
-export function ltxFrameVideoAvailability(info={}){
+export const LTX_FRAME_VIDEO_FAST_NODES=Object.freeze(['LatentUpscaleModelLoader','LTXVLatentUpsampler','ImagePadForOutpaint','ImageCrop']);
+export function ltxFrameVideoAvailability(info={},config={}){
   const options=(node,key)=>{const field=info[node]?.input?.required?.[key];return field?.[0]==='COMBO'?field[1]?.options||[]:Array.isArray(field?.[0])?field[0]:[];};
   const missing=[];
   for(const node of LTX_FRAME_VIDEO_CAPABILITIES.nodeTypes)if(!info[node])missing.push(node);
   for(const [node,key,file] of [['UNETLoader','unet_name',LTX_FRAME_VIDEO_MODELS.model],['CLIPLoader','clip_name',LTX_FRAME_VIDEO_MODELS.text],['VAELoader','vae_name',LTX_FRAME_VIDEO_MODELS.videoVae],['VAELoader','vae_name',LTX_FRAME_VIDEO_MODELS.audioVae]])if(!options(node,key).includes(file))missing.push(file);
+  if(config.fast===true){
+    for(const node of LTX_FRAME_VIDEO_FAST_NODES)if(!info[node])missing.push(node);
+    if(info.LatentUpscaleModelLoader&&!options('LatentUpscaleModelLoader','model_name').includes(LTX_FRAME_VIDEO_MODELS.latentUpscaler))missing.push(LTX_FRAME_VIDEO_MODELS.latentUpscaler);
+  }
   if(info.ModelAttentionBackend&&!options('ModelAttentionBackend','attention').includes('comfy kitchen attention'))missing.push('Comfy Kitchen attention');
   if(info.KSamplerSelect&&!options('KSamplerSelect','sampler_name').includes('euler_ancestral'))missing.push('Euler ancestral sampler');
   return {ready:missing.length===0,missing:[...new Set(missing)]};

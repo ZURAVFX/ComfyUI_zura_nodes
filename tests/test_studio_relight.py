@@ -47,9 +47,9 @@ class RelightTests(unittest.TestCase):
         project.update(character=None, references=[], look_mode='build')
         return project
 
-    def test_mode_requires_h3_and_lighting_direction(self):
+    def test_relight_selects_wan21_and_requires_lighting_direction(self):
         for engine in ('local', 'wan', 'seedance'):
-            with self.assertRaisesRegex(ValueError, 'supports MiniMax H3'):
+            with self.assertRaisesRegex(ValueError, 'Relight uses the Wan 2.1 workflow'):
                 studio.clean_config({'engine': engine, 'workflow_mode': 'relight', 'prompt': 'sunlight'})
         empty = studio.clean_config({'engine': 'h3', 'workflow_mode': 'relight'})
         with self.assertRaisesRegex(ValueError, 'Describe the lighting'):

@@ -9,7 +9,7 @@ Object.defineProperty(window.HTMLInputElement.prototype,'checked',{configurable:
 window.HTMLElement.prototype.pause=()=>{};
 const stored={},events=new Map(),calls=[];
 Object.assign(globalThis,{document,window,localStorage:{getItem:k=>stored[k],setItem:(k,v)=>stored[k]=v}});
-const owner={root:document.querySelector('#root'),studio:{close(){}},app:{},api:{apiURL:p=>p,clientId:'test',addEventListener:(n,h)=>events.set(n,h),fetchApi:async(path,options)=>{calls.push({path,options});const file=options.body.get('image');return {ok:true,json:async()=>({name:file.name,subfolder:'zura_references'})};}},fetch:async(path,body)=>{calls.push({path,body});if(path==='/zura/studio/loras/apply')return {graph:{...body.graph,custom_test:{class_type:'LoraLoaderModelOnly',inputs:{}}}};if(path==='/prompt')return {prompt_id:'ref-job'};if(path==='/queue')return {queue_running:[[0,'ref-job']],queue_pending:[]};return {};}};
+const owner={root:document.querySelector('#root'),studio:{close(){}},app:{},api:{apiURL:p=>p,clientId:'test',addEventListener:(n,h)=>{const previous=events.get(n);events.set(n,e=>{previous?.(e);h(e);});},fetchApi:async(path,options)=>{calls.push({path,options});const file=options.body.get('image');return {ok:true,json:async()=>({name:file.name,subfolder:'zura_references'})};}},fetch:async(path,body)=>{calls.push({path,body});if(path==='/zura/studio/loras/apply')return {graph:{...body.graph,custom_test:{class_type:'LoraLoaderModelOnly',inputs:{}}}};if(path==='/prompt')return {prompt_id:'ref-job'};if(path==='/queue')return {queue_running:[[0,'ref-job']],queue_pending:[]};return {};}};
 const ui=new ReferenceVideoWorkspace(owner);ui.startPolling=()=>{};
 assert.ok(VIDEO_WORKFLOWS.some(([id])=>id==='references'));
 assert.equal(ui.$('generate').disabled,true);
@@ -62,6 +62,13 @@ events.get('progress')({detail:{prompt_id:'foreign',value:7,max:8}});assert.notE
 events.get('progress')({detail:{prompt_id:'ref-job',value:3,max:8}});assert.equal(ui.$('bar').value,37.5);
 events.get('executing')({detail:{prompt_id:'ref-job',node:'decode'}});events.get('progress')({detail:{prompt_id:'ref-job',node:'decode',value:2,max:4}});assert.match(ui.$('progress-title').textContent,/Progress 2 of 4/);assert.doesNotMatch(ui.$('progress-title').textContent,/Step/);
 await ui.cancel();assert.ok(calls.some(c=>c.path==='/interrupt'&&c.body.prompt_id==='ref-job'));
+assert.equal(ui.$('cancel').disabled,true);assert.equal(JSON.parse(stored['zura-reference-video-v1']).job.cancelPending,true);
+const cancellationRequests=calls.filter(c=>c.path==='/interrupt').length;
+await ui.cancel();assert.equal(calls.filter(c=>c.path==='/interrupt').length,cancellationRequests,'Repeated clicks do not interrupt again');
+events.get('progress')({detail:{prompt_id:'ref-job',node:'sample',value:4,max:8}});
+events.get('executing')({detail:{prompt_id:'ref-job',node:'decode'}});
+assert.match(ui.$('progress-title').textContent,/Cancelling/,'Late events cannot replace the cancellation state');
+const duringCancel=new ReferenceVideoWorkspace({...owner,root:document.createElement('section')});assert.equal(duringCancel.job.cancelPending,true);assert.equal(duringCancel.$('cancel').disabled,false);assert.match(duringCancel.$('cancel').textContent,/Retry cancellation/);duringCancel.close();
 ui.job=null;ui.$('model').value='viggle';ui.$('model').dispatchEvent(new window.Event('change'));assert.equal(ui.config().speedup,'quality');assert.equal(ui.config().steps,40);assert.equal(ui.$('speedup').querySelector('[value="turbo"]').disabled,true);
 ui.save();const restored=new ReferenceVideoWorkspace({...owner,root:document.createElement('section')});assert.equal(restored.config().model,'viggle');assert.equal(restored.assets.images.length,2);assert.equal(restored.assets.videos[0].duration,4);assert.equal(restored.config().prompt,ui.config().prompt);
 assert.equal(restored.config().audioDriver,'audio:zura_references/voice.wav');

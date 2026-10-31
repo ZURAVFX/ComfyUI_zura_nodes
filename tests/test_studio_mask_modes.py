@@ -35,7 +35,7 @@ class MaskModeTests(unittest.TestCase):
         legacy = {'source': p['source']['sha'], **{k: p['config'][k] for k in studio.PREP_KEYS}}
         expected = hashlib.sha256(studio.canonical(legacy).encode()).hexdigest()
         self.assertNotEqual(studio.prep_key(p), expected)
-        current = dict(legacy, tracking_recipe=2)
+        current = dict(legacy, tracking_recipe=2, selection_version="hold-tail-v2")
         self.assertEqual(studio.prep_key(p), hashlib.sha256(studio.canonical(current).encode()).hexdigest())
         graph = self.graph(p)
         self.assertEqual(graph['7']['inputs']['text'], 'person')
@@ -78,7 +78,7 @@ class MaskModeTests(unittest.TestCase):
     def test_text_review_version_invalidates_previous_text_review(self):
         p = self.project(remove_text=True)
         expected = {'source': p['source']['sha'], **{key: p['config'][key] for key in studio.PREP_KEYS},
-                    'remove_text': 6, 'tracking_recipe': 2}
+                    'remove_text': 6, 'tracking_recipe': 2, 'selection_version': 'hold-tail-v2'}
         self.assertEqual(studio.prep_key(p), hashlib.sha256(studio.canonical(expected).encode()).hexdigest())
         old = dict(expected, remove_text=5)
         p.update(review='shot_' + 'a' * 16, approval=hashlib.sha256(studio.canonical(old).encode()).hexdigest(),

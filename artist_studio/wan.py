@@ -270,7 +270,7 @@ def build_wan_graph(project, use_cache=True, *, cache_key_override=None, prepara
         overlap_frames=5, max_side=c["resolution"], shot_mode="Detect cuts", cut_threshold=.2, cut_frames="",
         join_mode="Native continuation", viewport_render=viewport_render, **delivery_inputs)
     node("wan_export", "GenjRestoreSoundtrack", video=["wan_render", 0 if streamed else 1], clip_details=details,
-        take_name="studio_" + project["id"][:8] + "_wan")
+        model_stride=4, take_name="studio_" + project["id"][:8] + "_wan")
     # Wan renders facial detail from the audio-driven guide. A second mouth
     # pass is an explicit option because its small face decoder can soften detail.
     from .speech import add_finish

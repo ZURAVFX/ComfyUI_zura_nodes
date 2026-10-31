@@ -62,7 +62,7 @@ def disk_requirements(width, height, parts, *, anchor=False):
     return output, anchors
 
 
-def ffmpeg_assembly(ffmpeg, parts, rendered, output, *, source=None, audio_start=0):
+def ffmpeg_assembly(ffmpeg, parts, rendered, output, *, source=None, audio_start=0, pad_tail=False, audio_duration=None):
     """Construct a non-shell FFmpeg command to overlap/blend SDR windows.
 
     Each input must already be verified to contain exactly its window's frame
@@ -128,11 +128,20 @@ def ffmpeg_assembly(ffmpeg, parts, rendered, output, *, source=None, audio_start
             segments.append(f'[blend{i}]')
         if part.count - before - after:
             segments.append(f'[body{i}]')
-    filters.append(''.join(segments) + f'concat=n={len(segments)}:v=1:a=0[outv]')
     total = parts[-1].start + parts[-1].count - parts[0].start
+    if audio_duration is not None and (not isinstance(audio_duration, (int, float)) or isinstance(audio_duration, bool)
+            or not math.isfinite(audio_duration) or audio_duration <= 0 or audio_duration > total / FPS + 1e-6):
+        raise ValueError('Invalid source-audio duration.')
+    padding = (1 - total) % 8 if pad_tail else 0
+    filters.append(''.join(segments) + f'concat=n={len(segments)}:v=1:a=0[joined]')
+    filters.append(f'[joined]tpad=stop_mode=clone:stop={padding}[outv]' if padding else '[joined]null[outv]')
     command += ['-filter_complex', ';'.join(filters), '-map', '[outv]']
     if source is not None:
-        command += ['-map', f'{len(parts)}:a:0?', '-af', f'atrim=start={float(audio_start):.9f}:duration={total/FPS:.9f},asetpts=PTS-STARTPTS', '-c:a', 'aac']
-    command += ['-frames:v', str(total), '-r', str(FPS), '-c:v', 'libx264', '-pix_fmt', 'yuv420p',
+        selected_audio = total / FPS if audio_duration is None else audio_duration
+        audio_filter = f'atrim=start={float(audio_start):.9f}:duration={selected_audio:.9f},asetpts=PTS-STARTPTS'
+        if padding or selected_audio < total / FPS - 1e-6:
+            audio_filter += f',apad=whole_dur={(total+padding)/FPS:.9f}'
+        command += ['-map', f'{len(parts)}:a:0?', '-af', audio_filter, '-c:a', 'aac']
+    command += ['-frames:v', str(total + padding), '-r', str(FPS), '-c:v', 'libx264', '-pix_fmt', 'yuv420p',
                 '-movflags', '+faststart', str(Path(output))]
     return command

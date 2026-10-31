@@ -51,4 +51,20 @@ class HDRPreviewTests(unittest.TestCase):
             preview.export_sdr_preview(self.stage,self.tmp.name,'cancelled',fps=10,ffmpeg=self.ffmpeg,progress=stop)
         self.assertEqual(list((Path(self.tmp.name)/'genj'/'hdr').iterdir()),[])
 
+    def test_exact_fractional_audio_offset_matches_preview(self):
+        from scipy.signal import correlate, correlation_lags
+        samples=np.random.default_rng(317).integers(-14000,14000,144000,dtype=np.int16)
+        with wave.open(str(self.audio),'wb') as wav:
+            wav.setparams((1,2,48000,len(samples),'NONE','not compressed'));wav.writeframes(samples.tobytes())
+        path=preview.export_sdr_preview(self.stage,self.tmp.name,'exact',fps=24,
+            audio_source=self.audio,audio_start_seconds=.517,ffmpeg=self.ffmpeg)
+        with av.open(str(path)) as stream:
+            actual=np.concatenate([frame.to_ndarray().reshape(-1) for frame in stream.decode(audio=0)])
+        expected=samples[round(.517*48000):round(.517*48000)+round(14/24*48000)].astype(np.float32)/32768
+        actual=actual[:len(expected)];cross=correlate(actual,expected,mode='full',method='fft')
+        lags=correlation_lags(len(actual),len(expected),mode='full');near=np.abs(lags)<=4800
+        self.assertLessEqual(abs(int(lags[near][np.argmax(cross[near])])),1)
+        with self.assertRaisesRegex(ValueError,'one valid source audio offset'):
+            preview.export_sdr_preview(self.stage,self.tmp.name,'invalid',fps=24,audio_start_frame=1,audio_start_seconds=.517,ffmpeg=self.ffmpeg)
+
 if __name__=='__main__':unittest.main()

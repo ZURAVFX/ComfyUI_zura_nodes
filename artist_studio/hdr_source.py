@@ -90,7 +90,7 @@ class ZuraHDRLoadAudioRange:
         return load_hdr_audio_range(source,start_frame,frame_count,fps,MAX_FRAMES)
 
 
-def load_hdr_audio_range(source, start_frame, frame_count, fps, max_frames):
+def load_hdr_audio_range(source, start_frame, frame_count, fps, max_frames, *, start_seconds=None, allow_tail_hold=False, source_duration=None):
     from ..paintout.paintout import resolve_input
     import av
     if type(max_frames) is not int or not 1<=max_frames<=257 or type(start_frame) is not int or start_frame<0 or type(frame_count) is not int or not 1<=frame_count<=max_frames or not isinstance(fps,(float,int)) or isinstance(fps,bool) or not math.isfinite(fps) or not 1<=fps<=120:
@@ -98,12 +98,17 @@ def load_hdr_audio_range(source, start_frame, frame_count, fps, max_frames):
     path=resolve_input(source)
     executable=shutil.which('ffmpeg')
     if not executable: raise ValueError('FFmpeg is required to restore the source audio.')
+    if start_seconds is not None and (isinstance(start_seconds,bool) or not isinstance(start_seconds,(float,int)) or not math.isfinite(start_seconds) or start_seconds < 0):
+        raise ValueError('Choose a valid audio start time.')
     duration=frame_count/fps
+    if source_duration is not None and (isinstance(source_duration, bool) or not isinstance(source_duration, (int, float))
+            or not math.isfinite(source_duration) or source_duration <= 0 or source_duration > duration + 1e-6):
+        raise ValueError('Choose a valid selected audio duration.')
     # Decode one extra frame of audio, then trim to the exact video duration.
     # AAC timestamp rounding at fractional frame rates can otherwise leave a
     # valid selection a few samples short even when more audio follows.
     result=subprocess.run([executable,'-hide_banner','-loglevel','error','-i',str(path),
-        '-ss',str(start_frame/fps),'-t',str(duration+1/fps),'-map','0:a:0','-vn','-ac','2','-ar','48000',
+        '-ss',str(start_frame/fps if start_seconds is None else start_seconds),'-t',str(duration+1/fps),'-map','0:a:0','-vn','-ac','2','-ar','48000',
         '-c:a','pcm_f32le','-f','wav','pipe:1'],capture_output=True)
     if result.returncode:
         raise ValueError('Could not read the selected source audio.')
@@ -114,12 +119,16 @@ def load_hdr_audio_range(source, start_frame, frame_count, fps, max_frames):
     if not chunks: raise ValueError('No audio was found in the selected range.')
     samples=torch.from_numpy(np.concatenate(chunks,axis=-1).copy()).float()
     expected=round(duration*48000)
-    if samples.shape[-1]<expected:
-        short=expected-samples.shape[-1]
-        if short>48:
+    selected=expected if source_duration is None else min(expected, round(source_duration*48000))
+    if samples.shape[-1]<selected:
+        short=selected-samples.shape[-1]
+        permitted = 48 + (math.ceil(48000 / fps) if allow_tail_hold else 0)
+        if short>permitted:
             raise ValueError('The source audio is shorter than the selected video range.')
-        # At most 1 ms can be lost to container/AAC timestamp quantisation.
+        # A fractional final video frame may require a short silent tail.
         samples=torch.nn.functional.pad(samples,(0,short))
+    samples=samples[..., :selected]
+    if selected<expected: samples=torch.nn.functional.pad(samples,(0,expected-selected))
     return ({'waveform':samples[None, ..., :expected], 'sample_rate':48000},)
 
 class ZuraHDRLoadAudioRangeLong(ZuraHDRLoadAudioRange):
@@ -133,7 +142,27 @@ class ZuraHDRLoadAudioRangeLong(ZuraHDRLoadAudioRange):
         return load_hdr_audio_range(source,start_frame,frame_count,fps,257)
 
 
+class ZuraHDRLoadTimedAudio:
+    """Experimental audio selection matching a time-based video trim."""
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {'required': {'source': ('STRING', {'default': ''}),
+            'start_seconds': ('FLOAT', {'default': 0., 'min': 0.}),
+            'frame_count': ('INT', {'default': 48, 'min': 1, 'max': MAX_FRAMES}),
+            'fps': ('FLOAT', {'default': 24., 'min': 1., 'max': 120.})},
+            'optional': {'allow_tail_hold': ('BOOLEAN', {'default': False}),
+                         'source_duration': ('FLOAT', {'default': 0., 'min': 0.})}}
+    RETURN_TYPES = ('AUDIO',)
+    FUNCTION = 'load'
+    CATEGORY = 'Zura/Artist Studio/Experimental'
+    @classmethod
+    def IS_CHANGED(cls, **kwargs): return float('nan')
+    def load(self, source, start_seconds, frame_count, fps, allow_tail_hold=False, source_duration=0.):
+        return load_hdr_audio_range(source, 0, frame_count, fps, MAX_FRAMES, start_seconds=start_seconds,
+                                    allow_tail_hold=allow_tail_hold, source_duration=source_duration or None)
+
+
 NODE_CLASS_MAPPINGS={'ZuraHDRLoadSDRSource': ZuraHDRLoadSDRSource,'ZuraHDRLoadAudioRange':ZuraHDRLoadAudioRange,
-                     'ZuraHDRLoadAudioRangeLong':ZuraHDRLoadAudioRangeLong}
+                     'ZuraHDRLoadAudioRangeLong':ZuraHDRLoadAudioRangeLong, 'ZuraHDRLoadTimedAudio':ZuraHDRLoadTimedAudio}
 NODE_DISPLAY_NAME_MAPPINGS={'ZuraHDRLoadSDRSource': 'Zura · Load SDR Source for LTX HDR',
                            'ZuraHDRLoadAudioRange':'Zura · Load HDR Audio Range'}

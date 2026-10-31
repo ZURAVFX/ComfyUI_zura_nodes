@@ -5,10 +5,18 @@ MAX_REFERENCES = 9  # H3 accepts nine still references; Klein uses the first thr
 REFERENCE_ROLES = ("auto", "environment", "character", "object", "detail", "style")
 
 
-def resolve_appearance(body, load_asset, check_asset):
+def resolve_appearance(body, load_asset, check_asset, *, source=None):
     mode = body.get("look_mode", "build")
-    if mode not in ("build", "ready"):
+    if mode not in ("build", "ready", "source_hdr"):
         raise ValueError("Choose a finished starting image or build one from references.")
+    if mode == "source_hdr":
+        from .ltx_hdr_performance import verify_source
+        from types import SimpleNamespace
+        if body.get("references") or body.get("starting_image") or body.get("character"):
+            raise ValueError("Use the HDR source frame without additional appearance references.")
+        if not verify_source(source, SimpleNamespace(load=load_asset), check_asset, body.get("config", {})):
+            raise ValueError("Choose an imported HDR video before using its source frame.")
+        return {"look_mode": mode, "references": [], "starting_asset": None, "character": None}
     identities = body.get("references", [body["character"]] if body.get("character") else [])
     if not isinstance(identities, list) or len(identities) > MAX_REFERENCES:
         raise ValueError("Use up to nine appearance reference images.")
@@ -27,6 +35,8 @@ def resolve_appearance(body, load_asset, check_asset):
         return copy.deepcopy(asset)
     for index, identity in enumerate(identities):
         asset = image(identity)
+        if asset.get("native_hdr") is not None:
+            raise ValueError("Use an EXR as the finished LTX HDR frame, rather than an image-building reference.")
         role = roles[index] if index < len(roles) else "auto"
         if role not in REFERENCE_ROLES:
             raise ValueError("Choose a valid role for each reference image.")
@@ -36,6 +46,10 @@ def resolve_appearance(body, load_asset, check_asset):
             references.append(asset)
             seen.add(identity)
     starting = image(body.get("starting_image")) if mode == "ready" else None
+    if starting and starting.get("native_hdr") is not None:
+        from .ltx25_hdr_input import resolve_asset
+        from types import SimpleNamespace
+        resolve_asset(starting, body.get("config", {}), SimpleNamespace(load=load_asset), check_asset)
     if mode == "build" and not references and body.get("config", {}).get("workflow_mode") not in ("relight", "camera"):
         raise ValueError("Add at least one reference image to build your starting frame.")
     return {"look_mode": mode, "references": references, "starting_asset": starting,

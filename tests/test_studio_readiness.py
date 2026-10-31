@@ -4,6 +4,8 @@ import json
 import sys
 import types
 import unittest
+import tempfile
+from pathlib import Path
 from unittest.mock import patch
 
 from test_artist_studio import studio, h3
@@ -74,6 +76,9 @@ class StudioReadinessTests(unittest.TestCase):
         self.assertTrue(result["engine_ready"]["local_viewport"])
         self.assertTrue(result["engine_ready"]["h3_viewport"])
         self.assertFalse(result["engine_ready"]["local_scene"])
+        detector_files = {item["filename"]: item for item in result["model_files"]["local_scene"] if item.get("path")}
+        self.assertEqual(set(detector_files), {"yolox_l.onnx", "dw-ll_ucoco_384_bs5.torchscript.pt"})
+        self.assertTrue(all(not item["ready"] and item["path"].endswith(name) for name, item in detector_files.items()))
         self.assertFalse(result["engine_ready"]["h3"])
         self.assertIn("DepthAnythingV2Preprocessor", result["missing_h3_nodes"])
         for legacy in ("local", "local_scene", "h3", "wan", "h3_enhanced1080"):
@@ -82,6 +87,48 @@ class StudioReadinessTests(unittest.TestCase):
         self.assertEqual(result["missing_h3_viewport_nodes"], [])
         self.assertEqual({item["filename"] for item in result["model_files"]["h3_viewport"]},
                          {name for _, name in h3.H3_VIEWPORT_MODELS.values()})
+
+    def test_pose_detectors_follow_controlnet_aux_cache_override(self):
+        with tempfile.TemporaryDirectory() as directory, patch.dict('os.environ', {'AUX_ANNOTATOR_CKPTS_PATH': directory}):
+            for relative in studio.LTX25_DETECTORS.values():
+                file = Path(directory).joinpath(*relative.parts[2:])
+                file.parent.mkdir(parents=True, exist_ok=True)
+                file.write_bytes(b'fixture')
+            paths = studio.ltx25_detector_paths()
+            self.assertTrue(all(path and path.is_file() for path in paths.values()))
+            self.assertTrue(all(path.is_relative_to(Path(directory)) for path in paths.values()))
+
+    def test_finished_ltx_scene_does_not_require_sam_or_an_image_generation_model(self):
+        """Exercise the real status route for a source + supplied opening frame."""
+        server = types.SimpleNamespace(routes=studio.web.RouteTableDef(), last_prompt_id=None,
+                                       prompt_queue=types.SimpleNamespace(get_current_queue_volatile=lambda: ([], [])))
+        module = types.ModuleType("server")
+        module.PromptServer = types.SimpleNamespace(instance=server)
+        class InstalledNodes(dict):
+            def __contains__(self, key):
+                return True
+        unavailable = {"sam3.1_multiplex_fp16.safetensors", "flux-2-klein-9b-fp8.safetensors",
+                       "qwen_3_8b_fp8mixed.safetensors", "full_encoder_small_decoder.safetensors"}
+        def lookup(folder, name):
+            return None if name in unavailable else "installed"
+        with patch.dict(sys.modules, {"server": module}), patch.object(studio, "Studio"), \
+                patch.object(nodes, "NODE_CLASS_MAPPINGS", InstalledNodes()), \
+                patch.object(studio.folder_paths, "get_full_path", side_effect=lookup), \
+                patch.object(studio, "ltx25_detector_paths", return_value={"bbox_detector": "installed", "pose_estimator": "installed"}), \
+                patch.object(enhancement, "readiness", return_value={"ready": True}), \
+                patch.object(speech, "readiness", return_value={}), \
+                patch.object(wan_speech, "readiness", return_value={}):
+            studio.register()
+            route = next(item for item in server.routes if item.path == "/zura/studio/status")
+            request = types.SimpleNamespace(headers={}, host="local")
+            result = json.loads(asyncio.run(route.handler(request)).text)
+        self.assertTrue(result["engine_ready"]["local_scene"])
+        scene_files = {item.get("filename") for item in result["model_files"]["local_scene"]}
+        self.assertFalse(scene_files & unavailable)
+        self.assertIn(ltx25.QUALIFIED_MODELS["model"], scene_files)
+        self.assertIn(ltx25.QUALIFIED_MODELS["union"], scene_files)
+        self.assertFalse(result["engine_ready"]["local"], "Existing masked route requirements stay separate")
+        self.assertTrue(unavailable.issubset({item.get("filename") for item in result["model_files"]["local"]}))
 
 
 if __name__ == "__main__":

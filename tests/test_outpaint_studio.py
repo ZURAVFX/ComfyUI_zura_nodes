@@ -25,6 +25,10 @@ class StudioOutpaintTests(unittest.TestCase):
         self.assertEqual(g['source_range']['inputs']['duration_seconds'], 2)
         self.assertEqual(g['trim_result']['inputs']['length'], 48)
         self.assertEqual(g['assemble']['inputs']['audio'], ['components', 1])
+        padded = module.build_studio_graph(self.source, p, review_key=p['review_key'], output_prefix='genj/outpaint/padded', pad_delivery=True)
+        self.assertEqual(padded['hold_delivery']['inputs'], {'images': ['trim_result', 0], 'stride': 8})
+        self.assertEqual(padded['assemble']['inputs']['audio'], ['temporal_hold', 1])
+        self.assertEqual(padded['assemble']['inputs']['images'], ['hold_delivery', 0])
         self.assertEqual(g['audio_empty']['inputs']['frames_number'], 49)
         self.assertEqual(g['adapter']['inputs']['lora_name'], 'ltx-2.3-22b-ic-lora-outpaint.safetensors')
         self.assertEqual(g['guide']['inputs']['image'], ['canvas', 0])
@@ -32,6 +36,25 @@ class StudioOutpaintTests(unittest.TestCase):
         changed = copy.deepcopy(p); changed['left'] += 1
         with self.assertRaisesRegex(ValueError, 'changed'):
             module.build_studio_graph(self.source, changed, review_key=p['review_key'], output_prefix='genj/outpaint/test')
+
+    def test_fractional_source_end_rounds_up_and_decoder_holds_tail(self):
+        source = dict(self.source, duration=53 / 25)
+        options = {**self.options, 'start': 0., 'duration': source['duration']}
+        selected = module.plan(source, **options)
+        self.assertEqual(selected['frames'], 51)
+        rounded = module.plan(source, **{**options, 'duration': selected['duration']}, allow_partial_end=True)
+        self.assertNotEqual(selected['review_key'], rounded['review_key'])
+        with self.assertRaisesRegex(ValueError, 'past the source'):
+            module.plan(source, **{**options, 'duration': source['duration'] + .02})
+        graph = module.build_studio_graph(source, selected, review_key=selected['review_key'], output_prefix='genj/outpaint/fractional')
+        self.assertTrue(graph['source_range']['inputs']['round_up'])
+        self.assertAlmostEqual(graph['source_range']['inputs']['duration_seconds'], 53/25)
+        self.assertEqual(graph['temporal_hold']['inputs']['expected_frames'], 51)
+        review = module.build_review_graph(source, selected, output_prefix='genj/outpaint/fractional_review')
+        self.assertAlmostEqual(review['source_range']['inputs']['duration_seconds'], 53/25)
+        black = module.plan(source, start=0., duration=53/25, mode='black', width=768, height=432)
+        black_graph = module.build_studio_graph(source, black, review_key=black['review_key'], output_prefix='genj/outpaint/fractional_black')
+        self.assertAlmostEqual(black_graph['source_range']['inputs']['duration_seconds'], 53/25)
 
     def test_hold_repeats_last_frame_without_lengthening_output_audio(self):
         video = torch.rand(10, 8, 8, 3)

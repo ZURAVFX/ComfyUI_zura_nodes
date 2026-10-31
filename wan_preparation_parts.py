@@ -467,7 +467,7 @@ def _expected_review_video_paths(root, clip_details):
     if render_long_edge == 0:
         expected_source, expected_mask = review_dir / "source.mp4", review_dir / "mask.mp4"
     else:
-        if not 256 <= render_long_edge <= 1920:
+        if not 256 <= render_long_edge <= 4096:
             raise ValueError("Wan preparation has an unsupported reviewed render size.")
         selected = clip_details.get("selected_path")
         if not isinstance(selected, str) or not Path(selected).is_absolute():
@@ -479,7 +479,7 @@ def _expected_review_video_paths(root, clip_details):
         except ValueError as error:
             raise ValueError("The approved high-resolution source must use its reviewed render cache.") from error
         expected_cache = re.fullmatch(
-            rf"render_audio_v2_{render_long_edge}_x[12]_{clip_details.get('frames')}f", render_dir.name)
+            rf"render_audio_(?:v2_{render_long_edge}_x[12]_{clip_details.get('frames')}f|v3_{render_long_edge}_x[12]_{clip_details.get('frames')}f(?:_aspect)?)", render_dir.name)
         if len(relative_dir.parts) != 1 or not expected_cache or expected_source.name != "source.mp4":
             raise ValueError("The high-resolution source is outside its approved render cache.")
         expected_mask = render_dir / "mask.mp4"

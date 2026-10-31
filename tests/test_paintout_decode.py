@@ -1,10 +1,12 @@
 """CPU regressions for fractional-rate decoding and source-size processing."""
-import importlib.util
+import importlib
 import os
 from pathlib import Path
 import shutil
 import subprocess
 import tempfile
+import sys
+import types
 import unittest
 from unittest.mock import patch
 
@@ -12,9 +14,10 @@ import numpy as np
 import torch
 
 ROOT = Path(__file__).resolve().parents[1]
-spec = importlib.util.spec_from_file_location('paintout_decode_test', ROOT/'paintout/paintout.py')
-native = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(native)
+package = types.ModuleType('paintout_decode_test')
+package.__path__ = [str(ROOT/'paintout')]
+sys.modules.setdefault(package.__name__, package)
+native = importlib.import_module(package.__name__+'.paintout')
 
 
 class PaintoutDecodeTests(unittest.TestCase):

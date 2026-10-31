@@ -1,4 +1,5 @@
 from __future__ import annotations
+from .media_tools import find_media_tool
 import json, math, re, subprocess, hashlib, tempfile, uuid, shutil, time
 from pathlib import Path
 from fractions import Fraction
@@ -33,6 +34,15 @@ def frame_progress(total):
         return ProgressBar(total).update_absolute
     except ImportError:
         return lambda value: None  # CPU-only tools can also use the frame helpers.
+def grow_frame_masks(mask, grow):
+    """Exact square dilation without a quadratic CPU pooling kernel per pixel."""
+    if not grow:
+        return mask
+    # A size-one frame axis keeps each frame independent. SciPy implements the
+    # spatial maximum as separable sliding windows, unlike CPU max_pool2d.
+    values=mask.detach().cpu().numpy()
+    expanded=maximum_filter(values,size=(1,2*grow+1,2*grow+1),mode='constant',cval=-np.inf)
+    return torch.from_numpy(expanded).to(device=mask.device,dtype=mask.dtype)
 def natural(p): return [int(t) if t.isdigit() else t.lower() for t in re.split(r'(\d+)', str(p))]
 def read_image(path):
     import OpenImageIO as oiio
@@ -54,7 +64,7 @@ def read_image(path):
 @lru_cache(maxsize=64)
 def _decoded_video_count(path, size, modified_ns):
     # Matroska and some camera containers omit nb_frames and stream duration.
-    result=subprocess.run(['ffprobe','-v','error','-select_streams','v:0','-count_frames','-show_entries','stream=nb_read_frames','-of','json',path],capture_output=True,check=True,text=True)
+    result=subprocess.run([find_media_tool('ffprobe'),'-v','error','-select_streams','v:0','-count_frames','-show_entries','stream=nb_read_frames','-of','json',path],capture_output=True,check=True,text=True)
     count=int(json.loads(result.stdout)['streams'][0].get('nb_read_frames',0))
     if count<1:raise ValueError('The video contains no decodable frames.')
     return count
@@ -69,7 +79,7 @@ def describe(path):
     if p.suffix.lower() in ('.exr','.png','.tif','.tiff'):
         shape=read_image(p).shape
         return dict(kind='sequence',files=[str(p)],width=shape[1],height=shape[0],count=1)
-    r=subprocess.run(['ffprobe','-v','error','-select_streams','v:0','-show_streams','-of','json',str(p)],capture_output=True,check=True,text=True)
+    r=subprocess.run([find_media_tool('ffprobe'),'-v','error','-select_streams','v:0','-show_streams','-of','json',str(p)],capture_output=True,check=True,text=True)
     s=json.loads(r.stdout)['streams'][0]
     rotations = [s.get('tags', {}).get('rotate', 0)] + [item.get('rotation', 0) for item in s.get('side_data_list', [])]
     if any(abs(float(value) % 360) > .01 for value in rotations):
@@ -114,15 +124,22 @@ def frames(d,start,count):
     matrix={'bt2020nc':'bt2020','bt2020c':'bt2020','bt709':'bt709','smpte170m':'bt601'}.get(d.get('matrix'))
     if matrix:
         vf+=f',scale=in_color_matrix={matrix}:in_range={"pc" if d.get("range")=="pc" else "tv"}:out_range=pc'
-    # Preserve encoded RGB values at 16-bit precision; colour conversion follows decoding.
+    # Decode native 8-bit RGB directly. FFmpeg's packed RGB8 -> RGB16 path
+    # scales 255 to about 65280 instead of 65535 on some builds, darkening
+    # otherwise untouched source pixels. YUV and higher-depth sources retain
+    # the 16-bit conversion path so we do not quantize their colour conversion.
+    rgb8=d.get('pixel_format') in ('rgb24','bgr24','rgb0','bgr0','0rgb','0bgr','rgba','bgra','argb','abgr','gbrp','gbrap')
+    raw_format,component_bytes,component_dtype,maximum=('rgb24',1,'u1',255.) if rgb8 else ('rgb48le',2,'<u2',65535.)
+    # Preserve encoded RGB values; colour conversion follows decoding.
     # FFmpeg 7 defaults rawvideo to 25 fps after this filter chain. Keep every
     # decoded source frame, including 59.94 fps footage, rather than drop/duplicate.
-    cmd=['ffmpeg','-v','error','-i',d['path'],'-vf',vf,'-an','-sn','-fps_mode','passthrough','-f','rawvideo','-pix_fmt','rgb48le','-']
+    cmd=[find_media_tool('ffmpeg'),'-v','error','-i',d['path'],'-vf',vf,'-an','-sn','-fps_mode','passthrough','-f','rawvideo','-pix_fmt',raw_format,'-']
     # Windows anonymous pipes throttle large RGB streams. Reuse an uncompressed
     # temporary disk cache instead, while retaining 16-bit decoded RGB precision.
-    size=d['width']*d['height']*6*count
+    frame_bytes=d['width']*d['height']*3*component_bytes
+    size=frame_bytes*count
     cache_dir=Path(tempfile.gettempdir())/'zura_paintout_rgb';cache_dir.mkdir(exist_ok=True)
-    key=hashlib.sha256(('frame-exact-v2|'+str(Path(d['path']).resolve())+str(Path(d['path']).stat().st_mtime_ns)+vf+str(count)).encode()).hexdigest()
+    key=hashlib.sha256(('frame-exact-v3|'+raw_format+'|'+str(Path(d['path']).resolve())+str(Path(d['path']).stat().st_mtime_ns)+vf+str(count)).encode()).hexdigest()
     cached=cache_dir/(key+'.rgb')
     prune_frame_cache(cache_dir, reserve=0 if cached.exists() else min(size, 8*1024**3), keep=cached)
     if size<=8*1024**3 and (cached.exists() or shutil.disk_usage(cache_dir).free>size*1.2):
@@ -131,19 +148,19 @@ def frames(d,start,count):
             try:
                 subprocess.run(cmd[:-1]+[str(part)],check=True,capture_output=True)
                 if part.stat().st_size!=size:
-                    decoded=part.stat().st_size//(d['width']*d['height']*6)
+                    decoded=part.stat().st_size//frame_bytes
                     raise ValueError(f'Decoded {decoded} of {count} requested source frames starting at {start}. Check the footage and selected range.')
                 part.replace(cached)
             finally:
                 part.unlink(missing_ok=True)
-        mapped=np.memmap(cached,dtype='<u2',mode='r',shape=(count,d['height'],d['width'],3))
+        mapped=np.memmap(cached,dtype=component_dtype,mode='r',shape=(count,d['height'],d['width'],3))
         cached.touch()
         try:
-            for a in mapped:yield a.astype(np.float32)/65535.
+            for a in mapped:yield a.astype(np.float32)/maximum
         finally:del mapped
         return
     p=subprocess.Popen(cmd,stdout=subprocess.PIPE,stderr=subprocess.DEVNULL)
-    n=d['width']*d['height']*6
+    n=frame_bytes
     try:
         for _ in range(count):
             b=bytearray()
@@ -151,7 +168,7 @@ def frames(d,start,count):
                 part=p.stdout.read(n-len(b))
                 if not part: raise ValueError('Video ended before requested frame range')
                 b.extend(part)
-            yield np.frombuffer(b,dtype='<u2').reshape(d['height'],d['width'],3).astype(np.float32)/65535.
+            yield np.frombuffer(b,dtype=component_dtype).reshape(d['height'],d['width'],3).astype(np.float32)/maximum
     finally:
         p.stdout.close()
         if p.poll() is None: p.terminate()
@@ -453,7 +470,7 @@ class ZuraPaintoutCrop:
         image=torch.cat(ims);mask=torch.cat(ms)
         # Grow the conditioning mask at inference scale; final matte is built in original pixels.
         grow=math.ceil(repair_grow*scale)
-        if grow:mask=F.max_pool2d(mask[:,None],2*grow+1,1,grow)[:,0]
+        if grow:mask=grow_frame_masks(mask,grow)
         if m.get('protection_files'):
             for index in range(frame_count):
                 protected=crop_work(protection_mask(m,start_frame+index),c,colour_space,True)[0,...,0]
@@ -737,7 +754,7 @@ class ZuraPaintoutUncrop:
         metadata=dict(plate={k:v for k,v in plate.items() if not k.startswith('_')},precision=precision,match_context=match_context,colour_fits=metrics,notes='RGB only. Source alpha/AOV/header metadata are not copied. Video exports copy source audio when present, trimmed to the selected range. Sequence fps is authoritative.')
         (target/'paintout.json').write_text(json.dumps(metadata,indent=2),encoding='utf-8')
         previews=delivery.finish()
-        return {'ui':{'text':[f'Saved {plate["count"]} frames: {target}'],**previews},'result':(str(target),)}
+        return {'ui':{'text':[f'Saved {plate["count"]} frames: {target}'], 'zura_saved_sequence':[str(target)], **previews},'result':(str(target),)}
 
 class ZuraPaintoutExportFrames:
     @classmethod

@@ -64,6 +64,13 @@ class CameraGraphTests(unittest.TestCase):
         self.assertEqual(graph['export']['class_type'], 'GenjRestoreSoundtrack')
         self.assertEqual(graph['export']['inputs']['clip_details'], ['select', 1])
 
+    def test_fractional_interval_keeps_audio_cut_before_held_tail(self):
+        graph = camera.build_graph(self.request(start_seconds=.125, duration_seconds=.97))
+        self.assertEqual(graph['select']['inputs']['duration_seconds'], .97)
+        self.assertTrue(graph['select']['inputs']['round_up'])
+        self.assertEqual(graph['trim']['inputs']['length'], 24)
+        self.assertEqual(graph['references']['inputs']['length'], 39)
+
     def test_camera_still_stage_does_not_load_h3_and_only_reads_one_frame(self):
         r = camera.CameraRequest('source.mp4', source_path='input/source.mp4', start_seconds=1.5)
         graph = camera.build_still_graph(r)

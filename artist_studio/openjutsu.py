@@ -15,10 +15,10 @@ REVISION = "70ec62df0eda7c58697ea3ac2050588513651583"
 TEMPLATE = Path(__file__).parent / "graphs" / "OpenJutsu_Experimental.json"
 
 
-def exact_source_clip(start, duration):
+def exact_source_clip(start, duration, *, whole_source=False):
     return {"class_type": "GenjSelectClip", "inputs": {
         "video": ["30", 0], "start_seconds": start, "duration_seconds": duration,
-        "long_edge": 1920}, "_meta": {"title": "Select exact source range · 24 fps"}}
+        "long_edge": 1920, "use_original_length": whole_source, "round_up": True}, "_meta": {"title": "Select exact source range · 24 fps"}}
 
 
 def build_graph(project, check_asset=lambda asset: None):
@@ -40,7 +40,7 @@ def build_graph(project, check_asset=lambda asset: None):
         raise ValueError("Select up to five seconds for this OpenJutsu test.")
     if source.get("duration"):
         available = float(source["duration"]) - start
-        if available <= 0 or math.floor(duration * 24 + 1e-6) > math.floor(available * 24 + 1e-6):
+        if available <= 0 or duration > available + 1e-6:
             raise ValueError("The selected range extends past the end of the source video. Choose a shorter range.")
     tier = c.get("openjutsu_resolution", "480")
     if str(tier) not in ("480", "768"):
@@ -55,8 +55,10 @@ def build_graph(project, check_asset=lambda asset: None):
     # Video Slice can decode one frame short after a non-frame-aligned seek.
     # Prepare the requested 24 fps range once, with a one-frame tail hold if
     # needed, before both the H3 preparation and the shot's source reference.
-    graph["trim"] = exact_source_clip(start, duration)
-    graph["31"]["inputs"].update(resolution=int(tier), duration_seconds=duration)
+    whole_source = c.get("length_mode") == "original"
+    graph["trim"] = exact_source_clip(start, duration, whole_source=whole_source)
+    prepared_duration = math.ceil(duration * 24 - 1e-6) / 24
+    graph["31"]["inputs"].update(resolution=int(tier), duration_seconds=prepared_duration)
     graph["801"]["inputs"]["seed"] = int(c.get("seed", 42))
     replace_background = c.get("openjutsu_background", "keep") == "replace"
     graph["801"]["inputs"]["prompt"] = (
@@ -92,6 +94,14 @@ def build_graph(project, check_asset=lambda asset: None):
     graph["803"]["inputs"]["shot_id"] = identity
     graph["807"]["inputs"]["filename_prefix"] = "zura_openjutsu_" + identity
     graph["809"]["inputs"]["filename_prefix"] = "genj/final/studio_" + identity + "_openjutsu"
+    add_delivery_hold(graph)
+    return graph
+
+
+def add_delivery_hold(graph):
+    graph["hold_output"] = {"class_type": "GenjHoldToModelLength", "inputs": {"images": ["807", 0], "stride": 17, "remainder": 5}}
+    graph["hold_audio"] = {"class_type": "GenjPadAudioToFrames", "inputs": {"audio": ["807", 1], "frames": ["hold_output", 1], "fps": 24.0}}
+    graph["808"]["inputs"].update(images=["hold_output", 0], audio=["hold_audio", 0])
     return graph
 
 
@@ -116,6 +126,7 @@ def installed_readiness(node_mappings):
     """Check optional node pack and exact weights without loading any models."""
     graph = json.loads(TEMPLATE.read_text(encoding="utf8"))
     graph["trim"] = exact_source_clip(0, 5)
+    add_delivery_hold(graph)
     info = {}
     for kind in {node["class_type"] for node in graph.values()}:
         cls = node_mappings.get(kind)

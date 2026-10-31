@@ -263,7 +263,8 @@ def choose_mask_candidate(body):
 
 def project_response(document):
     manifest = _mask_manifest(document['id'], document['mask_revision']) if document['mask_revision'] is not None else None
-    return {**document, 'mask_coverage': sorted(int(i) for i in manifest['files']) if manifest else [],
+    from .mask_segments import summaries
+    return {**document, 'mask_segments': summaries(manifest, document['id']), 'mask_coverage': sorted(int(i) for i in manifest['files']) if manifest else [],
             'mask_review_ranges': manifest.get('review_ranges', []) if manifest else [],
             'mask_seed': _mask_seed_response(document['id'], manifest)}
 
@@ -340,7 +341,10 @@ def source_identity(source, description):
                 height=int(description["height"]), count=int(description["count"]))
 
 
-def commit_mask_pass(project, identity, frame_masks, operation, expected_revision, metadata=None, preserve_protection=False):
+def commit_mask_pass(project, identity, frame_masks, operation, expected_revision, metadata=None, preserve_protection=False, segments=None, seed_masks=None):
+    if segments is None and (metadata or {}).get('segment_id'):
+        from .mask_segments import commit_segment
+        return commit_segment(project, identity, frame_masks, operation, expected_revision, metadata)
     if not frame_masks:
         raise ValueError("The correction has no frames to save.")
     with _LOCK:
@@ -376,7 +380,10 @@ def commit_mask_pass(project, identity, frame_masks, operation, expected_revisio
                     # ADD commits merge with existing coverage. Retain its incoming
                     # subject separately so a subsequent track never seeds that union.
                     seed_path = staging / 'seed.png'
-                    Image.fromarray((np.asarray(incoming) >= .5).astype(np.uint8) * 255).save(seed_path)
+                    seed_value = (seed_masks or {}).get(index, incoming)
+                    if isinstance(seed_value, (str, Path)):
+                        seed_value = _load_mask(seed_value, width, height)
+                    Image.fromarray((np.asarray(seed_value) >= .5).astype(np.uint8) * 255).save(seed_path)
                     seed = dict(frame=index, path=str(target / 'seed.png'),
                                 sha256=hashlib.sha256(seed_path.read_bytes()).hexdigest())
                 protected = _load_mask(protections.get(str(index)), width, height)
@@ -407,6 +414,8 @@ def commit_mask_pass(project, identity, frame_masks, operation, expected_revisio
                             files=files, protection_files=protections, operation=operation, metadata=metadata or {},
                             area_counts=area_counts, absent_frames=sorted(absent_frames), review_ranges=review_ranges,
                             seed=seed)
+            if segments is not None:
+                manifest['segments'] = segments
             _atomic_json(staging / "manifest.json", manifest)
             staging.rename(target)
             published = True
@@ -509,7 +518,7 @@ class ZuraPaintoutMaskPass:
             "negative_coords": ("STRING", {"default": "[]"}), "text": ("STRING", {"default": ""}),
             "direction": (["forward", "backward", "both"],)},
             "optional": {"model": ("MODEL",), "conditioning": ("CONDITIONING",),
-                         "paint_mask": ("STRING", {"default": ""}), "expected_revision": ("INT", {"default": -1})}}
+                         "segment_id": ("STRING", {"default": ""}), "segment_tracked": ("BOOLEAN", {"default": False}), "paint_mask": ("STRING", {"default": ""}), "expected_revision": ("INT", {"default": -1})}}
     RETURN_TYPES = ("ZURA_MASK",)
     FUNCTION = "run"
     CATEGORY = "Zura/Paintout"
@@ -517,7 +526,7 @@ class ZuraPaintoutMaskPass:
 
     def run(self, source, project, frame, start_frame, frame_count, colour_space, operation,
             positive_coords="[]", negative_coords="[]", text="", direction="both", model=None,
-            conditioning=None, paint_mask="", expected_revision=-1):
+            conditioning=None, paint_mask="", expected_revision=-1, segment_id="", segment_tracked=False):
         import torch
         import torch.nn.functional as functional
         from .browser import checked_path
@@ -568,7 +577,7 @@ class ZuraPaintoutMaskPass:
                     if len(initial) > 1:
                         from .browser import grant
                         selection = save_mask_choices(project, identity, frame, initial.detach().cpu().numpy(),
-                                                      operation, base, {'text':str(text)[:4000]})
+                                                      operation, base, {'text':str(text)[:4000], 'segment_id':segment_id})
                         choices = dict(project=project, token=selection['token'], frame=frame,
                                        choices=[{'index':row['index'], 'url':grant(row['path'])} for row in selection['choices']])
                         return {'ui':{'zura_mask_choices':[choices]}, 'result':({'kind':'selection_required'},)}
@@ -611,7 +620,7 @@ class ZuraPaintoutMaskPass:
                                 masks[index] = spool(index, mask)
                             seed = tracked[-1:]
             metadata = dict(frame=frame, direction=direction, positive_coords=points, negative_coords=negatives,
-                            text=str(text)[:4000], base_revision=base)
+                            text=str(text)[:4000], base_revision=base, segment_id=segment_id, tracked=bool(segment_tracked or frame_count>1))
             # Do not commit results for footage modified while inference was running.
             if source_identity(source, describe(source)) != identity:
                 raise ValueError("The source footage changed while tracking. Reload it before applying this pass.")
@@ -693,7 +702,13 @@ async def mask_preview_route(request):
     from aiohttp import web
     _origin(request)
     try:
-        mask = await asyncio.to_thread(read_project_mask, request.query.get("project"), int(request.query.get("frame", 0)),
+        from .mask_segments import read_segment, read_other_segments
+        if request.query.get('others'):
+            mask = await asyncio.to_thread(read_other_segments, request.query.get('project'), request.query['others'], int(request.query.get('frame', 0)), int(request.query['revision']) if request.query.get('revision') else None, int(request.query.get('grow', 0)))
+        elif request.query.get('segment'):
+            mask = await asyncio.to_thread(read_segment, request.query.get('project'), request.query['segment'], int(request.query.get('frame', 0)), int(request.query['revision']) if request.query.get('revision') else None, int(request.query.get('grow', 0)))
+        else:
+            mask = await asyncio.to_thread(read_project_mask, request.query.get("project"), int(request.query.get("frame", 0)),
             int(request.query["revision"]) if request.query.get("revision") else None, int(request.query.get("grow", 0)), int(request.query.get("feather", 0)))
         buffer = io.BytesIO()
         Image.fromarray(np.round(mask * 255).astype(np.uint8), mode="L").save(buffer, format="PNG")

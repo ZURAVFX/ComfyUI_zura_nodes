@@ -23,7 +23,7 @@ export class PaintoutMaskViewer{
   async setFrame(url,width,height,frame){
     const key=`${url}|${width}|${height}|${frame}`;if(key===this.frameKey)return;
     const version=++this.version,image=await loadImage(url);if(version!==this.version)return;
-    this.frameKey=key;this.image=image;this.effectiveOverlay=null;this.width=Math.max(1,Math.round(width));this.height=Math.max(1,Math.round(height));this.frame=frame;
+    this.frameKey=key;this.image=image;this.effectiveOverlay=null;this.contextOverlay=null;this.contextVersion=(this.contextVersion||0)+1;this.width=Math.max(1,Math.round(width));this.height=Math.max(1,Math.round(height));this.frame=frame;
     this.maskCanvas.width=this.width;this.maskCanvas.height=this.height;this.maskCtx.fillStyle='black';this.maskCtx.fillRect(0,0,this.width,this.height);
     this.positive=[];this.negative=[];this.history=[];this.maskPresent=false;this.maskVersion++;this.overlayKey='';this.zoom=1;this.pan={x:0,y:0};this.draw();
   }
@@ -38,6 +38,13 @@ export class PaintoutMaskViewer{
   setTool(tool){if(!['include','exclude','brush','protect','pan'].includes(tool))return;this.tool=tool;this.root.dataset.tool=tool;this.root.setAttribute('aria-label',`Paintout frame editor. ${tool==='include'?'Click to include a point':tool==='exclude'?'Click to exclude a point':tool==='brush'?'Paint the removal area':tool==='protect'?'Erase from the removal mask':'Drag to pan'}.`);this.draw();}
   setGrow(grow,feather){this.effectiveVersion=(this.effectiveVersion||0)+1;this.grow=clamp(Math.round(Number(grow)||0),0,256);this.feather=clamp(Math.round(Number(feather)||0),0,256);this.effectiveOverlay=null;this.overlayKey='';this.draw();}
   async setEffectiveMask(url){const version=this.maskVersion,effective=this.effectiveVersion,image=await loadImage(url);if(version!==this.maskVersion||effective!==this.effectiveVersion)return;const canvas=document.createElement('canvas');canvas.width=image.width;canvas.height=image.height;const ctx=canvas.getContext('2d');ctx.drawImage(image,0,0);const pixels=ctx.getImageData(0,0,canvas.width,canvas.height);for(let i=0;i<pixels.data.length;i+=4){const alpha=pixels.data[i]>127?255:0;pixels.data[i]=245;pixels.data[i+1]=62;pixels.data[i+2]=66;pixels.data[i+3]=alpha;}ctx.putImageData(pixels,0,0);this.effectiveOverlay=canvas;this.draw();}
+  async setContextMask(url){
+    const version=this.version,request=this.contextVersion=(this.contextVersion||0)+1;
+    this.contextOverlay=null;if(!url){this.draw();return;}
+    const image=await loadImage(url);if(version!==this.version||request!==this.contextVersion)return;
+    const canvas=document.createElement('canvas');canvas.width=image.width;canvas.height=image.height;const ctx=canvas.getContext('2d');ctx.drawImage(image,0,0);
+    const pixels=ctx.getImageData(0,0,canvas.width,canvas.height);for(let i=0;i<pixels.data.length;i+=4){const alpha=pixels.data[i]>127?255:0;pixels.data[i]=245;pixels.data[i+1]=62;pixels.data[i+2]=66;pixels.data[i+3]=alpha;}ctx.putImageData(pixels,0,0);this.contextOverlay=canvas;this.draw();
+  }
   setOpacity(value){this.opacity=clamp(Number(value)||0,0,1);this.draw();}
   setBrushSize(value){this.brushSize=clamp(Number(value)||1,1,1000);}
   fit(){this.zoom=1;this.pan={x:0,y:0};this.draw();}
@@ -79,7 +86,7 @@ export class PaintoutMaskViewer{
     for(let i=0;i<grown.length;i++){const alpha=grown[i]?1:feather?clamp(1-distance[i]/feather,0,1):0;out.data[i*4]=245;out.data[i*4+1]=62;out.data[i*4+2]=66;out.data[i*4+3]=Math.round(alpha*255);}ctx.putImageData(out,0,0);
   }
   draw(){
-    if(!this.ctx)return;const ctx=this.ctx;ctx.clearRect(0,0,this.cssWidth||1,this.cssHeight||1);if(!this.image)return;const t=this.transform();ctx.drawImage(this.image,t.x,t.y,this.width*t.scale,this.height*t.scale);this.buildOverlay();ctx.save();ctx.globalAlpha=this.opacity;ctx.imageSmoothingEnabled=false;ctx.drawImage(this.effectiveOverlay||this.overlay,t.x,t.y,this.width*t.scale,this.height*t.scale);ctx.restore();
+    if(!this.ctx)return;const ctx=this.ctx;ctx.clearRect(0,0,this.cssWidth||1,this.cssHeight||1);if(!this.image)return;const t=this.transform();ctx.drawImage(this.image,t.x,t.y,this.width*t.scale,this.height*t.scale);this.buildOverlay();if(this.contextOverlay){ctx.save();ctx.globalAlpha=this.opacity;ctx.imageSmoothingEnabled=false;ctx.drawImage(this.contextOverlay,t.x,t.y,this.width*t.scale,this.height*t.scale);ctx.restore();}ctx.save();ctx.globalAlpha=this.opacity;ctx.imageSmoothingEnabled=false;ctx.drawImage(this.effectiveOverlay||this.overlay,t.x,t.y,this.width*t.scale,this.height*t.scale);ctx.restore();
     for(const [points,positive] of [[this.positive,true],[this.negative,false]])for(const p of points){const x=t.x+p.x*t.scale,y=t.y+p.y*t.scale;ctx.beginPath();ctx.arc(x,y,7,0,Math.PI*2);ctx.fillStyle=positive?'#caff00':'#f2f2f0';ctx.fill();ctx.strokeStyle='#101013';ctx.lineWidth=2;ctx.stroke();ctx.beginPath();ctx.moveTo(x-3,y);ctx.lineTo(x+3,y);if(positive){ctx.moveTo(x,y-3);ctx.lineTo(x,y+3);}ctx.stroke();}
     if(this.cursor&&this.inside(this.cursor)&&['brush','protect'].includes(this.tool)){ctx.beginPath();ctx.arc(t.x+this.cursor.x*t.scale,t.y+this.cursor.y*t.scale,this.brushSize*t.scale/2,0,Math.PI*2);ctx.strokeStyle='#101013';ctx.lineWidth=3;ctx.stroke();ctx.strokeStyle='#ffffff';ctx.lineWidth=1;ctx.stroke();}
   }

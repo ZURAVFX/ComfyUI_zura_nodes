@@ -207,8 +207,12 @@ class NativeProgressAdapter:
 def _stage_fallback(action):
     stage = str(action.get("stage") or "")
     if stage.startswith("ltx25_"):
-        suffix = stage.removeprefix("ltx25_").replace("_", " ")
-        return "LTX 2.5 · " + suffix.title()
+        phase = stage.removeprefix("ltx25_")
+        phases = {"text": "Preparing prompt", "motion": "Preparing motion guidance",
+                  "stage1": "Generating video · pass 1 of 2",
+                  "upscale": "Upscaling video", "refine": "Refining video · pass 2 of 2",
+                  "decode": "Decoding and saving video", "cleanup": "Preparing the next step"}
+        return "LTX 2.5 · " + phases.get(phase, "Preparing video")
     labels = {"h3": "Generating video", "wan": "Generating video", "local": "Generating video",
               "h3_enhance": "Enhancing video", "prepare": "Preparing video", "design": "Building scene"}
     return labels.get(stage, stage.replace("_", " ").title() or "Preparing")

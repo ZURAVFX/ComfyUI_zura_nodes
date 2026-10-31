@@ -1,10 +1,10 @@
 """Native Comfy graph for Wan Animate 2 full-frame motion transfer.
 
-The Studio adapter exposes a setup-gated full-frame option. Wan
-Animate 2 transfers a driving video's motion to a reference character while
-generating a new scene from text; it is not an object-swap node and exposes no
-spatial mask. The node's internal anchor mask is part of its model conditioning
-and cannot be used to constrain arbitrary image regions.
+The Studio adapter offers full-frame transfer and an experimental reviewed
+full-character sampler mask. The official model node exposes no arbitrary
+spatial edit mask. Zura keeps its native conditioning and locks source latents
+outside an expanded, solid block mask during sampling. No final RGB composite
+is used. The native internal anchor mask remains unchanged.
 
 The graph follows Comfy's distilled blueprint (10 LCM steps, CFG 1, shift 5,
 simple scheduler) and pins the repacked checkpoint filenames. Its bounded
@@ -311,7 +311,7 @@ MODEL_FOLDERS = {"diffusion": "diffusion_models", "text_encoder": "text_encoders
                  "clip_vision": "clip_vision", "vae": "vae"}
 MODEL_DOWNLOADS = {key: ("https://huggingface.co/Comfy-Org/Wan-Animate-2/resolve/main/"
                          + MODEL_FOLDERS[key] + "/" + name) for key, name in MODEL_FILES.items()}
-STUDIO_NODES = {"GenjSelectClip", "GenjLTXFramePad", "GetImageRangeFromBatch", "GenjRestoreSoundtrack"}
+STUDIO_NODES = {"GenjSelectClip", "GenjLTXFramePad", "GenjHoldToModelLength", "GetImageRangeFromBatch", "GenjRestoreSoundtrack"}
 
 
 def _studio_selection(project, check_asset):
@@ -332,8 +332,8 @@ def _studio_selection(project, check_asset):
     duration = available if original else float(c.get("duration", 2.))
     if not all(math.isfinite(v) for v in (available, start, duration)) or start < 0 or duration <= 0 or start >= available:
         raise WanAnimate2GraphError("Choose a valid source interval.")
-    frames = int(duration * OUTPUT_FPS + 1e-6)
-    if frames > int((available - start) * OUTPUT_FPS + 1e-6):
+    frames = math.ceil(duration * OUTPUT_FPS - 1e-6)
+    if not original and duration > available - start + 1e-6:
         raise WanAnimate2GraphError("The selected range extends past the end of the source video. Choose a shorter range.")
     if not MIN_FRAME_COUNT <= frames <= MAX_FRAME_COUNT:
         raise WanAnimate2GraphError("Wan Animate 2 supports 5 to 81 frames at 24 fps (0.21 to 3.375 seconds). Choose a custom clip length.")
@@ -348,19 +348,28 @@ def _studio_selection(project, check_asset):
 
 
 def build_studio_graph(project, check_asset):
-    """Build the full-frame route only; never enqueue or load model tensors.
+    """Build full-frame transfer or the reviewed sampler-mask route.
 
     An approved opening look is the single appearance reference. The source
     drives performance and the original soundtrack is restored after rendering.
-    This is not masked inpainting, audio-driven dubbing or viewport rendering.
+    The mask route locks original background latents during sampling. It does
+    not composite RGB after decoding or rerun selection at generation time.
     """
     c = project["config"]
-    if c.get("engine") != "wan2" or c.get("workflow_mode") != "motion" or c.get("edit_area") != "scene":
-        raise WanAnimate2GraphError("Choose Wan Animate 2 with full-frame character and background replacement.")
+    masked = c.get("workflow_mode") == "swap" and c.get("edit_area") == "mask"
+    whole_scene = c.get("workflow_mode") == "motion" and c.get("edit_area") == "scene"
+    if c.get("engine") != "wan2" or not (masked or whole_scene):
+        raise WanAnimate2GraphError("Choose Wan Animate 2 character replacement with Keep background or Replace background.")
+    # The Studio dispatcher verifies approval against its current prep_key and
+    # hashes the reviewed assets before entering this adapter.
+    if masked and (not project.get("review") or not project.get("approval")):
+        raise WanAnimate2GraphError("Review and approve the character selection before generating.")
+    if masked and (c.get("scope", "person") != "person" or c.get("mask_method", "auto") != "auto"):
+        raise WanAnimate2GraphError("Masked Animate 2 currently supports automatic full-character selection.")
     if c.get("subject_mode", "auto") not in ("auto", "people") or c.get("task_mode", "character") != "character":
         raise WanAnimate2GraphError("Wan Animate 2 requires a human character performance.")
     if any(c.get(key) for key in ("audio_id", "lip_sync", "refine_lips", "preserve_people", "remove_text", "h3_head_swap")):
-        raise WanAnimate2GraphError("Wan Animate 2 currently transfers the original performance and audio. New dialogue, text removal and masked edits are not supported.")
+        raise WanAnimate2GraphError("Wan Animate 2 transfers the original performance and audio. New dialogue and text removal are not supported.")
     reference = project.get("opening_input")
     if not reference or not project.get("opening_key") or project.get("opening_approval") != project.get("opening_key"):
         raise WanAnimate2GraphError("Generate or upload a finished starting frame, then approve it before creating the video.")
@@ -373,18 +382,46 @@ def build_studio_graph(project, check_asset):
                                 seed=c.get("seed", 0), cache_device="cpu")
     graph["select"] = {"class_type": "GenjSelectClip", "inputs": {
         "video": ["driving_video", 0], "start_seconds": start, "duration_seconds": duration,
-        "long_edge": MAX_OUTPUT_SIDE, "use_original_length": False}}
+        "long_edge": MAX_OUTPUT_SIDE, "use_original_length": c.get("length_mode") == "original", "round_up": True}}
     # 8n+1 padding also satisfies the model's 4n+1 grid. pose_frames slices
     # away any padding beyond the exact requested model window.
     graph["pad_source"] = {"class_type": "GenjLTXFramePad", "inputs": {"video": ["select", 0]}}
     graph["driving_video_frames"]["inputs"]["video"] = ["pad_source", 0]
+    details = ["select", 1]
+    if masked:
+        # Reviewed source and mask already share the selected interval. Never
+        # seek them again using the original clip's start time.
+        graph["reviewed"] = {"class_type": "GenjLoadReviewedShot", "inputs": {
+            "shot_id": project["review"], "approved_shot_id": project["review"],
+            "render_long_edge": MAX_OUTPUT_SIDE, "output_scale": 1,
+            "preview_seconds": 0, "preserve_aspect": True}}
+        graph["reviewed_frames"] = {"class_type": "ZuraWanReviewedFrames", "inputs": {
+            "source": ["reviewed", 0], "mask_video": ["reviewed", 1]}}
+        graph["hold_source"] = {"class_type": "GenjHoldToModelLength", "inputs": {
+            "images": ["reviewed_frames", 0], "stride": 4}}
+        graph["pose_frames"]["inputs"]["image"] = ["hold_source", 0]
+        graph["spatial_mask"] = {"class_type": "ZuraWanAnimate2SpatialMask", "inputs": {
+            "positive": ["animate2_conditioning", 0], "negative": ["animate2_conditioning", 1],
+            "latent": ["animate2_conditioning", 2], "vae": ["animate2_vae", 0],
+            "source_video": ["reviewed_frames", 0], "edit_mask": ["reviewed_frames", 1],
+            "trim_latent": ["animate2_conditioning", 3], "length": model_frames,
+            "video_frame_offset": 0, "grow_pixels": 32, "block_size": 32,
+            "fill_holes": True, "temporal_radius": 1,
+            "lock_background": True, "condition_background": False}}
+        graph["animate2_sample"]["inputs"].update(
+            positive=["spatial_mask", 0], negative=["spatial_mask", 1], latent_image=["spatial_mask", 2])
+        details = ["reviewed", 3]
+        for name in ("select", "pad_source", "driving_video", "driving_video_frames"):
+            del graph[name]
     graph["trim_output"] = {"class_type": "GetImageRangeFromBatch", "inputs": {
         "images": ["animate2_decode", 0], "start_index": 0, "num_frames": frames}}
-    graph["animate2_video"]["inputs"]["images"] = ["trim_output", 0]
+    graph["hold_output"] = {"class_type": "GenjHoldToModelLength", "inputs": {"images": ["trim_output", 0], "stride": 4}}
+    graph["animate2_video"]["inputs"]["images"] = ["hold_output", 0]
     del graph["animate2_save"]
     take = "studio_" + str(project["id"])[:8] + "_wan2"
     graph["wan2_export"] = {"class_type": "GenjRestoreSoundtrack", "inputs": {
-        "video": ["animate2_video", 0], "clip_details": ["select", 1], "take_name": take}}
+        "video": ["animate2_video", 0], "clip_details": details, "take_name": take,
+        "output_width": width, "output_height": height, "target_frames": ["hold_output", 1]}}
     return graph
 
 
@@ -400,10 +437,14 @@ def readiness(node_mappings, get_full_path):
                       "url": MODEL_DOWNLOADS[key]})
     required = (set(NATIVE_NODE_INPUTS) - {"SaveVideo"}) | STUDIO_NODES
     missing = sorted(required - set(node_mappings))
+    mask_missing = sorted({"GenjLoadReviewedShot", "ZuraWanReviewedFrames", "ZuraWanAnimate2SpatialMask"} - set(node_mappings))
     return {"ready": not missing and all(f["ready"] for f in files),
             "model_files": files, "missing_nodes": missing,
+            "masked_ready": not missing and not mask_missing and all(f["ready"] for f in files),
+            "missing_mask_nodes": mask_missing,
             "limits": {"fps": OUTPUT_FPS, "min_frames": MIN_FRAME_COUNT,
                        "max_frames": MAX_FRAME_COUNT, "max_seconds": MAX_FRAME_COUNT / OUTPUT_FPS,
                        "max_long_edge": MAX_OUTPUT_SIDE, "max_pixels": MAX_OUTPUT_PIXELS},
             "quality_verified_locally": False,
-            "note": "Full-frame character and background replacement. Local output qualification is pending."}
+            "masked_preview_approved": True,
+            "note": "Keep background uses expanded, filled block masks to lock source latents. Approved on one two-second full-character preview; inspect edges and occlusions on each shot. Replace background regenerates the whole scene."}

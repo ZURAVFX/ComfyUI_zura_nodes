@@ -4,7 +4,7 @@ import {PaintoutMaskViewer} from '../web/paintout_studio/paintout_viewer.js';
 
 const requests=[],applied=[];let grow=32;
 const editor=Object.create(PaintoutEditor.prototype);
-Object.assign(editor,{stage:'clean',active:true,sequence:1,previewSequence:0,w:{playhead:4,sourceInfo:{width:1920,height:1080},state:{source:'plate.mp4',maskGrow:32,anchors:[]},selected:-1,api:{fetchApi:async(path,options)=>{const body=JSON.parse(options.body);requests.push(body);return {ok:true,blob:async()=>new Blob(['mask'])};}}},$:id=>({value:grow}),viewer:{getSelection:()=>({hasMask:true,mask:'raw-mask'}),setEffectiveMask:async()=>applied.push(grow)},status(){}});
+Object.assign(editor,{stage:'clean',active:true,sequence:1,previewSequence:0,w:{playhead:4,sourceInfo:{width:1920,height:1080},state:{source:'plate.mp4',maskGrow:32,anchors:[]},selected:-1,api:{fetchApi:async(path,options)=>{const body=JSON.parse(options.body);requests.push(body);return {ok:true,blob:async()=>new Blob(['mask'])};}}},$:id=>({value:grow}),viewer:{setContextMask:async()=>{},getSelection:()=>({hasMask:true,mask:'raw-mask'}),setEffectiveMask:async()=>applied.push(grow)},status(){}});
 await editor.authoritativePreview();assert.equal(requests.at(-1).grow,32,'Clean preview without a guide card must use the displayed expansion');
 editor.w.state.anchors=[{frame:0,editGrow:7}];editor.w.selected=0;grow=48;
 await editor.authoritativePreview();assert.equal(requests.at(-1).grow,48,'A different selected frame must not override the current slider');

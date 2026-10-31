@@ -649,10 +649,12 @@ def build_viewport_plan(project, *, scenario, timeline, models, text_encoder_inp
     images = node(g, "decode", "VAEDecodeTiled", samples=video, vae=vae, tile_size=256, overlap=64, temporal_size=128, temporal_overlap=8)
     images = node(g, "trim_frames", "ImageFromBatch", image=images, batch_index=0, length=source_frames)
     images = node(g, "delivery_size", "ImageScale", image=images, width=delivery[0], height=delivery[1], upscale_method="lanczos", crop="disabled")
+    images = node(g, "hold_output", "GenjHoldToModelLength", images=images, stride=8)
     args = {"images": images, "fps": fps, "bit_depth": 8, "color_space": "sRGB", "codec": "none"}
     if scenario == "original":
         components = node(g, "source_components", "GetVideoComponents", video=reviewed(g))
-        args["audio"] = node(g, "trim_audio", "TrimAudioDuration", audio=[components[0], 1], start_index=0., duration=source_frames / fps)
+        audio = node(g, "trim_audio", "TrimAudioDuration", audio=[components[0], 1], start_index=0., duration=source_frames / fps)
+        args["audio"] = node(g, "hold_audio", "GenjPadAudioToFrames", audio=audio, frames=["hold_output", 1], fps=fps)
     video = node(g, "create_video", "CreateVideo", **args)
     node(g, "save_video", "SaveVideo", video=video, filename_prefix="zura/ltx25/" + key + "/result",
          format="mp4", **{"format.codec": "h264", "format.codec.encoding": "re-encode", "format.codec.encoding.crf": 16.})
@@ -664,7 +666,7 @@ def build_viewport_plan(project, *, scenario, timeline, models, text_encoder_inp
             "stage1_handoff": "Layout and appearance guides remain native and are cropped before caching.",
             "qualification": "Experimental viewport route; current-media visual testing required.",
             "source_frames": source_frames, "generation_frames": padded,
-            "delivered_frames": source_frames, "trimmed_tail_frames": 0,
+            "delivered_frames": padded, "trimmed_tail_frames": 0,
             "appearance_reference_role": ("composed_scene_plate_at_rope_minus_one" if finished_anchor is None
                                           else "finished_frame_at_selected_time"),
             "graph_hashes": {phase: digest(value) for phase, value in phases.items()}}

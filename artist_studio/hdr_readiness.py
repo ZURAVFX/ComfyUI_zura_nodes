@@ -16,7 +16,7 @@ _MODEL_FIELDS = {
 }
 
 
-def readiness(mode, output, get_path, node_mappings):
+def readiness(mode, output, get_path, node_mappings, *, longer=False):
     if mode not in ('sdr', 'native'):raise ValueError('Choose SDR-to-HDR or HDR-to-HDR.')
     if output not in ('hlg_video','acescg_exr','hlg_and_exr'):raise ValueError('Choose an available HDR delivery.')
     if mode == 'sdr':
@@ -24,8 +24,17 @@ def readiness(mode, output, get_path, node_mappings):
     else:
         graph=build_native_video_graph(source='readiness.mp4',start_frame=0,frame_count=9,fps=24,
             width=512,height=512,output=output,prefix='setup')
+    graphs=[graph]
+    if longer:
+        from types import SimpleNamespace
+        from .hdr_chunks import HDRChunk
+        from .hdr_chunk_comfy import chunk_graph
+        store=SimpleNamespace(identity='0'*32,width=512,height=512,
+                              plan=[HDRChunk(0,9,0),HDRChunk(8,9,1)])
+        graphs=[chunk_graph(graph,store,1,'hdr_unpad_raster' if mode=='sdr' else 'trim_raster',
+                            .75,'i2v' if mode=='sdr' else 'guide')]
     seen=set();files=[]
-    for node in graph.values():
+    for node in (node for item in graphs for node in item.values()):
         kind=node.get('class_type');field=_MODEL_FIELDS.get(kind)
         if not field:continue
         folder,key=field;name=node.get('inputs',{}).get(key)
@@ -34,7 +43,7 @@ def readiness(mode, output, get_path, node_mappings):
         try:present=bool(get_path(folder,name))
         except (KeyError,FileNotFoundError,OSError):present=False
         files.append({'folder':folder,'filename':name,'ready':present})
-    missing_nodes=sorted({node['class_type'] for node in graph.values()}-set(node_mappings))
+    missing_nodes=sorted({node['class_type'] for item in graphs for node in item.values()}-set(node_mappings))
     return {'route':'hdr_sdr' if mode=='sdr' else 'hdr_native','files':files,'missingNodes':missing_nodes,
             'ready':all(item['ready'] for item in files) and not missing_nodes}
 
@@ -61,7 +70,8 @@ def register(routes,response):
         import folder_paths
         import nodes
         result=await asyncio.to_thread(readiness,request.query.get('mode','sdr'),
-            request.query.get('output','hlg_and_exr'),folder_paths.get_full_path,nodes.NODE_CLASS_MAPPINGS)
+            request.query.get('output','hlg_and_exr'),folder_paths.get_full_path,nodes.NODE_CLASS_MAPPINGS,
+            longer=request.query.get('long')=='1')
         from .hdr_long_service import preview_enabled
         result['longPreview'] = preview_enabled()
         try:

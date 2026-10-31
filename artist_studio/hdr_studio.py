@@ -90,6 +90,36 @@ def register(studio, routes, response, check_asset):
     """Expose preflight only: graph is still queued through standard Comfy."""
     import asyncio
     from aiohttp import web
+    @routes.post('/zura/studio/hdr/source-info')
+    @routes.post('/genj/studio/hdr/source-info')
+    @response
+    async def source_info(request):
+        """Inspect only a selected Studio asset or output, never an arbitrary path."""
+        import folder_paths
+        from .hdr_output import selected_output
+        from ..paintout.paintout import describe
+        body = await request.json()
+        kind = body.get('source_kind', 'upload')
+        if kind == 'output':
+            path = selected_output(folder_paths.get_output_directory(), body.get('output_ref'))
+        elif kind == 'result':
+            project = studio.store.load(body.get('project_id', ''))
+            if project.get('config', {}).get('engine') != 'local' or not project.get('results'):
+                raise ValueError('Generate an LTX video before choosing its result.')
+            path = selected_output(folder_paths.get_output_directory(), project['results'][-1].get('asset'))
+        elif kind == 'upload':
+            asset = studio.store.load(body.get('source_id', ''))
+            if asset.get('asset_kind') != 'video':
+                raise ValueError('Choose an uploaded video.')
+            path = check_asset(asset)
+        else:
+            raise ValueError('Choose a video source.')
+        info = await asyncio.to_thread(describe, str(path))
+        if info.get('kind') != 'video' or not isinstance(info.get('count'), int) or info['count'] < 1:
+            raise ValueError('The video frame count could not be read.')
+        return web.json_response({'frames': info['count'], 'fps': info.get('fps'),
+                                  'width': info['width'], 'height': info['height']})
+
     @routes.post('/zura/studio/hdr/graph')
     @routes.post('/genj/studio/hdr/graph')
     @response

@@ -1,0 +1,34 @@
+import assert from 'node:assert/strict';
+import {buildLtxFrameVideoGraph as build,ltxFrameVideoAvailability as available,LTX_FRAME_VIDEO_MODELS as models,LTX_FRAME_VIDEO_CAPABILITIES as caps,LTX_FRAME_VIDEO_FAST_NODES as fastNodes} from '../web/ltx_frame_video_recipes.js';
+const input={first:{file:'a.png'},last:{file:'b.png'},prompt:'A character turns.',width:960,height:544,frames:49,steps:8,seed:17,audioEnabled:true,audio:{file:'speech.wav'},audioStart:1};
+const normal=build(input),normalExplicit=build({...input,fast:false}),fast=build({...input,fast:true});
+assert.deepEqual(normal,normalExplicit,'Normal graph must stay identical');
+assert.equal(normal.empty_video.inputs.width,960);assert.equal(normal.empty_video.inputs.height,544);
+assert.equal(normal.upscale,undefined);assert.deepEqual(normal.video.inputs.images,['decode',0]);
+assert.deepEqual(fast.empty_video.inputs,{width:480,height:288,length:49,batch_size:1});
+for(const id of ['first','last']){
+ assert.deepEqual(fast[`fit_${id}`].inputs,{image:[id,0],upscale_method:'lanczos',width:960,height:544,crop:'center'});
+ assert.deepEqual(fast[`pad_${id}`].inputs,{image:[`fit_${id}`,0],left:0,top:0,right:0,bottom:32,feathering:0});
+ assert.deepEqual(fast[`small_${id}`].inputs,{image:[`pad_${id}`,0],upscale_method:'lanczos',width:480,height:288,crop:'disabled'});
+ assert.deepEqual(fast[`preprocess_${id}`].inputs.image,[`small_${id}`,0]);
+}
+assert.equal(fast.guide_first.inputs.frame_idx,0);assert.equal(fast.guide_last.inputs.frame_idx,48);
+assert.deepEqual(fast.guide_last.inputs.latent,['guide_first',2]);assert.deepEqual(fast.av_latent.inputs.audio_latent,['freeze_audio',0]);
+assert.deepEqual(fast.upscale.inputs,{samples:['crop_guides',2],upscale_model:['upscale_model',0],vae:['video_vae',0]});
+assert.equal(fast.upscale_model.inputs.model_name,models.latentUpscaler);
+assert.deepEqual(fast.decode.inputs.samples,['upscale',0]);
+assert.deepEqual(fast.crop_output.inputs,{image:['decode',0],width:960,height:544,x:0,y:0});
+assert.deepEqual(fast.video.inputs.images,['crop_output',0]);assert.deepEqual(fast.video.inputs.audio,['trim_audio',0]);
+assert.equal(fast.trim_audio.inputs.duration,49/24);assert.equal(Object.values(fast).filter(n=>n.class_type==='SamplerCustomAdvanced').length,1);
+const aligned=build({...input,width:1024,height:512,fast:true,audioEnabled:false});
+assert.equal(aligned.pad_first,undefined);assert.equal(aligned.crop_output,undefined);assert.deepEqual(aligned.video.inputs.images,['decode',0]);
+assert.deepEqual(aligned.video.inputs.audio,['decode_audio',0]);assert.equal(aligned.guide_last.inputs.frame_idx,48);
+const info=Object.fromEntries([...caps.nodeTypes,...fastNodes].map(n=>[n,{input:{required:{}}}]));
+const combo=(node,key,values)=>{info[node].input.required[key]=['COMBO',{options:values}];};
+combo('UNETLoader','unet_name',[models.model]);combo('CLIPLoader','clip_name',[models.text]);combo('VAELoader','vae_name',[models.videoVae,models.audioVae]);combo('ModelAttentionBackend','attention',['comfy kitchen attention']);combo('KSamplerSelect','sampler_name',['euler_ancestral']);combo('LatentUpscaleModelLoader','model_name',[models.latentUpscaler]);
+assert.equal(available(info,{fast:true}).ready,true);
+delete info.LTXVLatentUpsampler;assert.ok(available(info,{fast:true}).missing.includes('LTXVLatentUpsampler'));
+assert.equal(available(info,{fast:false}).ready,true,'Fast dependencies must not gate Normal');
+info.LTXVLatentUpsampler={input:{required:{}}};combo('LatentUpscaleModelLoader','model_name',[]);
+assert.ok(available(info,{fast:true}).missing.includes(models.latentUpscaler));
+console.log('LTX first/last Fast graph: exact output sizing, paired anchors, audio, upscaler, normal preservation and readiness passed.');

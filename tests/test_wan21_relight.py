@@ -1,6 +1,11 @@
 """Contract checks for the user-approved Wan 2.1 chained relight route."""
 import importlib
 import unittest
+import subprocess
+import tempfile
+from pathlib import Path
+from fractions import Fraction
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import test_artist_studio as fixture
@@ -71,6 +76,41 @@ class Wan21RelightTests(unittest.TestCase):
             self.assertEqual(config["resolution"], 1280)
             self.assertFalse(config["preserve_identity"])
 
+    def test_finished_frame_and_full_length_use_wan21_not_h3_limit(self):
+        project = self.project()
+        project["config"].update(length_mode="original", duration=2, relight_engine="h3")
+        project.update(look_mode="ready", starting_asset={"file": "finished-lighting.png"})
+        stream = SimpleNamespace(duration=360, time_base=Fraction(1, 24))
+        container = SimpleNamespace(streams=SimpleNamespace(video=[stream], audio=[]))
+        class Clip:
+            def __enter__(self): return container
+            def __exit__(self, *args): return False
+        with patch.object(studio, 'check_asset', side_effect=lambda asset: asset['file']), \
+             patch.object(studio.av, 'open', return_value=Clip()):
+            studio.validate_selection(project)  # 15 seconds, with a legacy H3 flag
+        project['config'] = studio.clean_config(project['config'])
+        graph = self.build(project)
+        self.assertEqual(project['config']['relight_engine'], 'wan21')
+        self.assertIn('wan21_shot', graph)
+        self.assertEqual(graph['wan21_reference']['inputs']['image'], project['opening_input']['file'])
+        self.assertEqual(graph['wan21_export']['class_type'], 'GenjRestoreSoundtrack')
+
+    def test_full_length_with_real_video_is_validated_as_wan21(self):
+        with tempfile.TemporaryDirectory() as folder:
+            source = Path(folder) / 'six_seconds.mp4'
+            subprocess.run(['ffmpeg', '-v', 'error', '-y', '-f', 'lavfi', '-i',
+                            'color=c=black:s=64x64:r=24:d=6', '-c:v', 'libx264',
+                            '-pix_fmt', 'yuv420p', str(source)], check=True)
+            project = self.project()
+            project['config'].update(length_mode='original', relight_engine='wan21')
+            project['source']['file'] = str(source)
+            project.update(look_mode='ready', starting_asset={'file': 'finished.png'})
+            with patch.object(studio, 'check_asset', side_effect=lambda asset: asset['file']):
+                studio.validate_selection(project)
+            graph = self.build(project)
+            self.assertIn('wan21_shot', graph)
+            self.assertNotIn('h3_live_preview_' + project['id'], graph)
+
     def project(self):
         project = fixture.SharedEngineTests().project()
         project["config"] = studio.clean_config({
@@ -111,6 +151,15 @@ class Wan21RelightTests(unittest.TestCase):
         self.assertEqual(graph["wan21_export"]["inputs"]["output_width"], 1920)
         self.assertEqual(graph["wan21_export"]["inputs"]["output_height"], 1080)
 
+    def test_4k_resolution_reaches_review_loader_and_both_model_inputs(self):
+        project = self.project()
+        project["config"].update(relight_width=3840, relight_height=2160)
+        graph = self.build(project)
+        self.assertEqual(graph["wan21_shot"]["inputs"]["render_long_edge"], 3840)
+        for key in ("272:407:89", "272:408:275:190"):
+            self.assertEqual((graph[key]["inputs"]["width"], graph[key]["inputs"]["height"]), (3840, 2160))
+        self.assertEqual(graph["wan21_export"]["inputs"]["output_width"], 3840)
+
     def test_opening_resolution_keeps_original_frame_and_final_source_size(self):
         for model in ("flux3", "klein9b", "qwen2511", "qwen21"):
             project = self.project()
@@ -124,7 +173,7 @@ class Wan21RelightTests(unittest.TestCase):
 
     def test_invalid_grid_and_pixel_budget_are_rejected_before_queueing(self):
         for sizes in ({"opening_width": 721, "opening_height": 1280},
-                      {"relight_width": 2048, "relight_height": 2048},
+                      {"relight_width": 4096, "relight_height": 4096},
                       {"opening_width": 2048, "opening_height": 2048},
                       {"relight_width": 720}):
             with self.subTest(sizes=sizes), self.assertRaises(ValueError):
@@ -137,11 +186,19 @@ class Wan21RelightTests(unittest.TestCase):
         self.assertEqual(graph["wan21_shot"]["inputs"]["approved_shot_id"], graph["wan21_shot"]["inputs"]["shot_id"])
         self.assertNotEqual(graph["wan21_shot"]["inputs"]["approved_shot_id"], self.project()["approval"])
         self.assertEqual(graph["wan21_source_frames"]["inputs"]["video"], ["wan21_shot", 0])
+        self.assertEqual(graph["wan21_hold_source"]["inputs"], {"images":["272:404:395",0],"length":["272:403:387",0]})
+        self.assertEqual(graph["272:407:89"]["inputs"]["image"], ["wan21_hold_source",0])
+        self.assertEqual(graph["wan21_hold_result"]["inputs"], {"images":["272:402",0],"stride":4})
+        self.assertEqual(graph["wan21_video"]["inputs"]["images"], ["wan21_hold_result",0])
+        self.assertEqual(graph["wan21_export"]["inputs"]["target_frames"], ["wan21_hold_result",1])
         self.assertEqual(graph["272:407:89"]["inputs"]["width"], 1280)
         self.assertEqual(graph["272:407:89"]["inputs"]["height"], 704)
         self.assertEqual(graph["272:408:275:190"]["inputs"]["width"], 1280)
         self.assertEqual(graph["272:408:275:190"]["inputs"]["height"], 704)
         self.assertEqual(graph["272:408:275:190"]["inputs"]["crop_position"], graph["272:407:89"]["inputs"]["crop_position"])
+        self.assertEqual(graph["272:408:275:190"]["class_type"], graph["272:407:89"]["class_type"])
+        for parameter in ("width", "height", "upscale_method", "keep_proportion", "pad_color", "crop_position", "divisible_by", "device"):
+            self.assertEqual(graph["272:408:275:190"]["inputs"][parameter], graph["272:407:89"]["inputs"][parameter], parameter)
         self.assertEqual(graph["272:407:277:19"]["inputs"]["noise_seed"], 123)
         self.assertIn("Soft warm window light", graph["272:408:274:3"]["inputs"]["text"])
         self.assertEqual(graph["wan21_export"]["class_type"], "GenjRestoreSoundtrack")

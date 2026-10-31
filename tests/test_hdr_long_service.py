@@ -29,13 +29,36 @@ class Job:
     async def cancel(self):self.state='cancelled';self.release.set();return True
 
 class HDRLongServiceTests(unittest.IsolatedAsyncioTestCase):
-    async def test_integrated_preview_is_explicitly_opt_in(self):
+    async def test_missing_setup_stops_before_creating_or_queuing_a_job(self):
+        with tempfile.TemporaryDirectory() as root:
+            calls=[]
+            def missing(mode,output):
+                calls.append((mode,output))
+                raise ValueError('Missing nodes: LTXVAddGuide')
+            def create(*args,**kwargs):raise AssertionError('Must not create a job')
+            client=service.HDRLongService(None,Store(),lambda asset:'verified',root,create_native=create,check_setup=missing)
+            with self.assertRaisesRegex(ValueError,'LTXVAddGuide'):
+                await client.start({'mode':'native','source_id':'video','output':'hlg_video','request_id':'f'*32})
+            self.assertEqual(calls,[('native','hlg_video')]);self.assertFalse(client.jobs.tasks);self.assertFalse(client._requests)
+
+    async def test_setup_message_names_missing_files_and_nodes(self):
+        readiness=importlib.import_module('ComfyUI_zura_nodes.artist_studio.hdr_readiness')
+        nodes=types.ModuleType('nodes');nodes.NODE_CLASS_MAPPINGS={}
+        import folder_paths
+        with patch.dict(sys.modules,{'nodes':nodes}),patch.object(folder_paths,'get_full_path',return_value=None,create=True), \
+             patch.object(readiness,'readiness',return_value={'files':[{'filename':'model.safetensors','ready':False}],
+                                                             'missingNodes':['LTXVAddGuide']}):
+            with self.assertRaisesRegex(ValueError,'model.safetensors.*LTXVAddGuide.*model setup'):
+                service.check_long_setup('native','hlg_video')
+    async def test_approved_preview_is_available_and_can_be_disabled(self):
         with patch.dict(os.environ, {}, clear=True):
-            self.assertFalse(service.preview_enabled())
+            self.assertTrue(service.preview_enabled())
         with patch.dict(os.environ, {'ZURA_HDR_LONG_PREVIEW': 'true'}, clear=True):
             self.assertFalse(service.preview_enabled())
         with patch.dict(os.environ, {'ZURA_HDR_LONG_PREVIEW': '1'}, clear=True):
             self.assertTrue(service.preview_enabled())
+        with patch.dict(os.environ, {'ZURA_HDR_LONG_PREVIEW': '0'}, clear=True):
+            self.assertFalse(service.preview_enabled())
 
     async def test_checked_asset_single_job_and_relative_output(self):
         with tempfile.TemporaryDirectory() as root:
@@ -45,7 +68,7 @@ class HDRLongServiceTests(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(check(asset),'verified');self.assertEqual(kwargs['anchor_strength'],.75)
                 self.assertEqual(kwargs['max_chunk_frames'],121)
                 job=Job(output);created.append(job);return job,{'id':'a'*32,'frames':130}
-            client=service.HDRLongService(None,Store(),lambda asset:'verified',root,create_sdr=create)
+            client=service.HDRLongService(None,Store(),lambda asset:'verified',root,create_sdr=create,check_setup=lambda *_:None)
             result=await client.start({'mode':'sdr','source_id':'video'});self.assertEqual(result['id'],'a'*32)
             await created[0].entered.wait()
             with self.assertRaisesRegex(ValueError,'already running'):await client.start({'mode':'sdr','source_id':'video'})
@@ -75,7 +98,7 @@ class HDRLongServiceTests(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(kwargs['max_chunk_frames'],25)
                 job=Job(Path(root)/'unused');created.append(job)
                 return job,{'id':'e'*32,'frames':129}
-            client=service.HDRLongService(None,Store(),lambda asset:'verified',root,create_native=create)
+            client=service.HDRLongService(None,Store(),lambda asset:'verified',root,create_native=create,check_setup=lambda *_:None)
             await client.start({'mode':'native','source_id':'video','section_frames':25})
             await created[0].entered.wait();created[0].release.set();await client.jobs.tasks['e'*32]
 
@@ -87,7 +110,7 @@ class HDRLongServiceTests(unittest.IsolatedAsyncioTestCase):
             def create(server,asset,body,check,out,**kwargs):
                 job=Job(Path(root)/'unused');created.append(job)
                 return job,{'id':'b'*32,'frames':130}
-            client_service=service.HDRLongService(None,Store(),lambda asset:'verified',root,create_sdr=create)
+            client_service=service.HDRLongService(None,Store(),lambda asset:'verified',root,create_sdr=create,check_setup=lambda *_:None)
             routes=web.RouteTableDef()
             def response(fn):
                 async def wrapped(request):

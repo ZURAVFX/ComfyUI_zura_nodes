@@ -34,13 +34,15 @@ def grant(path):
     return '/zura/paintout/media?'+urlencode({'token':token})
 
 def describe_media(path):
-    from .paintout import describe
+    from .paintout import describe, selected_space
     p=checked_path(path);d=describe(str(p));kind='image' if p.is_file() and p.suffix.lower() in IMAGE_EXTENSIONS else d['kind']
     if kind=='image':
         from .frame_editor import validate_edit_orientation
         validate_edit_orientation(p)
     result=dict(path=str(p),name=p.name,width=d['width'],height=d['height'],frames=d['count'],fps=d.get('fps') or 25,kind=kind,
                 thumbnail_url='/zura/paintout/frame-preview?'+urlencode({'file':str(p),'space':'auto','frame':0,'size':1280}))
+    try:result['resolved_colour']=selected_space(d,'auto')
+    except (ValueError,OSError) as error:result['colour_error']=str(error)
     if kind=='video':result['media_url']=grant(p)
     return result
 
@@ -100,10 +102,16 @@ def thumbnail(path,space,frame=0,size=240):
     p=checked_path(path);d=describe(str(p));frame=int(frame);size=int(size)
     if frame<0 or frame>=d['count']:raise ValueError('The preview frame is outside the source range.')
     if not 32<=size<=1280:raise ValueError('Preview size must be between 32 and 1280 pixels.')
+    # Resolve the same missing-matrix fallback as FrameCrop before decoding.
+    # Otherwise an untagged source preview can use FFmpeg's default matrix,
+    # while its precisely composited clean frame uses Rec.709 or BT.2020.
+    space=selected_space(d,space)
     x=torch.from_numpy(next(frames(d,frame,1)))[None]
+    # Apply the display view before resizing, like the saved clean-frame PNG.
+    # HDR tone mapping is nonlinear and must not change order between views.
+    x=working(x,space,'SDR (sRGB)')
     h,w=x.shape[1:3];scale=min(1,size/max(h,w));x=resize(x,max(1,round(h*scale)),max(1,round(w*scale)))
-    if space=='auto':space=selected_space(d,space)
-    x=working(x,space,'SDR (sRGB)')[0].clamp(0,1)
+    x=x[0].clamp(0,1)
     image=Image.fromarray((x.numpy()*255).round().astype('uint8'));buf=io.BytesIO();image.save(buf,format='PNG');return buf.getvalue()
 
 async def preview(request):

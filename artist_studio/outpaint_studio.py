@@ -19,7 +19,7 @@ MAX_FRAMES = 120
 
 
 def plan(source, *, start, duration, mode, width, height, left=0, top=0,
-         right=0, bottom=0, black_threshold=2 / 255):
+         right=0, bottom=0, black_threshold=2 / 255, allow_partial_end=False):
     """Validate a 24-fps short source range and bind its geometry to review."""
     if not isinstance(source, dict) or not source.get('sha') or not source.get('file'):
         raise ValueError('Select a source video first.')
@@ -28,13 +28,13 @@ def plan(source, *, start, duration, mode, width, height, left=0, top=0,
     start, duration = float(start), float(duration)
     if not math.isfinite(start) or not math.isfinite(duration) or start < 0 or duration <= 0:
         raise ValueError('Choose a valid start and duration.')
-    frames = int(duration * FPS + 1e-6)
+    frames = math.ceil(duration * FPS - 1e-6)
     # GenjSelectClip requires a duration of at least 0.1 seconds. At 24 fps,
     # three frames are the first valid duration (2 / 24 is too short).
     if not 3 <= frames <= MAX_FRAMES:
         raise ValueError('Choose between 3 frames and five seconds at 24 fps.')
     available = float(source.get('duration', 0))
-    if not math.isfinite(available) or available <= 0 or start + frames / FPS > available + 1e-4:
+    if not math.isfinite(available) or available <= 0 or start + duration > available + (1 / FPS if allow_partial_end else 0) + 1e-4:
         raise ValueError('The selection extends past the source video.')
     if mode not in ('expand', 'black'):
         raise ValueError('Choose canvas expansion or black areas.')
@@ -55,7 +55,7 @@ def plan(source, *, start, duration, mode, width, height, left=0, top=0,
         raise ValueError('MP4 export needs even dimensions. Add a one-pixel border to the source and try again.')
     if mode == 'black' and any((left, top, right, bottom)):
         raise ValueError('Margins apply to canvas expansion, not a black-padded clip.')
-    values = {'source_sha': str(source['sha']), 'start': start, 'frames': frames,
+    values = {'source_sha': str(source['sha']), 'start': start, 'frames': frames, 'requested_duration': duration,
               'mode': mode, 'width': width, 'height': height,
               'left': left, 'top': top, 'right': right, 'bottom': bottom,
               'black_threshold': float(black_threshold)}
@@ -117,10 +117,10 @@ class ZuraOutpaintReviewOverlay:
 
 def build_review_graph(source, selection, *, output_prefix, check_asset=lambda asset: None):
     """Render the exact per-frame generation mask before allowing sampling."""
-    expected = plan(source, start=selection['start'], duration=selection['duration'], mode=selection['mode'],
+    expected = plan(source, start=selection['start'], duration=selection.get('requested_duration', selection['duration']), mode=selection['mode'],
                     width=selection['width'], height=selection['height'], left=selection['left'],
                     top=selection['top'], right=selection['right'], bottom=selection['bottom'],
-                    black_threshold=selection['black_threshold'])
+                    black_threshold=selection['black_threshold'], allow_partial_end=True)
     if expected['review_key'] != selection.get('review_key'):
         raise ValueError('The source or canvas changed. Create a fresh selection preview.')
     if not re.fullmatch(r'genj/outpaint/[a-zA-Z0-9_-]{1,96}', str(output_prefix)):
@@ -129,7 +129,7 @@ def build_review_graph(source, selection, *, output_prefix, check_asset=lambda a
     graph = {
         'source': {'class_type': 'LoadVideo', 'inputs': {'file': source['file']}},
         'source_range': {'class_type': 'GenjSelectClip', 'inputs': {'video': ['source', 0],
-            'start_seconds': expected['start'], 'duration_seconds': expected['duration'], 'long_edge': 1920}},
+            'start_seconds': expected['start'], 'duration_seconds': expected['requested_duration'], 'long_edge': 1920, 'round_up': True}},
         'components': {'class_type': 'GetVideoComponents', 'inputs': {'video': ['source_range', 0]}},
         'canvas': {'class_type': 'ZuraLTXOutpaintCanvas', 'inputs': {'images': ['components', 0],
             **{k: expected[k] for k in ('mode', 'left', 'top', 'right', 'bottom', 'black_threshold')},
@@ -147,14 +147,14 @@ def build_review_graph(source, selection, *, output_prefix, check_asset=lambda a
     return graph
 
 
-def build_studio_graph(source, selection, *, review_key, prompt='', seed=42, output_prefix, check_asset=lambda asset: None):
+def build_studio_graph(source, selection, *, review_key, prompt='', seed=42, output_prefix, check_asset=lambda asset: None, pad_delivery=False):
     """Use the user-approved LTX 2.5 black-guide recipe after mask review."""
     if not isinstance(selection, dict) or review_key != selection.get('review_key') or not re.fullmatch(r'[a-f0-9]{64}', str(review_key)):
         raise ValueError('Review and approve the current outpaint selection first.')
-    expected = plan(source, start=selection['start'], duration=selection['duration'], mode=selection['mode'],
+    expected = plan(source, start=selection['start'], duration=selection.get('requested_duration', selection['duration']), mode=selection['mode'],
                     width=selection['width'], height=selection['height'], left=selection['left'],
                     top=selection['top'], right=selection['right'], bottom=selection['bottom'],
-                    black_threshold=selection['black_threshold'])
+                    black_threshold=selection['black_threshold'], allow_partial_end=True)
     if expected['review_key'] != review_key:
         raise ValueError('The source or canvas changed. Review the selection again.')
     if not re.fullmatch(r'genj/outpaint/[a-zA-Z0-9_-]{1,96}', str(output_prefix)):
@@ -170,7 +170,7 @@ def build_studio_graph(source, selection, *, review_key, prompt='', seed=42, out
             prompt=prompt, seed=seed, black_threshold=expected['black_threshold'])
         g['source_range'] = {'class_type': 'GenjSelectClip', 'inputs': {
             'video': ['source', 0], 'start_seconds': expected['start'],
-            'duration_seconds': expected['duration'], 'long_edge': 1920}}
+            'duration_seconds': expected['requested_duration'], 'long_edge': 1920, 'round_up': True}}
         g['components']['inputs']['video'] = ['source_range', 0]
         g['temporal_hold'] = {'class_type': 'ZuraOutpaintTemporalHold', 'inputs': {
             'images': ['components', 0], 'audio': ['components', 1], 'expected_frames': expected['frames']}}
@@ -181,7 +181,7 @@ def build_studio_graph(source, selection, *, review_key, prompt='', seed=42, out
         g['unpad_result'] = {'class_type': 'ImageCrop', 'inputs': {'image': ['trim_result', 0],
             'width': expected['width'], 'height': expected['height'], 'x': 0, 'y': 0}}
         g['assemble']['inputs'].update(images=['unpad_result', 0], audio=['components', 1])
-        return g
+        return pad_outpaint_delivery(g) if pad_delivery else g
     def n(kind, **inputs): return {'class_type': kind, 'inputs': inputs}
     g = {
         'source': n('LoadVideo', file=source['file']),
@@ -216,7 +216,7 @@ def build_studio_graph(source, selection, *, review_key, prompt='', seed=42, out
     }
     g['source_range'] = {'class_type': 'GenjSelectClip', 'inputs': {
         'video': ['source', 0], 'start_seconds': expected['start'],
-        'duration_seconds': expected['duration'], 'long_edge': 1920}}
+        'duration_seconds': expected['requested_duration'], 'long_edge': 1920, 'round_up': True}}
     g['components']['inputs']['video'] = ['source_range', 0]
     g['temporal_hold'] = {'class_type': 'ZuraOutpaintTemporalHold', 'inputs': {
         'images': ['components', 0], 'audio': ['components', 1], 'expected_frames': expected['frames']}}
@@ -228,7 +228,15 @@ def build_studio_graph(source, selection, *, review_key, prompt='', seed=42, out
         g['unpad_result'] = {'class_type': 'ImageCrop', 'inputs': {'image': ['trim_result', 0],
             'width': expected['width'], 'height': expected['height'], 'x': 0, 'y': 0}}
         g['assemble']['inputs']['images'] = ['unpad_result', 0]
-    return g
+    return pad_outpaint_delivery(g) if pad_delivery else g
+
+
+def pad_outpaint_delivery(graph):
+    """Hold the final generated image to LTX's next 8n+1 frame count."""
+    graph['hold_delivery'] = {'class_type': 'GenjHoldToModelLength', 'inputs': {
+        'images': graph['assemble']['inputs']['images'], 'stride': 8}}
+    graph['assemble']['inputs'].update(images=['hold_delivery', 0], audio=['temporal_hold', 1])
+    return graph
 
 
 NODE_CLASS_MAPPINGS = {'ZuraOutpaintTemporalHold': ZuraOutpaintTemporalHold,

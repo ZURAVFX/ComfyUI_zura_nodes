@@ -69,6 +69,36 @@ CATALOG = {
 }
 
 CATALOG.update({
+    "wan22_first_last": dict(name="Wan 2.2 · first and last frame", gated=False,
+        license_url="https://huggingface.co/Comfy-Org/Wan-2.2",
+        note="The high- and low-noise FP8 models, matching four-step adapters, Wan VAE and shared text encoder used by this endpoint workflow. Review the source licences before downloading.",
+        files=[
+            _file("diffusion_models", "WAN\\wan2.2_i2v_high_noise_14B_fp8_scaled.safetensors", "Comfy-Org/Wan-2.2", "ee6f4a40737a995bf5818954cfce6d59443b0f04", "split_files/diffusion_models/wan2.2_i2v_high_noise_14B_fp8_scaled.safetensors", 14294742832, "6122e79d55e0f235698d11d657f3b196c5273c830da00b2b013c5a048d5e6a42"),
+            _file("diffusion_models", "WAN\\wan2.2_i2v_low_noise_14B_fp8_scaled.safetensors", "Comfy-Org/Wan-2.2", "ee6f4a40737a995bf5818954cfce6d59443b0f04", "split_files/diffusion_models/wan2.2_i2v_low_noise_14B_fp8_scaled.safetensors", 14294742832, "5471a457b6ac404202a5fbe6c11595a3d5641fc766b00f38763f72303fffc21e"),
+            CATALOG["wan_animate_2"]["files"][1],
+            _file("vae", "wan_2.1_vae.safetensors", "Comfy-Org/Wan-2.1", "123acf1cc74bccbb9bfff8ac1ee72edc08c2341d", "split_files/vae/wan_2.1_vae.safetensors", 253815318, "2fc39d31359a4b0a64f55876d8ff7fa8d780956ae2cb13463b0223e15148976b"),
+            _file("loras", "wan2.2_i2v_lightx2v_4steps_lora_v1_high_noise.safetensors", "Comfy-Org/Wan-2.2", "ee6f4a40737a995bf5818954cfce6d59443b0f04", "split_files/loras/wan2.2_i2v_lightx2v_4steps_lora_v1_high_noise.safetensors", 1226977424, "d176c808d6fc461999b68e321efcb7501b20b8c3797523ed0df14f7d1deff11e"),
+            _file("loras", "wan2.2_i2v_lightx2v_4steps_lora_v1_low_noise.safetensors", "Comfy-Org/Wan-2.2", "ee6f4a40737a995bf5818954cfce6d59443b0f04", "split_files/loras/wan2.2_i2v_lightx2v_4steps_lora_v1_low_noise.safetensors", 1226977424, "024f21de095bc8fad9809ded3e9e49a2e170dcf27075da8145ba7d60d8aab7f9"),
+        ]),
+    "sam31": dict(name="SAM 3.1 · person and object selection", gated=False,
+        license_url="https://huggingface.co/Comfy-Org/sam3.1",
+        note="Selection checkpoint used by masked workflows. Downloading it separately does not install the OpenJutsu H3 models.",
+        files=[CATALOG["openjutsu_h3"]["files"][4]]),
+    "wan22_style": dict(name="Wan 2.2 Animate · relight and realism adapters", gated=False,
+        license_url="https://huggingface.co/vrgamedevgirl84/Wan14BT2VFusioniX",
+        note="The exact two adapters used by the Wan 2.2 character workflow. Kijai's conversion repository does not state a licence; review both sources and their upstream terms.",
+        files=[
+            _file("loras", "WanAnimate_relight_lora_fp16_resized_from_128_to_dynamic_22.safetensors", "Kijai/WanVideo_comfy", "8260d429d19fd7a72304cad059160b95d843913f", "LoRAs/Wan22_relight/WanAnimate_relight_lora_fp16_resized_from_128_to_dynamic_22.safetensors", 272805784, "5e723593ee0b4f6202061ae9d84edd3661de8ee9afa237b5dd29db623e203df0"),
+            _file("loras", "Wan14B_RealismBoost.safetensors", "vrgamedevgirl84/Wan14BT2VFusioniX", "b9793a1f84727f2f69bdffecc2f50f0abfa746a6", "OtherLoRa's/Wan14B_RealismBoost.safetensors", 306848616, "1cd2217d7df8f2e4de76f8a890174cced33d551cffb58d42f6d6f7f7a6d1c654"),
+        ]),
+    "zimage_turbo": dict(name="Z-Image Turbo · native BF16 recipe", gated=False,
+        license_url="https://huggingface.co/Comfy-Org/Z-Image-Turbo",
+        note="Includes the diffusion model, Qwen text encoder and VAE for Studio's existing image recipe. Requires ComfyUI offloading on 16 GB systems. No reference-image support in this recipe.",
+        files=[
+            _file("diffusion_models", "z_image_turbo_bf16.safetensors", "Comfy-Org/Z-Image-Turbo", "6fc90a3b1b653e935a0d175e260736de25b84df5", "split_files/diffusion_models/z_image_turbo_bf16.safetensors", 12309866400, "2407613050b809ffdff18a4ac99af83ea6b95443ecebdf80e064a79c825574a6"),
+            _file("text_encoders", "qwen_3_4b.safetensors", "Comfy-Org/Z-Image-Turbo", "6fc90a3b1b653e935a0d175e260736de25b84df5", "split_files/text_encoders/qwen_3_4b.safetensors", 8044982048, "6c671498573ac2f7a5501502ccce8d2b08ea6ca2f661c458e708f36b36edfc5a"),
+            _file("vae", "ae.safetensors", "Comfy-Org/Z-Image-Turbo", "6fc90a3b1b653e935a0d175e260736de25b84df5", "split_files/vae/ae.safetensors", 335304388, "afc8e28272cd15db3919bacdb6918ce9c1ed22e96cb12c4d5ed0fba823529e38"),
+        ]),
     "fasth3_draft": dict(name="FastH3 · reference video draft", gated=False,
         license_url="https://huggingface.co/FastVideo/FastH3-Omni-Comfy",
         note="Experimental faster draft. Includes the shared MiniMax H3 encoder and VAEs; install the SelfLift node pack separately. Review all source repositories and upstream licences.",

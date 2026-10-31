@@ -1,4 +1,5 @@
 """Small streaming delivery adapter around ComfyUI's installed HDR/video nodes."""
+from .media_tools import find_media_tool
 from pathlib import Path
 import io
 import subprocess
@@ -7,7 +8,7 @@ import torch
 import numpy as np
 from .paintout import encode_ct, native_colour, resize, sdr_view
 
-def correct_video_clock(path,fps):
+def correct_video_clock(path,fps,hdr=False):
     rate=Fraction(str(fps)).limit_denominator(100000)
     temp=path.with_name(path.stem+'_clock.mp4')
     ticks=rate.denominator;timescale=rate.numerator
@@ -15,18 +16,22 @@ def correct_video_clock(path,fps):
     # source clock after concatenation, without re-encoding image samples.
     # Packet-count expressions need no prescale option (absent in older FFmpeg).
     expression=f'setts=pts=N*{ticks}/{timescale}/TB:dts=N*{ticks}/{timescale}/TB:duration={ticks}/{timescale}/TB'
-    subprocess.run(['ffmpeg','-v','error','-i',str(path),'-map','0:v:0','-c:v','copy','-bsf:v',expression,'-video_track_timescale',str(timescale),'-y',str(temp)],check=True,capture_output=True)
+    # Native chunk concatenation can drop primaries/transfer metadata. Set the
+    # final H.264 VUI and MP4 colour fields together, without re-encoding pixels.
+    if hdr:expression+=',h264_metadata=colour_primaries=9:transfer_characteristics=18:matrix_coefficients=9'
+    colour=['-color_primaries','bt2020','-color_trc','arib-std-b67','-colorspace','bt2020nc'] if hdr else []
+    subprocess.run([find_media_tool('ffmpeg'),'-v','error','-i',str(path),'-map','0:v:0','-c:v','copy','-bsf:v',expression,*colour,'-video_track_timescale',str(timescale),'-y',str(temp)],check=True,capture_output=True)
     temp.replace(path)
 
 def copy_source_audio(path,plate):
     """Trim original audio to the selected image range; preserve video samples."""
     source=plate.get('source',{})
     if source.get('kind')!='video':return False
-    probe=subprocess.run(['ffprobe','-v','error','-select_streams','a:0','-show_entries','stream=index','-of','csv=p=0',source['path']],check=True,capture_output=True,text=True)
+    probe=subprocess.run([find_media_tool('ffprobe'),'-v','error','-select_streams','a:0','-show_entries','stream=index','-of','csv=p=0',source['path']],check=True,capture_output=True,text=True)
     if not probe.stdout.strip():return False
     temporary=path.with_name(path.stem+'_audio.mp4')
     start=plate['start']/plate['fps'];duration=plate['count']/plate['fps']
-    subprocess.run(['ffmpeg','-v','error','-i',str(path),'-ss',str(start),'-i',source['path'],'-map','0:v:0','-map','1:a:0','-c:v','copy','-c:a','aac','-b:a','192k','-af','asetpts=PTS-STARTPTS','-t',str(duration),'-movflags','+faststart','-y',str(temporary)],check=True,capture_output=True)
+    subprocess.run([find_media_tool('ffmpeg'),'-v','error','-i',str(path),'-ss',str(start),'-i',source['path'],'-map','0:v:0','-map','1:a:0','-c:v','copy','-c:a','aac','-b:a','192k','-af','asetpts=PTS-STARTPTS','-t',str(duration),'-movflags','+faststart','-y',str(temporary)],check=True,capture_output=True)
     temporary.replace(path)
     return True
 
@@ -79,7 +84,7 @@ class Delivery:
         pixels=(images.detach().cpu().clamp(0,1).numpy()*65535).round().astype('<u2')
         rate=str(self.plate.get('fps_rational',self.plate['fps']))
         colour=['-color_primaries','bt2020','-color_trc','arib-std-b67','-colorspace','bt2020nc'] if hdr else ['-color_primaries','bt709','-color_trc','iec61966-2-1','-colorspace','bt709']
-        command=['ffmpeg','-v','error','-f','rawvideo','-pix_fmt','rgb48le','-s',f'{w}x{h}','-r',rate,'-i','pipe:0','-an','-c:v','libx264','-pix_fmt','yuv444p10le','-preset','ultrafast','-crf','18','-bf','0',*colour,'-f','matroska','pipe:1']
+        command=[find_media_tool('ffmpeg'),'-v','error','-f','rawvideo','-pix_fmt','rgb48le','-s',f'{w}x{h}','-r',rate,'-i','pipe:0','-an','-c:v','libx264','-pix_fmt','yuv444p10le','-preset','ultrafast','-crf','18','-bf','0',*colour,'-f','matroska','pipe:1']
         result=subprocess.run(command,input=pixels.tobytes(),capture_output=True,check=True)
         return InputImpl.VideoFromFile(io.BytesIO(result.stdout))
 
@@ -103,7 +108,7 @@ class Delivery:
             video=InputImpl.VideoFromList(chunks,codec=Types.VideoCodec.H264)
             # Uses the same VIDEO implementation as native Create Video / Save Video.
             video.save_to(str(path),format=Types.VideoContainer.MP4,codec=Types.VideoCodec.AUTO)
-            correct_video_clock(path,self.plate.get('fps_rational',self.plate['fps']))
+            correct_video_clock(path,self.plate.get('fps_rational',self.plate['fps']),hdr=name=='paintout_HLG_10bit.mp4')
             copy_source_audio(path,self.plate)
             rel=path.relative_to(Path(folder_paths.get_output_directory()))
             results.append({'filename':rel.name,'subfolder':str(rel.parent).replace('\\','/'),'type':'output'})

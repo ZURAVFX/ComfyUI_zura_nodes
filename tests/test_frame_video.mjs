@@ -42,8 +42,20 @@ const stored={};const localStorage={getItem:k=>stored[k],setItem:(k,v)=>stored[k
 let history={},queue={queue_pending:[],queue_running:[]};const calls=[],events=new Map();
 const owner={root:document.querySelector('#root'),studio:{close(){}},app:{},api:{apiURL:p=>p,clientId:'test',addEventListener:(n,h)=>events.set(n,h)},show:()=>{},fetch:async(path,body)=>{calls.push({path,body});if(path.startsWith('/object_info/')){const type=path.split('/').at(-1);return {[type]:info[type]};}if(path==='/prompt'){queue.queue_pending=[[0,'our-job']];return {prompt_id:'our-job'};}if(path.startsWith('/history/'))return history;if(path==='/queue'&&!body)return queue;return {};}};
 const ui=new FrameVideoWorkspace(owner);await ui.loadModels();ui.assets={first:{...config.first,filename:'first.png'},last:{...config.last,filename:'last.png'},audio:{...config.audio,filename:'reference.wav'}};ui.$('prompt').value=config.prompt;ui.$('audio-enabled').checked=true;ui.render();assert.equal(ui.$('generate').disabled,false);assert.equal(ui.$('audio-file-button').hidden,false);
+const originalMissingContext=ui.modelDownloads.setMissingContext.bind(ui.modelDownloads);let lastMissing;
+ui.modelDownloads.setMissingContext=(route,missing)=>{lastMissing={route,missing};return originalMissingContext(route,missing);};
+ui.$('engine').value='ltx';ui.$('output').value='hlg_video';
+ui.hdrOutput.onSetup({route:'hdr_sdr',ready:false,files:[{filename:'hdr-adapter.safetensors',ready:false}],missingNodes:['HDRMissingNode']});ui.render();
+assert.ok(lastMissing.missing.includes('hdr-adapter.safetensors'),'HDR model remains in setup after rerender');
+assert.ok(lastMissing.missing.includes('HDRMissingNode'),'HDR node remains in setup after rerender');
+const originalLoadModels=ui.loadModels,originalPreflight=ui.hdrOutput.preflight;let refreshedHDR=false;
+ui.loadModels=async()=>{};ui.hdrOutput.preflight=async()=>{refreshedHDR=true;ui.hdrOutput.onSetup({route:'hdr_sdr',ready:true,files:[{filename:'hdr-adapter.safetensors',ready:true}],missingNodes:[]});};
+await ui.refreshSetup();assert.equal(refreshedHDR,true,'Refreshing models rechecks HDR readiness');assert.ok(!lastMissing.missing.includes('hdr-adapter.safetensors'),'Installed HDR adapter is removed from missing requirements');
+ui.loadModels=originalLoadModels;ui.hdrOutput.preflight=originalPreflight;
+ui.$('output').value='sdr';ui.$('output').dispatchEvent(new window.Event('change'));assert.ok(!lastMissing.missing.includes('hdr-adapter.safetensors'),'SDR does not require the HDR adapter');
+ui.hdrSetup=null;ui.$('engine').value='h3';ui.render();
 const firstAsset=ui.assets.first,lastAsset=ui.assets.last,audioAsset=ui.assets.audio;
-assert.equal(ui.page.querySelectorAll('.zf-remove-frame').length,2);
+assert.equal(ui.page.querySelectorAll('.zf-remove-frame').length,3,'Both frame inputs and the audio reference have remove buttons');
 for(const slot of ['first','last']){assert.equal(ui.$('remove-'+slot).getAttribute('aria-label'),`Remove ${slot} frame`);assert.equal(ui.$('remove-'+slot).hidden,false);assert.ok(ui.$('remove-'+slot).querySelector('svg'));}
 ui.$('remove-first').click();assert.equal(ui.assets.first,undefined);assert.equal(ui.assets.last,lastAsset);assert.equal(ui.assets.audio,audioAsset);assert.equal(ui.$('prompt').value,config.prompt);assert.equal(ui.$('generate').disabled,true);assert.match(ui.$('note').textContent,/first frame/);assert.equal(ui.$('note').hidden,false);assert.equal(ui.$('remove-first').hidden,true);assert.equal(ui.$('remove-last').hidden,false);assert.equal(ui.page.querySelector('[data-frame="first"] img'),null);assert.equal(JSON.parse(stored['zura-first-last-v1']).assets.first,undefined);assert.match(ui.$('image-slot').querySelector('img').src,/last.png/);
 ui.assets.first=firstAsset;ui.render();ui.preview();
@@ -65,12 +77,14 @@ const restoredOwner={...owner,root:document.createElement('section')},restored=n
 // reopen the hidden resolution panel before Generate becomes available.
 const legacy=JSON.parse(stored['zura-first-last-v1']);legacy.draft.width=720;stored['zura-first-last-v1']=JSON.stringify(legacy);
 const migrated=new FrameVideoWorkspace(restoredOwner);await migrated.loadModels();assert.equal(migrated.config().width,736);assert.equal(migrated.$('generate').disabled,false);migrated.close();
-ui.$('audio-enabled').checked=false;ui.$('audio-enabled').dispatchEvent(new window.Event('change'));assert.equal(ui.assets.audio.file,'reference.wav','Toggling off retains the uploaded track');assert.equal(ui.$('audio-file-button').hidden,true);
+ui.$('audio-enabled').checked=false;ui.$('audio-enabled').dispatchEvent(new window.Event('change'));assert.equal(ui.assets.audio.file,'reference.wav','Toggling off retains the uploaded track');assert.equal(ui.$('audio-slot').hidden,false,'The retained audio remains visible so it can be removed');assert.equal(ui.$('remove-audio').hidden,false);
 assert.equal(ui.page.querySelectorAll('[data-frame]').length,2);assert.equal(ui.page.querySelectorAll('[data-reference]').length,0);
 await ui.generate();assert.equal(ui.job.id,'our-job');assert.equal(calls.filter(c=>c.path==='/prompt').length,1);const submitted=calls.find(c=>c.path==='/prompt').body.prompt;assert.ok(!submitted.audio_guide);assert.ok(!submitted.last);assert.ok(!('last_frame' in submitted.endpoints.inputs));assert.equal(submitted.endpoints.inputs.width,736);assert.equal(submitted.endpoints.inputs.height,1280);
 assert.equal(ui.$('remove-first').disabled,true);ui.removeFrame('first');assert.equal(ui.assets.first,firstAsset,'Removing a frame cannot change an active run');assert.equal(ui.job.id,'our-job');
 assert.ok(!submitted.output_size,'The selected dimensions are sampled natively without a resizing stage');
 await ui.cancel();assert.deepEqual(calls.find(c=>c.path==='/interrupt').body,{prompt_id:'our-job'});assert.deepEqual(calls.find(c=>c.path==='/queue'&&c.body).body,{delete:['our-job']});
+assert.equal(ui.$('cancel').disabled,true);assert.equal(JSON.parse(stored['zura-first-last-v1']).job.cancelPending,true);const interruptCount=calls.filter(c=>c.path==='/interrupt').length;await ui.cancel();assert.equal(calls.filter(c=>c.path==='/interrupt').length,interruptCount);
+const duringCancel=new FrameVideoWorkspace(restoredOwner);assert.equal(duringCancel.job.cancelPending,true);assert.equal(duringCancel.$('cancel').disabled,false);assert.match(duringCancel.$('cancel').textContent,/Retry cancellation/);duringCancel.close();
 while(ui.polling)await new Promise(r=>setTimeout(r,1));history={'our-job':{status:{completed:true},outputs:{save:{images:[{filename:'result.mp4',subfolder:'zura/first_last'}]}}}};await ui.poll();assert.equal(ui.job,null);assert.equal(ui.items.length,1);assert.equal(ui.$('result').hidden,false);assert.match(ui.$('result').src,/result.mp4/);
 ui.$('remove-first').click();assert.equal(ui.$('result').hidden,true);assert.equal(ui.$('image-slot').hidden,true);assert.equal(ui.$('empty').hidden,false);assert.equal(ui.items.length,1,'Clearing endpoint inputs keeps completed takes in history');assert.equal(ui.$('remove-first').hidden,true);assert.equal(ui.$('remove-last').hidden,true);assert.equal(ui.$('generate').disabled,true);
 ui.$('clear').click();assert.equal(ui.items.length,0);assert.equal(ui.$('result').hidden,true);assert.equal(ui.$('result').getAttribute('src'),null);ui.close();

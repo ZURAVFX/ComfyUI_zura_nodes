@@ -61,6 +61,35 @@ class Queue:
 
 
 class RuntimeTests(unittest.TestCase):
+    def test_native_opening_cannot_switch_to_sdr_or_another_engine(self):
+        p, _ = example()
+        p['starting_asset'] = {'native_hdr': {'asset_id': 'e' * 32}}
+        controller = self.controller()
+        controller.collect = lambda project: project
+        with patch.dict('os.environ', {'ZURA_LTX_HDR_PERFORMANCE': '1'}):
+            for changes in ({'engine': 'h3'}, {'ltx_output': 'sdr'}):
+                config = {**p['config'], 'ltx_output': 'hlg_and_exr', **changes}
+                with self.subTest(changes=changes), self.assertRaises(ValueError):
+                    controller.configure(copy.deepcopy(p), config)
+
+    def test_native_finished_frame_can_use_guided_create_look_without_image_generation(self):
+        p, _ = example()
+        p['config']['ltx_output'] = 'hlg_and_exr'
+        p.update(look_mode='ready', starting_asset={'native_hdr': {'asset_id': 'e' * 32}},
+                 opening_input=None, phase='review')
+        p['prepared_key'] = studio.prep_key(p)
+        controller = self.controller()
+        controller.collect = lambda project: project
+        opening = importlib.import_module(NAME + '.opening')
+        with patch.dict('os.environ', {'ZURA_LTX_HDR_PERFORMANCE': '1'}), \
+                patch.object(studio, 'check_asset'), patch.object(studio, 'require_verified_setup'), \
+                patch.object(sys.modules[NAME], 'verify_review', create=True), \
+                patch.object(opening, 'bind_uploaded_opening') as bind:
+            result = asyncio.run(controller.action(p, 'create_look', {'request_key': 'a' * 36}))
+        bind.assert_called_once()
+        self.assertEqual(result['approval'], studio.prep_key(result))
+        self.assertFalse(controller.server.prompt_queue.submitted, 'A supplied EXR does not queue an image generator')
+
     def controller(self):
         queue = Queue()
         controller = studio.Studio.__new__(studio.Studio)
@@ -314,7 +343,7 @@ class RuntimeTests(unittest.TestCase):
                 def __enter__(self): return container
                 def __exit__(self, *args): return None
             with patch.object(studio, "assert_approved"), patch.object(studio, "check_asset", return_value=root / "source.mp4"), \
-                    patch.object(package, "verify_review", return_value=(root, manifest), create=True), \
+                    patch.object(sys.modules[NAME], "verify_review", return_value=(root, manifest), create=True), \
                     patch.object(studio.av, "open", return_value=Context()), \
                     patch.object(studio.folder_paths, "get_full_path", return_value=str(union)), \
                     patch.object(studio.folder_paths, "get_folder_paths", return_value=[str(detector_roots)], create=True):
@@ -333,8 +362,50 @@ class RuntimeTests(unittest.TestCase):
             self.assertEqual(actual["scenario"], "silent")
             self.assertNotIn("audio", actual["phases"]["decode"]["create_video"]["inputs"])
 
+    def test_native_hdr_plan_resolves_original_exr_and_pins_full_vae(self):
+        p, _ = example()
+        p["config"].update(resolution=512, ltx_output="hlg_and_exr")
+        p["source"] = {**p["source"], "native_hdr_video": {"asset_id": "f" * 32, "sha": p["source"]["sha"], "colour_space": "auto"}}
+        p["opening_input"] = {**p["opening_input"], "native_hdr": {"asset_id": "e" * 32}}
+        p["approval"] = studio.prep_key(p)
+        native_input = importlib.import_module(NAME + ".ltx25_hdr_input")
+        native_source = importlib.import_module(NAME + ".ltx_hdr_performance")
+        endpoints = importlib.import_module(NAME + ".ltx_hdr_endpoints")
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "source.mp4").write_bytes(b"reviewed source")
+            union = root / "union.safetensors"
+            header = json.dumps({"__metadata__": {"reference_downscale_factor": "2"}}).encode()
+            union.write_bytes(len(header).to_bytes(8, "little") + header)
+            detector = root / "detector"
+            detector.write_bytes(b"detector")
+            manifest = {"clip": {"frames": 48, "fps": 24, "start": 0, "has_audio": True}}
+            container = types.SimpleNamespace(streams=types.SimpleNamespace(video=[types.SimpleNamespace(width=704, height=1280)]))
+            class Context:
+                def __enter__(self): return container
+                def __exit__(self, *args): return None
+            endpoint = {"manifest": "verified.json", "sha": "f" * 64,
+                        "colour_space": "acescg", "opening_key": p["opening_key"]}
+            source_info={"asset_id":"f"*32,"file":p["source"]["file"],"sha":p["source"]["sha"],
+                "colour_space":"auto","start_seconds":0,"frames":48,"fps":24}
+            with patch.object(studio, "assert_approved"), patch.object(studio, "check_asset", return_value=root / "source.mp4"), \
+                    patch.object(studio, "Store", return_value=object()), \
+                    patch.object(native_input, "resolve_opening", return_value=endpoint), \
+                    patch.object(native_source, "source_interval", return_value=source_info), \
+                    patch.object(sys.modules[NAME], "verify_review", return_value=(root, manifest), create=True), \
+                    patch.object(studio.av, "open", return_value=Context()), \
+                    patch.object(studio.folder_paths, "get_full_path", return_value=str(union)) as paths, \
+                    patch.object(studio, "ltx25_detector_paths", return_value={"bbox_detector": detector, "pose_estimator": detector}):
+                result = studio.ltx25_native_plan(p)
+            self.assertIn(("vae", endpoints.VIDEO_VAE), [call.args for call in paths.call_args_list])
+            self.assertEqual(result["basis"]["models"]["video_vae"], endpoints.VIDEO_VAE)
+            self.assertEqual(result["phases"]["stage1"]["opening"]["class_type"], "ZuraHDRLoadNativeSource")
+            self.assertEqual(result["hdr_delivery"]["output"], "hlg_and_exr")
+            self.assertEqual(result["basis"]["native_hdr"]["source"]["asset_id"],"f"*32)
+
     def test_final_delivery_is_verified_and_collected_once(self):
         p, plan = example()
+        p['config']['ltx_output'] = 'hlg_and_exr'
         controller = self.controller()
         enhancement = importlib.import_module(NAME + ".enhancement")
         with tempfile.TemporaryDirectory() as directory:
@@ -359,9 +430,59 @@ class RuntimeTests(unittest.TestCase):
                     controller._collect_ltx25_phase(p, action, history)
                     controller._collect_ltx25_phase(p, action, history)
                 self.assertEqual(len(p["results"]), 1)
+                self.assertEqual(p['results'][0]['hdr_output'], 'hlg_and_exr')
+                self.assertEqual(p['results'][0]['seed'], p['config']['seed'])
+                self.assertEqual(p['results'][0]['asset']['filename'], path.name)
                 self.assertEqual(p["phase"], "done")
                 self.assertEqual(inspector.call_args.kwargs, {"expected_frames": 48, "expected_width": 704,
                     "expected_height": 1280, "expected_fps": 24, "expected_audio_tracks": 1})
+
+    def test_native_hdr_decode_rebinds_verified_cache_and_delivers_native_files(self):
+        p, sdr = example()
+        p["config"].update(resolution=512, ltx_output="hlg_and_exr")
+        hdr = importlib.import_module(NAME + ".ltx25_hdr_plan")
+        models = dict(sdr["basis"]["models"], video_vae=hdr.VIDEO_VAE)
+        plan = hdr.build_native_hdr_plan(p, hdr_endpoint={"manifest": "verified.json", "sha": "d" * 64,
+            "colour_space": "acescg", "opening_key": p["opening_key"]},
+            scenario=sdr["scenario"], timeline=sdr["basis"]["timeline"], models=models,
+            model_pins=sdr["basis"]["model_pins"], text_encoder_inputs=sdr["basis"]["encoder"],
+            approval_key=p["approval"], original_audio_sha="c" * 64)
+        p["ltx25_run"].update(plan=plan, receipts={})
+        controller = self.controller()
+        collector = importlib.import_module(NAME + ".ltx25_hdr_result")
+        with tempfile.TemporaryDirectory() as directory:
+            output, input_root = self.roots(directory)
+            with patch.object(studio.folder_paths, "get_output_directory", return_value=str(output), create=True), \
+                    patch.object(studio.folder_paths, "get_input_directory", return_value=str(input_root)):
+                for phase in ltx.PHASES[:-1]:
+                    self.produce(controller, p, phase, output, input_root)
+                graph = ltx.bind_phase(plan, "decode", p["ltx25_run"]["receipts"],
+                    output_directory=output, input_directory=input_root)
+                action = {"id": "hdr-decode", "stage": "ltx25_decode", "graph": graph,
+                    "ltx25_plan_key": plan["key"], "resolution": 512, "quality": "fast", "state": "running"}
+                history = {"prompt": [0, action["id"], graph],
+                    "status": {"status_str": "success", "completed": True}, "outputs": {}}
+                asset = {"filename": "preview.mp4", "subfolder": "genj/hdr", "type": "output"}
+                delivery = {"asset": asset, "hdr_files": [{"filename": "master.mp4", "label": "HDR video"}],
+                    "output_raster": {"frames": 48, "fps": 24}, "sha256": "a" * 64,
+                    "native_hdr": True, "hdr_output": "hlg_and_exr"}
+                with patch.object(studio, "ltx25_native_plan", return_value=plan), \
+                        patch.object(collector, "collect_native_delivery", return_value=delivery) as collect:
+                    # Replacing the producer bytes after the job was queued is rejected.
+                    cache = Path(p["ltx25_run"]["receipts"]["stage2_video"]["path"])
+                    original = cache.read_bytes()
+                    cache.write_bytes(original + b"changed")
+                    with self.assertRaises(ValueError):
+                        controller._collect_ltx25_phase(p, action, history)
+                    collect.assert_not_called()
+                    cache.write_bytes(original)
+                    controller._collect_ltx25_phase(p, action, history)
+                    controller._collect_ltx25_phase(p, action, history)
+                    self.assertEqual(len(p["results"]), 1)
+                    self.assertTrue(p["results"][0]["native_hdr"])
+                    self.assertEqual(p["results"][0]["hdr_files"], delivery["hdr_files"])
+                    self.assertEqual(p["results"][0]["asset"], asset)
+                    self.assertEqual(p["phase"], "done")
 
     def test_files_changing_during_successful_phase_are_not_accepted(self):
         p, plan = example()

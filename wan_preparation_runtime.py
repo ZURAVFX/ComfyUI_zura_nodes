@@ -111,8 +111,8 @@ def validate_render_cache_pin(value, root, shot_id, total_frames, *, render_long
         if render_long_edge not in (None,0):
             raise ValueError("Wan preparation uses another reviewed render resolution.")
     else:
-        match = re.fullmatch(r"render_audio_v2_([0-9]+)_x[12]_"+str(total_frames)+r"f",source.parent.name)
-        if (source.parent.parent != review or not match or not 256 <= int(match[1]) <= 1920 or
+        match = re.fullmatch(r"render_audio_v(?:2|3)_([0-9]+)_x[12]_"+str(total_frames)+r"f(?:_aspect)?",source.parent.name)
+        if (source.parent.parent != review or not match or source.parent.name.startswith('render_audio_v2_') and source.parent.name.endswith('_aspect') or not 256 <= int(match[1]) <= 4096 or
                 (render_long_edge is not None and int(match[1]) != render_long_edge)):
             raise ValueError("Wan preparation derived pair belongs to another render resolution or review.")
     return value

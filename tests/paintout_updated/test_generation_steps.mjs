@@ -1,0 +1,24 @@
+import assert from 'node:assert/strict';
+import {describeGeneration,updateGenerationSteps} from '../../web/paintout_studio/paintout_generation_steps.js';
+assert.equal(describeGeneration({}).current,-1);
+assert.match(describeGeneration({}).help,/queued/);
+for(const node of ['frame_crop','frame_model','frame_text','frame_subject_detect'])assert.equal(describeGeneration({currentNode:node}).current,0,node);
+assert.equal(describeGeneration({currentNode:'frame_sample'}).current,1);
+for(const node of ['frame_decode','frame_save'])assert.equal(describeGeneration({node}).current,2,node);
+assert.match(describeGeneration({node:'frame_sample'}).next,/new layer/);
+for(const node of ['sample','hdr_sample'])assert.equal(describeGeneration({node}).current,1,node);
+for(const node of ['decode','crop_guides','repair_save','hdr_decode','hdr_save'])assert.equal(describeGeneration({node}).current,2,node);
+assert.equal(describeGeneration({node:'hdr_prepare',phase:'hdr'}).current,0);
+assert.match(describeGeneration({node:'sample',phase:'repair'}).next,/retry HDR without repeating/);
+assert.match(describeGeneration({node:'hdr_sample',phase:'hdr'}).next,/HDR clip/);
+assert.deepEqual(describeGeneration({node:'mask_pass',kind:'mask'}).steps,['Prepare','Track','Save']);
+assert.match(describeGeneration({node:'mask_pass',kind:'mask',single:true}).next,/choose Track mask/);
+class Element{constructor(){this.children=[];this.attributes={};}setAttribute(k,v){this.attributes[k]=v;}append(child){this.children.push(child);}replaceChildren(...children){this.children=children;}}
+globalThis.document={createElement:()=>new Element()};
+const container=new Element();updateGenerationSteps(container,{currentNode:'frame_sample'});
+assert.equal(container.children[0].children[1].attributes['aria-current'],'step');
+assert.equal(container.children[0].children[0].className,'is-complete');
+assert.equal(container.children[0].children[2].attributes['aria-current'],undefined);
+updateGenerationSteps(container,{});assert.ok(container.children[0].children.every(step=>!step.attributes['aria-current']&&!step.className));
+updateGenerationSteps(container,null);assert.equal(container.hidden,true);assert.equal(container.children.length,0);
+console.log('PASS: honest queued state, clean-frame/render/HDR/mask phase mapping, next actions, accessible active step and idle hiding');

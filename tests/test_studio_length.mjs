@@ -9,6 +9,11 @@ assert.equal(recoverClipLength({...original,engine:'local'},20).duration,15);
 assert.equal(recoverClipLength({...original,engine:'local',workflow_mode:'motion'},20).duration,5);
 assert.equal(recoverClipLength({...original,engine:'wan',audio_id:'speech',lip_sync:true},45).duration,30);
 assert.equal(clipLength({...original,length_mode:'custom',duration:5},15).invalid,false);
+assert.equal(clipLength({...original,length_mode:'custom',duration:2.1},15).frames,51, 'Custom selections keep the fractional end frame');
+assert.equal(clipLength({...original,length_mode:'custom',duration:2.1},15).deliveryFrames,56, 'H3 holds to its next supported length');
+assert.equal(clipLength({...original,engine:'wan',workflow_mode:'relight',length_mode:'custom',duration:2.1},15).deliveryFrames,53, 'Wan relight holds to its next supported length');
+assert.equal(clipLength({...original,engine:'local',length_mode:'custom',duration:2.1},15).deliveryFrames,57, 'LTX holds to its next supported length');
+assert.equal(clipLength({...original,engine:'wan',workflow_mode:'relight'}, 53/25).frames,51, 'Full source rounds up so its final fraction is not discarded');
 // Execute the actual CTA handler without browser APIs or any Comfy queue.
 const source=fs.readFileSync(new URL('../web/studio.js',import.meta.url),'utf8').replace(/^import .*;\r?\n/gm,'').replace(/^export /gm,'').split('app.registerExtension({')[0];
 const context={app:{registerExtension(){}},clipLength,recoverClipLength};
@@ -41,5 +46,5 @@ assert.equal(clipLength(relight,15).invalid,false);
 assert.equal(clipLength({...relight,length_mode:'original'},45).maximum,null,'Full-source relight is not limited by the custom-selection cap');
 assert.equal(clipLength({...relight,length_mode:'original'},45).invalid,false);
 assert.equal(clipLength({...relight,duration:31},45).invalid,true,'Custom durations beyond the backend limit are rejected before submission');
-assert.equal(clipLength({...relight,relight_engine:'h3'},15).invalid,true,'The H3 relight limit remains enforced');
+assert.equal(clipLength({...relight,relight_engine:'h3'},15).invalid,false,'Saved legacy relight choices migrate to the Wan 2.1 route before generation');
 assert.equal(clipLength({...relight,engine:'wan2',workflow_mode:'motion',duration:4},15).invalid,true,'Wan Animate 2 retains its real 81-frame limit');

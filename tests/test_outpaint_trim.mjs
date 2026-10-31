@@ -1,6 +1,10 @@
 import assert from 'node:assert/strict';
 import {parseHTML} from '../../ui-check/node_modules/linkedom/esm/index.js';
-import {OutpaintTrim} from '../web/studio_outpaint_trim.js';
+import {OutpaintTrim,hdrOutpaintFrameLimit} from '../web/studio_outpaint_trim.js';
+
+assert.equal(hdrOutpaintFrameLimit({width:1920,height:1080},1088,640),17,'the original HDR source limits the padded selection');
+assert.equal(hdrOutpaintFrameLimit({width:7680,height:4320},1088,640),0,'unsafe source raster is rejected before queueing');
+assert.equal(hdrOutpaintFrameLimit({width:128,height:128},512,320),113,'small sources use the bounded model limit');
 
 const {document}=parseHTML(`<section><div class="settings"><label>Start <input data-start value="0"></label><label>Length <input data-duration value="2"></label></div><video></video><textarea data-prompt></textarea></section>`);
 globalThis.document=document;
@@ -27,6 +31,7 @@ assert.equal(Number(workspace.$('duration').value),2.5,'dragging the end changes
 trim.button.click();
 assert.equal(workspace.$('start').value,'0');
 assert.equal(Number(workspace.$('duration').value),4.25,'same as input restores the complete source');
+workspace.source.duration=53/25;trim.initial();trim.button.click();assert.equal(Number(workspace.$('duration').value),53/25,'fractional source duration is not cut to whole 24 fps frames');
 workspace.source.duration=10;
 trim.initial();
 assert.equal(Number(workspace.$('duration').value),5);

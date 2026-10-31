@@ -208,6 +208,16 @@ class BoundedDecodeTests(unittest.TestCase):
                 self.assertEqual(tuple(frames.shape), (2, 32, 64, 3))
                 self.assertEqual(tuple(mask.shape), (2, 32, 64))
 
+                current_cache = review_dir / "render_audio_v3_768_x1_3f_aspect"
+                current_cache.mkdir()
+                current_source = write_video(current_cache / "source.mp4", pixels)
+                current_mask = write_video(current_cache / "mask.mp4", resized_review_mask)
+                current_details = {**high_details, "selected_path": str(current_source)}
+                current_frames, _, _, _, _ = parts.decode_preparation_window(
+                    InputImpl.VideoFromFile(str(current_source)), InputImpl.VideoFromFile(str(current_mask)),
+                    current_details, 0, 2, interrupt=lambda: None)
+                self.assertEqual(tuple(current_frames.shape), (2, 32, 64, 3))
+
                 altered = resized_review_mask.copy()
                 altered[:, 8:24, 12:36] = 0
                 write_video(high_mask, altered)
@@ -223,6 +233,21 @@ class BoundedDecodeTests(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, "exact source/mask files"):
                     parts.decode_preparation_window(InputImpl.VideoFromFile(str(arbitrary_source)),
                         InputImpl.VideoFromFile(str(arbitrary_mask)), details, 0, 2, interrupt=lambda: None)
+
+    def test_review_paths_accept_current_loader_cache_and_high_resolution(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            review = root / 'genj' / 'reviews' / 'shot_0123456789abcdef'
+            review.mkdir(parents=True)
+            for cache in ('render_audio_v2_3840_x1_3f', 'render_audio_v3_3840_x1_3f', 'render_audio_v3_3840_x1_3f_aspect'):
+                details = {'review_shot_id':'shot_0123456789abcdef', 'render_long_edge':3840,
+                           'frames':3, 'selected_path':str(review / cache / 'source.mp4')}
+                _, source, mask = parts._expected_review_video_paths(root, details)
+                self.assertEqual(source, review / cache / 'source.mp4')
+                self.assertEqual(mask, review / cache / 'mask.mp4')
+            details['selected_path'] = str(review / 'render_audio_v3_3840_x1_4f_aspect' / 'source.mp4')
+            with self.assertRaisesRegex(ValueError, 'outside its approved render cache'):
+                parts._expected_review_video_paths(root, details)
 
     def test_rejects_review_mask_changed_after_approval(self):
         with tempfile.TemporaryDirectory() as tmp:

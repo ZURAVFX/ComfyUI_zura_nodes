@@ -137,6 +137,20 @@ class ProgressEstimatorTests(unittest.TestCase):
 
 
 class NativeAdapterTests(unittest.TestCase):
+    def test_handoffs_explain_the_work_without_inventing_steps_or_eta(self):
+        adapter = NativeProgressAdapter(registry_getter=lambda: None)
+        expected = {"text": "Preparing prompt", "motion": "Preparing motion guidance",
+                    "stage1": "Generating video · pass 1 of 2", "upscale": "Upscaling video",
+                    "refine": "Refining video · pass 2 of 2", "decode": "Decoding and saving video",
+                    "cleanup": "Preparing the next step", "unknown": "Preparing video"}
+        for phase, label in expected.items():
+            with self.subTest(phase=phase):
+                result = adapter.project_progress(None, "server", {
+                    "id": "handoff", "state": "running", "stage": "ltx25_" + phase})
+                self.assertEqual(result["stage_label"], "LTX 2.5 · " + label)
+                self.assertIsNone(result["stage_percent"])
+                self.assertIsNone(result["stage_remaining_seconds"])
+
     def test_design_sampler_reports_image_without_changing_video_actions(self):
         registry = self.registry("image", {"sampler": {"state": "running", "value": 2, "max": 4}})
         adapter = NativeProgressAdapter(registry_getter=lambda: registry)

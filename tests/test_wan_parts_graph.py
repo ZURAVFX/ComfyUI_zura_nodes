@@ -74,6 +74,21 @@ class PreparationGraphTests(unittest.TestCase):
             with patch.object(coordinator,"prepare_next_part_graph",side_effect=lambda project,graph,key:graph):
                 return wan.build_wan_graph(self.project)
 
+    def test_render_cache_pins_accept_current_loader_and_reject_wrong_resolution(self):
+        for name in ('render_audio_v3_3840_x1_120f', 'render_audio_v3_3840_x1_120f_aspect'):
+            folder = self.review / name
+            folder.mkdir()
+            pins = {}
+            for label in ('source', 'mask'):
+                path = folder / (label + '.mp4')
+                path.write_bytes(label.encode())
+                stat = path.stat()
+                pins[label] = {'path':str(path), 'sha256':hashlib.sha256(path.read_bytes()).hexdigest(),
+                               'size':stat.st_size, 'mtime_ns':stat.st_mtime_ns}
+            runtime.validate_render_cache_pin(pins, self.root, self.review.name, self.total, render_long_edge=3840)
+            with self.assertRaisesRegex(ValueError, 'another render resolution'):
+                runtime.validate_render_cache_pin(pins, self.root, self.review.name, self.total, render_long_edge=1920)
+
     def next_graph(self, cold):
         return coordinator.prepare_next_part_graph(self.project,cold,KEY)
 

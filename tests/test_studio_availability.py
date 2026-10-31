@@ -1,6 +1,7 @@
 """Retired UI choices cannot enqueue jobs through saved projects or stale clients."""
 import asyncio
 import copy
+import importlib
 import json
 import sys
 import types
@@ -9,6 +10,11 @@ from unittest.mock import AsyncMock, patch
 
 from test_artist_studio import studio
 from ComfyUI_zura_nodes.artist_studio.availability import require_verified_setup, verified_setup
+
+# Load the native extensions before patch.dict snapshots sys.modules. Otherwise
+# leaving the first registered-route test drops numpy/scipy modules and a later
+# route registration tries to load their native extensions a second time.
+importlib.import_module("ComfyUI_zura_nodes.paintout.paintout")
 
 
 class AvailabilityTests(unittest.TestCase):
@@ -20,6 +26,18 @@ class AvailabilityTests(unittest.TestCase):
             for extra in ({}, {"audio_id": "a" * 32, "lip_sync": True}, {"scope": "head"}):
                 with self.subTest(engine=engine, extra=extra):
                     self.assertTrue(verified_setup(self.config(engine=engine, **extra)))
+
+    def test_animate2_keeps_both_background_routes_and_blocks_unapproved_scope(self):
+        for mode, area in (("swap", "mask"), ("motion", "scene")):
+            config = self.config(engine="wan2", workflow_mode=mode)
+            self.assertEqual(config["edit_area"], area)
+            self.assertTrue(verified_setup(config))
+            require_verified_setup(config, "wan2")
+        config = self.config(engine="wan2", workflow_mode="swap")
+        for changes in ({"scope": "head"}, {"mask_method": "points"},
+                        {"subject_mode": "objects"}, {"audio_id": "a" * 32}):
+            with self.subTest(changes=changes):
+                self.assertFalse(verified_setup({**config, **changes}))
 
     def test_ltx_performance_route_allows_original_replacement_and_silent_clips(self):
         # Absence of a selected track permits original audio or a silent source;
@@ -44,11 +62,11 @@ class AvailabilityTests(unittest.TestCase):
             require_verified_setup(config, stage)
         with self.assertRaisesRegex(ValueError, "selected Relight video graph"):
             require_verified_setup(config, "h3")
-        # An already-running legacy H3 job can still finish on its own backend.
+        # Saved legacy choices migrate for new actions; running jobs finish independently.
         legacy = {**config, "relight_engine": "h3"}
-        require_verified_setup(legacy, "h3")
+        require_verified_setup(legacy, "wan21_relight")
         with self.assertRaisesRegex(ValueError, "selected Relight video graph"):
-            require_verified_setup(legacy, "wan21_relight")
+            require_verified_setup(legacy, "h3")
         self.assertFalse(verified_setup({**config, "audio_id": "voice"}))
         self.assertFalse(verified_setup({**config, "engine": "wan"}))
 
@@ -91,6 +109,38 @@ class AvailabilityTests(unittest.TestCase):
         for stage in ("h3", "h3_enhance", "draft", "final", "background", "restyle"):
             with self.subTest(stage=stage), self.assertRaisesRegex(ValueError, "stage"):
                 require_verified_setup(self.config(), stage)
+
+    def test_http_create_hdr_objects_requires_verified_original(self):
+        from ComfyUI_zura_nodes.artist_studio import ltx_hdr_performance as hdr
+        from ComfyUI_zura_nodes.artist_studio.ltx25_hdr_input import validate_config
+        async def exercise():
+            source = {"id":"source", "name":"HDR", "asset_kind":"video", "native_hdr_video": {
+                "asset_id":"a"*32, "sha":"b"*64, "colour_space":"auto"}}
+            controller = types.SimpleNamespace(lock=asyncio.Lock(), start_watcher=lambda: None,
+                store=types.SimpleNamespace(load=lambda _: source), configure=lambda p, c: p)
+            server = types.SimpleNamespace(routes=studio.web.RouteTableDef())
+            module = types.ModuleType("server"); module.PromptServer = types.SimpleNamespace(instance=server)
+            cfg = self.config(engine="local", workflow_mode="motion", subject_mode="objects", ltx_output="hlg_video")
+            request = types.SimpleNamespace(headers={}, host="local", json=AsyncMock(return_value={"source":"source", "config":cfg, "look_mode":"source_hdr"}))
+            def verify(src, store, check, config):
+                validate_config(config)
+                if src.get("bad"): raise ValueError("HDR source identity is invalid")
+                return {"ok":True}
+            with patch.dict(sys.modules, {"server":module}), patch.object(studio, "Studio", return_value=controller), \
+                 patch.object(studio, "public_project", side_effect=lambda p:p), patch.object(hdr, "verify_source", side_effect=verify), \
+                 patch("ComfyUI_zura_nodes.artist_studio.appearance.resolve_appearance", return_value={}):
+                studio.register()
+                route = next(r for r in server.routes if r.path == "/zura/studio/projects" and r.method == "POST")
+                with patch.dict("os.environ", {"ZURA_LTX_HDR_PERFORMANCE":"1"}):
+                    self.assertEqual((await route.handler(request)).status, 200)
+                    source["bad"] = True
+                    self.assertEqual((await route.handler(request)).status, 400)
+                    source.pop("bad"); source.pop("native_hdr_video")
+                    self.assertEqual((await route.handler(request)).status, 400)
+                source["native_hdr_video"] = {"asset_id":"a"*32, "sha":"b"*64, "colour_space":"auto"}
+                with patch.dict("os.environ", {"ZURA_LTX_HDR_PERFORMANCE":"0"}):
+                    self.assertEqual((await route.handler(request)).status, 400)
+        asyncio.run(exercise())
 
     def test_real_http_action_handler_blocks_legacy_projects_before_submission(self):
         async def exercise():

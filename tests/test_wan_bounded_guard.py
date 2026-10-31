@@ -17,6 +17,7 @@ from unittest.mock import patch
 
 import torch
 import soundfile
+import numpy as np
 
 import test_bounded_video_audio as media
 import test_wan_speech as fixtures
@@ -314,7 +315,7 @@ class BoundedSpeechGuardTests(unittest.TestCase):
         output_root.mkdir(parents=True,exist_ok=True)
         namespace = {"CATEGORY":"Zura/Artist Studio","Path":Path,"re":re,"av":media.av,
             "InputImpl":media.InputImpl,"digest_file":io.file_digest,"source_path":lambda v:Path(v.get_stream_source()),
-            "root":lambda:output_root,"ffmpeg":ffmpeg}
+            "root":lambda:output_root,"ffmpeg":ffmpeg,"np":np}
         exec(compile(ast.Module(body=[definition],type_ignores=[]),str(path),"exec"),namespace)
         generated = media.NativeFile(str(media.write_video(self.fixture.base/"neutral-generated.mov",count=24)))
         result = namespace["GenjRestoreSoundtrack"]().restore(generated,{**self.details,"full_source":False},"neutral_take")
@@ -338,6 +339,47 @@ class BoundedSpeechGuardTests(unittest.TestCase):
         result = namespace["GenjRestoreSoundtrack"]().restore(short,{**self.details,"full_source":False},"short_take")
         self.assertEqual(io.inspect_video(result["result"][0]).frames,24)
         self.assertIn('tpad=stop_mode=clone:stop=1', calls[-1][calls[-1].index('-vf')+1])
+        padded = media.NativeFile(str(media.write_video(self.fixture.base/"neutral-padded.mov",count=25)))
+        extended = namespace["GenjRestoreSoundtrack"]().restore(padded,{**self.details,"full_source":False},"padded_take",target_frames=25)
+        self.assertEqual(io.inspect_video(extended["result"][0]).frames,25)
+        self.assertIn('apad',calls[-1][calls[-1].index('-af')+1])
+        extended_audio=io.decode_selected_audio(extended["result"][0])['waveform']
+        self.assertGreaterEqual(extended_audio.shape[-1], 25000)
+        self.assertLess(float(extended_audio[...,24000:].abs().max()),.001)
+        held = namespace['GenjRestoreSoundtrack']().restore(generated,{**self.details,'full_source':False},'wan_held_take',model_stride=4)
+        self.assertEqual(io.inspect_video(held['result'][0]).frames,25)
+        self.assertIn('trim=end_frame=24,tpad=stop_mode=clone:stop=2',calls[-1][calls[-1].index('-vf')+1])
+        held_audio=io.decode_selected_audio(held['result'][0])['waveform']
+        self.assertLess(float(held_audio[...,24000:].abs().max()),.001)
+        # Source audio continues beyond the selected interval. It must not leak
+        # into a held frame, even when the selection starts partway into it.
+        long_source = self.fixture.base / 'long-audio-source.mp4'
+        ffmpeg('-f','lavfi','-i','color=size=64x64:rate=24:duration=2',
+               '-f','lavfi','-i','sine=frequency=440:sample_rate=24000:duration=2',
+               '-c:v','libx264','-c:a','aac','-shortest',long_source)
+        selected_details = {**self.details, 'source':str(long_source),
+                            'source_hash':io.file_digest(long_source), 'start':.25,
+                            'duration':1.0, 'frames':24, 'full_source':False}
+        selected_details.pop('audio_source',None)
+        selected_details.pop('audio_hash',None)
+        for label, kwargs in [('target', {'target_frames':25}), ('stride', {'model_stride':4})]:
+            output = namespace['GenjRestoreSoundtrack']().restore(padded, selected_details,
+                                                                  'long_audio_'+label, **kwargs)['result'][0]
+            wave = io.decode_selected_audio(output)['waveform']
+            self.assertGreater(float(wave[...,12000:22000].abs().mean()), .01)
+            self.assertLess(float(wave[...,24300:].abs().max()), .002)
+            self.assertEqual(io.inspect_video(output).frames,25)
+        fractional_details = {**selected_details, 'selected_duration':.97}
+        output = namespace['GenjRestoreSoundtrack']().restore(generated, fractional_details,
+                                                              'fractional_audio')['result'][0]
+        wave = io.decode_selected_audio(output)['waveform']
+        self.assertGreater(float(wave[...,12000:22000].abs().mean()), .01)
+        self.assertLess(float(wave[...,23520:].abs().max()), .002)
+        self.assertEqual(io.inspect_video(output).frames,24)
+        with self.assertRaisesRegex(ValueError,'either'):
+            namespace['GenjRestoreSoundtrack']().restore(generated,{**self.details,'full_source':False},'ambiguous',target_frames=25,model_stride=4)
+        with self.assertRaisesRegex(ValueError,'at most sixteen'):
+            namespace["GenjRestoreSoundtrack"]().restore(padded,{**self.details,"full_source":False},"invalid_take",target_frames=41)
         sized = namespace["GenjRestoreSoundtrack"]().restore(generated,{**self.details,"full_source":False},"sized_take",output_width=96,output_height=64)
         with media.av.open(str(sized["result"][0].get_stream_source())) as container:
             self.assertEqual((container.streams.video[0].width,container.streams.video[0].height),(96,64))

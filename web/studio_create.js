@@ -7,6 +7,10 @@ import {getPaintoutWorkspace} from "./paintout_studio/paintout_shared.js";
 import {installPopoverDismissal} from "./studio_popovers.js";
 import {PreviewZoom} from "./studio_preview_zoom.js";
 import {OutpaintWorkspace} from "./studio_outpaint.js";
+import {groupMissingNodes} from './studio_node_setup.js';
+import {preferredHDRFile} from './studio_native_hdr_performance.js';
+import {installOwnedExecuting} from './studio_progress.js';
+import {cancelOwnedJob,submitOwnedGraph,recoverOwnedSubmission} from './studio_owned_jobs.js';
 
 const escape=value=>String(value??"").replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const arrow=()=>'<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12h16m-6-6 6 6-6 6"/></svg>';
@@ -23,7 +27,8 @@ export class CreativeWorkspace {
     this.studio=studio;this.api=api;this.app=app;this.root=studio.container;
     this.disposePopovers=installPopoverDismissal(this.root);
     const saved=read();this.items=Array.isArray(saved.items)?saved.items.slice(0,30):[];
-    this.job=saved.job||null;this.draft=saved.draft||{};this.models=[];this.submitting=false;this.uploading=false;this.references=Array.isArray(this.draft.references)?this.draft.references:[];
+    this.job=saved.job||null;this.pendingSubmission=saved.pendingSubmission||null;this.draft=saved.draft||{};this.models=[];this.submitting=false;this.uploading=false;this.references=Array.isArray(this.draft.references)?this.draft.references:[];
+    if(this.job?.cancelPending)this.job.cancelRetryAvailable=true;
     this.imageLoras=Array.isArray(this.draft.loras)?this.draft.loras.map(l=>({...l})):[];this.imageLoraCatalog=[];
     const nav=document.createElement("nav");nav.className="zc-nav";nav.setAttribute("aria-label","Workspace");
     nav.innerHTML='<button type="button" data-space="home">Home</button><button type="button" data-space="image">Image</button><button type="button" data-space="video">Video</button><button type="button" id="zc-open-hdr">HDR</button>';
@@ -44,9 +49,9 @@ export class CreativeWorkspace {
     imageLoraSettings.innerHTML='<summary>Image LoRAs</summary><p class="zc-hint">Optional model-only adapters for this image. Video has separate settings.</p><label for="zc-image-lora-picker">Installed LoRA</label><select id="zc-image-lora-picker"><option value="">Open to load installed LoRAs</option></select><button type="button" id="zc-image-lora-add">Add LoRA</button><div id="zc-image-lora-list"></div><p id="zc-image-lora-message" class="zc-hint" role="status"></p>';
     page.querySelector('.zc-image-settings .zc-advanced').before(imageLoraSettings);
     imageLoraSettings.addEventListener('toggle',()=>{if(imageLoraSettings.open)this.loadImageLoras();});
-    this.$('image-lora-add').onclick=()=>{const name=this.$('image-lora-picker').value;if(this.job||this.submitting||!name||this.imageLoras.length>=4||this.imageLoras.some(item=>item.name===name))return;this.imageLoras.push({name,strength:1,confirm_unknown:false});this.save();this.renderImageLoras();};
-    this.$('image-lora-list').addEventListener('click',event=>{if(this.job||this.submitting)return;const button=event.target.closest('[data-image-lora-remove]');if(!button)return;this.imageLoras.splice(Number(button.dataset.imageLoraRemove),1);this.save();this.renderImageLoras();});
-    this.$('image-lora-list').addEventListener('change',event=>{if(this.job||this.submitting)return;const input=event.target,index=Number(input.dataset.imageLoraIndex),item=this.imageLoras[index];if(!item)return;if(input.dataset.imageLoraField==='strength')item.strength=Number(input.value);if(input.dataset.imageLoraField==='confirm')item.confirm_unknown=!!input.checked;this.save();this.renderImageLoras();});
+    this.$('image-lora-add').onclick=()=>{const name=this.$('image-lora-picker').value;if(this.job||this.pendingSubmission||this.submitting||!name||this.imageLoras.length>=4||this.imageLoras.some(item=>item.name===name))return;this.imageLoras.push({name,strength:1,confirm_unknown:false});this.save();this.renderImageLoras();};
+    this.$('image-lora-list').addEventListener('click',event=>{if(this.job||this.pendingSubmission||this.submitting)return;const button=event.target.closest('[data-image-lora-remove]');if(!button)return;this.imageLoras.splice(Number(button.dataset.imageLoraRemove),1);this.save();this.renderImageLoras();});
+    this.$('image-lora-list').addEventListener('change',event=>{if(this.job||this.pendingSubmission||this.submitting)return;const input=event.target,index=Number(input.dataset.imageLoraIndex),item=this.imageLoras[index];if(!item)return;if(input.dataset.imageLoraField==='strength')item.strength=Number(input.value);if(input.dataset.imageLoraField==='confirm')item.confirm_unknown=!!input.checked;this.save();this.renderImageLoras();});
     // One action, alongside the prompt, in both workspaces. Existing IDs and
     // handlers remain the source of truth for every approved video route.
     const composer=this.root.querySelector(".gs-composer");
@@ -92,7 +97,7 @@ export class CreativeWorkspace {
     this.$("seed").value=Number.isSafeInteger(this.draft.seed)?this.draft.seed:42;
     this.$("random").checked=this.draft.random!==false;
     this.$("prompt").oninput=()=>{this.save();this.render();};
-    this.$("model").onchange=()=>{this.save();this.render();this.renderImageLoras();};
+    this.$("model").onchange=()=>{this.save();this.render();this.renderImageLoras();const model=this.models.find(item=>item.id===this.$('model').value);if(model&&!model.ready){this.$('setup').closest('details').open=true;this.$('setup').querySelector(`[data-image-model="${model.id}"]`)?.scrollIntoView?.({block:'nearest'});}};
     for(const id of ["width","height"])this.$(id).oninput=()=>{this.save();this.render();};
     for(const key of ['width','height'])editableDimension(this.$(key),()=>{this.imageSizeRatio=Number(this.$('width').value)/Number(this.$('height').value);this.save();this.render();},()=>({step:16,min:256,max:2048}));
     this.$("swap-size").onclick=()=>{const w=this.$("width").value;this.$("width").value=this.$("height").value;this.$("height").value=w;this.save();this.render();};
@@ -122,12 +127,12 @@ export class CreativeWorkspace {
     drop.ondragleave=()=>drop.classList.remove("is-dragging");
     drop.ondrop=e=>{e.preventDefault();e.stopPropagation();drop.classList.remove("is-dragging");this.uploadReferences(Array.from(e.dataTransfer?.files||[]));};
     this.root.onpaste=e=>this.pasteReferences(e);
-    this.$("reference-list").onclick=e=>{if(this.job||this.uploading)return;const remove=e.target.closest("[data-remove-ref]"),move=e.target.closest("[data-move-ref]");if(remove)this.references.splice(Number(remove.dataset.removeRef),1);if(move){const i=Number(move.dataset.moveRef);[this.references[i-1],this.references[i]]=[this.references[i],this.references[i-1]];}this.save();this.render();};
+    this.$("reference-list").onclick=e=>{if(this.job||this.pendingSubmission||this.submitting||this.uploading)return;const remove=e.target.closest("[data-remove-ref]"),move=e.target.closest("[data-move-ref]");if(remove)this.references.splice(Number(remove.dataset.removeRef),1);if(move){const i=Number(move.dataset.moveRef);[this.references[i-1],this.references[i]]=[this.references[i],this.references[i-1]];}this.save();this.render();};
     this.$("clear-references").onclick=()=>{this.references=[];this.save();this.render();};
     this.$("refresh").onclick=()=>this.loadModels();this.$("cancel").onclick=()=>this.cancel();
     this.$("new").onclick=()=>{this.$("prompt").value="";this.save();this.render();this.$("prompt").focus({preventScroll:true});};
     this.$("gallery").onclick=e=>{
-      if(this.job||this.submitting||this.uploading)return;
+      if(this.job||this.pendingSubmission||this.submitting||this.uploading)return;
       const button=e.target.closest("[data-reuse]");if(!button)return;
       const item=this.items[Number(button.dataset.reuse)];
       this.setImageOperation(IMAGE_MODELS.find(m=>m.id===item.model)?.edit?'edit':'create');
@@ -135,8 +140,8 @@ export class CreativeWorkspace {
       const size=imageDimensions(item);this.$("width").value=size[0];this.$("height").value=size[1];this.$("seed").value=item.seed;this.$("random").checked=false;this.save();this.render();
     };
     this.root.querySelector("#gs-exit").onclick=()=>this.mode==="image"?this.graph():this.mode==="frames"?this.frames.graph():this.mode==="references"?this.referencesVideo.graph():this.mode==="paintout"?this.paintout.graph():this.mode==="outpaint"?this.outpaint.graph():studio.graphView();
-    this.api.addEventListener?.("progress",event=>{const d=event.detail;if(!this.job||d?.prompt_id!==this.job.id||!Number.isFinite(d.value)||!(d.max>0))return;const node=d.node||this.job.currentNode||"sample",sampling=node==="sample",names={text:"Loading text encoder",prompt:"Reading your prompt",model:"Loading image model",sample:"Generating image",decode:"Decoding image",save:"Saving image"};this.$("bar").value=Math.max(0,Math.min(100,100*d.value/d.max));this.$("progress-title").textContent=`${names[node]||"Processing image"} · ${sampling?"Step":"Progress"} ${d.value} of ${d.max}`;this.$("progress-detail").textContent=this.elapsed();});
-    this.api.addEventListener?.("executing",event=>{const d=event.detail;if(!this.job||d?.prompt_id!==this.job.id||!d.node)return;this.job.currentNode=d.node;const names={text:"Loading text encoder",prompt:"Reading your prompt",model:"Loading image model",sample:"Generating image",decode:"Decoding image",save:"Saving image"};this.$("bar").removeAttribute("value");this.$("progress-title").textContent=names[d.node]||"Preparing image";});
+    this.api.addEventListener?.("progress",event=>{const d=event.detail;if(!this.job||this.job.cancelPending||d?.prompt_id!==this.job.id||!Number.isFinite(d.value)||!(d.max>0))return;const node=d.node||this.job.currentNode||"sample",sampling=node==="sample",names={text:"Loading text encoder",prompt:"Reading your prompt",model:"Loading image model",sample:"Generating image",decode:"Decoding image",save:"Saving image"};this.$("bar").value=Math.max(0,Math.min(100,100*d.value/d.max));this.$("progress-title").textContent=`${names[node]||"Processing image"} · ${sampling?"Step":"Progress"} ${d.value} of ${d.max}`;this.$("progress-detail").textContent=this.elapsed();});
+    installOwnedExecuting(this.api,event=>{const d=event.detail;if(!this.job||this.job.cancelPending||d?.prompt_id!==this.job.id||!d.node)return;this.job.currentNode=d.node;const names={text:"Loading text encoder",prompt:"Reading your prompt",model:"Loading image model",sample:"Generating image",decode:"Decoding image",save:"Saving image"};this.$("bar").removeAttribute("value");this.$("progress-title").textContent=names[d.node]||"Preparing image";});
     for(const [id,hint] of [["zc-swap-size","Swap image width and height"],["zc-clear-history","Hide previous images from this workspace. Saved files stay on disk."],["zc-add-references","Upload reference images, or paste an image with Ctrl+V."],["zc-settings-toggle","Choose a model, exact dimensions and seed."],["gs-exit","Open the editable ComfyUI graph with your current media."]]){
       const control=this.root.querySelector("#"+id);if(!control)continue;
       control.title=hint;
@@ -202,7 +207,13 @@ export class CreativeWorkspace {
     const results=this.studio.project?.results||[];this.$('take-count').textContent=String(results.length);
     const take=this.root.querySelector('.zc-take-drawer');take.hidden=!results.length;
     const download=this.$('download-take');download.hidden=!results.length;
-    if(results.length)download.href=results.at(-1).url;
+    if(results.length){
+      const result=results.at(-1),hdrTake=this.videoComposer?.ltxOutput?.result(this.studio.project);
+      const file=preferredHDRFile(hdrTake?.hdrFiles||result.hdr_files);
+      download.href=file?this.api.apiURL('/view?'+new URLSearchParams(file)):result.url;
+      download.download=file?.filename||'zura-take.mp4';
+      download.querySelector('span').textContent=file?(file.filename.endsWith('.zip')?'Download EXRs':'Download HDR'):result.native_hdr?'Download SDR preview':'Download';
+    }
     this.root.querySelector('.zc-viewer-views').hidden=this.studio.$('preview-tabs').hidden;
     this.studio.$('preview-description').title=this.studio.$('preview-description').textContent;
   }
@@ -232,7 +243,7 @@ export class CreativeWorkspace {
     if(persist)try{localStorage.setItem("zura-studio-theme",theme);}catch{this.message("Theme changed for this session. Browser storage is unavailable.");}
   }
   $(id){return this.root.querySelector("#zc-"+id);}
-  async fetch(path,body){const r=await this.api.fetchApi(path,body===undefined?{}:{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});let data;try{data=await r.json();}catch{if(r.ok)return {};throw new Error("ComfyUI is unavailable. Reconnect and try again.");}if(!r.ok)throw new Error(data.error?.message||data.error||"ComfyUI could not complete this request.");return data;}
+  async fetch(path,body){const r=await this.api.fetchApi(path,body===undefined?{}:{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});let data;try{data=await r.json();}catch{if(r.ok)return {};const e=new Error("ComfyUI is unavailable. Reconnect and try again.");e.status=r.status;throw e;}if(!r.ok){const e=new Error(data.error?.message||data.error||"ComfyUI could not complete this request.");e.status=r.status;throw e;}return data;}
   imageLoraFamily(){return {flux2:'flux2_klein9b',klein9b:'flux2_klein9b',flux3:'flux3_klein',qwen2511:'qwen2511',zimage:'zimage'}[this.$('model').value]||null;}
   async loadImageLoras(){try{const data=await this.fetch('/zura/studio/loras');this.imageLoraCatalog=Array.isArray(data.loras)?data.loras:[];this.$('image-lora-message').textContent='';this.renderImageLoras();}catch(error){this.$('image-lora-message').textContent=error.message;}}
   renderImageLoras(){
@@ -240,8 +251,8 @@ export class CreativeWorkspace {
     picker.innerHTML='<option value="">Choose an installed LoRA</option>'+this.imageLoraCatalog.map(entry=>{const unusable=!entry.usable||/ic[-_]lora/i.test(entry.name)||entry.metadata_family&&entry.metadata_family!==family;return `<option value="${escape(entry.name)}" ${unusable?'disabled':''}>${escape(entry.name)}${unusable?' · incompatible':''}</option>`;}).join('');
     picker.value=selected;
     list.innerHTML=this.imageLoras.map((item,index)=>{const info=this.imageLoraCatalog.find(entry=>entry.name===item.name),unknown=!info?.metadata_family;return `<div class="zc-image-lora-row"><strong>${escape(item.name)}</strong><button type="button" data-image-lora-remove="${index}" aria-label="Remove ${escape(item.name)}">Remove</button><label>Strength<input type="number" min="-2" max="2" step="0.05" value="${escape(item.strength)}" data-image-lora-index="${index}" data-image-lora-field="strength"/></label>${unknown?`<label class="zc-check"><input type="checkbox" data-image-lora-index="${index}" data-image-lora-field="confirm" ${item.confirm_unknown?'checked':''}/> I checked this LoRA matches the selected image model</label>`:''}</div>`;}).join('');
-    this.$('image-lora-add').disabled=!family||this.imageLoras.length>=4||!!this.job||this.submitting;
-    picker.disabled=!!this.job||this.submitting;list.querySelectorAll('input,button').forEach(control=>control.disabled=!!this.job||this.submitting);
+    this.$('image-lora-add').disabled=!family||this.imageLoras.length>=4||!!this.job||!!this.pendingSubmission||this.submitting;
+    picker.disabled=!!this.job||!!this.pendingSubmission||this.submitting;list.querySelectorAll('input,button').forEach(control=>control.disabled=!!this.job||!!this.pendingSubmission||this.submitting);
   }
   async imageGraph(config){
     if(!config.loras?.length)return buildImageGraph(config);
@@ -251,31 +262,57 @@ export class CreativeWorkspace {
   }
   config(){return {operation:this.imageOperation,model:this.$("model").value||(this.imageOperation==='edit'?'qwen2511':'flux2'),prompt:this.$("prompt").value,shape:this.$("shape").value,references:this.references.map(r=>({...r})),loras:this.imageLoras.map(l=>({...l})),width:Number(this.$("width").value),height:Number(this.$("height").value),seed:Number(this.$("seed").value),random:this.$("random").checked};}
   setImageOperation(operation){
-    if(this.job||this.submitting||this.uploading)return;
+    if(this.job||this.pendingSubmission||this.submitting||this.uploading)return;
     this.imageOperation=operation;
     for(const option of this.$('model').querySelectorAll('option'))option.hidden=!!this.models.find(m=>m.id===option.value)?.edit!==(operation==='edit');
-    if(!this.models.some(m=>m.id===this.$('model').value&&m.ready&&!!m.edit===(operation==='edit')))this.$('model').value=this.models.find(m=>m.ready&&!!m.edit===(operation==='edit'))?.id||'';
+    if(!this.models.some(m=>m.id===this.$('model').value&&!!m.edit===(operation==='edit')))this.$('model').value=this.models.find(m=>m.ready&&!!m.edit===(operation==='edit'))?.id||this.models.find(m=>!!m.edit===(operation==='edit'))?.id||'';
     this.save();this.render();
   }
-  save(){this.draft=this.config();try{localStorage.setItem(KEY,JSON.stringify({draft:this.draft,items:this.items,job:this.job}));}catch{this.message("Browser storage is full. Your files still save in ComfyUI/output/zura_images.");}}
+  save(){this.draft=this.config();try{localStorage.setItem(KEY,JSON.stringify({draft:this.draft,items:this.items,job:this.job,pendingSubmission:this.pendingSubmission}));return true;}catch{this.message("Browser storage is full. Your files still save in ComfyUI/output/zura_images.");return false;}}
   message(text){this.$("message").textContent=text||"";this.$("message").hidden=!text;}
   open(){
+    this.modelDownloadClosed=false;
+    this.videoComposer?.ltxOutput?.open();
     this.disposePopovers=installPopoverDismissal(this.root);
     this.show(this.mode||'home');
   }
-  openHDR(){
+  openHDR({preferSource=false}={}){
     const tool=this.studio.hdrTool;if(!tool)return;
-    let ref=null;
-    if(this.mode==='frames'&&this.frames&&!this.frames.$('result').hidden){
+    if(this.mode!=='hdr')this.hdrReturnMode=this.mode||'video';
+    const destination=this.mode==='outpaint'?'frame extension':this.mode==='video'?'LTX performance':'paintout';
+    tool.$('use-video').textContent='Use in '+destination;
+    if(preferSource&&['outpaint','paintout','video'].includes(this.mode))tool.$('mode').value='native';
+    tool.$('back').onclick=()=>this.show(this.hdrReturnMode||'video');
+    tool.onUseVideo=this.mode==='paintout'&&this.paintout&&this.studio.modelStatus?.hdr_paintout_handoff?async(asset,colour,output)=>{
+      const exports={hlg_and_exr:'EXR + HLG video',hlg_video:'HLG video',acescg_exr:'EXR sequence'};
+      await this.paintout.importStudioHDR(asset.id,colour,exports[output]||'HLG video');this.show('paintout');
+    }:this.mode==='video'&&this.studio.modelStatus?.native_hdr_performance&&this.studio.config.engine==='local'&&this.studio.config.workflow_mode==='motion'&&this.studio.config.edit_area==='scene'?async(asset,colour)=>{
+      const source=await this.fetch('/zura/studio/ltx/hdr-performance/source',{asset_id:asset.id,colour_space:colour});
+      const parts=source.file.split('/');source.url=this.api.apiURL('/view?'+new URLSearchParams({filename:parts.pop(),subfolder:parts.join('/'),type:'input'}));
+      this.studio.source=source;this.studio.hdrSourceLook=false;this.studio.project=null;this.studio.lastVideo=null;localStorage.removeItem('genj-studio-project');
+      Object.assign(this.studio.config,{start:0,duration:Math.min(2,source.duration),mask_points:[],ltx_output:'hlg_and_exr'});
+      this.studio.trimSeeking=false;this.studio.trimSeekTime=null;this.studio.pointFrameStart=0;this.studio.syncForm();this.show('video');this.studio.render();
+      this.studio.message('HDR video loaded. Choose an HDR EXR or use the source frame for its appearance.');
+    }:this.mode==='outpaint'&&this.outpaint?.capabilities?.hdr_expand_experiment?async(asset,colour)=>{
+      await this.outpaint.importStudioHDR(asset,colour);this.show('outpaint');
+    }:null;
+    tool.onUseResult=this.mode==='paintout'&&this.paintout&&this.studio.modelStatus?.hdr_paintout_handoff?async(ref,output)=>{
+      const exports={hlg_and_exr:'EXR + HLG video',hlg_video:'HLG video',acescg_exr:'EXR sequence'};
+      await this.paintout.importStudioHDROutput(ref,exports[output]||'HLG video');this.show('paintout');
+    }:null;
+    let ref=null,source=null;
+    if(!preferSource&&this.mode==='frames'&&this.frames&&!this.frames.$('result').hidden){
       const file=this.frames.selectedResult,item=this.frames.items.find(value=>value.file===file||value.file?.filename===file?.filename&&value.file?.subfolder===file?.subfolder);
-      if(item?.config?.engine==='ltx')ref=file;
-    }else if(this.mode==='outpaint'&&this.outpaint&&!this.outpaint.result.hidden)ref=this.outpaint.outputRef;
-    else if(this.mode==='paintout'&&this.paintout?.view==='result'){
+      if(item?.config?.engine==='ltx'){ref=file;tool.$('mode').value='sdr';}
+    }else if(this.mode==='outpaint'&&this.outpaint){if(!preferSource&&!this.outpaint.result.hidden){ref=this.outpaint.outputRef;if(ref&&typeof this.outpaint.outputIsHDR==='boolean')tool.$('mode').value=this.outpaint.outputIsHDR?'native':'sdr';}else source=this.outpaint.source;}
+    else if(!preferSource&&this.mode==='paintout'&&this.paintout?.view==='result'){
       const result=this.paintout.result;ref=[result?.master,result?.file].find(file=>/\.(mp4|mov|mkv|webm)$/i.test(file?.filename||''));
-    }else if(this.mode==='video'&&this.studio.config.engine==='local')ref=this.studio.project?.results?.at(-1)?.asset;
-    this.show('video');tool.setOutput(ref);
-    if(!ref&&!this.studio.source?.id){tool.$('source-kind').value='own';tool.updateMode();}
-    tool.root.open=true;this.studio.revealControl(tool.root,tool.root.querySelector('summary'));
+    }else if(!preferSource&&this.mode==='video'&&this.studio.config.engine==='local')ref=this.studio.project?.results?.at(-1)?.asset;
+    tool.setOutput(ref);
+    if(!ref&&source?.id)tool.setOwnAsset(source);
+    else if(!ref&&this.mode==='video'&&this.studio.source?.id){tool.$('source-kind').value='upload';tool.updateMode();}
+    else if(!ref){tool.$('source-kind').value='own';tool.updateMode();}
+    this.show('hdr');
   }
   show(mode){
     this.mode=mode;this.root.dataset.workspace=mode;
@@ -286,17 +323,19 @@ export class CreativeWorkspace {
     this.videoComposer?.mountWorkflow(mode);
     // Set real visibility as well as the CSS state, so another page cannot
     // cover navigation when the workspace changes or styles are still loading.
-    const pages={'.zc-home':'home','.zc-image-page':'image','.zf-page:not(.zr-page):not(.zp-page)':'frames','.zr-page':'references','.zp-page':'paintout','.zo-page':'outpaint','.gs-workspace':'video','.gs-steps':'video'};
+    const pages={'.zc-home':'home','.zc-image-page':'image','.zf-page:not(.zr-page):not(.zp-page):not(.zh-page)':'frames','.zr-page':'references','.zp-page':'paintout','.zh-page':'hdr','.zo-page':'outpaint','.gs-workspace':'video','.gs-steps':'video'};
     for(const child of this.root.children)for(const [selector,space] of Object.entries(pages))if(child.matches(selector))child.hidden=mode!==space;
     for(const b of this.root.querySelectorAll('.zc-nav [data-space]'))b.setAttribute('aria-current',b.dataset.space===(['frames','references','paintout','outpaint'].includes(mode)?'video':mode)?'page':'false');
     this.root.querySelectorAll('video,audio').forEach(m=>m.pause());
+    this.root.querySelector('#zc-open-hdr').setAttribute('aria-current',mode==='hdr'?'page':'false');
+    if(mode==='hdr')this.studio.hdrTool?.activate();else this.studio.hdrTool?.deactivate();
     if(mode==='video')this.videoComposer?.sync();
     if(mode==='image'&&!this.models.length)this.loadModels();
     if(mode==='frames')this.frames.open();
     if(mode==='references')this.referencesVideo.open();
     if(mode==='paintout')this.paintout.open();
     if(mode==='outpaint')this.outpaint.open();
-    if(this.job)this.startPolling();
+    if(this.job||this.pendingSubmission)this.startPolling();
   }
   async loadModels(){
     if(this.loading)return;this.loading=true;
@@ -305,18 +344,23 @@ export class CreativeWorkspace {
       const parts=await Promise.all(types.map(t=>this.fetch("/object_info/"+t)));
       this.models=imageAvailability(Object.assign({},...parts));const edit=this.imageOperation==='edit';
       let available=[],activeDownload=null;try{const catalogue=await this.fetch('/zura/studio/model-downloads');available=catalogue.models||[];activeDownload=catalogue.active||null;}catch{}
-      const map={flux2:'flux2_klein_9b',flux3:'flux3_klein',klein9b:'flux2_klein_9b',qwen2511:'qwen2511'};
-      for(const model of this.models){const pack=available.find(p=>p.id===map[model.id]);for(const file of pack?.files||[])if(file.incomplete){model.ready=false;model.missing.push(`${file.filename} (wrong size)`);}}
-      this.$("model").innerHTML=this.models.map(m=>`<option value="${m.id}" ${!!m.edit===edit?'':'hidden'} ${m.ready?"":"disabled"}>${escape(m.name)}${m.ready?"":" · Setup needed"}</option>`).join("");
-      this.$("model").value=this.models.find(m=>m.id===this.draft.model&&m.ready&&!!m.edit===edit)?.id||this.models.find(m=>m.ready&&!!m.edit===edit)?.id||"";
+      const map={flux2:'flux2_klein_9b',flux3:'flux3_klein',zimage:'zimage_turbo',klein9b:'flux2_klein_9b',qwen2511:'qwen2511'};
+      // The catalogue pins a download version, not every valid local conversion.
+      // Keep Comfy's file/node readiness separate from overwrite protection.
+      for(const model of this.models){const pack=available.find(p=>p.id===map[model.id]);model.variants=(pack?.files||[]).filter(file=>file.incomplete).map(file=>file.filename);}
+      this.$("model").innerHTML=this.models.map(m=>`<option value="${m.id}" ${!!m.edit===edit?'':'hidden'}>${escape(m.name)}${m.ready?"":" · Setup needed"}</option>`).join("");
+      this.$("model").value=this.models.find(m=>m.id===this.draft.model&&!!m.edit===edit)?.id||this.models.find(m=>m.ready&&!!m.edit===edit)?.id||this.models.find(m=>!!m.edit===edit)?.id||"";
       this.$("setup").innerHTML=this.models.map(m=>{
         const pack=available.find(p=>p.id===map[m.id]);
         const gb=n=>(n/1e9).toFixed(2)+' GB';
-        const files=pack?.files?.map(f=>`${escape(f.filename)} · ${gb(f.size_bytes)}${f.installed?' · installed':f.incomplete?' · existing file has the wrong size; check or move it':''}`).join('<br>')||'';
+        const files=pack?.files?.map(f=>`${escape(f.filename)} · ${gb(f.size_bytes)}${f.installed?' · installed':f.incomplete?' · existing version differs from this download; it will not be overwritten':''}`).join('<br>')||'';
         const blocked=pack?.files?.some(f=>f.incomplete);
         const sources=pack?[...new Set(pack.files.map(f=>f.repo).filter(Boolean))].map(repo=>`<a href="https://huggingface.co/${escape(repo)}" target="_blank" rel="noopener noreferrer">${escape(repo)}</a>`).join(' · '):'';
+        const requiredNodes=groupMissingNodes(m.missing).packs;
+        const nodeSetup=requiredNodes.map(source=>`<p><a href="${escape(source.url)}" target="_blank" rel="noopener noreferrer">${escape(source.name)}</a> · ${escape(source.missing.join(', '))}${source.note?`<br>${escape(source.note)}`:''}</p>`).join('');
         const download=pack&&pack.remaining_bytes?`<p>${files}</p><p>${gb(pack.remaining_bytes)} to download. Sign in and accept the licence if required.</p>${pack.note?`<p>${escape(pack.note)}</p>`:''}<p>${sources}</p><a href="${escape(pack.license_url)}" target="_blank" rel="noopener noreferrer">Review licence and access</a> <button type="button" data-download-model="${escape(pack.id)}" ${blocked?'disabled':''}>${blocked?'Check existing files':'Download model'}</button> <button type="button" data-download-cancel="${escape(pack.id)}" hidden>Cancel</button><progress data-download-progress="${escape(pack.id)}" max="100" value="0" hidden></progress><p data-download-status="${escape(pack.id)}" aria-live="polite"></p>`:'';
-        return `<div class="zc-model-setup"><strong>${escape(m.name)}</strong><p>${m.ready?"Installed":escape("Missing: "+m.missing.join(", "))}</p>${download||`<a href="${escape(m.url)}" target="_blank" rel="noopener noreferrer">Model files & instructions</a>`}</div>`;
+        const variantNote=m.variants.length?`<p>Local file differs from the pinned download: ${escape(m.variants.join(', '))}. This can be another version; file size alone does not establish compatibility. The existing file is retained.</p>`:'';
+        return `<div class="zc-model-setup" data-image-model="${escape(m.id)}"><strong>${escape(m.name)}</strong><p>${m.ready?"Available in ComfyUI":escape("Missing: "+m.missing.join(", "))}</p>${variantNote}${nodeSetup}${download||`<a href="${escape(m.url)}" target="_blank" rel="noopener noreferrer">Model files & instructions</a>`}</div>`;
       }).join("");
       this.$('setup').onclick=event=>{const button=event.target.closest('[data-download-model]');if(button)this.startModelDownload(button.dataset.downloadModel);const cancel=event.target.closest('[data-download-cancel]');if(cancel&&this.modelDownloadJob)this.fetch('/zura/studio/model-downloads/'+encodeURIComponent(this.modelDownloadJob)+'/cancel',{}).catch(error=>this.message(error.message));};
       if(activeDownload?.id&&!this.modelDownloadActive&&this.$('setup').querySelector(`[data-download-status="${activeDownload.model_id}"]`))void this.startModelDownload(activeDownload.model_id,activeDownload.id);
@@ -330,11 +374,25 @@ export class CreativeWorkspace {
     this.modelDownloadActive=true;
     try{
       set(existingJobId?'Reconnecting to the existing download…':'Starting download…');
-      const job=existingJobId?{id:existingJobId}:await this.fetch('/zura/studio/model-downloads',{model_id:modelId});
+      let job;
+      if(existingJobId)job={id:existingJobId};
+      else try{job=await this.fetch('/zura/studio/model-downloads',{model_id:modelId});}
+      catch(startError){
+        let catalogue;
+        while(!this.modelDownloadClosed){
+          try{catalogue=await this.fetch('/zura/studio/model-downloads');break;}
+          catch{set('Connection lost. Checking whether the download started…');await new Promise(resolve=>setTimeout(resolve,1000));}
+        }
+        if(this.modelDownloadClosed)return;
+        if(catalogue?.active?.id&&catalogue.active.model_id===modelId){job={id:catalogue.active.id};set('Reconnecting to the existing download…');}
+        else if(catalogue?.active?.id)throw new Error('Another model download is already running. Refresh models to see its progress.');
+        else throw startError;
+      }
       if(!job.id)throw new Error('Download could not be started.');
       this.modelDownloadJob=job.id;
       this.$('setup').querySelectorAll(`[data-download-cancel="${modelId}"],[data-download-progress="${modelId}"]`).forEach(e=>e.hidden=false);
       for(;;){
+        if(this.modelDownloadClosed)break;
         let status;
         try{status=await this.fetch('/zura/studio/model-downloads/'+encodeURIComponent(job.id));}
         catch(error){
@@ -356,7 +414,7 @@ export class CreativeWorkspace {
   render(){
     this.styleControls();
     if(this.$('image-lora-settings').open)this.renderImageLoras();
-    const c=this.config(),m=this.models.find(m=>m.id===c.model),busy=!!this.job||this.submitting||this.uploading;
+    const c=this.config(),m=this.models.find(m=>m.id===c.model),busy=!!this.job||!!this.pendingSubmission||this.submitting||this.uploading;
     let size,error;try{size=imageDimensions(c);}catch(e){error=e.message;}
     this.$("generate").disabled=busy||!m?.ready||!c.prompt.trim()||!!error||this.references.length<(m?.minReferences||0)||this.references.length>(m?.maxReferences||0)||!!this.references.length&&!m?.referenceReady;this.$("generate").firstChild.textContent=busy?"Generating… ":this.imageOperation==='edit'?"Apply edit ":"Generate image ";
     for(const button of this.root.querySelectorAll('[data-image-operation]')){button.setAttribute('aria-pressed',String(button.dataset.imageOperation===this.imageOperation));button.disabled=busy;}
@@ -364,7 +422,7 @@ export class CreativeWorkspace {
     this.root.querySelector('.zc-image-empty>p').textContent=this.imageOperation==='edit'?'Drop or paste the source image below, then describe your change.':'Add references below, or start with a prompt.';
     this.$('prompt').placeholder=this.imageOperation==='edit'?'Describe what to change. Image 1 is your source; keep everything else…':'Describe the image you have in mind…';
     for(const id of ["model","seed","random","new","width","height","swap-size"])this.$(id).disabled=busy||(id==="model"&&!this.models.length);
-    this.$("progress").hidden=!this.job&&!this.submitting;this.$("cancel").disabled=!this.job;
+    this.$("progress").hidden=!this.job&&!this.pendingSubmission&&!this.submitting;this.$("cancel").disabled=!this.job||!!(this.job?.cancelPending&&!this.job.cancelRetryAvailable);this.$('cancel').textContent=this.job?.cancelRetryAvailable?'Retry cancellation':'Cancel run';if(this.job?.cancelPending){this.$('bar').removeAttribute('value');this.$('progress-title').textContent='Cancelling…';this.$('progress-detail').textContent='Waiting for ComfyUI to stop this run.';}else if(this.pendingSubmission){this.$('bar').removeAttribute('value');this.$('progress-title').textContent='Checking your run';this.$('progress-detail').textContent='Reconnecting without submitting again…';}
     this.$("clear-history").disabled=!this.items.length;
     const max=m?.maxReferences||0;
     this.$("add-references").disabled=busy||!max||!m?.referenceReady||this.references.length>=max;
@@ -407,11 +465,11 @@ export class CreativeWorkspace {
       return extension&&!/\.(png|jpe?g|webp)$/i.test(file.name||"")?new File([file],`Pasted image.${extension}`,{type:file.type}):file;
     });
     if(this.mode==="video"){await this.studio.upload("character",files);return;}
-    if(this.job||this.submitting||this.uploading){this.message("Wait for the current upload or generation to finish, then paste your image again.");return;}
+    if(this.job||this.pendingSubmission||this.submitting||this.uploading){this.message("Wait for the current upload or generation to finish, then paste your image again.");return;}
     await this.uploadReferences(files);
   }
   async uploadReferences(files){
-    if(this.job||this.submitting||this.uploading||!files.length)return;
+    if(this.job||this.pendingSubmission||this.submitting||this.uploading||!files.length)return;
     const m=this.models.find(m=>m.id===this.config().model);
     if(!m?.maxReferences||!m.referenceReady){this.message("Choose an installed model with image reference support.");return;}
     if(files.length+this.references.length>m.maxReferences){this.message(`Choose up to ${m.maxReferences-this.references.length} more images for ${m.name}. Nothing was discarded.`);return;}
@@ -434,26 +492,27 @@ export class CreativeWorkspace {
   }
   async generate(){
     if(['width','height'].some(k=>this.$(k).commitDimension?.()===false)){this.message('Enter a whole number for width and height.');return;}
-    if(this.job||this.submitting||this.uploading)return;
-    this.submitting=true;this.message("");this.render();
-    try{const c=this.config();if(!this.models.find(m=>m.id===c.model)?.ready)throw new Error("Install this model first, then refresh models.");if(c.random)c.seed=crypto.getRandomValues(new Uint32Array(1))[0];const graph=await this.imageGraph(c);this.$("bar").removeAttribute("value");this.$("progress-title").textContent="Submitting image";const result=await this.fetch("/prompt",{prompt:graph,client_id:this.api.clientId,extra_data:{zura_image:true}});if(!result.prompt_id)throw new Error("ComfyUI did not confirm this run. Check the queue before retrying.");this.job={id:result.prompt_id,started:Date.now(),config:c};this.$("progress-title").textContent="Queued";this.save();this.startPolling();}
-    catch(e){this.message(e.message);}finally{this.submitting=false;this.render();}
+    if(this.job||this.pendingSubmission||this.submitting||this.uploading)return;
+    this.submitting=true;const attempt={};this.submitAttempt=attempt;this.message("");this.render();
+    try{const c=this.config();if(!this.models.find(m=>m.id===c.model)?.ready)throw new Error("Install this model first, then refresh models.");if(c.random)c.seed=crypto.getRandomValues(new Uint32Array(1))[0];const graph=await this.imageGraph(c);this.$("bar").removeAttribute("value");await submitOwnedGraph(this,graph,c,'auto',{zura_image:true});}
+    catch(e){this.message(e.message);}finally{if(this.submitAttempt===attempt){this.submitting=false;this.submitAttempt=null;this.render();}}
   }
   startPolling(){if(this.timer)return;this.timer=setInterval(()=>this.poll(),1500);this.poll();}
   async poll(){
+    if(this.pendingSubmission&&!this.job)return recoverOwnedSubmission(this);
     if(!this.job||this.polling)return;this.polling=true;const job=this.job;
     try{const history=await this.fetch("/history/"+encodeURIComponent(job.id)),entry=history[job.id];if(this.job!==job)return;if(this.connectionLost){this.message("");this.connectionLost=false;}
       if(entry?.status?.completed||entry?.status?.status_str==="error"){
-        const files=entry.outputs?.save?.images||[];
+        const files=entry.status.status_str==='error'?[]:entry.outputs?.save?.images||[];
         const messages=entry.status.messages||[],start=messages.find(m=>m[0]==="execution_start")?.[1]?.timestamp,end=messages.find(m=>m[0]==="execution_success")?.[1]?.timestamp;
         for(const file of files)this.items.unshift({...job.config,file,seconds:start&&end?(end-start)/1000:null});this.items=this.items.slice(0,30);if(files.length)this.selectedImage=0;
-        const error=messages.find(m=>m[0]==="execution_error")?.[1];this.message(files.length?"":error?.exception_message||"Generation stopped. Your previous images are safe.");this.job=null;this.stopPolling();this.save();this.renderGallery();this.render();
-      }else{const queue=await this.fetch("/queue");if(this.job!==job)return;const running=queue.queue_running.some(r=>r[1]===job.id),pending=queue.queue_pending.some(r=>r[1]===job.id);if(!running&&!pending){const again=await this.fetch("/history/"+encodeURIComponent(job.id));if(this.job!==job)return;if(again[job.id])return;this.job=null;this.stopPolling();this.save();this.message("This run is no longer in ComfyUI's queue. You can generate again.");this.render();}else this.$("progress-detail").textContent=running?this.elapsed():"Waiting for other ComfyUI jobs";}
+        const error=messages.find(m=>m[0]==="execution_error")?.[1];this.message(files.length?(job.cancelPending?"Image finished before cancellation. Your image is saved.":""):error?.exception_message||(job.cancelPending?"Run cancelled. Your previous images are safe.":"Generation stopped. Your previous images are safe."));this.job=null;this.stopPolling();this.save();this.renderGallery();this.render();
+      }else{const queue=await this.fetch("/queue");if(this.job!==job)return;const running=queue.queue_running.some(r=>r[1]===job.id),pending=queue.queue_pending.some(r=>r[1]===job.id);if(!running&&!pending){const again=await this.fetch("/history/"+encodeURIComponent(job.id));if(this.job!==job)return;if(again[job.id])return;this.job=null;this.stopPolling();this.save();this.message(job.cancelPending?"Run cancelled. Your previous images are safe.":"This run is no longer in ComfyUI's queue. You can generate again.");this.render();}else if(job.cancelPending){this.$('progress-title').textContent='Cancelling…';this.$('progress-detail').textContent='Waiting for ComfyUI to stop this run.';}else this.$("progress-detail").textContent=running?this.elapsed():"Waiting for other ComfyUI jobs";}
     }catch(e){this.connectionLost=true;this.message("Connection interrupted. Reconnecting to your image run…");}finally{this.polling=false;}
   }
-  async cancel(){if(!this.job)return;try{const id=this.job.id;await this.fetch("/queue",{delete:[id]});await this.fetch("/interrupt",{prompt_id:id});this.message("Cancellation requested.");await this.poll();}catch(e){this.message(e.message);}}
+  async cancel(){await cancelOwnedJob(this);}
   stopPolling(){clearInterval(this.timer);this.timer=null;}
-  close(){this.save();this.stopPolling();this.imageZoom?.dispose();this.frames?.close();this.referencesVideo?.close();this.outpaint?.dispose();if(this.paintout?.owner===this)this.paintout.close();this.disposePopovers?.();}
+  close(){this.modelDownloadClosed=true;this.videoComposer?.ltxOutput?.close();this.save();this.stopPolling();this.imageZoom?.stopDraw();this.frames?.close();this.referencesVideo?.close();this.outpaint?.close();if(this.paintout?.owner===this)this.paintout.close();this.disposePopovers?.();}
   async graph(){
     try{const graph=await this.imageGraph(this.job?.config||this.config());if(typeof this.app.loadApiJson!=="function")throw new Error("Update ComfyUI to open this image graph.");const original=(this.app.rootGraph||this.app.graph)?.serialize?.();if(!original)throw new Error("Your current graph could not be backed up.");try{await this.app.loadApiJson(graph,"Zura Image · "+Date.now()+".json");}catch(e){await this.app.loadGraphData(original);throw e;}this.studio.close();}catch(e){this.message(e.message);}
   }

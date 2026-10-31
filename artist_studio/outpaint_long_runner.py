@@ -17,15 +17,15 @@ from .outpaint_studio import plan
 
 
 def plan_long(source, *, start, duration, mode, width, height, left=0, top=0,
-              right=0, bottom=0, black_threshold=2/255, overlap=12, strategy=None):
+              right=0, bottom=0, black_threshold=2/255, overlap=12, strategy=None, allow_partial_end=False):
     """Bind the whole source range and canvas, not just the first window."""
     if isinstance(start, bool) or isinstance(duration, bool):
         raise ValueError('Choose a valid start and duration.')
     start, duration = float(start), float(duration)
     if not math.isfinite(start) or not math.isfinite(duration) or start < 0 or duration <= 0:
         raise ValueError('Choose a valid start and duration.')
-    frames = int(duration * FPS + 1e-6)
-    if frames < 3 or start + frames/FPS > float(source.get('duration', 0)) + 1e-4:
+    frames = math.ceil(duration * FPS - 1e-6)
+    if frames < 3 or start + duration > float(source.get('duration', 0)) + (1/FPS if allow_partial_end else 0) + 1e-4:
         raise ValueError('Choose a valid range within the source video.')
     parts = windows(0, frames, width=width, height=height, overlap=overlap)
     if start + parts[-1].start / FPS > 86400:
@@ -34,10 +34,10 @@ def plan_long(source, *, start, duration, mode, width, height, left=0, top=0,
                 right=right, bottom=bottom, black_threshold=black_threshold)
     # Reuse the production validator for every subrange and exact canvas.
     subplans = [plan(source, start=start + part.start/FPS,
-                     duration=part.count/FPS, **args) for part in parts]
+                     duration=part.count/FPS, allow_partial_end=True, **args) for part in parts]
     if strategy is not None and (strategy != 'anchored_masked' or mode != 'expand' or overlap != 9):
         raise ValueError('The anchored long workflow requires canvas expansion and a nine-frame overlap.')
-    values = {'source_sha': str(source['sha']), 'start': start, 'frames': frames, 'overlap': overlap, **args}
+    values = {'source_sha': str(source['sha']), 'start': start, 'frames': frames, 'requested_duration': duration, 'overlap': overlap, **args}
     if strategy is not None:
         values['strategy'] = strategy
     digest = hashlib.sha256(json.dumps(values, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
@@ -80,7 +80,8 @@ async def run_windows(*, kind, source, selection, parts, subplans, submit, wait,
         update('assembling', len(parts), len(parts))
         command = ffmpeg_assembly(ffmpeg, parts, paths, output,
             source=source_audio if kind == 'render' else None,
-            audio_start=selection['start'])
+            audio_start=selection['start'], pad_tail=kind == 'render',
+            audio_duration=selection.get('requested_duration', selection['duration']))
         process = await asyncio.create_subprocess_exec(*command, stdout=asyncio.subprocess.DEVNULL,
             stderr=asyncio.subprocess.PIPE)
         _, stderr = await process.communicate()

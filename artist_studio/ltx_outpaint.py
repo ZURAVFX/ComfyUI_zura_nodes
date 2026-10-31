@@ -74,6 +74,23 @@ def prepare_canvas(images, mode, width, height, left=0, top=0, right=0,
     return canvas, mask
 
 
+def prepare_hdr_canvas(acescct_images, mode, width, height, left=0, top=0,
+                       right=0, bottom=0, black_threshold=2 / 255):
+    """Experimental HDR canvas; the threshold is applied in linear ACEScg.
+
+    In ACEScct, scene black is approximately 0.073 rather than zero. Decode
+    before detecting black or resampling; padding must be encoded scene black
+    before it is sent as an LTX HDR guide. This helper does not qualify the
+    outpainting model or delivery path for HDR.
+    """
+    from ..paintout.paintout import decode_ct, encode_ct
+    if not isinstance(acescct_images, torch.Tensor) or not acescct_images.is_floating_point() or not bool(torch.isfinite(acescct_images).all()):
+        raise ValueError('Expected finite floating-point ACEScct frames.')
+    linear = decode_ct(acescct_images)
+    canvas, mask = prepare_canvas(linear, mode, width, height, left, top, right, bottom, black_threshold)
+    return encode_ct(canvas), mask
+
+
 class ZuraLTXOutpaintCanvas:
     @classmethod
     def INPUT_TYPES(cls):
@@ -98,8 +115,120 @@ class ZuraLTXOutpaintCanvas:
                               bottom, black_threshold)
 
 
-NODE_CLASS_MAPPINGS = {'ZuraLTXOutpaintCanvas': ZuraLTXOutpaintCanvas}
-NODE_DISPLAY_NAME_MAPPINGS = {'ZuraLTXOutpaintCanvas': 'Zura · Prepare Outpaint Canvas'}
+class ZuraLTXOutpaintHDRCanvas(ZuraLTXOutpaintCanvas):
+    """Experimental ACEScct guide; not an HDR model or delivery guarantee."""
+    def prepare(self, images, mode, width, height, left=0, top=0, right=0,
+                bottom=0, black_threshold=2 / 255):
+        return prepare_hdr_canvas(images, mode, width, height, left, top, right,
+                                  bottom, black_threshold)
+
+
+def match_hdr_outpaint_colour(generated, source, mask, feather=16, strength=1.0):
+    """Match low-frequency colour near the plate, leaving distant pixels alone.
+
+    Inputs are ACEScct. Only the difference sampled on the source side of the
+    seam is propagated; black padding is never used as a colour reference.
+    Correction is bounded in log exposure and tapers outside the plate.
+    """
+    import numpy as np
+    from scipy.ndimage import distance_transform_edt, gaussian_filter
+    if not strength or not feather:
+        return generated
+    frames = generated.detach().float().cpu().numpy()
+    original = source.detach().float().cpu().numpy()
+    masks = mask.detach().float().cpu().numpy()
+    corrections = np.zeros_like(frames)
+    fades = np.zeros(frames.shape[:3], dtype=np.float32)
+    radius = max(8, feather * 5)
+    sigma = max(2, feather / 2)
+    for i, (image, plate, area) in enumerate(zip(frames, original, masks)):
+        keep = area < .5
+        if not keep.any() or keep.all():
+            continue
+        inside = distance_transform_edt(keep)
+        ring = keep & (inside <= max(2, feather * 2))
+        weights = gaussian_filter(ring.astype(np.float32), sigma=sigma)
+        difference = np.clip(plate - image, -.15, .15)
+        offset = np.stack([
+            gaussian_filter(difference[..., channel] * ring, sigma=sigma)
+            / np.maximum(weights, 1e-6) for channel in range(3)
+        ], axis=-1)
+        _, nearest = distance_transform_edt(~ring, return_indices=True)
+        field = offset[nearest[0], nearest[1]]
+        outside = distance_transform_edt(~keep)
+        fade = np.maximum(0, 1 - outside / radius) ** 2
+        corrections[i] = field
+        fades[i] = fade
+    # A three-frame symmetric filter suppresses flickering colour estimates.
+    # It doesn't interpolate generated geometry or alter the source plate.
+    if len(corrections) > 1:
+        previous = corrections[0].copy()
+        for i in range(len(corrections)):
+            current = corrections[i].copy()
+            following = corrections[min(i + 1, len(corrections) - 1)]
+            corrections[i] = (previous + 2 * current + following) / 4
+            previous = current
+    corrections *= fades[..., None]
+    correction = torch.from_numpy(corrections).to(device=generated.device, dtype=generated.dtype)
+    return generated + correction * strength
+
+
+def composite_hdr_outpaint(generated, source, mask, feather=16, colour_match=0.0):
+    """Preserve the source away from the seam, blending in linear ACEScg."""
+    from ..paintout.paintout import decode_ct, encode_ct
+    if not isinstance(generated, torch.Tensor) or not isinstance(source, torch.Tensor) or not isinstance(mask, torch.Tensor):
+        raise ValueError('Expected generated frames, HDR source frames and a mask.')
+    if generated.ndim != 4 or generated.shape[-1] != 3 or generated.shape != source.shape or mask.shape != generated.shape[:3]:
+        raise ValueError('HDR source, generated frames and mask must have matching dimensions.')
+    if not all(x.is_floating_point() and bool(torch.isfinite(x).all()) for x in (generated, source, mask)):
+        raise ValueError('HDR frames and mask must be finite floating-point values.')
+    if type(feather) is not int or not 0 <= feather <= 128:
+        raise ValueError('Feather must be between 0 and 128 pixels.')
+    if isinstance(colour_match, bool) or not isinstance(colour_match, (int, float)) or not math.isfinite(colour_match) or not 0 <= colour_match <= 1:
+        raise ValueError('Colour matching must be between zero and one.')
+    alpha = mask.to(device=generated.device, dtype=generated.dtype).clamp(0, 1).unsqueeze(1)
+    generated_area = alpha
+    source = source.to(device=generated.device, dtype=generated.dtype)
+    if colour_match:
+        generated = match_hdr_outpaint_colour(generated, source, mask, feather, colour_match)
+    if feather:
+        window = 2 * feather + 1
+        alpha = F.avg_pool2d(alpha, (1, window), stride=1, padding=(0, feather), count_include_pad=False)
+        alpha = F.avg_pool2d(alpha, (window, 1), stride=1, padding=(feather, 0), count_include_pad=False)
+        # The source canvas is black outside the plate. Blend only inside it,
+        # but bring alpha to one at the inner edge. A plain blurred mask reaches
+        # roughly 0.5 there and jumps to one outside, creating a visible seam.
+        alpha = (alpha * (window / feather)).clamp(max=1)
+        alpha = torch.maximum(alpha, generated_area)
+    alpha = alpha.permute(0, 2, 3, 1)
+    mixed = encode_ct(decode_ct(source) * (1 - alpha) + decode_ct(generated) * alpha)
+    # Avoid even a colour-transform round trip in untouched pixels.
+    composited = torch.where(alpha <= 0, source, torch.where(alpha >= 1, generated, mixed))
+    if colour_match and feather:
+        from .hdr_boundary import refine_hdr_boundary
+        composited = refine_hdr_boundary(composited, source, mask, feather, colour_match, inplace=True)
+    return composited
+
+
+class ZuraHDRCompositeOutpaint:
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {'required': {'generated': ('IMAGE',), 'source': ('IMAGE',), 'mask': ('MASK',),
+                             'feather': ('INT', {'default': 16, 'min': 0, 'max': 128})},
+                'optional': {'colour_match': ('FLOAT', {'default': 0.0, 'min': 0.0, 'max': 1.0, 'step': .05})}}
+    RETURN_TYPES = ('IMAGE',)
+    FUNCTION = 'composite'
+    CATEGORY = 'Zura/Artist Studio'
+    def composite(self, generated, source, mask, feather=16, colour_match=0.0):
+        return (composite_hdr_outpaint(generated, source, mask, feather, colour_match),)
+
+
+NODE_CLASS_MAPPINGS = {'ZuraLTXOutpaintCanvas': ZuraLTXOutpaintCanvas,
+                       'ZuraLTXOutpaintHDRCanvas': ZuraLTXOutpaintHDRCanvas,
+                       'ZuraHDRCompositeOutpaint': ZuraHDRCompositeOutpaint}
+NODE_DISPLAY_NAME_MAPPINGS = {'ZuraLTXOutpaintCanvas': 'Zura · Prepare Outpaint Canvas',
+                              'ZuraLTXOutpaintHDRCanvas': 'Zura · Prepare HDR Outpaint Canvas (experimental)',
+                              'ZuraHDRCompositeOutpaint': 'Zura · Composite HDR Outpaint (experimental)'}
 
 
 def build_test_graph(source_file, output_prefix, frame_count, fps, width, height,

@@ -15,7 +15,7 @@ from .model_downloads import _publish_verified
 
 
 def export_hlg_video(staged, output_root, prefix, *, fps, audio_source=None, audio_start_frame=0,
-                     ffmpeg=None, progress=None):
+                     audio_start_seconds=None, audio_duration_seconds=None, ffmpeg=None, progress=None):
     """Encode 10-bit Rec.2020 HLG and restore one source soundtrack.
 
     LTX ACEScct is transformed using Comfy's same ImageColorSpace operation as
@@ -33,10 +33,20 @@ def export_hlg_video(staged, output_root, prefix, *, fps, audio_source=None, aud
         raise ValueError('HLG video requires even source dimensions.')
     if type(audio_start_frame) is not int or audio_start_frame<0:
         raise ValueError('Invalid source audio offset.')
+    if audio_start_seconds is not None and (isinstance(audio_start_seconds, bool) or
+            not isinstance(audio_start_seconds, (int,float)) or not math.isfinite(audio_start_seconds) or
+            audio_start_seconds < 0 or audio_start_frame != 0):
+        raise ValueError('Choose one valid source audio offset.')
+    audio_offset = audio_start_frame/float(fps) if audio_start_seconds is None else float(audio_start_seconds)
     executable=ffmpeg or shutil.which('ffmpeg')
     if not executable:raise ValueError('FFmpeg is required to export HDR video.')
     total=staged.plan[-1].start+staged.plan[-1].count-staged.plan[0].start
     duration=total/float(fps)
+    if audio_duration_seconds is not None and (isinstance(audio_duration_seconds, bool) or
+            not isinstance(audio_duration_seconds, (int, float)) or not math.isfinite(audio_duration_seconds) or
+            not 0 < audio_duration_seconds <= duration + 1e-6):
+        raise ValueError('Choose a valid source audio duration.')
+    audio_duration = duration if audio_duration_seconds is None else float(audio_duration_seconds)
     parent=(Path(output_root)/'genj'/'hdr').resolve();parent.mkdir(parents=True,exist_ok=True)
     temporary=parent/('.zura-hlg-'+uuid.uuid4().hex);temporary.mkdir(exist_ok=False)
     output=temporary/'video.mp4';destination=parent/(prefix+'.mp4')
@@ -46,8 +56,8 @@ def export_hlg_video(staged, output_root, prefix, *, fps, audio_source=None, aud
         command=[str(executable),'-hide_banner','-loglevel','error','-f','rawvideo','-pixel_format','rgb48le',
             '-video_size',f'{staged.width}x{staged.height}','-framerate',str(float(fps)),'-i','pipe:0']
         if audio_source is not None:
-            command+=['-ss',str(audio_start_frame/float(fps)),'-i',str(audio_source),
-                '-map','0:v:0','-map','1:a:0','-af',f'apad=whole_dur={duration:.9f},atrim=duration={duration:.9f}',
+            command+=['-ss',str(audio_offset),'-i',str(audio_source),
+                '-map','0:v:0','-map','1:a:0','-af',f'atrim=duration={audio_duration:.9f},apad=whole_dur={duration:.9f},atrim=duration={duration:.9f}',
                 '-c:a','aac','-ar','48000']
         else:command+=['-map','0:v:0','-an']
         command+=['-frames:v',str(total),'-t',str(duration),'-vf',

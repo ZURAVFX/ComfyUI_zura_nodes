@@ -1,4 +1,4 @@
-"""Validated adapter for long HDR jobs; deliberately not registered yet."""
+"""Validated adapter for explicitly labelled long HDR preview jobs."""
 from __future__ import annotations
 
 import asyncio
@@ -11,17 +11,33 @@ from .hdr_jobs import HDRJobs
 
 
 def preview_enabled():
-    """The integrated longer route is deliberately opt-in for desktop testing."""
-    return os.environ.get('ZURA_HDR_LONG_PREVIEW', '').strip() == '1'
+    """Make the artist-approved preview available; administrators can disable it."""
+    return os.environ.get('ZURA_HDR_LONG_PREVIEW', '1').strip() == '1'
+
+
+def check_long_setup(mode, output):
+    """Fail before any chunk runs when continuation dependencies are absent."""
+    import folder_paths
+    import nodes
+    from .hdr_readiness import readiness
+    setup=readiness(mode,output,folder_paths.get_full_path,nodes.NODE_CLASS_MAPPINGS,longer=True)
+    missing_files=[file['filename'] for file in setup['files'] if not file['ready']]
+    missing_nodes=setup['missingNodes']
+    if missing_files or missing_nodes:
+        parts=[]
+        if missing_files:parts.append('Missing models: '+', '.join(missing_files))
+        if missing_nodes:parts.append('Missing nodes: '+', '.join(missing_nodes))
+        raise ValueError('Longer HDR setup is incomplete. '+'. '.join(parts)+'. Open HDR model setup for installation guidance.')
 
 
 class HDRLongService:
-    def __init__(self, server, store, check_asset, output_root, *, create_sdr=None, create_native=None):
+    def __init__(self, server, store, check_asset, output_root, *, create_sdr=None, create_native=None, check_setup=None):
         from .hdr_chunk_native_job import create_sdr_job, create_native_job
         self.server=server;self.store=store;self.check_asset=check_asset
         self.output_root=Path(output_root).resolve()
         self.create_sdr=create_sdr or create_sdr_job
         self.create_native=create_native or create_native_job
+        self.check_setup=check_setup or check_long_setup
         self.jobs=HDRJobs();self._preparing=asyncio.Lock();self._requests={}
 
     def _asset(self, body):
@@ -66,6 +82,7 @@ class HDRLongService:
             if any(not task.done() for task in self.jobs.tasks.values()):
                 raise ValueError('An HDR conversion is already running.')
             asset,check=self._asset(body)
+            await asyncio.to_thread(self.check_setup,mode,body.get('output','hlg_and_exr'))
             factory=self.create_sdr if mode=='sdr' else self.create_native
             # A modest continuation anchor is deliberately fixed for this
             # private evaluation; no artist-facing quality claim is implied.

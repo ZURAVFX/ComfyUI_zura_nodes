@@ -24,6 +24,18 @@ class OutpaintLongPlanning(unittest.TestCase):
         self.options = dict(start=1., duration=8., mode='expand', width=1152,
                             height=640, left=128, right=128)
 
+    def test_fractional_full_source_round_trip_keeps_last_frame(self):
+        source = dict(self.source, duration=153/25)
+        options = {**self.options, 'start': 0., 'duration': source['duration']}
+        selection, parts, _ = runner.plan_long(source, **options)
+        self.assertEqual(selection['frames'], 147)
+        rebuilt, _, _ = runner.plan_long(source, **{**options, 'duration': selection['requested_duration']}, allow_partial_end=True)
+        self.assertEqual(rebuilt['review_key'], selection['review_key'])
+        rounded, _, _ = runner.plan_long(source, **{**options, 'duration': selection['duration']}, allow_partial_end=True)
+        self.assertNotEqual(rounded['review_key'], selection['review_key'])
+        with self.assertRaisesRegex(ValueError, 'valid range'):
+            runner.plan_long(source, **{**options, 'duration': source['duration'] + .02})
+
     def test_full_range_key_and_chunk_validation(self):
         selection, parts, subplans = runner.plan_long(self.source, **self.options)
         self.assertEqual(selection['frames'], 192)
@@ -236,11 +248,12 @@ class OutpaintLongCancellation(unittest.IsolatedAsyncioTestCase):
             audio = root/'source.wav'
             subprocess.run([ffmpeg, '-v', 'error', '-f', 'lavfi', '-i',
                 'sine=frequency=440:duration=8', str(audio)], check=True)
-            source = {'file':'genj_studio/a/source.mp4', 'sha':'a'*64, 'duration':8,
+            source = {'file':'genj_studio/a/source.mp4', 'sha':'a'*64, 'duration':153/25,
                       'width':128, 'height':128}
-            selection, _, _ = runner.plan_long(source, start=0, duration=6.25,
+            selection, _, _ = runner.plan_long(source, start=0, duration=153/25,
                 mode='expand', width=128, height=128, left=16, right=16, overlap=9,
                 strategy='anchored_masked')
+            self.assertEqual(selection['frames'], 147)
             instance = jobs_module.OutpaintJobs(SimpleNamespace())
             serial = 0
             anchors = []; selected_loras=[]
@@ -273,6 +286,7 @@ class OutpaintLongCancellation(unittest.IsolatedAsyncioTestCase):
                 await instance.jobs[review['id']]['task']
                 reviewed = instance.state(review['id'])
                 self.assertEqual(reviewed['state'], 'complete', reviewed.get('error'))
+                self.assertAlmostEqual(reviewed['selection']['requested_duration'], 153/25)
                 with self.assertRaisesRegex(ValueError, 'approve'):
                     await instance.submit_long('render', source, selection, reviewed=reviewed, anchor=True)
                 reviewed['approved'] = True
@@ -283,8 +297,14 @@ class OutpaintLongCancellation(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(result['state'], 'complete', result.get('error'))
                 self.assertEqual(instance.public(result)['artifact'], result['artifact'], 'HDR can select the completed output directly')
                 from ComfyUI_zura_nodes.artist_studio.enhancement import inspect_video
-                media = inspect_video(out/result['artifact']['filename'], expected_frames=150, expected_fps=24)
+                media = inspect_video(out/result['artifact']['filename'], expected_frames=153, expected_fps=24)
                 self.assertEqual(media['audio_tracks'], 1)
+                import array
+                pcm = subprocess.check_output([ffmpeg, '-v', 'error', '-i', str(out/result['artifact']['filename']),
+                                               '-map', '0:a:0', '-f', 'f32le', '-ac', '1', '-ar', '24000', '-'])
+                wave = array.array('f'); wave.frombytes(pcm)
+                self.assertGreater(sum(map(abs,wave[24000:48000]))/24000, .01)
+                self.assertLess(max(map(abs,wave[round(6.14*24000):])), .002)
                 self.assertTrue(all(items==choice for kind,items in selected_loras if kind=='render'), 'Every rendered window receives the same custom LoRA')
                 self.assertTrue(all(items is None for kind,items in selected_loras if kind=='review'), 'Review graphs do not load user LoRAs')
                 self.assertEqual(len(anchors), 1, 'Only the second render window needs the previous last frame.')

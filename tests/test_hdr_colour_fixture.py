@@ -11,8 +11,10 @@ import sys
 import tempfile
 import types
 import unittest
+from unittest.mock import patch
 
 import numpy as np
+from scipy.signal import correlate, correlation_lags
 import v2_bootstrap
 
 for name, path in [('ComfyUI_zura_nodes.artist_studio', 'artist_studio'),
@@ -26,6 +28,8 @@ paintout = importlib.import_module('ComfyUI_zura_nodes.paintout.paintout')
 chunks = importlib.import_module('ComfyUI_zura_nodes.artist_studio.hdr_chunks')
 storage = importlib.import_module('ComfyUI_zura_nodes.artist_studio.hdr_chunk_store')
 delivery = importlib.import_module('ComfyUI_zura_nodes.artist_studio.hdr_chunk_video')
+studio = importlib.import_module('ComfyUI_zura_nodes.artist_studio.studio')
+hdr_source = importlib.import_module('ComfyUI_zura_nodes.artist_studio.hdr_source')
 
 
 def expected_linear(signal, transfer):
@@ -41,6 +45,35 @@ def expected_linear(signal, transfer):
 
 
 class HDRSwatchFixtureTests(unittest.TestCase):
+    def test_fractional_rate_hdr_input_and_trimmed_audio_share_timing(self):
+        ffmpeg = shutil.which('ffmpeg')
+        if not ffmpeg or not shutil.which('ffprobe'):
+            self.skipTest('ffmpeg and ffprobe are required')
+        fps = 24000 / 1001
+        samples_per_frame, start, count = 2002, 7, 9
+        rng = np.random.default_rng(904)
+        audio = (rng.standard_normal(30 * samples_per_frame) * .08).astype('<f4')
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory); sound = root / 'audio.f32'; video = root / 'hlg.mov'
+            sound.write_bytes(audio.tobytes())
+            subprocess.run([ffmpeg, '-v', 'error', '-f', 'lavfi', '-i',
+                'testsrc2=size=96x64:rate=24000/1001', '-f', 'f32le', '-ar', '48000', '-ac', '1', '-i', str(sound),
+                '-frames:v', '30', '-c:v', 'libx265', '-x265-params',
+                'log-level=error:pools=1:frame-threads=1:colorprim=bt2020:transfer=arib-std-b67:colormatrix=bt2020nc',
+                '-pix_fmt', 'yuv420p10le', '-color_primaries', 'bt2020', '-color_trc', 'arib-std-b67',
+                '-colorspace', 'bt2020nc', '-color_range', 'tv', '-c:a', 'pcm_s16le', '-y', str(video)],
+                capture_output=True, check=True)
+            images, actual_fps = native.load_native_hdr_frames(str(video), start, count)
+            self.assertEqual(len(images), count)
+            self.assertAlmostEqual(actual_fps, fps, places=6)
+            selected = hdr_source.load_hdr_audio_range(str(video), start, count, actual_fps, 121)[0]['waveform'][0, 0].numpy()
+            expected = audio[start * samples_per_frame:(start + count) * samples_per_frame]
+            self.assertEqual(len(selected), len(expected))
+            correlation = correlate(selected, expected, method='fft')
+            lag = correlation_lags(len(selected), len(expected))[int(np.argmax(correlation))]
+            self.assertLessEqual(abs(int(lag)), 2)
+            self.assertGreater(float(np.corrcoef(selected, expected)[0, 1]), .99)
+
     def test_tagged_display_p3_pq_video_is_converted_to_acescg(self):
         ffmpeg=shutil.which('ffmpeg')
         if not ffmpeg or not shutil.which('ffprobe'):
@@ -55,6 +88,8 @@ class HDRSwatchFixtureTests(unittest.TestCase):
             subprocess.run([ffmpeg,'-v','error','-f','rawvideo','-pix_fmt','yuv420p10le','-color_range','tv','-colorspace','bt709','-s','32x32','-r','24','-i',str(raw),'-frames:v','1','-c:v','libx265','-x265-params','lossless=1:log-level=error:pools=1:colorprim=smpte432:transfer=smpte2084:colormatrix=bt709','-pix_fmt','yuv420p10le','-color_primaries','smpte432','-color_trc','smpte2084','-colorspace','bt709','-color_range','tv','-y',str(output)],capture_output=True,check=True)
             info=paintout.describe(str(output))
             self.assertEqual((info['primaries'],info['transfer'],info['matrix']),('smpte432','smpte2084','bt709'))
+            handoff=studio.paintout_hdr_asset_info(output,'auto',paintout.describe,paintout.selected_space,lambda path:{'path':path,'kind':'video'})
+            self.assertEqual(handoff['colour_space'],'auto','Display-P3 PQ remains tag-detected in paintout')
             encoded,_=native.load_native_hdr_frames(str(output),0,1)
             result=paintout.decode_ct(encoded)[0,16,16].numpy()
             luma=(y-64)/876;blue=(cb-512)/896;red=(cr-512)/896
@@ -92,6 +127,18 @@ class HDRSwatchFixtureTests(unittest.TestCase):
                     self.assertEqual((info['primaries'], info['transfer'], info['matrix'], info['range']),
                                      ('bt2020', transfer, 'bt2020nc', 'tv'))
                     self.assertEqual(info['pixel_format'], 'yuv420p10le')
+                    handoff=studio.paintout_hdr_asset_info(output,'auto',paintout.describe,paintout.selected_space,lambda path:{'path':path,'kind':'video'})
+                    self.assertEqual(handoff['colour_space'],'pq_rec2020' if transfer=='smpte2084' else 'hlg_rec2020')
+                    if transfer=='arib-std-b67':
+                        image,mask,plate,*_=paintout.ZuraPaintoutFullFrame().prepare(str(output),handoff['colour_space'],0,2,24,0,768,0,0,
+                            processing_mode='HDR (ACEScct)',framing_mode='Source resolution (pad, no resize)',render_width=128,render_height=64)
+                        self.assertEqual(plate['space'],'hlg_rec2020');self.assertEqual(plate['processing'],'HDR (ACEScct)')
+                        import folder_paths
+                        with patch.object(folder_paths,'get_output_directory',return_value=str(directory),create=True):
+                            result=paintout.ZuraPaintoutUncrop().save(image,plate,'handoff-check','float32',False,export_format='EXR + HLG video',motion_preview=False)
+                        target=Path(result['result'][0]);self.assertEqual(len(list(target.glob('frame_*.exr'))),2)
+                        delivered=paintout.describe(str(target/'paintout_HLG_10bit.mp4'))
+                        self.assertEqual((delivered['transfer'],delivered['primaries'],delivered['count']),('arib-std-b67','bt2020',2))
                     encoded, fps = native.load_native_hdr_frames(str(output), 0, 2)
                     self.assertEqual(fps, 24)
                     linear = paintout.decode_ct(encoded).cpu().numpy()

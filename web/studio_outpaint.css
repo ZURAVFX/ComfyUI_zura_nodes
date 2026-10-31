@@ -25,13 +25,18 @@
 #genj-studio .zo-composer p{margin:0;color:var(--gs-muted);font-size:12px}
 #genj-studio .zo-composer textarea{min-height:50px;resize:vertical;background:transparent;border:0;color:var(--zc-text);padding:8px 0;font:inherit}
 #genj-studio .zo-action span{flex:1;min-width:180px;font-size:12px;color:var(--gs-muted)}
+#genj-studio .zo-action .zo-model{flex:0 0 auto;min-width:0}
+#genj-studio .zo-action [data-delivery-label]{display:grid;gap:5px;flex:0 1 180px;font-size:12px;color:var(--gs-muted)}
+#genj-studio .zo-action [data-delivery-label][hidden]{display:none}
+#genj-studio .zo-action [data-delivery]{width:100%;min-height:36px;padding:7px 10px;font:inherit;color:var(--zc-text);background:var(--gs-panel);border:1px solid var(--gs-line);border-radius:8px}
+#genj-studio .zo-action [data-delivery-note]{font-size:12px;line-height:1.5}
 #genj-studio .zo-action button,#genj-studio .zo-action a,#genj-studio .zo-sources button,#genj-studio .zo-page header button{min-height:38px;padding:8px 14px;border:1px solid var(--gs-line);border-radius:8px;background:var(--gs-panel);color:var(--zc-text)}
 #genj-studio .zo-action [data-generate]{background:var(--gs-accent);border-color:var(--gs-accent);color:var(--gs-ink)}
 #genj-studio .zo-progress{display:flex;align-items:center;gap:12px;font-size:12px;color:var(--gs-muted)}
 #genj-studio .zo-progress[hidden]{display:none}
 #genj-studio .zo-progress progress{flex:1;min-width:80px;accent-color:var(--gs-accent)}
 @media(max-width:900px){#genj-studio .zo-page{padding:12px;overflow:auto}#genj-studio .zo-settings input{width:90px}}
-@media(max-width:700px){#genj-studio .zo-composer{grid-template-columns:minmax(0,1fr)}#genj-studio .zo-composer>*,#genj-studio .zo-composer>[data-help],#genj-studio .zo-composer>[data-method-info],#genj-studio .zo-composer>[data-canvas-info]{grid-area:auto;grid-column:1;text-align:left}#genj-studio .zo-composer>.zo-trim,#genj-studio .zo-composer>.gs-custom-loras{justify-self:start}}
+@media(max-width:700px){#genj-studio .zo-composer{grid-template-columns:minmax(0,1fr)}#genj-studio .zo-page .zo-composer>*{grid-area:auto;grid-column:1;justify-self:stretch;min-width:0;text-align:left}#genj-studio .zo-settings{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));width:100%}#genj-studio .zo-settings label{min-width:0}#genj-studio .zo-settings input{width:100%;min-width:0}#genj-studio .zo-settings label:has([data-scale]){grid-column:1/-1}#genj-studio .zo-composer>.zo-trim,#genj-studio .zo-composer>.gs-custom-loras{justify-self:start}}
 #genj-studio .zo-trim{position:relative;justify-self:start;max-width:100%}
 #genj-studio .zo-trim[hidden]{display:none}
 #genj-studio .zo-trim-menu>summary{display:flex;align-items:center;gap:12px;min-height:38px;padding:8px 12px;border:1px solid var(--gs-line);border-radius:8px;background:var(--gs-panel);color:var(--zc-text);font-size:12px;list-style:none;cursor:pointer}

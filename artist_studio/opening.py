@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import copy
 import re
 import shutil
 from pathlib import Path
@@ -28,6 +29,7 @@ def bind_uploaded_opening(
     assert_approved,
     check_asset,
     media_url,
+    store=None,
 ):
     """Copy an approved image into project storage and reset opening approval.
 
@@ -46,6 +48,10 @@ def bind_uploaded_opening(
     expected_sha = uploaded.get("sha")
     if not isinstance(expected_sha, str) or not re.fullmatch(r"[a-f0-9]{64}", expected_sha):
         raise ValueError("The uploaded image has no valid content hash. Upload it again.")
+    from .ltx25_hdr_input import opening_identity, resolve_asset
+    resolve_asset(uploaded, project.get("config", {}), store, check_asset)
+    marker = copy.deepcopy(uploaded.get("native_hdr"))
+    identity = opening_identity(expected_sha, marker)
 
     input_root = Path(input_directory).resolve()
     asset_root = (input_root / "genj_studio").resolve()
@@ -68,7 +74,8 @@ def bind_uploaded_opening(
 
     current = project.get("opening_input") or {}
     if (current.get("file") == relative.as_posix() and current.get("sha") == expected_sha
-            and project.get("opening_key") == expected_sha and destination.is_file()
+            and current.get("native_hdr") == marker
+            and project.get("opening_key") == identity and destination.is_file()
             and _sha256(destination) == expected_sha):
         return False
 
@@ -84,8 +91,9 @@ def bind_uploaded_opening(
 
     relative_text = relative.as_posix()
     project.update(
-        opening_input={"file": relative_text, "sha": expected_sha},
-        opening_key=expected_sha,
+        opening_input={"file": relative_text, "sha": expected_sha,
+                       **({"native_hdr": marker} if marker is not None else {})},
+        opening_key=identity,
         opening_url=media_url({
             "filename": destination.name,
             "subfolder": f"genj_studio/{project_id}",
@@ -127,6 +135,7 @@ def register(studio, routes, response):
                 assert_approved=assert_approved,
                 check_asset=check_asset,
                 media_url=media_url,
+                store=studio.store,
             )
             if changed or project.get("look_mode") != "ready" or (project.get("starting_asset") or {}).get("id") != asset_id:
                 project.update(look_mode="ready", starting_asset=dict(uploaded))

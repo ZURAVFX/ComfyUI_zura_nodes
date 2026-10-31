@@ -44,7 +44,7 @@ const missing=structuredClone(info);missing.UNETLoader.input.required.unet_name=
 info.ReferenceMultiLatent={};info.LoadImage={};
 const calls=[];let history={},queue={queue_running:[],queue_pending:[]},reject=false;
 const apiEvents=new Map();
-const api={apiURL:p=>p,addEventListener(name,handler){apiEvents.set(name,handler);},fetchApi:async(path,options)=>{if(path==='/upload/image'){calls.push({path});return {ok:true,json:async()=>({name:'ref-'+calls.length+'.png',subfolder:'zura_images/references'})};}const body=options?.body?JSON.parse(options.body):undefined;calls.push({path,body});if(path.startsWith('/object_info/')){const name=path.split('/').at(-1);return {ok:true,json:async()=>({[name]:info[name]})};}if(path==='/prompt'){if(reject)return {ok:false,json:async()=>({error:{message:'Model failed validation'}})};queue.queue_pending=[[0,'own-run']];return {ok:true,json:async()=>({prompt_id:'own-run'})};}if(path.startsWith('/history/'))return {ok:true,json:async()=>history};if(path==='/queue'&&!body)return {ok:true,json:async()=>queue};return {ok:true,json:async()=>({})};}};
+const api={apiURL:p=>p,addEventListener(name,handler){const previous=apiEvents.get(name);apiEvents.set(name,event=>{previous?.(event);handler(event);});},fetchApi:async(path,options)=>{if(path==='/upload/image'){calls.push({path});return {ok:true,json:async()=>({name:'ref-'+calls.length+'.png',subfolder:'zura_images/references'})};}const body=options?.body?JSON.parse(options.body):undefined;calls.push({path,body});if(path.startsWith('/object_info/')){const name=path.split('/').at(-1);return {ok:true,json:async()=>({[name]:info[name]})};}if(path==='/prompt'){if(reject)return {ok:false,status:400,json:async()=>({error:{message:'Model failed validation'}})};queue.queue_pending=[[0,'own-run']];return {ok:true,json:async()=>({prompt_id:'own-run'})};}if(path.startsWith('/history/'))return {ok:true,json:async()=>history};if(path==='/queue'&&!body)return {ok:true,json:async()=>queue};return {ok:true,json:async()=>({})};}};
 const app={};
 const context={document,window,localStorage,api,app,CreativeWorkspace,ContentDetection,ClipTrimmer,clipLength,recoverClipLength,stageProgress,setTimeout,clearTimeout,setInterval,clearInterval,crypto:globalThis.crypto,URLSearchParams,AbortController,FormData};
 vm.createContext(context);
@@ -86,10 +86,23 @@ ui.show('video');studio.render();
 assert.ok(studio.container.querySelector('#zc-video-task').closest('.zc-prompt-tools'),'Workflow choice sits in the model tool row');assert.equal(studio.container.querySelector('#zc-video-task').closest('.zc-task-control').previousElementSibling,ui.videoComposer.imageModel);
 assert.equal(studio.container.querySelector('.gs-workflow-choice').hidden,true,'The cramped legacy mode grid has no second visible copy');
 for(const id of ['zc-attach-source','zc-attach-refs','zc-video-model','gs-resolution','gs-duration','gs-audio-mode'])assert.ok(studio.container.querySelector('#'+id).closest('.gs-composer'),id+' belongs to the compact composer');
+assert.equal(studio.container.querySelector('#zc-attach-source').closest('.zc-source-choice'),studio.container.querySelector('.zc-source-hdr').closest('.zc-source-choice'),'Source and HDR import are presented as one choice');
+assert.equal(studio.container.querySelector('.zc-source-hdr').textContent,'LTX HDR');
+assert.match(studio.container.querySelector('.zc-source-hdr').title,/H3 video generation is SDR/);
+assert.equal(studio.container.querySelector('.zc-source-hdr').hidden,true,'Wan does not advertise HDR input');
+const originalEngine=studio.config.engine,originalMode=studio.config.workflow_mode;
+studio.config.engine='h3';ui.videoComposer.sync();
+assert.equal(studio.container.querySelector('.zc-source-hdr').hidden,true,'H3 does not advertise HDR input');
+assert.equal(studio.container.querySelector('.zc-source-or').hidden,true,'The unused HDR separator is hidden');
+studio.config.engine='local';studio.config.workflow_mode='motion';ui.videoComposer.sync();
+assert.equal(studio.container.querySelector('.zc-source-hdr').hidden,false,'LTX offers its HDR conversion tool');
+studio.config.workflow_mode='relight';ui.videoComposer.sync();
+assert.equal(studio.container.querySelector('.zc-source-hdr').hidden,true,'Wan relight never advertises LTX HDR input');
+studio.config.engine=originalEngine;studio.config.workflow_mode=originalMode;ui.videoComposer.sync();
 const workflowMenu=ui.videoComposer.task;
 assert.equal(workflowMenu.tagName,'DETAILS');
 assert.equal(workflowMenu.querySelector('select').hidden,true,'OS-native workflow dropdown is hidden behind the styled menu');
-assert.equal(workflowMenu.querySelectorAll('[role="menuitemradio"]').length,8);
+assert.equal(workflowMenu.querySelectorAll('[role="menuitemradio"]').length,9);
 assert.ok(workflowMenu.querySelector('[data-workflow="outpaint"]'),'Frame extension is available as a preview workflow');
 assert.equal(workflowMenu.querySelector('[data-workflow="swap"]').getAttribute('aria-checked'),'true');
 const removedInputs=[],savedRemoveInput=studio.removeInput;studio.removeInput=type=>removedInputs.push(type);
@@ -103,11 +116,24 @@ assert.doesNotMatch(ui.$('generate').innerHTML,/[↗]/,'Image actions use consis
 assert.equal(studio.$('preserve-identity-setting').hidden,true,'The H3 identity option stays out of unrelated modes');
 assert.equal(studio.container.querySelectorAll('wa-tooltip').length,5);
 const originalConfig={...studio.config};
+for(const workflow of ['swap','viewport','camera','relight']){
+  studio.config.workflow_mode=workflow;studio.selectWorkflow();studio.syncForm();studio.render();
+  if(!studio.container.querySelector('input[name="gs-look"][value="ready"]').disabled)
+    assert.equal(studio.container.querySelector('#zc-attach-frame').parentElement.hidden,false,workflow+' exposes a supplied frame when supported');
+}
 studio.config.workflow_mode='relight';studio.selectWorkflow();studio.syncForm();studio.render();
 assert.equal(studio.container.querySelector('input[value="relight"]').closest('label').hidden,false);
 assert.equal(studio.config.engine,'h3');assert.equal(studio.$('audio-settings').hidden,true);
 assert.equal(studio.$('preserve-identity-setting').hidden,true,'Wan relight hides the H3 identity guide');
 assert.equal(studio.config.relight_engine,'wan21','Relight defaults to the supplied Wan recipe');
+assert.equal(studio.container.querySelector('#zc-attach-frame').parentElement.hidden,false,'Relight offers a finished frame directly in the composer');
+{
+  const fetch=api.fetchApi;api.fetchApi=async(path,options)=>path==='/zura/studio/upload?kind=image'?{ok:true,json:async()=>({id:'finished-lighting',file:'genj_studio/lighting.png',name:'lighting.png'})}:fetch(path,options);
+  const file=Object.assign(new Blob(['image'],{type:'image/png'}),{name:'lighting.png'});
+  studio.source={id:'temporary-source',duration:3};await studio.upload('ready',file);api.fetchApi=fetch;
+  assert.equal(studio.lookMode,'ready');assert.equal(studio.readyAsset.id,'finished-lighting');assert.equal(studio.projectBody().starting_image,'finished-lighting');
+  studio.removeInput('ready');studio.source=null;
+}
 assert.match(studio.container.querySelector('#zc-tool-resolution').textContent,/\d+ × \d+/,'Relight shows its output dimensions');
 assert.doesNotMatch(studio.container.querySelector('#zc-tool-resolution').textContent,/H3/i,'Wan 2.1 relight must not show H3 in the resolution control');
 assert.equal(studio.container.querySelector('input[name="gs-engine"][value="h3"]').closest('label').hidden,true,'H3 relight video is removed from Studio');
@@ -167,6 +193,23 @@ ui.show('image');await ui.loadModels();
 for(let i=0;i<10&&ui.loading;i++)await Promise.resolve();
 assert.equal(ui.models.length,IMAGE_MODELS.length);
 const originalFetch=ui.fetch;
+ui.fetch=async function(path,body){if(path==='/object_info/FluxKVCache')return {};return originalFetch.call(this,path,body);};
+await ui.loadModels();
+assert.ok([...ui.$('setup').querySelectorAll('a')].some(a=>a.href==='https://github.com/Comfy-Org/ComfyUI'),'Image setup points missing core image nodes to ComfyUI');
+assert.match(ui.$('setup').textContent,/Update ComfyUI and restart/);
+const missingImageModel=ui.models.find(model=>!model.ready&&!model.edit);assert.ok(missingImageModel);
+const missingOption=ui.$('model').querySelector(`option[value="${missingImageModel.id}"]`);assert.equal(missingOption.hasAttribute('disabled'),false,'An uninstalled model can be selected for setup');
+ui.$('model').value=missingImageModel.id;ui.$('model').dispatchEvent(new window.Event('change'));
+assert.equal(ui.$('generate').disabled,true,'A missing model cannot start generation');assert.equal(ui.$('setup').closest('details').open,true,'Selecting it opens model setup');
+await ui.loadModels();assert.equal(ui.$('model').value,missingImageModel.id,'Refreshing preserves the selected model needing setup');
+ui.fetch=originalFetch;
+ui.fetch=async function(path,body){if(path==='/zura/studio/model-downloads')return {models:[{id:'flux2_klein_9b',remaining_bytes:123,files:[{filename:'flux2-vae.safetensors',size_bytes:123,incomplete:true}]}]};return originalFetch.call(this,path,body);};
+await ui.loadModels();
+assert.equal(ui.models.find(model=>model.id==='flux2').ready,true,'A different pinned download size alone must not disable an available local model');
+assert.equal(ui.$('setup').querySelector('[data-download-model="flux2_klein_9b"]').disabled,true,'An alternate local model must never be overwritten');
+assert.match(ui.$('setup').textContent,/file size alone does not establish compatibility/);
+assert.doesNotMatch(ui.$('setup').textContent,/wrong size/);
+ui.fetch=originalFetch;
 ui.fetch=async function(path,body){if(path==='/zura/studio/model-downloads')return {models:[{id:'qwen2511',license_url:'https://huggingface.co/Qwen/Qwen-Image-Edit-2511',note:'Review model source terms.',remaining_bytes:181,files:[{filename:'qwen.safetensors',repo:'gree9515/Qwen-Image-Edit-2511-ConvRot',size_bytes:181,installed:false}]}]};return originalFetch.call(this,path,body);};
 await ui.loadModels();
 assert.ok(ui.$('setup').querySelector('[data-download-model="qwen2511"]'),'Qwen edit exposes the verified model package');
@@ -195,6 +238,14 @@ await ui.loadModels();assert.equal(ui.modelDownloadJob,'existing-image');assert.
 assert.match(ui.$('setup').querySelector('[data-download-status="qwen2511"]').textContent,/Reconnecting/);
 const finishImage=releaseImageStatus;releaseImageStatus=null;finishImage({phase:'done'});await new Promise(resolve=>setTimeout(resolve,20));
 assert.equal(ui.modelDownloadActive,false);assert.equal(resumedImageStarts,0);
+let finishPost,finishRecovery,recoverPosts=0,recoverActive=true;const pendingImagePost=new Promise(resolve=>{finishPost=resolve;}),recoveredImageStatus=new Promise(resolve=>{finishRecovery=resolve;});
+ui.fetch=async function(path,body){
+  if(path==='/zura/studio/model-downloads'&&body){recoverPosts++;await pendingImagePost;throw Error('Connection lost');}
+  if(path==='/zura/studio/model-downloads'&&!body){const catalogue=await setupFetch.call(this,path,body);return {...catalogue,active:recoverActive?{id:'recovered-image',model_id:'qwen2511'}:null};}
+  if(path==='/zura/studio/model-downloads/recovered-image')return recoveredImageStatus;
+  return setupFetch.call(this,path,body);
+};
+const recoveringImage=ui.startModelDownload('qwen2511');await ui.startModelDownload('qwen2511');assert.equal(recoverPosts,1,'Repeated image download clicks submit once');finishPost();await new Promise(resolve=>setTimeout(resolve,10));assert.equal(ui.modelDownloadJob,'recovered-image','Lost image download response reconnects to the active job');recoverActive=false;finishRecovery({phase:'done'});await recoveringImage;assert.equal(ui.modelDownloadActive,false);
 ui.fetch=originalFetch;
 ui.setImageOperation('edit');assert.equal(ui.$('model').value,'qwen2511');assert.equal(ui.$('generate').disabled,true,'Editing needs a source image');
 assert.equal(ui.$('model').querySelector('option[value="flux3"]').hidden,true);
@@ -255,9 +306,11 @@ ui.items=[];ui.job=null;
 await ui.generate();await ui.generate();
 assert.equal(calls.filter(c=>c.path==='/prompt').length,1,'Double click queues only once');
 assert.equal(ui.job.id,'own-run');
+apiEvents.get('execution_start')({detail:{prompt_id:'own-run'}});apiEvents.get('executing')({detail:'model'});assert.equal(ui.$('progress-title').textContent,'Loading image model','Modern Comfy string events show the current image-loading stage');
 await ui.cancel();
 assert.deepEqual(calls.find(c=>c.path==='/interrupt').body,{prompt_id:'own-run'},'Never interrupt another user job');
 assert.deepEqual(calls.find(c=>c.path==='/queue'&&c.body).body,{delete:['own-run']});
+assert.equal(ui.$('cancel').disabled,true);const cancelCount=calls.filter(c=>c.path==='/interrupt').length;await ui.cancel();assert.equal(calls.filter(c=>c.path==='/interrupt').length,cancelCount);apiEvents.get('progress')({detail:{prompt_id:'own-run',node:'sample',value:2,max:8}});apiEvents.get('executing')({detail:'decode'});assert.match(ui.$('progress-title').textContent,/Cancelling/,'Late image events do not replace cancellation');
 history={'own-run':{status:{completed:true,messages:[['execution_start',{timestamp:1000}],['execution_success',{timestamp:4000}]]},outputs:{save:{images:[{filename:'image.png',subfolder:'zura_images',type:'output'}]}}}};
 while(ui.polling)await new Promise(r=>setTimeout(r,1));
 await ui.poll();
@@ -296,12 +349,27 @@ navStudio.source={id:'retained-video',name:'source.mp4'};navStudio.references=[{
 const navRequests=calls.filter(c=>c.path==='/prompt').length;
 const task=navStudio.container.querySelector('#zc-video-task');task.value='frames';task.dispatchEvent(new window.Event('change'));
 assert.equal(navUi.mode,'frames');assert.equal(navUi.frames.page.hidden,false);assert.equal(navUi.frames.page.querySelector('#zc-video-task'),task,'The same selector remains in the frame composer');assert.equal(task.value,'frames');assert.ok(task.closest('.zc-task-control').previousElementSibling.classList.contains('zf-model'));assert.equal(navUi.frames.page.querySelector('#zf-back'),null);assert.equal(navStudio.container.querySelector('.gs-workspace').hidden,true);
-const hdrRoot=document.createElement('details');hdrRoot.innerHTML='<summary>HDR tools</summary><select data-hdr="source-kind"><option value="own">Choose another video</option></select>';navStudio.container.querySelector('.gs-settings').append(hdrRoot);
-navStudio.hdrTool={root:hdrRoot,setOutput(ref){this.output=ref;},$(id){return hdrRoot.querySelector(`[data-hdr="${id}"]`);},updateMode(){},sourceChanged(){},close(){}};
-const ltxTake={type:'output',subfolder:'zura/first_last',filename:'ltx.mp4'};navUi.frames.items=[{file:ltxTake,config:{engine:'ltx'}}];navUi.frames.selectedResult=ltxTake;navUi.frames.$('result').hidden=false;
-navStudio.container.querySelector('#zc-open-hdr').click();assert.equal(navUi.mode,'video');assert.equal(navStudio.hdrTool.output,ltxTake);assert.equal(hdrRoot.open,true);assert.equal(navUi.$('panel-settings').hidden,false);
-const outpaintTake={type:'output',subfolder:'genj/outpaint',filename:'extended.mp4'};navUi.mode='outpaint';navUi.outpaint={result:{hidden:false},outputRef:outpaintTake};navStudio.container.querySelector('#zc-open-hdr').click();assert.equal(navStudio.hdrTool.output,outpaintTake);
+const hdrRoot=document.createElement('section');hdrRoot.className='zf-page zh-page';hdrRoot.innerHTML='<button data-hdr="back">Back</button><button data-hdr="use-video"></button><select data-hdr="mode"><option value="sdr">SDR</option><option value="native">HDR</option></select><select data-hdr="source-kind"><option value="own">Choose another video</option><option value="upload">Source footage</option></select>';navStudio.container.append(hdrRoot);
+navStudio.hdrTool={root:hdrRoot,setOutput(ref){this.output=ref;},$(id){return hdrRoot.querySelector(`[data-hdr="${id}"]`);},updateMode(){},activate(){this.active=true;},deactivate(){this.active=false;},sourceChanged(){},close(){}};
+const ltxTake={type:'output',subfolder:'zura/first_last',filename:'ltx.mp4'},h3Take={type:'output',subfolder:'zura/first_last',filename:'h3.mp4'};navUi.frames.items=[{file:ltxTake,config:{engine:'ltx'}},{file:h3Take,config:{engine:'h3'}}];
+navUi.frames.showResult(h3Take);assert.equal(navUi.frames.$('convert-hdr').hidden,true,'The LTX conversion action is not shown for another engine');
+navUi.frames.showResult(ltxTake);assert.equal(navUi.frames.$('convert-hdr').hidden,false,'An LTX result offers HDR conversion at the result');
+navStudio.hdrTool.$('mode').value='native';
+navUi.frames.$('convert-hdr').click();assert.equal(navUi.mode,'hdr');assert.equal(navStudio.hdrTool.output,ltxTake);assert.equal(hdrRoot.hidden,false);assert.equal(navStudio.hdrTool.active,true);
+assert.equal(navStudio.hdrTool.$('mode').value,'sdr','An SDR first/last take must not inherit a previous HDR-import mode');
+navStudio.hdrTool.$('back').click();assert.equal(navUi.mode,'frames');assert.equal(navStudio.hdrTool.active,false);assert.equal(navUi.frames.page.hidden,false);navStudio.container.querySelector('#zc-open-hdr').click();
+const outpaintTake={type:'output',subfolder:'genj/outpaint',filename:'extended.mp4'};navUi.mode='outpaint';navUi.outpaint={result:{hidden:false},outputRef:outpaintTake,outputIsHDR:false};navStudio.hdrTool.$('mode').value='native';navStudio.container.querySelector('#zc-open-hdr').click();assert.equal(navStudio.hdrTool.output,outpaintTake);assert.equal(navStudio.hdrTool.$('mode').value,'sdr');
+navUi.mode='outpaint';navUi.outpaint.outputIsHDR=true;navStudio.hdrTool.$('mode').value='sdr';navStudio.container.querySelector('#zc-open-hdr').click();assert.equal(navStudio.hdrTool.$('mode').value,'native');
 const paintTake={type:'output',subfolder:'genj/paintout',filename:'clean.mp4'};navUi.mode='paintout';navUi.paintout={view:'result',result:{file:paintTake}};navStudio.container.querySelector('#zc-open-hdr').click();assert.equal(navStudio.hdrTool.output,paintTake);
+let imported;navUi.mode='paintout';navUi.paintout={view:'source',importStudioHDR:async(...args)=>{imported=args;},importStudioHDROutput:async(...args)=>{imported=args;}};navStudio.modelStatus={hdr_paintout_handoff:true};navStudio.container.querySelector('#zc-open-hdr').click();await navStudio.hdrTool.onUseVideo({id:'hdr-source'},'hlg_rec2020','hlg_and_exr');assert.deepEqual(imported,['hdr-source','hlg_rec2020','EXR + HLG video']);assert.equal(navUi.mode,'paintout');navUi.paintout.importStudioHDROutput=async(...args)=>{imported=args;};navStudio.container.querySelector('#zc-open-hdr').click();await navStudio.hdrTool.onUseResult({type:'output',filename:'converted.mp4'},'hlg_video');assert.deepEqual(imported,[{type:'output',filename:'converted.mp4'},'HLG video']);assert.equal(navUi.mode,'paintout');
+navUi.mode='video';navStudio.config.engine='local';navStudio.project=null;navStudio.hdrTool.$('source-kind').value='own';navUi.openHDR();
+assert.equal(navStudio.hdrTool.$('source-kind').value,'upload','Opening HDR from a loaded video uses that video, not an earlier HDR import');
+navUi.mode='video';navStudio.project={results:[{asset:{type:'output',filename:'old-render.mp4'}}]};navUi.openHDR({preferSource:true});
+assert.equal(navStudio.hdrTool.output,null,'HDR import ignores an earlier render');assert.equal(navStudio.hdrTool.$('source-kind').value,'upload');
+navUi.mode='frames';navUi.frames.$('result').hidden=true;navStudio.hdrTool.$('source-kind').value='upload';navUi.openHDR();
+assert.equal(navStudio.hdrTool.$('source-kind').value,'own','A workspace without a video does not inherit another workspace source');
+let extendedImport;const outpaintPage=document.createElement('section');outpaintPage.innerHTML='<span class="zo-model"></span>';navStudio.container.append(outpaintPage);navUi.mode='outpaint';navUi.outpaint={page:outpaintPage,result:{hidden:true},source:null,capabilities:{hdr_expand_experiment:true},importStudioHDR:async(...args)=>{extendedImport=args;},open(){}};
+navUi.openHDR({preferSource:true});assert.equal(navStudio.hdrTool.$('mode').value,'native');assert.equal(navStudio.hdrTool.$('use-video').textContent,'Use in frame extension');await navStudio.hdrTool.onUseVideo({id:'extension-hdr'},'pq_rec2020','hlg_and_exr');assert.deepEqual(extendedImport,[{id:'extension-hdr'},'pq_rec2020']);assert.equal(navUi.mode,'outpaint');
 navUi.outpaint=null;navUi.paintout=null;
 navUi.show('frames');
 navUi.frames.assets.first={file:'retained-first.png',filename:'retained-first.png'};navUi.frames.$('prompt').value='A slow camera move';navUi.frames.save();
@@ -341,6 +409,12 @@ task.value='swap';task.dispatchEvent(new window.Event('change'));assert.equal(na
 task.value='paintout';task.dispatchEvent(new window.Event('change'));
 assert.equal(navUi.mode,'paintout');assert.equal(navUi.paintout.page.hidden,false);assert.equal(navUi.frames.page.hidden,true);assert.equal(navUi.referencesVideo.page.hidden,true);
 assert.equal(navUi.paintout.page.querySelector('#zc-video-task'),task,'Paintout retains the workflow menu beside its model');
+task.value='inpaint';task.dispatchEvent(new window.Event('change'));
+assert.equal(navUi.mode,'paintout');assert.equal(navUi.paintout.state.mode,'inpaint');
+assert.match(navUi.paintout.$('prompt').value,/Add the object/);
+assert.equal(task.value,'inpaint','The shared workflow menu identifies the inpaint workspace');
+task.value='paintout';task.dispatchEvent(new window.Event('change'));
+assert.equal(navUi.paintout.state.mode,'targeted','Returning to paintout restores removal conditioning');
 navUi.paintout.loras.setValue([{name:'ltx-style.safetensors',strength:.7,confirm_unknown:true}]);
 let paintLoraRequest;navUi.paintout.loras.request=async(path,body)=>{paintLoraRequest={path,body};return {graph:{...body.graph,custom_test:{class_type:'LoraLoaderModelOnly',inputs:{}}}};};
 assert.equal((await navUi.paintout.loras.patch({model:{class_type:'UNETLoader',inputs:{}}})).custom_test.class_type,'LoraLoaderModelOnly');
@@ -380,7 +454,25 @@ for(const mode of ['frames','references']){
   workspace.job=null;workspace.startPolling=priorStart;
 }
 assert.match(source,/this\.creative\?\.open\(\)/,'Opening Studio restores the retained creative workspace');
-navUi.close();navStudio.container.remove();
+// Studio reuses its workspace controllers. Temporary close must not destroy
+// retained panels, zoom controls or setup handlers needed on the next open.
+const retainedExtension=navUi.outpaint.page,retainedFrames=navUi.frames,retainedReferences=navUi.referencesVideo;
+navStudio.hdrTool.close=()=>hdrRoot.remove();
+navStudio.close();
+assert.equal(hdrRoot.parentElement,navStudio.container,'HDR remains in the retained Studio shell');
+assert.equal(retainedExtension.parentElement,navStudio.container,'Frame extension remains in the retained shell');
+assert.equal(retainedFrames.modelDownloads.closed,true);
+assert.ok(retainedFrames.modelDownloads.panel.ontoggle,'Temporary close keeps model setup interactive');
+for(const workspace of [retainedFrames,retainedReferences])assert.ok(workspace.previewZoom.toolbar.parentElement,'Zoom controls survive closing Studio');
+document.body.append(navStudio.container);navUi.open();
+for(const mode of ['frames','references','outpaint','hdr']){
+  navUi.show(mode);
+  const page=mode==='frames'?retainedFrames.page:mode==='references'?retainedReferences.page:mode==='outpaint'?retainedExtension:hdrRoot;
+  assert.equal(page.hidden,false,mode+' can be shown after reopening');
+  assert.equal(page.isConnected,true,mode+' remains attached after reopening');
+}
+assert.equal(retainedFrames.modelDownloads.closed,false);assert.equal(retainedReferences.modelDownloads.closed,false);
+navStudio.close();navUi.outpaint.dispose();
 // Generation and Graph view both use the same backend-validated LoRA graph.
 const oldImageFetch=ui.fetch.bind(ui),imageLoraCalls=[];
 ui.fetch=async(path,body)=>{if(path==='/zura/studio/image-loras/validate'){imageLoraCalls.push(body);if(!body.loras[0].confirm_unknown)throw new Error('Confirm compatibility');return {loras:[{name:body.loras[0].name,strength:body.loras[0].strength}]};}return oldImageFetch(path,body);};
@@ -394,4 +486,37 @@ ui.close();
 assert.equal(JSON.parse(storage['zura-image-workspace-v1']).items.length,1);
 const oldFiles=ui.items.map(i=>i.file.filename);ui.$('clear-history').onclick();assert.equal(ui.items.length,0);assert.equal(ui.$('gallery').querySelectorAll('img').length,0);assert.equal(ui.$('image-empty').hidden,false);ui.$('undo-history').onclick();assert.deepEqual(ui.items.map(i=>i.file.filename),oldFiles);ui.$('clear-history').onclick();
 const reopened=new context.Studio();assert.equal(reopened.creative.items.length,0);assert.equal(reopened.container.dataset.theme,'light');assert.equal(Number(reopened.creative.$('width').value),720);assert.equal(Number(reopened.creative.$('height').value),1280);reopened.creative.close();
+const relightUi=new context.Studio();relightUi.source={id:'long-source',duration:15,width:1080,height:1920,url:'/source.mp4'};
+relightUi.config={...relightUi.config,workflow_mode:'relight',engine:'h3',relight_engine:'wan21',length_mode:'original',edit_area:'scene'};
+relightUi.lookMode='ready';relightUi.readyAsset={id:'lighting',url:'/light.png'};relightUi.syncForm();relightUi.render();
+assert.doesNotMatch(relightUi.$('resolution').querySelector('option[value="1280"]').textContent,/H3/,'Relight resolution must never claim H3');
+assert.doesNotMatch(relightUi.$('action-note').textContent,/H3|5 seconds/,'Long relight should not show H3 limits');
+assert.equal(relightUi.container.querySelector('#zc-video-model').value,'wan21','The model selector reflects the actual relight model');
+relightUi.creative.close();
+// Choosing the original HDR source frame needs no dummy reference. The source
+// is reviewed first; only the next explicit action approves it and reads the
+// selected native frame. No image or video generation is queued here.
+const hdrFlow=new context.Studio();hdrFlow.source={id:'hdr-video',name:'hdr.mp4',duration:2,width:1280,height:720,url:'/hdr.mp4',native_hdr_video:{asset_id:'a'.repeat(32),sha:'b'.repeat(64),colour_space:'auto'}};
+hdrFlow.modelStatus={...(hdrFlow.modelStatus||{}),native_hdr_performance:true};
+hdrFlow.config={...hdrFlow.config,engine:'local',workflow_mode:'motion',edit_area:'scene',background:'restyle',ltx_output:'hlg_and_exr',duration:1,start:0};
+hdrFlow.syncForm();hdrFlow.render();await hdrFlow.creative.videoComposer.ltxOutput.useSourceFrame();
+assert.equal(hdrFlow.hdrSourceLook,true);assert.equal(hdrFlow.hasLook(),true);
+assert.equal(hdrFlow.projectBody().look_mode,'source_hdr');assert.deepEqual([...hdrFlow.projectBody().references],[]);
+let hdrProject=null;const hdrCalls=[],priorFetch=api.fetchApi;
+api.fetchApi=async(path,options)=>{
+  const body=options?.body?JSON.parse(options.body):undefined;hdrCalls.push({path,body});
+  if(path==='/zura/studio/projects'){hdrProject={id:'hdr-project',source:hdrFlow.source,config:hdrFlow.config,look_mode:'source_hdr',references:[],character:null,actions:[],results:[],phase:'new'};return {ok:true,json:async()=>hdrProject};}
+  if(path.endsWith('/config'))return {ok:true,json:async()=>hdrProject};
+  if(path.endsWith('/action')){if(body.action==='prepare')hdrProject={...hdrProject,phase:'review',review:'shot',prepared_key:'prep',approval:null};else if(body.action==='approve')hdrProject={...hdrProject,phase:'approved',approval:'prep'};return {ok:true,json:async()=>hdrProject};}
+  if(path.endsWith('/hdr-source-opening')){hdrProject={...hdrProject,phase:'opening',look_mode:'ready',opening_key:'key',opening_input:{file:'frame.png',native_hdr:{source_id:'hdr-video'}},starting_asset:{id:'frame',file:'frame.png',native_hdr:{source_id:'hdr-video'}}};return {ok:true,json:async()=>hdrProject};}
+  return priorFetch(path,options);
+};
+await hdrFlow.primaryRecipe();assert.equal(hdrFlow.project.phase,'review');assert.equal(hdrFlow.project.approval,null);
+assert.deepEqual(hdrCalls.filter(x=>x.path.endsWith('/action')).map(x=>x.body.action),['prepare']);
+assert.ok(!hdrCalls.some(x=>x.path.endsWith('/hdr-source-opening')),'Preparation never auto-approves the review');
+await hdrFlow.primaryRecipe();assert.equal(hdrFlow.project.phase,'opening');assert.equal(hdrFlow.lookMode,'ready');
+assert.deepEqual(hdrCalls.filter(x=>x.path.endsWith('/action')).map(x=>x.body.action),['prepare','approve']);
+assert.equal(hdrCalls.filter(x=>x.path.endsWith('/hdr-source-opening')).length,1);
+assert.ok(!hdrCalls.some(x=>x.path==='/prompt'),'The flow does not start image or video generation');
+api.fetchApi=priorFetch;hdrFlow.creative.close();
 console.log('Reference upload/limits, safe history clearing/undo, saved theme and exact dimensions, Image/Video home, state preservation, native recipe readiness, prompt/action, targeted cancel, history and error recovery pass.');

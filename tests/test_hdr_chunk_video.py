@@ -92,5 +92,23 @@ class HDRChunkVideoTests(unittest.TestCase):
         near=np.abs(lags)<=4800
         self.assertLessEqual(abs(int(lags[near][np.argmax(cross[near])])),1)
 
+    def test_exact_fractional_start_time_is_not_rounded_to_a_frame(self):
+        from scipy.signal import correlate, correlation_lags
+        rng=np.random.default_rng(317)
+        samples=rng.integers(-14000,14000,144000,dtype=np.int16)
+        with wave.open(str(self.audio),'wb') as wav:
+            wav.setparams((1,2,48000,len(samples),'NONE','not compressed'));wav.writeframes(samples.tobytes())
+        with patch.object(paintout,'native_colour',side_effect=lambda frames,*args:frames):
+            path=video.export_hlg_video(self.stage,self.tmp.name,'exact',fps=24,
+                audio_source=self.audio,audio_start_seconds=.517,ffmpeg=self.ffmpeg)
+        with av.open(str(path)) as container:
+            actual=np.concatenate([frame.to_ndarray().reshape(-1) for frame in container.decode(audio=0)])
+        expected=samples[round(.517*48000):round(.517*48000)+round(14/24*48000)].astype(np.float32)/32768
+        actual=actual[:len(expected)];cross=correlate(actual,expected,mode='full',method='fft')
+        lags=correlation_lags(len(actual),len(expected),mode='full');near=np.abs(lags)<=4800
+        self.assertLessEqual(abs(int(lags[near][np.argmax(cross[near])])),1)
+        with self.assertRaisesRegex(ValueError,'one valid source audio offset'):
+            video.export_hlg_video(self.stage,self.tmp.name,'invalid',fps=24,audio_start_frame=1,audio_start_seconds=.517,ffmpeg=self.ffmpeg)
+
 
 if __name__=='__main__':unittest.main()

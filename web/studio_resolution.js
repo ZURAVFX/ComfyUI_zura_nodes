@@ -61,7 +61,8 @@ export class VideoResolutionControl {
   context(){
     const s=this.studio,c=s.config,source=s.source||{},ratio=(source.width||16)/(source.height||9),opening=s.composerStage()!=='video',camera=c.workflow_mode==='camera',relight=c.workflow_mode==='relight';
     const exact=opening||camera||relight;
-    const cap=camera?{step:32,min:128,max:1280,maxPixels:1280*1280}:opening?{step:c.opening_model==='qwen21'?32:16,min:256,max:2048,maxPixels:2e6}:{step:16,min:256,max:1920,maxPixels:1920*1088};
+    const openingMax=s.modelStatus?.opening_max_pixels>=4e6?4e6:2e6,largeRelight=relight&&!opening&&c.relight_engine==='wan21'&&s.modelStatus?.wan21_relight_max_pixels>=8_388_608;
+    const cap=camera?{step:32,min:128,max:1280,maxPixels:1280*1280}:opening?{step:c.opening_model==='qwen21'?32:16,min:256,max:openingMax>2e6?4096:2048,maxPixels:openingMax}:largeRelight?{step:16,min:256,max:4096,maxPixels:8_388_608}:{step:16,min:256,max:1920,maxPixels:1920*1088};
     return {s,c,source,ratio,opening,camera,relight,exact,cap,key:camera?'camera':opening?'opening':'relight'};
   }
   apply(custom=false){
@@ -91,7 +92,7 @@ export class VideoResolutionControl {
     if(sourceSize)Object.assign(x.c,{[x.key+'_width']:sourceSize.width,[x.key+'_height']:sourceSize.height});
     const size=x.exact?(sourceSize||{width:x.c[x.key+'_width']||fallback.width,height:x.c[x.key+'_height']||fallback.height}):resolutionSize(x.ratio,(Number(x.c.resolution)||1280)**2/Math.max(x.ratio,1/x.ratio)/1e6,{step:x.c.engine==='wan2'?16:64,min:64,max:1920});
     if(this.nativeQuality)this.nativeQuality.hidden=x.exact;
-    this.$('mp').max=x.camera?1.6:x.opening?2:x.exact?2:2.1;
+    this.$('mp').max=x.camera?1.6:x.opening?x.cap.maxPixels/1e6:x.exact&&x.cap.maxPixels>3e6?8.35:x.exact?2:2.1;
     this.$('mp').value=x.exact?(x.c[x.key+'_megapixels']??size.width*size.height/1e6):size.width*size.height/1e6;
     this.$('mp-label').textContent=`${(size.width*size.height/1e6).toFixed(2)} MP`;
     this.$('shape').value=x.exact?(x.c[x.key+'_shape']||'source'):'source';this.$('shape').disabled=busy||!x.exact;
@@ -102,7 +103,7 @@ export class VideoResolutionControl {
     this.$('mp').disabled=busy||(!x.exact&&(x.c.engine==='wan2'||x.c.h3_head_swap));
     const output=sourceSize&&x.relight?{width:sourceWidth-sourceWidth%2,height:sourceHeight-sourceHeight%2}:size;
     this.$('dimensions').textContent=`${output.width} × ${output.height} px`;
-    this.$('hint').textContent=x.camera?`Camera still and video use ${size.width} × ${size.height}. Images are fitted without stretching${sourceSize&&(size.width!==sourceWidth||size.height!==sourceHeight)?'; source size adjusted for H3':''}.`:sourceSize?`${output.width===sourceWidth&&output.height===sourceHeight?'Output matches the source.':'Output adjusted to even pixels for MP4.'} ${sourceSize.width===output.width&&sourceSize.height===output.height?'':`Generated at ${sourceSize.width} × ${sourceSize.height} on Wan’s ${x.cap.step}-pixel grid, then fitted to the output.`}`.trim():x.opening?`Image generation · ${x.cap.step}-pixel grid. Saved frame stays ${sourceWidth} × ${sourceHeight}.`:x.exact?`Wan 2.1 · ${x.cap.step}-pixel grid. Images are fitted without stretching.`:'The slider selects supported native sizes for this workflow.';
+    this.$('hint').textContent=x.camera?`Camera still and video use ${size.width} × ${size.height}. Images are fitted without stretching${sourceSize&&(size.width!==sourceWidth||size.height!==sourceHeight)?'; source size adjusted for H3':''}.`:sourceSize?`${output.width===sourceWidth&&output.height===sourceHeight?'Output matches the source.':'Output adjusted to even pixels for MP4.'} ${sourceSize.width===output.width&&sourceSize.height===output.height?'':`Generated at ${sourceSize.width} × ${sourceSize.height} on Wan’s ${x.cap.step}-pixel grid, then fitted to the output.`}${size.width*size.height>1920*1088?' High resolutions need more memory and are untested.':''}`.trim():x.opening?`Image generation · ${x.cap.step}-pixel grid. Saved frame stays ${sourceWidth} × ${sourceHeight}.${size.width*size.height>2e6?' High resolution needs more memory and may be slower.':''}`:x.exact?`Wan 2.1 · ${x.cap.step}-pixel grid. Images are fitted without stretching.${size.width*size.height>1920*1088?' High resolutions need more memory and are untested.':''}`:'The slider selects supported native sizes for this workflow.';
     return output;
   }
 }

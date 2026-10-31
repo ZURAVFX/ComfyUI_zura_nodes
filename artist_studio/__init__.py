@@ -1,5 +1,6 @@
 import hashlib
 import json
+import math
 import re
 import shutil
 import subprocess
@@ -155,14 +156,15 @@ class GenjSelectClip:
             "duration_seconds": ("FLOAT", {"default": 4.0, "min": 0.1, "max": 30.0, "step": 0.1}),
             "long_edge": ("INT", {"default": 768, "min": 256, "max": 1920, "step": 64}),
         }, "optional": {"audio": ("AUDIO",), "audio_start_seconds": ("FLOAT", {"default": 0, "min": 0, "max": 86400, "step": .1}),
-                        "use_original_length": ("BOOLEAN", {"default": False, "tooltip": "Use the whole source video from the beginning."})}}
+                        "use_original_length": ("BOOLEAN", {"default": False, "tooltip": "Use the whole source video from the beginning."}),
+                        "round_up": ("BOOLEAN", {"default": False, "tooltip": "Hold the last frame when the selected interval ends between output frames."})}}
 
     RETURN_TYPES = ("VIDEO", "GENJ_CLIP", "STRING")
     RETURN_NAMES = ("selected_clip", "clip_details", "clip_summary")
     FUNCTION = "select"
     CATEGORY = CATEGORY
 
-    def select(self, video, start_seconds, duration_seconds, long_edge, audio=None, audio_start_seconds=0, use_original_length=False):
+    def select(self, video, start_seconds, duration_seconds, long_edge, audio=None, audio_start_seconds=0, use_original_length=False, round_up=False):
         source = source_path(video)
         with av.open(str(source)) as c:
             stream = c.streams.video[0]
@@ -174,7 +176,11 @@ class GenjSelectClip:
             start_seconds, duration_seconds = 0.0, available
         if start_seconds >= available:
             raise ValueError("The start time is beyond the end of this video.")
-        frames = max(1, int(min(duration_seconds, available - start_seconds) * 24 + 1e-6))
+        selected_duration = min(duration_seconds, available - start_seconds)
+        # A complete source need not end on a 24 fps boundary. Round up and
+        # hold the final decoded frame so the end of the original isn't lost.
+        frames = max(1, math.ceil(selected_duration * 24 - 1e-6) if use_original_length or round_up
+                     else int(selected_duration * 24 + 1e-6))
         duration = frames / 24
         scale = min(1.0, long_edge / max(width, height))
         # SAM and review videos need even codec dimensions, not a diffusion
@@ -182,13 +188,13 @@ class GenjSelectClip:
         # distorting the camera geometry before the opening look was created.
         w, h = max(2, round(width * scale / 2) * 2), max(2, round(height * scale / 2) * 2)
         details = {"source": str(source), "source_hash": digest_file(source), "start": start_seconds,
-                   "duration": duration, "frames": frames, "fps": 24, "width": w, "height": h,
+                   "duration": duration, "selected_duration": selected_duration, "frames": frames, "fps": 24, "width": w, "height": h,
                    "full_source": start_seconds == 0 and abs(duration - available) <= 1 / 24, "has_audio": has_audio}
         if audio is not None:
             _, details = reference_audio(details, audio, audio_start_seconds)
         # Include the selection algorithm version so previously cached files
         # with a missing final frame are never reused after this fix.
-        key = hashlib.sha256((json.dumps(details, sort_keys=True) + "|selection-v2").encode()).hexdigest()[:16]
+        key = hashlib.sha256((json.dumps(details, sort_keys=True) + "|selection-v4").encode()).hexdigest()[:16]
         path = root() / "clips" / (key + ".mp4")
         path.parent.mkdir(exist_ok=True)
         if not path.exists():
@@ -196,6 +202,9 @@ class GenjSelectClip:
             # in our intermediate MP4 container. Preserve AAC when possible;
             # convert other source codecs to AAC for broad compatibility.
             audio_codec = ["-c:a", "copy"] if details["full_source"] and audio_codec_name == "aac" and audio is None else ["-c:a", "aac", "-b:a", "256k"]
+            if selected_duration < duration - 1e-6:
+                audio_codec = ["-c:a", "aac", "-b:a", "256k", "-af",
+                               f"atrim=duration={selected_duration:.9f},asetpts=PTS-STARTPTS,apad"]
             second = (["-i", details["audio_source"]] if audio is not None else
                       [] if has_audio else ["-f", "lavfi", "-i", "anullsrc=r=48000:cl=stereo"])
             ffmpeg("-ss", start_seconds, "-i", source, *second, "-t", duration, "-map", "0:v:0", "-map", "1:a:0" if second else "0:a:0",
@@ -394,7 +403,7 @@ class GenjLoadReviewedShot:
         return {"required": {"shot_id": ("STRING", {"default": "", "multiline": False}),
                              "approved_shot_id": ("STRING", {"default": "", "multiline": False,
                              "tooltip": "Studio fills this automatically after review. Standalone graphs must use matching reviewed and approved IDs."})},
-                "optional": {"render_long_edge": ("INT", {"default": 0, "min": 0, "max": 1920,
+                "optional": {"render_long_edge": ("INT", {"default": 0, "min": 0, "max": 4096,
                     "tooltip": "0 uses the reviewed preview. Higher values reread the original footage and resize the approved mask."}),
                     "output_scale": ("INT", {"default": 1, "min": 1, "max": 2}),
                     "preview_seconds": ("FLOAT", {"default": 0, "min": 0, "max": 30}),
@@ -425,8 +434,8 @@ class GenjLoadReviewedShot:
             source = Path(details["source"])
             if digest_file(source) != details["source_hash"]:
                 raise ValueError("The original source changed after mask approval. Prepare the shot again.")
-            if not 256 <= render_long_edge <= 1920:
-                raise ValueError("Choose a render size between 256 and 1920 pixels.")
+            if not 256 <= render_long_edge <= 4096:
+                raise ValueError("Choose a render size between 256 and 4096 pixels.")
             with av.open(str(source)) as c:
                 stream = c.streams.video[0]
                 sw, sh = stream.width, stream.height
@@ -594,6 +603,61 @@ class GenjRecordDraft:
         return {"ui": {"text": [f"Draft task ID: {draft_task_id}\nSource shot: {record['shot_id']}\nInspect the draft before authorising a final render."]}, "result": (draft_task_id,)}
 
 
+class GenjHoldImages:
+    """Hold the last control image instead of padding model input with grey."""
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {"required": {"images": ("IMAGE",), "length": ("INT", {"default": 81, "min": 1, "max": 10000})}}
+    RETURN_TYPES = ("IMAGE",)
+    FUNCTION = "hold"
+    CATEGORY = CATEGORY
+    def hold(self, images, length):
+        if not isinstance(images, torch.Tensor) or images.ndim != 4 or not len(images) or type(length) is not int or not 1 <= length <= 10000:
+            raise ValueError("Choose a valid image sequence and target length.")
+        if len(images) >= length:
+            return (images[:length],)
+        return (torch.cat((images, images[-1:].expand(length - len(images), -1, -1, -1)), dim=0),)
+
+
+class GenjHoldToModelLength:
+    """Extend a finished image batch to a model-supported length with its last frame."""
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {"required": {"images": ("IMAGE",), "stride": ([4, 8, 17],)}, "optional": {"remainder": ("INT", {"default": 1, "min": 0, "max": 16})}}
+    RETURN_TYPES = ("IMAGE", "INT")
+    RETURN_NAMES = ("images", "frame_count")
+    FUNCTION = "hold"
+    CATEGORY = CATEGORY
+    def hold(self, images, stride, remainder=1):
+        if not isinstance(images, torch.Tensor) or images.ndim != 4 or not len(images) or stride not in (4, 8, 17) or not 0 <= remainder < stride:
+            raise ValueError("Choose a valid image sequence and model frame stride.")
+        target = len(images) + (remainder - len(images)) % stride
+        return GenjHoldImages().hold(images, target)[0], target
+
+
+class GenjPadAudioToFrames:
+    """Keep a soundtrack aligned with a held final video frame."""
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {"required": {"audio": ("AUDIO",), "frames": ("INT", {"default": 25, "min": 1}),
+                             "fps": ("FLOAT", {"default": 24., "min": 1., "max": 120.})}}
+    RETURN_TYPES = ("AUDIO",)
+    FUNCTION = "pad"
+    CATEGORY = CATEGORY
+    def pad(self, audio, frames, fps):
+        if not isinstance(audio, dict) or not isinstance(audio.get("waveform"), torch.Tensor):
+            raise ValueError("A valid soundtrack is required.")
+        wave, rate = audio["waveform"], audio.get("sample_rate")
+        if type(rate) is not int or rate <= 0 or type(frames) is not int or frames < 1 or not isinstance(fps, (int, float)) or isinstance(fps, bool) or not math.isfinite(fps) or fps <= 0:
+            raise ValueError("Choose a valid frame count, sample rate and frame rate.")
+        samples = round(frames / fps * rate)
+        if wave.shape[-1] < samples:
+            wave = F.pad(wave, (0, samples - wave.shape[-1]))
+        else:
+            wave = wave[..., :samples]
+        return ({**audio, "waveform": wave},)
+
+
 class GenjRestoreSoundtrack:
     @classmethod
     def INPUT_TYPES(cls):
@@ -601,14 +665,16 @@ class GenjRestoreSoundtrack:
                              "take_name": ("STRING", {"default": "replacement", "multiline": False})},
                 "optional": {"output_subfolder": (["final", "studio_intermediate"],),
                              "output_width": ("INT", {"default": 0, "min": 0, "max": 16384}),
-                             "output_height": ("INT", {"default": 0, "min": 0, "max": 16384})}}
+                             "output_height": ("INT", {"default": 0, "min": 0, "max": 16384}),
+                             "target_frames": ("INT", {"default": 0, "min": 0}),
+                             "model_stride": ([0, 4, 8],)}}
 
     RETURN_TYPES = ("VIDEO",)
     FUNCTION = "restore"
     CATEGORY = CATEGORY
     OUTPUT_NODE = True
 
-    def restore(self, video, clip_details, take_name, output_subfolder="final", output_width=0, output_height=0):
+    def restore(self, video, clip_details, take_name, output_subfolder="final", output_width=0, output_height=0, target_frames=0, model_stride=0):
         if not re.fullmatch(r"[A-Za-z0-9_-]{1,80}", take_name):
             raise ValueError("Take name can contain letters, numbers, underscores and hyphens.")
         if output_subfolder not in ("final", "studio_intermediate"):
@@ -620,8 +686,15 @@ class GenjRestoreSoundtrack:
         with av.open(str(generated)) as c:
             vs = c.streams.video[0]
             duration = float(vs.duration * vs.time_base) if vs.duration else float(c.duration / av.time_base)
-        target_duration = clip_details["duration"]
-        if duration + 1 / 24 < target_duration:
+        original_frames = clip_details["frames"]
+        if type(target_frames) is not int or target_frames < 0 or (target_frames and not original_frames <= target_frames <= original_frames + 16):
+            raise ValueError("The padded output must retain the selected clip and add at most sixteen held frames.")
+        if model_stride not in (0, 4, 8) or (model_stride and target_frames):
+            raise ValueError("Choose either a model frame stride or an explicit padded length.")
+        final_frames = (original_frames + (1 - original_frames) % model_stride) if model_stride else (target_frames or original_frames)
+        target_duration = final_frames / 24 if target_frames or model_stride else clip_details["duration"]
+        required_duration = original_frames / 24 if model_stride else target_duration
+        if duration + 1 / 24 < required_duration:
             raise ValueError(f"Generated video is too short ({duration:.3f}s for {target_duration:.3f}s). The source soundtrack will not be shortened to hide this.")
         destination = root() / output_subfolder
         destination.mkdir(exist_ok=True)
@@ -635,11 +708,19 @@ class GenjRestoreSoundtrack:
         offset = 0 if external else clip_details["start"]
         with av.open(str(soundtrack)) as media:
             audio_codec_name = media.streams.audio[0].codec_context.name if media.streams.audio else None
-        audio = ["-c:a", "copy"] if clip_details["full_source"] and not external and audio_codec_name == "aac" else ["-c:a", "aac", "-b:a", "256k"]
+        selected_audio_duration = min(float(clip_details.get("selected_duration", clip_details["duration"])), original_frames / 24)
+        if not np.isfinite(selected_audio_duration) or selected_audio_duration <= 0:
+            raise ValueError("The selected audio duration must be positive and finite.")
+        extend_audio = bool(audio_codec_name) and (final_frames > original_frames or selected_audio_duration < target_duration - 1e-6)
+        audio = ["-c:a", "copy"] if clip_details["full_source"] and not external and audio_codec_name == "aac" and not extend_audio else ["-c:a", "aac", "-b:a", "256k"]
+        if extend_audio:
+            # Do not play later source audio underneath the held final frames.
+            audio += ["-af", f"atrim=duration={selected_audio_duration:.9f},asetpts=PTS-STARTPTS,apad"]
         # Model decoding can end up one frame short after timebase rounding.
         # The duration check above still rejects larger shortages; holding just
         # one frame gives the selected soundtrack an exact frame-aligned end.
-        vf = "fps=24,tpad=stop_mode=clone:stop=1"
+        vf = (f"fps=24,trim=end_frame={original_frames},tpad=stop_mode=clone:stop={final_frames - original_frames + 1}"
+              if model_stride else "fps=24,tpad=stop_mode=clone:stop=1")
         if output_width or output_height:
             if any(type(v) is not int or v < 2 or v > 16384 or v % 2 for v in (output_width, output_height)):
                 raise ValueError("Output width and height must be even numbers from 2 to 16384.")
@@ -647,7 +728,7 @@ class GenjRestoreSoundtrack:
         elif clip_details.get("export_width") and clip_details.get("export_height"):
             vf += f",scale={clip_details['export_width']}:{clip_details['export_height']}:flags=lanczos"
         ffmpeg("-i", generated, "-ss", offset, "-i", soundtrack, "-map", "0:v:0", "-map", "1:a:0?",
-               "-t", target_duration, "-vf", vf, "-frames:v", clip_details["frames"],
+               "-t", target_duration, "-vf", vf, "-frames:v", final_frames,
                "-c:v", "libx264", "-crf", 16, "-pix_fmt", "yuv420p", *audio, "-movflags", "+faststart", path)
         preview = {"filename": path.name, "subfolder": "genj/" + output_subfolder,
                    "type": "output", "format": "video/mp4"}
@@ -656,7 +737,7 @@ class GenjRestoreSoundtrack:
 
 
 NODE_CLASS_MAPPINGS = {cls.__name__: cls for cls in [GenjSelectClip, GenjChoosePerformer, GenjColourDepth,
-    GenjVoiceGuidance, GenjSaveReview, GenjLoadReviewedShot, GenjLTXFramePad, GenjApproveDraft, GenjRecordDraft,
+    GenjVoiceGuidance, GenjSaveReview, GenjLoadReviewedShot, GenjLTXFramePad, GenjHoldImages, GenjHoldToModelLength, GenjPadAudioToFrames, GenjApproveDraft, GenjRecordDraft,
     GenjRestoreSoundtrack, GenjSaveTextConditioning, GenjLoadTextConditioning, GenjApplyReferenceAudio]}
 NODE_DISPLAY_NAME_MAPPINGS = {"GenjSelectClip": "Choose Clip", "GenjChoosePerformer": "Choose Performer",
     "GenjColourDepth": "Colour Depth for Seedance", "GenjVoiceGuidance": "Voice Guidance",

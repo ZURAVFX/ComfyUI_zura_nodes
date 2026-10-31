@@ -33,7 +33,7 @@ MODEL_FILES = {
 REQUIRED_NODES = {
     "BasicScheduler", "CLIPLoader", "CLIPTextEncode", "CLIPVisionEncode",
     "CLIPVisionLoader", "CreateVideo", "ForLoopClose", "ForLoopOpen",
-    "GetImageSizeAndCount", "GetVideoComponents", "GenjLoadReviewedShot",
+    "GetImageSizeAndCount", "GetVideoComponents", "GenjLoadReviewedShot", "GenjHoldImages", "GenjHoldToModelLength",
     "GenjRestoreSoundtrack", "ImageBatchExtendWithOverlap", "ImageFromBatch",
     "ImageResizeKJv2", "KSamplerSelect", "LoadImage", "LoraLoaderModelOnly",
     "ModelSamplingSD3", "PathchSageAttentionKJ", "SamplerCustom",
@@ -135,7 +135,7 @@ def build_studio_graph(project: Mapping[str, Any], check_asset) -> dict[str, dic
     width, height = _output_size(source_path)
     if config.get("relight_width") and config.get("relight_height"):
         width, height = int(config["relight_width"]), int(config["relight_height"])
-        if any(v < 256 or v > 1920 or v % 16 for v in (width, height)) or width * height > 1920 * 1088:
+        if any(v < 256 or v > 4096 or v % 16 for v in (width, height)) or width * height > 8_388_608:
             raise Wan21RelightError("Choose valid Wan 2.1 dimensions on its 16-pixel grid.")
 
     payload = json.loads(RECIPE.read_text(encoding="utf-8"))
@@ -158,20 +158,29 @@ def build_studio_graph(project: Mapping[str, Any], check_asset) -> dict[str, dic
     }
     for key in ("272:407:89", "272:408:275:190"):
         graph[key]["inputs"].update(width=width, height=height)
+    # Wan's control node otherwise fills a short last section with neutral
+    # grey. Hold the last source image for the model's full 81-frame window.
+    graph["wan21_hold_source"] = {"class_type": "GenjHoldImages", "inputs": {
+        "images": ["272:404:395", 0], "length": ["272:403:387", 0]},
+        "_meta": {"title": "Hold final source frame for the model"}}
+    graph["272:407:89"]["inputs"]["image"] = ["wan21_hold_source", 0]
     # Crop the lighting reference at the same position as source frames.  The
     # supplied recipe used top for the anchor and centre for every other frame.
     graph["272:408:275:190"]["inputs"]["crop_position"] = "center"
     graph["272:408:274:3"]["inputs"]["text"] = prompt
     graph["272:407:277:19"]["inputs"]["noise_seed"] = int(config.get("seed", 42))
+    graph["wan21_hold_result"] = {"class_type": "GenjHoldToModelLength", "inputs": {
+        "images": ["272:402", 0], "stride": 4},
+        "_meta": {"title": "Hold final frame to a supported Wan length"}}
     graph["wan21_video"] = {
         "class_type": "CreateVideo",
-        "inputs": {"images": ["272:402", 0], "fps": 24.0},
+        "inputs": {"images": ["wan21_hold_result", 0], "fps": 24.0},
         "_meta": {"title": "Assemble relit frames"},
     }
     graph["wan21_export"] = {
         "class_type": "GenjRestoreSoundtrack",
         "inputs": {"video": ["wan21_video", 0],
-                   "clip_details": ["wan21_shot", 3],
+                   "clip_details": ["wan21_shot", 3], "target_frames": ["wan21_hold_result", 1],
                    "take_name": "studio_" + str(project["id"])[:8] + "_wan21_relight"},
         "_meta": {"title": "Save relight with original soundtrack"},
     }

@@ -42,6 +42,7 @@ class HeadSwapRequest:
     object_indices: str = ""
     prompt: str = ""
     reference_size: str = "max"
+    use_original_length: bool = False
 
 
 def build_graph(request: HeadSwapRequest):
@@ -61,7 +62,7 @@ def build_graph(request: HeadSwapRequest):
         value = getattr(request, name)
         if type(value) not in (int, float) or not math.isfinite(value) or value < 0:
             raise ValueError(f"Provide a finite nonnegative {name}.")
-    if not 5 <= int(request.duration_seconds * 24 + 1e-6) <= 120:
+    if not 5 <= math.ceil(request.duration_seconds * 24 - 1e-6) <= 120:
         raise ValueError("Select 5 to 120 frames at 24 fps, up to five seconds.")
     if type(request.seed) is not int or not 0 <= request.seed <= 2**64 - 1:
         raise ValueError("Provide an unsigned 64-bit seed.")
@@ -79,7 +80,7 @@ def build_graph(request: HeadSwapRequest):
 
     source = node("source", "LoadVideo", file=request.source_video)
     selected = node("select", "GenjSelectClip", video=source, start_seconds=request.start_seconds,
-                    duration_seconds=request.duration_seconds, long_edge=1024, use_original_length=False)
+                    duration_seconds=request.duration_seconds, long_edge=1024, use_original_length=request.use_original_length, round_up=True)
     images = node("components", "GetVideoComponents", video=selected)
     audio = ["components", 1]
     node("source_size", "GetImageSize", image=images)
@@ -153,8 +154,9 @@ def build_graph(request: HeadSwapRequest):
                     bboxes=["crop", 2], cropped_masks=blend_mask, feather=16, resize_method="auto")
     finished = node("trim_output", "GetImageRangeFromBatch", images=finished, start_index=0,
                     num_frames=["source_size", 2])
+    finished = node("hold_output", "GenjHoldToModelLength", images=finished, stride=17, remainder=5)
     video = node("video", "CreateVideo", images=finished, audio=audio, fps=24.)
-    node("export", "GenjRestoreSoundtrack", video=video, clip_details=["select", 1], take_name=request.take_name)
+    node("export", "GenjRestoreSoundtrack", video=video, clip_details=["select", 1], target_frames=["hold_output", 1], take_name=request.take_name)
     return graph
 
 
@@ -171,14 +173,16 @@ def _selection(project, check_asset):
     duration = available if config.get("length_mode") == "original" else config["duration"]
     if not all(math.isfinite(v) for v in (available,start,duration)) or start < 0 or duration <= 0 or start >= available:
         raise ValueError("Choose a valid source interval.")
-    if int(duration * 24 + 1e-6) > int((available - start) * 24 + 1e-6):
+    if duration > available - start + 1e-6:
         raise ValueError("The selected range extends past the end of the source video. Choose a shorter range.")
-    frames = int(duration * 24 + 1e-6) if math.isfinite(duration) else 0
+    frames = math.ceil(duration * 24 - 1e-6) if math.isfinite(duration) else 0
     if not has_audio:
         raise ValueError("Head & face requires original audio. Use Full character for silent footage or new dialogue.")
     if not 5 <= frames <= 48:
         raise ValueError("Head & face is approved for 0.21 to 2 seconds. Choose a shorter custom clip.")
-    return start, frames / 24, frames
+    # Keep the artist's interval separate from the rounded inference count.
+    # GenjSelectClip holds the final partial frame and silences its extra tail.
+    return start, duration, frames
 
 
 def selected_frame_count(project, check_asset):
@@ -196,7 +200,7 @@ def build_studio_graph(project, check_asset):
     start, duration, _ = _selection(project, check_asset)
     config = project["config"]
     return build_graph(HeadSwapRequest(source_video=project["source"]["file"], portrait_image=refs[0]["file"],
-        source_has_audio=True, start_seconds=start, duration_seconds=duration, seed=config["seed"],
+        source_has_audio=True, start_seconds=start, duration_seconds=duration, use_original_length=config.get("length_mode") == "original", seed=config["seed"],
         prompt=config.get("prompt", ""), take_name="studio_" + project["id"][:8] + "_h3_head_face"))
 
 

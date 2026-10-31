@@ -5,6 +5,7 @@ import hashlib
 import json
 import logging
 import math
+import os
 import re
 import shutil
 import time
@@ -41,7 +42,7 @@ STAGES = {
 STAGES.update({"ltx25_" + phase: "LTX 2.5 " + phase for phase in
                ("text", "motion", "stage1", "upscale", "refine", "decode", "cleanup")})
 DEFAULTS = {"engine": "local", "background": "keep", "scope": "person", "prompt": "", "image_prompt": "",
-            "custom_loras": [], "opening_loras": [],
+            "custom_loras": [], "opening_loras": [], "ltx_output": "sdr",
             "h3_character_method": "control", "openjutsu_resolution": "480",
             "openjutsu_background": "keep", "openjutsu_direct": False,
             "opening_model": "klein9b",
@@ -129,6 +130,7 @@ def clean_config(value):
         raise ValueError("Choose an available starting-image model.")
     for key, options in [("engine", ("local", "h3", "wan", "wan2", "seedance")), ("background", ("keep", "restyle")),
                          ("quality", ("fast", "detailed")),
+                         ("ltx_output", ("sdr", "hlg_video", "hlg_and_exr", "acescg_exr")),
                          ("length_mode", ("custom", "original")),
                          ("workflow_mode", ("motion", "swap", "viewport", "relight", "camera")),
                          ("subject_mode", ("auto", "people", "objects")),
@@ -158,13 +160,15 @@ def clean_config(value):
     if c["engine"] not in ("local", "h3") and c["finished_frame_position"] != "first":
         raise ValueError("Timed finished-frame references are supported by LTX and H3. Select First frame or switch models.")
     if c["workflow_mode"] == "relight" and c["engine"] != "h3":
-        raise ValueError("Relight currently supports MiniMax H3. Choose H3 for this task.")
+        raise ValueError("Relight uses the Wan 2.1 workflow. Reload Studio and choose Relight again.")
     if c["workflow_mode"] != "relight":
         c["relight_engine"] = "h3"
     else:
         # Migrate saved H3 choices when editing/exporting a shot. Running jobs
         # keep their queued graph and are never automatically resubmitted.
         c["relight_engine"] = "wan21"
+        c["finished_frame_position"] = "first"
+        c["finished_frame_number"] = 1
     c["preserve_people"] = bool(c["preserve_people"])
     c["preserve_identity"] = bool(c["preserve_identity"]) and c["workflow_mode"] == "relight"
     if c["preserve_people"] and (c["engine"] != "h3" or c["workflow_mode"] != "motion"):
@@ -181,6 +185,8 @@ def clean_config(value):
         raise ValueError("Timed LTX finished frames currently require a whole-scene task. Masked edits use the first frame.")
     # The visible task choice is the sole source of scene/mask routing.
     c["background"] = "restyle" if c["engine"] in ("local", "seedance") and c["edit_area"] == "scene" else "keep"
+    if c["engine"] != "local" or c["workflow_mode"] != "motion":
+        c["ltx_output"] = "sdr"
     for key in ("start", "duration", "audio_start"):
         c[key] = float(c[key])
         if not math.isfinite(c[key]):
@@ -227,7 +233,8 @@ def clean_config(value):
     c["mask_prompt"] = str(c["mask_prompt"]).strip()[:500]
     from .mask_selection import clean_points
     c["mask_points"] = clean_points(c["mask_points"], require_positive=False)
-    for prefix, step, maximum, pixels in (("opening", 32 if c["opening_model"] == "qwen21" else 16, 2048, 2_000_000), ("relight", 16, 1920, 1920 * 1088)):
+    relight_large = c['workflow_mode'] == 'relight' and c['relight_engine'] == 'wan21'
+    for prefix, step, maximum, pixels in (("opening", 32 if c["opening_model"] == "qwen21" else 16, 4096, 4_000_000), ("relight", 16, 4096 if relight_large else 1920, 8_388_608 if relight_large else 1920 * 1088)):
         pair = []
         for side in ("width", "height"):
             raw = c[prefix + "_" + side]
@@ -401,6 +408,27 @@ def check_asset(asset):
     return path
 
 
+def paintout_asset_path(store, identity, validate=check_asset):
+    """Resolve only an unchanged Studio-uploaded video for paintout handoff."""
+    asset = store.load(identity)
+    if asset.get("asset_kind") != "video":
+        raise ValueError("Choose an uploaded video.")
+    return validate(asset)
+
+
+def paintout_hdr_asset_info(path, colour_space, describe, selected_space, describe_media):
+    if colour_space not in ('auto', 'hlg_rec2020', 'pq_rec2020'):
+        raise ValueError('Choose HLG, PQ, or source colour detection for HDR video.')
+    details = describe(str(path))
+    space = selected_space(details, colour_space)
+    if space not in ('hlg_rec2020', 'pq_rec2020', 'pq_display_p3'):
+        raise ValueError('This source is not identified as HDR. Choose SDR to HDR or verify its colour tags.')
+    info = describe_media(str(path))
+    # Paintout's node selection resolves Display-P3 PQ from video tags in auto.
+    info['colour_space'] = 'auto' if space == 'pq_display_p3' else space
+    return info
+
+
 def validate_selection(project):
     """Reject unsupported timelines before mask tracking or reference encoding."""
     c = project["config"]
@@ -416,7 +444,9 @@ def validate_selection(project):
         selected_frame_count(project, check_asset)
         return
     wan2 = c["engine"] == "wan2"
-    wan21_relight = c.get("workflow_mode") == "relight" and c.get("relight_engine") == "wan21"
+    # Pending relight jobs are migrated to Wan 2.1, including legacy saved
+    # projects that still carry the old H3 choice.
+    wan21_relight = c.get("workflow_mode") == "relight"
     h3 = c["engine"] == "h3" and not wan21_relight
     ltx_scene = c["engine"] == "local" and c.get("edit_area") == "scene"
     wan_speech = c["engine"] == "wan" and bool(project.get("audio")) and c.get("lip_sync")
@@ -432,9 +462,9 @@ def validate_selection(project):
     seconds = available if c.get("length_mode") == "original" else c["duration"]
     if start >= available:
         raise ValueError("The start time is beyond the end of this video.")
-    if int(seconds * 24 + 1e-6) > int((available - start) * 24 + 1e-6):
+    if seconds > available - start + 1e-6:
         raise ValueError("The selected range extends past the end of the source video. Choose Use source or a shorter range.")
-    frames = max(1, int(seconds * 24 + 1e-6))
+    frames = max(1, math.ceil(seconds * 24 - 1e-6))
     if h3 and not 5 <= frames <= 120:
         raise ValueError("H3 currently supports 0.21 to 5 seconds. Choose a shorter custom clip, or use Wan for a longer take.")
     if head_swap_setup(c):
@@ -455,6 +485,11 @@ def prep_key(project):
     from .opening_subject import directed_source_subject
     from .opening_edit import replacement_target, target_position
     settings = {"source": project["source"]["sha"], **{k: project["config"][k] for k in PREP_KEYS}}
+    from .ltx_hdr_performance import marker as hdr_video_marker
+    hdr_source = hdr_video_marker(project["source"])
+    if hdr_source is not None:
+        settings["native_hdr_video"] = hdr_source
+    settings["selection_version"] = "hold-tail-v2"
     if project["config"].get("remove_text"):
         settings["remove_text"] = 6
     if project["config"].get("length_mode") == "original":
@@ -545,6 +580,11 @@ LTX25_DETECTORS = {
 
 
 def ltx25_detector_paths():
+    override = os.environ.get("AUX_ANNOTATOR_CKPTS_PATH")
+    if override:
+        root = Path(override)
+        return {name: (root / Path(*relative.parts[2:])) if (root / Path(*relative.parts[2:])).is_file() else None
+                for name, relative in LTX25_DETECTORS.items()}
     roots = folder_paths.get_folder_paths("custom_nodes")
     return {name: next((Path(root) / relative for root in roots if (Path(root) / relative).is_file()), None)
             for name, relative in LTX25_DETECTORS.items()}
@@ -597,6 +637,12 @@ def ltx25_native_plan(project):
     source = check_asset(project["source"])
     check_asset(project["character"])
     check_asset(project["opening_input"])
+    hdr_endpoint = None
+    if (project.get("opening_input") or {}).get("native_hdr") is not None:
+        from .ltx25_hdr_input import resolve_opening
+        hdr_endpoint = resolve_opening(project, Store(), check_asset)
+        if not hdr_endpoint:
+            raise ValueError("The native HDR opening could not be verified. Import it again.")
     directory, manifest = verify_review(project["review"])
     clip = manifest["clip"]
     reviewed_source = Path(directory) / "source.mp4"
@@ -611,10 +657,19 @@ def ltx25_native_plan(project):
     timeline = {"frames": clip["frames"], "fps": clip["fps"], "width": width, "height": height,
                 "has_audio": bool(clip.get("has_audio")), "source_has_audio": source_has_audio, "start": clip["start"],
                 "review_source_sha256": sha(reviewed_source)}
+    from .ltx_hdr_performance import marker as hdr_video_marker, source_interval
+    hdr_source = None
+    if hdr_video_marker(project["source"]) is not None:
+        if not hdr_endpoint:
+            raise ValueError("Choose an HDR EXR appearance or use the HDR source frame before generation.")
+        hdr_source = source_interval(project["source"], Store(), check_asset, project["config"], timeline)
     viewport = bool(project.get("config", {}).get("viewport_render"))
     objects = project.get("config", {}).get("subject_mode") == "objects"
-    model_set = VIEWPORT_MODELS if viewport else {k: v for k, v in QUALIFIED_MODELS.items()
+    model_set = dict(VIEWPORT_MODELS) if viewport else {k: v for k, v in QUALIFIED_MODELS.items()
         if not objects or k not in ("bbox_detector", "pose_estimator")}
+    if hdr_endpoint:
+        from .ltx_hdr_endpoints import VIDEO_VAE
+        model_set["video_vae"] = VIDEO_VAE
     categories = {"model": "diffusion_models", "video_vae": "vae", "audio_vae": "vae",
                   "union": "loras", "upscaler": "latent_upscale_models"}
     paths = {}
@@ -666,10 +721,15 @@ def ltx25_native_plan(project):
                 raise ValueError("The LTX LoRA changed while preparing the render. Try again.")
             loras.append({"name": node["lora_name"], "strength": node["strength_model"],
                           "pin": pin})
-    return build_plan(_viewport_project(project), scenario=scenario, timeline=timeline,
+    arguments = dict(scenario=scenario, timeline=timeline,
         models=dict(model_set), text_encoder_inputs=encoder, model_pins=pins,
         approval_key=prep_key(project), original_audio_sha=project["source"]["sha"],
         union_downscale_factor=factor, custom_loras=loras)
+    if hdr_endpoint:
+        from .ltx25_hdr_plan import build_native_hdr_plan
+        return build_native_hdr_plan(_viewport_project(project), hdr_endpoint=hdr_endpoint,
+            hdr_source=hdr_source, output=project["config"].get("ltx_output", "sdr"), **arguments)
+    return build_plan(_viewport_project(project), **arguments)
 
 
 def ltx25_phase_graph(project, phase):
@@ -816,11 +876,14 @@ def build_graph(project, stage, use_cache=True, run_id=None):
             inputs["noise_seed"] = c["seed"]
         elif typ == "GenjRestoreSoundtrack":
             inputs["take_name"] = "studio_" + project["id"][:8] + "_" + stage
+            if stage in ("background", "restyle") and c.get("engine") == "local":
+                inputs["model_stride"] = 8
     if stage == "prepare":
         check_asset(project["source"])
         graph["2"]["inputs"]["file"] = project["source"]["file"]
         graph["3"]["inputs"].update(start_seconds=c["start"], duration_seconds=c["duration"], long_edge=c["size"],
-                                     use_original_length=c["length_mode"] == "original")
+                                     use_original_length=c["length_mode"] == "original",
+                                     round_up=True)
         if project.get("audio"):
             check_asset(project["audio"])
             graph["zura_reference_audio"] = {"class_type": "LoadAudio", "inputs": {"audio": project["audio"]["file"]},
@@ -831,6 +894,13 @@ def build_graph(project, stage, use_cache=True, run_id=None):
         graph["9"]["inputs"]["performer"] = c["performer"]
         graph["12"]["inputs"]["expand"] = c["margin"]
         graph["18"]["inputs"]["pitch_vocals"] = c["pitch"]
+        if not c["pitch"]:
+            # Lazy inputs skip inference, but Comfy still validates their
+            # models and node classes. An ordinary review must not require
+            # a vocal-separation installation that it will never execute.
+            graph["18"]["inputs"].pop("isolated_vocals", None)
+            graph.pop("21", None)
+            graph.pop("22", None)
         if c.get("preserve_people"):
             # Detect all visible people as a joint protection track, not just the largest performer.
             # Native SAM defaults to one detection per category. Explicitly
@@ -1539,11 +1609,12 @@ class Studio:
             active.discard(action_id)
 
     def advance_wan_cleanup(self, p):
-        """Wait for an idle serial worker, then acknowledge model release.
+        """Wait for an idle serial worker, then acknowledge the hand-off.
 
         A /free success only submits flags. The CPU marker executes after the
-        worker consumes those flags and completes its normal cleanup, so no
-        InfiniteTalk or Animate model loads before the boundary is acknowledged.
+        worker consumes any requested flags and completes its normal cleanup.
+        Compatible LTX stages may reuse loaded models; other transitions still
+        release models before the CPU acknowledgement runs.
         """
         action = p["actions"][-1]
         h3_handoff = action.get("next_stage") == "h3_enhance"
@@ -1558,7 +1629,8 @@ class Studio:
                 policy = release_policy(p)
                 action["memory_policy"] = policy
                 action["cleanup_requested"] = time.time()
-                queue.set_flag("unload_models", True)
+                if policy.get("unload_models", True):
+                    queue.set_flag("unload_models", True)
                 if policy["purge_cache"]:
                     queue.set_flag("free_memory", True)
                 self.store.save(p)
@@ -1568,6 +1640,19 @@ class Studio:
                 if time.time() - action["cleanup_requested"] > 120:
                     raise ValueError(f"ComfyUI did not finish releasing models for {engine_name}. Check its queue before trying again.")
                 return p
+            if action.get("memory_policy", {}).get("unload_models") is False:
+                # A different job may have run, or memory may have become
+                # scarce, while this hand-off waited. Recheck before reusing.
+                from .memory_policy import release_policy
+                policy = release_policy(p)
+                if policy.get("unload_models", True):
+                    action["memory_policy"] = policy
+                    action["cleanup_requested"] = time.time()
+                    queue.set_flag("unload_models", True)
+                    if policy.get("purge_cache", True):
+                        queue.set_flag("free_memory", True)
+                    self.store.save(p)
+                    return p
             action["state"] = "submitting"
             self.store.save(p)
             extra = {"client_id": "zura-studio", "create_time": int(time.time() * 1000),
@@ -1659,6 +1744,29 @@ class Studio:
             receipts[name] = receipt
         index = PHASES.index(phase)
         if phase == "decode":
+            if plan.get("basis", {}).get("native_hdr"):
+                # Rebind from the verified upstream receipt before accepting any
+                # native result. The result helper also checks the exact graph,
+                # files, frame count, colour tags and EXR archive.
+                expected = bind_phase(plan, "decode", receipts,
+                    output_directory=output_root, input_directory=input_root)
+                if submitted != expected:
+                    raise ValueError("The native HDR decode no longer matches its verified inputs.")
+                from .ltx25_hdr_result import collect_native_delivery
+                delivery = collect_native_delivery(plan, submitted, frozen, output_root)
+                actual, asset = delivery["output_raster"], delivery["asset"]
+                append_result_once(p, {"stage": "restyle", "label": "LTX 2.5", "url": media_url(asset),
+                    "asset": asset, "created": time.time(), "action_id": action["id"],
+                    "resolution": action["resolution"], "duration": actual["frames"] / actual["fps"],
+                    "quality": action["quality"], "audio_mode": plan["scenario"],
+                    "generation_audio": plan.get("generation_audio"), "delivery_audio": plan.get("delivery_audio"),
+                    "seed": p["config"].get("seed", 42), **delivery})
+                run["next_phase"] = None
+                p["phase"] = "done"
+                action["state"] = "complete"
+                p["error"] = None
+                self.store.save(p)
+                return p
             assets = frozen["outputs"].get("save_video", {}).get("images", [])
             prefix = Path(submitted["save_video"]["inputs"]["filename_prefix"])
             candidates = [asset for asset in assets if asset.get("type") == "output" and
@@ -1674,7 +1782,7 @@ class Studio:
             width, height = plan["basis"]["delivery"]
             # The sampler receives an 8k+1 padded guide, while delivery is
             # trimmed back to the exact reviewed source interval.
-            expected_frames = plan["basis"].get("source_frames", plan["basis"]["frames"])
+            expected_frames = plan.get("delivered_frames", plan["basis"].get("source_frames", plan["basis"]["frames"]))
             actual = inspect_video(path, expected_frames=expected_frames,
                 expected_width=width, expected_height=height, expected_fps=24,
                 expected_audio_tracks=0 if plan["scenario"] == "silent" else 1)
@@ -1683,6 +1791,7 @@ class Studio:
                 "resolution": action["resolution"], "duration": actual["frames"] / actual["fps"],
                 "quality": action["quality"], "audio_mode": plan["scenario"],
                 "generation_audio": plan.get("generation_audio"), "delivery_audio": plan.get("delivery_audio"),
+                "hdr_output": p["config"].get("ltx_output", "sdr"), "seed": p["config"].get("seed", 42),
                 "output_raster": actual, "sha256": sha(path)})
             run["next_phase"] = None
             p["phase"] = "done"
@@ -2077,6 +2186,16 @@ class Studio:
             prior_value["audio_id"] = p["audio"]["id"]
         old_key, prior = prep_key(p), clean_config(prior_value)
         config = clean_config(value)
+        # A frame extracted from the HDR source always represents clip frame 1.
+        # User-supplied EXR references retain their chosen anchor.
+        native = (p.get("opening_input") or {}).get("native_hdr") or (p.get("starting_asset") or {}).get("native_hdr") or {}
+        if native.get("source_id"):
+            config.update(finished_frame_position="first", finished_frame_number=1)
+        from .ltx_hdr_performance import verify_source as verify_hdr_video
+        verify_hdr_video(p["source"], self.store, check_asset, config)
+        if any((p.get(key) or {}).get("native_hdr") is not None for key in ("opening_input", "starting_asset")):
+            from .ltx25_hdr_input import validate_config
+            validate_config(config)
         audio = self.store.load(config["audio_id"]) if config["audio_id"] else None
         if audio:
             if audio.get("asset_kind") != "audio":
@@ -2116,9 +2235,27 @@ class Studio:
         approve_opening = stage == "animate"
         if p.get("actions") and p["actions"][-1]["state"] in ("waiting", "submitting", "queued", "running"):
             return p  # A double-click/reconnect never queues another job.
+        from .ltx_hdr_performance import verify_source as verify_hdr_video
+        verify_hdr_video(p["source"], self.store, check_asset, p["config"])
+        native_opening = (p.get("opening_input") or p.get("starting_asset") or {}).get("native_hdr")
+        if native_opening is not None:
+            from .ltx25_hdr_input import validate_config
+            validate_config(p["config"])
+            if stage in ("design", "draft"):
+                raise ValueError("This EXR is a finished HDR frame. Remove it before building an SDR starting image.")
+        if p["config"].get("workflow_mode") == "relight" and p["config"].get("relight_engine") != "wan21":
+            # Migrate only new actions, never an already-running H3 job.
+            p["config"] = clean_config(p["config"])
+            self.store.save(p)
         create_look = stage == "create_look"
         if create_look:
-            require_verified_setup(p["config"], stage)
+            if p.get("look_mode") == "source_hdr":
+                raise ValueError("Review and approve the HDR source selection before using its frame.")
+            from .ltx_hdr_performance import marker, verify_source
+            native_source = bool(marker(p["source"]))
+            if native_source:
+                verify_source(p["source"], self.store, check_asset, p["config"])
+            require_verified_setup(p["config"], stage, native_hdr_source=native_source)
             request_key = str(body.get("request_key", ""))
             if not re.fullmatch(r"[a-f0-9-]{36}", request_key):
                 raise ValueError("Reload Zura Studio before continuing.")
@@ -2148,7 +2285,8 @@ class Studio:
             if p.get("look_mode") == "ready" and p.get("starting_asset"):
                 from .opening import bind_uploaded_opening
                 bind_uploaded_opening(p, p["starting_asset"], folder_paths.get_input_directory(),
-                                      assert_approved=assert_approved, check_asset=check_asset, media_url=media_url)
+                                      assert_approved=assert_approved, check_asset=check_asset, media_url=media_url,
+                                      store=self.store)
             self.store.save(p)
             return p
         if stage == "animate":
@@ -2289,24 +2427,25 @@ class Studio:
                 action.update(h3_character_method="openjutsu", h3_preset="openjutsu_8step",
                               generation_resolution=int(p["config"]["openjutsu_resolution"]),
                               resolution=int(p["config"]["openjutsu_resolution"]),
-                              expected_frames=verify_review(p["review"])[1]["clip"]["frames"], label="OpenJutsu · experimental")
+                              expected_frames=(lambda n: n + (5 - n) % 17)(verify_review(p["review"])[1]["clip"]["frames"]), label="OpenJutsu · experimental")
             elif stage == "h3" and camera_setup(p["config"]):
                 from .h3_camera import selected_frame_count
                 raster = {"width": p["config"]["camera_width"], "height": p["config"]["camera_height"]}
                 action.update(resolution=max(raster.values()), generation_resolution=max(raster.values()),
-                              h3_preset="camera_ref2va_8step", expected_frames=selected_frame_count(p, check_asset),
+                              h3_preset="camera_ref2va_8step", expected_frames=(lambda n: n + (5 - n) % 17)(selected_frame_count(p, check_asset)),
                               generation_raster=raster, base_output_raster=raster, label="H3 · Camera angle")
             elif stage == "h3" and head_swap_setup(p["config"]):
                 from .h3_head_swap import selected_frame_count
                 action.update(resolution=1024, generation_resolution=1024,
-                              h3_preset="head_face_8step", expected_frames=selected_frame_count(p, check_asset))
+                              h3_preset="head_face_8step", expected_frames=(lambda n: n + (5 - n) % 17)(selected_frame_count(p, check_asset)))
             elif stage == "h3":
                 from . import verify_review
                 generation_raster, base_output_raster = h3_render_rasters(
                     p, action["generation_resolution"])
                 action["generation_raster"] = generation_raster
                 action["base_output_raster"] = base_output_raster
-                action["expected_frames"] = verify_review(p["review"])[1]["clip"]["frames"]
+                selected_frames = verify_review(p["review"])[1]["clip"]["frames"]
+                action["expected_frames"] = selected_frames + (5 - selected_frames) % 17
                 if action["delivery_mode"] == "enhanced1080":
                     action["next_stage"] = "wan_cleanup"
                     action["studio_action_tag"] = prompt_id
@@ -2317,7 +2456,7 @@ class Studio:
             action.update(label="Wan 2.1 Relight", resolution=max(size["width"], size["height"]),
                           generation_resolution=max(size["width"], size["height"]),
                           generation_raster={"width": size["width"], "height": size["height"]},
-                          expected_frames=manifest["clip"]["frames"],
+                          expected_frames=manifest["clip"]["frames"] + (1 - manifest["clip"]["frames"]) % 4,
                           relight_recipe="wan21-relight-switchx-v1")
             delivery = graph["wan21_export"]["inputs"]
             if delivery.get("output_width") and delivery.get("output_height"):
@@ -2378,12 +2517,18 @@ def register():
     proxy_jobs = {}
     proxy_errors = {}
 
+    def preview_identity(asset):
+        relative = asset.get("preview_file")
+        return os.path.normcase(str((Path(folder_paths.get_input_directory()) / relative).resolve())) if relative else None
+
     def ensure_preview(asset):
         from .preview_proxy import describe_existing
         describe_existing(asset, folder_paths.get_input_directory())
         if not asset.get("preview_file"):
             return
-        identity = asset["id"]
+        # HDR colour variants retain the original media and playback target.
+        # Share its writer/error state even when their asset IDs differ.
+        identity = preview_identity(asset)
         target = Path(folder_paths.get_input_directory()) / asset["preview_file"]
         if target.is_file() or identity in proxy_jobs or identity in proxy_errors:
             return
@@ -2425,6 +2570,12 @@ def register():
     register_hdr_studio(studio, routes, response, check_asset)
     from .hdr_native_studio import register as register_hdr_native_studio
     register_hdr_native_studio(studio, routes, response, check_asset)
+    from .ltx_hdr_endpoint_routes import register as register_hdr_endpoints
+    register_hdr_endpoints(studio, routes, response, check_asset)
+    from .ltx25_hdr_input import register as register_hdr_performance
+    register_hdr_performance(studio, routes, response, check_asset)
+    from .ltx_hdr_performance import register as register_hdr_performance_source
+    register_hdr_performance_source(studio, routes, response, check_asset)
     from .hdr_readiness import register as register_hdr_readiness
     register_hdr_readiness(routes, response)
     from .hdr_long_service import HDRLongService, preview_enabled, register as register_hdr_long
@@ -2503,7 +2654,11 @@ def register():
         missing_ltx_nodes = [name for name in ("LTXVModalityGuidance", "SolidMask", "SetLatentNoiseMask",
                                               "MaskFix+", "ThresholdMask", "ComfyMathExpression")
                              if name not in nodes.NODE_CLASS_MAPPINGS]
-        scene_keys = set(required) - {"inpaint", "ltx_video_vae", "vocals"}
+        # Whole-scene review uses a full-frame mask, not SAM. Image-model
+        # readiness is selected separately by the frontend only when the
+        # artist builds a starting image instead of supplying one.
+        scene_keys = {"ltx", "ltx_text", "ltx_scene_video_vae", "ltx_audio_vae",
+                      "ltx_upscaler", "depth_control"}
         scene_nodes = ("DWPreprocessor", "ResizeImageMaskNode", "VHS_LoadImagesPath",
                        "LTXVConditioning", "LTXVPreprocess", "LTXVImgToVideoInplace", "LTXVAddGuide",
                        "LTXAddVideoICLoRAGuideAdvanced", "LTXICLoRALoaderModelOnly",
@@ -2534,11 +2689,16 @@ def register():
         opening_models = opening_models_readiness(nodes.NODE_CLASS_MAPPINGS, folder_paths.get_full_path)
         from .openjutsu import installed_readiness
         openjutsu = installed_readiness(nodes.NODE_CLASS_MAPPINGS)
+        from .ltx25_hdr_input import enabled as hdr_performance_enabled
         return web.json_response({**hardware_snapshot(), "models": models, "h3_models": h3_models, "wan_models": wan_models, "speech": readiness(),
             "h3_text_cleanup": text_cleanup_readiness(),
             "h3_head_swap": head_swap, "wan2": wan2, "h3_camera": camera,
             "wan21_relight": wan21_relight,
             "opening_models": opening_models,
+            "opening_max_pixels": 4_000_000,
+            "wan21_relight_max_pixels": 8_388_608,
+            "hdr_paintout_handoff": True,
+            "native_hdr_performance": hdr_performance_enabled(),
             "openjutsu": openjutsu,
             "missing_openjutsu_nodes": openjutsu["missing_nodes"],
             "h3_attention_backends": h3_attention_capabilities(nodes.NODE_CLASS_MAPPINGS),
@@ -2569,7 +2729,7 @@ def register():
                                 for key, (folder, name) in H3_VIEWPORT_MODELS.items()],
                 "local_scene": [{"folder": folder, "filename": name, "ready": models[key]}
                                 for key, (folder, name) in required.items() if key in scene_keys] +
-                               [{"path": "custom_nodes/" + relative.as_posix(), "ready": detectors[key] is not None}
+                               [{"filename": relative.name, "path": str(Path(os.environ["AUX_ANNOTATOR_CKPTS_PATH"]) / Path(*relative.parts[2:])) if os.environ.get("AUX_ANNOTATOR_CKPTS_PATH") else "custom_nodes/" + relative.as_posix(), "ready": detectors[key] is not None}
                                 for key, relative in LTX25_DETECTORS.items()],
                 "local": [{"folder": folder, "filename": name, "ready": models[key]}
                           for key, (folder, name) in required.items() if key in masked_keys],
@@ -2671,10 +2831,41 @@ def register():
             raise ValueError("Choose an uploaded video.")
         ensure_preview(asset)
         visible = public_project(asset)
-        if asset["id"] in proxy_errors:
+        if preview_identity(asset) in proxy_errors:
             visible["preview_status"] = "error"
             visible["preview_error"] = "Could not create a playback preview. The original remains available for generation."
         return web.json_response(visible)
+
+    @routes.post("/zura/studio/assets/{identity}/paintout")
+    @routes.post("/genj/studio/assets/{identity}/paintout")
+    @response
+    async def paintout_uploaded_source(request):
+        from ..paintout.browser import describe_media
+        from ..paintout.paintout import describe, selected_space
+        from ..media_source import require_same_origin
+        require_same_origin(request)
+        body = await request.json()
+        if not isinstance(body, dict):
+            raise ValueError('Choose a valid HDR source colour.')
+        path = await asyncio.to_thread(paintout_asset_path, studio.store, request.match_info["identity"], check_asset)
+        info = await asyncio.to_thread(paintout_hdr_asset_info, path, body.get('colour_space', 'auto'), describe, selected_space, describe_media)
+        return web.json_response(info)
+
+    @routes.post('/zura/studio/hdr/output/paintout')
+    @routes.post('/genj/studio/hdr/output/paintout')
+    @response
+    async def paintout_hdr_output(request):
+        from ..paintout.browser import describe_media
+        from ..paintout.paintout import describe, selected_space
+        from ..media_source import require_same_origin
+        from .hdr_output import selected_output
+        require_same_origin(request)
+        body = await request.json()
+        if not isinstance(body, dict):
+            raise ValueError('Choose a valid HDR output.')
+        path = selected_output(folder_paths.get_output_directory(), body.get('output_ref'))
+        info = await asyncio.to_thread(paintout_hdr_asset_info, path, 'auto', describe, selected_space, describe_media)
+        return web.json_response(info)
 
     @routes.post("/zura/studio/voice")
     @routes.post("/genj/studio/voice")
@@ -2697,6 +2888,13 @@ def register():
         async with studio.lock:
             return web.json_response([public_project(studio.collect(p)) for p in studio.store.list()])
 
+    def verified_native_source(source, config):
+        from .ltx_hdr_performance import marker, verify_source
+        if not marker(source):
+            return False
+        verify_source(source, studio.store, check_asset, config)
+        return True
+
     @routes.post("/zura/studio/projects")
     @routes.post("/genj/studio/projects")
     @response
@@ -2707,9 +2905,9 @@ def register():
             raise ValueError("Choose a source video.")
         from .appearance import resolve_appearance
         config = clean_config(body.get("config", {}))
-        require_verified_setup(config)
+        require_verified_setup(config, native_hdr_source=verified_native_source(source, config))
         require_relight_direction(config, supplied_image=body.get("look_mode") == "ready" and bool(body.get("starting_image")))
-        appearance = resolve_appearance({**body, "config": config}, studio.store.load, check_asset)
+        appearance = resolve_appearance({**body, "config": config}, studio.store.load, check_asset, source=source)
         p = {"id": uuid.uuid4().hex, "kind": "project", "name": source["name"], "source": source,
              **appearance, "config": config, "phase": "new",
              "actions": [], "results": [], "created": time.time()}
@@ -2729,7 +2927,7 @@ def register():
     async def export_project_graph(request):
         async with studio.lock:
             p = studio.store.load(request.match_info["identity"])
-            require_verified_setup(p["config"], request.query.get("stage", "auto"))
+            require_verified_setup(p["config"], request.query.get("stage", "auto"), native_hdr_source=verified_native_source(p.get("source"), p["config"]))
             payload = await asyncio.to_thread(graph_export_payload, p, request.query.get("stage", "auto"))
             return web.json_response(payload)
 
@@ -2751,7 +2949,8 @@ def register():
         async with studio.lock:
             p = studio.store.load(request.match_info["identity"])
             body = await request.json()
-            require_verified_setup(clean_config(body.get("config", {})))
+            config = clean_config(body.get("config", {}))
+            require_verified_setup(config, native_hdr_source=verified_native_source(p.get("source"), config))
             roles = body.get("reference_roles")
             if roles is not None:
                 from .appearance import REFERENCE_ROLES
@@ -2776,7 +2975,7 @@ def register():
         async with studio.lock:
             p = studio.store.load(request.match_info["identity"])
             body = await request.json()
-            require_verified_setup(p["config"], body.get("action"))
+            require_verified_setup(p["config"], body.get("action"), native_hdr_source=verified_native_source(p.get("source"), p["config"]))
             p = await studio.action(p, body.get("action"), body)
             return web.json_response(public_project(p))
 

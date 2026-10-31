@@ -60,6 +60,7 @@ class CameraRequest:
     crossview_lora_strength: float = .8
     references: tuple = ()
     take_name: str = "zura_camera"
+    use_original_length: bool = False
 
 
 def _validate(r, video=False):
@@ -68,7 +69,8 @@ def _validate(r, video=False):
     for value in (r.start_seconds, r.duration_seconds):
         if type(value) not in (int, float) or not math.isfinite(value):
             raise ValueError("Choose a finite clip interval.")
-    if r.start_seconds < 0 or not 3 <= int(r.duration_seconds * 24 + 1e-7) <= 120:
+    frames = math.ceil(r.duration_seconds * 24 - 1e-6)
+    if r.start_seconds < 0 or not 3 <= frames <= 120:
         raise ValueError("Choose a camera test of 0.125 to five seconds at 24 fps.")
     if any(type(x) is not int or x % 32 or not 128 <= x <= 4096 for x in (r.width, r.height)):
         raise ValueError("Camera width and height must be multiples of 32, from 128 to 4096.")
@@ -177,11 +179,11 @@ def build_graph(r):
     """H3 only, with source RGB performance, joint audio guide and start anchor."""
     _validate(r, video=True)
     graph, node = _builder()
-    frames = int(r.duration_seconds * 24 + 1e-7)
+    frames = math.ceil(r.duration_seconds * 24 - 1e-6)
     padded = 5 + 17 * max(0, math.ceil((frames - 5) / 17))
     source = node("source", "LoadVideo", file=r.source_video)
     selected = node("select", "GenjSelectClip", video=source, start_seconds=r.start_seconds,
-                    duration_seconds=frames / 24, long_edge=1280, use_original_length=False)
+                    duration_seconds=r.duration_seconds, long_edge=1280, use_original_length=r.use_original_length, round_up=True)
     images = node("components", "GetVideoComponents", video=selected)
     audio = ["components", 1]
     images = node("performance_size", "ImageScale", image=images, upscale_method="lanczos", width=r.width, height=r.height, crop="center")
@@ -217,8 +219,9 @@ def build_graph(r):
     sample = node("sample", "SamplerCustomAdvanced", noise=noise, guider=guider, sampler=sampler, sigmas=sigmas, latent_image=latent)
     decoded = node("decode", "VAEDecode", samples=sample, vae=vae)
     decoded = node("trim", "ImageFromBatch", image=decoded, batch_index=0, length=frames)
+    decoded = node("hold_output", "GenjHoldToModelLength", images=decoded, stride=17, remainder=5)
     video = node("video", "CreateVideo", images=decoded, audio=audio, fps=24.)
-    node("export", "GenjRestoreSoundtrack", video=video, clip_details=["select", 1], take_name=r.take_name)
+    node("export", "GenjRestoreSoundtrack", video=video, clip_details=["select", 1], target_frames=["hold_output", 1], take_name=r.take_name)
     return graph
 
 
@@ -236,7 +239,7 @@ def _request(project, check_asset, video=False):
     duration = available if config.get("length_mode") == "original" else float(config.get("duration", 2))
     if not all(math.isfinite(v) for v in (available,start,duration)) or start < 0 or duration <= 0 or start >= available:
         raise ValueError("Choose a valid source interval.")
-    if int(duration * 24 + 1e-6) > int((available - start) * 24 + 1e-6):
+    if duration > available - start + 1e-6:
         raise ValueError("The selected range extends past the end of the source video. Choose a shorter range.")
     refs = []
     for asset in project.get("references", []):
@@ -252,13 +255,14 @@ def _request(project, check_asset, video=False):
         source_has_audio=has_audio, start_seconds=start,
         duration_seconds=duration, width=int(config.get("camera_width", 768)), height=int(config.get("camera_height", 448)),
         seed=config.get("seed", 1052), preset=config.get("camera_preset", "Left three-quarter"),
-        prompt=config.get("camera_prompt", ""), references=tuple(refs), take_name="studio_"+project["id"][:8]+"_camera")
+        prompt=config.get("camera_prompt", ""), references=tuple(refs), use_original_length=config.get("length_mode") == "original", take_name="studio_"+project["id"][:8]+"_camera")
     _validate(request, video=video)
     return request
 
 
 def selected_frame_count(project, check_asset):
-    return int(_request(project, check_asset).duration_seconds * 24 + 1e-7)
+    r = _request(project, check_asset)
+    return math.ceil(r.duration_seconds * 24 - 1e-6)
 
 
 def build_studio_still_graph(project, check_asset):

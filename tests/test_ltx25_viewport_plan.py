@@ -34,10 +34,10 @@ class ViewportPlanTests(unittest.TestCase):
         self.assertNotIn("VideoDepthAnythingProcess", all_types)
         self.assertNotIn("CannyEdgePreprocessor", all_types)
 
-    def test_layout_is_padded_for_sampling_and_delivery_keeps_exact_interval(self):
+    def test_layout_is_padded_and_delivery_holds_last_frame(self):
         project, kwargs = viewport_inputs()
         plan = plan_module.build_plan(project, **kwargs)
-        self.assertEqual(plan["delivered_frames"], 360)
+        self.assertEqual(plan["delivered_frames"], 361)
         self.assertEqual(plan["basis"]["timeline"]["frames"], 360)
         self.assertEqual(plan["basis"]["frames"], 361)
         self.assertEqual(plan["basis"]["source_frames"], 360)
@@ -48,11 +48,13 @@ class ViewportPlanTests(unittest.TestCase):
         self.assertEqual(plan["artifacts"]["layout"]["frames"], 361)
         self.assertEqual(plan["phases"]["motion"]["pad_source"]["class_type"], "GenjLTXFramePad")
         self.assertEqual(plan["phases"]["decode"]["trim_frames"]["inputs"]["length"], 360)
+        self.assertEqual(plan["phases"]["decode"]["hold_output"]["inputs"]["stride"], 8)
+        self.assertEqual(plan["phases"]["decode"]["create_video"]["inputs"]["images"], ["hold_output", 0])
         self.assertNotIn("audio", plan["phases"]["decode"]["create_video"]["inputs"])
         kwargs["timeline"]["frames"] = 120
         five_second = plan_module.build_plan(project, **kwargs)
         self.assertEqual(five_second["generation_frames"], 121)
-        self.assertEqual(five_second["delivered_frames"], 120)
+        self.assertEqual(five_second["delivered_frames"], 121)
         self.assertEqual(five_second["trimmed_tail_frames"], 0)
 
     def test_official_sampling_and_reference_encoding_recipe(self):
@@ -103,6 +105,8 @@ class ViewportPlanTests(unittest.TestCase):
         self.assertEqual(plan["generation_audio"], "disabled")
         self.assertEqual(plan["delivery_audio"], "original")
         self.assertEqual(plan["phases"]["decode"]["trim_audio"]["inputs"]["duration"], 360 / 24)
+        self.assertEqual(plan["phases"]["decode"]["create_video"]["inputs"]["audio"], ["hold_audio", 0])
+        self.assertEqual(plan["phases"]["decode"]["hold_audio"]["inputs"]["frames"], ["hold_output", 1])
 
 if __name__ == "__main__":
     unittest.main()

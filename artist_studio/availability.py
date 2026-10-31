@@ -41,7 +41,7 @@ def relight_setup(config):
                         ("audio_id", "lip_sync", "refine_lips", "preserve_people", "h3_head_swap")))
 
 
-def verified_setup(config):
+def verified_setup(config, *, native_hdr_source=False):
     if config.get("h3_character_method") == "openjutsu":
         return (config.get("engine") == "h3" and config.get("workflow_mode") == "swap"
                 and config.get("scope") == "person" and config.get("mask_method") == "auto"
@@ -52,7 +52,10 @@ def verified_setup(config):
     if config.get("workflow_mode") == "camera":
         return camera_setup(config)
     if config.get("engine") == "wan2":
-        return (config.get("workflow_mode") == "motion" and config.get("edit_area") == "scene"
+        route = ((config.get("workflow_mode") == "motion" and config.get("edit_area") == "scene")
+                 or (config.get("workflow_mode") == "swap" and config.get("edit_area") == "mask"
+                     and config.get("scope", "person") == "person" and config.get("mask_method", "auto") == "auto"))
+        return (route and config.get("subject_mode", "auto") in ("auto", "people")
                 and not any(config.get(k) for k in ("audio_id", "lip_sync", "refine_lips", "preserve_people", "remove_text", "h3_head_swap")))
     if config.get("h3_head_swap"):
         return head_swap_setup(config)
@@ -63,7 +66,10 @@ def verified_setup(config):
     if (config.get("engine") == "local"
             and config.get("workflow_mode") == "motion"
             and config.get("edit_area") == "scene"
-            and config.get("subject_mode", "auto") in ("auto", "people")):
+            and (config.get("subject_mode", "auto") in ("auto", "people")
+                 or (config.get("subject_mode") == "objects" and native_hdr_source
+                     and config.get("ltx_output") in ("hlg_video", "hlg_and_exr", "acescg_exr")
+                     and __import__("os").environ.get("ZURA_LTX_HDR_PERFORMANCE", "0").strip() == "1"))):
         # The qualified Union/pose route regenerates the complete frame. It
         # must not be advertised or dispatched as precise masked inpainting.
         return True
@@ -75,8 +81,8 @@ def verified_setup(config):
             and config.get("subject_mode", "auto") in ("auto", "people"))
 
 
-def require_verified_setup(config, stage=None):
-    if not verified_setup(config):
+def require_verified_setup(config, stage=None, *, native_hdr_source=False):
+    if not verified_setup(config, native_hdr_source=native_hdr_source):
         raise ValueError(UNAVAILABLE)
     stages = {"auto", "prepare", "approve", "design", "animate", "create_look"}
     if camera_setup(config):
@@ -84,8 +90,7 @@ def require_verified_setup(config, stage=None):
             raise ValueError("Create and review the camera frame, then generate the video.")
         return
     if config.get("workflow_mode") == "relight":
-        route = "wan21_relight" if config.get("relight_engine", "h3") == "wan21" else "h3"
-        if stage is not None and stage not in ("auto", "prepare", "approve", "design", "animate", "create_look", route):
+        if stage is not None and stage not in ("auto", "prepare", "approve", "design", "animate", "create_look", "wan21_relight"):
             raise ValueError("Choose the selected Relight video graph.")
         return
     if head_swap_setup(config):
@@ -95,7 +100,7 @@ def require_verified_setup(config, stage=None):
     if config.get("engine") == "wan2":
         stages.add("wan2")
         if stage is not None and stage not in stages:
-            raise ValueError("Choose the Wan Animate 2 full-frame workflow.")
+            raise ValueError("Choose the Wan Animate 2 character replacement workflow.")
         return
     stages.update(({"h3"} if viewport_setup(config) else {"h3", "h3_enhance"}) if config["engine"] == "h3" else
                   {"background", "restyle"} if config["engine"] == "local" else

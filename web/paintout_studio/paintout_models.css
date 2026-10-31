@@ -1,0 +1,42 @@
+:is(#genj-studio,#zura-paintout-app) .zps-models{position:relative;flex:none;color:var(--zc-text,#f2f2f2);font-size:12px}
+:is(#genj-studio,#zura-paintout-app) .zps-models>summary{display:flex;align-items:center;gap:7px;min-height:40px;box-sizing:border-box;padding:9px 10px;cursor:pointer;list-style:none;border:1px solid var(--gs-line,#373737);border-radius:5px}
+:is(#genj-studio,#zura-paintout-app) .zps-models>summary::-webkit-details-marker{display:none}
+:is(#genj-studio,#zura-paintout-app) .zps-models svg{width:16px;height:16px;flex:none}
+:is(#genj-studio,#zura-paintout-app) .zps-models [data-model-badge]:empty{display:none}
+:is(#genj-studio,#zura-paintout-app) .zps-models [data-model-badge]{font-size:11px;color:var(--gs-muted,#aaa)}
+:is(#genj-studio,#zura-paintout-app) .zps-models-panel{position:fixed;right:0;top:calc(100% + 8px);z-index:45;width:min(560px,calc(100vw - 48px));max-height:min(720px,calc(100dvh - 150px));overflow:auto;box-sizing:border-box;padding:20px;background:var(--gs-panel,#1c1c1c);border:1px solid var(--gs-line,#373737);border-radius:8px;font-size:12px;line-height:1.5;scrollbar-color:var(--gs-muted,#aaa) var(--gs-panel,#1c1c1c)}
+:is(#genj-studio,#zura-paintout-app) .zps-models:not([open])>.zps-models-panel{display:none}
+:is(#genj-studio,#zura-paintout-app) .zps-models-panel header{display:flex;justify-content:space-between;align-items:flex-start;gap:20px;margin-bottom:20px}
+:is(#genj-studio,#zura-paintout-app) .zps-models-panel h3{margin:0;font-size:18px;line-height:1.4;font-weight:600}
+:is(#genj-studio,#zura-paintout-app) .zps-models-panel p{margin:6px 0 12px;max-width:70ch;color:var(--gs-muted,#aaa)}
+:is(#genj-studio,#zura-paintout-app) .zps-models-panel button{display:inline-flex;align-items:center;justify-content:center;gap:7px;min-height:40px;padding:9px 12px;background:var(--zc-hover,#292929);color:var(--zc-text,#f2f2f2);border:1px solid var(--gs-line,#373737);border-radius:5px;font:inherit;cursor:pointer}
+:is(#genj-studio,#zura-paintout-app) .zps-models-panel button:disabled{opacity:.5;cursor:default}
+:is(#genj-studio,#zura-paintout-app) .zps-models-panel [data-model-close]{width:36px;min-height:36px;padding:8px;flex:none}
+:is(#genj-studio,#zura-paintout-app) .zps-models-choice{display:flex;align-items:center;gap:12px;font-weight:600}
+:is(#genj-studio,#zura-paintout-app) .zps-models-choice select{flex:1;min-width:0;min-height:40px;padding:8px 10px;border:1px solid var(--gs-line,#373737);border-radius:5px;background:var(--gs-input,#232323);color:var(--zc-text,#f2f2f2);font:inherit}
+:is(#genj-studio,#zura-paintout-app) .zps-models-reason{margin-top:10px!important}
+:is(#genj-studio,#zura-paintout-app) .zps-models-file-summary{font-weight:600;color:var(--zc-text,#f2f2f2)!important;margin-top:18px!important}
+:is(#genj-studio,#zura-paintout-app) .zps-models-file-list{list-style:none;margin:0;padding:0}
+:is(#genj-studio,#zura-paintout-app) .zps-models-file-list li{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;padding:10px 0;border-top:1px solid var(--gs-line,#373737)}
+:is(#genj-studio,#zura-paintout-app) .zps-models-file-list li>span{display:flex;flex-direction:column;gap:3px;min-width:0}
+:is(#genj-studio,#zura-paintout-app) .zps-models-file-list strong{font-size:11px;font-weight:500;overflow-wrap:anywhere;line-height:1.5}
+:is(#genj-studio,#zura-paintout-app) .zps-models-file-list small{color:var(--gs-muted,#aaa);font-size:11px;overflow-wrap:anywhere}
+:is(#genj-studio,#zura-paintout-app) .zps-models-file-list li>small{flex:none;max-width:100px;text-align:right}
+:is(#genj-studio,#zura-paintout-app) .zps-models-file-list [data-state=installed]>small{color:var(--zc-text,#f2f2f2)}
+:is(#genj-studio,#zura-paintout-app) .zps-models-access{margin:16px 0;padding-top:12px;border-top:1px solid var(--gs-line,#373737)}
+:is(#genj-studio,#zura-paintout-app) .zps-models-access>summary{cursor:pointer;font-weight:600;min-height:24px}
+:is(#genj-studio,#zura-paintout-app) .zps-models-access label{display:flex;flex-direction:column;gap:5px;margin-top:12px}
+:is(#genj-studio,#zura-paintout-app) .zps-models-access label>span{color:var(--gs-muted,#aaa);font-weight:400}
+:is(#genj-studio,#zura-paintout-app) .zps-models-access input{box-sizing:border-box;width:100%;min-height:40px;padding:9px 10px;border:1px solid var(--gs-line,#373737);border-radius:5px;background:var(--gs-input,#232323);color:var(--zc-text,#f2f2f2);font:inherit;user-select:text}
+:is(#genj-studio,#zura-paintout-app) .zps-models-access a{display:inline-block;margin:6px 10px 0 0;padding:0!important;text-decoration:underline;text-underline-offset:3px;overflow-wrap:anywhere}
+:is(#genj-studio,#zura-paintout-app) .zps-models-actions{display:flex;flex-wrap:wrap;gap:10px;margin:16px 0 8px}
+:is(#genj-studio,#zura-paintout-app) .zps-models-actions [data-model-download]{background:var(--gs-accent,#caff00);color:#17180f;border-color:transparent;font-weight:600}
+:is(#genj-studio,#zura-paintout-app) .zps-models-download{padding-top:16px;margin-top:16px;border-top:1px solid var(--gs-line,#373737)}
+:is(#genj-studio,#zura-paintout-app) .zps-models-download progress{width:100%;height:5px;display:block;margin:12px 0;accent-color:var(--gs-accent,#caff00)}
+:is(#genj-studio,#zura-paintout-app) .zps-models-status.is-error{color:var(--gs-warning,#eabf74)}
+:is(#genj-studio,#zura-paintout-app) .zps-models-nodes{margin-top:18px;padding-top:16px;border-top:1px solid var(--gs-line,#373737)}
+:is(#genj-studio,#zura-paintout-app) .zps-models-panel :is(button,select,input,a,summary):focus-visible{outline:2px solid var(--gs-accent,#caff00);outline-offset:3px}
+@media(max-width:700px){:is(#genj-studio,#zura-paintout-app) .zps-models-panel{position:fixed;inset:70px 12px auto;width:auto;max-height:calc(100dvh - 90px);padding:16px}:is(#genj-studio,#zura-paintout-app) .zps-models-choice{align-items:stretch;flex-direction:column;gap:6px}:is(#genj-studio,#zura-paintout-app) .zps-models-actions>button{flex:1}:is(#genj-studio,#zura-paintout-app) .zps-models-file-list li{gap:10px}}
+
+:is(#genj-studio,#zura-paintout-app) .zps-models [hidden]{display:none!important}
+:is(#genj-studio,#zura-paintout-app) #zps-model-setup{border:0;background:none;color:var(--gs-muted,#aaa);padding:8px 12px;text-decoration:underline;text-underline-offset:4px;cursor:pointer}

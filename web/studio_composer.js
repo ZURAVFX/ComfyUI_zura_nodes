@@ -1,6 +1,7 @@
 import {VideoResolutionControl} from './studio_resolution.js';
 import {OpeningLoraControl} from './studio_opening_loras.js';
 import {clipLength} from './studio_length.js';
+import {MainLTXDelivery} from './studio_main_ltx_delivery.js';
 const svg=body=>`<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${body}</svg>`;
 export const composerIcons={
   video:svg('<rect x="3" y="5" width="18" height="14" rx="3"/><path d="m10 9 5 3-5 3z"/>'),
@@ -18,7 +19,7 @@ export const composerIcons={
   takes:svg('<rect x="3" y="7" width="18" height="14" rx="2"/><path d="M7 3h10m-8 9 6 3-6 3z"/>'),
   download:svg('<path d="M12 3v12m-4-4 4 4 4-4M4 17v4h16v-4"/>'),
 };
-export const VIDEO_WORKFLOWS=[['swap','Character replacement'],['viewport','Viewport to final'],['camera','Change camera angle'],['relight','Relight'],['paintout','Paintout / clean plate'],['outpaint','Frame extension · preview'],['frames','First & last frame'],['references','Reference to video']];
+export const VIDEO_WORKFLOWS=[['swap','Character replacement'],['viewport','Viewport to final'],['camera','Change camera angle'],['relight','Relight'],['paintout','Paintout / clean plate'],['inpaint','Inpaint · preview'],['outpaint','Frame extension · preview'],['frames','First & last frame'],['references','Reference to video']];
 
 /** A compact surface over the existing controls, never a second configuration. */
 export class VideoComposer {
@@ -39,6 +40,9 @@ export class VideoComposer {
       const remove=document.createElement('button');remove.type='button';remove.className='zf-remove-frame zc-remove-input';remove.id='zc-remove-'+id;remove.setAttribute('aria-label','Remove '+label);remove.innerHTML=svg('<path d="m7 7 10 10M7 17 17 7"/>');remove.hidden=true;
       remove.onclick=()=>studio.removeInput(type);slot.append(remove);
     }
+    const sourceGroup=document.createElement('div');sourceGroup.className='zc-source-choice';sourceGroup.setAttribute('role','group');sourceGroup.setAttribute('aria-label','Choose a video source');const sourceSlot=attachments.querySelector('#zc-attach-source').parentElement;sourceSlot.before(sourceGroup);sourceGroup.append(sourceSlot);
+    const or=document.createElement('span');or.className='zc-source-or';or.textContent='or';or.setAttribute('aria-hidden','true');sourceGroup.append(or);this.hdrChoiceSeparator=or;
+    const importHDR=document.createElement('button');importHDR.type='button';importHDR.className='zc-source-hdr';importHDR.textContent='LTX HDR';importHDR.setAttribute('aria-label','Open LTX 2.5 HDR conversion');importHDR.title='HDR conversion uses LTX 2.5; H3 video generation is SDR.';importHDR.onclick=()=>workspace.openHDR({preferSource:true});sourceGroup.append(importHDR);this.hdrChoice=importHDR;
     composer.insertBefore(attachments,studio.$('prompt-composer'));
     const bottom=document.createElement('div');bottom.className='zc-prompt-bottom';
     const tools=document.createElement('div');tools.className='zc-prompt-tools';bottom.append(tools);this.tools=tools;
@@ -83,9 +87,11 @@ export class VideoComposer {
     // One popover at a time. Escape returns focus to its trigger.
     composer.addEventListener('toggle',e=>{const detail=e.target;if(detail.tagName==='DETAILS'&&detail.open)for(const other of composer.querySelectorAll('details.zc-tool-popup,.zc-composer-audio>details'))if(other!==detail&&!other.contains(detail)&&!detail.contains(other))other.open=false;},true);
     composer.addEventListener('keydown',e=>{if(e.key!=='Escape')return;const open=Array.from(composer.querySelectorAll('details')).find(d=>d.open);if(open){open.open=false;open.querySelector('summary').focus({preventScroll:true});e.stopPropagation();}});
-    this.composer=composer;this.sync();
+    this.composer=composer;this.ltxOutput=new MainLTXDelivery(studio,workspace.api,outputTools);this.sync();
   }
   selectWorkflow(value){
+    if(value==='inpaint'){this.workspace.show('paintout');this.workspace.paintout.setMode('inpaint');this.syncWorkflow();return;}
+    if(value==='paintout'&&this.workspace.paintout?.state.mode==='inpaint'){this.workspace.show('paintout');this.workspace.paintout.setMode('targeted');this.syncWorkflow();return;}
     if(['frames','references','paintout','outpaint'].includes(value)){this.workspace.show(value);return;}
     if(!VIDEO_WORKFLOWS.some(([id])=>id===value))return;
     const input=this.root.querySelector(`input[name="gs-workflow"][value="${value}"]`);
@@ -96,6 +102,15 @@ export class VideoComposer {
     }
   }
   mountWorkflow(mode){
+    // Early Paintout stages hide the composer. Keep the shared task selector
+    // in its heading so the artist can always return to another workflow.
+    if(mode==='paintout'){
+      const heading=this.workspace.paintout.page.querySelector('.zf-heading');
+      heading.querySelector('h2').hidden=true;
+      heading.prepend(this.task);
+      this.syncWorkflow();
+      return;
+    }
     // Reuse the same control and handler in both composers. Its place in the
     // tool row stays immediately after the model, including endpoint video.
     const select=this.task.querySelector('select'),focused=this.root.ownerDocument.activeElement===select;
@@ -107,6 +122,7 @@ export class VideoComposer {
   syncWorkflow(){
     const independent=['frames','references','paintout','outpaint'].includes(this.workspace.mode),select=this.task.querySelector('select');
     select.value=independent?this.workspace.mode:this.studio.config.workflow_mode==='motion'?'swap':this.studio.config.workflow_mode;
+    if(this.workspace.mode==='paintout'&&this.workspace.paintout?.state.mode==='inpaint')select.value='inpaint';
     select.disabled=!independent&&(this.studio.busy||this.studio.project?.phase==='working');
     for(const option of select.querySelectorAll('option')){
       const input=this.root.querySelector(`input[name="gs-workflow"][value="${option.value}"]`);
@@ -145,11 +161,14 @@ export class VideoComposer {
   }
   sync(){
     const s=this.studio,working=s.busy||s.project?.phase==='working',stage=s.composerStage();
+    // HDR is an LTX conversion path, not an input mode for H3 or Wan.
+    const canUseLtxHDR=s.config.engine==='local'&&s.config.workflow_mode!=='relight';
+    this.hdrChoice.hidden=!canUseLtxHDR;this.hdrChoiceSeparator.hidden=!canUseLtxHDR;
     this.composer.dataset.stage=stage;
     const select=this.root.querySelector('#zc-video-model'),radios=Array.from(this.root.querySelectorAll('input[name="gs-engine"]')).filter(r=>!r.closest('label').hidden);
     const key=radios.map(r=>r.value+':'+r.disabled).join('|');
     if(select.dataset.choices!==key){select.replaceChildren();for(const radio of radios){const option=document.createElement('option');option.value=radio.value;option.textContent={local:'LTX 2.5',h3:'MiniMax H3',wan:'Wan 2.2',wan2:'Wan Animate 2',wan21:'Wan 2.1',seedance:'Seedance'}[radio.value];option.disabled=radio.disabled;select.append(option);}select.dataset.choices=key;}
-    select.value=s.config.engine;select.disabled=working;this.model.hidden=stage!=='video';this.imageModel.hidden=stage==='video';
+    select.value=s.config.workflow_mode==='relight'&&s.config.relight_engine==='wan21'?'wan21':s.config.engine;select.disabled=working;this.model.hidden=stage!=='video';this.imageModel.hidden=stage==='video';
     this.syncOpeningModel(working);
     this.openingLoras.sync(stage);
     this.syncWorkflow();
@@ -159,15 +178,17 @@ export class VideoComposer {
     const length=clipLength(s.config,s.source?.duration),lengthLabel=this.root.querySelector('#zc-tool-length');
     const local24=['wan','wan2','h3','local'].includes(s.config.engine);
     lengthLabel.textContent=local24&&Number.isFinite(length.outputSeconds)?`${length.outputSeconds.toFixed(2)}s · ${length.frames}f`:(s.config.length_mode==='original'?'Full clip':`${s.config.duration}s`);
-    lengthLabel.title=local24&&Number.isFinite(length.frames)?`${length.frames} frames at 24 fps`:'';
+    lengthLabel.title=local24&&Number.isFinite(length.frames)?`${length.frames} selected frames at 24 fps${length.deliveryFrames>length.frames?`; ${length.deliveryFrames-length.frames} held frame${length.deliveryFrames-length.frames===1?"":"s"} added at the end`:""}`:'';
     const audioSummary=s.$('audio-summary');audioSummary.textContent=s.config.audio_id?'Reference audio':'Original audio';audioSummary.title='Audio and facial performance';
     const source=s.source?{...s.source,url:s.source.thumbnail_url}:null;
     this.attachment('source',source,s.source?'Source video':'Add video');
     this.attachment('refs',s.references?.[0],s.references?.length?`${s.references.length} reference${s.references.length===1?'':'s'}`:'References');
     this.root.querySelector('#zc-remove-refs').setAttribute('aria-label',s.references?.length>1?'Remove all references':'Remove reference');this.root.querySelector('#zc-remove-refs').title=s.references?.length>1?'Remove all references':'Remove reference';
-    this.attachment('frame',s.readyAsset,s.readyAsset?'Finished frame':'Finished frame');
-    this.root.querySelector('#zc-attach-refs').parentElement.hidden=s.lookMode==='ready';this.root.querySelector('#zc-attach-frame').parentElement.hidden=s.lookMode!=='ready';
+    this.attachment('frame',s.readyAsset,s.readyAsset?'Finished frame':'Use finished frame');
+    this.root.querySelector('#zc-attach-refs').parentElement.hidden=s.lookMode==='ready';
+    this.root.querySelector('#zc-attach-frame').parentElement.hidden=(stage==='video'&&!s.directViewport())||s.headSwap()||s.config.engine==='seedance'||!!this.root.querySelector('input[name="gs-look"][value="ready"]')?.disabled;
     for(const button of this.composer.querySelectorAll('.zc-attachment'))button.disabled=working;
     this.length.querySelector('summary').setAttribute('aria-label','Clip length: '+this.root.querySelector('#zc-tool-length').textContent);
+    this.ltxOutput?.sync(stage);
   }
 }

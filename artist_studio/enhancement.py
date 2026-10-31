@@ -77,21 +77,21 @@ def inspect_video(path, *, expected_frames=None, expected_width=None, expected_h
         videos = list(container.streams.video)
         audios = list(container.streams.audio)
         if len(videos) != 1:
-            raise ValueError("The H3 delivery must contain exactly one video stream.")
+            raise ValueError("The output must contain exactly one video stream.")
         stream = videos[0]
         width, height = int(stream.width), int(stream.height)
         fps = float(stream.average_rate or stream.base_rate or 0)
         frames = sum(1 for _ in container.decode(video=0))
     if expected_frames is not None and frames != int(expected_frames):
-        raise ValueError("The H3 delivery has an unexpected number of frames.")
+        raise ValueError("The output has an unexpected number of frames.")
     if expected_width is not None and width != int(expected_width):
-        raise ValueError("The H3 delivery has an unexpected raster width.")
+        raise ValueError("The output has an unexpected raster width.")
     if expected_height is not None and height != int(expected_height):
-        raise ValueError("The H3 delivery has an unexpected raster height.")
+        raise ValueError("The output has an unexpected raster height.")
     if expected_fps is not None and abs(fps - float(expected_fps)) > 0.01:
-        raise ValueError("The H3 delivery has an unexpected frame rate.")
+        raise ValueError("The output has an unexpected frame rate.")
     if expected_audio_tracks is not None and len(audios) != int(expected_audio_tracks):
-        raise ValueError("The H3 delivery has an unexpected soundtrack track count.")
+        raise ValueError("The output has an unexpected soundtrack track count.")
     return {"width": width, "height": height, "frames": frames,
             "fps": fps, "audio_tracks": len(audios)}
 
@@ -158,7 +158,7 @@ class GenjVHSVideoFromFilenames:
         return {"required": {
             "filenames": ("VHS_FILENAMES",),
             "filename_prefix": ("STRING", {"default": "genj/studio_h3_enhance"}),
-            "expected_frames": ("INT", {"default": 120, "min": 5, "max": 120}),
+            "expected_frames": ("INT", {"default": 120, "min": 5, "max": 124}),
             "expected_width": ("INT", {"default": 1080, "min": 2, "max": 7680}),
             "expected_height": ("INT", {"default": 1920, "min": 2, "max": 7680}),
         }}
@@ -261,7 +261,7 @@ def build_graph(project, base_record, *, run_id=None):
             "render_long_edge": 0, "output_scale": 1, "preview_seconds": 0}},
         "h3_enhance_export": {"class_type": "GenjRestoreSoundtrack", "inputs": {
             "video": ["h3_enhance_complete", 0], "clip_details": ["h3_enhance_review", 3],
-            "take_name": take_name, "output_subfolder": "final"}},
+            "take_name": take_name, "output_subfolder": "final", "target_frames": expected_frames}},
     }
     return graph
 

@@ -22,6 +22,37 @@ class Response:
 
 
 class ModelDownloadTest(unittest.TestCase):
+    def test_wan_endpoint_package_matches_every_native_recipe_file(self):
+        import json
+        import subprocess
+        root = Path(__file__).resolve().parents[1]
+        script = "import {WAN_FRAME_VIDEO_MODELS} from './web/wan_frame_video_recipes.js'; console.log(JSON.stringify(WAN_FRAME_VIDEO_MODELS));"
+        recipe = json.loads(subprocess.check_output(['node', '--input-type=module', '-e', script], cwd=root, text=True))
+        package = downloads.CATALOG['wan22_first_last']
+        files = {(file['folder'], file['filename']) for file in package['files']}
+        self.assertEqual(files, {('diffusion_models', recipe['high']), ('diffusion_models', recipe['low']),
+            ('text_encoders', recipe['text']), ('vae', recipe['vae']),
+            ('loras', recipe['highLora']), ('loras', recipe['lowLora'])})
+        self.assertTrue(all(len(file['revision']) == 40 and len(file['sha256']) == 64 and file['size_bytes'] > 0 for file in package['files']))
+        self.assertEqual(package['files'][2], downloads.CATALOG['wan_animate_2']['files'][1], 'Reuse an installed shared text encoder')
+
+    def test_image_packages_match_every_exposed_native_recipe(self):
+        import json
+        import subprocess
+        root = Path(__file__).resolve().parents[1]
+        script = "import {IMAGE_MODELS} from './web/image_recipes.js'; console.log(JSON.stringify(IMAGE_MODELS));"
+        models = json.loads(subprocess.check_output(['node', '--input-type=module', '-e', script], cwd=root, text=True))
+        packages = {'flux2': 'flux2_klein_9b', 'flux3': 'flux3_klein', 'zimage': 'zimage_turbo',
+                    'klein9b': 'flux2_klein_9b', 'qwen2511': 'qwen2511'}
+        for model in models:
+            package = downloads.CATALOG[packages[model['id']]]
+            files = {(file['folder'], file['filename']) for file in package['files']}
+            expected = {('diffusion_models', model['model']), ('text_encoders', model['text']), ('vae', model['vae'])}
+            if model.get('lora'):
+                expected.add(('loras', model['lora']))
+            self.assertEqual(files, expected, model['name'])
+            self.assertTrue(all(len(file['revision']) == 40 and len(file['sha256']) == 64 for file in package['files']))
+
     def test_optional_model_folder_can_register_after_routes_load(self):
         class Folders:
             paths = {'loras': ['/models/loras']}
@@ -49,6 +80,17 @@ class ModelDownloadTest(unittest.TestCase):
         self.assertEqual(wan22[0]['filename'], 'Wan2_2-Animate-14B_fp8_scaled_e4m3fn_KJ_v2.safetensors')
         self.assertEqual(wan22[1:], packages['wan_animate_2']['files'][1:])
         self.assertIn('separately', packages['wan22_animate_core']['note'])
+        style = packages['wan22_style']['files']
+        self.assertEqual({file['filename'] for file in style}, {
+            'WanAnimate_relight_lora_fp16_resized_from_128_to_dynamic_22.safetensors',
+            'Wan14B_RealismBoost.safetensors'})
+        self.assertEqual({file['size_bytes'] for file in style}, {272805784, 306848616})
+        self.assertEqual({file['sha256'] for file in style}, {
+            '5e723593ee0b4f6202061ae9d84edd3661de8ee9afa237b5dd29db623e203df0',
+            '1cd2217d7df8f2e4de76f8a890174cced33d551cffb58d42f6d6f7f7a6d1c654'})
+        self.assertTrue(all(file['folder'] == 'loras' and len(file['revision']) == 40 for file in style))
+        self.assertEqual(packages['sam31']['files'], [packages['openjutsu_h3']['files'][4]])
+        self.assertEqual(sum(file['size_bytes'] for file in packages['sam31']['files']), 1745546848)
         self.assertEqual({f['folder'] for f in packages['wan22_pose']['files']}, {'detection'})
         self.assertEqual(packages['h3_birefnet']['files'][0]['folder'], 'background_removal')
         self.assertEqual(packages['h3_dmd_ref2va']['files'][0]['filename'], 'minimax_h3_dmd_ref2va_8step_turbo_pruned.safetensors')
@@ -178,6 +220,19 @@ class ModelDownloadTest(unittest.TestCase):
             self.assertFalse(plan['files'][0]['incomplete'])
             self.assertEqual(plan['files'][0]['destination'], str(complete))
             self.assertEqual(plan['remaining_bytes'], 0)
+
+    def test_nested_model_is_published_inside_its_allowed_model_root(self):
+        relative = str(Path('WAN') / 'example.safetensors')
+        item = downloads._file('diffusion_models', relative, 'author/model', 'a' * 40,
+                               'remote.safetensors', len(self.data), hashlib.sha256(self.data).hexdigest())
+        recipe = {'nested': dict(name='Nested', gated=False, license_url='', files=[item])}
+        with patch.dict(downloads.CATALOG, recipe, clear=True), patch('requests.get', return_value=Response(self.data)):
+            manager = downloads.DownloadManager(self.locations)
+            status = self.wait(manager, manager.start('nested'))
+            self.assertEqual(status['phase'], 'done', status)
+            expected = Path(self.directory.name) / 'WAN' / 'example.safetensors'
+            self.assertEqual(expected.read_bytes(), self.data)
+            self.assertEqual(downloads.inspect('nested', self.locations)['remaining_bytes'], 0)
 
     def test_hardlink_unavailable_uses_atomic_noreplace_rename(self):
         with patch.dict(downloads.CATALOG, self.recipe, clear=True), \

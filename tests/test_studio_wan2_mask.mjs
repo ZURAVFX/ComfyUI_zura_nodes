@@ -1,0 +1,47 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import vm from 'node:vm';
+
+const source=fs.readFileSync(new URL('../web/studio.js',import.meta.url),'utf8')
+  .replace(/^import .*;\r?\n/gm,'').replace(/^export /gm,'').split('app.registerExtension({')[0];
+const context={};vm.createContext(context);
+vm.runInContext(source+'\nthis.Studio=ArtistStudio;this.allowed=verifiedSetup;this.defaults=defaults;',context);
+const ui=Object.create(context.Studio.prototype),fields=new Map();
+ui.config={...context.defaults,engine:'wan2',h3_character_method:'control',workflow_mode:'swap',edit_area:'mask',scope:'person',mask_method:'auto'};
+ui.$=id=>{
+  if(!fields.has(id))fields.set(id,{value:String(ui.config[id] ?? ''),checked:false});
+  return fields.get(id);
+};
+ui.$('resolution').value='832';ui.$('audio-mode').value='original';
+ui.$('wan2_background').value='keep';
+ui.container={querySelector:selector=>({value:selector.includes('gs-engine')?'wan2':'swap'})};
+assert.equal(context.allowed(ui.config),true);
+let config=ui.readConfig();
+assert.equal(config.workflow_mode,'swap');assert.equal(config.edit_area,'mask');
+assert.equal(config.engine,'wan2');assert.equal(config.resolution,832);
+assert.equal(config.h3_character_method,'control');
+ui.$('wan2_background').value='replace';
+config=ui.readConfig();
+assert.equal(config.workflow_mode,'motion');assert.equal(config.edit_area,'scene');
+assert.equal(context.allowed(config),true);
+ui.config=config;ui.selectWorkflow();
+assert.equal(ui.config.workflow_mode,'motion','The task selector must retain the existing whole-frame choice');
+ui.$('wan2_background').value='keep';config=ui.readConfig();
+assert.equal(config.workflow_mode,'swap');assert.equal(config.edit_area,'mask');
+assert.equal(context.allowed({...config,scope:'head'}),false,'The unapproved head-only preview is not exposed');
+assert.equal(context.allowed({...config,mask_method:'points'}),false);
+assert.equal(context.allowed({...config,audio_id:'new-speech'}),false);
+assert.equal(context.allowed({...config,subject_mode:'objects'}),false);
+ui.config={...config,engine:'h3'};
+ui.$('wan2_background').value='replace';
+config=ui.readConfig();
+assert.equal(config.edit_area,'mask','Switching into Animate 2 starts with Keep background, not a stale selector');
+ui.config=config;ui.lookMode='ready';
+ui.modelStatus={engine_ready:{wan2:true},wan2:{masked_ready:false,missing_mask_nodes:['ZuraWanAnimate2SpatialMask']}};
+ui.$('models').classList={toggle(){}};
+ui.updateModelStatus();
+assert.match(ui.$('models').textContent,/setup needed/);
+assert.match(ui.$('model-checklist').innerHTML,/ZuraWanAnimate2SpatialMask/);
+ui.modelStatus.wan2={masked_ready:true,missing_mask_nodes:[]};
+ui.updateModelStatus();assert.match(ui.$('models').textContent,/setup ready/);
+console.log('Animate 2 background choices preserve existing full-frame shots and select only the approved full-character mask route.');

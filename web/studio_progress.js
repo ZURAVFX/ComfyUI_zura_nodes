@@ -1,4 +1,23 @@
 // Progress describes the current stage, never an invented whole-job percentage.
+// Comfy's frontend emits executing as a node ID, while progress and start retain
+// prompt IDs. Attach only the prompt observed on this connection; never infer
+// ownership from a node name shared by another queued graph.
+export function installOwnedExecuting(api,onExecuting){
+  let activePrompt=null;
+  const started=e=>{activePrompt=e.detail?.prompt_id||null;};
+  const progress=e=>{if(e.detail?.prompt_id)activePrompt=e.detail.prompt_id;};
+  const executing=e=>{
+    const detail=e.detail;
+    if(detail&&typeof detail==='object'){onExecuting(e);return;}
+    if(typeof detail==='string'&&activePrompt)onExecuting({detail:{node:detail,prompt_id:activePrompt}});
+  };
+  const ended=e=>{if(e.detail?.prompt_id===activePrompt)activePrompt=null;};
+  const listeners=[['execution_start',started],['progress',progress],['executing',executing],
+    ...['execution_success','execution_error','execution_interrupted'].map(type=>[type,ended])];
+  for(const [type,listener] of listeners)api.addEventListener?.(type,listener);
+  return ()=>{for(const [type,listener] of listeners)api.removeEventListener?.(type,listener);};
+}
+
 export function durationLabel(seconds) {
   const value=Math.max(0,Math.ceil(Number(seconds)||0));
   if(value<60)return `${value}s`;

@@ -1,5 +1,6 @@
 """CPU media checks for the unexposed long-outpaint assembly primitives."""
 import importlib.util
+import array
 import json
 import os
 from pathlib import Path
@@ -16,6 +17,25 @@ spec.loader.exec_module(module)
 
 
 class WindowPlanning(unittest.TestCase):
+    def test_fractional_selection_does_not_leak_audio_into_held_frames(self):
+        ffmpeg = shutil.which('ffmpeg')
+        if not ffmpeg:
+            self.skipTest('FFmpeg is required for this media test.')
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            clip, source, output = root/'part.mp4', root/'audio.wav', root/'result.mp4'
+            subprocess.run([ffmpeg,'-v','error','-f','lavfi','-i','color=s=64x64:r=24',
+                            '-frames:v','24',str(clip)],check=True)
+            subprocess.run([ffmpeg,'-v','error','-f','lavfi','-i',
+                            'sine=frequency=440:sample_rate=24000:duration=2',str(source)],check=True)
+            subprocess.run(module.ffmpeg_assembly(ffmpeg,[module.Window(0,24,0)],[clip],output,
+                           source=source,audio_start=.25,audio_duration=.97,pad_tail=True),check=True)
+            pcm=subprocess.check_output([ffmpeg,'-v','error','-i',str(output),'-map','0:a:0',
+                                         '-f','f32le','-ac','1','-ar','24000','-'])
+            wave=array.array('f');wave.frombytes(pcm)
+            self.assertGreater(sum(map(abs,wave[12000:22000]))/10000,.01)
+            self.assertLess(max(map(abs,wave[23520:])),.002)
+
     def test_windows_cover_exact_range_and_obey_limit(self):
         for length in (3, 120, 121, 240, 1000):
             parts = module.windows(24, length)
@@ -117,6 +137,17 @@ class WindowPlanning(unittest.TestCase):
             self.assertLess(levels[0], 8, 'The overlap must start at the black endpoint.')
             self.assertGreater(levels[-1], 247, 'The overlap must end at the white endpoint.')
             self.assertTrue(all(a <= b + 2 for a, b in zip(levels, levels[1:])), levels)
+            held_output = root / 'held-result.mp4'
+            subprocess.run(module.ffmpeg_assembly(ffmpeg, parts, clips, held_output, pad_tail=True), check=True)
+            def lowres(path):
+                data = subprocess.check_output([ffmpeg, '-v', 'error', '-i', str(path), '-vf',
+                    'scale=1:1', '-f', 'rawvideo', '-pix_fmt', 'rgb24', '-'])
+                return [sum(data[i:i+3]) / 3 for i in range(0, len(data), 3)]
+            original, held = lowres(output), lowres(held_output)
+            self.assertEqual((len(original), len(held)), (150, 153))
+            self.assertTrue(all(abs(a-b)<2 for a,b in zip(original, held[:150])), 'Padding must not alter the accepted joins')
+            self.assertTrue(all(abs(v-held[149])<2 for v in held[150:]), 'Only the last frame may be held')
+
 
 
 if __name__ == '__main__':

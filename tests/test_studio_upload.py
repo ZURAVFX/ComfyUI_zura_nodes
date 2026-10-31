@@ -8,6 +8,7 @@ import tempfile
 import threading
 import time
 import types
+import importlib
 from pathlib import Path
 from unittest.mock import patch
 
@@ -15,9 +16,78 @@ import test_artist_studio as fixtures
 from PIL import Image
 
 studio = fixtures.studio
+# Route registration imports these native modules. Keep them outside mocked
+# module snapshots so a later route test cannot re-import NumPy's extensions.
+importlib.import_module('ComfyUI_zura_nodes.paintout.paintout')
 
 
 class UploadTests(fixtures.unittest.IsolatedAsyncioTestCase):
+    async def test_prores_colour_variants_share_one_preview_writer(self):
+        await self.preview_variants(fail=False)
+
+    async def test_prores_colour_variants_share_preview_failure_without_retry(self):
+        with self.assertLogs(level='ERROR'):
+            await self.preview_variants(fail=True)
+
+    async def preview_variants(self, *, fail):
+        preview_proxy = importlib.import_module('ComfyUI_zura_nodes.artist_studio.preview_proxy')
+        server = types.SimpleNamespace(routes=studio.web.RouteTableDef())
+        module = types.ModuleType('server')
+        module.PromptServer = types.SimpleNamespace(instance=server)
+        started, release = threading.Event(), threading.Event()
+        calls = []
+        with tempfile.TemporaryDirectory() as tmp:
+            source = Path(tmp) / 'genj_studio/original/source.mov'
+            source.parent.mkdir(parents=True);source.write_bytes(b'original remains unchanged')
+            target = source.with_name('preview.mp4')
+            original = {'id':'a'*32, 'kind':'asset', 'asset_kind':'video',
+                        'file':'genj_studio/original/source.mov',
+                        'preview_file':'genj_studio/original/preview.mp4'}
+            clone = {**original, 'id':'b'*32}
+            records = {item['id']:item for item in (original,clone)}
+            instance = types.SimpleNamespace(start_watcher=lambda:None,
+                store=types.SimpleNamespace(load=lambda identity:dict(records[identity])))
+            def build(media, dest, ffmpeg):
+                calls.append((media,dest));started.set()
+                if not release.wait(5):raise RuntimeError('Test did not release its preview worker')
+                if fail:raise ValueError('test proxy failure')
+                dest.write_bytes(b'playable proxy')
+            with patch.dict(sys.modules, {'server':module}), \
+                    patch.object(studio,'Studio',return_value=instance), \
+                    patch.object(importlib.import_module('ComfyUI_zura_nodes.artist_studio'),'ffmpeg',lambda *args:None,create=True), \
+                    patch.object(studio.folder_paths,'get_input_directory',return_value=tmp), \
+                    patch.object(studio,'check_asset',return_value=source), \
+                    patch.object(studio,'public_project',side_effect=lambda asset:dict(asset)), \
+                    patch.object(preview_proxy,'build_proxy',side_effect=build):
+                studio.register()
+                handler = next(r.handler for r in server.routes if r.path=='/zura/studio/assets/{identity}/preview')
+                async def poll(identity):
+                    result=await handler(types.SimpleNamespace(headers={},host='localhost',match_info={'identity':identity}))
+                    self.assertEqual(result.status,200)
+                    return json.loads(result.body)
+                try:
+                    await poll(original['id'])
+                    for _ in range(100):
+                        if started.is_set():break
+                        await asyncio.sleep(.01)
+                    self.assertTrue(started.is_set())
+                    await asyncio.gather(poll(original['id']),poll(clone['id']))
+                    await asyncio.sleep(.02)
+                    self.assertEqual(len(calls),1,'Both asset IDs must share the same target writer')
+                finally:
+                    release.set()
+                for _ in range(100):
+                    first,second=await asyncio.gather(poll(original['id']),poll(clone['id']))
+                    if (first.get('preview_status')=='error' if fail else target.is_file()):break
+                    await asyncio.sleep(.01)
+                self.assertEqual(len(calls),1)
+                self.assertEqual(source.read_bytes(),b'original remains unchanged')
+                if fail:
+                    self.assertEqual(first['preview_status'],'error')
+                    self.assertEqual(second['preview_status'],'error')
+                else:
+                    self.assertEqual(target.read_bytes(),b'playable proxy')
+
     async def test_image_upload_hashes_once_and_inspects_off_event_loop(self):
         image = io.BytesIO()
         Image.new('RGB', (64, 48), 'purple').save(image, format='PNG')

@@ -1,0 +1,14 @@
+import assert from 'node:assert/strict';
+import {installOwnedExecuting} from '../web/studio_progress.js';
+const listeners=new Map(),api={addEventListener(type,fn){if(!listeners.has(type))listeners.set(type,new Set());listeners.get(type).add(fn);},removeEventListener(type,fn){listeners.get(type)?.delete(fn);}};
+const emit=(type,detail)=>{for(const fn of listeners.get(type)||[])fn({detail});};
+const received=[];const dispose=installOwnedExecuting(api,e=>{if(e.detail.prompt_id==='mine')received.push(e.detail.node);});
+emit('executing','model');assert.deepEqual(received,[],'An unowned node string cannot update a job');
+emit('execution_start',{prompt_id:'mine'});emit('executing','text');emit('executing','model');
+assert.deepEqual(received,['text','model'],'Current Comfy frontend strings identify model loading before sampling');
+emit('execution_start',{prompt_id:'someone-else'});emit('executing','sample1');assert.equal(received.length,2);
+emit('executing',{node:'sample1',prompt_id:'mine'});assert.equal(received.at(-1),'sample1','Object-shaped events remain supported');
+emit('progress',{prompt_id:'mine',value:1,max:8});emit('executing','upsample');assert.equal(received.at(-1),'upsample','A progress event restores ownership after reconnect');
+emit('execution_success',{prompt_id:'mine'});emit('executing','decode');assert.equal(received.at(-1),'upsample','Terminal jobs cannot keep ownership');
+dispose();assert.equal([...listeners.values()].reduce((n,s)=>n+s.size,0),0,'Disposed HDR tools remove all their listeners');
+console.log('PASS owned executing events: modern strings, older objects, loading stages, reconnect and unrelated jobs.');

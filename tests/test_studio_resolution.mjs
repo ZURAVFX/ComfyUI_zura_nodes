@@ -13,10 +13,12 @@ number.value='';number.dispatchEvent(new window.Event('input',{bubbles:true}));a
 number.value='12';number.dispatchEvent(new window.Event('input',{bubbles:true}));assert.equal(number.value,'12','Partial values do not snap while typing');
 number.value='721';assert.equal(number.commitDimension(),true);assert.equal(number.value,'736');assert.equal(commits,1);
 number.value='1e3';assert.equal(number.commitDimension(),false);assert.equal(commits,1);
-const studio={config:{workflow_mode:'relight',engine:'h3',opening_model:'klein9b',resolution:1280},source:{width:1920,height:1080},composerStage:()=>stage,$:()=>document.querySelector('#native')};
+const studio={config:{workflow_mode:'relight',engine:'h3',opening_model:'klein9b',resolution:1280},modelStatus:{opening_max_pixels:4e6},source:{width:1920,height:1080},composerStage:()=>stage,$:()=>document.querySelector('#native')};
 let stage='image';const panel=document.querySelector('#panel'),control=new VideoResolutionControl(studio,panel);control.sync();
 const field=id=>panel.querySelector('#zvr-'+id);
 field('mp').value='.65';field('mp').oninput();assert.equal(studio.config.opening_width%16,0);assert.equal(studio.config.opening_height%16,0);assert.match(field('dimensions').textContent,new RegExp(String(studio.config.opening_width)));assert.match(field('hint').textContent,/Saved frame stays 1920/);
+assert.equal(Number(field('mp').max),4);field('mp').value='3';field('mp').oninput();assert.ok(studio.config.opening_width*studio.config.opening_height>2e6);assert.ok(studio.config.opening_width*studio.config.opening_height<=4e6);assert.match(field('hint').textContent,/more memory/);
+studio.modelStatus={};control.sync();assert.equal(Number(field('mp').max),2,'Older running servers do not advertise unsupported image sizes');studio.modelStatus={opening_max_pixels:4e6};control.sync();
 const imageWidth=studio.config.opening_width;stage='video';control.sync();assert.match(field('dimensions').textContent,/1280 × 720/,'Existing relight default matches its graph');
 field('shape').value='portrait';field('shape').onchange();assert.ok(studio.config.relight_height>studio.config.relight_width);assert.equal(studio.config.opening_width,imageWidth,'Image and video sizes stay independent');
 field('shape').value='custom';field('shape').onchange();field('width').value='720';field('height').value='1280';field('width').commitDimension();assert.equal(studio.config.relight_width,720);assert.equal(studio.config.relight_height,1280);
@@ -31,6 +33,7 @@ assert.equal(field('shape').disabled,false);assert.equal(field('mp').disabled,fa
 field('shape').value='source_size';field('shape').onchange();
 assert.ok(studio.config.camera_height>studio.config.camera_width);assert.equal(studio.config.camera_width%32,0);assert.equal(studio.config.camera_height%32,0);
 assert.match(field('hint').textContent,/Camera still and video use/);assert.match(field('hint').textContent,/adjusted for H3/);
+studio.config.workflow_mode='relight';studio.config.relight_engine='wan21';studio.modelStatus.wan21_relight_max_pixels=8_388_608;studio.source={width:3840,height:2160};stage='video';control.sync();assert.equal(Number(field('mp').max),8.35);field('shape').value='source_size';field('shape').onchange();assert.equal(studio.config.relight_width,3840);assert.equal(studio.config.relight_height,2160);assert.match(field('hint').textContent,/untested/);studio.config.workflow_mode='camera';studio.source={width:1080,height:1920};stage='image';control.sync();
 const cameraSize=[studio.config.camera_width,studio.config.camera_height];stage='video';control.sync();
 assert.deepEqual([studio.config.camera_width,studio.config.camera_height],cameraSize);assert.match(field('dimensions').textContent,new RegExp(`${cameraSize[0]} × ${cameraSize[1]}`));
 field('shape').value='custom';field('shape').onchange();field('width').value='448';field('height').value='768';field('width').commitDimension();

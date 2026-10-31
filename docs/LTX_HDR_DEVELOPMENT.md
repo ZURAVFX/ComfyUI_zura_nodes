@@ -1,10 +1,69 @@
 # LTX 2.5 HDR development
 
+## Native HDR performance experiment, 31 October
+
+`artist_studio/ltx25_hdr_plan.py` adapts the approved staged performance
+topology for an original EXR appearance plate and SDR source pose/edge
+extraction. This is an opt-in development experiment, disabled by default.
+It is not an official HDR Union recipe. The caller must resolve and
+verify the EXR manifest, bind it to the approved opening and pin the full HDR
+VAE before planning. The template's SDR VAE is replaced before the final basis,
+cache identities and graph hashes are computed; no temporary template is run.
+
+Each VAE consumer receives the full float32 VAE. EXR appearance conditioning
+does not pass through a PNG or JPEG. Resizing converts ACEScct to linear ACEScg
+and back; the pose/edge guide is explicitly encoded into ACEScct for the HDR
+VAE. Signed Union guide masks remain inside the first sampling graph, while
+ordinary cropped video latents use the existing verified handoff. Frozen audio,
+original/replacement/silent semantics and exact finished-frame indices are
+retained. HLG and EXR are saved from native decoded frames, with tone mapping
+applied only to the browser proxy. This adds no SDR-to-HDR diffusion pass.
+
+A private GPU run executed real source selection, DWPose, text, sampling,
+upscaling, refinement and decoding for 17 frames at 288 x 512. The six generation
+phases took approximately 76 seconds including loads on this run; this is not a
+comparative speed benchmark. Every phase bound actual successful producer
+receipts and verified cache files. Delivery validation found 17 10-bit HLG
+frames tagged BT.2020 and 17 finite half-float ACEScg/AP1 EXRs, with linear
+values above 1. The original soundtrack was present. Private graphs, histories,
+receipts, model pins, metadata and contact sheet are under
+`work/openjutsu-benchmark/native-hdr-performance-check`.
+
+The reference was a synthetic exposure-expanded SDR image, not native HDR
+camera footage. The viewing contact sheet shows appearance/framing changes;
+the test does not qualify identity, performance fidelity or HDR display quality.
+Do not ship this as a verified workflow. Main Studio EXR import and approval,
+native plan resolution and result collection are now integrated behind
+`ZURA_LTX_HDR_PERFORMANCE=1`. In LTX whole-scene performance, select a finished
+frame and upload one EXR. The existing inline output selector offers HLG,
+HLG + EXR or EXR; SDR is unavailable for this native input. No new panel or
+separate conversion step is introduced. Each approval binds the original
+manifest hash and colour interpretation as well as the viewing PNG hash.
+Changing original EXR bytes, switching to an incompatible mode or attempting
+to use the proxy as an image-generation reference is rejected. The native
+runtime resolves and pins the full VAE before planning; decode collection
+rebinds all upstream receipts before checking actual frame/raster/audio,
+10-bit HLG tags and the EXR archive. Its final result is identified as native,
+so reopening or displaying it cannot submit the SDR-to-HDR diffusion pass.
+
+`native-hdr-performance-ui-check` contains the real EXR import/project records,
+graph-derived readiness, desktop/mobile screenshots and playback evidence.
+The displayed result is a replay of the prior independently revalidated GPU
+fixture, not a new render of the imported project. The CPU server deliberately
+excluded DWPose/VHS, and setup correctly reported those missing classes.
+There were no page errors, global overflow or generation submissions. All
+67 top-level JavaScript suites and 81 combined backend runtime/input/approval
+checks pass. A representative real-HDR render and artist review remain before
+default exposure or release. The existing SDR generator is unchanged.
+
 HDR is LTX-specific. The experimental `artist_studio/hdr_delivery.py` graph
 builder follows the locally installed official `ComfyUI-LTXVideo` 2.5 HDR
 examples. Studio offers a bounded SDR-to-HDR tool for an uploaded source or
 the latest LTX result. It is a separate conversion pass, not an HDR-enabled
-version of all LTX generation workflows.
+version of all LTX generation workflows. The first/last-frame workspace now
+also automates that additional pass when its inline LTX output selector is set
+to HDR. It preserves the SDR take and shows an SDR preview with separate HLG/EXR
+downloads. This does not add native HDR image conditioning to its endpoint graph.
 
 The SDR-to-HDR path uses LTX 2.5 distilled, its video and audio VAEs, the
 SDR-to-HDR IC-LoRA and the matching fixed scene embeddings. Frames must be
@@ -303,3 +362,501 @@ separate 64-frame 512 × 512 synthetic CPU processes. Peak RSS growth was
 approximately 391 MiB versus 393 MiB, with both taking 0.44 s in this test.
 That measurement does not establish a useful memory or speed improvement, so
 the change was not retained and the HDR limits remain unchanged.
+
+## Synthetic GPU smoke tests (30 October)
+
+An isolated 9-frame, 96 x 64 HLG/Rec.2020 synthetic fixture completed targeted
+paintout on the LTX 2.5 int8 model with the installed Obscura adapter and an
+experimental substitution of the full video VAE for the absent conv VAE. The
+render took 174.56 seconds, produced nine float32 ACEScg EXRs and a 96 x 64,
+24 fps, 10-bit HLG/Rec.2020 MP4. It does not qualify the visual repair or
+performance with representative footage. The full clean-plate adapter remains
+missing and its HDR path has not been tested.
+
+A separate 9-frame HDR frame-extension experiment completed in 140.27 seconds
+at 192 x 128, producing an SDR viewing proxy and an explicitly unverified
+ACEScg EXR archive. The experiment used the installed
+`ltx-2.3-22b-ic-lora-outpaint.safetensors` adapter in place of the unavailable
+filename in the experimental builder; the diffusion model was LTX 2.5. The
+synthetic result is not representative of real scenes and does not establish
+HDR colour or visual quality. This path is not exposed in Studio.
+The integrated targeted HDR paintout workspace now falls back to the full VAE
+when the preferred conv VAE is unavailable, records that choice in the run
+configuration and labels it experimental. It does not make this substitution
+for SDR or full clean plate. The Studio integration has automated coverage and
+model-discovery was checked against the test server; artist-quality review on
+representative HDR footage is still outstanding.
+
+The separate black-video guidance HDR experiment now reuses the user's approved
+SDR expansion recipe, with the native HDR loader, ACEScct canvas and full VAE.
+A 9-frame synthetic GPU smoke test completed in 37.78 seconds with the model
+already cached, writing an SDR proxy and explicitly unverified EXRs. This is
+not comparable to cold-load timings and does not verify the generated scene.
+A separate real-PQ-footage experiment was subsequently evaluated below.
+The black-guide variant also completed nine frames of real PQ/Rec.2020 source
+at 448 x 704 in 36.7 seconds with cached models. Its SDR proxy retained black
+margins through the first and final frames instead of filling them. This is a
+failed outpaint result and must not be exposed as a working HDR mode. The
+fixture was a 24-fps transcode of the CHUG sample cited above; this short,
+silent test does not qualify colour or temporal continuity.
+On the real PQ fixture, using the black-guide outpaint adapter with the masked
+recipe produced a green border. The intended 1.31 GB LTX 2.3 in/outpaint LoRA
+was subsequently downloaded (no LTX 2.3 base model) and tested with LTX 2.5.
+Its nine-frame SDR proxy filled the border; this is promising but remains a
+short, low-resolution test of the masked recipe, which the user had previously
+preferred less than the SDR black-guide method. HDR accuracy and the animated
+result require further review before exposure.
+A subsequent 25-frame PQ test with the intended masked adapter filled the
+borders but substantially changed the centre of the frame. An experimental
+linear-light, 16-pixel seam composite was added and unit tested. A separate
+nine-frame end-to-end GPU render at 448 x 704 completed in 149.6 seconds
+from cold loading; its first, middle and final checked EXR frames matched the
+source exactly in the interior more than 16 pixels from the seam. This says
+nothing about seam appearance, motion, HDR monitor quality, or audio; the
+composite remains internal and is not a verified Studio HDR outpaint mode.
+
+The private outpaint experiment now has an explicitly unverified 10-bit HLG
+output option alongside its EXR archive. A CPU-only live Comfy graph reloaded
+nine previously generated 448 x 704 ACEScg EXRs and muxed an independent
+24 fps audio fixture. FFprobe reported nine frames, 24 fps, 0.375-second video
+and audio, yuv420p10le, BT.2020 non-constant-luminance and HLG transfer tags.
+Audio cross-correlation peaked at zero samples with a 0.9998 normalised score.
+This validates the delivery nodes on generated frames, not end-to-end model
+colour, seam quality, representative motion or an HDR display. The route stays
+internal until those remaining checks and Studio integration are complete.
+The same independent outpaint delivery check was repeated at 24000/1001 fps
+with a five-frame audio offset. It saved nine frames at the requested rational
+rate and 0.375375-second duration; correlation against the correctly offset
+source peaked at zero samples (0.9973). No video model was rerun in that check.
+Recompositing the existing 25-frame generated EXRs through the live CPU graph
+produced a 25-frame SDR preview and EXR archive without another model run.
+The generated borders remain visible, but the first/middle/final SDR contact
+sheet still shows a scene mismatch at the edge; this does not meet the visual
+bar for exposing HDR outpaint. More representative resolution and seam work are
+needed, and the user previously preferred the black-guide SDR method.
+# Native HDR timeline selection (internal)
+
+An experimental native HDR selector now maps output timestamps to the
+corresponding source frames at different constant frame rates, without an SDR
+intermediate. It rejects selections extending past the source and leaves
+inference padding to a separate stage. CPU tests cover fractional and mixed
+rates, a non-zero trim, and a synthetic 60 fps 10-bit video with an explicit
+HLG colour interpretation. An internal short outpaint graph now uses this
+selection, checks reviewed settings, pads only for inference and trims before
+SDR preview, HLG and EXR delivery. A synthetic PCM test confirms a non-frame-
+aligned audio start and exact output sample count. This is not exposed in
+Studio: individual-node tests do not establish model output quality. An
+experimental HDR review graph now uses the same native timeline selector and
+canvas as the render instead of the SDR review graph. Its approval key also
+binds the chosen colour interpretation. A synthetic 60 fps test compares every
+selected HDR canvas frame and mask before and after inference padding. Real
+footage, audio, sequence input, final HDR output and visual quality still need
+an end-to-end render. A CPU-only synthetic 60 fps fixture also exercises
+native selection, canvas expansion, HDR compositing and ACEScg EXR packaging:
+the archive contains exactly the four selected frames, preserves the source
+centre and retains a generated 4.0 scene-linear highlight. This substitutes
+synthetic pixels for model inference and does not qualify visual quality.
+The internal review and render graphs also accept a checked EXR manifest; the
+approval binds its colour choice and sequence frame rate. A CPU fixture checks
+12-to-24 fps selection, ACEScg highlights and rejection of changed frames. Auto
+colour detection reads every EXR's tags, so it also verifies every file hash;
+this can add noticeable time for large sequences. The route is not yet
+exposed in Studio or qualified with a model render.
+The HDR review path was also executed on CPU with the installed Comfy and LTX
+nodes: a synthetic 60 fps source produced a nine-frame, 24 fps tone-mapped mask
+preview at the requested 192 × 128 canvas size. This checks node compatibility
+and saved timing; it does not verify the model-generated scene or a desktop UI.
+
+An offline comparison re-composited the saved 25-frame PQ outpaint using 16,
+32, 64 and 96 pixel feathers at the first, middle and last frames. Wider
+blending softens the transition but does not resolve the changed scene content
+or the visible rectangular boundary, and also affects more of the source.
+The result remains unqualified; the comparison is saved as
+`openjutsu-benchmark/hdr-outpaint-feather-comparison.png`. Further model or
+guidance work is needed rather than merely increasing the feather.
+The experimental HDR composite previously feathered into the black padded
+canvas, darkening generated edge pixels. It now keeps the generated area intact
+and feathers only within the source region. Tests verify this invariant and
+preservation of the source away from the seam. A saved-frame comparison at four
+feather widths removes that particular black-padding contribution, but the
+scene still mismatches at the boundary; this is not a visual approval.
+
+
+## Matched black-guide HDR comparison (30 October)
+
+A 25-frame 448 × 704 PQ-source test used the same source, crop geometry, prompt
+and seed as the prior official masked comparison. The LTX 2.5 black-guide graph
+completed in 130.46 seconds on the RTX 4080 and generated 25 frames, but the
+SDR viewing proxy retains broad black borders where the extension should be.
+The official masked graph fills those areas but still exhibits an obvious
+boundary and colour mismatch. Neither result qualifies HDR frame extension for
+Studio. Comparison: `openjutsu-benchmark/hdr-outpaint-black-vs-official-25.png`;
+the HDR EXR archive remains an unverified internal test artifact. These are
+not native HDR-display visual evaluations.
+
+
+## SDR-first HDR outpaint experiment (30 October)
+
+A new internal two-pass LTX 2.5 test tone-mapped the 25-frame PQ source to
+sRGB, ran the artist-preferred SDR black-guide outpaint (126.03 s), converted
+that result using the LTX 2.5 SDR-to-HDR adapter, then composited the original
+PQ source into the ACEScct result (114.85 s). This filled the black borders
+seen in the direct HDR black-guide test. The silent 448 × 704 result contains
+25 frames at 24 fps; its video is 10-bit Rec.2020 HLG and the archive contains
+25 ACEScg EXRs. Against independently reloaded original PQ source, the EXR
+interior had mean absolute linear error 0.000075 and maximum error 0.00388,
+consistent with half-float storage; a sampled highlight remained 15.42. The
+working intermediate is an SDR H.264 file, so the newly generated borders
+are reconstructed HDR, not recovered source highlights. The tested composite
+is silent, short and low resolution. Motion, seam quality, source-audio
+delivery, long sections, larger canvases, and native HDR-display appearance
+remain unqualified. It is not exposed in Studio. Compare SDR viewing proxies
+at `openjutsu-benchmark/hdr-sdrfirst-final-comparison.png`.
+
+The internal two-stage builders now use native HDR timestamp resampling and can
+restore source audio to the HDR output and SDR preview. A real ComfyUI
+engineering graph selected 25 output frames at 24 fps from HDR-tagged 30 fps
+footage starting at 0.5 seconds. Its chirp audio measured zero sample lag and
+0.99987 correlation at 24 kHz. This only validates timeline and audio plumbing;
+the earlier model-generated two-stage HDR outpaint test remains silent and
+unapproved.
+
+A second two-stage model test used a PQ-tagged 1920 × 1080 source with audio
+and a 1088 × 640 canvas. The SDR outpaint stage took 52.33 seconds and the
+HDR conversion and composite stage took 48.30 seconds. The output has nine
+frames at 24 fps, 10-bit Rec.2020 HLG video and an audio stream. Its first
+0.375 seconds of decoded audio correlated 0.9956 with the source at zero
+lag. The archive contains nine ACEScg EXRs; a centre-region comparison of
+the middle frame with independently resampled original HDR measured mean
+absolute linear error 0.000015 and maximum 0.000827. This is a short
+engineering test, not a 1080p, long-clip or HDR-display
+quality approval; generated borders remain reconstructed from SDR. The
+experimental workflow remains unavailable in Studio.
+
+The two-stage experiment also accepts an exact start time, so a future Studio
+handoff can use the same fractional trim for the SDR guide, native HDR centre
+and original audio. Graph tests cover this alignment and reject invalid times.
+A nine-frame GPU test at 1088 × 640 used a 0.517-second trim from the
+24000/1001 fps PQ source. The two stages took 51.66 and 57.04 seconds;
+the middle EXR centre matched the independently resampled original with mean
+absolute linear error 0.0000148 and maximum 0.000746. Decoded output audio
+correlated 0.9953 at zero lag with the same source trim. This verifies the
+short experimental path, not Studio integration, long-clip continuity or
+HDR-display quality.
+
+The user accepted the visual comparison for further development. Internal
+builders now bind both stages to the reviewed HDR canvas, exact selection and
+colour, pad the source for inference, hold the final delivered image to 8n+1,
+and pad source audio to match. Graph tests cover review invalidation, exact
+trim, connections and tail handling. These builders currently support bounded
+video canvas expansion only; they are not yet wired into Studio or tested by
+a new end-to-end GPU run.
+Review also checks the original HDR source's pixel-frame budget, not only
+the output canvas, so a small output cannot bypass the native decode limit.
+The private two-pass coordinator now rechecks approval before the HDR pass,
+cleans up its owned intermediate, and targets only its active job on failure
+or cancellation. Six asynchronous tests cover sequential submission, changed
+selection, connection failure, and cancellation including the submission
+race. This coordinator is not yet wired into Studio.
+Asset validation and graph construction run off the async event loop; a
+blocking-source test confirms cancellation remains responsive while a source
+check is in progress.
+An internal artifact validator now checks job-owned paths, video raster,
+frame count, audio track, 10-bit Rec.2020 HLG tags and the EXR archive frame
+sequence before delivery. Unit tests reject wrong paths, SDR tags and missing
+frames; a copy of the actual nine-frame output passed these checks. The
+validator checks the archive's frame names and sizes, not every EXR's pixels,
+and is now used by a private Comfy queue adapter. Queue tests cover validated
+outputs, failures, ownership of intermediate cleanup and prompt-specific
+cancellation. The adapter is connected to an internal frame-extension job
+with an approved HDR review key and returns the preview, HLG and EXR references
+only after validation. Mocked job tests and the existing long-SDR job tests pass.
+The review and render handlers also support an explicitly enabled internal
+test route (`ZURA_HDR_OUTPAINT_EXPERIMENT=1`); it is disabled by default.
+Tests check the gate, approval and automatic source
+audio detection. The route has not been tested end to end on the GPU.
+The test-only capability now enables an HDR output checkbox in the existing
+frame-extension composer. It limits the trim to the bounded HDR route, blocks
+the SDR long-clip option, labels reconstructed borders, and offers HLG and EXR
+downloads alongside the SDR preview. DOM tests cover these controls and the
+capability gate; the normal default remains hidden. Model setup now derives
+the required files and nodes from the review and both render graphs, and the
+backend checks them before queuing. Tests cover the outpaint adapter, HDR
+adapter, conditioning and required nodes. Desktop visual and GPU checks remain
+pending.
+The guarded interface now computes the padded software frame limit from both
+source and canvas dimensions before review. At 1920 × 1080 source resolution
+the current budget permits 17 frames; larger sources may be rejected even when
+the output canvas is small. It labels this as a software limit, not a hardware
+guarantee. DOM tests cover over-limit and corrected selections.
+The internal job hand-off was exercised with copies of the real nine-frame
+1088 × 640 HDR output, SDR preview, EXR archive and intermediate. Queue
+submission was simulated, while the actual artifact validators checked the
+files and the owned intermediate was removed afterwards. This is not a new
+model render or a desktop Studio test.
+An internal HDR review submission now queues the HDR canvas preview and binds
+its approval to source, geometry, timing and colour space. Mocked queue tests
+check that changing colour after approval is rejected and that preview status
+returns the correct job-owned output. Normal Studio remains gated.
+The reviewed 12-frame graph pair was checked against the live isolated
+ComfyUI `/object_info`: all 27 first-pass and 39 second-pass node types and
+required inputs are present. This schema check is not a model render.
+An attempted reviewed 12-frame GPU run on the isolated 8336 test instance
+did not complete: its log reported DXCore and WDDM VRAM query failures and
+then a fatal Python abort during model loading. The server stopped answering
+requests and no reviewed-stage output was produced. A fresh CUDA process had
+reported free VRAM immediately beforehand, so that check alone did not prove
+the existing Comfy process healthy. Investigate the GPU/Comfy runtime before
+repeating this test; no new HDR quality or Studio integration claim follows.
+The installed ComfyUI exposes `--disable-dynamic-vram` as an alternative
+model-loading mode. It has not been tested for this path, and could change
+memory and speed behaviour; no user instance was restarted or reconfigured.
+An isolated 8337 instance using `--disable-dynamic-vram --lowvram` loaded the
+test route and completed the real 12-frame HDR review. The render reached CPU
+text encoding, but after 447 seconds available system RAM had fallen below
+8 GB. The specific test job was cancelled, Comfy confirmed cancellation and
+the idle test models were unloaded. No rendered output was produced; this
+alternative mode is not a qualified speed or quality solution.
+
+Private long-HDR planning now binds the whole selection and colour space and
+calculates overlap windows against both the original HDR source and the output
+canvas, including 8n+1 temporal padding. Tests check the full range and window
+timing. This is planning only: an anchored HDR executor, blended joins and
+their visual validation remain outstanding, and no longer HDR option is exposed.
+An internal per-section graph can now add an aligned previous-frame I2V anchor
+while retaining the HDR source guide, and trims inference padding before
+assembly. Tests bind the section to the full review and reject unsafe anchor
+paths. This is a graph test, not evidence of a smooth rendered join.
+The complementary conversion graph now takes each time-aligned range from the
+assembled SDR video, restores the corresponding original HDR centre and can
+stage ACEScct frames through the existing HDR chunk writer with an I2V
+continuation anchor. A structural test confirms its chunk plan matches the
+writer's plan. Execution, exports and visual continuity are still unverified.
+The private SDR first-pass runner now uses the existing overlap assembler and
+aligned anchors. A CPU test with generated section videos verified the 24-frame
+selection is assembled as 25 frames with the final hold; it does not test model
+quality. Both HDR and SDR-preview exporters now accept the exact trim start in
+seconds. Non-periodic audio tests measured alignment within one sample at a
+0.517-second start. The full two-stage long runner remains unconnected.
+An internal streaming delivery wrapper now appends only the final required
+held frames after HDR section blending, then exports HLG, EXR and an SDR
+preview with the exact audio start. A real CPU media test checked 24-to-25
+frames, EXR count, both video counts and audio alignment; cancellation waits
+for the active export and removes files this job published. This does not
+validate model-generated long-section joins or wire the route into Studio.
+The private long conversion factory now validates the assembled SDR file,
+review key, source audio and disk budget, then uses the existing cancellable
+HDR chunk renderer and streaming delivery. A real-media preflight test checks
+the held intermediate, section timing, audio detection and path boundary. No
+end-to-end GPU test or public Studio route has been run for this composition.
+A private parent job now joins the first pass and HDR conversion and reports
+their separate progress. Tests cover cancellation during conversion and while
+preparing its staging, plus cleanup after a failed first pass. Adapters still
+need to connect this parent to real Studio jobs; no long HDR render or visual
+join acceptance has been established.
+A private Comfy adapter now submits owned SDR sections, extracts aligned
+anchors, validates each child, assembles them and hands the result to the HDR
+conversion factory. It preflights disk space and removes only its own verified
+child files and anchors. A CPU integration test uses real encoded video and
+anchor extraction with simulated model completions; actual GPU execution,
+end-to-end cancellation and visual joins remain unverified. It is not a
+registered Studio route.
+Full-range HDR review graphs and a private review assembler now bind every
+section to the same source, timing, geometry and colour. A CPU media test
+assembled a 24-frame review without adding inference padding; review children
+were simulated. A real review render and Studio route remain outstanding.
+The private Comfy review adapter now submits and validates each review child,
+assembles the full-range preview and removes owned child files. A CPU test
+used real encoded review sections with simulated Comfy completions. A separate
+test route requires both `ZURA_HDR_OUTPAINT_EXPERIMENT=1` and
+`ZURA_HDR_OUTPAINT_LONG_EXPERIMENT=1`; tests check the gates and approval. No
+normal Studio control enables it. GPU and desktop checks remain outstanding.
+
+### Isolated HDR integration test, 30 October
+
+Port 8338 used a fresh isolated ComfyUI instance with dynamic VRAM disabled and the normal memory policy. With approximately 25 GiB of available RAM, the real 1080p PQ source upload and 12-frame selection review completed. The outpaint render was cancelled during model loading when available RAM dropped below 8 GiB; it briefly fell below 1 GiB before cancellation completed. No video result was produced. Its idle model cache was unloaded afterwards. This is not a completed end-to-end render and should not be represented as one. A further model run requires a materially safer memory margin or an identified lower-memory configuration; do not repeat this loading configuration under similar conditions.
+
+Long HDR delivery now checks that its owned HLG and preview videos match the expected dimensions, frame count, audio tracks and frame rate, verifies HLG colour metadata, and checks the EXR sequence before exposing a completed result. These checks passed focused unit tests; a complete long model run still needs verification.
+
+A second isolated 8338 attempt started with about 44 GiB free. During the outpaint model load, available RAM fell below the 12 GiB stop threshold and continued falling while ComfyUI could not interrupt its synchronous load. The explicitly identified isolated 8338 process was stopped to protect the machine; free RAM recovered to about 46 GiB. No render was produced. Normal ComfyUI processes were left running. The log showed the 10 GiB text encoder and 20 GiB INT8 video model in the same phase. Do not repeat this configuration without addressing the loading peak and cancellation latency.
+The longer-delivery validator was also exercised on copies of the previously generated nine-frame 1088 × 640 HLG video, SDR preview and EXR archive with audio. All three passed the actual media checks. This validates the delivery gate with real artifacts, not a new long render.
+
+The installed ComfyUI's default RAM-pressure cache retains node results until memory pressure, and it also enables pinned host memory unless `--disable-pinned-memory` is set. The installed CLI offers `--cache-none` and `--disable-pinned-memory` as separate, documented alternatives. These are hypotheses for lowering the peak, not measured fixes. The observed cancellation could not stop a synchronous model load, so any further isolated benchmark must use an external, process-specific memory watchdog capable of terminating only that disposable test instance before available RAM reaches a critical level. Do not apply these flags globally to the user's normal instance without measuring their speed and memory effects.
+
+An isolated watchdog test on port 8339 tried `--disable-dynamic-vram --cache-none --disable-pinned-memory` with 43.5 GiB free initially. The real HDR upload and selection review completed, and the video model loaded and reached the start of sampling. Available RAM dropped to 20 GiB, where an external process-specific watchdog terminated that disposable server immediately; after cleanup 44.5 GiB was available. No model output resulted. This test does not show what the eventual peak would have been, or establish a safe setting. The normal ComfyUI instances were not stopped. A lower-memory graph or measured loading strategy is still required.
+
+A private `split_prompt_graph` prototype now moves the existing positive and negative `CLIPTextEncode` nodes into a separate graph using Zura's existing tensor-only prompt cache. The video graph consumes the saved conditioning while retaining the same frame-rate conditioning. Tests verify the actual outpaint graph, unchanged input prompts, valid links, and rejection of unexpected consumers. No shared Comfy model is unloaded by this helper. A safe queue handoff, cache ownership/cleanup, GPU memory measurement and output equivalence test are still required before this can be enabled.
+
+An isolated 8340 benchmark ran the split prompt graph on the same real nine-frame source and prompt. Text encoding completed in 18.1 seconds, then the idle test instance was asked to unload its models before the video graph. The video graph reached sampling without loading the text encoder, but available RAM still fell below the 20 GiB watchdog threshold from approximately 40 GiB at startup. The watchdog stopped only the isolated instance; the unique prompt cache was removed and free RAM recovered to 38.6 GiB. No video output was produced. Splitting the prompt therefore does not establish a sufficiently safe memory improvement on this machine, and remains an unexposed prototype.
+
+The explicitly gated HDR frame-extension prototype now supports returning a verified HDR video from the import screen. It reuses the Studio asset validation, preserves HLG/PQ input colour in the reviewed job, blocks duplicate interactions during handoff, and retains the existing source if validation fails. Interface tests cover the handoff and unsupported-colour failure. This is not enabled in normal Studio and is not a GPU or desktop qualification.
+
+The earlier successful nine-frame SDR-first and HDR-composite engineering runs in `hold-8336.stderr.log` used ComfyUI's dynamic VRAM loader, whereas the recent watchdog runs used `--disable-dynamic-vram`. The later 8336 failure occurred after several successful runs and reported a DXCore/WDDM query failure. A fresh isolated dynamic-VRAM benchmark may behave differently, but it has not yet been run and is not guaranteed safe. Any comparison must retain the external memory watchdog and must not use an active user GPU session.
+A real 1920 × 1080 PQ-tagged video passed upload and the unchanged HDR source-validation endpoint used by the new frame-extension handoff on isolated ComfyUI port 8337. It returned the uploaded asset and `pq_rec2020` as expected. This checks the backend contract only, not the revised desktop interaction or a model render.
+
+A fresh isolated dynamic-VRAM test on port 8341 completed HDR source review, then reached the 20 GiB watchdog threshold during video-stage loading from approximately 28 GiB available; the isolated instance was stopped, so there was no rendered output. Four previously created idle test instances were also stopped after checking their queues and process identities; the unrelated and previously blocked user/test instances were not restarted or stopped. The crashed 8336 process had already exited by the time cleanup was attempted. This test does not measure dynamic-VRAM peak memory or establish a successful render.
+
+A fresh dynamic-VRAM run on isolated port 8342 completed the real reviewed short HDR frame-extension route from a 1920 × 1080 PQ video with audio. Twelve selected source frames produced 17 delivered 512 × 320 frames, 10-bit Rec.2020 HLG video, SDR preview and EXR archive. The model passes took 40.91 and 31.35 seconds; the review took 6.60 seconds. Available RAM remained above the 12 GiB process watchdog. This confirms the route and its output validation at a small output raster, not 1080p output quality.
+
+A second dynamic-VRAM run on isolated port 8343 completed the experimental full review and two-section HDR frame-extension route from the same PQ source. Twenty-four selected frames produced 25 delivered frames, 512 × 320 10-bit Rec.2020 HLG HEVC, audio, preview and EXR archive. Per-section model passes took 41.70, 19.18, 29.00 and 19.62 seconds, after 9.09 and 8.28 seconds of review. The new final-delivery validator accepted the real files. This one-second engineering run does not qualify long-form continuity, full-resolution output, HDR-display appearance or the desktop UI. The job previously reported a stale `converting_hdr` stage after completion; the local job now returns `complete`, and its queue test passes.
+
+An isolated 8344 run exercised the same full-review, two-section HDR frame-extension route at 1088 × 640 using the real 1080p PQ source with audio. It delivered 25 frames at 24 fps as a verified 10-bit Rec.2020 HLG HEVC, an SDR preview and a 25-frame EXR archive. Review sections took 10.59 and 9.42 seconds; the two outpaint passes took 51.06 and 29.62 seconds, and the two HDR passes took 53.41 and 36.97 seconds. The process watchdog remained active at 12 GiB; sampled available RAM briefly reached 12.1 GiB. This is still a one-second engineering run, not a full-resolution or long-form visual qualification. Preview: `hdr_outpaint_7f8431d5761149eeb630b04be9d6327b_preview.mp4` in `openjutsu-benchmark/hdr-shared-long/output/genj/hdr`.
+
+The artist identified a visible seam around the original footage in the 1088 × 640 preview. Inspection found that the old blend alpha jumped from about 0.5 inside the source edge to 1.0 outside it. The experimental HDR composite now ramps to 1.0 at the inside edge while leaving the exterior entirely generated and the source interior untouched. A linear-light synthetic test verifies edge continuity and source preservation; the change has not yet been visually qualified on a new generated output. A 1920 × 1088 two-section test and a nine-frame 1088 × 640 retest were both stopped by the 12 GiB watchdog during model loading, so neither produced an image. Do not treat the earlier artist acceptance as acceptance of this newly observed seam.
+
+A CPU reconstruction of frame 12 from the previously rendered 1088 × 640 EXR and its independently loaded PQ source estimated the effect of the revised edge blend without running the model. On the sampled horizontal boundary, mean absolute linear-channel change between adjacent rows fell from 0.02184 to 0.00338. This reconstruction infers hidden generated pixels from the previous composite, and is not a newly generated result. Visual inspection still shows a broader tonal boundary, so the seam remains unresolved and requires real-render and artist review; the numeric edge reduction alone is not acceptance.
+The revised inner-edge ramp also passed synthetic linear-light tests at all four sides and two corners, with exact source preservation away from the transition. On the original unmodified output, decoded HLG and the SDR preview both show a larger average adjacent-row change at the measured source edge than their neighbouring rows; this is evidence of an encoded boundary in both deliveries, but not a perceptual assessment on an HDR display. The user has the original HLG and EXR files for that assessment. No revised model render has yet completed.
+The same single-frame CPU reconstruction measured smaller mean adjacent-pixel changes on all four plate edges after the proposed ramp: top 0.021842→0.003378, bottom 0.015104→0.004891, left 0.009524→0.002201, right 0.017056→0.006864 in linear ACEScg. These are estimates reconstructed from a previously composited EXR; they do not measure perceived HDR seam quality, and broad colour differences remain visible in the SDR proxy.
+For the remaining representative long-form HDR test, the existing `chug-hdr-reference-1080.mp4` fixture is a 1080 × 1920, approximately 8.03-second PQ/Rec.2020 10-bit source with 241 frames. It has no audio stream; a separate 129-frame 384 × 216 HLG fixture has audio. This metadata check does not qualify either input for the full frame-extension workflow.
+The long HDR frame-extension composer now reports its calculated number of overlapping sections and the two generation passes per section before submission. The 1080 × 1920 PQ fixture's 193-frame selection computes 21 sections in both the backend planner and interface test. If the artist trims back to a single-section range while the long option remains selected, the UI now submits the short route and requests its matching dependencies instead of failing with a long-route error. Interface tests pass; a desktop check and full 21-section render remain outstanding.
+A boundary regression verifies that a 17-frame HDR selection uses the single-section route, while 18 frames selects and displays two overlapping sections at the 1080p source budget. This is a planning/UI check, not a render.
+Sectioned HDR outpaint now reports a phase-only time estimate after it observes a completed section, counts it down during the current section, resets it when conversion begins, and clears it on cancellation. The backend now reports the current HDR conversion section rather than the number already completed. UI and backend tests cover these transitions; no end-to-end timing claim is made.
+
+After closing four additional idle test instances owned by this task, the 1088 × 640 revised-blend render was retried on isolated port 8347. It again reached the 12 GiB watchdog during model loading and was stopped without producing output. Other ComfyUI instances belong to a separate workspace and were left running. The revised seam remains unqualified on an actual rendered clip.
+
+A separate CPU-only local-colour-match experiment was evaluated on one reconstructed frame, without changing the shipped or experimental Studio graph. It estimates a bounded ACEScct colour offset from the inside seam, extends it into a fading band outside the plate, then applies the revised ramp. On this single inferred frame, the sampled top-edge linear jump was 0.00218 versus 0.02184 in the old composite, and a central source region differed by at most 7.4e-7. The SDR proxy looked smoother, but reconstruction, highlights, motion, temporal stability, other scenes and native HDR viewing are unverified; this is an experimental idea, not an implementation or approval.
+A full isolated-per-file run of the `test_hdr*.py` unit suites passed after the seam and handoff changes. The optional live-readiness suite was not configured and was skipped. These are automated checks, not visual approval, a new GPU render, or proof of native HDR capability in every LTX mode.
+
+An isolated 8348 rerun completed the revised-ramp short HDR path using the real PQ source at 1088 × 640: nine frames, 10-bit Rec.2020 HLG with audio, EXR and SDR preview. The outpaint and HDR passes took 47.80 and 37.67 seconds, respectively. This is a fresh 0.375-second single-section render, not a like-for-like long-section A/B; a broader tonal transition is still visible in its SDR preview. The user must judge the HLG master on an HDR display. It does not establish temporal continuity or full-length quality.
+
+A fresh isolated 8349 run completed the revised edge ramp through the full three-section HDR path at 1088 × 640. The 1.4-second selection contained 34 source frames and delivered 41 frames at 24 fps, holding the final frame to the model's 8n+1 count; it includes 10-bit Rec.2020 HLG, EXR, audio and SDR preview. Review sections took 19.89, 22.35 and 21.08 seconds; outpaint sections took 67.27, 32.84 and 32.73 seconds; HDR sections took 50.43, 42.96 and 41.58 seconds. The generated HLG master is `hdr_outpaint_60e2fce82f754b31bfe7e43e19c01cd5.mp4`. The SDR preview still shows a broader tonal transition near the edge. Native HDR display, the full user-requested clip length and 1080p output remain unqualified.
+
+The real 34-frame, 41-frame-delivery HDR frame-extension test revealed that its source audio continued into held frames: zero-lag correlation was 0.99691 over the selected range, but the held tail RMS was 0.0417. The long-HDR export now trims audio to the exact requested duration before padding to the held video length for both HLG and SDR preview. A real FFmpeg export test with a non-zero start and fractional 0.93-second selection confirms aligned audio and a silent held tail; existing HDR video/preview suites pass. The earlier shared HLG file still contains that extra audio and has not been modified. A new model run using this change remains outstanding.
+# HDR seam diagnostic
+
+## 31 October: bounded colour correction and fresh delivery check
+
+The experimental SDR-first HDR compositor now accepts an optional `colour_match` strength. It estimates a bounded ACEScct offset from the source-side seam ring, smooths it over three frames and fades the correction into the generated border. Black padding is excluded. Existing graphs retain the disabled default; only the gated HDR outpaint experiment enables it. Six CPU tests cover edge behaviour, temporal smoothing, absent references, strength validation and unchanged source/distant pixels.
+
+An isolated port-8350 comparison reused the exact same nine generated SDR frames and HDR seed at 1088 × 640. Both versions delivered valid 10-bit Rec.2020 HLG and nine ACEScg EXRs. Across all nine EXRs, source-interior pixels and generated pixels beyond the correction band were byte-for-byte unchanged. Mean adjacent-pixel boundary steps fell by approximately 30–41% across the four sides. The SDR contact sheet looked smoother, but these measurements do not establish HDR-display acceptance or remove geometric differences. The two conversion timings are cache-dependent and are not a speed comparison. Evidence: `hdr8350-colour-results.json`, `hdr8350-colour-metrics.json` and `hdr8350-colour-contact.png` in the benchmark folder.
+
+A fresh isolated port-8351 run then completed the full reviewed three-section route with this correction and the exact-duration audio fix. Its 1.4-second, 34-frame PQ selection delivered 41 frames at 24 fps, 1088 × 640, as HLG video, SDR preview and an archive of 41 EXRs. FFprobe confirmed `yuv420p10le`, Rec.2020 and HLG tags. Both delivered videos have a silent held audio tail (measured RMS 0). Master: `hdr_outpaint_a03913f5ebd346bf81f3101232bb2a43.mp4`; delivery evidence: `hdr8351-delivery-check.json`. The owned test server stopped after completion. Native HDR viewing, full-length and 1080p quality remain unqualified; the experimental gate stays in place.
+
+Four frames (0, 10, 20 and 30) of the 41-frame experimental HLG/EXR output
+`hdr_outpaint_60e2fce82f754b31bfe7e43e19c01cd5` were checked in the
+scene-linear ACEScg EXR frames. At the expected top boundary, the mean RGB
+step was approximately 0.0055, 0.0031, 0.0026 and 0.0874 respectively.
+Neighbouring rows also vary substantially on frame 30, so this measurement
+does not isolate a compositor discontinuity or establish perceptual quality.
+The test confirms only that the master was inspected, not that the visible
+colour seam is absent. HDR-display artist review remains required.
+# Native first/last HDR endpoints: 31 October 2026
+
+The opt-in `ZURA_LTX_HDR_ENDPOINTS=1` route now accepts single EXR images in the
+existing LTX first/last workspace. Studio keeps the uploaded asset identity and
+manifest hash; its tone-mapped PNG is only a viewing proxy. The server rechecks
+the manifest and file hashes before generation. The first frame is required;
+the last is optional. Both endpoints must be EXR for this preview. Switching to
+H3 or Wan with an EXR gives an actionable error rather than feeding the SDR proxy
+into another model.
+
+The graph follows the installed official two-stage HDR I2V example: distilled
+INT8 transformer, Gemma4 INT8, full video VAE forced to float32, no reference JPEG
+compression, first-frame conditioning at both passes, optional last-frame guides
+at both passes, latent upscaling and a three-step refinement pass. Output is HLG,
+ACEScg EXRs or both, with an explicitly SDR viewing preview. This native route
+does not enqueue the separate SDR-to-HDR conversion. Source audio can be frozen
+as guidance; generated audio is padded with silence to match the selected length
+when the audio latent is shorter. Installed compatible LTX LoRAs remain optional.
+
+Graph-derived setup checks cover both audio paths. The interface reports the
+64-pixel grid and 512–2048-pixel side limits. A 40-million-pixel-frame software
+budget bounds this preview; it is not a hardware-capacity prediction. Native
+endpoint support remains opt-in and is not installed or publicly released.
+
+Evidence in `work/openjutsu-benchmark`:
+
+- `native-hdr-endpoint-check`: real first-only and first/last GPU tests; both
+  produced nine 512 × 512 frames, 10-bit BT.2020/HLG video and nine EXRs retaining
+  scene-linear values above one. Timings were 42.3 s and 14.0 s, with cache reuse
+  on the latter, so these are not a fair performance comparison.
+- `native-hdr-endpoint-ui`: real browser EXR uploads, first/last generation,
+  final playable preview and HLG/EXR links in 45.2 s, with no page errors.
+- `native-hdr-endpoint-confirmation`: first-only generation with a short audio
+  reference; live loading stages, eight-step generation and three-step refinement
+  were observed. The delivered reference tail is silent and audio is 0.375 s,
+  matching the nine-frame video. Desktop and 390 px layout checks had no global
+  overflow and retained the central viewer.
+- `native-hdr-audio-delivery`: the real generated-audio output, whose native
+  stream was 0.330 s, was re-exported through the final CPU delivery graph. Video
+  and padded audio are both 0.375 s; HDR tags and nine frames are retained.
+
+Seven Python endpoint tests and the native endpoint UI, automatic delivery and
+owned-progress tests pass. These short engineering tests establish connectivity,
+asset isolation, output tags and timing. They do not establish long-clip quality,
+mixed SDR/EXR endpoints or artist approval on an HDR display. Remaining LTX routes
+and longer native endpoint selections still require integration and verification.
+
+## Main performance workspace: inline SDR-to-HDR delivery
+
+The existing main LTX performance composer now includes an output selector with
+SDR, HLG video, HLG + EXR and EXR. This is an explicit additional SDR-to-HDR pass,
+not native HDR video conditioning. It preflights the conversion dependencies
+before generation, includes missing HDR files/nodes in the shared model setup,
+and starts one conversion from the actual completed SDR asset and raster.
+Changing delivery format preserves the reviewed selection and starting image.
+H3 and Wan do not expose this selector.
+
+The original SDR take is retained. Conversion progress, targeted cancellation,
+the SDR viewing proxy and HLG/EXR downloads remain in the same workspace. Closing
+and reopening observes the same job. Unknown submission identity does not trigger
+an automatic repeat conversion. An unconfirmed cancellation remains visible.
+
+The isolated port-8360 browser check used a verified existing nine-frame,
+512-square SDR receipt to exercise this new handoff and real HDR inference.
+It observed one submission, sampler steps, final playback and both downloads,
+then reopened without submitting again. The conversion took 31.409 seconds in
+this cache-dependent test. FFprobe confirmed nine 10-bit BT.2020 HLG frames and
+matching 0.375-second audio; the archive contains nine EXRs. Desktop controls,
+390-pixel mobile controls and the desktop result were visually checked.
+Evidence: `main-ltx-hdr-check/results.json`, screenshots and
+`delivery-metadata.json` in the benchmark folder.
+
+This does not establish main performance quality, long/high-resolution HDR
+delivery, native HDR input or HDR-display acceptance. The main generation recipe
+was not rerun by this fixture; its output metadata is covered by backend tests.
+The controls and delivery code remain source-only and are not installed or
+publicly released. The broad all-LTX HDR checklist remains open.
+
+## Main performance workspace: opt-in native EXR appearance
+
+`ZURA_LTX_HDR_PERFORMANCE=1` enables a separate native experiment in the existing
+supplied-frame flow. It accepts an original EXR appearance image alongside the
+existing SDR motion source. The tone-mapped PNG is a viewing proxy only. Approval
+binds the original manifest, colour interpretation and proxy identity; changed
+EXR bytes fail validation even when the PNG is unchanged. This does not claim
+native HDR motion-video ingestion or precise masked preservation.
+
+The staged Union plan uses the full float32 video VAE, original EXR conditioning
+and native HLG/ACEScg delivery. It does not enqueue a second SDR-to-HDR diffusion
+pass. Native outputs are collected only after rebinding decode to the actual
+upstream receipts. Every EXR archive entry is CRC-checked and decoded individually,
+with finite-pixel, raster and scene-linear ACEScg/AP1 checks. Both the prominent
+download and take-card download prefer the HDR master or EXR archive. Playback
+uses the explicitly labelled SDR viewing proxy.
+
+The feature refuses switching the active EXR to H3/Wan, SDR output, image
+generation or a masked route. An unused supplied EXR does not affect a fresh
+Build from references flow. Model setup checks full-VAE, encoder and phase
+dependencies without loading weights. Current bounds are five seconds and
+40 million padded pixel-frames, not a hardware guarantee.
+
+On 31 October, an isolated GPU instance exercised actual Studio HTTP upload,
+project creation, source preparation, automatic supplied-frame binding, frame
+approval, all six generation phases and result collection. Preparation/binding
+took 2.04 s and generation/delivery took 81.17 s, including loads and polling.
+The result has 17 frames at 24 fps, 288 × 512, original audio, HLG video, 17
+ACEScg EXRs and a separate SDR preview. The queue was empty after completion.
+No image-generator stage or separate HDR conversion was submitted. Earlier
+startup attempts exposed missing dependencies in the test server's deliberately
+restricted whitelist and model paths; those test configurations were corrected.
+
+The reference remains a synthetic exposure-expanded SDR image. These timings
+are not a matched speed comparison, and this run does not establish real-camera
+HDR fidelity or artist acceptance. The feature stays source-only and off by
+default. All 86 `test_ltx25*.py` checks and 67 top-level JavaScript suites pass.
+The stored project from this fresh render was then reopened in a CPU-only test
+server. Browser playback, native-master downloads, desktop/mobile containment
+and close/reopen passed with no page errors or new generation submissions.
+Evidence: `native-hdr-performance-runtime-check` in the benchmark folder;
+the separate `native-hdr-performance-ui-check` records the earlier result replay.

@@ -51,7 +51,10 @@ class SceneOnlyTests(unittest.TestCase):
         p = self.project()
         with patch.object(studio, 'check_asset'), patch.object(studio, 'assert_approved'):
             g = studio.build_graph(p, 'design', use_cache=False)
-            self.assertEqual(g['122']['inputs']['images'], ['zura_masked_look', 0])
+            self.assertEqual(g['122']['inputs']['images'], ['zura_opening_preserve_source', 0])
+            self.assertEqual(g['zura_opening_preserve_source']['inputs']['destination'], ['125', 0])
+            self.assertEqual(g['zura_opening_preserve_source']['inputs']['mask'], ['zura_look_inside_mask', 0])
+            self.assertEqual(g['zura_opening_original_resolution']['inputs']['image'], ['zura_masked_look', 0])
             self.assertIn('Keep every original person', g['127']['inputs']['value'])
             p['look_mode'] = 'ready'
             with self.assertRaisesRegex(ValueError, 'Build from references'):

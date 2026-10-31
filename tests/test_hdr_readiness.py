@@ -47,5 +47,18 @@ class HDRReadinessTests(unittest.TestCase):
             with self.subTest(mode=mode,output=output),self.assertRaises(ValueError):
                 setup.readiness(mode,output,lambda *_:'/installed',{})
 
+    def test_long_mode_checks_continuation_and_staging_nodes(self):
+        for mode,kind in [('sdr','LTXVImgToVideoInplace'),('native','LTXVAddGuide')]:
+            with self.subTest(mode=mode):
+                short=setup.readiness(mode,'hlg_video',lambda *_:'/installed',{})
+                baseline={key:object() for key in short['missingNodes']}
+                short=setup.readiness(mode,'hlg_video',lambda *_:'/installed',baseline)
+                self.assertTrue(short['ready'])
+                longer=setup.readiness(mode,'hlg_video',lambda *_:'/installed',baseline,longer=True)
+                self.assertFalse(longer['ready'])
+                self.assertIn('ZuraHDRWriteChunk',longer['missingNodes'])
+                self.assertIn('ZuraHDRReadChunkAnchor',longer['missingNodes'])
+                self.assertIn(kind,longer['missingNodes'])
+
 
 if __name__=='__main__':unittest.main()

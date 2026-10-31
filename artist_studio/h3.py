@@ -23,7 +23,7 @@ H3_MODELS = {
 }
 H3_NATIVE_NODES = ("MiniMaxH3ReferenceToVideo", "MiniMaxH3AddGuide",
                    "MiniMaxH3FunControlNetApply", "MiniMaxH3SigmaShift",
-                   "DepthAnythingV2Preprocessor", "GetImageRangeFromBatch")
+                   "DepthAnythingV2Preprocessor", "GetImageRangeFromBatch", "GenjHoldToModelLength")
 H3_VIEWPORT_MODELS = {key: value for key, value in H3_MODELS.items() if key != "h3_control"}
 H3_VIEWPORT_NATIVE_NODES = ("MiniMaxH3ReferenceToVideo", "MiniMaxH3AddGuide",
                             "MiniMaxH3SigmaShift", "GetImageRangeFromBatch",
@@ -31,7 +31,7 @@ H3_VIEWPORT_NATIVE_NODES = ("MiniMaxH3ReferenceToVideo", "MiniMaxH3AddGuide",
                             "GetVideoComponents", "LoadImage", "UNETLoader", "LoraLoaderModelOnly",
                             "CLIPLoader", "VAELoader", "ZuraH3LockReferenceAudio", "BasicGuider",
                             "RandomNoise", "BasicScheduler", "KSamplerSelect", "SamplerCustomAdvanced",
-                            "VAEDecode", "ImageCrop", "CreateVideo", "GenjRestoreSoundtrack")
+                            "VAEDecode", "ImageCrop", "CreateVideo", "GenjRestoreSoundtrack", "GenjHoldToModelLength")
 H3_TEXT_CLEANUP_NODES = ("LoadLaMaModel", "LaMaInpaint", "LazySwitchKJ")
 H3_PRESETS = ("preview_fast", "preview_quality", "take_fast", "take_quality")
 
@@ -489,9 +489,9 @@ def build_h3_viewport_graph(project):
     if start >= available:
         raise ValueError("The selected start time is beyond the end of this viewport video.")
     selected_seconds = available if original_length else c["duration"]
-    if int(selected_seconds * 24 + 1e-6) > int((available - start) * 24 + 1e-6):
+    if selected_seconds > available - start + 1e-6:
         raise ValueError("The selected range extends past the end of the source video. Choose a shorter range.")
-    selected_frames = max(1, int(selected_seconds * 24 + 1e-6))
+    selected_frames = max(1, math.ceil(selected_seconds * 24 - 1e-6))
     if not 5 <= selected_frames <= 120:
         raise ValueError("Local H3 viewport renders currently support 0.21–5 seconds per take. Choose a section up to five seconds long.")
     references = list(project.get("viewport_references") or [])
@@ -570,7 +570,7 @@ def build_h3_viewport_graph(project):
     selected = node("h3_viewport_clip", "GenjSelectClip", video=source_video,
                     start_seconds=c["start"], duration_seconds=c["duration"],
                     long_edge=h3_generation_resolution(c),
-                    use_original_length=original_length, **audio_inputs)
+                    use_original_length=original_length, round_up=True, **audio_inputs)
     node("h3_viewport_data", "GenjH3ViewportFrameData", video=selected)
     selected_audio = None
     if audio_inputs:
@@ -622,11 +622,12 @@ def build_h3_viewport_graph(project):
     cropped = node("h3_crop", "ImageCrop", image=trimmed,
                    width=["h3_viewport_data", 7], height=["h3_viewport_data", 8],
                    x=["h3_viewport_data", 5], y=["h3_viewport_data", 6])
-    video = node("h3_video", "CreateVideo", images=cropped, fps=24.0,
+    held = node("h3_hold_output", "GenjHoldToModelLength", images=cropped, stride=17, remainder=5)
+    video = node("h3_video", "CreateVideo", images=held, fps=24.0,
                  **({"audio": selected_audio} if selected_audio else {}))
     enhanced_delivery = c.get("delivery_mode") == "enhanced1080"
     node("h3_export", "GenjRestoreSoundtrack", video=video,
-         clip_details=["h3_viewport_clip", 1],
+         clip_details=["h3_viewport_clip", 1], target_frames=["h3_hold_output", 1],
          take_name="studio_" + project["id"][:8] + ("_h3_base" if enhanced_delivery else "_h3_viewport"),
          **({"output_subfolder": "studio_intermediate"} if enhanced_delivery else {}))
     return graph
@@ -1087,9 +1088,10 @@ def build_h3_graph(project, use_cache=True, preserve_background=True):
                    sampler=sampler, sigmas=sigmas, latent_image=latent)
     decoded = node("h3_decode", "VAEDecode", samples=sampled, vae=vae)
     trimmed = node("h3_trim", "GetImageRangeFromBatch", images=decoded, start_index=0, num_frames=["h3_pad", 6])
-    video = node("h3_video", "CreateVideo", images=trimmed, fps=24.0, audio=["h3_pad", 2])
+    held = node("h3_hold_output", "GenjHoldToModelLength", images=trimmed, stride=17, remainder=5)
+    video = node("h3_video", "CreateVideo", images=held, fps=24.0, audio=["h3_pad", 2])
     enhanced_delivery = c.get("delivery_mode") == "enhanced1080"
-    node("h3_export", "GenjRestoreSoundtrack", video=video, clip_details=["h3_shot", 3],
+    node("h3_export", "GenjRestoreSoundtrack", video=video, clip_details=["h3_shot", 3], target_frames=["h3_hold_output", 1],
          take_name="studio_" + project["id"][:8] + ("_h3_base" if enhanced_delivery else "_h3"),
          **({"output_subfolder": "studio_intermediate"} if enhanced_delivery else {}))
     key = cache_key(project)

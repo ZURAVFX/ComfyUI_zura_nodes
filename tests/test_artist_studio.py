@@ -25,6 +25,46 @@ adapters = importlib.import_module('ComfyUI_zura_nodes.wan_artist')
 
 
 class SharedEngineTests(unittest.TestCase):
+    def test_main_ltx_hdr_output_is_explicit_and_never_applied_to_h3_or_wan(self):
+        for output in ('sdr', 'hlg_video', 'hlg_and_exr', 'acescg_exr'):
+            c = studio.clean_config({'engine': 'local', 'workflow_mode': 'motion', 'ltx_output': output})
+            self.assertEqual(c['ltx_output'], output)
+        for engine, mode in (('h3', 'swap'), ('h3', 'camera'), ('h3', 'relight'), ('wan', 'swap'), ('wan2', 'motion')):
+            c = studio.clean_config({'engine': engine, 'workflow_mode': mode, 'ltx_output': 'hlg_video'})
+            self.assertEqual(c['ltx_output'], 'sdr')
+        with self.assertRaises(ValueError):
+            studio.clean_config({'ltx_output': 'tag-sdr-as-hdr'})
+
+    def test_paintout_handoff_only_resolves_valid_uploaded_videos(self):
+        store = types.SimpleNamespace(load=lambda identity: {'id': identity, 'asset_kind': 'video'})
+        self.assertEqual(studio.paintout_asset_path(store, 'asset', lambda asset: '/verified/video.mp4'), '/verified/video.mp4')
+        store.load = lambda identity: {'asset_kind': 'image'}
+        with self.assertRaisesRegex(ValueError, 'uploaded video'):
+            studio.paintout_asset_path(store, 'asset', lambda asset: '/wrong.png')
+        store.load = lambda identity: {'asset_kind': 'video'}
+        with self.assertRaisesRegex(ValueError, 'changed'):
+            studio.paintout_asset_path(store, 'asset', lambda asset: (_ for _ in ()).throw(ValueError('changed')))
+
+    def test_hdr_paintout_handoff_validates_detected_colour(self):
+        describe = lambda path: {'kind':'video', 'transfer':'arib-std-b67', 'primaries':'bt2020'}
+        media = lambda path: {'path':path, 'kind':'video'}
+        info = studio.paintout_hdr_asset_info('/source.mov', 'auto', describe, lambda details, space:'hlg_rec2020', media)
+        self.assertEqual(info['colour_space'], 'hlg_rec2020')
+        with self.assertRaisesRegex(ValueError, 'not identified as HDR'):
+            studio.paintout_hdr_asset_info('/sdr.mov', 'auto', describe, lambda details, space:'rec709_oetf', media)
+        with self.assertRaisesRegex(ValueError, 'Choose HLG'):
+            studio.paintout_hdr_asset_info('/source.mov', 'srgb_display', describe, lambda details, space:space, media)
+        info = studio.paintout_hdr_asset_info('/p3.mov', 'auto', describe, lambda details, space:'pq_display_p3', media)
+        self.assertEqual(info['colour_space'], 'auto')
+
+    def test_opening_resolution_accepts_larger_images_with_pixel_budget(self):
+        config = studio.clean_config({'opening_width': 2304, 'opening_height': 1280})
+        self.assertEqual((config['opening_width'], config['opening_height']), (2304, 1280))
+        with self.assertRaisesRegex(ValueError, 'pixel limit'):
+            studio.clean_config({'opening_width': 4096, 'opening_height': 4096})
+        with self.assertRaisesRegex(ValueError, 'multiples of 32'):
+            studio.clean_config({'opening_model': 'qwen21', 'opening_width': 2320, 'opening_height': 1280})
+
     def project(self):
         config = studio.clean_config({'engine': 'wan', 'duration': 3, 'resolution': 1280})
         return {'id': 'a' * 32, 'source': {'sha': 'source', 'file': 'source.mp4'}, 'character': {'sha': 'character', 'file': 'character.png'},
@@ -46,6 +86,20 @@ class SharedEngineTests(unittest.TestCase):
                 self.assertEqual((p['review'], p['approval'], p['opening_input']), before)
             controller.configure(p, {**p['config'], 'duration': 2})
             self.assertIsNone(p['review'], 'Changing the selected interval requires a new review')
+
+    def test_ltx_delivery_format_preserves_review_and_starting_image(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            controller = studio.Studio.__new__(studio.Studio)
+            controller.store = studio.Store(tmp)
+            controller.collect = lambda p: p
+            p = self.project()
+            p['config'] = studio.clean_config({**p['config'], 'engine': 'local', 'workflow_mode': 'motion'})
+            p['approval'] = p['prepared_key'] = studio.prep_key(p)
+            before = (p['review'], p['approval'], copy.deepcopy(p['opening_input']))
+            for output in ('hlg_video', 'hlg_and_exr', 'acescg_exr', 'sdr'):
+                controller.configure(p, {**p['config'], 'ltx_output': output})
+                self.assertEqual((p['review'], p['approval'], p['opening_input']), before,
+                                 'Delivery format must not invalidate the selected mask or starting image')
 
     def test_camera_resolution_persists_and_invalidates_stale_still(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -415,7 +469,7 @@ class SharedEngineTests(unittest.TestCase):
         server = types.SimpleNamespace(routes=studio.web.RouteTableDef())
         module = types.ModuleType('server')
         module.PromptServer = types.SimpleNamespace(instance=server)
-        with patch.dict(sys.modules, {'server': module}), patch.object(studio, 'Studio'), \
+        with patch.dict('os.environ', {'ZURA_HDR_LONG_PREVIEW': '1'}), patch.dict(sys.modules, {'server': module}), patch.object(studio, 'Studio'), \
                 patch.object(studio.folder_paths, 'get_folder_paths', return_value=[], create=True):
             studio.register()
             routes = {(r.method, r.path) for r in server.routes}
@@ -427,6 +481,9 @@ class SharedEngineTests(unittest.TestCase):
             self.assertIn(('GET', '/zura/studio/status'), routes)
             self.assertIn(('POST', '/zura/studio/projects/{identity}/wan-graph/plan'), routes)
             self.assertIn(('POST', '/zura/studio/projects/{identity}/opening'), routes)
+            self.assertIn(('POST', '/zura/studio/hdr/source-info'), routes)
+            self.assertIn(('POST', '/zura/studio/hdr/output/paintout'), routes)
+            self.assertIn(('POST', '/zura/studio/hdr/jobs'), routes)
             route_count = len(server.routes)
             studio.register()
             self.assertEqual(len(server.routes), route_count, 'Reloading must not register duplicate routes')
@@ -488,6 +545,7 @@ class SharedEngineTests(unittest.TestCase):
         self.assertEqual(graph['wan_cached']['class_type'], 'ZuraWanLoadWindowPreparation')
         self.assertEqual(graph['wan_render']['class_type'], 'ZuraWan22StreamedSampler')
         self.assertEqual(graph['wan_export']['inputs']['video'], ['wan_render', 0])
+        self.assertEqual(graph['wan_export']['inputs']['model_stride'], 4)
         self.assertFalse({'ZuraWanReviewedFrames', 'ZuraWanPackPreparation',
                           'ZuraWan22LoopedChunksSampler'} & {n['class_type'] for n in graph.values()})
 
@@ -617,6 +675,67 @@ class AudioAdapterTests(unittest.TestCase):
             with av.open(selected.path) as media:
                 self.assertEqual(len(media.streams.audio), 1)
                 self.assertEqual(sum(1 for _ in media.decode(video=0)), 36)
+
+    def test_fractional_trim_holds_frame_without_leaking_later_audio(self):
+        import folder_paths
+        import numpy as np
+        import shutil
+        import subprocess
+        ffmpeg = shutil.which('ffmpeg')
+        if not ffmpeg:
+            self.skipTest('FFmpeg is unavailable')
+        with tempfile.TemporaryDirectory() as tmp, patch.object(folder_paths, 'get_output_directory', return_value=tmp, create=True):
+            source = Path(tmp) / 'source.mp4'
+            subprocess.run([ffmpeg, '-hide_banner', '-loglevel', 'error', '-y',
+                            '-f', 'lavfi', '-i', 'color=size=64x64:rate=24:duration=2',
+                            '-f', 'lavfi', '-i', 'sine=frequency=440:sample_rate=24000:duration=2',
+                            '-c:v', 'libx264', '-c:a', 'aac', '-shortest', str(source)], check=True)
+            video = self.ns['InputImpl'].VideoFromFile(str(source))
+            selected, details, _ = self.ns['GenjSelectClip']().select(video, .25, .97, 256, round_up=True)
+            self.assertEqual(details['frames'], 24)
+            self.assertAlmostEqual(details['selected_duration'], .97)
+            pcm = subprocess.check_output([ffmpeg, '-hide_banner', '-loglevel', 'error', '-i', str(selected.path),
+                                           '-map', '0:a:0', '-f', 'f32le', '-ac', '1', '-ar', '24000', '-'])
+            wave = np.frombuffer(pcm, dtype='<f4')
+            self.assertGreater(np.abs(wave[12000:22000]).mean(), .01)
+            self.assertLess(np.abs(wave[23520:]).max(), .002)
+
+    def test_whole_source_rounds_up_and_hold_nodes_preserve_last_frame(self):
+        import av
+        import folder_paths
+        import numpy as np
+        with tempfile.TemporaryDirectory() as tmp, patch.object(folder_paths, 'get_output_directory', return_value=tmp, create=True):
+            source = Path(tmp) / 'odd-length.mp4'
+            with av.open(str(source), mode='w') as out:
+                stream=out.add_stream('libx264',rate=25);stream.width=64;stream.height=64;stream.pix_fmt='yuv420p'
+                for index in range(53):
+                    frame=av.VideoFrame.from_ndarray(np.full((64,64,3),index*4,dtype=np.uint8),format='rgb24')
+                    for packet in stream.encode(frame):out.mux(packet)
+                for packet in stream.encode():out.mux(packet)
+            video=self.ns['InputImpl'].VideoFromFile(str(source))
+            selected,details,_=self.ns['GenjSelectClip']().select(video,0,1,256,use_original_length=True)
+            self.assertEqual(details['frames'],51)
+            self.assertGreaterEqual(details['duration'],53/25)
+            with av.open(selected.path) as media:
+                frames=list(media.decode(video=0))
+            self.assertEqual(len(frames),51)
+            self.assertGreater(float(frames[-1].to_ndarray(format='rgb24').mean()),195)
+            custom, custom_details, _ = self.ns['GenjSelectClip']().select(video, 0, 2.1, 256, round_up=True)
+            self.assertEqual(custom_details['frames'], 51)
+            with av.open(custom.path) as custom_media:
+                self.assertEqual(sum(1 for _ in custom_media.decode(video=0)), 51)
+        batch=torch.arange(50,dtype=torch.float32).reshape(50,1,1,1).expand(-1,2,2,3)
+        padded,count=self.ns['GenjHoldToModelLength']().hold(batch,4)
+        self.assertEqual(count,53);self.assertTrue(torch.equal(padded[:50],batch));self.assertTrue(torch.equal(padded[-1],batch[-1]))
+        h3, count = self.ns['GenjHoldToModelLength']().hold(batch,17,5)
+        self.assertEqual(count,56); self.assertTrue(torch.equal(h3[:50],batch)); self.assertTrue(torch.equal(h3[-1],batch[-1]))
+        audio = {'waveform':torch.ones(1,2,5000), 'sample_rate':2400}
+        held_audio, = self.ns['GenjPadAudioToFrames']().pad(audio, 56, 24.)
+        self.assertEqual(held_audio['waveform'].shape[-1], 5600)
+        self.assertTrue(torch.equal(held_audio['waveform'][..., :5000], audio['waveform']))
+        self.assertTrue(torch.all(held_audio['waveform'][..., 5000:] == 0))
+        control,=self.ns['GenjHoldImages']().hold(batch,81)
+        self.assertEqual(len(control),81);self.assertTrue(torch.equal(control[-1],batch[-1]))
 
 
 if __name__ == '__main__':
