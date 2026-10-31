@@ -5,6 +5,7 @@ import json
 import sys
 import types
 import unittest
+from pathlib import Path
 from unittest.mock import Mock, patch
 
 import test_wan_graph as fixtures
@@ -12,6 +13,15 @@ import test_wan_graph as fixtures
 studio = fixtures.studio
 planner = fixtures.planner
 wan = fixtures.importlib.import_module(fixtures.NAME + ".wan")
+
+# Registering the Studio routes loads Paintout's native NumPy/SciPy helpers.
+# Load them before the per-test sys.modules snapshot so C extensions are not
+# removed and imported a second time after a route registration.
+if "ComfyUI_zura_nodes.paintout" not in sys.modules:
+    paintout_package = types.ModuleType("ComfyUI_zura_nodes.paintout")
+    paintout_package.__path__ = [str(Path(__file__).resolve().parents[1] / "paintout")]
+    sys.modules[paintout_package.__name__] = paintout_package
+fixtures.importlib.import_module("ComfyUI_zura_nodes.paintout.paintout")
 
 
 class WanGraphIntegrationTests(unittest.TestCase):
@@ -148,7 +158,7 @@ class WanGraphIntegrationTests(unittest.TestCase):
         asyncio.run(run())
 
     def test_http_foreign_origin_rejects_before_planning(self):
-        controller = types.SimpleNamespace(start_watcher=Mock())
+        controller = types.SimpleNamespace(start_watcher=Mock(), store=Mock())
         handler = self.registered_handler(controller)
         request = types.SimpleNamespace(headers={"Origin": "https://another.example"}, host="localhost:8188")
         with self.assertRaises(studio.web.HTTPForbidden):
