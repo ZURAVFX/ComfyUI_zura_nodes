@@ -9,6 +9,15 @@ module = importlib.import_module('ComfyUI_zura_nodes.artist_studio.outpaint_stud
 
 
 class StudioOutpaintTests(unittest.TestCase):
+    def test_enlarged_geometry_is_reviewed_and_forwarded_to_the_canvas(self):
+        selection = module.plan(self.source, **{**self.options, 'left': -256, 'right': -256})
+        graph = module.build_review_graph(self.source, selection, output_prefix='genj/outpaint/zoom')
+        self.assertEqual(graph['canvas']['inputs']['left'], -256)
+        self.assertEqual(graph['canvas']['inputs']['right'], -256)
+        self.assertNotEqual(selection['review_key'], module.plan(self.source, **self.options)['review_key'])
+        with self.assertRaises(ValueError):
+            module.plan(self.source, **{**self.options, 'left': -32769})
+
     def setUp(self):
         self.source = {'file': 'genj_studio/abc/source.mp4', 'sha': 'a'*64,
                        'duration': 8, 'width': 768, 'height': 432}

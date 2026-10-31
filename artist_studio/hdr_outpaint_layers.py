@@ -38,8 +38,8 @@ def _checked_selection(selection):
     width, height, frames = (selection[k] for k in ('width', 'height', 'frames'))
     if not 1 <= frames <= 10000 or not 1 <= width <= 4096 or not 1 <= height <= 4096:
         raise ValueError('The reviewed frame-extension dimensions or frame count are invalid.')
-    if any(selection[k] < 0 for k in ('left', 'top', 'right', 'bottom')):
-        raise ValueError('Frame-extension margins must be non-negative.')
+    if any(abs(selection[k]) > 32768 for k in ('left', 'top', 'right', 'bottom')):
+        raise ValueError('Frame-extension offsets exceed the supported range.')
     start, threshold = selection.get('start'), selection.get('black_threshold', 2 / 255)
     if (isinstance(start, bool) or not isinstance(start, (int, float)) or not math.isfinite(start) or start < 0 or
         isinstance(threshold, bool) or not isinstance(threshold, (int, float)) or not math.isfinite(threshold) or not 0 <= threshold <= .1):
@@ -50,6 +50,9 @@ def _checked_selection(selection):
         raise ValueError('Black-area footage does not use canvas margins.')
     if width-selection['left']-selection['right'] <= 0 or height-selection['top']-selection['bottom'] <= 0:
         raise ValueError('The reviewed frame-extension margins are invalid.')
+    if (selection['left'] >= width or selection['right'] >= width or
+            selection['top'] >= height or selection['bottom'] >= height):
+        raise ValueError('The source footage does not overlap the output canvas.')
     return width, height, frames
 
 

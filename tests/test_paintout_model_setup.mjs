@@ -12,6 +12,8 @@ const calls=[];
 const models=[
   {id:'targeted',name:'Targeted repair',files:[{folder:'diffusion_models',filename:'repair.safetensors',size_bytes:100,installed:false}]},
   {id:'full',name:'Full-scene clean plate',files:[{folder:'loras',filename:'clean.safetensors',size_bytes:50,installed:false}]},
+  {id:'inpaint',name:'Object inpainting',files:[{folder:'loras',filename:'inpaint.safetensors',size_bytes:60,installed:false}]},
+  {id:'inpaint_hdr',name:'Object inpainting · HDR',files:[{folder:'loras',filename:'inpaint-hdr.safetensors',size_bytes:60,installed:false}]},
   {id:'hdr_conversion',name:'HDR conversion',files:[{folder:'loras',filename:'hdr.safetensors',size_bytes:25,installed:false}]},
 ];
 const owner={root:document.querySelector('#root'),studio:{close(){}},app:{},api:{clientId:'test',apiURL:p=>p,addEventListener(){},removeEventListener(){}},async fetch(path,body){calls.push({path,body});if(path==='/zura/paintout/model-downloads')return {models};if(path==='/object_info')return {};throw Error(path);}};
@@ -33,6 +35,16 @@ assert.equal(ui.modelDownloads.recommended(),'_sdr_hdr');
 assert.deepEqual(ui.modelDownloads.models[0].model_ids,['full','hdr_conversion'],'SDR repair plus HDR lists both required packages');
 assert.deepEqual(ui.modelDownloads.models[0].files.map(file=>file.filename),['clean.safetensors','hdr.safetensors']);
 assert.equal(calls.filter(call=>call.body).length,0,'opening setup never starts a download');
+ui.modelDownloads.setContext({mode:'inpaint',pipeline:'sdr'});
+ui.modelDownloads.open('video');
+assert.equal(ui.modelDownloads.$('package').value,'inpaint','inpainting does not offer the removal adapter');
+assert.match(ui.modelDownloads.$('files').textContent,/inpaint.safetensors/);
+ui.modelDownloads.setContext({mode:'inpaint',pipeline:'hdr_hdr'});
+ui.modelDownloads.open('hdr_source');
+assert.equal(ui.modelDownloads.$('package').value,'inpaint_hdr');
+ui.modelDownloads.setContext({mode:'inpaint',pipeline:'sdr_hdr'});
+assert.deepEqual(ui.modelDownloads.models[0].model_ids,['inpaint','hdr_conversion'],'inpainting plus HDR conversion uses the correct adapter');
+assert.equal(calls.filter(call=>call.body).length,0,'inpainting setup does not start downloads');
 ui.modelDownloads.setContext({mode:'targeted',pipeline:'hdr_hdr',missingNodes:['ZuraPaintoutFrameCrop','SAM3_Detect','LTXVVAEForceFloat32','BlockifyMask','UnknownNode']});
 const nodeLinks=[...ui.modelDownloads.$('nodes').querySelectorAll('a')].map(link=>link.href);
 for(const url of ['https://github.com/ZURAVFX/ComfyUI_zura_nodes','https://github.com/Comfy-Org/ComfyUI','https://github.com/Lightricks/ComfyUI-LTXVideo','https://github.com/kijai/ComfyUI-KJNodes'])assert.ok(nodeLinks.includes(url),url);

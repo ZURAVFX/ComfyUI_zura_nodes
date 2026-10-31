@@ -45,7 +45,9 @@ def plan(source, *, start, duration, mode, width, height, left=0, top=0,
     padded_width, padded_height = (width + 63) // 64 * 64, (height + 63) // 64 * 64
     if padded_width * padded_height > 2_100_000:
         raise ValueError('This preview supports up to approximately 2 megapixels.')
-    if min(left, top, right, bottom) < 0 or left + right >= width or top + bottom >= height:
+    if (max(abs(v) for v in (left, top, right, bottom)) > 32768 or
+            left + right >= width or top + bottom >= height or
+            left >= width or right >= width or top >= height or bottom >= height):
         raise ValueError('The canvas margins leave no room for the source.')
     if not math.isfinite(float(black_threshold)) or not 0 <= float(black_threshold) <= .1:
         raise ValueError('Black threshold must be between 0 and 0.1.')

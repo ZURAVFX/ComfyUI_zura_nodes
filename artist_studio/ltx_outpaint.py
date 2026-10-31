@@ -49,8 +49,8 @@ def prepare_canvas(images, mode, width, height, left=0, top=0, right=0,
         return images, mask
 
     edges = (left, top, right, bottom)
-    if any(type(value) is not int or value < 0 for value in edges):
-        raise ValueError('Canvas margins must be non-negative whole pixels.')
+    if any(type(value) is not int or abs(value) > 32768 for value in edges):
+        raise ValueError('Canvas offsets must be whole pixels between -32768 and 32768.')
     box_width, box_height = width - left - right, height - top - bottom
     if box_width < 1 or box_height < 1:
         raise ValueError('Canvas margins leave no room for the source.')
@@ -60,15 +60,28 @@ def prepare_canvas(images, mode, width, height, left=0, top=0, right=0,
     fitted_height = min(box_height, max(1, round(source_height * scale)))
     x = left + (box_width - fitted_width) // 2
     y = top + (box_height - fitted_height) // 2
-    if fitted_width == source_width and fitted_height == source_height:
+    x0, y0 = max(0, x), max(0, y)
+    x1, y1 = min(width, x + fitted_width), min(height, y + fitted_height)
+    if x1 <= x0 or y1 <= y0:
+        raise ValueError('Move the source footage inside the output canvas.')
+    if x0 != x or y0 != y or x1 != x + fitted_width or y1 != y + fitted_height:
+        # Sample only the visible crop. A 1000% source must not allocate a
+        # giant intermediate image just to discard most of it afterwards.
+        gx = (torch.arange(x0, x1, device=images.device, dtype=torch.float32) + .5 - x) / fitted_width * 2 - 1
+        gy = (torch.arange(y0, y1, device=images.device, dtype=torch.float32) + .5 - y) / fitted_height * 2 - 1
+        grid_y, grid_x = torch.meshgrid(gy, gx, indexing='ij')
+        grid = torch.stack((grid_x, grid_y), dim=-1).unsqueeze(0).expand(len(images), -1, -1, -1)
+        resized = F.grid_sample(images.permute(0, 3, 1, 2).float(), grid,
+                                mode='bilinear', padding_mode='border', align_corners=False).permute(0, 2, 3, 1).to(images.dtype)
+    elif fitted_width == source_width and fitted_height == source_height:
         resized = images
     else:
         resized = F.interpolate(images.permute(0, 3, 1, 2), size=(fitted_height, fitted_width),
                                 mode='bilinear', align_corners=False, antialias=True).permute(0, 2, 3, 1)
     canvas = images.new_zeros((len(images), height, width, 3))
-    canvas[:, y:y + fitted_height, x:x + fitted_width] = resized
+    canvas[:, y0:y1, x0:x1] = resized
     mask = images.new_ones((len(images), height, width))
-    mask[:, y:y + fitted_height, x:x + fitted_width] = 0
+    mask[:, y0:y1, x0:x1] = 0
     if not bool(mask.any()):
         raise ValueError('Expand the canvas to select an area to generate.')
     return canvas, mask
@@ -98,10 +111,10 @@ class ZuraLTXOutpaintCanvas:
                 'mode': (['expand', 'black'],),
                 'width': ('INT', {'default': 1152, 'min': 64, 'max': 4096, 'step': 64}),
                 'height': ('INT', {'default': 640, 'min': 64, 'max': 4096, 'step': 64}),
-                'left': ('INT', {'default': 0, 'min': 0, 'max': 4096}),
-                'top': ('INT', {'default': 0, 'min': 0, 'max': 4096}),
-                'right': ('INT', {'default': 0, 'min': 0, 'max': 4096}),
-                'bottom': ('INT', {'default': 0, 'min': 0, 'max': 4096}),
+                'left': ('INT', {'default': 0, 'min': -32768, 'max': 32768}),
+                'top': ('INT', {'default': 0, 'min': -32768, 'max': 32768}),
+                'right': ('INT', {'default': 0, 'min': -32768, 'max': 32768}),
+                'bottom': ('INT', {'default': 0, 'min': -32768, 'max': 32768}),
                 'black_threshold': ('FLOAT', {'default': 2 / 255, 'min': 0., 'max': .1, 'step': .001})}}
 
     RETURN_TYPES = ('IMAGE', 'MASK')
@@ -248,7 +261,7 @@ def build_test_graph(source_file, output_prefix, frame_count, fps, width, height
         raise ValueError('Choose a valid source frame rate.')
     if type(width) is not int or type(height) is not int or min(width, height) < 128 or max(width, height) > 4096 or width % 64 or height % 64:
         raise ValueError('Output dimensions must be multiples of 64 between 128 and 4096.')
-    if mode not in ('expand', 'black') or any(type(v) is not int or v < 0 for v in (left, top, right, bottom)):
+    if mode not in ('expand', 'black') or any(type(v) is not int or abs(v) > 32768 for v in (left, top, right, bottom)):
         raise ValueError('Choose valid canvas mode and margins.')
     if width - left - right < 1 or height - top - bottom < 1:
         raise ValueError('Canvas margins leave no room for the source.')

@@ -15,7 +15,7 @@ export class OutpaintWorkspace {
       <div class="zo-stage"><div class="zo-canvas" aria-label="Output canvas"><video muted playsinline loop></video><span class="zo-border" aria-hidden="true"></span></div><video class="zo-result" controls playsinline hidden></video></div>
       <div class="zo-composer"><div class="zo-sources"><button type="button" data-source>Add video</button><button type="button" data-hdr>HDR import</button><input type="file" accept="video/*,.mov,.mkv" hidden/><label>Method <select data-mode><option value="expand">Expand canvas</option><option value="black">Use black areas</option></select></label><label data-hdr-option hidden><input type="checkbox" data-hdr-output/> HDR output · preview</label><span data-source-info></span></div>
       <p data-help>Drag the footage to position it inside the new frame.</p><p data-canvas-info aria-live="polite"></p><p data-method-info>The original footage can also change.</p>
-      <div class="zo-settings"><label>Width <input type="number" data-width min="128" max="1920" step="64" value="1152"/></label><label>Height <input type="number" data-height min="128" max="1920" step="64" value="640"/></label><label>Footage size <input type="range" data-scale min="30" max="100" step="1" value="72"/></label><label>Start (seconds) <input type="number" data-start min="0" step="0.041667" value="0"/></label><label>Length (seconds) <input type="number" data-duration min="0.125" max="5" step="0.041667" value="2"/></label></div>
+      <div class="zo-settings"><label>Width <input type="number" data-width min="128" max="1920" step="64" value="1152"/></label><label>Height <input type="number" data-height min="128" max="1920" step="64" value="640"/></label><label class="zo-scale">Footage size <span class="zo-scale-controls"><input type="range" data-scale min="5" max="1000" step="1" value="72" aria-label="Footage size percentage"/><span class="zo-scale-value"><input type="number" data-scale-percent min="5" max="1000" step="1" value="72" aria-label="Exact footage size percentage"/><span>%</span></span><button type="button" data-scale-fit title="Fit the entire source inside the canvas (100%)">Fit</button></span></label><label>Start (seconds) <input type="number" data-start min="0" step="0.041667" value="0"/></label><label>Length (seconds) <input type="number" data-duration min="0.125" max="5" step="0.041667" value="2"/></label></div>
       <textarea data-prompt placeholder="Describe the extended scene" aria-label="Video prompt"></textarea>
       <div class="zo-action"><span class="zo-model">LTX 2.5 · Preview</span><label data-delivery-label>Output <select data-delivery aria-label="Output format"><option value="sdr">SDR</option><option value="hlg_video">HDR · HLG video</option><option value="hlg_and_exr">HDR · HLG + EXR</option><option value="acescg_exr">HDR · EXR</option></select><small data-delivery-note hidden>HDR adds a conversion pass; SDR is kept.</small></label><span data-status role="status" aria-live="polite">Add a source video to begin.</span><details data-model-downloads class="zc-tool-popup gs-model-help"></details><a data-download download="zura-frame-extension.mp4" hidden>Download</a><a data-download-exr download hidden>Download EXR frames</a><a data-download-sdr download="zura-frame-extension-sdr.mp4" hidden>Download SDR</a><button type="button" data-retry-hdr hidden>Retry HDR</button><button type="button" data-cancel hidden>Cancel run</button><button type="button" data-review disabled>Review selection</button><button type="button" data-generate hidden>Approve &amp; generate</button></div><div data-progress-wrap class="zo-progress" hidden><progress data-progress max="100" aria-label="Current outpaint stage progress"></progress><span data-progress-detail></span></div></div>`;
     this.root.append(this.page);this.stage=this.page.querySelector('.zo-stage');this.canvas=this.page.querySelector('.zo-canvas');this.video=this.canvas.querySelector('video');this.result=this.page.querySelector('.zo-result');
@@ -37,7 +37,11 @@ export class OutpaintWorkspace {
     this.$('hdr-output').onchange=()=>{this.trim.modeChanged();this.trim.commit({start:Number(this.$('start').value),duration:Number(this.$('duration').value)});this.invalidate();this.paint();};
     this.page.querySelector('input[type=file]').onchange=e=>{const file=e.target.files?.[0];e.target.value='';if(file)this.upload(file);};
     this.$('mode').onchange=()=>{if(this.isHDRSource&&this.mode==='black'&&!this.capabilities?.hdr_black_experiment){this.$('mode').value='expand';this.message('HDR black-area preview is not available on this server.');return;}if(!this.isHDRSource&&this.mode!=='expand')this.$('hdr-output').checked=false;this.trim.modeChanged();this.reframe();this.invalidate();this.paint();};
-    this.$('scale').oninput=()=>{this.reframe();this.invalidate();this.paint();};
+    this.$('scale').oninput=()=>this.setScale(this.$('scale').value);
+    this.$('scale-percent').oninput=()=>this.setScale(this.$('scale-percent').value,false);
+    this.$('scale-percent').onchange=()=>this.setScale(this.$('scale-percent').value);
+    this.$('scale-percent').addEventListener('focus',()=>this.$('scale-percent').select());
+    this.$('scale-fit').onclick=()=>this.setScale(100);
     for(const id of ['width','height']){this.$(id).oninput=()=>{if(this.$(id).value!==''){this.reframe();this.invalidate();this.paint();}};this.$(id).onchange=()=>{this.snap(id);this.reframe();this.invalidate();this.paint();};}
     this.resizeObserver=typeof ResizeObserver==='function'?new ResizeObserver(()=>this.fitCanvas()):null;this.resizeObserver?.observe(this.stage);
     this.trim=new OutpaintTrim(this);
@@ -78,6 +82,13 @@ export class OutpaintWorkspace {
     if(!this.source)return;const {width,height}=this.dimensions(),sw=this.stage.clientWidth,sh=this.stage.clientHeight;
     if(sw>0&&sh>0){const scale=Math.min(sw/width,sh/height,1050/width);this.canvas.style.width=`${width*scale}px`;this.canvas.style.height=`${height*scale}px`;}
   }
+  setScale(value,commit=true){
+    if(this.job||this.submitting||this.hdrBusy()||this.mode==='black')return;
+    const n=Number(value);if(!commit&&(value===''||!Number.isFinite(n)||n<5||n>1000))return;
+    const percent=Math.max(5,Math.min(1000,Math.round(Number.isFinite(n)&&value!==''?n:100)));
+    this.$('scale').value=String(percent);if(commit)this.$('scale-percent').value=String(percent);
+    this.reframe();this.invalidate();this.paint();
+  }
   reframe(){
     if(!this.source)return;
     const {width:w,height:h}=this.dimensions();
@@ -87,13 +98,13 @@ export class OutpaintWorkspace {
   }
   usesLongHDR(){return !!(this.$('hdr-output').checked&&this.trim?.long&&Math.ceil((Number(this.$('duration').value)||0)*24-1e-6)>this.trim.maxFrames());}
   paint(){
-    const has=!!this.source,black=this.mode==='black',busy=!!this.job||this.submitting||this.hdrSubmitting||!!this.hdrDelivery?.busy||!!this.layers?.busy,hdr=this.$('hdr-output').checked;this.$('width').disabled=black||busy;this.$('height').disabled=black||busy;
+    const has=!!this.source,black=this.mode==='black',covered=!!this.box&&!black&&Object.values(this.box).every(value=>value<=0),busy=!!this.job||this.submitting||this.hdrSubmitting||!!this.hdrDelivery?.busy||!!this.layers?.busy,hdr=this.$('hdr-output').checked;this.$('width').disabled=black||busy;this.$('height').disabled=black||busy;
     const blackOption=this.$('mode').querySelector('option[value=black]');if(blackOption)blackOption.disabled=!!this.isHDRSource&&!this.capabilities?.hdr_black_experiment;
     this.$('hdr-option').hidden=!this.isHDRSource||!(black?this.capabilities?.hdr_black_experiment:this.capabilities?.hdr_expand_experiment);this.$('hdr-output').disabled=busy||!!this.isHDRSource;this.loras.root.hidden=hdr;
     this.$('delivery-label').hidden=hdr;this.$('delivery').disabled=busy||hdr;this.$('delivery-note').hidden=hdr||this.$('delivery').value==='sdr';
     this.updateModelContext();
     this.loras.setBusy(busy);
-    for(const id of ['source','mode','start','duration'])this.$(id).disabled=busy;this.$('scale').disabled=black||busy;
+    for(const id of ['source','mode','start','duration'])this.$(id).disabled=busy;for(const id of ['scale','scale-percent','scale-fit'])this.$(id).disabled=black||busy;
     this.$('help').textContent=black?'Black pixels are selected for masked generation, including dark clothing or shadows. Review the whole selection.':'Drag the footage to position it inside the new frame.';
     const limit=this.trim?.maxFrames()??120,selected=Math.ceil((Number(this.$('duration').value)||0)*24-1e-6),tooLong=hdr&&(limit<9||(this.trim?.long?selected>10000:selected>limit));
     this.$('duration').max=this.trim?.long?String(Math.min(this.source?.duration||86400,hdr?10000/24:86400)):String(Math.max(0,limit)/24);
@@ -103,7 +114,8 @@ export class OutpaintWorkspace {
     const blackSetupMissing=!!(hdr&&black&&(!this.capabilities?.hdr_black_experiment||blackSetup?.ready!==true));
     if(blackSetupMissing)this.$('method-info').textContent=blackSetup?'HDR black-area setup is incomplete. Open Models to install the missing requirements.':'Checking HDR black-area setup…';
     if(!hdr&&this.trim?.long)this.$('method-info').textContent='Long clip: guided, blended sections. The original footage may also change.';
-    this.$('review').disabled=!has||busy||tooLong||blackSetupMissing||Number(this.source?.duration)<.125;this.$('generate').hidden=!this.review||busy;this.$('generate').disabled=blackSetupMissing;this.$('cancel').hidden=!this.job&&!this.hdrDelivery?.busy;this.$('cancel').disabled=!!this.job?.cancelling||!!this.hdrDelivery?.client.cancelPending;this.$('progress-wrap').hidden=!busy||!!this.layers?.busy;this.trim?.container?.toggleAttribute('inert',busy);this.trim?.update();
+    if(covered)this.$('help').textContent='The footage covers the canvas. Reduce its size to leave an area to extend.';
+    this.$('review').disabled=!has||busy||tooLong||blackSetupMissing||covered||Number(this.source?.duration)<.125;this.$('generate').hidden=!this.review||busy;this.$('generate').disabled=blackSetupMissing;this.$('cancel').hidden=!this.job&&!this.hdrDelivery?.busy;this.$('cancel').disabled=!!this.job?.cancelling||!!this.hdrDelivery?.client.cancelPending;this.$('progress-wrap').hidden=!busy||!!this.layers?.busy;this.trim?.container?.toggleAttribute('inert',busy);this.trim?.update();
     if(!has||!this.box)return;
     const {width:w,height:h}=this.dimensions(),b=this.box;
     this.canvas.style.aspectRatio=`${w}/${h}`;this.fitCanvas();
@@ -116,8 +128,9 @@ export class OutpaintWorkspace {
   invalidate(){if(this.job||!this.clearHDRRecord())return false;this.review=null;this.clearResultLinks();this.$('generate').hidden=true;this.result.hidden=true;this.canvas.hidden=false;this.message(this.source?'Review the selected area before generating.':'Add a source video to begin.');return true;}
   dragStart(e){if(this.mode==='black'||!this.source||this.job||this.submitting||this.hdrBusy())return;e.preventDefault();this.drag={id:e.pointerId,x:e.clientX,y:e.clientY,box:{...this.box}};this.canvas.setPointerCapture?.(e.pointerId);}
   dragMove(e){if(this.job||this.submitting||this.hdrBusy()){this.drag=null;return;}if(!this.drag||this.drag.id!==e.pointerId)return;const r=this.canvas.getBoundingClientRect(),{width:w,height:h}=this.dimensions(),b=this.drag.box;
-    const dx=Math.round((e.clientX-this.drag.x)*w/r.width),dy=Math.round((e.clientY-this.drag.y)*h/r.height),x=Math.max(-b.left,Math.min(b.right,dx)),y=Math.max(-b.top,Math.min(b.bottom,dy));
-    this.box={left:b.left+x,right:b.right-x,top:b.top+y,bottom:b.bottom-y};this.invalidate();this.paint();}
+    const dx=Math.round((e.clientX-this.drag.x)*w/r.width),dy=Math.round((e.clientY-this.drag.y)*h/r.height),gapX=b.left+b.right,gapY=b.top+b.bottom;
+    const left=Math.max(Math.min(0,gapX),Math.min(Math.max(0,gapX),b.left+dx)),top=Math.max(Math.min(0,gapY),Math.min(Math.max(0,gapY),b.top+dy));
+    this.box={left,right:gapX-left,top,bottom:gapY-top};this.invalidate();this.paint();}
   dragEnd(e){if(this.drag?.id===e.pointerId)this.drag=null;}
   async upload(file){
     if(this.job||this.submitting||this.hdrBusy())return;this.submitting=true;this.$('progress').removeAttribute('value');this.$('progress-detail').textContent='Uploading and reading footage';this.paint();this.message('Loading video…');const form=new FormData();form.append('file',file);

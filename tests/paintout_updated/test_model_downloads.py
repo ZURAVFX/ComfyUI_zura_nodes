@@ -330,11 +330,17 @@ class ModelDownloadTests(unittest.TestCase):
                 for item in recipe['files']:
                     downloads._safe_item(item)
             names = {item['filename'] for recipe in downloads.CATALOG.values() for item in recipe['files']}
-            self.assertEqual(len(names), 13)
+            self.assertEqual(len(names), 14)
             self.assertFalse(any('upscal' in name or 'refine' in name for name in names))
             hdr = {item['filename'] for item in downloads.CATALOG['targeted_hdr']['files']}
             self.assertIn('ltx-2.5-video-vae-bf16.safetensors', hdr)
             self.assertNotIn('ltx-2.5-video-vae-conv-bf16.safetensors', hdr)
+            for key in ('inpaint', 'inpaint_hdr'):
+                inpaint = {item['filename'] for item in downloads.CATALOG[key]['files']}
+                self.assertIn('ltx-2.3-22b-ic-lora-in-outpainting-0.9.safetensors', inpaint)
+                self.assertNotIn('LTX23_Obscura_Remova_v1.safetensors', inpaint)
+                self.assertIn('ltx-2.5-22b-distilled-transformer-comfy-int8-convrot.safetensors', inpaint)
+            self.assertIn('ltx-2.5-video-vae-bf16.safetensors', {item['filename'] for item in downloads.CATALOG['inpaint_hdr']['files']})
 
     def test_catalogue_is_offline_and_disk_preflight_prevents_network(self):
         manager = self.manager(lambda *_a, **_k: self.fail('Unexpected network'))

@@ -4,6 +4,12 @@ Goal: preserve the approved character workflows while making the requested media
 generation and viewing controls dependable and easy to discover. Changes are local
 until a release is explicitly requested and the relevant flows are verified.
 
+Current installation gaps and exact LTX two-stage coverage are recorded in
+[the 31 October feature audit](STUDIO_FEATURE_AUDIT_2026-10-31.md). Use its
+file-level findings when reconciling older completion notes below. Inpainting's
+preview was implemented but omitted from the installed menu and recipe files;
+it is being restored with a separate render-qualification gate.
+
 ## Object replacement and Wan Animate 2 masks (31 October)
 
 - [x] Audit Kagami against local H3 object replacement and LTX inpaint. It uses
@@ -47,7 +53,8 @@ sampling took 110.49, 109.50 and 108.62 seconds respectively (49 frames,
 - [x] Provide an explicit HDR compositing-layer export: original native plate, delivered generated border with straight alpha, and 16-bit matte. Exported the reviewed 41-frame result without inference; installed the five required local files with a backup. Source and installed focused backend suites each pass 100 tests, and the layer UI regression passes. Existing running servers require a restart to register the new endpoint.
 - [ ] Compare the existing official native-HDR masked outpaint prototype against the current SDR-guide-then-HDR route using matching source, geometry and duration. Do not claim the official Laplacian blend guarantees untouched plate pixels or removes temporal flicker.
 - [ ] Add and time an opt-in lower-resolution Fast path on supported LTX routes. Keep approved Normal recipes; expose only variants with an actual working graph, valid geometry, timing and audio. Explain the detail tradeoff on hover.
-- [ ] Add distinct object inpainting using the official in/outpainting adapter and two-stage recipe. Reuse Paintout selection and frame tools without changing the approved removal recipes. Verify arbitrary-frame replacement references in an actual render, separately from structural checks.
+- [x] Implement distinct object inpainting with the official adapter and two-stage recipe, reusing Paintout selection and frame tools. Restore its missing installed menu/assets and correct the model packages. Structural UI/graph checks and installed node/model readiness pass.
+- [ ] Verify arbitrary-frame inpainting references in an actual render. The menu remains labelled preview until this separate quality check passes.
 - [ ] Check the new flows together in the main Studio before any release or shutdown. The contest standalone must remain unchanged.
 
 Latest local state: the selective compatibility merge is installed with backup

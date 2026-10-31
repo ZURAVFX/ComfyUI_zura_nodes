@@ -22,6 +22,13 @@ native = importlib.import_module('ComfyUI_zura_nodes.artist_studio.hdr_native_so
 
 
 class HDRCanvasTests(unittest.TestCase):
+    def test_zoomed_hdr_source_crops_in_linear_light(self):
+        linear = torch.rand((1, 64, 256, 3)) * 4
+        image, mask = canvas.prepare_hdr_canvas(colour.encode_ct(linear), 'expand', 128, 128, -64, 32, -64, 32)
+        self.assertTrue(torch.allclose(colour.decode_ct(image[:, 32:96]), linear[:, :, 64:192], atol=1e-5))
+        self.assertTrue((mask[:, 32:96] == 0).all())
+        self.assertTrue((mask[:, :32] == 1).all())
+
     def test_reviewed_sdr_first_keeps_selection_and_holds_tail(self):
         source = {'sha': 'a' * 64, 'file': 'source.mp4', 'duration': 4, 'width': 128, 'height': 128, 'asset_kind': 'video'}
         selection = outpaint.plan(source, start=.517, duration=.5, mode='expand', width=192, height=192,

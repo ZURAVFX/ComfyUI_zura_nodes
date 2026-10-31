@@ -41,6 +41,14 @@ def read_rgba(path):
 
 
 class LayerTests(unittest.TestCase):
+    def test_signed_crop_offsets_are_valid_for_compositing_layers(self):
+        selection = {**self.selection, 'left': -16, 'right': -16}
+        self.assertEqual(layers._checked_selection(selection), (64, 64, 3))
+        with self.assertRaises(ValueError):
+            layers._checked_selection({**selection, 'left': -32769})
+        with self.assertRaises(ValueError):
+            layers._checked_selection({**selection, 'left': 64, 'right': -128})
+
     def setUp(self):
         self.tmp=tempfile.TemporaryDirectory();self.addCleanup(self.tmp.cleanup)
         self.root=Path(self.tmp.name);self.source=self.root/'source.mp4';self.source.write_bytes(b'test')

@@ -291,6 +291,30 @@ CATALOG = {'targeted': {'name': 'Targeted video repair',
                     'license_url': 'https://huggingface.co/Lightricks/LTX-2.5-22b-IC-LoRA-SDR-To-HDR'}}
 
 
+# Inpainting shares the LTX 2.5 base and encoders with repair, but uses the
+# official in/outpainting adapter instead of the removal-only Remova adapter.
+# Keep independent file dictionaries so package discovery cannot mutate repair.
+for _package, _base in (('inpaint', 'targeted'), ('inpaint_hdr', 'targeted_hdr')):
+    CATALOG[_package] = {
+        'name': 'Object inpainting' + (' · HDR' if _package.endswith('_hdr') else ''),
+        'files': [dict(item) for item in CATALOG[_base]['files']
+                  if item['filename'] != 'LTX23_Obscura_Remova_v1.safetensors'] + [{
+            'folder': 'loras',
+            'filename': 'ltx-2.3-22b-ic-lora-in-outpainting-0.9.safetensors',
+            'repo': 'Lightricks/LTX-2.3-22b-IC-LoRA-In-Outpainting',
+            'revision': '8becd61405133263d9e580be41a92e8f827b01ed',
+            'remote_path': 'ltx-2.3-22b-ic-lora-in-outpainting-0.9.safetensors',
+            'size_bytes': 1308778338,
+            'sha256': '73dd0841c0d4f0eb26fb1f017781b841b2752021944ac5ecefe57917f6dae6b5',
+            'gated': True,
+            'model_card': 'https://huggingface.co/Lightricks/LTX-2.3-22b-IC-LoRA-In-Outpainting',
+        }],
+        'note': 'Two-stage object inpainting with LTX 2.5. The compatible adapter has 2.3 in its filename; no LTX 2.3 base model is needed.',
+        'license_url': 'https://huggingface.co/Lightricks/LTX-2.5',
+    }
+del _package, _base
+
+
 class DownloadError(RuntimeError):
     """Only controlled messages from this exception may reach the browser."""
     def __init__(self, message, *, auth_required=False):
