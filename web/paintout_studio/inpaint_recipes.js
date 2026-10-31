@@ -29,6 +29,9 @@ export function inpaintAvailability(info,config){
 export function buildInpaintRepairGraph(config,info){
   const error=inpaintValidation(config);if(error)throw Error(error);
   const c={...config,mode:'targeted',prompt:String(config.prompt||'').trim()||INPAINT_PROMPT};
+  const seed=Number(c.seed??42);
+  if(!Number.isSafeInteger(seed)||seed<0)throw Error('Choose a non-negative whole-number seed.');
+  const lowSeed=seed===Number.MAX_SAFE_INTEGER?0:seed+1;
   const graph=buildPaintoutRepairGraph(c,info),ref=(id,slot=0)=>[id,slot];
   const vaes=choices(info,'VAELoader','vae_name');
   if(info&&paintoutColourPipeline(c)!=='hdr_hdr'&&!vaes.some(s=>basename(s)===PAINTOUT_MODELS.videoVae)){
@@ -48,7 +51,8 @@ export function buildInpaintRepairGraph(config,info){
   node('apply_anchors','ZuraPaintoutApplyAnchors',{positive:ref('guide'),negative:ref('guide',1),vae:ref('float_vae'),latent:ref('guide',2),anchors:ref('anchors')},'Encoding reference frames');
   node('combine','LTXVConcatAVLatent',{video_latent:ref('apply_anchors',2),audio_latent:ref('audio')},'Preparing samples');
   node('guider','CFGGuider',{model:ref('lora'),positive:ref('apply_anchors'),negative:ref('apply_anchors',1),cfg:1},'Preparing inpaint guidance');
-  node('noise','RandomNoise',{noise_seed:Number(c.seed??42)},'Preparing noise');
+  node('noise','RandomNoise',{noise_seed:lowSeed},'Preparing first-pass noise');
+  node('noise_high','RandomNoise',{noise_seed:seed},'Preparing independent refinement noise');
   node('sampler','KSamplerSelect',{sampler_name:'euler_ancestral'},'Preparing sampler');
   node('sigmas','ManualSigmas',{sigmas:'1.0, 0.99375, 0.9875, 0.98125, 0.975, 0.909375, 0.725, 0.421875, 0.0'},'Preparing first pass');
   node('sample','SamplerCustomAdvanced',{noise:ref('noise'),guider:ref('guider'),sampler:ref('sampler'),sigmas:ref('sigmas'),latent_image:ref('combine')},'Generating the object');
@@ -63,7 +67,7 @@ export function buildInpaintRepairGraph(config,info){
   node('guider_high','CFGGuider',{model:ref('lora'),positive:ref('anchors_high'),negative:ref('anchors_high',1),cfg:1},'Preparing detail guidance');
   node('sampler_high','KSamplerSelect',{sampler_name:'euler'},'Preparing refinement sampler');
   node('sigmas_high','ManualSigmas',{sigmas:'0.7250, 0.4219, 0.0'},'Preparing two-step refinement');
-  node('sample_high','SamplerCustomAdvanced',{noise:ref('noise'),guider:ref('guider_high'),sampler:ref('sampler_high'),sigmas:ref('sigmas_high'),latent_image:ref('combine_high')},'Refining the object');
+  node('sample_high','SamplerCustomAdvanced',{noise:ref('noise_high'),guider:ref('guider_high'),sampler:ref('sampler_high'),sigmas:ref('sigmas_high'),latent_image:ref('combine_high')},'Refining the object');
   node('separate_high','LTXVSeparateAVLatent',{av_latent:ref('sample_high')},'Preparing the final frame');
   node('crop_high','LTXVCropGuides',{positive:ref('anchors_high'),negative:ref('anchors_high',1),latent:ref('separate_high')},'Removing reference samples');
   node('decode_high','VAEDecodeTiled',{samples:ref('crop_high',2),vae:ref('float_vae'),tile_size:512,overlap:64,temporal_size:128,temporal_overlap:32},'Decoding the result');

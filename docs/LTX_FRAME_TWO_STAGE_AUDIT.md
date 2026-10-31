@@ -82,3 +82,33 @@ quality approval or a speed comparison with a warm single-stage render.
 
 Local private receipt: `release-check-1.3.38/ltx-two-stage-validation-job.json`.
 No audio-reference GPU test or long-clip quality review was performed here.
+
+## Matched endpoint comparison, 31 October 2026
+
+Four real renders used the production convolutional BF16 video VAE and INT8
+LTX 2.5 transformer, Kitchen attention, fixed seed 42, the same portrait first
+and last image, the same reference soundtrack and prompt. All delivered
+448 x 768, 49 frames at 24 fps (2.041667 seconds), with stereo AAC audio.
+Comfy execution timestamps, including graph work and export:
+
+| Run | Seconds |
+| --- | ---: |
+| Normal, first run | 51.619 |
+| Fast, warmed dependencies | 41.450 |
+| Normal, warmed dependencies | 43.435 |
+| Two-stage, warmed dependencies | 57.872 |
+
+Neither sampling pass was cached in these executions. Fast was only 4.6%
+quicker than the warmed Normal run at this small raster. This does not establish
+a general speedup at other sizes. The first/middle/last contact sheet shows
+softer textures and edges in Fast; Two-stage preserves more of that detail.
+These are engineering comparisons, not new artist approvals.
+
+All four reference-audio outputs have zero measured sample lag at 16 kHz and
+correlation 0.99667 against the short original reference, with matching encoded
+audio bytes across variants. The 0.341-second test reference is followed by
+silence; this verifies the short-reference delivery branch, not speech quality.
+The native video streams contain exactly 49 frames with the selected raster.
+
+Private reproducible graphs, histories, probes and contact sheet:
+`release-check-1.3.38/ltx-endpoint-matched-speed/`.

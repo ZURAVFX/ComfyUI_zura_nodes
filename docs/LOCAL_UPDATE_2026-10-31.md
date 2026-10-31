@@ -54,11 +54,56 @@ not acquire LTX-only controls.
 - Native Panorama popout needs visual checking in Comfy Desktop and one fresh
   end-to-end Studio camera render. The supplied approved camera result remains
   recipe quality evidence, not a new integration render.
-- Two-stage needs longer visual quality checks and an audio-reference GPU check
-  before promoting it beyond preview. No speed gain has been claimed.
+- First/Last Normal, Fast and Two-stage now have matched 49-frame endpoint
+  and audio-reference GPU checks. Warm Normal took 43.435 seconds, Fast 41.450
+  and Two-stage 57.872 at 448 x 768. Fast is softer and only 4.6% faster here;
+  neither preview is promoted or advertised as universally faster. Longer
+  visual qualification remains separate.
 - Long HDR sections retain exact duration/audio but temporal joins can remain
   shot-dependent. Existing HDR edge/flicker limitations remain documented.
 
 Local install backup/receipt:
 `release-check-1.3.38/panorama-navigation-final-20261031-194443`.
 The installed package root entry point was preserved.
+
+## Follow-up checks and installation
+
+- Runtime model reuse is installed: compatible LTX sampling/upscale/refine
+  handoffs keep models when memory permits. Initial preparation, speech and
+  memory-pressure boundaries retain full cleanup. Nine tests pass against
+  both source and installed modules; no end-to-end speed gain is claimed.
+- H3/OpenJutsu/LTX held-tail contracts and Wan preparation/cache fixes are
+  reconciled with the installed package. The source and installed 69-test
+  focused set and 13 real-environment Wan preparation tests pass.
+- The missing Z-Image Turbo download package is restored; 13 backend and the
+  shared model-download UI checks pass without downloading model files.
+- Actual frame-8 inpainting completed in 82.508 seconds, delivering all 17
+  source frames and zero-lag original audio. Independent first/refine noise
+  follows the official recipe. It remains a preview.
+
+Backups and hashes are in the additional `memory-handoff-install-20261031-195430`,
+`inpaint-noise-install-20261031-201351` and `timing-cache-install-20261031-201615`
+receipts. These installed Python updates require a normal restart; the root
+entry point was preserved. No process was stopped and no release was pushed.
+
+## Matched diagnostic results
+
+The native-HDR masked outpaint and SDR-outpaint-then-HDR graphs both completed
+the same 17-frame fixture, with validated 10-bit HLG, ACEScg EXRs and identical
+audio. Neither preserves original plate pixels exactly; preview labels and
+artist compositing layers remain. See `LTX_HDR_MATCHED_COMPARISON_2026-10-31.md`.
+
+A real three-way microphone diagnostic also completed: local maskless H3, H3
+with OpenJutsu native mask conditioning, and LTX inpaint. Different native
+frame grids are disclosed. The short outputs do not establish longer stability
+or justify promoting object swap; it stays hidden. See
+`OBJECT_SWAP_MATCHED_COMPARISON_2026-10-31.md`.
+
+The consolidated receipt verifies all 41 touched installed files against their
+latest expected hashes. All 28 standalone Paintout import files remain unchanged.
+Evidence is in `consolidated-local-install-20261031.json` and
+`standalone-preservation-20261031.json` under `release-check-1.3.38`.
+
+The remaining main-Studio integration check needs the requested manual restart
+and desktop visual review. Automatic approval review rejected the attempted
+test-server restart; no alternative restart or hot reload was used.

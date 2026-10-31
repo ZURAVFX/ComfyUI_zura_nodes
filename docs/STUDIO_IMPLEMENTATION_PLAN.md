@@ -35,8 +35,7 @@ it is being restored with a separate render-qualification gate.
   frame count and dimensions, inspect first/middle/last, and stop the owned server.
 - [x] Audit Body Double's latest source/generated mask union, dropout handling,
   alignment and composite. Keep final RGB blending separate from native masking.
-- [ ] Compare a Kagami-style local H3 object route with masked H3 and LTX.
-  A local adaptation is not a benchmark of Kagami's hosted provider.
+- [x] Compare a Kagami-style local H3 object route with native masked H3 and LTX on the same microphone fixture. All three rendered; compare the first 17 frames, excluding H3's five held tail frames. Timings were 54.613 s / 39.248 s / 94.697 s with different warm caches and constraints. This short diagnostic does not qualify longer stability; object swap stays hidden. A local adaptation is not a benchmark of Kagami's hosted provider. See `OBJECT_SWAP_MATCHED_COMPARISON_2026-10-31.md`.
 
 See [Object swap and Animate 2 research](OBJECT_SWAP_AND_ANIMATE2_MASK.md).
 The approved full-character mask recipe is integrated locally as a preview.
@@ -51,10 +50,10 @@ sampling took 110.49, 109.50 and 108.62 seconds respectively (49 frames,
 
 - [x] Audit all 17 official LTX 2.5 examples at commit `220e1d45aa0469f518e982102fca4dca92a61862`; record actual active sampling paths rather than assuming every route needs an extra upscale pass.
 - [x] Provide an explicit HDR compositing-layer export: original native plate, delivered generated border with straight alpha, and 16-bit matte. Exported the reviewed 41-frame result without inference; installed the five required local files with a backup. Source and installed focused backend suites each pass 100 tests, and the layer UI regression passes. Existing running servers require a restart to register the new endpoint.
-- [ ] Compare the existing official native-HDR masked outpaint prototype against the current SDR-guide-then-HDR route using matching source, geometry and duration. Do not claim the official Laplacian blend guarantees untouched plate pixels or removes temporal flicker.
-- [ ] Add and time an opt-in lower-resolution Fast path on supported LTX routes. Keep approved Normal recipes; expose only variants with an actual working graph, valid geometry, timing and audio. Explain the detail tradeoff on hover.
+- [x] Compare the native-HDR masked outpaint prototype against the current SDR-guide-then-HDR route using the same PQ source, geometry, 17-frame interval and seed. Both rendered actual 1088 x 640, 24 fps, 10-bit HLG and 17 finite ACEScg EXRs with identical audio. Native 147.254 s, SDR then HDR 143.052 s, with different warm caches; no general speed claim. The native prototype combines official node techniques rather than copying a named official HDR-outpaint example. Neither preserves plate pixels exactly or guarantees flicker-free boundaries; keep the preview gate and artist layers. See `LTX_HDR_MATCHED_COMPARISON_2026-10-31.md`.
+- [x] Add and time the opt-in lower-resolution First/Last LTX Fast path. Normal stays unchanged; the installed Fast and true Two-stage alternatives have matched 49-frame endpoint/audio renders and hover tradeoff guidance. Warm Normal 43.435 s, Fast 41.450 s, Two-stage 57.872 s at 448 x 768. Other routes are either inherently two-stage, use a separate HDR recipe, or retain their accepted Normal graph; do not advertise an untested universal speed toggle. See `LTX_25_TWO_STAGE_MATRIX.md` and `LTX_FRAME_TWO_STAGE_AUDIT.md`.
 - [x] Implement distinct object inpainting with the official adapter and two-stage recipe, reusing Paintout selection and frame tools. Restore its missing installed menu/assets and correct the model packages. Structural UI/graph checks and installed node/model readiness pass.
-- [ ] Verify arbitrary-frame inpainting references in an actual render. The menu remains labelled preview until this separate quality check passes.
+- [x] Verify an arbitrary-frame inpainting reference in an actual render: source frame 8, 17 frames at 24 fps, 1152 × 640 processing and 512 × 288 source-sized delivery, 82.508 seconds. Independent first/refine noise matches the official topology; first/middle/last images and framewise target coverage were checked. The route remains labelled preview; this short object-addition check does not qualify every object replacement or occlusion. Private evidence: `inpaint-arbitrary-frame-validation/result.json` and `comparison.png`.
 - [ ] Check the new flows together in the main Studio before any release or shutdown. The contest standalone must remain unchanged.
 
 Latest local state: the selective compatibility merge is installed with backup

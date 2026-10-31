@@ -42,9 +42,13 @@ class ModelDownloadTest(unittest.TestCase):
         root = Path(__file__).resolve().parents[1]
         script = "import {IMAGE_MODELS} from './web/image_recipes.js'; console.log(JSON.stringify(IMAGE_MODELS));"
         models = json.loads(subprocess.check_output(['node', '--input-type=module', '-e', script], cwd=root, text=True))
-        packages = {'flux2': 'flux2_klein_9b', 'flux3': 'flux3_klein', 'zimage': 'zimage_turbo',
+        packages = {'flux2': 'flux2_klein_9b', 'flux3': 'flux3_klein', 'flux3edit': 'flux3_klein', 'zimage': 'zimage_turbo',
                     'klein9b': 'flux2_klein_9b', 'qwen2511': 'qwen2511'}
         for model in models:
+            if model.get('provider'):
+                self.assertIn(model['provider'], ('chatgpt', 'gemini'))
+                self.assertNotIn('model', model, 'Browser-account modes have no local model package')
+                continue
             package = downloads.CATALOG[packages[model['id']]]
             files = {(file['folder'], file['filename']) for file in package['files']}
             expected = {('diffusion_models', model['model']), ('text_encoders', model['text']), ('vae', model['vae'])}

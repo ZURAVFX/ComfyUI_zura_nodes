@@ -44,11 +44,13 @@ def warp_path(asset, selection, state):
 
 def register(studio, routes, response, check_asset):
     @routes.get('/zura/studio/panorama/status')
+    @routes.get('/genj/studio/panorama/status')
     @response
     async def status(request):
         return web.json_response(await asyncio.to_thread(readiness))
 
     @routes.post('/zura/studio/panorama/graph')
+    @routes.post('/genj/studio/panorama/graph')
     @response
     async def graph(request):
         data = await request.json()
