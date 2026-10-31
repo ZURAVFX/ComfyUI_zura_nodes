@@ -33,7 +33,7 @@ jobs:
             sudo apt-get install -y --no-install-recommends ffmpeg
           fi
           python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
-          python -m pip install numpy scipy pillow requests soundfile av aiohttp opencv-python-headless safetensors OpenImageIO
+          python -m pip install numpy scipy pillow requests soundfile av aiohttp opencv-python-headless safetensors OpenImageIO psutil
       - name: Install graph test DOM dependency outside the package
         run: npm install --prefix "$GITHUB_WORKSPACE/../ui-check" --ignore-scripts --no-audit --no-fund linkedom@0.18.13
       - name: Run regression checks
