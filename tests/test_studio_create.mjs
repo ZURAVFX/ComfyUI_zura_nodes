@@ -157,6 +157,8 @@ studio.modelStatus={engine_ready:{h3:false,design:true,wan21_relight:true},missi
 studio.config.relight_engine='wan21';studio.config.image_prompt='Warm sunset from the left';studio.syncForm();studio.render();
 assert.equal(studio.container.querySelectorAll('input[name="gs-engine"][value="wan21"]').length,1,'Wan 2.1 appears exactly once in the relight model choices');
 assert.equal(studio.container.querySelector('input[name="gs-engine"][value="wan21"]').checked,true);
+assert.equal(studio.container.querySelector('#zc-video-model').value,'wan21','Relight composer names the actual video model');
+assert.doesNotMatch(studio.$('resolution').querySelector('option[value="1280"]').textContent,/H3/,'Relight resolution must not be labelled as H3');
 assert.equal(studio.$('primary').disabled,false,'The 7.37-second approved source is allowed by chained Wan 2.1 relight');
 assert.equal(studio.$('sampling-setting').hidden,true,'H3 sampling controls do not appear on the fixed-step Wan recipe');
 assert.equal(studio.$('h3-steps-setting').hidden,true);

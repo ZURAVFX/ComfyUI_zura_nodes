@@ -1,5 +1,7 @@
 """Contract checks for the user-approved Wan 2.1 chained relight route."""
 import importlib
+import subprocess
+import tempfile
 import unittest
 import subprocess
 import tempfile
@@ -15,6 +17,29 @@ wan21 = importlib.import_module(studio.__package__ + ".wan21_relight")
 
 
 class Wan21RelightTests(unittest.TestCase):
+    def test_full_length_real_video_with_finished_frame_uses_wan21(self):
+        with tempfile.TemporaryDirectory() as folder:
+            source = Path(folder) / 'six_seconds.mp4'
+            subprocess.run(['ffmpeg', '-v', 'error', '-y', '-f', 'lavfi', '-i',
+                            'color=c=black:s=64x64:r=24:d=6', '-c:v', 'libx264',
+                            '-pix_fmt', 'yuv420p', str(source)], check=True)
+            project = self.project()
+            project['config'].update(length_mode='original', relight_engine='wan21')
+            project['source']['file'] = str(source)
+            project.update(look_mode='ready', starting_asset={'file': 'finished.png'})
+            with patch.object(studio, 'check_asset', side_effect=lambda asset: asset['file']):
+                studio.validate_selection(project)
+            graph = self.build(project)
+            self.assertIn('wan21_shot', graph)
+            self.assertEqual(graph['wan21_export']['class_type'], 'GenjRestoreSoundtrack')
+
+    def test_legacy_relight_uses_first_frame(self):
+        config = studio.clean_config({'engine':'h3','workflow_mode':'relight',
+            'relight_engine':'h3','finished_frame_position':'last','finished_frame_number':30})
+        self.assertEqual(config['relight_engine'], 'wan21')
+        self.assertEqual(config['finished_frame_position'], 'first')
+        self.assertEqual(config['finished_frame_number'], 1)
+
     def test_wan21_image_preparation_has_no_sam_or_depth_model(self):
         project = self.project()
         with patch.object(studio, "check_asset"):
@@ -135,6 +160,7 @@ class Wan21RelightTests(unittest.TestCase):
         project["config"].update(relight_width=720, relight_height=1280)
         graph = self.build(project)
         self.assertTrue(graph["wan21_shot"]["inputs"]["preserve_aspect"])
+        self.assertEqual(graph["272:408:275:190"]["inputs"]["crop_position"], graph["272:407:89"]["inputs"]["crop_position"])
         for key in ("272:407:89", "272:408:275:190"):
             self.assertEqual(graph[key]["inputs"]["width"], 720)
             self.assertEqual(graph[key]["inputs"]["height"], 1280)

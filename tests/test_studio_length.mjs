@@ -14,6 +14,9 @@ assert.equal(clipLength({...original,length_mode:'custom',duration:2.1},15).deli
 assert.equal(clipLength({...original,engine:'wan',workflow_mode:'relight',length_mode:'custom',duration:2.1},15).deliveryFrames,53, 'Wan relight holds to its next supported length');
 assert.equal(clipLength({...original,engine:'local',length_mode:'custom',duration:2.1},15).deliveryFrames,57, 'LTX holds to its next supported length');
 assert.equal(clipLength({...original,engine:'wan',workflow_mode:'relight'}, 53/25).frames,51, 'Full source rounds up so its final fraction is not discarded');
+const legacyRelight={...original,workflow_mode:'relight',relight_engine:'h3'};
+assert.equal(clipLength(legacyRelight,15).invalid,false,'Legacy relight settings must not apply the H3 five-second limit');
+assert.equal(clipLength(legacyRelight,15).maximum,null,'Wan relight supports chained source-length clips');
 // Execute the actual CTA handler without browser APIs or any Comfy queue.
 const source=fs.readFileSync(new URL('../web/studio.js',import.meta.url),'utf8').replace(/^import .*;\r?\n/gm,'').replace(/^export /gm,'').split('app.registerExtension({')[0];
 const context={app:{registerExtension(){}},clipLength,recoverClipLength};

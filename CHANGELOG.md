@@ -1,5 +1,10 @@
 # Release notes
 
+## 1.3.37 - 30 October 2026
+
+- Fix Wan 2.1 Relight being blocked by the H3 five-second limit and correct the model and resolution labels. Existing relight projects use Wan 2.1 for their next action; running jobs are not changed.
+- Use the first frame for a supplied relight image, matching the Wan 2.1 workflow. Verify longer section joins on your own footage.
+
 ## 1.3.35 - 27 October 2026
 
 - Add optional FastH3 draft beside normal H3 in Reference to video. Normal H3 remains the default; draft mode clearly warns about softer detail and possible framing/camera changes.
