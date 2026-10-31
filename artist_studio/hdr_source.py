@@ -14,13 +14,29 @@ MAX_FRAMES = 121
 SDR_SPACES = ('srgb_display', 'rec709_oetf', 'rec709_gamma24')
 
 
+def sdr_source_space(info, colour_space='auto'):
+    """Use Rec.709 for untagged conventional video, only in SDR conversion.
+
+    Explicit HDR, wide-gamut, linear or camera-log tags never take this
+    fallback. The UI discloses the assumption and offers a source override.
+    Paintout/native HDR retain their stricter colour handling.
+    """
+    from ..paintout.paintout import selected_space
+    missing = (None, '', 'unknown', 'unspecified')
+    if (colour_space == 'auto' and info.get('kind') == 'video'
+            and info.get('transfer') in missing
+            and info.get('primaries') in (*missing, 'bt709')
+            and info.get('matrix') in (*missing, 'bt709')):
+        return selected_space(info, 'rec709_oetf')
+    return selected_space(info, colour_space)
+
+
 def load_sdr_frames(path, start_frame, frame_count, colour_space='auto', sequence_fps=24):
     """Read exactly one bounded source range into display-referred sRGB.
 
     Reuses paintout's frame-exact 16-bit decode and colour transforms. HDR,
-    log/unknown metadata, variable FPS and oversized batches are refused rather
-    than silently treating their pixels as sRGB. Explicit overrides are for
-    artists who know the encoding of an untagged file.
+    log/unsupported metadata, variable FPS and oversized batches are refused.
+    Untagged conventional video defaults to Rec.709, as stated in the UI.
     """
     from ..paintout.paintout import describe, selected_space, frames, _decode_original, _encode_original
     if type(start_frame) is not int or start_frame < 0:
@@ -36,7 +52,7 @@ def load_sdr_frames(path, start_frame, frame_count, colour_space='auto', sequenc
         raise ValueError('The selected frame range extends past the source.')
     if info['width'] * info['height'] * frame_count > MAX_PIXEL_FRAMES:
         raise ValueError('This selection is too large for one HDR conversion. Choose fewer frames or smaller footage.')
-    selected = selected_space(info, colour_space)
+    selected = sdr_source_space(info, colour_space)
     if selected not in SDR_SPACES:
         raise ValueError('This conversion accepts SDR footage only. Native HDR input needs the separate HDR workflow.')
     fps = info.get('fps', sequence_fps)

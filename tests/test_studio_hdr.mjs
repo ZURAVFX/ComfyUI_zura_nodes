@@ -16,6 +16,17 @@ const api={apiURL:p=>p,clientId:'test',addEventListener(){},removeEventListener(
   return {ok:true,async json(){return data;}};
 }};
 const tool=new HDRSourceTool(document.querySelector('#host'),api,()=>({id:'source-id',projectId:'project-id'}));
+assert.ok(tool.$('mode').closest('.zh-advanced'),'Technical input override stays in Advanced');
+assert.doesNotMatch(tool.root.textContent,/HDR to HDR/);
+assert.match(tool.$('source-note').textContent,/Rec.709/);
+tool.acceptSourceInfo({frames:25,transfer:'smpte2084',primaries:'bt2020'},0);
+assert.equal(tool.$('mode').value,'native');assert.match(tool.$('source-label').textContent,/preserve HDR/);
+tool.acceptSourceInfo({frames:25,transfer:'unknown'},0);
+assert.equal(tool.$('mode').value,'sdr');
+tool.$('mode').value='native';tool.$('mode').onchange();tool.acceptSourceInfo({frames:25,transfer:'unknown'},0);
+assert.equal(tool.$('mode').value,'native','Explicit artist override is retained for this source');
+tool.sourceModeManual=false;tool.$('mode').value='sdr';tool.updateMode();
+
 tool.$('count').value='37';tool.$('count').oninput();assert.match(tool.$('advanced-summary').textContent,/37 frames/);
 const rangeTool=new HDRSourceTool(document.querySelector('#host'),api,()=>({}),{longAvailable:true});
 const rangePending=[];rangeTool.request=(path,body)=>new Promise(resolve=>rangePending.push({path,body,resolve}));rangeTool.refreshModelSetup=async()=>{};

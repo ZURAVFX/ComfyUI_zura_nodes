@@ -121,3 +121,15 @@ under the MIT licence. Its licence is preserved in the adjacent
 `OpenJutsu_LICENSE` file. The optional Akatz `h3_character_swap` runtime is a
 separate GPL-3.0 dependency and is not vendored here. See
 `docs/OPENJUTSU_EXPERIMENT.md` for pinned provenance and local test limitations.
+
+## Optional browser image clients
+
+The ChatGPT and Gemini adapters use separately installed website clients in an
+isolated runtime. Their implementation is not bundled in this package:
+
+- gpt4free, revision `91d9c82150b8d5032a0400591872cfc816cfa9af`,
+  https://github.com/xtekky/gpt4free/tree/91d9c82150b8d5032a0400591872cfc816cfa9af.
+- Gemini-API (`gemini-webapi` 2.1.1), https://github.com/HanaokaYuzu/Gemini-API.
+
+Website accounts and provider terms apply. See `CHATGPT_IMAGE.md` and
+`GEMINI_IMAGE.md` for connection scope and runtime details.

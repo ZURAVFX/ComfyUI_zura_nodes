@@ -13,11 +13,11 @@ export class HDRSourceTool {
         <div class="zh-inputs"><label>Source<select data-hdr="source-kind"><option value="upload">Source footage</option><option value="output" hidden>Selected LTX result</option><option value="result">Latest LTX shot result</option><option value="own">Import video</option><option value="sequence" hidden>EXR sequence</option></select></label>
         <div data-hdr="video-controls" hidden><input data-hdr="video-file" type="file" accept="video/*,.mp4,.mov,.mkv,.webm" hidden/><button data-hdr="add-video" type="button">Import video</button><span data-hdr="video-name">No video selected</span></div>
         <div data-hdr="sequence-controls" hidden><input data-hdr="sequence-files" type="file" accept=".exr" multiple hidden/><button data-hdr="add-sequence" type="button">Import EXR frames</button><span data-hdr="sequence-name">No frames selected</span><label>Frame rate<input data-hdr="sequence-fps" type="number" min="1" max="120" step="0.001" value="24"/></label></div></div>
-        <div class="zh-controls"><label>Conversion<select data-hdr="mode"><option value="sdr">SDR to HDR</option><option value="native">HDR to HDR · preview</option></select></label><label>Output<select data-hdr="output"><option value="hlg_and_exr">HLG video + EXR</option><option value="hlg_video">HLG video</option><option value="acescg_exr">EXR sequence</option></select></label></div>
-        <details class="zh-advanced"><summary data-hdr="advanced-summary">Frame range · 25 frames &amp; advanced settings</summary><div class="zh-advanced-body"><div class="zh-range"><label>First frame<input data-hdr="start" type="number" min="0" step="1" value="0"/></label><label>Frames<input data-hdr="count" type="number" min="1" max="121" step="1" value="25"/></label><label>Source colour<select data-hdr="colour"><option value="auto">Read source tags</option><option value="rec709_oetf">Rec.709</option><option value="rec709_gamma24">Rec.709 gamma 2.4</option><option value="srgb_display">sRGB</option></select></label></div><details data-hdr="models" class="gs-advanced"></details></div></details>
+        <div class="zh-controls"><div class="zh-colour-summary"><strong data-hdr="source-label">SDR footage → HDR</strong><span data-hdr="source-note">Untagged standard video uses Rec.709. Change this in advanced settings if needed.</span></div><label>Output<select data-hdr="output"><option value="hlg_and_exr">HLG video + EXR</option><option value="hlg_video">HLG video</option><option value="acescg_exr">EXR sequence</option></select></label></div>
+        <details class="zh-advanced"><summary data-hdr="advanced-summary">Frame range · 25 frames &amp; advanced settings</summary><div class="zh-advanced-body"><label>Input type<select data-hdr="mode"><option value="sdr">SDR footage · convert to HDR</option><option value="native">HDR footage · preserve HDR</option></select></label><div class="zh-range"><label>First frame<input data-hdr="start" type="number" min="0" step="1" value="0"/></label><label>Frames<input data-hdr="count" type="number" min="1" max="121" step="1" value="25"/></label><label>Source colour<select data-hdr="colour"><option value="auto">Read source tags</option><option value="rec709_oetf">Rec.709</option><option value="rec709_gamma24">Rec.709 gamma 2.4</option><option value="srgb_display">sRGB</option></select></label></div><details data-hdr="models" class="gs-advanced"></details></div></details>
         <div class="zh-range-summary"><span data-hdr="range-notice" aria-live="polite">25 frames selected</span><button type="button" data-hdr="full-range" hidden>Use full clip</button></div>
         <div class="zh-footer"><label data-hdr="long-control" hidden><input data-hdr="long" type="checkbox"/> Longer clip · preview</label><label data-hdr="sections-control" hidden>Section size<select data-hdr="sections"><option value="121">Longer sections · fewer joins</option><option value="25">Shorter sections · potentially faster, more joins</option></select></label><button data-hdr="use-video" type="button" hidden>Use in paintout</button><button data-hdr="use-result" type="button" hidden>Use converted video in paintout</button><button data-hdr="start-job" class="gs-primary" type="button">Convert video</button></div>
-        <p data-hdr="limits" role="status" aria-live="polite">Up to 121 frames per run. Large frame selections may need to be shorter.</p><p class="zh-note">LTX 2.5 converts HDR. H3 generates SDR. HLG is 10-bit; EXR is ACEScg. The on-screen preview is tone-mapped for SDR.</p>
+        <p data-hdr="limits" role="status" aria-live="polite">Up to 121 frames per run. Large frame selections may need to be shorter.</p><p class="zh-note">HLG video is 10-bit; EXR is ACEScg. The on-screen preview is tone-mapped for SDR.</p>
       </div>`;
     host.append(this.root);this.loras=new LTXLoras(this.root.querySelector('.zh-advanced-body'),path=>this.request(path),()=>this.busy);this.$('start-job').onclick=()=>this.start();this.$('cancel').onclick=()=>this.cancel();
     this.longAvailable=longAvailable;this.$('long-control').hidden=!longAvailable;
@@ -27,7 +27,7 @@ export class HDRSourceTool {
     this.$('models').querySelector('summary').textContent='HDR model packages';
     const setupNote=document.createElement('p');setupNote.textContent='Checks for installed files and nodes. Source and frame limits are checked when you start.';this.$('models').querySelector('.gs-advanced-body').prepend(setupNote);
     this.$('models').ontoggle=()=>{if(this.$('models').open)this.refreshModelSetup();};
-    this.$('mode').onchange=()=>this.updateMode();this.$('source-kind').onchange=()=>this.updateMode();
+    this.$('mode').onchange=()=>{this.sourceModeManual=true;this.updateMode();};this.$('source-kind').onchange=()=>this.updateMode();
     this.$('count').oninput=this.$('start').oninput=()=>{this.rangeEditRevision=(this.rangeEditRevision||0)+1;this.updateRangeSummary();};
     this.$('full-range').onclick=()=>this.useFullRange();
     this.$('output').onchange=()=>{if(this.active)this.sourceChanged();else if(this.$('models').open)this.refreshModelSetup();};
@@ -51,6 +51,7 @@ export class HDRSourceTool {
   acceptSourceInfo(info,editRevision){
     if(!Number.isInteger(info?.frames)||info.frames<1)return;
     this.sourceInfo=info;
+    if(!this.sourceModeManual&&Object.hasOwn(info,'transfer')){const mode=['arib-std-b67','smpte2084'].includes(info.transfer)?'native':'sdr';if(this.$('mode').value!==mode){this.$('mode').value=mode;this.updateMode();}}
     const start=Number(this.$('start').value),count=Number(this.$('count').value);
     if((this.rangeEditRevision||0)===editRevision&&Number.isInteger(start)&&Number.isInteger(count)&&count>0&&start+count>info.frames){this.$('start').value='0';this.$('count').value=String(Math.min(info.frames,count));}
     this.updateRangeSummary();
@@ -90,13 +91,15 @@ export class HDRSourceTool {
     const sequence=native&&this.$('source-kind').value==='sequence';this.$('sequence-controls').hidden=!sequence;
     this.$('video-controls').hidden=this.$('source-kind').value!=='own';
     const previousColour=this.$('colour').value;
-    this.$('colour').innerHTML=sequence?'<option value="auto">Read EXR tags</option><option value="acescg">ACEScg</option><option value="acescct">ACEScct</option><option value="linear_rec709">Linear Rec.709</option>':native?'<option value="auto">Read source tags</option><option value="hlg_rec2020">HLG · Rec.2020</option><option value="pq_rec2020">PQ · Rec.2020</option>':'<option value="auto">Read source tags</option><option value="rec709_oetf">Rec.709</option><option value="rec709_gamma24">Rec.709 gamma 2.4</option><option value="srgb_display">sRGB</option>';
+    this.$('colour').innerHTML=sequence?'<option value="auto">Read EXR tags</option><option value="acescg">ACEScg</option><option value="acescct">ACEScct</option><option value="linear_rec709">Linear Rec.709</option>':native?'<option value="auto">Read source tags</option><option value="hlg_rec2020">HLG · Rec.2020</option><option value="pq_rec2020">PQ · Rec.2020</option>':'<option value="auto">Auto · Rec.709 if untagged</option><option value="rec709_oetf">Rec.709</option><option value="rec709_gamma24">Rec.709 gamma 2.4</option><option value="srgb_display">sRGB</option>';
     if([...this.$('colour').options].some(option=>option.value===previousColour))this.$('colour').value=previousColour;
     const longer=this.longAvailable&&this.$('long').checked;
     this.$('sections-control').hidden=!longer||!native;
     this.$('count').max=longer?'10000':'121';
     this.$('limits').textContent=this.defaultLimitText();
-    this.$('start-job').textContent=native?'Process HDR video':'Convert to HDR';
+    this.$('start-job').textContent=native?'Prepare HDR video':'Convert to HDR';
+    this.$('source-label').textContent=native?'HDR footage · preserve HDR':'SDR footage → HDR';
+    this.$('source-note').textContent=native?'Keep HDR colour when preparing this clip for LTX editing. No SDR conversion is needed.':'Untagged standard video uses Rec.709. Change this in advanced settings if needed.';
     this.$('use-video').hidden=!(native&&this.$('source-kind').value==='own'&&this.ownAsset?.id&&this.onUseVideo);
     if(this.active)this.sourceChanged();
     this.showFrameLimit();
@@ -107,7 +110,7 @@ export class HDRSourceTool {
     this.renderSource(kind,asset);
     const projectId=kind==='result'?this.getSource()?.projectId:null;
     const sourceKey=JSON.stringify([kind,asset?.id,projectId,this.outputRef?.filename,this.outputRef?.subfolder]);
-    if(sourceKey!==this.sourceInfoKey){this.sourceInfoKey=sourceKey;this.sourceInfo=null;this.frameLimit=null;this.modelSetupRevision=(this.modelSetupRevision||0)+1;this.modelSetupKey=null;const revision=this.sourceInfoRevision=(this.sourceInfoRevision||0)+1,editRevision=this.rangeEditRevision||0;this.updateRangeSummary();
+    if(sourceKey!==this.sourceInfoKey){this.sourceModeManual=false;this.sourceInfoKey=sourceKey;this.sourceInfo=null;this.frameLimit=null;this.modelSetupRevision=(this.modelSetupRevision||0)+1;this.modelSetupKey=null;const revision=this.sourceInfoRevision=(this.sourceInfoRevision||0)+1,editRevision=this.rangeEditRevision||0;this.updateRangeSummary();
       if(kind==='sequence'&&asset?.count){this.acceptSourceInfo({frames:asset.count,width:asset.width,height:asset.height},editRevision);}
       else if((kind==='output'&&this.outputRef)||(kind==='result'&&projectId)||((kind==='own'||kind==='upload')&&asset?.id)){
         const body={source_kind:kind==='own'?'upload':kind,source_id:asset?.id,project_id:projectId,output_ref:this.outputRef};

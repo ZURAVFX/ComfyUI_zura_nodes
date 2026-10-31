@@ -22,6 +22,10 @@ import folder_paths
 from aiohttp import web
 from server import PromptServer
 
+# Account-session dependencies are loaded lazily when the artist connects.
+from .chatgpt_image import NODE_CLASS_MAPPINGS as CHATGPT_IMAGE_NODES, NODE_DISPLAY_NAME_MAPPINGS as CHATGPT_IMAGE_NAMES
+from .gemini_image import NODE_CLASS_MAPPINGS as GEMINI_IMAGE_NODES, NODE_DISPLAY_NAME_MAPPINGS as GEMINI_IMAGE_NAMES
+
 from .longcat import NODE_CLASS_MAPPINGS as LONGCAT_NODES, NODE_DISPLAY_NAME_MAPPINGS as LONGCAT_NAMES
 from .qwen_voice_design import NODE_CLASS_MAPPINGS as QWEN_DESIGN_NODES, NODE_DISPLAY_NAME_MAPPINGS as QWEN_DESIGN_NAMES
 from .driving_clip import NODE_CLASS_MAPPINGS as DRIVING_NODES, NODE_DISPLAY_NAME_MAPPINGS as DRIVING_NAMES
@@ -224,3 +228,12 @@ NODE_DISPLAY_NAME_MAPPINGS.update(OUTPAINT_STUDIO_NAMES)
 from .wan_animate2_mask import NODE_CLASS_MAPPINGS as ANIMATE2_MASK_NODES, NODE_DISPLAY_NAME_MAPPINGS as ANIMATE2_MASK_NAMES
 NODE_CLASS_MAPPINGS.update(ANIMATE2_MASK_NODES)
 NODE_DISPLAY_NAME_MAPPINGS.update(ANIMATE2_MASK_NAMES)
+
+# Browser account image generation, shared by nodes and the Image workspace.
+NODE_CLASS_MAPPINGS.update(CHATGPT_IMAGE_NODES)
+NODE_DISPLAY_NAME_MAPPINGS.update(CHATGPT_IMAGE_NAMES)
+NODE_CLASS_MAPPINGS.update(GEMINI_IMAGE_NODES)
+NODE_DISPLAY_NAME_MAPPINGS.update(GEMINI_IMAGE_NAMES)
+if getattr(PromptServer, 'instance', None) is not None:
+    from .browser_image_routes import register as register_browser_image_routes
+    register_browser_image_routes(PromptServer.instance.routes)

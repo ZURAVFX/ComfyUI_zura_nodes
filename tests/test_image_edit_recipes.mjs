@@ -7,7 +7,7 @@ assert.equal(create.text.inputs.clip_name,'qwen_3_8b_fp4mixed.safetensors');
 assert.equal(create.schedule.class_type,'Flux2Scheduler');
 assert.equal(create.schedule.inputs.steps,4);
 assert.equal(IMAGE_MODELS.find(m=>m.id==='flux3').name,'Flux 3 Klein','Flux 3 remains available');
-for(const model of ['qwen2511','klein9b']){
+for(const model of ['qwen2511','klein9b','flux3edit']){
   assert.throws(()=>buildImageGraph({model,prompt:'Edit the image'}),/image you want to edit/);
   assert.throws(()=>buildImageGraph({model,prompt:'Edit',references:[{file:'../escape.png'}]}),/Upload/);
   const graph=buildImageGraph({model,prompt:'  Make the wall blue  ',references:refs,width:1280,height:720,seed:17});
@@ -24,14 +24,18 @@ for(const model of ['qwen2511','klein9b']){
     assert.deepEqual(graph.prompt.inputs.image1,['source_size',0]);assert.deepEqual(graph.size.inputs.pixels,['source_size',0]);
     assert.equal(graph.source_size.inputs.width,1280);assert.equal(graph.source_size.inputs.height,720);
     assert.equal(graph.positive_references.inputs.reference_latents_method,'index_timestep_zero');
-  }else{
+  }else if(model==='klein9b'){
     assert.equal(graph.sample.class_type,'SamplerCustomAdvanced');
     assert.deepEqual(graph.schedule.inputs,{steps:4,width:1280,height:720});
     assert.equal(graph.kv_cache.class_type,'FluxKVCache');assert.equal(graph.noise.inputs.noise_seed,17);
+  }else{
+    assert.equal(graph.text.inputs.type,'flux3');assert.equal(graph.sample.inputs.steps,16);
+    assert.deepEqual(graph.sample.inputs.positive,['references',0]);
+    assert.equal(graph.size.inputs.width,1280);assert.equal(graph.size.inputs.height,720);
   }
 }
 // Image LoRAs precede each model's existing optimisations and reach the sampler.
-for(const model of ['flux2','flux3','klein9b','qwen2511','zimage']){
+for(const model of ['flux2','flux3','flux3edit','klein9b','qwen2511','zimage']){
   const graph=buildImageGraph({model,prompt:'Check',references:IMAGE_MODELS.find(m=>m.id===model).minReferences?[refs[0]]:[],loras:[{name:'face.safetensors',strength:.75}]});
   assert.deepEqual(graph.custom_image_lora_1.inputs.model,['model',0]);
   const consumer=model==='qwen2511'?graph.lightning:model==='flux2'||model==='klein9b'?graph.kv_cache:model==='zimage'?graph.sampling:graph.sample;
@@ -50,3 +54,18 @@ assert.ok(imageAvailability(info).every(m=>m.ready));
 info.LoraLoaderModelOnly.input.required.lora_name=combo([]);
 assert.equal(imageAvailability(info).find(m=>m.id==='qwen2511').ready,false,'Missing Lightning adapter blocks Qwen rather than changing its recipe');
 console.log('Qwen 2511 and Klein 9B artist recipes: ordered edit references, native sampling, dimensions, readiness and local-only graphs pass.');
+
+for(const model of IMAGE_MODELS.filter(m=>m.provider)){
+ const references=model.edit?refs:[];
+ const graph=buildImageGraph({model:model.id,prompt:' Draw this ',references,width:1152,height:768});
+ assert.equal(graph.browser_image.class_type,model.node);assert.equal(graph.browser_image.inputs.prompt,'Draw this');
+ assert.equal(graph.browser_image.inputs.custom_width,1152);assert.equal(graph.browser_image.inputs.custom_height,768);
+ assert.equal(graph.browser_image.inputs.size,'Custom');assert.deepEqual(graph.save.inputs.images,['browser_image',0]);
+ assert.ok(!graph.model&&!graph.text&&!graph.sample&&!graph.vae);
+ assert.doesNotThrow(()=>buildImageGraph({model:model.id,prompt:'Draw',references,seed:NaN}),'Browser models do not expose local seeds');
+ if(model.edit){assert.deepEqual(graph.browser_image.inputs.reference_1,['reference_1',0]);assert.throws(()=>buildImageGraph({model:model.id,prompt:'Edit'}),/image you want to edit/);}
+ assert.throws(()=>buildImageGraph({model:model.id,prompt:'Draw',references,loras:[{name:'x',strength:1}]}),/LoRA/);
+ assert.throws(()=>buildImageGraph({model:model.id,prompt:'Draw',references:Array.from({length:9},()=>refs[0])}),/8/);
+ const withoutProvider={...info};delete withoutProvider[model.node];assert.equal(imageAvailability(withoutProvider).find(m=>m.id===model.id).ready,false);
+}
+console.log('Browser create/edit recipes: ordered references, limits, requested size, no local model or API-key inputs pass.');

@@ -376,3 +376,11 @@
 #genj-studio .zc-image-lora-row strong{overflow-wrap:anywhere;font-size:12px}
 #genj-studio .zc-image-lora-row label{grid-column:1 / -1;margin:0}
 #genj-studio .zc-image-lora-row input[type=number]{width:100%;margin-top:6px}
+
+/* Account connection belongs beside the prompt, with the same quiet controls. */
+#genj-studio .zc-browser-connection{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:12px 0;margin-bottom:8px;border-bottom:1px solid var(--gs-line)}
+#genj-studio .zc-browser-connection>div{display:grid;gap:6px;min-width:0}
+#genj-studio .zc-browser-connection strong{font-size:12px;font-weight:600}
+#genj-studio .zc-browser-connection small,#genj-studio .zc-browser-connection span{color:var(--gs-muted);font-size:11px;line-height:1.5;overflow-wrap:anywhere}
+#genj-studio .zc-browser-connection>button{flex:0 0 auto;min-height:36px;padding:8px 12px}
+@media(max-width:600px){#genj-studio .zc-browser-connection{flex-wrap:wrap;gap:12px}}

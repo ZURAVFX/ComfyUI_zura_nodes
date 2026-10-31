@@ -116,6 +116,9 @@
 #genj-studio .zh-inputs>label{min-width:200px}
 #genj-studio .zh-inputs>div:not([hidden]){display:flex;align-items:center;gap:10px;flex-wrap:wrap}
 #genj-studio .zh-controls{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+#genj-studio .zh-colour-summary{display:grid;align-content:center;gap:6px;padding:8px 0;min-width:0}
+#genj-studio .zh-colour-summary strong{font-size:13px;font-weight:600;color:var(--zc-text)}
+#genj-studio .zh-colour-summary span{font-size:12px;line-height:1.5;color:var(--gs-muted)}
 #genj-studio .zh-composer-heading{display:flex;align-items:center;justify-content:space-between;gap:16px}
 #genj-studio .zh-composer-heading strong{font-size:14px;font-weight:600}
 #genj-studio .zh-close{display:grid;place-items:center;flex:none;width:36px;height:36px;padding:0;border:0;border-radius:8px;background:transparent;color:var(--zc-text);font-size:23px;line-height:1;cursor:pointer}

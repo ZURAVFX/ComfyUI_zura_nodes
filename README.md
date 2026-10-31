@@ -9,6 +9,11 @@ Local video, image and audio tools, with a guided **Zura Studio** interface and 
 
 Model weights are separate downloads. Available routes and tested limits vary by model; see the [approved workflows](docs/APPROVED_WORKFLOWS.md) and [validation history](ARTIST_STUDIO_VALIDATION.md).
 
+The Image workspace supports FLUX.2 Klein 9B and Flux 3 Klein for both creation
+and editing. ChatGPT Image and Gemini Image are also available through your
+browser account, with no Zura or paid API credits. Website plan limits apply.
+See [browser image setup](docs/STUDIO_BROWSER_IMAGES.md).
+
 ## Install and open
 
 Install **Zura Nodes**, published by **ZURAVFX**, through ComfyUI Manager when an approved Registry version is available. Otherwise, use the official [GitHub release](https://github.com/ZURAVFX/ComfyUI_zura_nodes/releases/latest).

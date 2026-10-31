@@ -25,6 +25,36 @@ paintout=importlib.import_module('ComfyUI_zura_nodes.paintout.paintout')
 
 
 class HDRSourceTest(unittest.TestCase):
+    def test_untagged_sdr_defaults_to_rec709_only_for_conversion(self):
+        info={'kind':'video','count':25,'width':64,'height':64,'fps':24,
+              'transfer':'unknown','primaries':'unknown','matrix':'unknown'}
+        self.assertEqual(source.sdr_source_space(dict(info)), 'rec709_oetf')
+        self.assertEqual(source.sdr_source_space(dict(info),'srgb_display'), 'srgb_display')
+        with self.assertRaises(ValueError):
+            paintout.selected_space(dict(info),'auto')  # Native paintout is unchanged.
+        with patch.object(paintout,'describe',return_value=dict(info)), patch('av.open') as opened:
+            opened.return_value.__enter__.return_value.streams.audio=[]
+            graph,_=hdr_studio.build_asset_graph({'asset_kind':'video'}, {'frame_count':9}, lambda _: 'source.mp4')
+        self.assertEqual(graph['zura_hdr_source']['inputs']['colour_space'],'rec709_oetf')
+        for tags in ({'transfer':'log100'}, {'transfer':'linear'}, {'primaries':'bt2020'}, {'matrix':'bt2020nc'}):
+            with self.subTest(tags=tags),self.assertRaises(ValueError):
+                source.sdr_source_space({**info,**tags})
+        self.assertEqual(source.sdr_source_space({**info,'transfer':'smpte2084','primaries':'bt2020'}),'pq_rec2020')
+
+    @unittest.skipUnless(shutil.which('ffmpeg') and shutil.which('ffprobe'),'requires FFmpeg')
+    def test_real_untagged_sdr_decode_and_preflight(self):
+        with tempfile.TemporaryDirectory() as temp:
+            path=Path(temp)/'untagged.mp4'
+            subprocess.run(['ffmpeg','-v','error','-f','lavfi','-i','testsrc2=size=64x64:rate=24:duration=1',
+                            '-c:v','libx264','-pix_fmt','yuv420p',str(path)],check=True)
+            info=paintout.describe(str(path))
+            self.assertIn(info.get('transfer'),(None,'','unknown','unspecified'))
+            result,fps=source.load_sdr_frames(str(path),0,9)
+            self.assertEqual(tuple(result.shape),(9,64,64,3));self.assertEqual(fps,24)
+            self.assertTrue(torch.isfinite(result).all())
+            graph,_=hdr_studio.build_asset_graph({'asset_kind':'video'}, {'frame_count':9}, lambda _: path)
+            self.assertEqual(graph['zura_hdr_source']['inputs']['colour_space'],'rec709_oetf')
+
     def test_1080p_padded_limit_is_reported_before_reading_frames(self):
         info={'kind':'video','count':200,'width':1920,'height':1080,'fps':24,'transfer':'bt709'}
         with patch.object(paintout,'describe',return_value=info), patch('av.open') as open_video:

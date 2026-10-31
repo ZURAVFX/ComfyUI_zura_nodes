@@ -75,7 +75,9 @@ def build_asset_graph(asset, body, check_asset):
         raise ValueError('This source is HDR. The SDR-to-HDR route requires SDR footage.')
     colour=body.get('colour_space','auto')
     if colour not in ('auto',*SDR_SPACES):raise ValueError('Choose the source SDR colour space.')
-    if selected_space(info,colour) not in SDR_SPACES:raise ValueError('Choose a supported SDR source colour space.')
+    from .hdr_source import sdr_source_space
+    colour=sdr_source_space(info,colour)
+    if colour not in SDR_SPACES:raise ValueError('Choose a supported SDR source colour space.')
     fps=info['fps']
     with av.open(str(path)) as input_video:has_audio=bool(input_video.streams.audio)
     name='shot_'+uuid.uuid4().hex
@@ -118,7 +120,10 @@ def register(studio, routes, response, check_asset):
         if info.get('kind') != 'video' or not isinstance(info.get('count'), int) or info['count'] < 1:
             raise ValueError('The video frame count could not be read.')
         return web.json_response({'frames': info['count'], 'fps': info.get('fps'),
-                                  'width': info['width'], 'height': info['height']})
+                                  'width': info['width'], 'height': info['height'],
+                                  'transfer': info.get('transfer'),
+                                  'primaries': info.get('primaries'),
+                                  'matrix': info.get('matrix')})
 
     @routes.post('/zura/studio/hdr/graph')
     @routes.post('/genj/studio/hdr/graph')
