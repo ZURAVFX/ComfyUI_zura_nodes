@@ -35,6 +35,17 @@ class HDRChunkTests(unittest.TestCase):
                 self.assertTrue(all(1 <= covered <= 2 for covered in coverage))
                 self.assertEqual(ranges[-1].start+ranges[-1].count, 7+count)
 
+    def test_sdr_sections_match_actual_readiness_raster(self):
+        from ComfyUI_zura_nodes.artist_studio.hdr_prepare import sdr_frame_limit
+        for width, height in [(546, 514), (2560, 800), (1920, 1080), (800, 2560)]:
+            capacity = chunks.chunk_capacity(width, height, mode='sdr')
+            self.assertEqual(capacity, sdr_frame_limit(width, height))
+            ranges = chunks.plan_chunks(0, 150, width, height, mode='sdr')
+            self.assertTrue(all(part.count <= capacity for part in ranges))
+            self.assertEqual(ranges[-1].start + ranges[-1].count, 150)
+        with self.assertRaises(ValueError):
+            chunks.chunk_capacity(2560, 800)  # Native HDR keeps its own limit.
+
     def test_blend_occurs_in_linear_light_not_log_code_values(self):
         a=colour.encode_ct(torch.zeros((3,1,1,3)))
         b=colour.encode_ct(torch.full((3,1,1,3), 2.0))
@@ -81,6 +92,12 @@ class HDRChunkTests(unittest.TestCase):
         ranges=chunks.plan_chunks(0,10,384,224,max_frames=9)
         self.assertEqual(ranges,[chunks.HDRChunk(0,9,0),chunks.HDRChunk(5,5,4)])
         with self.assertRaises(ValueError):chunks.plan_chunks(0,10,384,224,max_frames=8)
+
+    def test_1080p_25_frame_selection_is_bounded_without_truncation(self):
+        self.assertEqual(chunks.chunk_capacity(1920,1080),17)
+        ranges=chunks.plan_chunks(0,25,1920,1080)
+        self.assertEqual(ranges,[chunks.HDRChunk(0,17,0),chunks.HDRChunk(9,16,8)])
+        self.assertEqual(ranges[-1].start+ranges[-1].count,25)
 
 
 if __name__=='__main__': unittest.main()

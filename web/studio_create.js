@@ -7,6 +7,7 @@ import {getPaintoutWorkspace} from "./paintout_studio/paintout_shared.js";
 import {installPopoverDismissal} from "./studio_popovers.js";
 import {PreviewZoom} from "./studio_preview_zoom.js";
 import {OutpaintWorkspace} from "./studio_outpaint.js";
+import {PanoramaCameraWorkspace} from './studio_panorama.js';
 import {groupMissingNodes} from './studio_node_setup.js';
 import {preferredHDRFile} from './studio_native_hdr_performance.js';
 import {installOwnedExecuting} from './studio_progress.js';
@@ -32,11 +33,14 @@ export class CreativeWorkspace {
     if(this.job?.cancelPending)this.job.cancelRetryAvailable=true;
     this.imageLoras=Array.isArray(this.draft.loras)?this.draft.loras.map(l=>({...l})):[];this.imageLoraCatalog=[];
     const nav=document.createElement("nav");nav.className="zc-nav";nav.setAttribute("aria-label","Workspace");
-    nav.innerHTML='<button type="button" data-space="home">Home</button><button type="button" data-space="image">Image</button><button type="button" data-space="video">Video</button><button type="button" id="zc-open-hdr">HDR</button>';
+    nav.innerHTML='<button type="button" data-space="home" hidden>Home</button><button type="button" data-space="image">Image</button><button type="button" data-space="video">Video</button><button type="button" id="zc-open-hdr" hidden>Convert to HDR</button>';
     this.root.querySelector(".gs-top").insertBefore(nav,this.root.querySelector(".gs-top-actions"));
     this.root.querySelector(".gs-brand>span").textContent="";
     const theme=document.createElement("button");theme.id="zc-theme";theme.type="button";theme.className="zc-theme-toggle";
     this.root.querySelector(".gs-top-actions").prepend(theme);
+    // Reuse the existing downloader, including its running-download ownership.
+    const modelDownloads=studio.$('model-downloads');
+    if(modelDownloads?.querySelector('summary')){modelDownloads.classList.add('zc-tool-popup','zc-global-models');modelDownloads.querySelector('summary').textContent='Models';modelDownloads.querySelector('.gs-advanced-body')?.classList.add('zc-tool-panel');this.root.querySelector('.gs-top-actions').prepend(modelDownloads);}
     let savedTheme;try{savedTheme=localStorage.getItem("zura-studio-theme");}catch{}
     this.setTheme(savedTheme==="light"?"light":"dark",false);
     theme.onclick=()=>this.setTheme(this.root.dataset.theme==="light"?"dark":"light");
@@ -154,7 +158,7 @@ export class CreativeWorkspace {
       this.root.append(tooltip);
       if(globalThis.customElements?.get("wa-tooltip"))control.removeAttribute("title");
     }
-    this.show("home");this.renderGallery();this.render();
+    this.show("video");this.renderGallery();this.render();
   }
   buildVideoInspector(settings){
     const controls=this.root.querySelector(".gs-controls");
@@ -300,7 +304,7 @@ export class CreativeWorkspace {
     this.modelDownloadClosed=false;
     this.videoComposer?.ltxOutput?.open();
     this.disposePopovers=installPopoverDismissal(this.root);
-    this.show(this.mode||'home');
+    this.show(this.mode||'video');
   }
   openHDR({preferSource=false}={}){
     const tool=this.studio.hdrTool;if(!tool)return;
@@ -347,12 +351,13 @@ export class CreativeWorkspace {
     if(mode==='references')this.referencesVideo??=new ReferenceVideoWorkspace(this);
     if(mode==='paintout')this.paintout=getPaintoutWorkspace(this);
     if(mode==='outpaint')this.outpaint??=new OutpaintWorkspace(this);
+    if(mode==='panorama')this.panorama??=new PanoramaCameraWorkspace(this);
     this.videoComposer?.mountWorkflow(mode);
     // Set real visibility as well as the CSS state, so another page cannot
     // cover navigation when the workspace changes or styles are still loading.
-    const pages={'.zc-home':'home','.zc-image-page':'image','.zf-page:not(.zr-page):not(.zp-page):not(.zh-page)':'frames','.zr-page':'references','.zp-page':'paintout','.zh-page':'hdr','.zo-page':'outpaint','.gs-workspace':'video','.gs-steps':'video'};
+    const pages={'.zc-home':'home','.zc-image-page':'image','.zf-page:not(.zr-page):not(.zp-page):not(.zh-page)':'frames','.zr-page':'references','.zp-page':'paintout','.zh-page':'hdr','.zo-page':'outpaint','.zpc-page':'panorama','.gs-workspace':'video','.gs-steps':'video'};
     for(const child of this.root.children)for(const [selector,space] of Object.entries(pages))if(child.matches(selector))child.hidden=mode!==space;
-    for(const b of this.root.querySelectorAll('.zc-nav [data-space]'))b.setAttribute('aria-current',b.dataset.space===(['frames','references','paintout','outpaint'].includes(mode)?'video':mode)?'page':'false');
+    for(const b of this.root.querySelectorAll('.zc-nav [data-space]'))b.setAttribute('aria-current',b.dataset.space===(['frames','references','paintout','outpaint','panorama','hdr'].includes(mode)?'video':mode)?'page':'false');
     this.root.querySelectorAll('video,audio').forEach(m=>m.pause());
     this.root.querySelector('#zc-open-hdr').setAttribute('aria-current',mode==='hdr'?'page':'false');
     if(mode==='hdr')this.studio.hdrTool?.activate();else this.studio.hdrTool?.deactivate();
@@ -362,6 +367,7 @@ export class CreativeWorkspace {
     if(mode==='references')this.referencesVideo.open();
     if(mode==='paintout')this.paintout.open();
     if(mode==='outpaint')this.outpaint.open();
+    if(mode==='panorama')this.panorama.open();
     if(this.job||this.pendingSubmission)this.startPolling();
   }
   async loadModels(){
@@ -545,7 +551,7 @@ export class CreativeWorkspace {
   }
   async cancel(){await cancelOwnedJob(this);}
   stopPolling(){clearInterval(this.timer);this.timer=null;}
-  close(){this.modelDownloadClosed=true;this.browserConnection?.close();this.videoComposer?.ltxOutput?.close();this.save();this.stopPolling();this.imageZoom?.stopDraw();this.frames?.close();this.referencesVideo?.close();this.outpaint?.close();if(this.paintout?.owner===this)this.paintout.close();this.disposePopovers?.();}
+  close(){this.modelDownloadClosed=true;this.browserConnection?.close();this.videoComposer?.ltxOutput?.close();this.save();this.stopPolling();this.imageZoom?.stopDraw();this.frames?.close();this.referencesVideo?.close();this.outpaint?.close();this.panorama?.close();if(this.paintout?.owner===this)this.paintout.close();this.disposePopovers?.();}
   async graph(){
     try{const graph=await this.imageGraph(this.job?.config||this.config());if(typeof this.app.loadApiJson!=="function")throw new Error("Update ComfyUI to open this image graph.");const original=(this.app.rootGraph||this.app.graph)?.serialize?.();if(!original)throw new Error("Your current graph could not be backed up.");try{await this.app.loadApiJson(graph,"Zura Image · "+Date.now()+".json");}catch(e){await this.app.loadGraphData(original);throw e;}this.studio.close();}catch(e){this.message(e.message);}
   }

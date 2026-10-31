@@ -384,3 +384,8 @@
 #genj-studio .zc-browser-connection small,#genj-studio .zc-browser-connection span{color:var(--gs-muted);font-size:11px;line-height:1.5;overflow-wrap:anywhere}
 #genj-studio .zc-browser-connection>button{flex:0 0 auto;min-height:36px;padding:8px 12px}
 @media(max-width:600px){#genj-studio .zc-browser-connection{flex-wrap:wrap;gap:12px}}
+
+/* One model library, accessible without leaving the canvas. */
+#genj-studio .zc-global-models{position:relative}
+#genj-studio .zc-global-models>summary{display:flex;align-items:center;min-height:36px;padding:8px 12px;box-sizing:border-box;color:var(--zc-text);cursor:pointer;list-style:none}
+#genj-studio .zc-global-models>.zc-tool-panel{position:absolute;right:0;left:auto;top:calc(100% + 10px);z-index:100;width:min(420px,calc(100vw - 32px));max-height:calc(100dvh - 110px);overflow:auto;padding:20px;background:var(--gs-panel);border:1px solid var(--gs-line);border-radius:12px;box-shadow:0 12px 36px #0005}

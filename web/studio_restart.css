@@ -1,0 +1,106 @@
+#genj-studio .zrn-restart-wrap {
+  position: relative;
+  display: inline-flex;
+  flex: 0 0 auto;
+}
+
+/* The shared header owns starting a new task; page-local duplicates stay hidden. */
+#genj-studio #zc-new,
+#genj-studio #gs-new,
+#genj-studio #zps-new,
+#genj-studio wa-dropdown-item[value="new"],
+#genj-studio .zpc-page [data-new] {
+  display: none !important;
+}
+
+#genj-studio .zrn-restart {
+  min-height: 36px;
+  padding: 8px 12px;
+  border: 1px solid var(--gs-line, #383838);
+  border-radius: 7px;
+  background: transparent;
+  color: var(--zc-text, #f2f2f2);
+  font-size: 12px;
+  font-weight: 550;
+  white-space: nowrap;
+}
+
+#genj-studio .zrn-restart:hover:not(:disabled) {
+  background: var(--zc-hover, #303030);
+}
+
+#genj-studio .zrn-restart:focus-visible,
+#genj-studio .zrn-restart-confirm button:focus-visible {
+  outline: 2px solid var(--gs-focus, #d7ff50);
+  outline-offset: 2px;
+}
+
+#genj-studio .zrn-restart-confirm {
+  position: absolute;
+  z-index: 40;
+  top: calc(100% + 8px);
+  right: 0;
+  width: min(320px, calc(100vw - 32px));
+  padding: 14px;
+  border: 1px solid var(--gs-line, #383838);
+  border-radius: 10px;
+  background: var(--gs-panel, #1b1b1b);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.3);
+  color: var(--zc-text, #f2f2f2);
+}
+
+#genj-studio .zrn-restart-confirm p {
+  margin: 0 0 12px;
+  color: var(--gs-muted, #ababab);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+#genj-studio .zrn-restart-confirm > div {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+#genj-studio .zrn-restart-confirm button {
+  min-height: 34px;
+  padding: 8px 10px;
+  border: 1px solid var(--gs-line, #383838);
+  border-radius: 7px;
+  background: transparent;
+  color: var(--zc-text, #f2f2f2);
+  font-size: 12px;
+}
+
+#genj-studio .zrn-restart-confirm button:hover:not(:disabled) {
+  background: var(--zc-hover, #303030);
+}
+
+#genj-studio .zrn-restart-confirm [data-cancel-reset] {
+  border-color: color-mix(in srgb, var(--gs-error, #e77e70) 58%, var(--gs-line, #383838));
+  color: var(--gs-error, #e77e70);
+}
+
+@media (max-width: 700px) {
+  #genj-studio .zrn-restart {
+    min-height: 44px;
+    padding-inline: 10px;
+  }
+
+  #genj-studio .zrn-restart-confirm {
+    position: fixed;
+    top: 8px;
+    right: 8px;
+    left: 8px;
+    width: auto;
+  }
+
+  #genj-studio .zrn-restart-confirm > div {
+    flex-direction: column-reverse;
+  }
+
+  #genj-studio .zrn-restart-confirm button {
+    min-height: 44px;
+    width: 100%;
+  }
+}

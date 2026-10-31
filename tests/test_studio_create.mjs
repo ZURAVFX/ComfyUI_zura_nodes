@@ -9,6 +9,7 @@ import {ClipTrimmer} from '../web/studio_trim.js';
 import {clipLength,recoverClipLength} from '../web/studio_length.js';
 import {stageProgress} from '../web/studio_progress.js';
 import {OpeningLoraControl} from '../web/studio_opening_loras.js';
+import {installStudioRestartNavigation} from '../web/studio_restart.js';
 
 const {document,window}=parseHTML('<html><body></body></html>');
 // This DOM fixture checks navigation and state, not canvas pixels.
@@ -47,7 +48,7 @@ const calls=[];let history={},queue={queue_running:[],queue_pending:[]},reject=f
 const apiEvents=new Map();
 const api={apiURL:p=>p,addEventListener(name,handler){const previous=apiEvents.get(name);apiEvents.set(name,event=>{previous?.(event);handler(event);});},fetchApi:async(path,options)=>{if(path==='/upload/image'){calls.push({path});return {ok:true,json:async()=>({name:'ref-'+calls.length+'.png',subfolder:'zura_images/references'})};}const body=options?.body?JSON.parse(options.body):undefined;calls.push({path,body});if(path.startsWith('/object_info/')){const name=path.split('/').at(-1);return {ok:true,json:async()=>({[name]:info[name]})};}if(path==='/prompt'){if(reject)return {ok:false,status:400,json:async()=>({error:{message:'Model failed validation'}})};queue.queue_pending=[[0,'own-run']];return {ok:true,json:async()=>({prompt_id:'own-run'})};}if(path.startsWith('/history/'))return {ok:true,json:async()=>history};if(path==='/queue'&&!body)return {ok:true,json:async()=>queue};return {ok:true,json:async()=>({})};}};
 const app={};
-const context={document,window,localStorage,api,app,CreativeWorkspace,ContentDetection,ClipTrimmer,clipLength,recoverClipLength,stageProgress,setTimeout,clearTimeout,setInterval,clearInterval,crypto:globalThis.crypto,URLSearchParams,AbortController,FormData};
+const context={installStudioRestartNavigation,document,window,localStorage,api,app,CreativeWorkspace,ContentDetection,ClipTrimmer,clipLength,recoverClipLength,stageProgress,setTimeout,clearTimeout,setInterval,clearInterval,crypto:globalThis.crypto,URLSearchParams,AbortController,FormData};
 vm.createContext(context);
 const source=fs.readFileSync(new URL('../web/studio.js',import.meta.url),'utf8').replace(/^import .*;\r?\n/gm,'').replace(/^export /gm,'').split('app.registerExtension({')[0];
 vm.runInContext(source+'\nthis.Studio=ArtistStudio;',context);
@@ -73,7 +74,7 @@ assert.equal(studio.$('live-preview-image').getAttribute('src'),'data:image/webp
 studio.project.phase='done';studio.renderLiveH3Preview(false);
 assert.equal(studio.$('live-preview').hidden,true,'Live samples are hidden after the render completes');
 studio.project=null;studio.config.engine='wan';
-assert.equal(studio.container.dataset.workspace,'home');
+assert.equal(studio.container.dataset.workspace,'video','Studio opens directly in the working video canvas');
 assert.equal(studio.container.querySelectorAll('#gs-primary').length,1);
 assert.ok(studio.$('primary').closest('.gs-composer'));
 assert.ok(studio.container.querySelector('.gs-settings').closest('.zc-video-settings'));
@@ -103,7 +104,7 @@ studio.config.engine=originalEngine;studio.config.workflow_mode=originalMode;ui.
 const workflowMenu=ui.videoComposer.task;
 assert.equal(workflowMenu.tagName,'DETAILS');
 assert.equal(workflowMenu.querySelector('select').hidden,true,'OS-native workflow dropdown is hidden behind the styled menu');
-assert.equal(workflowMenu.querySelectorAll('[role="menuitemradio"]').length,9);
+assert.equal(workflowMenu.querySelectorAll('[role="menuitemradio"]').length,10);
 assert.ok(workflowMenu.querySelector('[data-workflow="outpaint"]'),'Frame extension is available as a preview workflow');
 assert.equal(workflowMenu.querySelector('[data-workflow="swap"]').getAttribute('aria-checked'),'true');
 const removedInputs=[],savedRemoveInput=studio.removeInput;studio.removeInput=type=>removedInputs.push(type);
@@ -342,6 +343,8 @@ const ids=[...studio.container.querySelectorAll('[id]')].map(n=>n.id);assert.equ
 // Image review is an explicit, local step before motion and video generation.
 const flow=new context.Studio();
 const modelPicker=flow.container.querySelector('#zc-video-model');modelPicker.value='h3';modelPicker.onchange({target:modelPicker});while(flow.busy)await new Promise(resolve=>setTimeout(resolve,1));assert.equal(flow.config.engine,'h3','The composer model picker updates the existing workflow configuration');
+assert.equal(flow.creative.videoComposer.model.hidden,false,'Choosing H3 must keep the video model selector visible at the image stage');
+assert.equal(flow.container.querySelector('#zc-video-model').disabled,false,'Video model selection remains usable before image approval');
 flow.config={...originalConfig};
 flow.source={id:'flow-source',duration:2,has_audio:true,url:'/source.mp4'};flow.references=[{id:'flow-ref',url:'/ref.png'}];
 flow.project={id:'guided-flow',phase:'opening',config:{...flow.config},review:'shot',approval:'prep',prepared_key:'prep',opening_key:'image-one',opening_input:{file:'one.png'},opening_url:'/one.png'};
@@ -406,13 +409,22 @@ navUi.frames.wanHighLoras.setValue([{name:'high.safetensors',strength:1,confirm_
 await navUi.frames.patchLoras({model:{}},navUi.frames.config());assert.deepEqual(phases,['wan22_high','wan22_low']);
 assert.equal(navUi.frames.config().custom_loras[0].confirm_unknown,false,'Changing the model requires new compatibility confirmation');
 navUi.frames.loras.setValue([]);navUi.frames.wanHighLoras.setValue([]);navUi.frames.wanLowLoras.setValue([]);navUi.frames.$('engine').value='h3';navUi.frames.$('engine').dispatchEvent(new window.Event('change'));
+navUi.frames.$('engine').value='ltx';navUi.frames.render();assert.equal(navUi.frames.$('two-stage-control').hidden,false);
+navUi.frames.$('two-stage').checked=true;navUi.frames.$('two-stage').dispatchEvent(new window.Event('change'));assert.equal(navUi.frames.config().twoStage,true);assert.equal(navUi.frames.config().fast,false);
+navUi.frames.$('fast').checked=true;navUi.frames.$('fast').dispatchEvent(new window.Event('change'));assert.equal(navUi.frames.config().twoStage,false);assert.equal(navUi.frames.config().fast,true,'Fast and two-stage are distinct options');
+navUi.frames.$('engine').value='h3';navUi.frames.render();assert.equal(navUi.frames.$('two-stage-control').hidden,true);assert.equal(navUi.frames.config().twoStage,false);
 task.value='swap';task.dispatchEvent(new window.Event('change'));assert.equal(navUi.mode,'video');assert.equal(navUi.frames.page.hidden,true);assert.equal(navStudio.container.querySelector('.gs-workspace').hidden,false);
 while(navStudio.busy)await new Promise(resolve=>setTimeout(resolve,1));
 for(const mode of ['home','image','video']){
   navUi.show('frames');navStudio.container.querySelector(`.zc-nav [data-space="${mode}"]`).click();assert.equal(navUi.mode,mode);assert.equal(navUi.frames.page.hidden,true,mode+' must hide the frame page');
 }
 navUi.show('frames');navStudio.render();assert.equal(task.value,'frames','Legacy repaints cannot reset the current workflow selection');task.value='camera';task.dispatchEvent(new window.Event('change'));
-assert.equal(navUi.mode,'video');assert.equal(navStudio.container.querySelectorAll('select[aria-label="Video workflow"]').length,1);assert.equal(task.closest('.zc-task-control').previousElementSibling,navUi.videoComposer.imageModel,'The selector returns beside the model');assert.equal(navStudio.config.workflow_mode,'camera','The same workflow control exits frames and selects the intended recipe');assert.equal(navUi.frames.page.hidden,true);
+assert.equal(navUi.mode,'panorama');assert.equal(navStudio.container.querySelectorAll('select[aria-label="Video workflow"]').length,1);assert.equal(task.closest('.zc-task-control').previousElementSibling,navUi.panorama.page.querySelector('.zpc-model'),'The selector stays beside the camera model');assert.equal(task.value,'camera');assert.equal(navUi.frames.page.hidden,true);task.value='swap';task.dispatchEvent(new window.Event('change'));assert.equal(navUi.mode,'video','The camera workspace has the same way back to character video');
+navUi.show('panorama');
+navUi.panorama.status={ready:true};navUi.panorama.state={source:{id:'fixture-source',name:'Camera source',duration:2},geometry:{ready:true},camera:'native-state'};navUi.panorama.render();
+assert.equal(navUi.panorama.$('generate').textContent,'Choose camera angle','Preparing geometry must not silently approve the neutral camera');
+let cameraOpened=false;const editCamera=navUi.panorama.editCamera;navUi.panorama.editCamera=async()=>{cameraOpened=true;};await navUi.panorama.generate();assert.equal(cameraOpened,true,'The next primary action opens the camera editor before queuing a warp');navUi.panorama.editCamera=editCamera;
+navUi.panorama.state={};navUi.panorama.render();navUi.show('video');
 navUi.show('frames');assert.equal(navUi.frames.assets.first.file,'retained-first.png');assert.equal(navUi.frames.$('prompt').value,'A slow camera move');
 task.value='references';task.dispatchEvent(new window.Event('change'));
 assert.equal(navUi.mode,'references');assert.equal(navUi.referencesVideo.page.hidden,false);assert.equal(navUi.frames.page.hidden,true);
@@ -532,6 +544,20 @@ relightUi.lookMode='ready';relightUi.readyAsset={id:'lighting',url:'/light.png'}
 assert.doesNotMatch(relightUi.$('resolution').querySelector('option[value="1280"]').textContent,/H3/,'Relight resolution must never claim H3');
 assert.doesNotMatch(relightUi.$('action-note').textContent,/H3|5 seconds/,'Long relight should not show H3 limits');
 assert.equal(relightUi.container.querySelector('#zc-video-model').value,'wan21','The model selector reflects the actual relight model');
+// Backwards step navigation must change the real preview and active step,
+// even when the project already has a finished take.
+relightUi.project={id:'nav-completed',phase:'done',opening_input:'light.png',opening_url:'/light.png',results:[{url:'/finished.mp4'}],actions:[]};
+relightUi.render();
+relightUi.container.querySelector('[data-step="1"]').click();
+assert.equal(relightUi.navigationStep,1);
+assert.equal(relightUi.$('opening').getAttribute('src'),'/light.png');
+assert.equal(relightUi.$('player').hidden,true);
+assert.equal(relightUi.container.querySelector('[data-step="1"]').getAttribute('aria-current'),'step');
+relightUi.container.querySelector('[data-step="0"]').click();
+assert.equal(relightUi.navigationStep,0);
+assert.equal(relightUi.$('player').src,'/source.mp4');
+assert.equal(relightUi.$('opening').hidden,true);
+relightUi.restartNavigation.dispose();
 relightUi.creative.close();
 // Choosing the original HDR source frame needs no dummy reference. The source
 // is reviewed first; only the next explicit action approves it and reads the
@@ -560,3 +586,5 @@ assert.equal(hdrCalls.filter(x=>x.path.endsWith('/hdr-source-opening')).length,1
 assert.ok(!hdrCalls.some(x=>x.path==='/prompt'),'The flow does not start image or video generation');
 api.fetchApi=priorFetch;hdrFlow.creative.close();
 console.log('Reference upload/limits, safe history clearing/undo, saved theme and exact dimensions, Image/Video home, state preservation, native recipe readiness, prompt/action, targeted cancel, history and error recovery pass.');
+
+navUi.panorama?.close();

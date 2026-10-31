@@ -2586,6 +2586,8 @@ def register():
         register_hdr_long(routes, response, server._zura_hdr_long_preview)
     from .outpaint_jobs import register as register_outpaint_jobs
     register_outpaint_jobs(studio, routes, response)
+    from .panorama_routes import register as register_panorama
+    register_panorama(studio, routes, response, check_asset)
 
     @routes.get("/zura/studio/loras")
     @routes.get("/genj/studio/loras")

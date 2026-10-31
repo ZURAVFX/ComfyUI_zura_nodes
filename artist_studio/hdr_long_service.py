@@ -30,6 +30,21 @@ def check_long_setup(mode, output):
         raise ValueError('Longer HDR setup is incomplete. '+'. '.join(parts)+'. Open HDR model setup for installation guidance.')
 
 
+def section_frames_for(mode, requested=121):
+    """Normalise a section choice; SDR chunks still obey the pixel budget."""
+    if requested is not None and type(requested) is not int:
+        raise ValueError('Choose an available HDR section setting.')
+    if mode=='sdr':
+        if requested not in (None,121):
+            raise ValueError('Choose an available HDR section setting.')
+        return 121
+    if mode=='native':
+        if requested not in (None,25,121):
+            raise ValueError('Choose an available HDR section setting.')
+        return 25 if requested==25 else 121
+    raise ValueError('Choose SDR to HDR or HDR to HDR.')
+
+
 class HDRLongService:
     def __init__(self, server, store, check_asset, output_root, *, create_sdr=None, create_native=None, check_setup=None):
         from .hdr_chunk_native_job import create_sdr_job, create_native_job
@@ -67,9 +82,7 @@ class HDRLongService:
         if not isinstance(body,dict):raise ValueError('Choose HDR conversion settings.')
         mode=body.get('mode')
         if mode not in ('sdr','native'):raise ValueError('Choose SDR to HDR or HDR to HDR.')
-        section_frames=body.get('section_frames',121)
-        if type(section_frames) is not int or section_frames not in ((25,121) if mode=='native' else (121,)):
-            raise ValueError('Choose an available HDR section setting.')
+        section_frames=section_frames_for(mode,requested=body.get('section_frames'))
         request_id=body.get('request_id')
         if request_id is not None and (not isinstance(request_id,str) or not re.fullmatch(r'[a-f0-9]{32}',request_id)):
             raise ValueError('Invalid HDR request ID.')

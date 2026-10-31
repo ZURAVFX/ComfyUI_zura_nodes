@@ -22,6 +22,7 @@ adapter=importlib.import_module('ComfyUI_zura_nodes.artist_studio.hdr_chunk_comf
 paintout=importlib.import_module('ComfyUI_zura_nodes.paintout.paintout')
 sdr=importlib.import_module('ComfyUI_zura_nodes.artist_studio.hdr_studio')
 loras=importlib.import_module('ComfyUI_zura_nodes.artist_studio.custom_loras')
+chunks=importlib.import_module('ComfyUI_zura_nodes.artist_studio.hdr_chunks')
 
 
 class SimulatedQueue:
@@ -91,6 +92,26 @@ class HDRNativeLongJobTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual([g['zura_hdr_source']['inputs']['frame_count'] for g in queue.graphs],[121,9])
             self.assertEqual([g['zura_hdr_stage_chunk']['inputs']['images'] for g in queue.graphs],[['hdr_unpad_raster',0]]*2)
             with zipfile.ZipFile(result['files'][0]) as archive:self.assertEqual(len(archive.namelist()),122)
+
+    async def test_1080p_25_frame_sdr_job_automatically_plans_two_bounded_sections(self):
+        with tempfile.TemporaryDirectory() as root:
+            (Path(root)/'genj'/'hdr').mkdir(parents=True)
+            queue=SimulatedQueue();server=types.SimpleNamespace(prompt_queue=queue)
+            details={'width':1920,'height':1080,'fps':24.,'has_audio':False,'output':'hlg_video'}
+            def graph(asset,body,check):
+                return {'hdr_unpad_raster':{'class_type':'stub','inputs':{}}},details
+            with patch.object(native,'staging_root',return_value=Path(root)/'stage'), \
+                 patch.object(sdr,'build_asset_graph',side_effect=graph), \
+                 patch.object(paintout,'describe',return_value={'count':25,'width':1920,'height':1080}), \
+                 patch.object(native.shutil,'disk_usage',return_value=types.SimpleNamespace(free=2**40,st_dev=1)), \
+                 patch.object(native.subprocess,'run',return_value=types.SimpleNamespace(returncode=0,stdout='libx264 libx265')), \
+                 patch.object(importlib.import_module('ComfyUI_zura_nodes.artist_studio.hdr_package'),'preflight_archive'):
+                job,summary=native.create_sdr_job(server,{'asset_kind':'video'},
+                    {'mode':'sdr','start_frame':0,'frame_count':25,'output':'hlg_video'},
+                    lambda _:Path(root)/'source.mp4',root,ffmpeg='ffmpeg')
+            self.assertEqual(summary['chunks'],2)
+            self.assertEqual(job.store.plan,[chunks.HDRChunk(0,17,0),chunks.HDRChunk(9,16,8)])
+            self.assertEqual(queue.submissions,0)
 
     async def test_insufficient_staging_disk_fails_before_queueing(self):
         with tempfile.TemporaryDirectory() as root:

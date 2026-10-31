@@ -60,7 +60,7 @@ Manrope variable, bundled locally under the SIL Open Font License, with system s
 
 ## Layout
 
-The app stays within the Comfy window. Video uses a compact inspector beside a large real-media canvas and a prompt composer at the bottom. Only the active inspector and long result lists scroll. Image generation keeps the canvas, optional settings rail, references and prompt together. Home offers clear Image and Video entry points. Graph view remains in the header.
+The app stays within the Comfy window. Video uses a compact inspector beside a large real-media canvas and a prompt composer at the bottom. Only the active inspector and long result lists scroll. Image generation keeps the canvas, optional settings rail, references and prompt together. Studio opens directly to Video, with Image and Video in the common header and model downloads beside them. Graph view remains in the header.
 
 ## Components
 
@@ -132,3 +132,8 @@ Bundles are local; no CDN, external font or paid component is required. Native
 field IDs and events remain intact. Existing text hints remain if tooltips fail.
 The video composer has one surface, no duplicate visible field label, and a
 horizontal footer linking the prerequisite message to the primary action.
+
+
+## Shared navigation, 31 October 2026
+
+The latest user brief removes the Home landing step. Image and Video remain in the header, with model downloads alongside them. Convert to HDR is a video workflow in the same task selector, not another top-level section. A shared Start over control returns the active mode to its empty source stage, retaining saved results and other modes. The Panorama camera editor uses native interactive geometry with explicit Apply and Cancel; its full-motion warp is reviewed before rendering.

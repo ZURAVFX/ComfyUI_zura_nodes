@@ -23,7 +23,7 @@ from .hdr_chunk_preview import export_sdr_preview
 from .hdr_native_studio import build_asset_graph
 
 
-def create_native_job(server, asset, body, check_asset, output_root, *, ffmpeg=None, max_chunk_frames=121, overlap=8, anchor_strength=None, anchor_mode='guide', _graph_builder=None, _image_node='trim_raster', _prefix='native'):
+def create_native_job(server, asset, body, check_asset, output_root, *, ffmpeg=None, max_chunk_frames=121, overlap=8, anchor_strength=None, anchor_mode='guide', _graph_builder=None, _image_node='trim_raster', _prefix='native', _planning_mode='native'):
     """Validate a whole selection and construct a bounded sequential job."""
     from ..paintout.paintout import describe
     manifest=check_asset(asset)
@@ -40,7 +40,7 @@ def create_native_job(server, asset, body, check_asset, output_root, *, ffmpeg=N
     else:raise ValueError('Choose HDR video or an EXR sequence.')
     info=describe(str(source))
     if start+count>info['count']:raise ValueError('The selected range extends past the source.')
-    plan=plan_chunks(start,count,info['width'],info['height'],overlap=overlap,max_frames=max_chunk_frames)
+    plan=plan_chunks(start,count,info['width'],info['height'],overlap=overlap,max_frames=max_chunk_frames,mode=_planning_mode)
     chunk_body=dict(body,start_frame=plan[0].start,frame_count=plan[0].count)
     builder=_graph_builder or build_asset_graph
     first_graph,details=builder(asset,chunk_body,check_asset)
@@ -118,9 +118,11 @@ def create_native_job(server, asset, body, check_asset, output_root, *, ffmpeg=N
 
 
 def create_sdr_job(server, asset, body, check_asset, output_root, *, ffmpeg=None, max_chunk_frames=121, overlap=8, anchor_strength=None):
-    """Private SDR-to-HDR chunk prototype; no Studio route is registered."""
+    """Build a frame-exact SDR-to-HDR job using bounded overlapping sections."""
+    if body.get('mode','sdr')!='sdr':
+        raise ValueError('The SDR conversion job only accepts SDR mode.')
     if asset.get('asset_kind')!='video':raise ValueError('Choose an SDR source video.')
     from .hdr_studio import build_asset_graph as build_sdr_graph
     return create_native_job(server,asset,body,check_asset,output_root,ffmpeg=ffmpeg,
-        max_chunk_frames=max_chunk_frames,overlap=overlap,anchor_strength=anchor_strength,anchor_mode='i2v',_graph_builder=build_sdr_graph,
+        max_chunk_frames=max_chunk_frames,overlap=overlap,anchor_strength=anchor_strength,anchor_mode='i2v',_planning_mode='sdr',_graph_builder=build_sdr_graph,
         _image_node='hdr_unpad_raster',_prefix='sdr')

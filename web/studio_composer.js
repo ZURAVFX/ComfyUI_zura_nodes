@@ -19,7 +19,7 @@ export const composerIcons={
   takes:svg('<rect x="3" y="7" width="18" height="14" rx="2"/><path d="M7 3h10m-8 9 6 3-6 3z"/>'),
   download:svg('<path d="M12 3v12m-4-4 4 4 4-4M4 17v4h16v-4"/>'),
 };
-export const VIDEO_WORKFLOWS=[['swap','Character replacement'],['viewport','Viewport to final'],['camera','Change camera angle'],['relight','Relight'],['paintout','Paintout / clean plate'],['inpaint','Inpaint · preview'],['outpaint','Frame extension · preview'],['frames','First & last frame'],['references','Reference to video']];
+export const VIDEO_WORKFLOWS=[['swap','Character replacement'],['viewport','Viewport to final'],['camera','Change camera angle'],['relight','Relight'],['paintout','Paintout / clean plate'],['inpaint','Inpaint · preview'],['outpaint','Frame extension · preview'],['hdr','Convert to HDR'],['frames','First & last frame'],['references','Reference to video']];
 
 /** A compact surface over the existing controls, never a second configuration. */
 export class VideoComposer {
@@ -90,6 +90,9 @@ export class VideoComposer {
     this.composer=composer;this.ltxOutput=new MainLTXDelivery(studio,workspace.api,outputTools);this.sync();
   }
   selectWorkflow(value){
+    this.studio.navigationStep=null;
+    if(value==='camera'){this.workspace.show('panorama');return;}
+    if(value==='hdr'){this.workspace.openHDR();return;}
     if(value==='inpaint'){this.workspace.show('paintout');this.workspace.paintout.setMode('inpaint');this.syncWorkflow();return;}
     if(value==='paintout'&&this.workspace.paintout?.state.mode==='inpaint'){this.workspace.show('paintout');this.workspace.paintout.setMode('targeted');this.syncWorkflow();return;}
     if(['frames','references','paintout','outpaint'].includes(value)){this.workspace.show(value);return;}
@@ -102,6 +105,11 @@ export class VideoComposer {
     }
   }
   mountWorkflow(mode){
+    if(mode==='hdr'){
+      const tool=this.studio.hdrTool,anchor=tool?.root?.querySelector('.zh-model')||tool?.root?.querySelector('.zh-composer-heading strong');
+      if(anchor){anchor.after(this.task);this.syncWorkflow();}
+      return;
+    }
     // Early Paintout stages hide the composer. Keep the shared task selector
     // in its heading so the artist can always return to another workflow.
     if(mode==='paintout'){
@@ -114,14 +122,15 @@ export class VideoComposer {
     // Reuse the same control and handler in both composers. Its place in the
     // tool row stays immediately after the model, including endpoint video.
     const select=this.task.querySelector('select'),focused=this.root.ownerDocument.activeElement===select;
-    const model=mode==='frames'?this.workspace.frames.page.querySelector('.zf-model'):mode==='references'?this.workspace.referencesVideo.page.querySelector('.zf-model'):mode==='paintout'?this.workspace.paintout.page.querySelector('.zf-model'):mode==='outpaint'?this.workspace.outpaint.page.querySelector('.zo-model'):this.imageModel;
+    const model=mode==='frames'?this.workspace.frames.page.querySelector('.zf-model'):mode==='references'?this.workspace.referencesVideo.page.querySelector('.zf-model'):mode==='paintout'?this.workspace.paintout.page.querySelector('.zf-model'):mode==='outpaint'?this.workspace.outpaint.page.querySelector('.zo-model'):mode==='panorama'?this.workspace.panorama.page.querySelector('.zpc-model'):this.imageModel;
     if(model.nextElementSibling!==this.task)model.after(this.task);
     this.syncWorkflow();
     if(focused)select.focus({preventScroll:true});
   }
   syncWorkflow(){
-    const independent=['frames','references','paintout','outpaint'].includes(this.workspace.mode),select=this.task.querySelector('select');
+    const independent=['frames','references','paintout','outpaint','panorama','hdr'].includes(this.workspace.mode),select=this.task.querySelector('select');
     select.value=independent?this.workspace.mode:this.studio.config.workflow_mode==='motion'?'swap':this.studio.config.workflow_mode;
+    if(this.workspace.mode==='panorama')select.value='camera';
     if(this.workspace.mode==='paintout'&&this.workspace.paintout?.state.mode==='inpaint')select.value='inpaint';
     select.disabled=!independent&&(this.studio.busy||this.studio.project?.phase==='working');
     for(const option of select.querySelectorAll('option')){
@@ -168,7 +177,10 @@ export class VideoComposer {
     const select=this.root.querySelector('#zc-video-model'),radios=Array.from(this.root.querySelectorAll('input[name="gs-engine"]')).filter(r=>!r.closest('label').hidden);
     const key=radios.map(r=>r.value+':'+r.disabled).join('|');
     if(select.dataset.choices!==key){select.replaceChildren();for(const radio of radios){const option=document.createElement('option');option.value=radio.value;option.textContent={local:'LTX 2.5',h3:'MiniMax H3',wan:'Wan 2.2',wan2:'Wan Animate 2',wan21:'Wan 2.1',seedance:'Seedance'}[radio.value];option.disabled=radio.disabled;select.append(option);}select.dataset.choices=key;}
-    select.value=s.config.workflow_mode==='relight'&&s.config.relight_engine==='wan21'?'wan21':s.config.engine;select.disabled=working;this.model.hidden=stage!=='video';this.imageModel.hidden=stage==='video';
+    select.value=s.config.workflow_mode==='relight'&&s.config.relight_engine==='wan21'?'wan21':s.config.engine;select.disabled=working;
+    // Choosing a video engine can return the shot to its starting-image step.
+    // Keep that engine selector mounted so the artist can always switch back.
+    this.model.hidden=false;this.model.title='Video model · available throughout this workflow';this.imageModel.hidden=stage==='video';
     this.syncOpeningModel(working);
     this.openingLoras.sync(stage);
     this.syncWorkflow();

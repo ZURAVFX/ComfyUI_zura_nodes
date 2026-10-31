@@ -795,3 +795,14 @@ Opening HDR conversion from an LTX first/last-frame result now explicitly select
 The frame-extension result now records whether its delivered file is SDR or HLG, and its HDR handoff selects the corresponding processing mode instead of retaining a previous choice. Invalidation clears the old result reference. UI tests cover both mode transitions; the HDR route remains experimental and requires visual qualification.
 Model setup now recognises additional Zura-owned clip preparation, frame-hold, HDR loading and outpaint nodes. When those nodes are missing it links to the Zura Nodes update and restart instructions instead of listing them as unmapped. The model setup UI regression test passes; installing custom node packs automatically is still outstanding.
 Short and long frame-extension review keys, including experimental HDR, now include the exact selected duration as well as the rounded frame count. Selections with different fractional endpoints require separate review even when they produce the same number of frames. Existing pre-change reviews will need to be reviewed again after updating. Focused planning, queue, render and media tests pass.
+
+
+## Local checkpoint, 31 October 2026: navigation, Panorama and LTX audit
+
+Implemented the shared per-workspace reset, guarded backwards step navigation,
+persistent H3 video selection, integrated Convert to HDR with timeline trimming
+and automatic SDR sections, native Panorama camera popout/cache/render path,
+and optional real two-stage LTX first/last-frame recipe. Local installation is
+backed up. No public release was made. Validation and the bounded remaining
+checks are recorded in `LOCAL_UPDATE_2026-10-31.md`; the current two-stage
+capability map is `LTX_25_TWO_STAGE_MATRIX.md`.

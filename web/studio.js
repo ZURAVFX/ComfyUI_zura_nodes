@@ -8,6 +8,7 @@ import { clipLength, recoverClipLength } from "./studio_length.js";
 import { ShotComparison } from "./studio_compare.js";
 import { ClipTrimmer } from "./studio_trim.js";
 import { CreativeWorkspace } from "./studio_create.js";
+import {installStudioRestartNavigation} from "./studio_restart.js";
 import { installNativeSamplePreview } from "./studio_live_preview.js";
 import { StudioModelDownloads } from "./studio_model_download.js";
 import { PreviewZoom } from "./studio_preview_zoom.js";
@@ -225,6 +226,7 @@ class ArtistStudio {
     if(typeof api!=="undefined")api.addEventListener?.("minimax_h3_preview",event=>this.receiveH3Preview(event.detail||{}));
     this.bind();this.syncForm();
     if(typeof CreativeWorkspace!=="undefined")this.creative=new CreativeWorkspace(this,api,app);
+    if(this.creative&&typeof installStudioRestartNavigation!=="undefined")installStudioRestartNavigation(this);
   }
   comparisonTarget(url) {
     const p=this.project,source=p?.selected_url || this.sourcePlayback();
@@ -467,9 +469,8 @@ class ArtistStudio {
     this.container.addEventListener("keydown",event=>{if(event.key==="Escape"){this.$("canvas").classList.remove("is-expanded");this.updateFullscreenLabel();}});
     this.container.querySelectorAll("[data-length-mode]").forEach(button=>button.onclick=()=>this.chooseClipLength(button.dataset.lengthMode));
     this.container.querySelectorAll("[data-step]").forEach(button=>button.onclick=()=>{
-      const targets=[this.$("source-drop"),this.container.querySelector(".gs-look"),this.$("primary"),this.$("canvas")];
-      const controls=[this.$("source"),this.$(this.lookMode==="ready"?"ready":this.config.workflow_mode==="camera"?"camera_preset":"image_prompt"),this.$("primary"),null];
-      const step=Number(button.dataset.step);this.revealControl(targets[step],controls[step]);
+      const step=Number(button.dataset.step);
+      this.restartNavigation?.navigateStep(step);
     });
     this.$("image_prompt").addEventListener("input",()=>{if(this.config.workflow_mode==="relight"&&!this.busy)this.render();});
     this.$("prompt").addEventListener("input",()=>{if(this.config.workflow_mode==="relight"&&!this.busy)this.render();});
@@ -777,6 +778,7 @@ class ArtistStudio {
     return updated;
   }
   async graphView() {
+    if(this.creative?.mode==='panorama')return this.creative.panorama.graph();
     if(!this.project && (!this.source || !this.hasLook())){this.close();return;}
     await this.perform(async(epoch)=>{
       this.config=this.readConfig();
@@ -1580,6 +1582,14 @@ class ArtistStudio {
       else if(phase==="done"){description="Check the middle and end for camera drift and motion changes. The original audio is restored.";}
     }
     if(this.trimSeeking && this.source){video=this.sourcePlayback();opening=video?null:this.source.thumbnail_url;title="Trim your source";description=video?"Drag the edges to choose the range. Click the strip to find a frame.":"Preparing a playback preview.";}
+    if(this.navigationStep===0 && this.source){
+      video=this.sourcePlayback();opening=video?null:this.source.thumbnail_url;
+      title="Your source video";description="Choose your source and references. Your generated takes stay saved.";
+    }else if((this.navigationStep===1 || this.navigationStep===2) && p?.opening_url){
+      video=null;opening=p.opening_url;
+      title=relight?"Review your lighting frame":workflow==="camera"?"Review your camera still":"Review your starting frame";
+      description=this.navigationStep===1?"Review this image, or regenerate it from the original source.":"Adjust the video settings before generating another take.";
+    }
     this.$("preview-title").textContent=title;this.$("preview-description").textContent=description;
     const player=this.$("player"),image=this.$("opening");player.hidden=!video;image.hidden=!opening;
     image.alt=workflow==="camera"?"Changed camera view":"Starting frame for this shot";
@@ -1598,10 +1608,10 @@ class ArtistStudio {
     this.$("canvas").hidden=!!this.compareActive;
     if(this.compareActive)this.comparison.show(target.source,target.kind==="image"?target.result:this.compareResult||target.result,target.offset,target);
     const hasFrame=!!p?.opening_input,direct=this.directViewport()||this.headSwap();
-    const step=!hasAssets?0:phase==="done"||phase==="draft"?3:!direct&&this.composerStage()!=="video"?1:2;
+    const step=Number.isInteger(this.navigationStep)?this.navigationStep:!hasAssets?0:phase==="done"||phase==="draft"?3:!direct&&this.composerStage()!=="video"?1:2;
     const stageNames=workflow==="camera"?["Source","Camera still","Review & render","Result"]:["Source","Starting frame","Video","Result"],stageNotes=workflow==="camera"?["Add your video","Choose a new angle","Approve the view","Compare & download"]:["Video & references","Create & review","Settings & generation","Compare & download"];
     this.container.querySelectorAll("[data-step]").forEach(e=>{const index=Number(e.dataset.step);e.querySelector("strong").textContent=stageNames[index];e.querySelector("small").textContent=stageNotes[index];e.hidden=direct&&index===1;});
-    this.container.querySelectorAll("[data-step]").forEach(e=>{const current=Number(e.dataset.step)===step;e.classList.toggle("active",current);e.classList.toggle("complete",Number(e.dataset.step)<step);if(current)e.setAttribute("aria-current","step");else e.removeAttribute("aria-current");});
+    this.container.querySelectorAll("[data-step]").forEach(e=>{const current=Number(e.dataset.step)===step;e.classList.toggle("active",current);e.classList.toggle("complete",Number(e.dataset.step)<step);e.disabled=working||this.busy||Number(e.dataset.step)>=step;if(current)e.setAttribute("aria-current","step");else e.removeAttribute("aria-current");});
     if(p?.error && p.error!==this.dismissedError)this.message(p.error,true);
     const results=p?.results || [];this.$("results").hidden=!results.length;
     const fingerprint=JSON.stringify(results);
@@ -1648,6 +1658,7 @@ class ArtistStudio {
     if(!this.container.isConnected)document.body.appendChild(this.container);
     document.documentElement.classList.add("genj-open");this.render();
     this.creative?.open();
+    if(this.creative&&!this.restartNavigation&&typeof installStudioRestartNavigation!=="undefined")installStudioRestartNavigation(this);
     if(window.matchMedia?.("(min-width: 901px)")?.matches ?? true)this.container.scrollTop=0;
     try{
       this.modelStatus=await request("/status");this.syncForm();this.render();
@@ -1735,7 +1746,7 @@ class ArtistStudio {
     }catch(e){if(epoch===this.resetEpoch)this.message("Connection interrupted. Your job is saved. Reopen this view when ComfyUI reconnects.",true);}
     finally{if(epoch===this.resetEpoch)this.polling=false;}
   }
-  close(){this.nativeSamplePreview?.dispose();this.nativeSamplePreview=null;this.previewZoom?.stopDraw();this.hdrTool?.deactivate?.();this.creative?.close();this.comparison?.hide();this.trimTimeline?.close();this.$("canvas").classList.remove("is-expanded");if(document.fullscreenElement===this.$("canvas"))document.exitFullscreen?.().catch(()=>{});this.container.querySelectorAll("video,audio").forEach(media=>media.pause());this.container.remove();document.documentElement.classList.remove("genj-open");clearInterval(this.timer);}
+  close(){this.restartNavigation?.dispose();this.nativeSamplePreview?.dispose();this.nativeSamplePreview=null;this.previewZoom?.stopDraw();this.hdrTool?.deactivate?.();this.creative?.close();this.comparison?.hide();this.trimTimeline?.close();this.$("canvas").classList.remove("is-expanded");if(document.fullscreenElement===this.$("canvas"))document.exitFullscreen?.().catch(()=>{});this.container.querySelectorAll("video,audio").forEach(media=>media.pause());this.container.remove();document.documentElement.classList.remove("genj-open");clearInterval(this.timer);}
 }
 
 let registeredStudio;
@@ -1763,7 +1774,7 @@ app.registerExtension({
     installArtistLinkRendering(app);
     const css=document.createElement("link");css.rel="stylesheet";css.href=new URL("./studio.css",import.meta.url).href;document.head.appendChild(css);
     for(const path of ["./vendor/studio-components.css","./studio_components.css"]){const link=document.createElement("link");link.rel="stylesheet";link.href=new URL(path,import.meta.url).href;document.head.appendChild(link);}
-    for(const path of ["./studio_create.css","./studio_composer.css","./studio_outpaint.css","./paintout_studio/studio_paintout.css","./paintout_studio/paintout_integrated.css"]){const link=document.createElement("link");link.rel="stylesheet";link.href=new URL(path,import.meta.url).href;document.head.appendChild(link);}
+    for(const path of ["./studio_create.css","./studio_composer.css","./studio_panorama.css","./studio_outpaint.css","./paintout_studio/studio_paintout.css","./paintout_studio/paintout_integrated.css"]){const link=document.createElement("link");link.rel="stylesheet";link.href=new URL(path,import.meta.url).href;document.head.appendChild(link);}
     import("./vendor/studio-components.js").then(()=>{
       document.getElementById("genj-studio")?.classList.add("zc-components-ready");
       for(const tip of document.querySelectorAll("#genj-studio wa-tooltip")){document.getElementById(tip.getAttribute("for"))?.removeAttribute("title");}

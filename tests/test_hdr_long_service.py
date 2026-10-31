@@ -102,6 +102,14 @@ class HDRLongServiceTests(unittest.IsolatedAsyncioTestCase):
             await client.start({'mode':'native','source_id':'video','section_frames':25})
             await created[0].entered.wait();created[0].release.set();await client.jobs.tasks['e'*32]
 
+    async def test_sdr_section_size_is_automatic_and_bounded_downstream(self):
+        self.assertEqual(service.section_frames_for('sdr',requested=None),121)
+        self.assertEqual(service.section_frames_for('sdr',requested=121),121)
+        with self.assertRaisesRegex(ValueError,'section setting'):
+            service.section_frames_for('sdr',requested=25)
+        with self.assertRaisesRegex(ValueError,'section setting'):
+            service.section_frames_for('sdr',requested=121.0)
+
     async def test_http_start_status_and_cancellation(self):
         from aiohttp import web
         from aiohttp.test_utils import TestClient,TestServer

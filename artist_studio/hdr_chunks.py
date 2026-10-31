@@ -21,7 +21,30 @@ class HDRChunk:
     overlap: int
 
 
-def plan_chunks(start, count, width, height, overlap=8, max_frames=MAX_FRAMES):
+def chunk_capacity(width, height, max_frames=MAX_FRAMES, *, mode='native'):
+    """Largest padded 8n+1 window that fits the shared pixel budget."""
+    if mode not in ('native', 'sdr'):
+        raise ValueError('Choose SDR conversion or native HDR processing.')
+    maximum = 4096 if mode == 'sdr' else 2048
+    if any(type(v) is not int or v < 32 or v > maximum or v % 2 for v in (width, height)):
+        raise ValueError(f'Use even source dimensions from 32 to {maximum} pixels.')
+    if type(max_frames) is not int or not 9 <= max_frames <= MAX_FRAMES:
+        raise ValueError('The per-chunk limit must be 9–121 frames.')
+    if mode == 'sdr':
+        # Readiness and the actual SDR guide use this same 32-pixel raster.
+        from .hdr_prepare import sdr_frame_limit
+        capacity = sdr_frame_limit(width, height, max_frames)
+    else:
+        padded_width=max(512, math.ceil(width / 64) * 64)
+        padded_height=max(512, math.ceil(height / 64) * 64)
+        budget=min(max_frames, MAX_PIXEL_FRAMES // (padded_width * padded_height))
+        capacity=1 + 8 * ((budget - 1) // 8) if budget >= 9 else 0
+    if capacity < 9:
+        raise ValueError('The padded source exceeds the per-chunk memory budget.')
+    return capacity
+
+
+def plan_chunks(start, count, width, height, overlap=8, max_frames=MAX_FRAMES, *, mode='native'):
     """Return overlapping source ranges that fit the *padded* LTX budget.
 
     All offsets are absolute source-frame indices. A padded 8n+1 guide must
@@ -29,18 +52,9 @@ def plan_chunks(start, count, width, height, overlap=8, max_frames=MAX_FRAMES):
     """
     if type(start) is not int or start < 0 or type(count) is not int or not 1 <= count <= MAX_TOTAL_FRAMES:
         raise ValueError(f'Choose a non-negative start and 1–{MAX_TOTAL_FRAMES} frames.')
-    if any(type(v) is not int or v < 32 or v > 2048 or v % 2 for v in (width, height)):
-        raise ValueError('Use even source dimensions from 32 to 2048 pixels.')
     if type(overlap) is not int or overlap < 1:
         raise ValueError('Overlap must be a positive whole number.')
-    if type(max_frames) is not int or not 9 <= max_frames <= MAX_FRAMES:
-        raise ValueError('The per-chunk limit must be 9–121 frames.')
-    pw=max(512, math.ceil(width / 64) * 64)
-    ph=max(512, math.ceil(height / 64) * 64)
-    budget=min(max_frames, MAX_PIXEL_FRAMES // (pw * ph))
-    capacity=1 + 8 * ((budget - 1) // 8)
-    if capacity < 9:
-        raise ValueError('The padded source exceeds the per-chunk memory budget.')
+    capacity=chunk_capacity(width, height, max_frames, mode=mode)
     if count <= capacity:
         return [HDRChunk(start, count, 0)]
     # No frame may participate in more than two overlaps, including the last
