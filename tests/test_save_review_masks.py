@@ -141,7 +141,7 @@ class SaveReviewMaskTests(unittest.TestCase):
             genuine[:, 2:6, 5:10] = 1
             shot_id, _, *_ = self.save_fixture(tmp, genuine)
             class Stream:
-                width, height = 640, 480
+                width, height, frames = 640, 480, 1
             class Container:
                 streams = types.SimpleNamespace(video=[Stream()])
                 def __enter__(self):

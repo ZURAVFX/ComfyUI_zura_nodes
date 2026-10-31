@@ -58,6 +58,7 @@ def install_stubs():
     if _require_real("folder_paths") is None:
         _stub("folder_paths",
               get_filename_list=lambda *a, **k: [],
+              get_folder_paths=lambda *a, **k: [],
               get_input_directory=lambda: str(ROOT / "outputs" / "_v2_test_input"),
               get_output_directory=lambda: str(ROOT / "outputs" / "_v2_test_output"),
               get_temp_directory=lambda: str(ROOT / "outputs" / "_v2_test_temp"),

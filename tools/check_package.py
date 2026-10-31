@@ -17,6 +17,8 @@ module_version = next(ast.literal_eval(n.value) for n in tree.body if isinstance
 assert version == module_version, 'Update __version__ as well as pyproject.toml'
 assert Path('LICENSE').is_file()
 assert Path('THIRD_PARTY_NOTICES.md').is_file()
+assert Path('wan_animate2_mask.py').is_file(), 'Missing approved Animate 2 mask module'
+assert '.wan_animate2_mask import' in Path('__init__.py').read_text(encoding='utf-8'), 'Register the Animate 2 mask node'
 for asset in ('paintout/__init__.py', 'paintout/paintout.py', 'paintout/media.py', 'paintout/browser.py', 'paintout/attention.py', 'web/paintout.js', 'web/studio_paintout.js', 'web/studio_paintout.css', 'web/paintout_recipes.js', 'PAINTOUT.md'):
     assert Path(asset).is_file(), f'Missing paintout release asset: {asset}'
 for asset in ('studio_launchers.py', 'web/studio_launchers.js', 'web/studio_launchers.css',

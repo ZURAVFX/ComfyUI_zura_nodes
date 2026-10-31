@@ -7,6 +7,7 @@ import sys
 import types
 import unittest
 from unittest.mock import AsyncMock, patch
+from pathlib import Path
 
 from test_artist_studio import studio
 from ComfyUI_zura_nodes.artist_studio.availability import require_verified_setup, verified_setup
@@ -14,6 +15,10 @@ from ComfyUI_zura_nodes.artist_studio.availability import require_verified_setup
 # Load the native extensions before patch.dict snapshots sys.modules. Otherwise
 # leaving the first registered-route test drops numpy/scipy modules and a later
 # route registration tries to load their native extensions a second time.
+if "ComfyUI_zura_nodes.paintout" not in sys.modules:
+    paintout_package = types.ModuleType("ComfyUI_zura_nodes.paintout")
+    paintout_package.__path__ = [str(Path(__file__).resolve().parents[1] / "paintout")]
+    sys.modules[paintout_package.__name__] = paintout_package
 importlib.import_module("ComfyUI_zura_nodes.paintout.paintout")
 
 

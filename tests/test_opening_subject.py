@@ -71,6 +71,7 @@ class OpeningSubjectTests(fixture.unittest.TestCase):
         p = self.project()
         p['tracking_coverage'] = {'shots':[{'start':0, 'near_empty_ranges':[{'start':0,'end':48}]}]}
         controller = studio.Studio.__new__(studio.Studio)
+        controller.store = None
         controller.collect = lambda project: project
         with self.assertRaisesRegex(ValueError, 'source subject was not selected'):
             asyncio.run(controller.action(p, 'animate', {}))

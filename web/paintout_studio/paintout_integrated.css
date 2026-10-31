@@ -34,7 +34,7 @@
 #genj-studio .zp-page[data-editor-stage=render]>.zp-editor-timeline-host,
 #genj-studio .zp-page[data-editor-stage=render] #zps-scrubber{display:none!important}
 #genj-studio .zp-page[data-editor-stage=render]>.zf-composer{max-height:none;overflow:visible;padding:14px 18px;gap:8px}
-#genj-studio .zp-page[data-editor-stage=render] #zps-prompt{min-height:44px;height:44px;max-height:80px}
+#genj-studio .zp-page[data-editor-stage=render] #zps-prompt{flex:0 0 auto;box-sizing:border-box;min-height:80px!important;height:80px;max-height:160px;resize:vertical;overflow-y:auto}
 #genj-studio .zp-page .zps-start-mode{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;width:min(480px,100%);margin-block:8px}
 #genj-studio .zp-page .zps-start-mode>button{display:flex;flex-direction:column;gap:8px;min-height:88px;padding:16px;text-align:left;background:var(--gs-panel);color:var(--zc-text);border:1px solid var(--gs-line);border-radius:10px;cursor:pointer}
 #genj-studio .zp-page .zps-start-mode>button[aria-pressed=true]{background:var(--gs-selected);box-shadow:inset 0 0 0 1px var(--gs-accent)}

@@ -62,7 +62,7 @@ class WanCleanupTests(unittest.IsolatedAsyncioTestCase):
             node_replace_manager=types.SimpleNamespace(apply_replacements=lambda graph: None))
         self.obj.start_watcher = Mock()
         self.obj.resume_text = AsyncMock()
-        self.p = {'id': 'a' * 32, 'phase': 'working', 'config': studio.clean_config({'engine': 'wan'}),
+        self.p = {'id': 'a' * 32, 'phase': 'working', 'source': {'file': 'source.mp4', 'sha': 'source'}, 'config': studio.clean_config({'engine': 'wan'}),
             'actions': [{'id': '11111111-1111-4111-8111-111111111111', 'stage': 'wan_cleanup',
                 'state': 'waiting', 'created': time.time(), 'next_stage': 'wan',
                 'server_address': self.obj.server_address,

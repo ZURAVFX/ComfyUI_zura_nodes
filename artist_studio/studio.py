@@ -2232,6 +2232,7 @@ class Studio:
 
     async def action(self, p, stage, body):
         self.collect(p)
+        approve_opening = stage == "animate"
         # Existing H3 relight projects use Wan 2.1 for their next action.
         # Never alter the graph of an action already running.
         if p.get("actions") and p["actions"][-1]["state"] in ("waiting", "submitting", "queued", "running"):

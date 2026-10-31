@@ -48,7 +48,7 @@ class CreateLookTests(fixtures.unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(result['phase'],'opening');self.assertEqual(stages,['prepare','design'])
 
     async def test_direct_head_recipe_stays_out_of_image_generation(self):
-        c=s.Studio.__new__(s.Studio);c.collect=lambda p:p
+        c=s.Studio.__new__(s.Studio);c.collect=lambda p:p;c.store=Mock()
         p=fixtures.SharedEngineTests().project();p['actions']=[]
         p['config'].update(engine='h3',scope='head',h3_head_swap=True,remove_text=False)
         with self.assertRaises(ValueError):await c.action(p,'create_look',{'request_key':str(uuid.uuid4())})

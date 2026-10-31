@@ -1,5 +1,14 @@
 # Release notes
 
+## 1.3.38 - 31 October 2026
+
+- Add the approved Wan Animate 2 full-character masked preview, with a clear Keep original background or Replace character + background choice. Keep native model conditioning, expand and fill block masks, and lock source latents during sampling. No final RGB composite is used.
+- Reuse the reviewed source and selection, preserve original audio, hold the final frame to the model grid and export without stretching. The masked route has a real 49-frame Studio GPU integration test; inspect edges and occlusions on new shots.
+- Include the current OpenJutsu character workflows, integrated Paintout tools, LTX delivery controls and Studio media, progress and resolution fixes. Experimental features retain their preview labels and restrictions.
+- Preserve the public Wan 2.1 Relight fixes and the separately pinned standalone Paintout release workflow.
+- Put the displayed canvas image into Image 1 automatically when choosing Edit image, preserving additional references and avoiding duplicate uploads.
+- Give prompts more multiline writing space across image, video, paintout and frame extension, with resizing, keyboard focus and improved wrapping on smaller screens.
+
 ## 1.3.37 - 30 October 2026
 
 - Fix Wan 2.1 Relight being blocked by the H3 five-second limit and correct the model and resolution labels. Existing relight projects use Wan 2.1 for their next action; running jobs are not changed.

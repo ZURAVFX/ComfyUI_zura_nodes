@@ -215,8 +215,8 @@
 }
 @media(max-width:420px){#genj-studio .zc-prompt-bottom{flex-wrap:wrap}#genj-studio .zc-prompt-submit{margin-left:auto}#genj-studio .zc-composer-attachments{gap:6px}#genj-studio .zc-attachment{padding:8px 10px}}
 @media(max-width:700px){
- #genj-studio[data-workspace=frames] .zf-composer{max-height:50dvh;overflow-y:auto;overscroll-behavior:contain}
- #genj-studio[data-workspace=frames] .zf-composer .zc-tool-panel{position:fixed;left:12px;right:12px;bottom:12px;max-height:70dvh;z-index:50}
+ #genj-studio:is([data-workspace=frames],[data-workspace=references]) .zf-composer{max-height:50dvh;overflow-y:auto;overscroll-behavior:contain}
+ #genj-studio:is([data-workspace=frames],[data-workspace=references]) .zf-composer .zc-tool-panel{position:fixed;left:12px;right:12px;bottom:12px;max-height:70dvh;z-index:50}
 }
 @media(max-height:650px) and (min-width:701px){
  #genj-studio[data-workspace=video] .gs-composer,#genj-studio .zf-composer,#genj-studio .zc-image-composer{padding:12px 16px;gap:8px}
@@ -287,3 +287,31 @@
 #genj-studio .zc-resolution-hint{margin:0;color:var(--gs-muted);font-size:12px;line-height:1.5}
 #genj-studio .zc-tool-panel .zf-dimensions{margin:0 0 16px}
 #genj-studio .zc-resolution-field[hidden],#genj-studio .zc-tool-panel .zf-dimensions[hidden]{display:none}
+
+/* Prompts are the main writing surface. Keep several lines visible and let
+   artists expand longer directions without shrinking the text inside the flex row. */
+#genj-studio[data-workspace=video] .gs-composer textarea,
+#genj-studio .zf-composer textarea,
+#genj-studio .zc-image-composer textarea{
+ flex:0 0 auto;box-sizing:border-box;height:88px;min-height:88px!important;max-height:200px;
+ padding:8px 2px;line-height:1.55;resize:vertical;overflow-y:auto;
+}
+#genj-studio .zc-image-composer{overflow:visible}
+#genj-studio :is(.gs-composer,.zf-composer,.zc-image-composer) textarea:focus-visible{
+ outline:2px solid var(--gs-focus);outline-offset:2px;border-radius:4px;
+}
+@media(max-width:700px){
+ #genj-studio .zc-prompt-bottom{flex-wrap:wrap}
+ #genj-studio .zc-prompt-tools{flex:1 1 220px}
+ #genj-studio .zc-prompt-submit{margin-left:auto}
+ #genj-studio[data-workspace=video] .gs-composer textarea,
+ #genj-studio .zf-composer textarea,#genj-studio .zc-image-composer textarea{
+  font-size:16px;height:80px;min-height:80px!important;max-height:160px;
+ }
+}
+@media(max-height:650px) and (min-width:701px){
+ #genj-studio[data-workspace=video] .gs-composer textarea,
+ #genj-studio .zf-composer textarea,#genj-studio .zc-image-composer textarea{
+  height:72px;min-height:72px!important;max-height:120px;
+ }
+}

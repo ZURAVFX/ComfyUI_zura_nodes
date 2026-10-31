@@ -18,6 +18,10 @@ from PIL import Image
 studio = fixtures.studio
 # Route registration imports these native modules. Keep them outside mocked
 # module snapshots so a later route test cannot re-import NumPy's extensions.
+if 'ComfyUI_zura_nodes.paintout' not in sys.modules:
+    paintout_package = types.ModuleType('ComfyUI_zura_nodes.paintout')
+    paintout_package.__path__ = [str(Path(__file__).resolve().parents[1] / 'paintout')]
+    sys.modules[paintout_package.__name__] = paintout_package
 importlib.import_module('ComfyUI_zura_nodes.paintout.paintout')
 
 

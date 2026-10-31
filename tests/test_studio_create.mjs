@@ -259,6 +259,25 @@ ui.items=[{model:'klein9b',prompt:'Change the wall',references:[{file:'source.pn
 ui.$('gallery').querySelector('[data-reuse]').click();
 assert.equal(ui.imageOperation,'edit','Reusing an edited image returns to Edit instead of selecting a hidden model in Create');assert.equal(ui.$('model').value,'klein9b');
 ui.items=[];ui.references=[];ui.setImageOperation('create');ui.$('prompt').value='';ui.renderGallery();ui.render();
+{
+  const fetchApi=api.fetchApi,extra={file:'identity.png',filename:'identity.png',name:'Identity'};
+  ui.items=[{file:{filename:'newest.png',subfolder:'zura_images'}},{file:{filename:'selected.png',subfolder:'zura_images'}}];
+  ui.selectedImage=1;ui.references=[extra];let copies=0,requested='';
+  api.fetchApi=async(path,options)=>{
+    if(path.startsWith('/view?')){requested=path;return {ok:true,blob:async()=>new Blob(['canvas'],{type:'image/png'})};}
+    if(path==='/upload/image'){copies++;assert.equal(options.body.get('type'),'input');return {ok:true,json:async()=>({name:'canvas.png',subfolder:'zura_images/references'})};}
+    return fetchApi(path,options);
+  };
+  await ui.setImageOperation('edit');
+  assert.match(requested,/filename=selected.png/,'Edit takes the displayed image, not the newest history entry');
+  assert.equal(ui.references[0].file,'zura_images/references/canvas.png');assert.equal(ui.references[1],extra,'Existing references are preserved after Image 1');
+  await ui.setImageOperation('create');await ui.setImageOperation('edit');
+  assert.equal(copies,1,'Returning to Edit reuses the uploaded canvas reference');assert.equal(ui.references.length,2);
+  ui.references.reverse();await ui.setImageOperation('edit');assert.equal(ui.references[0].filename,'canvas.png','Existing canvas source is promoted back to Image 1');
+  ui.items=[{file:{filename:'unavailable.png'}}];ui.renderGallery();api.fetchApi=async()=>({ok:false});
+  const before=ui.references.slice();await ui.setImageOperation('edit');assert.deepEqual(ui.references,before);assert.match(ui.$('message').textContent,/Could not load the canvas/);assert.equal(ui.uploading,false);
+  api.fetchApi=fetchApi;ui.items=[];ui.references=[];ui.selectedImage=0;await ui.setImageOperation('create');ui.message('');ui.renderGallery();ui.render();
+}
 assert.equal(ui.$('settings-panel').hidden,true);
 ui.$('settings-toggle').onclick();
 assert.equal(ui.$('settings-panel').hidden,false);

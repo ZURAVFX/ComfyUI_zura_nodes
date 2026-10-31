@@ -135,7 +135,7 @@ export class CreativeWorkspace {
       if(this.job||this.pendingSubmission||this.submitting||this.uploading)return;
       const button=e.target.closest("[data-reuse]");if(!button)return;
       const item=this.items[Number(button.dataset.reuse)];
-      this.setImageOperation(IMAGE_MODELS.find(m=>m.id===item.model)?.edit?'edit':'create');
+      this.setImageOperation(IMAGE_MODELS.find(m=>m.id===item.model)?.edit?'edit':'create',{useCanvas:false});
       this.references=item.references||[];this.$("prompt").value=item.prompt;this.$("model").value=item.model;this.$("shape").value=item.shape;
       const size=imageDimensions(item);this.$("width").value=size[0];this.$("height").value=size[1];this.$("seed").value=item.seed;this.$("random").checked=false;this.save();this.render();
     };
@@ -261,12 +261,32 @@ export class CreativeWorkspace {
     return buildImageGraph({...config,loras:result.loras});
   }
   config(){return {operation:this.imageOperation,model:this.$("model").value||(this.imageOperation==='edit'?'qwen2511':'flux2'),prompt:this.$("prompt").value,shape:this.$("shape").value,references:this.references.map(r=>({...r})),loras:this.imageLoras.map(l=>({...l})),width:Number(this.$("width").value),height:Number(this.$("height").value),seed:Number(this.$("seed").value),random:this.$("random").checked};}
-  setImageOperation(operation){
+  async setImageOperation(operation,{useCanvas=true}={}){
     if(this.job||this.pendingSubmission||this.submitting||this.uploading)return;
     this.imageOperation=operation;
     for(const option of this.$('model').querySelectorAll('option'))option.hidden=!!this.models.find(m=>m.id===option.value)?.edit!==(operation==='edit');
     if(!this.models.some(m=>m.id===this.$('model').value&&!!m.edit===(operation==='edit')))this.$('model').value=this.models.find(m=>m.ready&&!!m.edit===(operation==='edit'))?.id||this.models.find(m=>!!m.edit===(operation==='edit'))?.id||'';
     this.save();this.render();
+    if(operation==='edit'&&useCanvas)await this.useCanvasReference();
+  }
+  async useCanvasReference(){
+    const file=this.items[this.selectedImage||0]?.file;if(!file?.filename)return;
+    const origin=JSON.stringify([file.filename,file.subfolder||'',file.type||'output']);
+    const existing=this.references.find(r=>r.canvasOrigin===origin);
+    if(existing){this.references=[existing,...this.references.filter(r=>r!==existing)];this.save();this.render();return;}
+    this.uploading=true;this.message('Adding the canvas image as Image 1…');this.render();
+    const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),120000);
+    try{
+      const response=await this.api.fetchApi('/view?'+new URLSearchParams({filename:file.filename,subfolder:file.subfolder||'',type:file.type||'output'}),{signal:controller.signal});
+      if(!response.ok)throw new Error('Could not load the canvas image. Choose Edit image again to retry.');
+      const body=new FormData();body.append('image',await response.blob(),crypto.randomUUID()+'.png');body.append('subfolder','zura_images/references');body.append('type','input');
+      const uploaded=await this.api.fetchApi('/upload/image',{method:'POST',body,signal:controller.signal});
+      if(!uploaded.ok)throw new Error('Could not add the canvas image. Choose Edit image again to retry.');
+      const asset=await uploaded.json();if(!asset.name)throw new Error('ComfyUI did not return the canvas reference.');
+      this.references=[{name:file.filename,filename:asset.name,subfolder:asset.subfolder||'',file:(asset.subfolder?asset.subfolder+'/':'')+asset.name,canvasOrigin:origin},...this.references];
+      this.save();this.message('');
+    }catch(error){this.message(error.name==='AbortError'?'Adding the canvas image timed out. Choose Edit image again to retry.':error.message);}
+    finally{clearTimeout(timer);this.uploading=false;this.render();}
   }
   save(){this.draft=this.config();try{localStorage.setItem(KEY,JSON.stringify({draft:this.draft,items:this.items,job:this.job,pendingSubmission:this.pendingSubmission}));return true;}catch{this.message("Browser storage is full. Your files still save in ComfyUI/output/zura_images.");return false;}}
   message(text){this.$("message").textContent=text||"";this.$("message").hidden=!text;}
