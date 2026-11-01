@@ -83,7 +83,7 @@ def inspect_video(path, *, expected_frames=None, expected_width=None, expected_h
         fps = float(stream.average_rate or stream.base_rate or 0)
         frames = sum(1 for _ in container.decode(video=0))
     if expected_frames is not None and frames != int(expected_frames):
-        raise ValueError("The output has an unexpected number of frames.")
+        raise ValueError(f"The output contains {frames} frames; {int(expected_frames)} were expected.")
     if expected_width is not None and width != int(expected_width):
         raise ValueError("The output has an unexpected raster width.")
     if expected_height is not None and height != int(expected_height):
@@ -94,6 +94,13 @@ def inspect_video(path, *, expected_frames=None, expected_width=None, expected_h
         raise ValueError("The output has an unexpected soundtrack track count.")
     return {"width": width, "height": height, "frames": frames,
             "fps": fps, "audio_tracks": len(audios)}
+
+
+def h3_delivery_frames(selected_frames):
+    """Match GenjHoldToModelLength's 17k+5 H3 delivery, including held tails."""
+    if type(selected_frames) is not int or not 5 <= selected_frames <= 120:
+        raise ValueError("Select 5 to 120 source frames for this H3 route.")
+    return selected_frames + (5 - selected_frames) % 17
 
 
 def checked_output_path(asset, *, expected_subfolder=None):

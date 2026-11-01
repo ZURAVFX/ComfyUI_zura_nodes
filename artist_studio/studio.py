@@ -1879,7 +1879,7 @@ class Studio:
         actual = inspect_video(path, expected_frames=action.get("expected_frames"),
                                expected_width=raster.get("width"), expected_height=raster.get("height"),
                                expected_fps=24, expected_audio_tracks=tracks)
-        if actual["frames"] > 120:
+        if actual["frames"] > 124:
             raise ValueError("The H3 base render is longer than this Studio route supports.")
         delivery_raster = h3_render_rasters(p, 1920, delivery=True)[1]
         p["h3_enhancement_base"] = {
@@ -2141,7 +2141,7 @@ class Studio:
                             delivery_mode=action.get("delivery_mode", "native"),
                             generation_resolution=action.get("generation_resolution"),
                             generation_raster=copy.deepcopy(action.get("generation_raster")),
-                            output_raster=actual, sha256=sha(path))
+                            output_raster=actual, duration=actual["frames"] / actual["fps"], sha256=sha(path))
             elif stage == "wan21_relight":
                 from .enhancement import checked_output_path, inspect_video
                 path = checked_output_path(video)
@@ -2420,6 +2420,7 @@ class Studio:
                   "duration": (p["source"].get("duration") if p["config"].get("length_mode") == "original" else p["config"]["duration"]),
                   "quality": p["config"]["quality"]}
         if stage in ("h3", "h3_references"):
+            from .enhancement import h3_delivery_frames
             action["render_size"] = 0
             action["h3_preset"] = p["config"]["h3_preset"]
             action["delivery_mode"] = p["config"].get("delivery_mode", "native")
@@ -2429,17 +2430,17 @@ class Studio:
                 action.update(h3_character_method="openjutsu", h3_preset="openjutsu_8step",
                               generation_resolution=int(p["config"]["openjutsu_resolution"]),
                               resolution=int(p["config"]["openjutsu_resolution"]),
-                              expected_frames=(lambda n: n + (5 - n) % 17)(verify_review(p["review"])[1]["clip"]["frames"]), label="OpenJutsu · experimental")
+                              expected_frames=h3_delivery_frames(verify_review(p["review"])[1]["clip"]["frames"]), label="OpenJutsu · experimental")
             elif stage == "h3" and camera_setup(p["config"]):
                 from .h3_camera import selected_frame_count
                 raster = {"width": p["config"]["camera_width"], "height": p["config"]["camera_height"]}
                 action.update(resolution=max(raster.values()), generation_resolution=max(raster.values()),
-                              h3_preset="camera_ref2va_8step", expected_frames=(lambda n: n + (5 - n) % 17)(selected_frame_count(p, check_asset)),
+                              h3_preset="camera_ref2va_8step", expected_frames=h3_delivery_frames(selected_frame_count(p, check_asset)),
                               generation_raster=raster, base_output_raster=raster, label="H3 · Camera angle")
             elif stage == "h3" and head_swap_setup(p["config"]):
                 from .h3_head_swap import selected_frame_count
                 action.update(resolution=1024, generation_resolution=1024,
-                              h3_preset="head_face_8step", expected_frames=(lambda n: n + (5 - n) % 17)(selected_frame_count(p, check_asset)))
+                              h3_preset="head_face_8step", expected_frames=h3_delivery_frames(selected_frame_count(p, check_asset)))
             elif stage == "h3":
                 from . import verify_review
                 generation_raster, base_output_raster = h3_render_rasters(
@@ -2447,7 +2448,7 @@ class Studio:
                 action["generation_raster"] = generation_raster
                 action["base_output_raster"] = base_output_raster
                 selected_frames = verify_review(p["review"])[1]["clip"]["frames"]
-                action["expected_frames"] = selected_frames + (5 - selected_frames) % 17
+                action["expected_frames"] = h3_delivery_frames(selected_frames)
                 if action["delivery_mode"] == "enhanced1080":
                     action["next_stage"] = "wan_cleanup"
                     action["studio_action_tag"] = prompt_id
