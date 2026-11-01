@@ -133,3 +133,12 @@ isolated runtime. Their implementation is not bundled in this package:
 
 Website accounts and provider terms apply. See `CHATGPT_IMAGE.md` and
 `GEMINI_IMAGE.md` for connection scope and runtime details.
+
+## Studio interface craft
+
+The Studio polish follows the Unslop guidance by Damir Sokolovsky
+([@heydamir](https://x.com/heydamir)), adapted for Zura Studio.
+Guidance: https://github.com/heydamir/unslop, licensed under
+[Creative Commons Attribution 4.0](https://creativecommons.org/licenses/by/4.0/).
+The implementation retains Zura branding, the bundled Manrope typeface and
+existing workflow controls.

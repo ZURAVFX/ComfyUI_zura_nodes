@@ -10,12 +10,12 @@ from pathlib import Path
 
 from aiohttp import web
 
-from .outpaint_studio import plan, build_review_graph, build_studio_graph
+from .outpaint_studio import plan, build_review_graph, build_studio_graph, needs_bounded_canvas, source_rate
 from .studio import check_asset, media_url
 
 # The long workflow is independently selectable after artist approval of the
 # anchored/feathered prototype and targeted active-render cancellation.
-# The existing short black-guide path is independent of this flag.
+# Short and long SDR sections use the same masked two-stage recipe.
 LONG_MODE_READY = True
 
 
@@ -31,6 +31,19 @@ def hdr_long_outpaint_enabled():
 def hdr_black_outpaint_enabled():
     """Black-padded HDR shares the opt-in preview gate."""
     return hdr_outpaint_enabled()
+
+
+def probe_sdr_source(source):
+    """Record the original cadence so review, sampling and export agree."""
+    import av
+    from fractions import Fraction
+    with av.open(str(check_asset(source))) as container:
+        stream = container.streams.video[0]
+        rate = Fraction(stream.average_rate or stream.base_rate or 0)
+        if not 1 <= rate <= 120:
+            raise ValueError('Frame extension needs a source with a frame rate between 1 and 120 fps.')
+        return {**source, 'fps_num': rate.numerator, 'fps_den': rate.denominator,
+                'has_audio': bool(container.streams.audio)}
 
 
 def source_has_audio(source):
@@ -70,7 +83,7 @@ def inspect_sdr_delivery(job):
         count += (1 - count) % 8
     before = path.stat()
     raster = inspect_video(path, expected_frames=count, expected_width=selection['width'],
-        expected_height=selection['height'], expected_fps=24,
+        expected_height=selection['height'], expected_fps=float(source_rate(selection)),
         expected_audio_tracks=int(source_has_audio(job['source'])))
     after = path.stat()
     if (before.st_size, before.st_mtime_ns) != (after.st_size, after.st_mtime_ns):
@@ -84,18 +97,16 @@ LONG_REQUIRED_FILES = (
     ('text_encoders', 'gemma4-12b-with-proj-ltx-2.5-nvfp4.safetensors'),
     ('vae', 'ltx-2.5-video-vae-conv-bf16.safetensors'),
     ('vae', 'ltx-2.5-audio-vae-bf16.safetensors'),
-    ('loras', 'ltx-2.3-22b-ic-lora-in-outpainting-0.9.safetensors'),
+    ('loras', 'ltx-2.3-22b-ic-lora-outpaint.safetensors'),
 )
-LONG_REQUIRED_NODES = ('LTXVInpaintPreprocess', 'LTXAddVideoICLoRAGuideAdvanced',
-    'LTXICLoRALoaderModelOnly', 'LTXVLaplacianPyramidBlend', 'LTXVImgToVideoInplace',
-    'GenjSelectClip', 'ZuraOutpaintTemporalHold', 'ZuraLTXOutpaintCanvas',
-    'LoadVideo', 'GetVideoComponents', 'MaskToImage', 'ImageScale', 'ImageToMask',
-    'CLIPLoader', 'CLIPTextEncode', 'LTXVConditioning', 'VAELoader', 'UNETLoader',
-    'EmptyLTXVLatentVideo', 'VAEEncodeAudio', 'LTXVSetAudioRefTokens',
-    'LTXVConcatAVLatent', 'CFGGuider', 'RandomNoise', 'KSamplerSelect', 'ManualSigmas',
-    'SamplerCustomAdvanced', 'LTXVSeparateAVLatent', 'LTXVCropGuides',
-    'VAEDecodeTiled', 'VAEEncodeTiled', 'ImageFromBatch', 'LoadImage',
-    'CreateVideo', 'SaveVideo')
+LONG_REQUIRED_NODES = ('LTXAddVideoICLoRAGuide', 'LTXICLoRALoaderModelOnly',
+    'LTXVImgToVideoInplace', 'ZuraOutpaintExactVideo', 'ZuraOutpaintSelectClip', 'ZuraOutpaintTemporalHold',
+    'ZuraLTXOutpaintCanvas', 'LoadVideo', 'GetVideoComponents', 'CLIPLoader',
+    'CLIPTextEncode', 'LTXVConditioning', 'VAELoader', 'UNETLoader',
+    'EmptyLTXVLatentVideo', 'LTXVEmptyLatentAudio', 'LTXVConcatAVLatent', 'CFGGuider',
+    'RandomNoise', 'KSamplerSelect', 'ManualSigmas', 'SamplerCustomAdvanced',
+    'LTXVSeparateAVLatent', 'LTXVCropGuides', 'VAEDecodeTiled', 'ImageFromBatch',
+    'LoadImage', 'CreateVideo', 'SaveVideo')
 
 
 def long_dependencies():
@@ -106,7 +117,7 @@ def long_dependencies():
     missing_nodes = [name for name in LONG_REQUIRED_NODES if name not in nodes.NODE_CLASS_MAPPINGS]
     return {'ready': not missing_files and not missing_nodes, 'missing_files': missing_files,
             'missing_nodes': missing_nodes,
-            'packages': ['ltx25_core', 'ltx25_text_encoder', 'ltx25_in_outpaint']}
+            'packages': ['ltx25_core', 'ltx25_text_encoder', 'ltx25_outpaint']}
 
 
 def short_dependencies(mode):
@@ -384,7 +395,7 @@ class OutpaintJobs:
         job['task']=asyncio.create_task(execute())
         return self.public(job)
 
-    async def submit_long(self, kind, source, selection, *, reviewed=None, prompt='', seed=42, client_id=None, anchor=False, custom_loras=None):
+    async def submit_long(self, kind, source, selection, *, reviewed=None, prompt='', seed=42, client_id=None, anchor=False, custom_loras=None, first_frame=None):
         """Private bounded executor, not yet exposed by the Studio routes.
 
         Full-range review and generated-window continuity must be verified on
@@ -446,6 +457,9 @@ class OutpaintJobs:
         async def submit_child(child_kind, asset, subplan, previous):
             nonlocal anchor_dir
             anchor_file = None
+            if child_kind == 'render' and previous is None and first_frame is not None:
+                from .outpaint_first_frame import prepare_anchor
+                anchor_file = await asyncio.to_thread(prepare_anchor, first_frame, subplan, check_asset)
             if previous is not None:
                 from .outpaint_anchor import extract_frame
                 input_root = (Path(folder_paths.get_input_directory()) / 'genj_studio').resolve()
@@ -479,7 +493,7 @@ class OutpaintJobs:
                         raise ValueError('A generated window is unavailable.')
                     expected = child['selection']
                     await asyncio.to_thread(inspect_video, file, expected_frames=expected['frames'],
-                        expected_width=expected['width'], expected_height=expected['height'], expected_fps=24)
+                        expected_width=expected['width'], expected_height=expected['height'], expected_fps=float(source_rate(expected)))
                     return file
                 if child['state'] in ('failed', 'cancelled', 'interrupted'):
                     raise ValueError(child.get('error') or 'An outpaint window did not finish.')
@@ -513,7 +527,7 @@ class OutpaintJobs:
                     submit=submit_child, wait=wait_child, cancel=cancel_child, update=update,
                     ffmpeg=executable, output=output, source_audio=audio, anchor=anchor)
                 await asyncio.to_thread(inspect_video, output, expected_frames=(current['frames'] + (1 - current['frames']) % 8 if kind == 'render' else current['frames']),
-                    expected_width=current['width'], expected_height=current['height'], expected_fps=24)
+                    expected_width=current['width'], expected_height=current['height'], expected_fps=float(source_rate(current)))
                 asset = {'type': 'output', 'subfolder': 'genj/outpaint', 'filename': output.name}
                 job.update(state='complete', url=media_url(asset), artifact=asset)
             except asyncio.CancelledError:
@@ -588,6 +602,17 @@ def register(studio, routes, response):
     from .hdr_outpaint_layer_jobs import register as register_hdr_layer_exports
     register_hdr_layer_exports(jobs, routes, response)
 
+    @routes.post('/zura/studio/outpaint/first-frame')
+    @response
+    async def first_frame_canvas(request):
+        from .outpaint_first_frame import create_canvas
+        body = await request.json()
+        if body.get('hdr'):
+            raise ValueError('Image first-frame guides currently apply to SDR frame extension.')
+        source = await asyncio.to_thread(jobs.source, body.get('source'))
+        asset = await asyncio.to_thread(create_canvas, studio, source, body, check_asset)
+        return web.json_response(asset)
+
     @routes.get('/zura/studio/outpaint/capabilities')
     @routes.get('/genj/studio/outpaint/capabilities')
     @response
@@ -609,6 +634,14 @@ def register(studio, routes, response):
                                   'hdr_black_long_experiment': hdr_black_enabled and hdr_long_enabled,
                                   'hdr_black_long_dependencies': await asyncio.to_thread(hdr_long_dependencies,'black') if hdr_black_enabled and hdr_long_enabled else None})
 
+    @routes.post('/zura/studio/outpaint/source-info')
+    @response
+    async def source_info(request):
+        body = await request.json()
+        source = await asyncio.to_thread(jobs.source, body.get('source'))
+        probed = await asyncio.to_thread(probe_sdr_source, source)
+        return web.json_response({'fps_num': probed['fps_num'], 'fps_den': probed['fps_den']})
+
     @routes.post('/zura/studio/outpaint/review')
     @routes.post('/genj/studio/outpaint/review')
     @response
@@ -619,8 +652,12 @@ def register(studio, routes, response):
             fields = {k: body.get(k) for k in ('start', 'duration', 'mode', 'width', 'height', 'left', 'top', 'right', 'bottom', 'black_threshold')}
             strategy = body.get('strategy')
             hdr = body.get('hdr', False)
+            if hdr is False:
+                source = await asyncio.to_thread(probe_sdr_source, source)
             if type(hdr) is not bool:
                 raise ValueError('Choose a valid HDR option.')
+            if not hdr and fields['mode'] in ('expand', 'black') and strategy in (None, 'black_guide') and (float(fields['duration'])*float(source_rate(source)) > 120 or needs_bounded_canvas(fields['width'], fields['height'], fields['duration'], source_rate(source))):
+                strategy = 'anchored_masked'
             if hdr:
                 if not hdr_outpaint_enabled():
                     raise ValueError('HDR frame extension is not available in this version yet.')
@@ -701,12 +738,23 @@ def register(studio, routes, response):
             if review_job['kind'] != 'review' or review_job['state'] != 'complete' or not review_job['approved']:
                 raise ValueError('Review and approve the selection before generating.')
             if review_job.get('render_id'):
-                return web.json_response(jobs.public(jobs.state(review_job['render_id'])))
+                previous_render = jobs.state(review_job['render_id'])
+                if previous_render['state'] not in ('failed', 'cancelled', 'interrupted'):
+                    return web.json_response(jobs.public(previous_render))
+                # An explicit new Generate click may retry a confirmed failure.
+                # Running or completed jobs remain idempotent.
+                review_job.pop('render_id')
             if not isinstance(body.get('prompt', ''), str) or len(body.get('prompt', '')) > 4000:
                 raise ValueError('Enter a prompt up to 4,000 characters.')
             seed = body.get('seed', 42)
             if type(seed) is not int or not 0 <= seed <= 2**53-1:
                 raise ValueError('Choose a valid seed.')
+            first_frame = None
+            if body.get('first_frame'):
+                if review_job.get('hdr_review_key') or review_job.get('hdr_long'):
+                    raise ValueError('Image first-frame guides currently apply to SDR frame extension.')
+                from .outpaint_first_frame import guide_asset
+                first_frame = await asyncio.to_thread(guide_asset, studio, body['first_frame'], review_job['selection'], check_asset)
             if review_job.get('hdr_long'):
                 if not hdr_long_outpaint_enabled():
                     raise ValueError('Long HDR frame extension is not available in this version yet.')
@@ -732,10 +780,14 @@ def register(studio, routes, response):
                     raise ValueError('Long frame extension is not available in this version yet.')
                 result = await jobs.submit_long('render', review_job['source'], review_job['selection'],
                     reviewed=review_job, prompt=body.get('prompt', ''), seed=seed,
-                    client_id=body.get('client_id'), anchor=True, custom_loras=body.get('custom_loras', []))
+                    client_id=body.get('client_id'), anchor=True, custom_loras=body.get('custom_loras', []), first_frame=first_frame)
             else:
+                anchor_file = None
+                if first_frame is not None:
+                    from .outpaint_first_frame import prepare_anchor
+                    anchor_file = await asyncio.to_thread(prepare_anchor, first_frame, review_job['selection'], check_asset)
                 result = await jobs.submit('render', review_job['source'], review_job['selection'], body.get('prompt', ''), seed,
-                                           client_id=body.get('client_id'), custom_loras=body.get('custom_loras', []), pad_delivery=True)
+                                           client_id=body.get('client_id'), custom_loras=body.get('custom_loras', []), pad_delivery=True, anchor_file=anchor_file)
             review_job['render_id'] = result['id']
             return web.json_response(result)
 

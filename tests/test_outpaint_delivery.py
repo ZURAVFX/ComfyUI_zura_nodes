@@ -60,7 +60,7 @@ class OutpaintDeliveryTests(unittest.TestCase):
         self.generate(frames=6)
         self.assertEqual(jobs.inspect_sdr_delivery(self.job)['output_raster']['frames'], 6)
         self.job['long'] = True
-        with self.assertRaisesRegex(ValueError, 'number of frames'):
+        with self.assertRaisesRegex(ValueError, r'output contains .* frames'):
             jobs.inspect_sdr_delivery(self.job)
 
     def test_windows_save_video_subfolder_is_accepted_without_changing_reference(self):
@@ -74,7 +74,7 @@ class OutpaintDeliveryTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'width'):
             jobs.inspect_sdr_delivery(self.job)
         self.generate(frames=8)
-        with self.assertRaisesRegex(ValueError, 'number of frames'):
+        with self.assertRaisesRegex(ValueError, r'output contains .* frames'):
             jobs.inspect_sdr_delivery(self.job)
 
     def test_missing_original_audio_is_not_silently_accepted(self):

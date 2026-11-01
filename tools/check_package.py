@@ -46,6 +46,8 @@ for asset in ('studio_launchers.py', 'web/studio_launchers.js', 'web/studio_laun
 assert Path('web/v2_media_picker.js').is_file()
 studio_loader = Path('web/studio.js').read_text(encoding='utf-8')
 for asset in ('web/studio_create.js', 'web/studio_create.css',
+              'web/studio_polish.css', 'web/studio_image_edit_inputs.js',
+              'web/studio_outpaint_first_frame.js', 'artist_studio/outpaint_first_frame.py',
               'web/studio_composer.js', 'web/studio_composer.css',
               'web/studio_frames.js', 'web/frame_video_recipes.js',
               'web/video_recipe_catalog.js', 'web/wan_frame_video_recipes.js',

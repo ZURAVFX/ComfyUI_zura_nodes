@@ -255,6 +255,47 @@ ui.setImageOperation('edit');assert.equal(ui.$('model').value,'qwen2511');assert
 assert.equal(ui.$('model').querySelector('option[value="flux3"]').hidden,true);
 ui.references=[{file:'edit-source.png',name:'source.png'}];ui.$('prompt').value='Make the wall blue';ui.render();assert.equal(ui.$('generate').disabled,false);
 assert.match(ui.$('generate').textContent,/Apply edit/);assert.match(ui.$('reference-hint').textContent,/Image 1: source/);
+// The edited plate is a separate slot; references cannot silently replace it.
+{
+  const savedRefs=ui.references,savedItems=ui.items;
+  assert.ok(ui.$('model').closest('.zi-output-tools'));
+  assert.ok(ui.$('quick-settings').closest('.zi-output-tools'));
+  assert.ok(ui.$('settings-toggle').closest('.zi-output-tools'));
+  assert.ok(ui.$('new').closest('.zi-image-actions'));
+  assert.equal(ui.root.querySelectorAll('#zc-new').length,1);
+  ui.$('settings-toggle').click();assert.equal(ui.$('settings-toggle').getAttribute('aria-expanded'),'true');
+  ui.$('settings-close').click();assert.equal(ui.$('settings-toggle').getAttribute('aria-expanded'),'false');
+  ui.references=[];ui.items=[];ui.editMainMissing=false;ui.renderGallery();ui.render();
+  await ui.uploadReferences([new File(['plate'],'plate.png',{type:'image/png'}),new File(['style'],'style.png',{type:'image/png'})]);
+  const plate=ui.references[0],guide=ui.references[1],inputs=ui.editInputs;
+  assert.equal(inputs.source.hidden,false,'First uploaded image immediately appears on the canvas');
+  assert.match(inputs.source.querySelector('img').src,new RegExp(plate.filename));
+  assert.equal(ui.$('reference-list').querySelector('.zc-edit-main [data-remove-ref]').dataset.removeRef,'0');
+  assert.equal(ui.$('reference-list').querySelector('.zc-edit-guides [data-remove-ref]').dataset.removeRef,'1');
+  assert.equal(ui.$('add-references').closest('.zi-reference-panel')!==null,true);
+  assert.equal(ui.$('reference-list').querySelector('[data-move-ref="1"]').hidden,true,'Guidance cannot be moved into the main slot');
+  ui.$('reference-list').querySelector('[data-remove-ref="0"]').click();
+  assert.equal(ui.editMainMissing,true);assert.deepEqual(ui.references,[guide]);
+  assert.equal(inputs.source.hidden,true,'Removing the plate does not promote a guidance image');
+  assert.equal(ui.$('generate').disabled,true);
+  assert.equal(ui.$('image-empty').hidden,false,'Removing the only plate returns to the empty canvas');
+  await ui.uploadReferences([new File(['replacement'],'replacement.png',{type:'image/png'})],{main:true});
+  assert.equal(ui.editMainMissing,false);assert.equal(ui.references[1],guide);
+  assert.equal(inputs.source.hidden,false);
+  await ui.uploadReferences([new File(['new plate'],'newplate.png',{type:'image/png'})],{main:true});
+  assert.equal(ui.references.length,2,'Replacing the plate retains guidance without adding a third input');assert.equal(ui.references[1],guide);
+  ui.items=[{file:{filename:'edited-result.png'},references:ui.references.map(r=>({...r}))}];ui.renderGallery();
+  assert.equal(inputs.source.hidden,true,'A new generation displays its result');
+  assert.equal(ui.$('gallery').hidden,false);
+  inputs.toggle.click();assert.equal(inputs.source.hidden,false,'The original plate remains available for inspection');
+  ui.$('compare-image').click();assert.equal(inputs.source.hidden,true);assert.equal(ui.imageComparison.host.hidden,false,'Compare uses the same main image and result');
+  ui.imageComparison.active=false;
+  await ui.setImageOperation('create',{useCanvas:false});
+  assert.equal(ui.$('reference-list').querySelector('.zc-edit-main'),null);
+  assert.equal(ui.$('add-references').parentElement,inputs.addHome,'Create mode restores the ordinary reference toolbar');
+  assert.match(ui.$('add-references').textContent,/Add reference images/);
+  ui.references=savedRefs;ui.items=savedItems;ui.editMainMissing=false;await ui.setImageOperation('edit',{useCanvas:false});ui.renderGallery();ui.render();
+}
 ui.$('model').value='klein9b';ui.render();assert.equal(ui.$('generate').disabled,false);
 ui.references=[];ui.setImageOperation('create');ui.$('prompt').value='';ui.render();
 ui.items=[{model:'klein9b',prompt:'Change the wall',references:[{file:'source.png'}],shape:'square',width:1024,height:1024,seed:7,file:{filename:'edit.png'}}];ui.renderGallery();

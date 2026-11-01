@@ -62,7 +62,7 @@ def disk_requirements(width, height, parts, *, anchor=False):
     return output, anchors
 
 
-def ffmpeg_assembly(ffmpeg, parts, rendered, output, *, source=None, audio_start=0, pad_tail=False, audio_duration=None):
+def ffmpeg_assembly(ffmpeg, parts, rendered, output, *, source=None, audio_start=0, pad_tail=False, audio_duration=None, fps=FPS):
     """Construct a non-shell FFmpeg command to overlap/blend SDR windows.
 
     Each input must already be verified to contain exactly its window's frame
@@ -70,6 +70,10 @@ def ffmpeg_assembly(ffmpeg, parts, rendered, output, *, source=None, audio_start
     once, not copied from each generation window. Caller owns subprocess
     cancellation, output verification and cleanup of partial files.
     """
+    from fractions import Fraction
+    fps = Fraction(fps)
+    if not 1 <= fps <= 120:
+        raise ValueError('Invalid source frame rate.')
     if not parts or len(parts) != len(rendered) or parts[0].overlap:
         raise ValueError('Choose matching rendered windows.')
     for i, part in enumerate(parts):
@@ -129,19 +133,20 @@ def ffmpeg_assembly(ffmpeg, parts, rendered, output, *, source=None, audio_start
         if part.count - before - after:
             segments.append(f'[body{i}]')
     total = parts[-1].start + parts[-1].count - parts[0].start
+    rate = float(fps)
     if audio_duration is not None and (not isinstance(audio_duration, (int, float)) or isinstance(audio_duration, bool)
-            or not math.isfinite(audio_duration) or audio_duration <= 0 or audio_duration > total / FPS + 1e-6):
+            or not math.isfinite(audio_duration) or audio_duration <= 0 or audio_duration > total / rate + 1e-6):
         raise ValueError('Invalid source-audio duration.')
     padding = (1 - total) % 8 if pad_tail else 0
     filters.append(''.join(segments) + f'concat=n={len(segments)}:v=1:a=0[joined]')
     filters.append(f'[joined]tpad=stop_mode=clone:stop={padding}[outv]' if padding else '[joined]null[outv]')
     command += ['-filter_complex', ';'.join(filters), '-map', '[outv]']
     if source is not None:
-        selected_audio = total / FPS if audio_duration is None else audio_duration
+        selected_audio = total / rate if audio_duration is None else audio_duration
         audio_filter = f'atrim=start={float(audio_start):.9f}:duration={selected_audio:.9f},asetpts=PTS-STARTPTS'
-        if padding or selected_audio < total / FPS - 1e-6:
-            audio_filter += f',apad=whole_dur={(total+padding)/FPS:.9f}'
+        if padding or selected_audio < total / rate - 1e-6:
+            audio_filter += f',apad=whole_dur={(total+padding)/rate:.9f}'
         command += ['-map', f'{len(parts)}:a:0?', '-af', audio_filter, '-c:a', 'aac']
-    command += ['-frames:v', str(total + padding), '-r', str(FPS), '-c:v', 'libx264', '-pix_fmt', 'yuv420p',
+    command += ['-frames:v', str(total + padding), '-r', str(fps), '-c:v', 'libx264', '-pix_fmt', 'yuv420p',
                 '-movflags', '+faststart', str(Path(output))]
     return command

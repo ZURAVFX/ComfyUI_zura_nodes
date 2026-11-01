@@ -11,9 +11,10 @@ import hashlib
 import json
 import math
 from pathlib import Path
+from fractions import Fraction
 
 from .outpaint_chunks import FPS, ffmpeg_assembly, windows
-from .outpaint_studio import plan
+from .outpaint_studio import plan, source_rate
 
 
 def plan_long(source, *, start, duration, mode, width, height, left=0, top=0,
@@ -24,24 +25,25 @@ def plan_long(source, *, start, duration, mode, width, height, left=0, top=0,
     start, duration = float(start), float(duration)
     if not math.isfinite(start) or not math.isfinite(duration) or start < 0 or duration <= 0:
         raise ValueError('Choose a valid start and duration.')
-    frames = math.ceil(duration * FPS - 1e-6)
-    if frames < 3 or start + duration > float(source.get('duration', 0)) + (1/FPS if allow_partial_end else 0) + 1e-4:
+    fps = source_rate(source)
+    frames = math.ceil(duration * fps - 1e-6)
+    if frames < 3 or start + duration > float(source.get('duration', 0)) + (1/float(fps) if allow_partial_end else 0) + 1e-4:
         raise ValueError('Choose a valid range within the source video.')
     parts = windows(0, frames, width=width, height=height, overlap=overlap)
-    if start + parts[-1].start / FPS > 86400:
+    if start + parts[-1].start / float(fps) > 86400:
         raise ValueError('This selection extends beyond the supported 24-hour source start limit. Trim the clip.')
     args = dict(mode=mode, width=width, height=height, left=left, top=top,
                 right=right, bottom=bottom, black_threshold=black_threshold)
     # Reuse the production validator for every subrange and exact canvas.
-    subplans = [plan(source, start=start + part.start/FPS,
-                     duration=part.count/FPS, allow_partial_end=True, **args) for part in parts]
-    if strategy is not None and (strategy != 'anchored_masked' or mode != 'expand' or overlap != 9):
-        raise ValueError('The anchored long workflow requires canvas expansion and a nine-frame overlap.')
-    values = {'source_sha': str(source['sha']), 'start': start, 'frames': frames, 'requested_duration': duration, 'overlap': overlap, **args}
+    subplans = [plan(source, start=start + part.start/float(fps),
+                     duration=part.count/float(fps), allow_partial_end=True, **args) for part in parts]
+    if strategy is not None and (strategy != 'anchored_masked' or mode not in ('expand', 'black') or overlap != 9):
+        raise ValueError('The anchored long workflow requires a nine-frame overlap.')
+    values = {'source_sha': str(source['sha']), 'start': start, 'frames': frames, 'requested_duration': duration, 'fps_num': fps.numerator, 'fps_den': fps.denominator, 'overlap': overlap, **args}
     if strategy is not None:
         values['strategy'] = strategy
     digest = hashlib.sha256(json.dumps(values, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
-    return {**values, 'duration': frames/FPS, 'review_key': digest}, parts, subplans
+    return {**values, 'duration': float(frames/fps), 'review_key': digest}, parts, subplans
 
 
 async def run_windows(*, kind, source, selection, parts, subplans, submit, wait,
@@ -81,7 +83,8 @@ async def run_windows(*, kind, source, selection, parts, subplans, submit, wait,
         command = ffmpeg_assembly(ffmpeg, parts, paths, output,
             source=source_audio if kind == 'render' else None,
             audio_start=selection['start'], pad_tail=kind == 'render',
-            audio_duration=selection.get('requested_duration', selection['duration']))
+            audio_duration=selection.get('requested_duration', selection['duration']),
+            fps=Fraction(selection.get('fps_num', FPS),selection.get('fps_den', 1)))
         process = await asyncio.create_subprocess_exec(*command, stdout=asyncio.subprocess.DEVNULL,
             stderr=asyncio.subprocess.PIPE)
         _, stderr = await process.communicate()

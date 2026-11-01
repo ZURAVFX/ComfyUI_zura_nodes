@@ -1,5 +1,12 @@
 # Release notes
 
+## 1.3.40 - 1 November 2026
+
+- Apply the approved Studio interface polish across Image, Video, HDR conversion, Paintout, frame extension, camera controls and shared settings. Use neutral surfaces, consistent Manrope typography, clearer control groups, larger multiline prompts and matching focus and selection states in both themes.
+- Give Image editing a dedicated Main image attachment and a separate References disclosure using the Video attachment layout. Keep model, resolution and Settings together below the prompt, with History, Compare and More beside the canvas. Preserve reference order when replacing or removing the main image.
+- Include the signed-off original full-resolution SDR outpaint recipe on LTX 2.5. Keep HDR processing separate. Include the latest outpaint delivery, retry and optional first-frame guidance improvements.
+- Keep experimental Ripple object replacement outside this stable release. Existing preview routes retain their labels and limitations.
+
 ## 1.3.39 - 1 November 2026
 
 - Preserve the original frame rate and selected frame count in Wan 2.1 Relight, including fractional rates such as 29.97. Reload original source frames instead of the 24 fps review proxy, keep the original soundtrack aligned and remove internal model-padding frames from delivery.

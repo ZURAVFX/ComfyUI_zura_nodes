@@ -6,9 +6,14 @@ import shutil
 import subprocess
 import tempfile
 import unittest
+import sys
+import types
 from unittest.mock import patch
 
 import test_artist_studio as fixtures
+
+if 'nodes' not in sys.modules:
+    sys.modules['nodes'] = types.SimpleNamespace(NODE_CLASS_MAPPINGS={})
 
 runner = importlib.import_module('ComfyUI_zura_nodes.artist_studio.outpaint_long_runner')
 jobs_module = importlib.import_module('ComfyUI_zura_nodes.artist_studio.outpaint_jobs')
@@ -18,6 +23,47 @@ masked_graph = importlib.import_module('ComfyUI_zura_nodes.artist_studio.outpain
 
 
 class OutpaintLongPlanning(unittest.TestCase):
+    def test_30fps_sections_keep_full_length_and_use_approved_recipe(self):
+        source = dict(self.source, duration=218/30, fps_num=30, fps_den=1)
+        options = {**self.options, 'start':0, 'duration':source['duration']}
+        selection, parts, subplans = runner.plan_long(source, **options, overlap=9, strategy='anchored_masked')
+        self.assertEqual(selection['frames'], 218)
+        self.assertEqual(sum(part.count-part.overlap for part in parts), 218)
+        for part, sub in zip(parts, subplans):
+            self.assertAlmostEqual(sub['start'], part.start/30)
+            self.assertEqual(sub['frames'], part.count)
+            graph = masked_graph.build_masked_expand_graph(source, sub, review_key=sub['review_key'], output_prefix='genj/outpaint/nativefps')
+            self.assertEqual(graph['sampler']['inputs']['sampler_name'], 'euler_ancestral_cfg_pp')
+            self.assertEqual(graph['guide']['inputs']['image'], ['canvas', 0])
+            self.assertEqual(graph['assemble']['inputs']['fps_num'], 30)
+
+    def test_fractional_full_clip_builds_every_review_and_render_window(self):
+        source = dict(self.source, duration=7.266633333333333, width=1080, height=1920)
+        options = {**self.options, 'start': 0, 'duration': source['duration'], 'width':1088, 'height':1088, 'left':238, 'right':238}
+        selection, parts, subplans = runner.plan_long(source, **options, overlap=9, strategy='anchored_masked')
+        self.assertEqual(selection['frames'], 175)
+        self.assertEqual(len(parts), 7)
+        self.assertEqual(subplans[-1]['start'], 6)
+        self.assertEqual(subplans[-1]['frames'], 31)
+        for sub in subplans:
+            graph = masked_graph.build_masked_expand_graph(source, sub,
+                review_key=sub['review_key'], output_prefix='genj/outpaint/fractional')
+            self.assertEqual(graph['source_range']['inputs']['expected_frames'], sub['frames'])
+            self.assertEqual(graph['trim_result']['inputs']['length'], sub['frames'])
+        self.assertGreater(subplans[-1]['start'] + subplans[-1]['duration'], source['duration'])
+        self.assertEqual(parts[-1].start + parts[-1].count, selection['frames'])
+
+    def test_large_canvas_uses_bounded_windows_at_the_requested_resolution(self):
+        selection, parts, subplans = runner.plan_long(self.source, **{**self.options,
+            'width': 1920, 'height': 1920}, overlap=9, strategy='anchored_masked')
+        self.assertEqual((selection['width'], selection['height']), (1920,1920))
+        self.assertGreater(len(parts), 1)
+        for sub in subplans:
+            self.assertLessEqual(sub['padded_frames'] * 1920 * 1920, 40_000_000)
+            graph = masked_graph.build_masked_expand_graph(self.source, sub,
+                review_key=sub['review_key'], output_prefix='genj/outpaint/large')
+            self.assertEqual(graph['canvas']['inputs']['width'], 1920)
+
     def setUp(self):
         self.source = {'file':'genj_studio/a/source.mp4', 'sha':'a'*64, 'duration':20,
                        'width':768, 'height':432}
@@ -78,10 +124,9 @@ class OutpaintLongPlanning(unittest.TestCase):
             output_prefix='genj/outpaint/test')
         self.assertEqual(graph['source_range']['inputs']['start_seconds'], sub['start'])
         self.assertEqual(graph['canvas']['inputs']['left'], sub['left'])
-        self.assertEqual(graph['low_mask']['inputs']['image'], ['low_mask_image', 0])
-        self.assertEqual(graph['inpaint']['inputs']['mask'], ['low_mask', 0])
-        self.assertEqual(graph['guide']['inputs']['image'], ['inpaint', 0])
-        self.assertEqual(graph['blend_high']['inputs']['mask'], ['canvas', 1])
+        self.assertEqual(graph['guide']['inputs']['image'], ['canvas', 0])
+        self.assertEqual(graph['adapter']['inputs']['lora_name'], 'ltx-2.3-22b-ic-lora-outpaint.safetensors')
+        self.assertNotIn('sample_high', graph)
         self.assertEqual(graph['trim_result']['inputs']['length'], sub['frames'])
         self.assertEqual(graph['assemble']['inputs']['audio'], ['components', 1])
         with self.assertRaisesRegex(ValueError, 'Review'):
@@ -98,7 +143,7 @@ class OutpaintLongPlanning(unittest.TestCase):
         self.assertFalse(result['ready'])
         self.assertEqual(result['missing_files'], [missing_name])
         self.assertEqual(result['missing_nodes'], [])
-        self.assertIn('ltx25_in_outpaint', result['packages'])
+        self.assertIn('ltx25_outpaint', result['packages'])
 
     def test_short_methods_check_their_actual_adapter_and_nodes(self):
         import folder_paths
@@ -107,12 +152,12 @@ class OutpaintLongPlanning(unittest.TestCase):
              patch.object(folder_paths, 'get_full_path', return_value=None):
             expand = jobs_module.short_dependencies('expand')
             black = jobs_module.short_dependencies('black')
-        self.assertIn('ltx-2.3-22b-ic-lora-outpaint.safetensors', expand['missing_files'])
-        self.assertNotIn('ltx-2.3-22b-ic-lora-in-outpainting-0.9.safetensors', expand['missing_files'])
-        self.assertIn('ltx-2.3-22b-ic-lora-in-outpainting-0.9.safetensors', black['missing_files'])
-        self.assertNotIn('ltx-2.3-22b-ic-lora-outpaint.safetensors', black['missing_files'])
-        self.assertIn('ZuraOutpaintReviewOverlay', expand['missing_nodes'])
-        self.assertIn('LTXVInpaintPreprocess', black['missing_nodes'])
+        for result in (expand, black):
+            self.assertIn('ltx-2.3-22b-ic-lora-outpaint.safetensors', result['missing_files'])
+            self.assertNotIn('ltx-2.3-22b-ic-lora-in-outpainting-0.9.safetensors', result['missing_files'])
+            self.assertIn('ZuraOutpaintReviewOverlay', result['missing_nodes'])
+            self.assertIn('ZuraOutpaintSelectClip', result['missing_nodes'])
+
 
 
 class OutpaintLongCancellation(unittest.IsolatedAsyncioTestCase):

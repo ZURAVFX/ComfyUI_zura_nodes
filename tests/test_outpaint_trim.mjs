@@ -45,8 +45,11 @@ assert.equal(trim.longOption.hidden,false);assert.equal(trim.button.disabled,fal
 trim.button.click();assert.equal(trim.long,true);assert.equal(Number(workspace.$('duration').value),10,'entire source selects a long range explicitly');
 assert.equal(trim.selection.textContent,'10s · long','the collapsed label identifies a long selection');
 trim.commit({start:1,duration:8});assert.equal(Number(workspace.$('duration').value),8,'dragged long range remains intact');
-workspace.mode='black';trim.modeChanged();assert.equal(trim.long,false);assert.equal(Number(workspace.$('duration').value),5,'unsupported black-area mode returns to its short limit');
+workspace.mode='black';trim.modeChanged();assert.equal(trim.long,true);assert.equal(Number(workspace.$('duration').value),8,'black-area mode keeps an approved long selection');
 workspace.mode='expand';trim.update();trim.longMode.checked=true;trim.modeChanged();trim.longMode.checked=false;trim.longMode.onchange();assert.ok(Number(workspace.$('duration').value)<=5,'turning long mode off clamps the existing range');
+workspace.source={duration:218/30,fps_num:30,fps_den:1};trim.initial();assert.equal(Number(workspace.$('duration').value),4,'120 source frames are four seconds at 30 fps');assert.equal(trim.trimmer.fps,30,'Timeline dragging snaps to the source frame rate');
+trim.button.click();assert.equal(trim.long,true);assert.equal(Number(workspace.$('duration').value),218/30,'Use entire source keeps every original 30 fps frame');
+trim.commit({start:1/30,duration:15/30});assert.equal(Number(workspace.$('start').value),1/30);assert.equal(Number(workspace.$('duration').value),15/30);
 workspace.job={id:'busy'};trim.update();assert.equal(trim.button.disabled,true);
 trim.close();
 console.log('Frame-extension trim tracks the source, selection limit and precise timing.');

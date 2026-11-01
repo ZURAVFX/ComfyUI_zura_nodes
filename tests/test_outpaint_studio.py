@@ -24,6 +24,45 @@ class StudioOutpaintTests(unittest.TestCase):
         self.options = dict(start=1.0, duration=2.0, mode='expand', width=1152,
                             height=640, left=128, right=128)
 
+    def test_original_cadence_and_approved_sampling_are_bound_to_review(self):
+        source = dict(self.source, fps_num=30, fps_den=1, has_audio=True)
+        selection = module.plan(source, **self.options)
+        graph = module.build_studio_graph(source, selection, review_key=selection['review_key'], output_prefix='genj/outpaint/rate')
+        self.assertEqual((selection['frames'], selection['fps_num'], selection['fps_den']), (60, 30, 1))
+        self.assertEqual(graph['source_range']['class_type'], 'ZuraOutpaintSelectClip')
+        self.assertEqual(graph['source_range']['inputs']['expected_frames'], 60)
+        self.assertEqual(graph['temporal_hold']['inputs']['fps'], 30)
+        self.assertEqual(graph['assemble']['class_type'], 'ZuraOutpaintExactVideo')
+        self.assertEqual((graph['assemble']['inputs']['fps_num'], graph['assemble']['inputs']['fps_den']), (30, 1))
+        self.assertEqual(graph['empty']['inputs']['width'], selection['padded_width'])
+        self.assertEqual(graph['guide']['inputs']['image'], ['canvas', 0])
+        self.assertEqual(graph['adapter']['inputs']['lora_name'], 'ltx-2.3-22b-ic-lora-outpaint.safetensors')
+        self.assertEqual(graph['adapter']['inputs']['strength_model'], 1)
+        self.assertEqual(graph['sampler']['inputs']['sampler_name'], 'euler_ancestral_cfg_pp')
+        self.assertEqual(graph['guider']['inputs']['cfg'], 1)
+        self.assertEqual(graph['sigmas']['inputs']['sigmas'], '1.0, 0.99375, 0.9875, 0.98125, 0.975, 0.909375, 0.725, 0.421875, 0.0')
+        self.assertNotIn('sample_high', graph)
+        changed = dict(source, fps_num=24)
+        with self.assertRaisesRegex(ValueError, 'changed'):
+            module.build_studio_graph(changed, selection, review_key=selection['review_key'], output_prefix='genj/outpaint/rate')
+        silent = dict(source, has_audio=False)
+        silent_graph = module.build_studio_graph(silent, selection, review_key=selection['review_key'], output_prefix='genj/outpaint/silent', pad_delivery=True)
+        self.assertNotIn('audio', silent_graph['assemble']['inputs'])
+
+    def test_fractional_fps_is_not_rounded_in_video_container(self):
+        from fractions import Fraction
+        import sys
+        import types
+        from unittest.mock import patch
+        exact = Fraction(30000, 1001)
+        output = types.SimpleNamespace(VideoFromComponents=lambda components, **kwargs: components)
+        api = types.ModuleType('comfy_api.latest')
+        api.InputImpl = output
+        api.Types = types.SimpleNamespace(VideoComponents=lambda **kwargs: kwargs)
+        with patch.dict(sys.modules, {'comfy_api.latest': api}):
+            video = module.ZuraOutpaintExactVideo().make(torch.zeros(1, 2, 2, 3), 30000, 1001)[0]
+        self.assertEqual(video['frame_rate'], exact)
+
     def test_actual_frame_count_and_user_approval_gate(self):
         p = module.plan(self.source, **self.options)
         self.assertEqual((p['frames'], p['padded_frames'], p['duration']), (48, 49, 2.0))
@@ -56,7 +95,7 @@ class StudioOutpaintTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'past the source'):
             module.plan(source, **{**options, 'duration': source['duration'] + .02})
         graph = module.build_studio_graph(source, selected, review_key=selected['review_key'], output_prefix='genj/outpaint/fractional')
-        self.assertTrue(graph['source_range']['inputs']['round_up'])
+        self.assertEqual(graph['source_range']['inputs']['expected_frames'], selected['frames'])
         self.assertAlmostEqual(graph['source_range']['inputs']['duration_seconds'], 53/25)
         self.assertEqual(graph['temporal_hold']['inputs']['expected_frames'], 51)
         review = module.build_review_graph(source, selected, output_prefix='genj/outpaint/fractional_review')
@@ -104,11 +143,9 @@ class StudioOutpaintTests(unittest.TestCase):
         self.assertEqual((black['padded_width'], black['padded_height']), (768, 448))
         g = module.build_studio_graph(self.source, black, review_key=black['review_key'], output_prefix='genj/outpaint/black')
         self.assertEqual(g['unpad_result']['inputs']['height'], 432)
-        self.assertEqual(g['inpaint']['inputs']['mask'], ['low_mask', 0], 'The reviewed mask must reach LTX before sampling')
-        self.assertEqual(g['low_mask_image']['inputs']['image'], ['mask_image', 0])
-        self.assertEqual(g['mask_image']['inputs']['mask'], ['canvas', 1])
+        self.assertEqual(g['guide']['inputs']['image'], ['canvas', 0])
+        self.assertEqual(g['adapter']['inputs']['lora_name'], 'ltx-2.3-22b-ic-lora-outpaint.safetensors')
         self.assertEqual(g['canvas']['inputs']['images'], ['temporal_hold', 0])
-        self.assertEqual(g['audio_encoded']['inputs']['audio'], ['temporal_hold', 1])
         self.assertEqual(g['trim_result']['inputs']['length'], 48)
         self.assertEqual(g['assemble']['inputs']['audio'], ['components', 1])
         image = torch.ones((1, 130, 130, 3)); image[:, :, :10] = 0

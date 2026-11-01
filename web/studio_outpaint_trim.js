@@ -3,7 +3,7 @@ import {ClipTrimmer} from './studio_trim.js';
 // Long selections are available only when the verified backend advertises them.
 const FPS=24, MAX_FRAMES=120, MAX_START_SECONDS=86400, MAX_HDR_LONG_FRAMES=10000;
 const HDR_PIXEL_FRAMES=40_000_000;
-const framesFor=seconds=>Math.max(0,Math.ceil(Number(seconds)*FPS-1e-6));
+const framesFor=(seconds,fps=FPS)=>Math.max(0,Math.ceil(Number(seconds)*fps-1e-6));
 
 export function hdrOutpaintFrameLimit(source,width,height){
   if(!source || !Number.isInteger(source.width) || !Number.isInteger(source.height) || source.width<1 || source.height<1)return 113;
@@ -59,53 +59,56 @@ export class OutpaintTrim {
     });
   }
   seek(time){try{this.workspace.video.currentTime=time;}catch{/* Metadata may still be loading. */}}
+  fps(){if(this.workspace.$('hdr-output')?.checked)return FPS;const source=this.workspace.source,rate=Number(source?.fps_num)/Number(source?.fps_den);return Number.isFinite(rate)&&rate>=1&&rate<=120?rate:FPS;}
   maxFrames(){if(!this.workspace.$('hdr-output')?.checked)return MAX_FRAMES;const size=this.workspace.dimensions?.();return size?hdrOutpaintFrameLimit(this.workspace.source,size.width,size.height):113;}
   canLong(){const hdr=!!this.workspace.$('hdr-output')?.checked;
     if(hdr)return this.workspace.mode==='black'?this.workspace.capabilities?.hdr_black_long_experiment===true:this.workspace.mode==='expand'&&this.workspace.capabilities?.hdr_expand_long_experiment===true;
-    return this.workspace.mode==='expand'&&this.workspace.longReady===true;}
+    return ['expand','black'].includes(this.workspace.mode)&&this.workspace.longReady===true;}
   get long(){return this.canLong() && this.longMode.checked;}
   modeChanged(){
     if(!this.canLong() && this.longMode.checked){this.longMode.checked=false;this.commit({start:Number(this.workspace.$('start').value),duration:Number(this.workspace.$('duration').value)});}
     this.update();
   }
   initial(){
-    const source=this.workspace.source;
+    const source=this.workspace.source,fps=this.fps();
     this.longMode.checked=false;
-    const count=Math.min(this.maxFrames(),framesFor(source?.duration));
+    const count=Math.min(this.maxFrames(),framesFor(source?.duration,fps));
     this.workspace.$('start').value='0';
-    this.workspace.$('duration').value=String(Math.min(count/FPS, Number(source?.duration)||0));
+    this.workspace.$('duration').value=String(Math.min(count/fps, Number(source?.duration)||0));
     this.update();
   }
   commit(range){
-    const w=this.workspace,total=Math.min(MAX_START_SECONDS*FPS,framesFor(w.source?.duration));
+    const w=this.workspace,fps=this.fps(),total=Math.min(MAX_START_SECONDS*fps,framesFor(w.source?.duration,fps));
     if(!total)return;
     if(total<3)return;
-    const start=Math.max(0,Math.min(MAX_START_SECONDS*FPS,total-3,Math.round((Number(range.start)||0)*FPS)));
+    const start=Math.max(0,Math.min(MAX_START_SECONDS*fps,total-3,Math.round((Number(range.start)||0)*fps)));
     const maximum=this.long ? Math.min(total-start,w.$('hdr-output')?.checked?MAX_HDR_LONG_FRAMES:total-start) : this.maxFrames();
-    const count=Math.max(3,Math.min(maximum,total-start,Math.ceil((Number(range.duration)||0)*FPS-1e-6)));
-    w.$('start').value=String(start/FPS);
-    w.$('duration').value=String(Math.min(count/FPS, Math.max(0, Number(w.source.duration)-start/FPS)));
-    w.invalidate();w.updateModelContext?.();this.update();this.seek(start/FPS);
+    const count=Math.max(3,Math.min(maximum,total-start,Math.ceil((Number(range.duration)||0)*fps-1e-6)));
+    w.$('start').value=String(start/fps);
+    w.$('duration').value=String(Math.min(count/fps, Math.max(0, Number(w.source.duration)-start/fps)));
+    w.invalidate();w.updateModelContext?.();this.update();this.seek(start/fps);
   }
   useSource(){
-    const total=framesFor(this.workspace.source?.duration);
-    if(total<3||total>MAX_START_SECONDS*FPS||(this.workspace.$('hdr-output')?.checked&&total>MAX_HDR_LONG_FRAMES))return;
+    const fps=this.fps(),total=framesFor(this.workspace.source?.duration,fps);
+    if(total<3||total>MAX_START_SECONDS*fps||(this.workspace.$('hdr-output')?.checked&&total>MAX_HDR_LONG_FRAMES))return;
     if(total>this.maxFrames()){if(!this.canLong())return;this.longMode.checked=true;}
     this.commit({start:0,duration:Number(this.workspace.source.duration)});
   }
   update(){
-    const w=this.workspace,source=w.source,total=framesFor(source?.duration),busy=!!w.job||w.submitting;
+    const w=this.workspace,source=w.source,fps=this.fps(),total=framesFor(source?.duration,fps),busy=!!w.job||w.submitting;
     this.container.hidden=!source;
     this.longOption.hidden=!this.canLong();this.longMode.disabled=busy;
     const maxFrames=this.maxFrames();
-    const hdr=!!w.$('hdr-output')?.checked,longMax=hdr?MAX_HDR_LONG_FRAMES:MAX_START_SECONDS*FPS;
+    const hdr=!!w.$('hdr-output')?.checked,longMax=hdr?MAX_HDR_LONG_FRAMES:MAX_START_SECONDS*fps;
     this.button.disabled=busy||total<3||maxFrames<3||total>longMax||(total>maxFrames&&!this.canLong());
     this.play.disabled=busy||total<3;
-    this.limit.textContent=total<3?'Choose a source at least 3 frames long.':maxFrames<3?'This HDR source or canvas exceeds the frame memory limit. Use smaller footage or a smaller canvas.':total>MAX_START_SECONDS*FPS?'Select a range within the first 24 hours of the source.':this.long&&hdr?'HDR preview uses overlapping sections, up to 10,000 frames per selection.':this.long?'Long clips use guided, blended sections; rendering takes longer.':total>maxFrames?(this.canLong()?'Use the full source or enable long clips to select a longer range.':`Up to ${Number((maxFrames/FPS).toFixed(2))} seconds per render. Trim the source to continue.`):'The final frame is held if needed for the model.';
+    this.limit.textContent=total<3?'Choose a source at least 3 frames long.':maxFrames<3?'This HDR source or canvas exceeds the frame memory limit. Use smaller footage or a smaller canvas.':total>MAX_START_SECONDS*fps?'Select a range within the first 24 hours of the source.':this.long&&hdr?'HDR preview uses overlapping sections, up to 10,000 frames per selection.':this.long?'Long clips use guided, blended sections; rendering takes longer.':total>maxFrames?(this.canLong()?'Use the full source or enable long clips to select a longer range.':`Up to ${Number((maxFrames/fps).toFixed(2))} seconds per render. Trim the source to continue.`):'The final frame is held if needed for the model.';
     const duration=Number(w.$('duration').value)||0;
     this.selection.textContent=`${duration.toFixed(2).replace(/\.?0+$/,'')}s${this.long?' · long':''}`;
     const url=w.video.currentSrc||w.video.src||'';
-    this.trimmer.update(source?{...source,url}:null,{length_mode:'custom',start:Number(w.$('start').value),duration:Number(w.$('duration').value)},{disabled:busy||maxFrames<3,maximum:this.long?(hdr?MAX_HDR_LONG_FRAMES/FPS:null):Math.max(3,maxFrames)/FPS});
+    this.trimmer.update(source?{...source,url}:null,{length_mode:'custom',start:Number(w.$('start').value),duration:Number(w.$('duration').value)},{disabled:busy||maxFrames<3,maximum:this.long?(hdr?MAX_HDR_LONG_FRAMES/fps:null):Math.max(3,maxFrames)/fps});
+    // ClipTrimmer defaults to 24 fps; this workspace follows the source rate.
+    this.trimmer.fps=fps;this.trimmer.paint();
   }
   close(){this.menu.open=false;const doc=this.workspace.page.ownerDocument;doc.removeEventListener('pointerdown',this.onOutside,true);doc.removeEventListener('keydown',this.onEscape,true);this.trimmer.close();}
 }

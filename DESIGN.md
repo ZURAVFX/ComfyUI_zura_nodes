@@ -144,3 +144,19 @@ horizontal footer linking the prerequisite message to the primary action.
 ## Shared navigation, 31 October 2026
 
 The latest user brief removes the Home landing step. Image and Video remain in the header, with model downloads alongside them. Convert to HDR is a video workflow in the same task selector, not another top-level section. A shared Start over control returns the active mode to its empty source stage, retaining saved results and other modes. The Panorama camera editor uses native interactive geometry with explicit Apply and Cancel; its full-motion warp is reviewed before rendering.
+
+## Studio craft pass
+
+Image, Video, HDR, Paintout, frame extension and camera controls share the
+same neutral surfaces, Manrope typography and spacing scale. Footage carries
+the colour; lime marks the main action and keyboard focus. Both themes use
+the same roles. The final shared layer is `web/studio_polish.css`.
+
+Image editing keeps the editable plate in a Main image attachment and puts
+appearance references in a separate References disclosure. Model, resolution
+and settings sit together below the prompt. Original media, comparison,
+history and reset controls remain available. Short windows use a smaller
+prompt height; prompts remain multiline and resizable.
+
+Adapted from [Unslop by Damir Sokolovsky](https://github.com/heydamir/unslop),
+CC BY 4.0. See THIRD_PARTY_NOTICES.md.

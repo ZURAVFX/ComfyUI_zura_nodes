@@ -1,13 +1,13 @@
 # Image Studio
 
 Open Zura Studio and choose **Image** or **Video**. Switching workspaces keeps
-the current video shot and image prompt. Home returns to the two choices.
+the current video shot and image prompt. Studio opens directly in Video.
 
-Use the header Light mode / Dark mode toggle to change appearance. The choice is saved in this browser and shared across Home, Image and Video.
+Use the header Light mode / Dark mode toggle to change appearance. The choice is saved in this browser and shared across the Studio workspaces.
 
-For images, choose a model and shape, or enter width and height (256–2048 pixels in increments of 16). Swap exchanges the dimensions. Sizes above the tested 1 MP range display a memory notice; they are not guaranteed to fit every 16 GB setup. Dimensions are saved with the prompt and restored by Reuse prompt. Write a prompt, then select **Generate
+For images, choose a model and use Auto sizing to keep Image 1 dimensions. For an explicit size, choose a shape, use the megapixel slider (up to 8.5 MP), or enter width and height (256–8192 pixels per side in increments of 16). This is a UI sizing range, not a guarantee that every model or GPU supports every size. Swap exchanges the dimensions. Sizes above the tested 1 MP range display a memory notice; they are not guaranteed to fit every 16 GB setup. Dimensions are saved with the prompt and restored by Reuse prompt. Write a prompt, then select **Generate
 image**. Results save in `ComfyUI/output/zura_images`. Download opens the saved
-PNG; Reuse prompt restores its model, shape, prompt and seed. New prompt clears
+PNG; Reuse prompt restores its model, shape, prompt and seed. More → New prompt clears
 only the image prompt. The last 30 result links and an active run are remembered
 in this browser. The PNG files remain on disk even if browser storage is cleared.
 
@@ -16,6 +16,12 @@ memory offloading. No extra inference service, repeated VRAM purge, paid API or
 background model download is involved. Cancel targets the image job, leaving
 other ComfyUI jobs alone. Requires current ComfyUI with Flux 3 and targeted
 interruption support (qualified against 0.41.3).
+
+## Image editing controls
+
+Choose **Edit image**. The first input becomes **Main image** and appears in the canvas. Click that attachment to replace it, or its × to remove it. **References** opens the separate appearance references. Removing the main image never promotes a reference into its place. Image 1 always means the main image.
+
+Model, resolution and Settings sit together below the prompt. **Compare** switches to the Image 1 / result slider after a result is available. **View main image** returns to the editable plate. Scroll to zoom and drag to inspect it. The canvas header keeps History, Compare and More together.
 
 ## Qualified recipes
 
@@ -46,7 +52,7 @@ Two-reference Flux 3 and four-reference Flux 2 edits were rendered and visually
 checked at 768 × 512: red upholstery replaced the teal upholstery in the supplied
 train views. Ten-reference Flux 3 performance has not been qualified.
 
-Clear history empties the image gallery and saves that choice across reloads.
+More → Clear history empties the image gallery and saves that choice across reloads.
 It does not delete output files or reference uploads. Undo clear restores the
 previous gallery during the current session. A run already in progress can
 still add its new result after the history is cleared.

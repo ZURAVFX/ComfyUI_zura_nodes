@@ -1,3 +1,4 @@
+import {ImageEditInputs} from './studio_image_edit_inputs.js';
 import {resolutionSize,editableDimension} from './studio_resolution.js';
 import {IMAGE_MODELS,IMAGE_SIZES,buildImageGraph,imageAvailability,imageDimensions} from "./image_recipes.js";
 import {VideoComposer,composerIcons} from "./studio_composer.js";
@@ -34,6 +35,7 @@ export class CreativeWorkspace {
     const saved=read();this.items=Array.isArray(saved.items)?saved.items.slice(0,30):[];
     this.job=saved.job||null;this.pendingSubmission=saved.pendingSubmission||null;this.draft=saved.draft||{};this.models=[];this.submitting=false;this.uploading=false;this.references=Array.isArray(this.draft.references)?this.draft.references:[];
     if(this.job?.cancelPending)this.job.cancelRetryAvailable=true;
+    this.editMainMissing=!!this.draft.editMainMissing;
     this.imageLoras=Array.isArray(this.draft.loras)?this.draft.loras.map(l=>({...l})):[];this.imageLoraCatalog=[];
     const nav=document.createElement("nav");nav.className="zc-nav";nav.setAttribute("aria-label","Workspace");
     nav.innerHTML='<button type="button" data-space="home" hidden>Home</button><button type="button" data-space="image">Image</button><button type="button" data-space="video">Video</button><button type="button" id="zc-open-hdr" hidden>Convert to HDR</button>';
@@ -54,11 +56,13 @@ export class CreativeWorkspace {
     const page=document.createElement("section");page.className="zc-image-page";
     page.innerHTML=`<aside class="zc-image-settings"><button id="zc-settings-close" class="zc-mobile-tools" type="button">Done</button><h2>Image settings</h2><label for="zc-model">Model</label><select id="zc-model" disabled><option>Checking installed models…</option></select><p id="zc-model-hint" class="zc-hint"></p><span class="zc-field-label">Shape</span><div class="zc-shapes" role="group" aria-label="Image shape">${Object.keys(IMAGE_SIZES).map(s=>`<button type="button" data-shape="${s}"><span class="zc-shape-icon ${s}" aria-hidden="true"></span>${s[0].toUpperCase()+s.slice(1)}</button>`).join("")}</div><select id="zc-shape" hidden aria-hidden="true" tabindex="-1">${Object.keys(IMAGE_SIZES).map(s=>`<option value="${s}">${s}</option>`).join("")}</select><div class="zc-dimensions"><label for="zc-width">Width (px)<input id="zc-width" type="number" min="256" max="8192" step="16" value="1024"/></label><button id="zc-swap-size" type="button" aria-label="Swap width and height">Swap</button><label for="zc-height">Height (px)<input id="zc-height" type="number" min="256" max="8192" step="16" value="1024"/></label></div><p id="zc-size" class="zc-hint" aria-live="polite"></p><details class="zc-advanced"><summary>More control</summary><label for="zc-seed">Seed</label><input id="zc-seed" type="number" min="0" step="1" value="42"/><label class="zc-check"><input id="zc-random" type="checkbox" checked/> New variation each time</label></details><details class="zc-advanced"><summary>Models & setup</summary><div id="zc-setup"></div><button type="button" id="zc-refresh">Refresh models</button><p class="zc-hint">Tested at 1024px on a 16 GB RTX 4080 with ComfyUI offloading. Other hardware and apps affect speed.</p></details><p class="zc-local">Local generation · No API credits</p></aside><main class="zc-image-main"><div class="zc-image-scroll"><div class="zc-image-heading"><div><h2>Images</h2></div><div class="zc-image-tools"><button type="button" id="zc-settings-toggle" class="zc-mobile-tools" aria-expanded="false">Settings</button><button type="button" id="zc-new">New prompt</button><button type="button" id="zc-clear-history">Clear history</button><button type="button" id="zc-undo-history" hidden>Undo clear</button></div></div><div id="zc-gallery" class="zc-gallery"></div><div id="zc-image-empty" class="zc-image-empty"><svg class="zc-empty-symbol" aria-hidden="true" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="7" y="7" width="34" height="34" rx="6"/><circle cx="18" cy="18" r="3"/><path d="m8 33 10-9 8 7 7-5 8 7"/></svg><h3>Create your first image</h3><p>Add references below, or start with a prompt.</p><div class="zc-suggestions"><button type="button" data-suggestion="A cinematic photograph of a quiet coastal house at blue hour, warm light through the windows, soft mist, natural materials">A cinematic scene</button><button type="button" data-suggestion="Studio product photograph of a sculptural ceramic vase, pale lavender background, soft directional lighting, precise material detail">A product shot</button><button type="button" data-suggestion="An illustrated character sheet of an adventurous botanist wearing a moss green coat, expressive face, warm hand-painted textures, neutral background">A character idea</button></div></div></div><form class="zc-image-composer"><div id="zc-progress" class="zc-progress" hidden><div><strong id="zc-progress-title">Queued</strong><button id="zc-cancel" type="button">Cancel</button></div><progress id="zc-bar" max="100" aria-label="Image generation progress"></progress><small id="zc-progress-detail">Waiting for ComfyUI</small></div><p id="zc-message" role="status" aria-live="polite" hidden></p><section class="zc-references" id="zc-reference-drop" aria-label="Reference images"><div id="zc-reference-list" class="zc-reference-list"></div><div class="zc-reference-toolbar"><button id="zc-add-references" type="button">${plusIcon()} Add reference images</button><button id="zc-clear-references" type="button" hidden>Remove all</button><span id="zc-reference-hint"></span></div><input id="zc-reference-files" type="file" accept="image/png,image/jpeg,image/webp" multiple hidden/></section><label for="zc-prompt">Your prompt</label><textarea id="zc-prompt" rows="3" placeholder="Describe the image you have in mind…" required maxlength="12000"></textarea><div class="zc-composer-bottom"><span id="zc-recipe-label">Local image generation</span><button id="zc-generate" type="submit" class="gs-primary" disabled>Generate image ${arrow()}</button></div></form></main>`;
     this.root.append(page);
+    this.editInputs=new ImageEditInputs(this);
     const compareButton=document.createElement('button');compareButton.type='button';compareButton.id='zc-compare-image';compareButton.textContent='Compare';
     page.querySelector('.zc-image-tools').prepend(compareButton);
     const compareHost=document.createElement('section');compareHost.id='zc-image-comparison';compareHost.className='gs-comparison zc-image-comparison';compareHost.hidden=true;
     this.$('gallery').after(compareHost);
     this.imageComparison=new ImageResultComparison(compareHost,compareButton,this.$('gallery'),api);
+    compareButton.addEventListener('click',()=>{if(this.imageComparison.active){this.editInputs.showSource=false;this.editInputs.sync();}});
     const browserConnection=document.createElement('div');
     this.$('reference-drop').after(browserConnection);
     this.browserConnection=new BrowserImageConnection(this,browserConnection);
@@ -145,8 +149,8 @@ export class CreativeWorkspace {
     drop.ondragleave=()=>drop.classList.remove("is-dragging");
     drop.ondrop=e=>{e.preventDefault();e.stopPropagation();drop.classList.remove("is-dragging");this.uploadReferences(Array.from(e.dataTransfer?.files||[]));};
     this.root.onpaste=e=>this.pasteReferences(e);
-    this.$("reference-list").onclick=e=>{if(this.job||this.pendingSubmission||this.submitting||this.uploading)return;const remove=e.target.closest("[data-remove-ref]"),move=e.target.closest("[data-move-ref]");if(remove)this.references.splice(Number(remove.dataset.removeRef),1);if(move){const i=Number(move.dataset.moveRef);[this.references[i-1],this.references[i]]=[this.references[i],this.references[i-1]];}this.save();this.render();};
-    this.$("clear-references").onclick=()=>{this.references=[];this.save();this.render();};
+    this.$("reference-list").onclick=e=>{if(this.job||this.pendingSubmission||this.submitting||this.uploading)return;const remove=e.target.closest("[data-remove-ref]"),move=e.target.closest("[data-move-ref]");if(!remove&&!move)return;if(remove){const index=Number(remove.dataset.removeRef);if(this.imageOperation==='edit'&&index===0&&!this.editMainMissing)this.editMainMissing=true;this.references.splice(index,1);if(!this.references.length)this.editMainMissing=false;}if(move){const i=Number(move.dataset.moveRef);[this.references[i-1],this.references[i]]=[this.references[i],this.references[i-1]];}this.save();this.render();};
+    this.$("clear-references").onclick=()=>{this.references=[];this.editMainMissing=false;this.save();this.render();};
     this.$("refresh").onclick=()=>this.loadModels();this.$("cancel").onclick=()=>this.cancel();
     this.$("new").onclick=()=>{this.$("prompt").value="";this.save();this.render();this.$("prompt").focus({preventScroll:true});};
     this.$("gallery").onclick=e=>{
@@ -155,7 +159,7 @@ export class CreativeWorkspace {
       const button=e.target.closest("[data-reuse]");if(!button)return;
       const item=this.items[Number(button.dataset.reuse)];
       this.setImageOperation(IMAGE_MODELS.find(m=>m.id===item.model)?.edit?'edit':'create',{useCanvas:false});
-      this.references=item.references||[];this.$("prompt").value=item.prompt;this.$("model").value=item.model;this.$("shape").value=item.shape;
+      this.editMainMissing=false;this.references=item.references||[];this.$("prompt").value=item.prompt;this.$("model").value=item.model;this.$("shape").value=item.shape;
       const size=imageDimensions(item);this.$("width").value=size[0];this.$("height").value=size[1];this.$("seed").value=item.seed;this.$("random").checked=false;this.save();this.render();
     };
     this.root.querySelector("#gs-exit").onclick=()=>this.mode==="image"?this.graph():this.mode==="frames"?this.frames.graph():this.mode==="references"?this.referencesVideo.graph():this.mode==="paintout"?this.paintout.graph():this.mode==="outpaint"?this.outpaint.graph():studio.graphView();
@@ -168,6 +172,7 @@ export class CreativeWorkspace {
       this.root.append(tooltip);
       if(globalThis.customElements?.get("wa-tooltip"))control.removeAttribute("title");
     }
+    this.editInputs.mountControls();
     this.show("video");this.renderGallery();this.render();
   }
   buildVideoInspector(settings){
@@ -280,7 +285,7 @@ export class CreativeWorkspace {
     if(!Array.isArray(result.loras)||result.loras.length!==config.loras.length)throw new Error('Could not validate the selected image LoRAs.');
     return buildImageGraph({...config,loras:result.loras});
   }
-  config(){return {operation:this.imageOperation,model:this.$("model").value||(this.imageOperation==='edit'?'qwen2511':'flux2'),prompt:this.$("prompt").value,shape:this.$("shape").value,references:this.references.map(r=>({...r})),loras:IMAGE_MODELS.find(model=>model.id===this.$('model').value)?.provider?[]:this.imageLoras.map(l=>({...l})),width:Number(this.$("width").value),height:Number(this.$("height").value),seed:Number(this.$("seed").value),random:this.$("random").checked};}
+  config(){return {...(this.outpaintGuide?.request?{outpaint_guide:this.outpaintGuide.request.id}:{}),operation:this.imageOperation,editMainMissing:!!this.editMainMissing,model:this.$("model").value||(this.imageOperation==='edit'?'qwen2511':'flux2'),prompt:this.$("prompt").value,shape:this.$("shape").value,references:this.references.map(r=>({...r})),loras:IMAGE_MODELS.find(model=>model.id===this.$('model').value)?.provider?[]:this.imageLoras.map(l=>({...l})),width:Number(this.$("width").value),height:Number(this.$("height").value),seed:Number(this.$("seed").value),random:this.$("random").checked};}
   async setImageOperation(operation,{useCanvas=true}={}){
     if(this.job||this.pendingSubmission||this.submitting||this.uploading)return;
     this.imageOperation=operation;
@@ -293,7 +298,7 @@ export class CreativeWorkspace {
     const file=this.items[this.selectedImage||0]?.file;if(!file?.filename)return;
     const origin=JSON.stringify([file.filename,file.subfolder||'',file.type||'output']);
     const existing=this.references.find(r=>r.canvasOrigin===origin);
-    if(existing){this.references=[existing,...this.references.filter(r=>r!==existing)];this.save();this.render();return;}
+    if(existing){this.editMainMissing=false;this.references=[existing,...this.references.filter(r=>r!==existing)];this.save();this.render();return;}
     this.uploading=true;this.message('Adding the canvas image as Image 1…');this.render();
     const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),120000);
     try{
@@ -303,7 +308,7 @@ export class CreativeWorkspace {
       const uploaded=await this.api.fetchApi('/upload/image',{method:'POST',body,signal:controller.signal});
       if(!uploaded.ok)throw new Error('Could not add the canvas image. Choose Edit image again to retry.');
       const asset=await uploaded.json();if(!asset.name)throw new Error('ComfyUI did not return the canvas reference.');
-      this.references=[{...dimensions,name:file.filename,filename:asset.name,subfolder:asset.subfolder||'',file:(asset.subfolder?asset.subfolder+'/':'')+asset.name,canvasOrigin:origin},...this.references];
+      this.editMainMissing=false;this.references=[{...dimensions,name:file.filename,filename:asset.name,subfolder:asset.subfolder||'',file:(asset.subfolder?asset.subfolder+'/':'')+asset.name,canvasOrigin:origin},...this.references];
       this.save();this.message('');
     }catch(error){this.message(error.name==='AbortError'?'Adding the canvas image timed out. Choose Edit image again to retry.':error.message);}
     finally{clearTimeout(timer);this.uploading=false;this.render();}
@@ -481,8 +486,8 @@ export class CreativeWorkspace {
     this.$("reference-hint").textContent=this.uploading?"Uploading references…":!max?"Text only. Choose Flux to use reference images.":!m?.referenceReady?"Update ComfyUI for reference image support.":`${this.references.length} / ${max} · Drop or paste images here (Ctrl+V)`+(this.references.length?" · Refer to Image 1, Image 2… in your prompt.":"")+(this.references.length>2&&!m?.provider?" · References resized to a 2 MP total.":"");
     if(this.imageOperation==='edit'&&m?.referenceReady&&!this.uploading)this.$('reference-hint').textContent=`${this.references.length} / ${max} · Image 1: source to edit. Extra images: references. Drop or Ctrl+V.`;
     if(this.references.length>max)this.$("reference-hint").textContent=`This model accepts ${max} references. Remove some or choose another model.`;
-    const fingerprint=JSON.stringify([this.references,busy]);
-    if(fingerprint!==this.referenceFingerprint){this.referenceFingerprint=fingerprint;this.$("reference-list").innerHTML=this.references.map((r,i)=>`<div class="zc-reference"><img src="${escape(this.api.apiURL('/view?'+new URLSearchParams({filename:r.filename,subfolder:r.subfolder||'',type:'input'})))}" alt="${escape(r.name||'Reference '+(i+1))}"/><span>Image ${i+1}</span><button type="button" data-remove-ref="${i}" aria-label="Remove reference ${i+1}" ${busy?'disabled':''}>${closeIcon()}</button>${i?`<button type="button" class="zc-ref-move" data-move-ref="${i}" aria-label="Move reference ${i+1} earlier" ${busy?'disabled':''}>${previousIcon()}</button>`:''}</div>`).join('');}
+    const fingerprint=JSON.stringify([this.references,busy,this.imageOperation,this.editMainMissing]);
+    if(fingerprint!==this.referenceFingerprint){if(this.editInputs?.addHome)this.editInputs.addHome.prepend(this.editInputs.addReferences);this.referenceFingerprint=fingerprint;this.$("reference-list").innerHTML=this.references.map((r,i)=>`<div class="zc-reference"><img src="${escape(this.api.apiURL('/view?'+new URLSearchParams({filename:r.filename,subfolder:r.subfolder||'',type:'input'})))}" alt="${escape(r.name||'Reference '+(i+1))}"/><span>Image ${i+1}</span><button type="button" data-remove-ref="${i}" aria-label="Remove reference ${i+1}" ${busy?'disabled':''}>${closeIcon()}</button>${i?`<button type="button" class="zc-ref-move" data-move-ref="${i}" aria-label="Move reference ${i+1} earlier" ${busy?'disabled':''}>${previousIcon()}</button>`:''}</div>`).join('');}
     this.$("model-hint").textContent=m?.hint||"Checking local model files.";
     this.$("size").textContent=error || (auto?(m?.provider?"Auto · No size instruction is sent. The website chooses the final size.":this.references.length?"Auto · Uses Image 1 dimensions, aligned to 16 px.":"Auto · 1024 × 1024 when no reference is supplied.") : size.join(" × ")+" px · "+(size[0]*size[1]/1e6).toFixed(2)+" MP"+(m?.provider?" requested · The website determines the final size.":size[0]*size[1]>1048576?" · Above the tested 1 MP size; needs more memory.":" · Multiples of 16"));
     for(const id of ["width","height"])this.$(id).setAttribute("aria-invalid",String(!!error));
@@ -493,8 +498,10 @@ export class CreativeWorkspace {
     this.$("recipe-label").textContent=m?`${m.name} · ${m.provider?'Browser account':m.steps+' steps'}`:"Local image generation";
     for(const b of this.root.querySelectorAll("[data-shape]")){b.setAttribute("aria-pressed",String(auto?b.dataset.shape==='auto':b.dataset.shape!=='auto'&&!!size&&IMAGE_SIZES[b.dataset.shape].every((v,i)=>v===size[i])));b.disabled=busy;}
     this.imageComparison?.update(this.items[this.selectedImage||0],this.references);
+    this.editInputs?.sync();
   }
   renderGallery(){
+    this.outpaintGuide?.syncImageUI();
     this.imageZoom?.dispose();this.imageZoom=null;
     this.$("image-empty").hidden=!!this.items.length;
     this.selectedImage=Math.min(this.selectedImage||0,Math.max(0,this.items.length-1));
@@ -503,6 +510,7 @@ export class CreativeWorkspace {
     if(frame && typeof PreviewZoom!=="undefined"){this.imageZoom=new PreviewZoom(frame,()=>frame.querySelector('a>img'));this.imageZoom.update(String(this.selectedImage));}
     this.$('image-history').innerHTML=this.items.map((item,i)=>`<button type="button" data-view-image="${i}" aria-pressed="${i===this.selectedImage}"><img src="${escape(this.api.apiURL(view(item.file)))}" alt="" loading="lazy"/><span>${escape(item.prompt)}</span></button>`).join('')||'<p>No saved images yet.</p>';
     this.imageComparison?.update(this.items[this.selectedImage],this.references);
+    this.editInputs?.sync();
   }
   async pasteReferences(event){
     if(this.mode==='frames')return this.frames.paste(event);
@@ -521,17 +529,17 @@ export class CreativeWorkspace {
     if(this.job||this.pendingSubmission||this.submitting||this.uploading){this.message("Wait for the current upload or generation to finish, then paste your image again.");return;}
     await this.uploadReferences(files);
   }
-  async uploadReferences(files){
+  async uploadReferences(files,{main=false}={}){
     if(this.job||this.pendingSubmission||this.submitting||this.uploading||!files.length)return;
     const m=this.models.find(m=>m.id===this.config().model);
     if(!m?.maxReferences||!m.referenceReady){this.message("Choose an installed model with image reference support.");return;}
-    if(files.length+this.references.length>m.maxReferences){this.message(`Choose up to ${m.maxReferences-this.references.length} more images for ${m.name}. Nothing was discarded.`);return;}
+    if(files.length+this.references.length-(main&&this.imageOperation==='edit'&&!this.editMainMissing&&this.references.length?1:0)>m.maxReferences){this.message(`Choose up to ${m.maxReferences-this.references.length} more images for ${m.name}. Nothing was discarded.`);return;}
     if(files.some(f=>!(/\.(png|jpe?g|webp)$/i.test(f.name))||f.size>64*1024*1024)){this.message("Use PNG, JPEG or WebP images under 64 MB each.");return;}
     this.uploading=true;this.message("");this.render();
     try{for(const file of files){
       const body=new FormData();body.append("image",file,crypto.randomUUID()+'.'+file.name.split('.').at(-1));body.append("subfolder","zura_images/references");body.append("type","input");
       const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),120000);
-      try{const response=await this.api.fetchApi("/upload/image",{method:"POST",body,signal:controller.signal});if(!response.ok)throw new Error("Reference upload failed. You can retry the remaining images.");const asset=await response.json();if(!asset.name)throw new Error("ComfyUI did not return the uploaded image.");this.references.push({...await referenceDimensions(file),name:file.name,filename:asset.name,subfolder:asset.subfolder||"",file:(asset.subfolder?asset.subfolder+"/":"")+asset.name});this.save();this.render();}finally{clearTimeout(timer);}
+      try{const response=await this.api.fetchApi("/upload/image",{method:"POST",body,signal:controller.signal});if(!response.ok)throw new Error("Reference upload failed. You can retry the remaining images.");const asset=await response.json();if(!asset.name)throw new Error("ComfyUI did not return the uploaded image.");const ref={...await referenceDimensions(file),name:file.name,filename:asset.name,subfolder:asset.subfolder||"",file:(asset.subfolder?asset.subfolder+"/":"")+asset.name};if(this.imageOperation==='edit'&&(main||this.editMainMissing)){if(this.editMainMissing||!this.references.length)this.references.unshift(ref);else this.references[0]=ref;this.editMainMissing=false;}else this.references.push(ref);this.save();this.render();}finally{clearTimeout(timer);}
     }}catch(e){this.message(e.name==="AbortError"?"Upload timed out. Try the remaining images again.":e.message);}finally{this.uploading=false;this.render();}
   }
   elapsed(){
@@ -548,7 +556,7 @@ export class CreativeWorkspace {
     if(['width','height'].some(k=>this.$(k).commitDimension?.()===false)){this.message('Enter a whole number for width and height.');return;}
     if(this.job||this.pendingSubmission||this.submitting||this.uploading)return;
     this.submitting=true;const attempt={};this.submitAttempt=attempt;this.message("");this.render();
-    try{const c=this.config(),model=this.models.find(m=>m.id===c.model);if(c.shape==='auto'&&c.references[0]&&!c.references[0].width&&!model?.provider){const ref=c.references[0],response=await this.api.fetchApi('/view?'+new URLSearchParams({filename:ref.filename,subfolder:ref.subfolder||'',type:'input'}));if(!response.ok)throw Error('Could not read Image 1 dimensions. Re-upload it and try again.');Object.assign(ref,await referenceDimensions(await response.blob()));Object.assign(this.references[0],ref);}if(!model?.ready)throw new Error("Set up this model first, then refresh models.");if(!this.browserConnection.connected(model))throw new Error('Sign in to your browser account beside the prompt first.');if(c.random)c.seed=crypto.getRandomValues(new Uint32Array(1))[0];const graph=await this.imageGraph(c);this.$("bar").removeAttribute("value");await submitOwnedGraph(this,graph,c,'auto',{zura_image:true});}
+    try{const c=this.config(),model=this.models.find(m=>m.id===c.model);if(c.operation==='edit'&&(c.editMainMissing||!c.references.length))throw Error('Add the main image you want to edit first.');if(c.shape==='auto'&&c.references[0]&&!c.references[0].width&&!model?.provider){const ref=c.references[0],response=await this.api.fetchApi('/view?'+new URLSearchParams({filename:ref.filename,subfolder:ref.subfolder||'',type:'input'}));if(!response.ok)throw Error('Could not read Image 1 dimensions. Re-upload it and try again.');Object.assign(ref,await referenceDimensions(await response.blob()));Object.assign(this.references[0],ref);}if(!model?.ready)throw new Error("Set up this model first, then refresh models.");if(!this.browserConnection.connected(model))throw new Error('Sign in to your browser account beside the prompt first.');if(c.random)c.seed=crypto.getRandomValues(new Uint32Array(1))[0];const graph=await this.imageGraph(c);this.$("bar").removeAttribute("value");await submitOwnedGraph(this,graph,c,'auto',{zura_image:true});}
     catch(e){this.message(e.message);}finally{if(this.submitAttempt===attempt){this.submitting=false;this.submitAttempt=null;this.render();}}
   }
   startPolling(){if(this.timer)return;this.timer=setInterval(()=>this.poll(),1500);this.poll();}

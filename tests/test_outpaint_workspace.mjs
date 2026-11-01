@@ -50,7 +50,7 @@ assert.ok(ui.box.right<0);ui.drag=null;
 ui.$('scale-fit').onclick();assert.equal(ui.$('scale').value,'100');
 ui.setScale(50);
 assert.equal(ui.$('review').disabled,false);
-assert.equal(ui.config().strategy,undefined,'short canvas renders keep the original black-guide path');
+assert.equal(ui.config().strategy,undefined,'short canvas renders use the single masked two-stage graph');
 ui.longReady=true;ui.source.duration=10;ui.trim.useSource();assert.equal(ui.config().strategy,'anchored_masked');assert.equal(ui.config().duration,10,'long selection reaches the request');
 ui.longReady=false;ui.trim.modeChanged();assert.equal(ui.config().strategy,undefined,'long selections are unavailable without backend capability');
 ui.source.duration=4;ui.trim.commit({start:1,duration:2.5});
@@ -69,12 +69,24 @@ ui.job=null;ui.paint();assert.equal(ui.$('progress-wrap').hidden,true);
 await ui.reviewSelection();await new Promise(r=>setTimeout(r,0));
 assert.equal(calls[0][1].start,1);assert.equal(calls[0][1].duration,2.5);
 assert.equal(calls[0][1].client_id,'studio-client','events go to the requesting Studio client');
+assert.equal(ui.runPhase,'review');assert.match(ui.$('run-title').textContent,/not the finished video/);assert.equal(ui.$('run-state').hidden,false);
 assert.equal(ui.review.id,'review');assert.equal(ui.$('generate').hidden,false);assert.equal(ui.result.hidden,false);
 await ui.generate();await new Promise(r=>setTimeout(r,0));
-assert.equal(ui.review,null);assert.equal(ui.result.hidden,false);
+assert.equal(ui.review,null);assert.equal(ui.result.hidden,false);assert.equal(ui.runPhase,'complete');assert.equal(ui.$('generate').hidden,true);assert.equal(ui.$('download').hidden,false);assert.match(ui.$('download').href,/render=1/);
 assert.deepEqual(calls.slice(0,4).map(c=>c[0]),['/zura/studio/outpaint/review','/zura/studio/outpaint/jobs/review','/zura/studio/outpaint/jobs/review/approve','/zura/studio/outpaint/jobs/review/render']);
 assert.equal(calls[3][1].client_id,'studio-client');
 assert.deepEqual(calls[3][1].custom_loras,[{name:'test-style.safetensors',strength:.6,confirm_unknown:true}],'selected LTX adapters reach the render request');
+// Optional still guides are tied to this exact canvas and source frame.
+const guide=ui.firstFrame;
+globalThis.createImageBitmap=async()=>({width:ui.dimensions().width,height:ui.dimensions().height,close(){}});
+guide.store=async()=>({id:'guide-image',file:'genj_studio/guide/image.png'});
+await guide.upload(new Blob(['fixture'],{type:'image/png'}));
+assert.equal(guide.asset.id,'guide-image');assert.equal(guide.root.querySelector('.zo-guide-chip').hidden,false);
+ui.review={id:'review'};await ui.generate();await new Promise(r=>setTimeout(r,0));
+assert.equal(calls.findLast(c=>c[1]&&c[0].endsWith('/render'))[1].first_frame,'guide-image','Guide is explicitly submitted alongside the source-motion route');
+ui.$('width').value='1344';ui.invalidate();assert.equal(guide.asset,null,'Changing output geometry invalidates the still guide');
+assert.equal(guide.preview.hidden,true);
+ui.$('width').value='1280';ui.reframe();ui.paint();
 ui.review={id:'old'};ui.invalidate();assert.equal(ui.review,null,'changing source geometry invalidates review');
 ui.$('mode').value='black';ui.reframe();assert.equal(Number(ui.$('width').value),768);assert.equal(Number(ui.$('height').value),432);
 ui.$('mode').value='expand';ui.longReady=false;ui.trim.update();assert.equal(ui.trim.longOption.hidden,true,'long controls stay hidden until backend capability is checked');
@@ -134,4 +146,37 @@ await ui.importStudioHDR(hdrAsset,'auto');assert.equal(ui.source.id,'hdr-source'
 ui.fetch=async()=>({kind:'video',path:'verified.mov',colour_space:'pq_display_p3'});
 await assert.rejects(ui.importStudioHDR({...hdrAsset,id:'unsupported'},'auto'),/not supported/);assert.equal(ui.source.id,'hdr-source','Failed handoff keeps the previous source');
 ui.setSourceAsset({...hdrAsset,id:'sdr-source'});assert.equal(ui.sourceColour,'auto','Replacing the source resets the HDR colour override');
+ui.isHDRSource=false;ui.$('hdr-output').checked=false;ui.hdrRecord=null;
+ui.review={id:'approved',kind:'review',state:'complete'};ui.job={id:'failed-last',kind:'render'};
+ui.fetch=async()=>({id:'failed-last',kind:'render',state:'failed',window:7,windows:7,error:'The selection extends past the source video.'});
+await ui.poll();assert.equal(ui.runPhase,'failed');assert.match(ui.$('run-title').textContent,/Generation failed.*segment 7 of 7/);assert.match(ui.$('run-detail').textContent,/extends past/);assert.equal(ui.$('generate').textContent,'Retry generation');assert.equal(ui.$('generate').hidden,false);
+ui.paint();assert.equal(ui.runPhase,'failed','Layout updates must not erase a failed run');
+let retried=0;ui.fetch=async(path)=>{if(path.endsWith('/approve'))return {};if(path.endsWith('/render')){retried++;return {id:'retry',kind:'render',state:'queued'};}return {id:'retry',kind:'render',state:'complete',url:'/view?finished=1'};};
+await ui.generate();await new Promise(r=>setTimeout(r,0));assert.equal(retried,1);assert.equal(ui.runPhase,'complete');assert.match(ui.result.src,/finished=1/);assert.equal(ui.$('download').hidden,false);assert.equal(ui.$('generate').hidden,true);
+ui.job={id:'missing-video',kind:'render'};ui.fetch=async()=>({id:'missing-video',kind:'render',state:'complete'});await ui.poll();assert.equal(ui.runPhase,'failed');assert.match(ui.$('run-title').textContent,/video unavailable/);
+ui.invalidate();assert.equal(ui.$('run-state').hidden,true,'Changing the selection clears the previous run state');
+// Returning from guide generation restores both the operation and its model filter.
+{
+  const controls=Object.fromEntries(['model','shape','width','height','seed','prompt','random'].map(id=>[id,{value:'',checked:false}]));
+  const previous={operation:'create',references:[{file:'earlier.png'}],model:'flux2',shape:'auto',width:1024,height:1024,seed:1,prompt:'Earlier',random:true,loras:[]};
+  const transitions=[];
+  const imageOwner={items:[],job:null,pendingSubmission:null,submitting:false,uploading:false,
+    $(id){return controls[id];},async setImageOperation(operation,options){transitions.push([operation,options]);this.imageOperation=operation;},
+    save(){},render(){},renderGallery(){},show(mode){this.mode=mode;}};
+  const guide=ui.firstFrame,priorOwner=guide.owner;
+  guide.owner=imageOwner;guide.previous={config:previous,selected:0};guide.request={id:'request'};guide.importing=false;
+  imageOwner.job={id:'busy'};await guide.leave();assert.equal(transitions.length,0,'Return waits until the image render is finished');
+  imageOwner.job=null;await guide.leave();
+  assert.deepEqual(transitions,[['create',{useCanvas:false}]]);assert.equal(controls.model.value,'flux2');
+  assert.equal(imageOwner.imageOperation,'create');assert.equal(imageOwner.mode,'outpaint');assert.deepEqual(imageOwner.references,previous.references);
+  guide.owner=priorOwner;
+}
+{
+  ui.source={id:'native-rate',file:'input.mp4',name:'input',width:768,height:432,duration:7.2};
+  ui.isHDRSource=false;ui.review=null;ui.job=null;ui.longReady=true;ui.$('duration').value='5';ui.$('start').value='0';
+  ui.fetch=async()=>({fps_num:30,fps_den:1});await ui.loadSourceRate('native-rate');
+  assert.equal(ui.trim.fps(),30);assert.equal(ui.trim.trimmer.fps,30);
+  assert.equal(ui.trim.long,true,'A range larger than 120 native frames enables sections');
+  assert.equal(Number(ui.$('duration').value),5,'Reading the source rate does not shorten the selection');
+}
 ui.dispose();console.log('Outpaint prototype requires review and approval before rendering, and invalidates stale selection.');

@@ -118,7 +118,7 @@ def build_black_guide_experiment(source, *, start_frame, frame_count, width, hei
                      width=width, height=height, left=left, top=top,
                      right=right, bottom=bottom)
     g = build_studio_graph(asset, selection, review_key=selection['review_key'],
-                           prompt=prompt, seed=seed, output_prefix='genj/outpaint/hdr_experiment')
+                           prompt=prompt, seed=seed, output_prefix='genj/outpaint/hdr_experiment', masked_black=True)
     for key in ('source', 'source_range', 'components', 'temporal_hold', 'assemble', 'save'):
         del g[key]
     def node(kind, **inputs): return {'class_type': kind, 'inputs': inputs}
@@ -315,7 +315,7 @@ def _black_sdr_first_stage(source, expected, path, *, colour_space, prompt, seed
     if type(source.get('has_audio')) is not bool:
         raise ValueError('Verify whether the HDR source has audio before rendering.')
     graph = build_studio_graph(source, expected, review_key=expected['review_key'],
-        prompt=prompt, seed=seed, output_prefix='genj/outpaint/hdr_experiment')
+        prompt=prompt, seed=seed, output_prefix='genj/outpaint/hdr_experiment', masked_black=True)
     # Use the established in/outpaint graph for explicit black-pixel masks.
     # Its VIDEO source and output nodes are replaced by native HDR input and a
     # bounded silent intermediate. Audio guides remain available where present.

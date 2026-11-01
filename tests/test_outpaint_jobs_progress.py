@@ -1,4 +1,5 @@
 import importlib
+import sys
 from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
@@ -18,7 +19,7 @@ class OutpaintProgressRoutingTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(manager.state('mine')['state'],'cancelled')
 
     async def test_events_are_routed_to_the_requesting_client(self):
-        import execution
+        execution = SimpleNamespace(validate_prompt=None)
         queued=[]; triggered=[]
         queue=SimpleNamespace(put=queued.append)
         server=SimpleNamespace(prompt_queue=queue, number=0,
@@ -26,7 +27,8 @@ class OutpaintProgressRoutingTests(unittest.IsolatedAsyncioTestCase):
             node_replace_manager=SimpleNamespace(apply_replacements=lambda graph: None))
         manager=jobs_module.OutpaintJobs(SimpleNamespace(server=server))
         async def validate(*args): return (True, None, ['save'], {})
-        with patch.object(jobs_module, 'build_review_graph', return_value={'save': {}}), \
+        with patch.dict(sys.modules, {'execution': execution}), \
+             patch.object(jobs_module, 'build_review_graph', return_value={'save': {}}), \
              patch.object(execution, 'validate_prompt', validate):
             job=await manager.submit('review', {}, {}, client_id='studio-client')
             self.assertEqual(triggered[0]['client_id'], 'studio-client')

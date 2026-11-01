@@ -152,6 +152,19 @@ jobs:
           node tests/test_studio_wan2_mask.mjs
           node tests/test_studio_layout.mjs
           node tests/test_studio_reset.mjs
+          python -m unittest discover -s tests -p 'test_outpaint_studio.py'
+          python -m unittest discover -s tests -p 'test_outpaint_chunks.py'
+          python -m unittest discover -s tests -p 'test_outpaint_delivery.py'
+          python -m unittest discover -s tests -p 'test_outpaint_jobs_progress.py'
+          python -m unittest discover -s tests -p 'test_outpaint_long_runner.py'
+          python -m unittest discover -s tests -p 'test_outpaint_first_frame.py'
+          python -m unittest discover -s tests -p 'test_outpaint_retry.py'
+          python -m unittest discover -s tests -p 'test_outpaint_native_fps.py'
+          node tests/test_outpaint_workspace.mjs
+          node tests/test_outpaint_trim.mjs
+          node tests/test_outpaint_layers_ui.mjs
+          node tests/test_outpaint_hdr_delivery.mjs
+          node tests/test_hdr_outpaint_black_ui.mjs
       - name: Prepare qualified native Comfy CPU interfaces
         env:
           COMFYUI_ROOT: ${{ runner.temp }}/zura-native-comfy
