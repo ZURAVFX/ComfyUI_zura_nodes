@@ -30,18 +30,21 @@ def bind_uploaded_opening(
     check_asset,
     media_url,
     store=None,
+    defer_preparation=False,
 ):
-    """Copy an approved image into project storage and reset opening approval.
+    """Bind an uploaded image; defer source preparation for preview when requested.
 
     Returns True when project state changed. Does no generation, queue, or
-    ComfyUI work. The callback arguments keep this module importable without
+    ComfyUI work. Deferred previews do not grant generation approval.
+    The callback arguments keep this module importable without
     loading Studio's ComfyUI runtime.
     """
     actions = project.get("actions") or []
     if project.get("phase") == "working" or (actions and actions[-1].get("state") in _ACTIVE_ACTION_STATES):
         raise ValueError("Wait for the current job before changing the opening image.")
 
-    assert_approved(project)
+    if not defer_preparation:
+        assert_approved(project)
     if (not isinstance(uploaded, dict) or uploaded.get("kind") != "asset"
             or uploaded.get("asset_kind") != "image"):
         raise ValueError("Choose an uploaded image for the opening frame.")
@@ -104,6 +107,8 @@ def bind_uploaded_opening(
         draft_task=None,
         accepted_draft=None,
     )
+    if defer_preparation:
+        project['opening_needs_preparation'] = True
     project.pop("ltx25_run", None)
     return True
 

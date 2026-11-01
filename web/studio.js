@@ -774,6 +774,11 @@ class ArtistStudio {
       return null;
     }
     this.project=updated;
+    if(action==='create_look'&&this.lookMode==='ready'&&updated.opening_input&&updated.opening_needs_preparation){
+      localStorage.setItem('zura-studio-approved-frame',this.frameReviewKey());
+      this.promptStage='video';this.preview='look';
+      this.creative?.selectPanel?.('settings');
+    }
     this.render();
     return updated;
   }
@@ -863,6 +868,7 @@ class ArtistStudio {
       }
       if(this.headSwap())return this.run("h3");
       if(this.config.workflow_mode==="camera")return this.run(p.opening_input?"animate":"create_look");
+      if(p.opening_input&&p.opening_needs_preparation)return this.run("animate");
       if(!p.review || p.phase==="new" || p.prepared_key!==p.approval && p.phase!=="review")return this.run(this.directViewport()?"prepare":"create_look");
       if(p.phase==="review" && !this.directViewport() && this.config.engine!=="seedance")return this.run("create_look");
       if(p.phase==="review"){
@@ -1543,7 +1549,7 @@ class ArtistStudio {
     if(viewport){stageLabels.prepare="Preparing viewport guidance";stageLabels.design="Creating the finished scene image";stageLabels.h3="Rendering the viewport with H3";stageLabels.restyle="Rendering the viewport with LTX";}
     if(workflow==="camera"){stageLabels.prepare="Preparing the source performance";stageLabels.design="Creating your camera still";stageLabels.h3="Generating the new camera view";}
     stageLabels.wan_cleanup=latestAction?.next_stage==="h3_enhance"?"Releasing H3 models before enhancement":latestAction?.next_stage==="wan21_relight"?"Preparing memory for Wan 2.1":"Preparing Wan";
-    const progress=stageProgress(p?.progress,{state:latestAction?.state,label:stageLabels[stage],actionId:latestAction?.id,stage});
+    const progress=stageProgress(p?.progress,{state:latestAction?.state,label:stageLabels[stage],actionId:latestAction?.id,stage,elapsedSeconds:latestAction?.created?(Date.now()/1000-latestAction.created):null});
     this.$("working-title").textContent=progress.title;
     this.$("working-detail").textContent=progress.detail;
     this.$("working-meta").textContent=progress.meta;

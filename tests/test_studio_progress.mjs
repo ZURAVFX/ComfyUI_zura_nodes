@@ -34,3 +34,7 @@ for(const label of ['Generating video','Decoding video','Loading H3 video model'
 assert.equal(stageProgress({state:'running',stage_label:'Generating video'},{stage:'h3',label:'Rendering'}).detail,'Generating video','Video stages retain video labels');
 assert.equal(stageProgress({state:'running',step:2,total_steps:4},{stage:'wan21_relight'}).meta,'Current section · Step 2 of 4');
 console.log('Studio progress shows actual stage percent, honest unknown states and measured stage ETA.');
+
+assert.equal(stageProgress({state:"running",segment_current:2,segment_total:6,step:3,total_steps:4},{stage:"wan21_relight"}).meta,"Segment 2 of 6 · Step 3 of 4");
+assert.equal(stageProgress({state:"preparing",stage_elapsed_seconds:0},{elapsedSeconds:51}).meta,"51s elapsed");
+assert.ok(!stageProgress({action_id:"old",segment_current:5,segment_total:6},{actionId:"new"}).meta.includes("Segment"));

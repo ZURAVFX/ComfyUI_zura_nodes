@@ -15,6 +15,7 @@ from __future__ import annotations
 import json
 import logging
 import math
+import sys
 import time
 
 from .planning import ShotChunk, hold_last, plan_chunks, sampling_frames, parse_cut_frames, detect_cuts, validate_plan
@@ -24,6 +25,10 @@ from .video import video_output
 def _send_wan22_progress(**payload):
     """Send optional UI progress without making the node depend on a server."""
     try:
+        # Progress must not initialise Studio's HTTP routes in a standalone worker.
+        progress = sys.modules.get(__package__ + '.artist_studio.progress')
+        if progress is not None:
+            progress.report_segments(payload.get('chunk'), payload.get('chunks'))
         from server import PromptServer
         server = PromptServer.instance
         if server is not None:

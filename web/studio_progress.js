@@ -39,10 +39,12 @@ export function stageProgress(progress, fallback={}) {
     ?Math.max(0,Math.min(100,p.stage_percent)):null;
   const remaining=typeof p.stage_remaining_seconds==="number" && Number.isFinite(p.stage_remaining_seconds)
     ?Math.max(0,p.stage_remaining_seconds):null;
-  const elapsed=typeof p.stage_elapsed_seconds==="number" && Number.isFinite(p.stage_elapsed_seconds)
-    ?Math.max(0,p.stage_elapsed_seconds):null;
+  const elapsed=typeof p.stage_elapsed_seconds==="number" && Number.isFinite(p.stage_elapsed_seconds) && p.stage_elapsed_seconds>0
+    ?Math.max(0,p.stage_elapsed_seconds):Number.isFinite(fallback.elapsedSeconds)?Math.max(0,fallback.elapsedSeconds):null;
+  const segment=Number.isInteger(p.segment_current)&&Number.isInteger(p.segment_total)&&p.segment_total>0&&p.segment_current>=1&&p.segment_current<=p.segment_total
+    ?`Segment ${p.segment_current} of ${p.segment_total}`:null;
   const steps=active && Number.isInteger(p.step)&&Number.isInteger(p.total_steps)&&p.total_steps>0
-    ?`${fallback.stage==='wan21_relight'?'Current section · ':''}Step ${Math.max(0,p.step)} of ${p.total_steps}`:null;
+    ?`${fallback.stage==='wan21_relight'&&!segment?'Current section · ':''}Step ${Math.max(0,p.step)} of ${p.total_steps}`:null;
   const title=fallback.label || p.stage_label || "Preparing your shot";
   // Older backends label every sampler/decoder as video. Keep image-stage
   // wording correct immediately, including before the backend is restarted.
@@ -56,5 +58,5 @@ export function stageProgress(progress, fallback={}) {
     :remaining!==null && p.eta_confidence==="measured"?[activity,`About ${durationLabel(remaining)} left in this step`].filter(Boolean).join(" · ")
     :activity || (percent!==null?"Processing · estimating time…":"Loading and preparing…");
   return {title,detail,percent:queued?null:percent,
-    meta:[steps,elapsed>0 && !queued?`${durationLabel(elapsed)} elapsed`:null].filter(Boolean).join(" · ")};
+    meta:[segment,steps,elapsed>0 && !queued?`${durationLabel(elapsed)} elapsed`:null].filter(Boolean).join(" · ")};
 }

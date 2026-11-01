@@ -345,7 +345,7 @@ export class HDRSourceTool {
     this.$('start-job').disabled=this.busy;this.$('cancel').hidden=!this.busy||!this.longClient.id;this.$('cancel').disabled=state==='cancelling';
     this.longPrompt=job.active_prompt_id||null;
     this.longState=state;
-    this.longSection=Number.isInteger(job.total)&&job.total>0?`Section ${Math.min(job.completed+1,job.total)} of ${job.total}`:null;
+    this.longSection=Number.isInteger(job.total)&&job.total>0?`Segment ${Math.min(job.completed+1,job.total)} of ${job.total}`:null;
     if(state==='complete'){
       const files=job.result?.files||[],preview=job.result?.preview,hlg=files.find(f=>f.filename.endsWith('.mp4')),exr=files.find(f=>f.filename.endsWith('.zip'));
       if(!preview||(!hlg&&!exr)){this.status('HDR conversion finished without the requested files.');this.finish();return;}

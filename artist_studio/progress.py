@@ -155,6 +155,27 @@ class ProgressEstimator:
                 "queue_position": queue_position}
 
 
+_segments = {}
+_segment_lock = threading.Lock()
+
+
+def report_segments(current, total):
+    """Called by chunk samplers; prompt ownership comes from Comfy's running job."""
+    if not isinstance(current, int) or not isinstance(total, int) or not 1 <= current <= total:
+        return
+    try:
+        from comfy_execution.progress import get_progress_state
+        identity = get_progress_state().prompt_id
+    except (ImportError, AttributeError):
+        return
+    if not identity:
+        return
+    with _segment_lock:
+        _segments[str(identity)] = {'segment_current': current, 'segment_total': total}
+        while len(_segments) > 64:
+            _segments.pop(next(iter(_segments)))
+
+
 class NativeProgressAdapter:
     """Read the pinned ComfyUI core snapshot without patching its execution path."""
 
@@ -172,6 +193,32 @@ class NativeProgressAdapter:
             return None
 
     def project_progress(self, server, server_address, action, queue_position=None):
+        result = self._project_progress(server, server_address, action, queue_position)
+        if not result or action.get('server_address', server_address) != server_address:
+            return result
+        with _segment_lock:
+            reported = _segments.get(str(action.get('id')))
+        if reported:
+            result.update(reported)
+        elif action.get('segment_total'):
+            current = 1
+            registry = self._registry()
+            if registry is not None and getattr(registry, 'prompt_id', None) == action.get('id'):
+                prompt = getattr(registry, 'dynprompt', None)
+                executed = []
+                for identity, item in getattr(registry, 'nodes', {}).items():
+                    try:
+                        original = prompt.get_display_node_id(identity)
+                        if (str(original) == action.get('segment_node')
+                                and _state_name(item.get('state')) in ('running', 'finished')):
+                            executed.append(identity)
+                    except (AttributeError, KeyError, TypeError):
+                        pass
+                current = max(1, len(executed))
+            result.update(segment_current=min(current, action['segment_total']), segment_total=action['segment_total'])
+        return result
+
+    def _project_progress(self, server, server_address, action, queue_position=None):
         action_id = str(action.get("id") or "")
         if not action_id or action.get("server_address", server_address) != server_address:
             return None

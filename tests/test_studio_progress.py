@@ -137,6 +137,21 @@ class ProgressEstimatorTests(unittest.TestCase):
 
 
 class NativeAdapterTests(unittest.TestCase):
+    def test_looped_relight_reports_the_actual_dynamic_sampler_segment(self):
+        registry = self.registry('render', {
+            'loop1.sampler': {'state':'finished','value':4,'max':4},
+            'loop2.sampler': {'state':'running','value':2,'max':4},
+            'unrelated': {'state':'finished','value':1,'max':1}})
+        registry.dynprompt.get_display_node_id=lambda identity:'sampler' if identity.endswith('.sampler') else identity
+        adapter=NativeProgressAdapter(registry_getter=lambda:registry)
+        action={'id':'render','stage':'wan21_relight','state':'running','segment_total':6,'segment_node':'sampler'}
+        result=adapter.project_progress(None,'server',action)
+        self.assertEqual((result['segment_current'],result['segment_total']),(2,6))
+        self.assertIsNone(adapter.project_progress(None,'other',{**action,'server_address':'server'}))
+        registry.prompt_id='another-job'
+        result=adapter.project_progress(None,'server',action)
+        self.assertEqual(result['segment_current'],1,'Another artist job cannot advance this counter')
+
     def test_handoffs_explain_the_work_without_inventing_steps_or_eta(self):
         adapter = NativeProgressAdapter(registry_getter=lambda: None)
         expected = {"text": "Preparing prompt", "motion": "Preparing motion guidance",

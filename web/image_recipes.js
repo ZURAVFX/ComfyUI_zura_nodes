@@ -8,12 +8,13 @@ export const IMAGE_MODELS = [
   {id:"flux3edit",minReferences:1,maxReferences:10,edit:true,name:"Flux 3 Klein",hint:"Edit Image 1 using your prompt and optional appearance references. Native INT8 recipe, 16 steps.",model:"flux3-image-klein-int8-convrot.safetensors",text:"qwen3vl_4b_int8_convrot.safetensors",vae:"flux2-vae.safetensors",type:"flux3",steps:16,latent:"EmptyFlux2LatentImage",url:"https://huggingface.co/black-forest-labs/flux-3-image-klein-comfy"},
   ...['chatgpt','gemini'].flatMap(provider=>[false,true].map(edit=>({id:provider+(edit?'edit':''),provider,edit,minReferences:edit?1:0,maxReferences:8,name:provider==='chatgpt'?'ChatGPT Image':'Gemini Image',node:provider==='chatgpt'?'ZuraChatGPTImage':'ZuraGeminiImage',hint:'Sign in through your browser. Uses your website account allowance, with no Zura or paid API credits. References are sent to the selected provider.',url:provider==='chatgpt'?'https://chatgpt.com':'https://gemini.google.com'}))),
 ];
-export const IMAGE_SIZES={square:[1024,1024],landscape:[1152,768],portrait:[768,1152]};
-export function imageDimensions({shape="square",width,height}={}){
+export const IMAGE_SIZES={auto:[1024,1024],square:[1024,1024],landscape:[1152,768],portrait:[768,1152]};
+export function imageDimensions({shape="square",width,height,references=[]}={}){
   const preset=IMAGE_SIZES[shape];
   if(!preset)throw new Error("Choose an available image shape.");
-  const size=[width??preset[0],height??preset[1]];
-  if(size.some(v=>!Number.isInteger(v)||v<256||v>2048||v%16))throw new Error("Width and height must be 256–2048 px, in multiples of 16.");
+  const first=references[0];
+  const size=shape==='auto'?[first?.width||1024,first?.height||1024].map(v=>Math.max(256,Math.round(v/16)*16)):[width??preset[0],height??preset[1]];
+  if(size.some(v=>!Number.isInteger(v)||v<256||v>8192||v%16))throw new Error("Width and height must be 256–8192 px, in multiples of 16.");
   return size;
 }
 export function buildImageGraph({model="flux3",prompt,shape="square",seed=42,width,height,references=[],loras=[]}={}){
@@ -24,10 +25,10 @@ export function buildImageGraph({model="flux3",prompt,shape="square",seed=42,wid
   if(!Array.isArray(references)||references.length>recipe.maxReferences)throw new Error(`${recipe.name} supports ${recipe.maxReferences} reference images in this workflow.`);
   if(references.length<(recipe.minReferences||0))throw new Error("Add the image you want to edit first. Extra images are optional references.");
   if(references.some(r=>!r||typeof r.file!=="string"||!r.file||r.file.includes("..")))throw new Error("Upload each reference image before generating.");
-  [width,height]=imageDimensions({shape,width,height});
+  [width,height]=imageDimensions({shape,width,height,references});
   if(recipe.provider){
     if(loras.length)throw new Error('Custom LoRAs apply to local image models only.');
-    const inputs={prompt:prompt.trim(),size:'Custom',custom_width:width,custom_height:height,timeout_seconds:300};
+    const inputs={prompt:prompt.trim(),size:shape==='auto'?'Auto':'Custom',custom_width:width,custom_height:height,timeout_seconds:300};
     const graph={};references.forEach((ref,i)=>{graph[`reference_${i+1}`]={class_type:'LoadImage',inputs:{image:ref.file}};inputs[`reference_${i+1}`]=[`reference_${i+1}`,0];});
     graph.browser_image={class_type:recipe.node,_meta:{title:`Generate with ${recipe.name} · browser account`},inputs};
     graph.save={class_type:'SaveImage',inputs:{images:['browser_image',0],filename_prefix:'zura_images/'+recipe.provider}};

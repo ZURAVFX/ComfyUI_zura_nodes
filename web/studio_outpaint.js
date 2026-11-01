@@ -70,7 +70,7 @@ export class OutpaintWorkspace {
     if(state.window>timing.last){timing.average=(now-timing.start)/1000/(state.window-timing.first);timing.last=state.window;timing.lastStart=now;}
     if(timing.average!==null){const seconds=Math.max(0,timing.average*(state.windows-state.window+1)-(now-timing.lastStart)/1000);this.sectionRemaining=Number.isFinite(seconds)&&seconds<86400?Math.ceil(seconds):null;}
   }
-  progressDetail(){const remaining=this.sampleRemaining,seconds=this.jobStarted?Math.max(0,Math.floor((Date.now()-this.jobStarted)/1000)):0,window=this.job?.windows?`Section ${this.job.window||1} of ${this.job.windows} · `:this.hdrDelivery?.busy&&this.hdrJob?.total>0?`Section ${Math.min((this.hdrJob.completed||0)+1,this.hdrJob.total)} of ${this.hdrJob.total} · `:'';this.$('progress-detail').textContent=window+(Number.isFinite(remaining)?`About ${remaining}s left in this pass · `:'')+(Number.isFinite(this.sectionRemaining)?`About ${this.sectionRemaining}s left in this phase \u00b7 `:'')+(seconds?`${Math.floor(seconds/60)}m ${seconds%60}s elapsed`:'Waiting for ComfyUI');}
+  progressDetail(){const remaining=this.sampleRemaining,seconds=this.jobStarted?Math.max(0,Math.floor((Date.now()-this.jobStarted)/1000)):0,window=this.job?.windows?`Segment ${this.job.window||1} of ${this.job.windows} · `:this.hdrDelivery?.busy&&this.hdrJob?.total>0?`Segment ${Math.min((this.hdrJob.completed||0)+1,this.hdrJob.total)} of ${this.hdrJob.total} · `:'';this.$('progress-detail').textContent=window+(Number.isFinite(remaining)?`About ${remaining}s left in this pass · `:'')+(Number.isFinite(this.sectionRemaining)?`About ${this.sectionRemaining}s left in this phase \u00b7 `:'')+(seconds?`${Math.floor(seconds/60)}m ${seconds%60}s elapsed`:'Waiting for ComfyUI');}
   get mode(){return this.$('mode').value;}
   snap(key){const node=this.$(key),value=Number(node.value);node.value=String(Math.max(128,Math.min(1920,Math.round((Number.isFinite(value)?value:128)/64)*64)));}
   dimensions(){
@@ -229,7 +229,7 @@ export class OutpaintWorkspace {
       this.$('retry-hdr').hidden=job.state==='unknown';
     }
     if(changed||!this.progressNode){this.progressNode=null;this.sampleClock=null;this.sampleRemaining=null;this.$('progress').removeAttribute('value');
-      const section=job.total>0?`Section ${Math.min((job.completed||0)+1,job.total)} of ${job.total} · `:'';
+      const section=job.total>0?`Segment ${Math.min((job.completed||0)+1,job.total)} of ${job.total} · `:'';
       this.message(section+(({preparing:'Preparing HDR conversion…',reconnecting:'Reconnecting to HDR conversion…',cancelling:'Cancelling HDR conversion…','cancel-error':job.error||'Cancellation could not be confirmed. Try again.',saving:'Saving HDR files…',complete:'HDR ready. The preview is SDR; download HLG or EXRs to view HDR.',failed:job.error||'HDR conversion failed. Your SDR video is retained.',cancelled:'HDR conversion cancelled. Your SDR video is retained.',unknown:job.error||'HDR job status is unknown. Your SDR video is retained.'})[job.state]||'Converting the SDR result to HDR…'));}
     this.paint();
   }

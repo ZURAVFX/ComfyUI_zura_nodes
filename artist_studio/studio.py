@@ -2000,7 +2000,7 @@ class Studio:
             server_matches = action.get("server_address", self.server_address) == self.server_address
             auto_handoff = (action.get("stage") in ("video_text", "h3_references", "wan_prepare", "wan_speech", "wan_cleanup", "ltx25_cleanup") or
                             str(action.get("stage", "")).startswith("ltx25_") and action.get("stage") != "ltx25_decode")
-            auto_handoff = auto_handoff or (action.get("stage") == "prepare" and action.get("next_stage") == "create_look")
+            auto_handoff = auto_handoff or (action.get("stage") == "prepare" and action.get("next_stage") in ("create_look", "finished_animate"))
             if auto_handoff and server_matches:
                 self.schedule_resume(p["id"], action_id)
                 return p
@@ -2169,7 +2169,7 @@ class Studio:
                 p["phase"] = "done"
         action["state"] = "complete"
         p["error"] = None
-        if stage == "prepare" and action.get("next_stage") == "create_look":
+        if stage == "prepare" and action.get("next_stage") in ("create_look", "finished_animate"):
             p["phase"] = "working"
             self.store.save(p)
             self.schedule_resume(p["id"], action["id"])
@@ -2222,7 +2222,7 @@ class Studio:
             if any(prior[key] != config[key] for key in ("finished_frame_position", "finished_frame_number")):
                 p["opening_approval"] = None
                 p.pop("ltx25_run", None)
-            if (any(prior[k] != config[k] for k in ("openjutsu_direct", "openjutsu_background", "h3_character_method")) or prior["opening_model"] != config["opening_model"] or prior["h3_viewport_direct"] != config["h3_viewport_direct"] or prior["workflow_mode"] != config["workflow_mode"] or prior["image_prompt"] != config["image_prompt"] or (prior["prompt"] != config["prompt"] and not config["image_prompt"])
+            if p.get("look_mode") != "ready" and (any(prior[k] != config[k] for k in ("openjutsu_direct", "openjutsu_background", "h3_character_method")) or prior["opening_model"] != config["opening_model"] or prior["h3_viewport_direct"] != config["h3_viewport_direct"] or prior["workflow_mode"] != config["workflow_mode"] or prior["image_prompt"] != config["image_prompt"] or (prior["prompt"] != config["prompt"] and not config["image_prompt"])
                     or any(prior[k] != config[k] for k in ("camera_preset", "camera_prompt", "camera_width", "camera_height", "opening_width", "opening_height", "opening_loras"))):
                 p.update(opening_input=None, opening_key=None, opening_url=None, opening_approval=None)
             p["phase"] = ("opening" if p.get("opening_input") and p["config"]["engine"] in ("local", "h3", "wan", "wan2")
@@ -2237,6 +2237,19 @@ class Studio:
         # Never alter the graph of an action already running.
         if p.get("actions") and p["actions"][-1]["state"] in ("waiting", "submitting", "queued", "running"):
             return p  # A double-click/reconnect never queues another job.
+        if stage == "finished_animate":
+            previous = p.get('actions', [])[-1] if p.get('actions') else {}
+            if (not p.get('opening_needs_preparation') or previous.get('stage') != 'prepare'
+                    or previous.get('state') != 'complete' or previous.get('next_stage') != 'finished_animate'
+                    or body.get('request_key') != str(uuid.uuid5(uuid.NAMESPACE_URL, previous['id']))):
+                raise ValueError('The finished-frame preparation could not be verified. Prepare the shot again.')
+            await self.action(p, 'approve', body)
+            return await self.action(p, 'animate', body)
+        deferred_finished = (stage == 'animate' and p.get('opening_needs_preparation')
+                             and bool(p.get('opening_input')))
+        if deferred_finished:
+            stage = 'prepare'
+            approve_opening = False
         from .ltx_hdr_performance import verify_source as verify_hdr_video
         verify_hdr_video(p["source"], self.store, check_asset, p["config"])
         native_opening = (p.get("opening_input") or p.get("starting_asset") or {}).get("native_hdr")
@@ -2265,6 +2278,17 @@ class Studio:
                 return p
             if h3_viewport_direct(p):
                 raise ValueError("This workflow uses references directly, without a starting frame.")
+            if (p.get('look_mode') == 'ready' and p.get('starting_asset')
+                    and not camera_setup(p['config']) and p['config'].get('engine') != 'seedance'):
+                # Display the uploaded frame without loading masks, depth or an image model.
+                # Source preparation and its normal approval checks run on Generate video.
+                from .opening import bind_uploaded_opening
+                await asyncio.to_thread(bind_uploaded_opening, p, p['starting_asset'],
+                    folder_paths.get_input_directory(), assert_approved=assert_approved,
+                    check_asset=check_asset, media_url=media_url, store=self.store,
+                    defer_preparation=True)
+                self.store.save(p)
+                return p
             if camera_setup(p["config"]):
                 stage = "design"
             elif p.get("review") and p.get("prepared_key") == prep_key(p):
@@ -2289,6 +2313,7 @@ class Studio:
                 bind_uploaded_opening(p, p["starting_asset"], folder_paths.get_input_directory(),
                                       assert_approved=assert_approved, check_asset=check_asset, media_url=media_url,
                                       store=self.store)
+            p.pop('opening_needs_preparation', None)
             self.store.save(p)
             return p
         if stage == "animate":
@@ -2339,7 +2364,8 @@ class Studio:
             needs_speech_model = stage in ("draft", "final") or p["config"].get("refine_lips")
             if needs_speech_model and not readiness()["ready"]:
                 raise ValueError("Install the local speech models with Setup_Speech_Windows.cmd, or untick Create a new facial performance to use this track as a soundtrack.")
-        next_stage = "create_look" if create_look and stage == "prepare" else None
+        next_stage = ("finished_animate" if deferred_finished else
+                      "create_look" if create_look and stage == "prepare" else None)
         if ltx25_scene_route(p, stage):
             # Request replay was rejected above. A new render owns fresh files;
             # subsequent native phases retain this persisted namespace.
@@ -2461,6 +2487,8 @@ class Studio:
                           generation_raster={"width": size["width"], "height": size["height"]},
                           expected_frames=manifest["clip"]["frames"] + (1 - manifest["clip"]["frames"]) % 4,
                           relight_recipe="wan21-relight-switchx-v1")
+            action.update(segment_total=max(1, (manifest['clip']['frames'] - 2) // 80 + 1),
+                          segment_node='272:407:277:19')
             delivery = graph["wan21_export"]["inputs"]
             if delivery.get("output_width") and delivery.get("output_height"):
                 action["output_raster"] = {"width": delivery["output_width"], "height": delivery["output_height"]}
@@ -2558,11 +2586,17 @@ def register():
             try:
                 same_origin(request)
                 studio.start_watcher()
-                return await fn(request)
+                outputs.start()
+                result = await fn(request)
+                if isinstance(result, web.Response) and result.content_type == 'application/json' and result.status < 400:
+                    outputs.schedule_export(json.loads(result.body))
+                return result
             except (ValueError, KeyError, TypeError, OSError, av.error.FFmpegError) as e:
                 return web.json_response({"error": str(e)}, status=400)
         return wrapped
 
+    from .output_settings import register as register_outputs
+    outputs = register_outputs(server, routes, response)
     from .opening import register as register_opening
     register_opening(studio, routes, response)
     from .content import register as register_content
