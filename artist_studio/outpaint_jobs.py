@@ -603,6 +603,7 @@ def register(studio, routes, response):
     register_hdr_layer_exports(jobs, routes, response)
 
     @routes.post('/zura/studio/outpaint/first-frame')
+    @routes.post('/genj/studio/outpaint/first-frame')
     @response
     async def first_frame_canvas(request):
         from .outpaint_first_frame import create_canvas
@@ -635,6 +636,7 @@ def register(studio, routes, response):
                                   'hdr_black_long_dependencies': await asyncio.to_thread(hdr_long_dependencies,'black') if hdr_black_enabled and hdr_long_enabled else None})
 
     @routes.post('/zura/studio/outpaint/source-info')
+    @routes.post('/genj/studio/outpaint/source-info')
     @response
     async def source_info(request):
         body = await request.json()

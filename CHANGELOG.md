@@ -1,5 +1,10 @@
 # Release notes
 
+## 1.3.41 - 1 November 2026
+
+- Keep the Studio-wide interface polish and the approved original full-resolution LTX 2.5 SDR outpaint recipe from 1.3.40.
+- Restore legacy route aliases for the new outpaint first-frame and source-info endpoints so existing Studio projects and the Registry compatibility checks remain supported.
+
 ## 1.3.40 - 1 November 2026
 
 - Apply the approved Studio interface polish across Image, Video, HDR conversion, Paintout, frame extension, camera controls and shared settings. Use neutral surfaces, consistent Manrope typography, clearer control groups, larger multiline prompts and matching focus and selection states in both themes.
