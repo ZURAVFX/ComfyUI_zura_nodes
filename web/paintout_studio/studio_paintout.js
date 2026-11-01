@@ -4,6 +4,8 @@ import {PaintoutModels} from './paintout_models.js';
 import {updateGenerationSteps} from './paintout_generation_steps.js';
 import {buildPaintoutGraph,buildPaintoutRepairGraph,buildPaintoutHDRGraph,paintoutValidation,paintoutAvailability,PAINTOUT_DEFAULT_PROMPTS,PAINTOUT_OUTPUT_MODES,PAINTOUT_SIZE_PRESETS,paintoutPresetSize,paintoutRangeFix,paintoutColourPipeline} from './paintout_recipes.js';
 import {buildInpaintRepairGraph,inpaintValidation,inpaintAvailability,INPAINT_PROMPT} from './inpaint_recipes.js';
+import {buildRippleGraph,rippleValidation,rippleAvailability,RIPPLE_PROMPT} from './ripple_recipes.js';
+import {syncRippleWorkspace} from './ripple_editor.js';
 
 import {composerIcons as icons} from './studio_composer.js';
 
@@ -50,17 +52,20 @@ export async function findPaintoutSubmission(fetch, requestId){
 
 export class PaintoutWorkspace{
 
-  constructor(owner){
+  constructor(owner,workspaceOptions={}){
 
     this.owner=owner;this.api=owner.api;this.app=owner.app;this.studio=owner.studio;
 
-    let saved={};try{saved=JSON.parse(localStorage.getItem(KEY))||{};}catch{}
+    this.storageKey=workspaceOptions.storageKey||KEY;this.ripple=workspaceOptions.mode==='ripple';
+    let saved={};try{saved=JSON.parse(localStorage.getItem(this.storageKey))||{};}catch{}
 
     this.state=paintoutDraft(saved.draft);
+    this.ripple=this.state.mode==='ripple'||this.ripple;
+    if(this.ripple)this.state.mode='ripple';
 
     this.state.anchors=Array.isArray(this.state.anchors)?this.state.anchors:[];this.prompts=saved.prompts||{};this.sourceInfo=saved.sourceInfo||null;this.maskInfo=saved.maskInfo||null;this.job=saved.job||null;this.pendingHDR=saved.pendingHDR||(this.job?.phase==='hdr'&&this.job.savedSequence?{config:this.job.config,savedSequence:this.job.savedSequence}:null);this.items=Array.isArray(saved.items)?saved.items.slice(0,12):[];this.playhead=Number.isInteger(this.state.editorPlayhead)?Math.max(0,Math.min((this.sourceInfo?.frames||100001)-1,this.state.editorPlayhead)):this.state.startFrame;this.selected=Number.isInteger(this.state.editorSelected)&&this.state.anchors[this.state.editorSelected]?this.state.editorSelected:-1;this.cleanupPrompt=typeof saved.cleanupPrompt==='string'?saved.cleanupPrompt:this.state.anchors[this.selected]?.editPrompt||DEFAULT_FRAME_EDIT_PROMPT;this.view='source';this.result=saved.result||this.items.find(item=>item.config?.source===this.state.source)||null;
 
-    this.page=document.createElement('section');this.page.className='zf-page zp-page';
+    this.page=document.createElement('section');this.page.className='zf-page zp-page'+(this.ripple?' zob-page':'');
 
     this.page.innerHTML=`
 
@@ -122,7 +127,8 @@ export class PaintoutWorkspace{
 
     this.loras=new LTXLoras(this.page.querySelector('.zc-prompt-tools'),(path,body)=>this.fetch(path,body),()=>this.busy(),()=> 'ltx25',true);
     this.loras.setValue(saved.draft?.custom_loras);this.loras.onchange=()=>{this.state.custom_loras=this.loras.value();this.save();};
-    this.$('prompt').value=this.prompts[this.state.mode]||(this.state.mode==='inpaint'?INPAINT_PROMPT:PAINTOUT_DEFAULT_PROMPTS[this.state.mode]);
+    this.$('prompt').value=this.prompts[this.state.mode]||(this.ripple?'':this.state.mode==='inpaint'?INPAINT_PROMPT:PAINTOUT_DEFAULT_PROMPTS[this.state.mode]);
+    if(this.ripple&&typeof saved.cleanupPrompt!=='string')this.cleanupPrompt='Replace the selected object with the object shown in the reference image';
     if(this.state.mode==='inpaint'&&typeof saved.cleanupPrompt!=='string'&&!this.state.anchors[this.selected]?.editPrompt)this.cleanupPrompt='Add the object shown in the reference image';
 
     for(const [id,key] of Object.entries({start:'startFrame',count:'frameCount',fps:'sequenceFps',colour:'sourceColour',processing:'processingSpace',width:'width',height:'height',output:'outputMode',seed:'seed'}))this.$(id).value=this.state[key];
@@ -267,11 +273,11 @@ export class PaintoutWorkspace{
 
   fps(){return this.sourceInfo?.kind==='video'?this.sourceInfo.fps:this.state.sequenceFps;}
 
-  config(){const c={...this.state,custom_loras:this.loras.value(),resolutionMode:'plate',sourceWidth:this.sourceInfo?.width,sourceHeight:this.sourceInfo?.height,detectedSourceColour:this.sourceInfo?.resolved_colour,colourPipeline:paintoutColourPipeline(this.state),anchors:this.state.anchors.filter(a=>a.file&&(!a.status||a.status==='accepted')&&(Number(a.frame)===-1||Number(a.frame)>=this.state.startFrame&&Number(a.frame)<this.state.startFrame+this.state.frameCount)).map(a=>({...a})),prompt:this.$('prompt').value,keepAudio:true,savePrefix:'paintout/studio',exrPrecision:'float32'};if(this.sourceInfo){c.width=Math.ceil(c.sourceWidth/64)*64;c.height=Math.ceil(c.sourceHeight/64)*64;c.sequenceFps=this.fps();}return c;}
+  config(){const c={...this.state,custom_loras:this.loras.value(),resolutionMode:'plate',sourceWidth:this.sourceInfo?.width,sourceHeight:this.sourceInfo?.height,detectedSourceColour:this.sourceInfo?.resolved_colour,colourPipeline:paintoutColourPipeline(this.state),anchors:this.state.anchors.filter(a=>(!this.ripple||Number(a.frame)===this.state.startFrame)&&a.file&&(!a.status||a.status==='accepted')&&(Number(a.frame)===-1||Number(a.frame)>=this.state.startFrame&&Number(a.frame)<this.state.startFrame+this.state.frameCount)).map(a=>({...a})),prompt:this.$('prompt').value,keepAudio:true,savePrefix:this.ripple?'ZURA STUDIO/object replacement':'paintout/studio',exrPrecision:'float32'};if(this.sourceInfo){c.width=Math.ceil(c.sourceWidth/64)*64;c.height=Math.ceil(c.sourceHeight/64)*64;c.sequenceFps=this.fps();}return c;}
 
   applySize(){const mode=this.state.resolutionMode;if(mode==='default'){this.state.width=1152;this.state.height=640;}else if(PAINTOUT_SIZE_PRESETS.some(p=>p[0]===mode))Object.assign(this.state,paintoutPresetSize(mode,this.state.megapixels));this.$('width').value=this.state.width;this.$('height').value=this.state.height;}
 
-  save(){this.editor?.saveSoon();try{localStorage.setItem(KEY,JSON.stringify({draft:this.state,prompts:this.prompts,sourceInfo:this.sourceInfo,maskInfo:this.maskInfo,job:this.job,pendingHDR:this.pendingHDR,cleanupPrompt:this.cleanupPrompt,items:this.items,result:this.result}));}catch{this.message('Browser storage is full. Your output files remain on disk.');}}
+  save(){this.editor?.saveSoon();try{localStorage.setItem(this.storageKey,JSON.stringify({draft:this.state,prompts:this.prompts,sourceInfo:this.sourceInfo,maskInfo:this.maskInfo,job:this.job,pendingHDR:this.pendingHDR,cleanupPrompt:this.cleanupPrompt,items:this.items,result:this.result}));}catch{this.message('Browser storage is full. Your output files remain on disk.');}}
 
   changed(){this.message('');this.save();this.render();this.owner.videoComposer?.syncWorkflow();}
 
@@ -350,9 +356,9 @@ export class PaintoutWorkspace{
 
   async resetSource(){if(this.busy())return false;try{await this.editor?.flushManual();await this.editor?.persist();}catch(e){this.message(e.message);return false;}this.state.source='';this.state.editorProject=null;this.state.maskProject=null;this.state.maskRevision=null;this.state.mask='';this.state.anchors=[];this.sourceInfo=this.maskInfo=null;this.pendingHDR=null;this.selected=-1;this.result=null;this.$('export-link').hidden=true;this.$('export-link').removeAttribute('href');this.renderAnchors();this.changed();this.preview('source');return true;}
 
-  async reset(){if(this.busy())return;if(!await this.resetSource())return;this.items=[];this.cleanupPrompt=this.state.mode==='inpaint'?'Add the object shown in the reference image':DEFAULT_FRAME_EDIT_PROMPT;if(this.editor)this.editor.$('instruction').value=this.cleanupPrompt;this.state.startFrame=0;this.state.frameCount=81;this.playhead=0;this.$('start').value=0;this.$('count').value=81;this.save();this.render();}
+  async reset(){if(this.busy())return;if(!await this.resetSource())return;this.items=[];this.cleanupPrompt=this.state.mode==='ripple'?'Replace the selected object with the object shown in the reference image':this.state.mode==='inpaint'?'Add the object shown in the reference image':DEFAULT_FRAME_EDIT_PROMPT;if(this.editor)this.editor.$('instruction').value=this.cleanupPrompt;this.state.startFrame=0;this.state.frameCount=81;this.playhead=0;this.$('start').value=0;this.$('count').value=81;this.save();this.render();}
 
-  setMode(mode){if(this.busy()||!['targeted','full','inpaint'].includes(mode))return;this.prompts[this.state.mode]=this.$('prompt').value;this.state.mode=mode;this.$('prompt').value=this.prompts[mode]||(mode==='inpaint'?INPAINT_PROMPT:PAINTOUT_DEFAULT_PROMPTS[mode]);this.cleanupPrompt=mode==='inpaint'?'Add the object shown in the reference image':DEFAULT_FRAME_EDIT_PROMPT;if(this.editor)this.editor.$('instruction').value=this.cleanupPrompt;this.changed();if(mode==='full'&&['mask','anchor'].includes(this.view))this.preview('source');}
+  setMode(mode){if(this.busy()||!['targeted','full','inpaint','ripple'].includes(mode))return;this.prompts[this.state.mode]=this.$('prompt').value;this.state.mode=mode;this.ripple=mode==='ripple';this.page.classList.toggle('is-ripple',this.ripple);this.$('prompt').value=this.prompts[mode]||(mode==='ripple'?'':mode==='inpaint'?INPAINT_PROMPT:PAINTOUT_DEFAULT_PROMPTS[mode]);this.cleanupPrompt=mode==='ripple'?'Replace the selected object with the object shown in the reference image':mode==='inpaint'?'Add the object shown in the reference image':DEFAULT_FRAME_EDIT_PROMPT;if(this.editor)this.editor.$('instruction').value=this.cleanupPrompt;this.changed();if(mode==='full'&&['mask','anchor'].includes(this.view))this.preview('source');if(this.ripple&&this.state.source){this.playhead=this.state.startFrame;this.editor?.setStage(this.state.clipTrimConfirmed===false?'trim':'mask');}}
 
   renderAnchors(){
 
@@ -368,7 +374,7 @@ export class PaintoutWorkspace{
 
   selectAnchor(index){if(this.editor){this.editor.selectFrame(index);return;}this.selected=index;const a=this.state.anchors[index];if(!a)return;this.syncAnchorControls(index);this.$('anchors').querySelectorAll('.zps-anchor').forEach((e,i)=>e.classList.toggle('is-selected',i===index));this.preview('anchor');this.render();}
 
-  seek(frame){if(!this.sourceInfo)return;this.playhead=Math.max(0,Math.min(this.sourceInfo.frames-1,Math.round(frame)));this.updatePlayhead();if(this.editor?.active){this.editor.frameChanged();return;}if(this.view!=='source')this.preview('source');else if(this.sourceInfo.media_url&&!this.videoFallback?.has(this.state.source))this.$('video').currentTime=this.playhead/this.fps();else this.preview('source');}
+  seek(frame){if(!this.sourceInfo)return;if(this.ripple&&this.editor?.active)frame=this.state.startFrame;this.playhead=Math.max(0,Math.min(this.sourceInfo.frames-1,Math.round(frame)));this.updatePlayhead();if(this.editor?.active){this.editor.frameChanged();return;}if(this.view!=='source')this.preview('source');else if(this.sourceInfo.media_url&&!this.videoFallback?.has(this.state.source))this.$('video').currentTime=this.playhead/this.fps();else this.preview('source');}
 
   updatePlayhead(){if(document.activeElement!==this.$('frame'))this.$('frame').value=this.playhead;this.$('scrub').value=this.playhead;this.editor?.update();}
 
@@ -453,11 +459,11 @@ export class PaintoutWorkspace{
 
   render(){
 
-    const busy=this.busy(),inpaint=this.state.mode==='inpaint',targeted=this.state.mode!=='full',c=this.config(),availability=this.modelInfo?(inpaint?inpaintAvailability(this.modelInfo,c):paintoutAvailability(this.modelInfo,this.state.mode,c)):null;let error=[...this.page.querySelectorAll('[data-input-error]')].find(input=>!input.disabled)?.dataset.inputError||(inpaint?inpaintValidation(c):paintoutValidation(c));
+    const busy=this.busy(),inpaint=this.state.mode==='inpaint',targeted=this.state.mode!=='full',c=this.config(),availability=this.modelInfo?(this.ripple?rippleAvailability(this.modelInfo):inpaint?inpaintAvailability(this.modelInfo,c):paintoutAvailability(this.modelInfo,this.state.mode,c)):null;let error=[...this.page.querySelectorAll('[data-input-error]')].find(input=>!input.disabled)?.dataset.inputError||(this.ripple?rippleValidation(c):inpaint?inpaintValidation(c):paintoutValidation(c));
 
     if(!error&&this.sourceInfo&&c.startFrame+c.frameCount>this.sourceInfo.frames)error='The selected frame range exceeds your footage.';
 
-    if(!error&&targeted&&this.maskInfo&&this.maskInfo.frames>1&&this.maskInfo.frames<c.startFrame+c.frameCount)error='The mask does not cover the selected source range.';
+    if(!error&&targeted&&!this.ripple&&this.maskInfo&&this.maskInfo.frames>1&&this.maskInfo.frames<c.startFrame+c.frameCount)error='The mask does not cover the selected source range.';
 
     this.loras?.setBusy(busy);
     this.validationError=error;this.availability=availability;this.renderColourStatus(c);this.$('block-control').hidden=!targeted;this.$('mask-block').value=String(this.state.maskBlockSize??32);this.$('mask-block').disabled=busy;
@@ -507,7 +513,7 @@ export class PaintoutWorkspace{
 
     this.$('fps').disabled=busy||this.sourceInfo?.kind==='video';this.$('megapixels').disabled=busy||!preset;
 
-    this.$('anchors').querySelectorAll('button,input').forEach(el=>{el.disabled=busy||!targeted;if(el.tagName==='INPUT'){el.min=c.startFrame;el.max=c.startFrame+c.frameCount-1;}});
+    this.$('anchors').querySelectorAll('button,input').forEach(el=>{el.disabled=busy||!targeted||this.ripple;if(el.tagName==='INPUT'){el.min=c.startFrame;el.max=c.startFrame+c.frameCount-1;}});
 
     for(const id of ['anchor-strength','anchor-colour','anchor-enabled','replace-anchor'])this.$(id).disabled=busy||!targeted||this.selected<0;
 
@@ -522,7 +528,7 @@ export class PaintoutWorkspace{
     this.$('export').disabled=busy;this.$('progress').hidden=!this.job&&!this.submitting;this.$('cancel').disabled=!this.job||!!this.job.cancelPending;this.updateGenerationGuide();
 
     this.$('hdr-stage').hidden=!this.pendingHDR;this.$('convert-hdr').disabled=busy;this.$('convert-hdr').textContent=this.pendingHDR?.failed?'Retry HDR conversion':'Convert to HDR';this.$('hdr-stage-note').textContent=this.pendingHDR?.failed?'Conversion stopped. Your repair is saved.':'Repair saved. Ready for HDR.';
-    this.$('generate').disabled=busy;this.$('generate').setAttribute('aria-describedby','zps-note');this.$('generate').textContent=this.job?'Generating…':this.submitting?'Submitting…':error&&/mask section|inpaint mask|removal mask|matching mask/i.test(error)?'Finish mask':error&&/painted clean frame|painted frame|reference frame/i.test(error)?'Add reference frame':error||!availability?.ready?'Review setup':inpaint?'Generate inpaint':targeted?'Generate paintout':'Generate clean plate';
+    this.$('generate').disabled=busy;this.$('generate').setAttribute('aria-describedby','zps-note');this.$('generate').textContent=this.job?'Generating…':this.submitting?'Submitting…':error&&/mask section|inpaint mask|removal mask|matching mask/i.test(error)?'Finish mask':error&&/painted clean frame|painted frame|reference frame|replacement image/i.test(error)?'Add reference frame':error||!availability?.ready?'Review setup':inpaint?'Generate inpaint':targeted?'Generate paintout':'Generate clean plate';
 
     this.modelDownloads?.setContext({stage:this.state.source?this.editor?.stage:'setup',mode:this.state.mode,pipeline:paintoutColourPipeline(this.state),phase:this.pendingHDR?'hdr':this.job?.phase,missingNodes:availability?.missing||[]});
     this.$('setup').textContent=this.loading?'Checking installed models…':this.modelError||(!availability?'Open Paintout to check installed models.':availability.ready?'Required models and nodes are installed.':'Missing: '+availability.missing.join(', '));
@@ -539,6 +545,7 @@ export class PaintoutWorkspace{
 
     this.$('download').hidden=!this.result||this.view!=='result';if(this.result){this.$('download').href=this.outputURL(this.result.master||this.result.file);this.$('download').textContent=this.result.config.outputMode==='EXR sequence'?'Download preview':'Download video';}
 
+    syncRippleWorkspace(this);
     this.$('takes').innerHTML=this.items.map((item,i)=>`<button type="button" data-take="${i}">${item.config.mode==='full'?'Clean plate':'Targeted repair'} · ${esc(name(item.config.source))}</button>`).join('');
 
     this.editor?.update();
@@ -610,13 +617,13 @@ export class PaintoutWorkspace{
 
     if(!this.validationError&&!this.availability?.ready){this.message(this.$('setup').textContent);this.openModelSetup('video');return;}
 
-    if(this.validationError||!this.availability?.ready){const reason=this.validationError||this.$('setup').textContent;if(this.editor&&/mask section|inpaint mask|removal mask|matching mask/i.test(reason)){await this.editor.setStage('mask');const covered=new Set(this.state.maskCoverage||[]),first=Array.from({length:this.state.frameCount},(_,i)=>this.state.startFrame+i).find(f=>!covered.has(f));if(first!=null)this.seek(first);this.editor.status(reason);return;}if(this.editor&&/painted clean frame|painted frame|reference frame/i.test(reason)){await this.editor.setStage('clean');this.editor.status(reason);return;}this.message(reason);const id=/frame|range|mask.*cover/i.test(reason)?'range':/width|height|resolution|pixel/i.test(reason)?'resolution':null;if(id){this.$('render-settings').open=true;this.$(id).open=true;}else if(!this.availability?.ready)this.openModelSetup('video');return;}
+    if(this.validationError||!this.availability?.ready){const reason=this.validationError||this.$('setup').textContent;if(this.editor&&/mask section|inpaint mask|removal mask|matching mask/i.test(reason)){await this.editor.setStage('mask');const covered=new Set(this.state.maskCoverage||[]),first=Array.from({length:this.state.frameCount},(_,i)=>this.state.startFrame+i).find(f=>!covered.has(f));if(first!=null)this.seek(first);this.editor.status(reason);return;}if(this.editor&&/painted clean frame|painted frame|reference frame|replacement image/i.test(reason)){await this.editor.setStage('clean');this.editor.status(reason);return;}this.message(reason);const id=/frame|range|mask.*cover/i.test(reason)?'range':/width|height|resolution|pixel/i.test(reason)?'resolution':null;if(id){this.$('render-settings').open=true;this.$(id).open=true;}else if(!this.availability?.ready)this.openModelSetup('video');return;}
 
     this.submitting=true;this.message('');this.$('progress-title').textContent='Submitting clean plate';this.$('progress-detail').textContent='Sending your run to ComfyUI…';this.$('bar').removeAttribute('value');this.render();
 
     try{
 
-      const config=this.config(),phase=paintoutColourPipeline(config)==='sdr_hdr'?'repair':'complete',graph=await this.loras.patch(config.mode==='inpaint'?buildInpaintRepairGraph(config,this.modelInfo):buildPaintoutRepairGraph(config,this.modelInfo),config.custom_loras),response=await this.submitGraph(graph);
+      const config=this.config(),phase=paintoutColourPipeline(config)==='sdr_hdr'?'repair':'complete',graph=await this.loras.patch(config.mode==='ripple'?buildRippleGraph(config,this.modelInfo):config.mode==='inpaint'?buildInpaintRepairGraph(config,this.modelInfo):buildPaintoutRepairGraph(config,this.modelInfo),config.custom_loras),response=await this.submitGraph(graph);
 
       if(!response.prompt_id)throw new Error('ComfyUI did not confirm this run. Check the queue before retrying.');
 
@@ -684,7 +691,7 @@ export class PaintoutWorkspace{
 
   compare(){if(!this.result||this.result.config.source!==this.state.source||!this.sourceInfo?.media_url)return;this.$('video').pause();this.comparison??=new ShotComparison(this.$('comparison'));this.$('comparison').hidden=false;this.comparison.onClose=()=>{this.$('comparison').hidden=true;};const c=this.result.config;this.comparison.show(this.url(this.sourceInfo.media_url),this.outputURL(this.result.file),c.startFrame/(this.sourceInfo.kind==='video'?this.sourceInfo.fps:c.sequenceFps),{resultLabel:'Clean plate'});}
 
-  async graph(){try{const config=this.job?.config||this.config(),base=config.mode==='inpaint'?buildInpaintRepairGraph(config,this.modelInfo):buildPaintoutGraph(config,this.modelInfo),graph=this.loras?.patch?await this.loras.patch(base,config.custom_loras||[]):base,original=(this.app.rootGraph||this.app.graph)?.serialize?.();if(!original||typeof this.app.loadApiJson!=='function')throw new Error('Update ComfyUI to open this editable graph.');try{await this.app.loadApiJson(graph,`Zura Paintout · ${Date.now()}.json`);await import('../vendor/elk.bundled.js');await tidyArtistGraph(this.app,graph,'paintout',window.ELK);}catch(e){await this.app.loadGraphData(original);throw e;}this.studio.close();}catch(e){this.message(e.message);}}
+  async graph(){try{const config=this.job?.config||this.config(),base=config.mode==='ripple'?buildRippleGraph(config,this.modelInfo):config.mode==='inpaint'?buildInpaintRepairGraph(config,this.modelInfo):buildPaintoutGraph(config,this.modelInfo),graph=this.loras?.patch?await this.loras.patch(base,config.custom_loras||[]):base,original=(this.app.rootGraph||this.app.graph)?.serialize?.();if(!original||typeof this.app.loadApiJson!=='function')throw new Error('Update ComfyUI to open this editable graph.');try{await this.app.loadApiJson(graph,`Zura Paintout · ${Date.now()}.json`);await import('../vendor/elk.bundled.js');await tidyArtistGraph(this.app,graph,'paintout',window.ELK);}catch(e){await this.app.loadGraphData(original);throw e;}this.studio.close();}catch(e){this.message(e.message);}}
 
   close(){this.modelDownloads?.close();this.editor?.close();this.save();this.stopPolling();this.nativeSamplePreview?.dispose();this.nativeSamplePreview=null;this.comparison?.hide();this.$('video').pause();}
 

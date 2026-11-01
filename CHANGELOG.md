@@ -2,6 +2,7 @@
 
 ## 1.3.41 - 1 November 2026
 
+- Add Video > Object replacement · Ripple with a guided first-frame mask, replacement-image creation or import, explicit review and original-frame-rate/audio delivery. Reuse Paintout selection tools and expose the Ripple model download package. This mode is SDR and first-frame only; video propagation is maskless and surrounding details may change.
 - Keep the Studio-wide interface polish and the approved original full-resolution LTX 2.5 SDR outpaint recipe from 1.3.40.
 - Restore legacy route aliases for the new outpaint first-frame and source-info endpoints so existing Studio projects and the Registry compatibility checks remain supported.
 

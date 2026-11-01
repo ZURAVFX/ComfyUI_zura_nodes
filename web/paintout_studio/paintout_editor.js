@@ -1,3 +1,4 @@
+import {isRipple,syncRippleEditor} from './ripple_editor.js';
 import {describeGeneration,updateGenerationSteps} from './paintout_generation_steps.js';
 import {maskIcons} from './paintout_icons.js';
 import {PaintoutTimeline} from './paintout_timeline.js';
@@ -232,7 +233,7 @@ export class PaintoutEditor{
     if(commit)w.save();w.render();
   }
   async confirmClipTrim(){
-    if(this.w.busy())return;const state=this.w.state;
+    if(this.w.busy())return;const state=this.w.state;if(isRipple(this))for(const anchor of state.anchors)delete anchor.rippleReviewedFile;
     if(state.mode!=='full'){this.tool='include';this.viewer.setTool('include');}
     state.clipTrimConfirmed=true;state.maskTrackStart=state.startFrame;state.maskTrackEnd=state.startFrame+state.frameCount-1;
     this.customRange=false;this.$('range-start').value=state.maskTrackStart;this.$('range-end').value=state.maskTrackEnd;
@@ -417,14 +418,14 @@ export class PaintoutEditor{
   }
   async loadDocument(){const doc=await this.w.fetch(endpoint+'/project',{id:this.project});this.document=doc;this.revision=doc.revision;this.w.state.maskCoverage=doc.mask_coverage;return doc;}
   async setStage(stage){
-    if(this.w.busy()||!['trim','mask','clean','render'].includes(stage))return;if(this.w.state.clipTrimConfirmed===false&&stage!=='trim')stage='trim';if(stage!==this.stage){this.autoPreviewPending=false;clearTimeout(this.autoPreviewTimer);this.maskEditVersion++;}try{await this.flushManual();}catch(e){this.status(e.message);return;}this.closed=false;this.stage=stage;this.w.state.editorStage=stage;if(stage==='clean')this.$('instruction').value=this.cleanupInstruction();this.active=['mask','clean'].includes(stage)&&!!this.w.state.source;this.candidate=stage==='clean'?this.selected()?.candidate||null:null;if(this.candidate&&!this.candidate.review){this.addPaintLayer(this.selected(),{...this.candidate,method:'flux3',layer_mask:this.candidate.layer_mask||this.candidate.effective_mask||this.candidate.target_mask});this.candidate=null;}
-    if(stage==='clean'&&!this.selected()&&this.w.state.source)this.createFrame(this.w.playhead);
+    if(this.w.busy()||!['trim','mask','clean','render'].includes(stage))return;if(isRipple(this)&&stage==='render'&&!this.w.state.anchors.some(a=>a.frame===this.w.state.startFrame&&a.file&&a.rippleReviewedFile===a.file&&a.status==='accepted'&&a.enabled!==false)){stage='clean';this.status('Create or import the first-frame replacement before generating.');}if(isRipple(this)&&['mask','clean'].includes(stage))this.w.playhead=this.w.state.startFrame;if(this.w.state.clipTrimConfirmed===false&&stage!=='trim')stage='trim';if(stage!==this.stage){this.autoPreviewPending=false;clearTimeout(this.autoPreviewTimer);this.maskEditVersion++;}try{await this.flushManual();}catch(e){this.status(e.message);return;}this.closed=false;this.stage=stage;this.w.state.editorStage=stage;if(stage==='clean')this.$('instruction').value=this.cleanupInstruction();this.active=['mask','clean'].includes(stage)&&!!this.w.state.source;this.candidate=stage==='clean'?this.selected()?.candidate||null:null;if(this.candidate&&!this.candidate.review){this.addPaintLayer(this.selected(),{...this.candidate,method:'flux3',layer_mask:this.candidate.layer_mask||this.candidate.effective_mask||this.candidate.target_mask});this.candidate=null;}
+    if(stage==='clean'&&(!this.selected()||isRipple(this)&&this.selected().frame!==this.w.state.startFrame)&&this.w.state.source)this.createFrame(this.w.playhead);
     if(this.active){this.w.view=stage==='clean'?'anchor':'mask';this.w.comparison?.hide();if(this.w.$('comparison'))this.w.$('comparison').hidden=true;this.w.$('video').pause();this.w.$('video').hidden=true;this.w.$('image-slot').hidden=true;await this.frameChanged(true);}
     else this.w.preview(stage==='trim'?'source':this.w.result?'result':'source');
     this.update();this.w.save();
   }
   async frameChanged(force=false){
-    if(!this.active||!this.w.sourceInfo)return;const w=this.w;
+    if(!this.active||!this.w.sourceInfo)return;const w=this.w;if(isRipple(this))w.playhead=w.state.startFrame;
     if(this.viewer.frame!==w.playhead){this.autoPreviewPending=false;clearTimeout(this.autoPreviewTimer);this.maskEditVersion++;}
     const accepted=this.stage==='clean'&&this.selected()?.frame===w.playhead?this.selected():null;
     const key=[w.state.source,w.playhead,w.state.maskRevision,w.state.mask,w.state.sourceColour,this.candidate?.file,accepted?.file,this.stage].join('|');
@@ -460,8 +461,8 @@ export class PaintoutEditor{
     this.updateControls();
   }
   updateControls(){
-    const clean=this.stage==='clean',busy=this.w.busy();
-    const inpaint=this.w.state.mode==='inpaint';this.objectReferenceTools.hidden=!inpaint||!clean;
+    const clean=this.stage==='clean',busy=this.w.busy();this.projects.hidden=false;this.$('track').hidden=false;this.$('import-mask').hidden=false;this.guideHelp.hidden=true;if(this.rippleImport)this.rippleImport.hidden=true;
+    const inpaint=['inpaint','ripple'].includes(this.w.state.mode);this.objectReferenceTools.hidden=!inpaint||!clean;
     this.objectReferenceAdd.disabled=busy;this.objectReferenceAdd.textContent=this.referenceUploading?'Uploading…':'Add object references';
     this.objectReferenceList.replaceChildren(...(this.w.state.objectReferences||[]).map((item,index)=>{const button=el('button',item.name+' ×');button.type='button';button.disabled=busy;button.title='Remove '+item.name;button.setAttribute('aria-label','Remove '+item.name);button.onclick=()=>{this.w.state.objectReferences.splice(index,1);this.w.save();this.updateControls();};return button;}));
     const cleanStage=this.nav.querySelector('[data-stage="clean"]');if(cleanStage)cleanStage.textContent=inpaint?'Reference frame':'Clean frames';
@@ -543,7 +544,7 @@ export class PaintoutEditor{
     this.$('review-count').textContent=`${reviewRanges.length} mask ${reviewRanges.length===1?'change':'changes'} to check`;
     this.$('review-reason').textContent=atFrame?`${atFrame.label||'Mask changed'}. Advisory only: inspect and correct if needed.`:'Amber timeline marks flag abrupt mask changes. Advisory only; no masks have been altered.';
     this.$('review-next').disabled=busy||!!this.manualSaving||!reviewRanges.length;
-    this.updateGuidance({selection,segment,pointPreview,outsideMask});updateGenerationSteps(this.$('job-steps'),this.toolJob);
+    this.updateGuidance({selection,segment,pointPreview,outsideMask});updateGenerationSteps(this.$('job-steps'),this.toolJob);syncRippleEditor(this);
 
   }
   updateGuidance({selection,segment,pointPreview,outsideMask}){
@@ -604,12 +605,12 @@ export class PaintoutEditor{
   }
   createFrame(frame){
     if(this.manualDirty||this.manualSaving){this.flushManual().then(()=>this.createFrame(frame)).catch(e=>this.status(e.message));return;}
-    if(this.w.busy()||!this.w.state.source)return;frame=number(frame,0,(this.w.sourceInfo?.frames||1)-1);if(frame<this.w.state.startFrame||frame>=this.w.state.startFrame+this.w.state.frameCount){this.status('This frame is outside your clip. Open Trim clip to change the exported range.');return;}
+    if(this.w.busy()||!this.w.state.source)return;if(isRipple(this))frame=this.w.state.startFrame;frame=number(frame,0,(this.w.sourceInfo?.frames||1)-1);if(frame<this.w.state.startFrame||frame>=this.w.state.startFrame+this.w.state.frameCount){this.status('This frame is outside your clip. Open Trim clip to change the exported range.');return;}
     const old=this.w.state.anchors.findIndex(a=>a.frame===frame);if(old>=0){this.selectFrame(old);return;}
     this.w.state.anchors.push({id:crypto.randomUUID(),frame,file:'',strength:.75,enabled:true,status:'draft',colour_space:this.w.state.sourceColour,versions:[]});
     this.selectFrame(this.w.state.anchors.length-1);this.w.save();
   }
-  selectFrame(index){if(this.manualDirty||this.manualSaving){this.flushManual().then(()=>this.selectFrame(index)).catch(e=>this.status(e.message));return;}if(this.w.busy())return;const a=this.w.state.anchors[index];if(!a)return;this.w.selected=index;this.w.syncAnchorControls?.(index);this.w.playhead=a.frame;this.stage='clean';this.$('instruction').value=this.cleanupInstruction();this.w.state.editorStage='clean';this.w.view='anchor';this.active=true;this.candidate=a.candidate||null;if(this.candidate&&!this.candidate.review){this.addPaintLayer(a,{...this.candidate,method:'flux3',layer_mask:this.candidate.layer_mask||this.candidate.effective_mask||this.candidate.target_mask});this.candidate=null;}this.tool='brush';this.viewer.setTool('brush');this.w.comparison?.hide();if(this.w.$('comparison'))this.w.$('comparison').hidden=true;this.w.updatePlayhead();this.frameChanged(true);this.update();this.w.save();}
+  selectFrame(index){if(this.manualDirty||this.manualSaving){this.flushManual().then(()=>this.selectFrame(index)).catch(e=>this.status(e.message));return;}if(this.w.busy())return;const a=this.w.state.anchors[index];if(!a)return;if(isRipple(this)&&a.frame!==this.w.state.startFrame){this.status('Ripple edits only the first selected frame. Change the clip trim to use another frame.');return;}this.w.selected=index;this.w.syncAnchorControls?.(index);this.w.playhead=a.frame;this.stage='clean';this.$('instruction').value=this.cleanupInstruction();this.w.state.editorStage='clean';this.w.view='anchor';this.active=true;this.candidate=a.candidate||null;if(this.candidate&&!this.candidate.review){this.addPaintLayer(a,{...this.candidate,method:'flux3',layer_mask:this.candidate.layer_mask||this.candidate.effective_mask||this.candidate.target_mask});this.candidate=null;}this.tool='brush';this.viewer.setTool('brush');this.w.comparison?.hide();if(this.w.$('comparison'))this.w.$('comparison').hidden=true;this.w.updatePlayhead();this.frameChanged(true);this.update();this.w.save();}
   async compareFrame(){try{this.showOriginal=!this.showOriginal;const a=this.selected(),url=this.showOriginal?this.w.thumbnail(this.w.state.source,this.w.playhead,this.w.state.sourceColour,1280):this.candidate?.file?this.w.thumbnail(this.candidate.png_file||this.candidate.file,0,this.candidate.png_file?(this.candidate.preview_colour_space||'srgb_display'):this.candidate.colour_space,1280):this.w.thumbnail(a.preview_file||a.file,0,a.preview_file?(a.preview_colour_space||'srgb_display'):a.colour_space,1280);await this.viewer.setDisplayImage(url);this.viewer.setOpacity(0);this.updateControls();}catch(e){this.status(e.message);}}
   removeFrame(index){if(this.w.busy())return;this.w.state.anchors.splice(index,1);this.w.selected=-1;this.candidate=null;this.w.changed();}
   async downloadFrame(){
@@ -679,7 +680,7 @@ export class PaintoutEditor{
     this.w.save();this.update();
   }
   async runMask(single,operation){
-    if(this.w.busy())return;
+    if(this.w.busy())return;if(isRipple(this))single=true;
     let requestVersion=this.maskEditVersion;this.maskStarting=true;this.maskPreviewStarting=!!single;this.jobProgress=null;this.$('job').querySelector('progress').removeAttribute('value');this.$('job-label').textContent=single?'Updating mask…':'Preparing tracking…';this.w.render();
     try{
       if(this.w.modelInfo?.ZuraPaintoutMaskPass&&!this.w.modelInfo.ZuraPaintoutMaskPass.input?.optional?.segment_id)throw Error('Restart ComfyUI once to enable the new mask timeline, then refresh this page.');
@@ -718,7 +719,7 @@ export class PaintoutEditor{
       if(this.ensureLayers(a).length>=32)throw Error('This frame has 32 paint layers. Delete a layer before adding another.');
       const config={source:this.w.state.source,frame:a.frame,colour_space:this.w.state.sourceColour,base_file:a.file||'',base_colour_space:a.colour_space||this.w.state.sourceColour,mask:selection.mask,
         grow:a.editGrow??this.w.state.maskGrow,feather:0,project:this.w.state.maskProject,mask_revision:this.w.state.maskRevision,context:256,max_side:1024,seed:a.editSeed??this.w.state.seed,prompt:this.$('instruction').value,references:(this.w.state.objectReferences||[]).map(item=>item.file)};
-      const graph=this.w.state.mode==='inpaint'?buildInpaintFrameGraph(config,this.w.modelInfo):buildFrameEditGraph(config,this.w.modelInfo);
+      const graph=['inpaint','ripple'].includes(this.w.state.mode)?buildInpaintFrameGraph(config,this.w.modelInfo):buildFrameEditGraph(config,this.w.modelInfo);
       await this.queue(graph,'frame',a.id||a.frame,{layerMask:selection.mask,layerPrompt:this.$('instruction').value,layerSeed:a.editSeed??this.w.state.seed});
     }catch(e){this.status(e.message);}
   }

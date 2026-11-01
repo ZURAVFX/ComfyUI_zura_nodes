@@ -1,0 +1,46 @@
+import assert from 'node:assert/strict';
+import {parseHTML} from '../../ui-check/node_modules/linkedom/esm/index.js';
+import {PaintoutWorkspace} from '../web/paintout_studio/studio_paintout.js';
+
+const {document,window}=parseHTML('<html><body><section id="root"></section></body></html>');
+Object.defineProperty(window.HTMLSelectElement.prototype,'value',{configurable:true,get(){return this.querySelector('option[selected]')?.value??this.querySelector('option')?.value??'';},set(value){for(const option of this.querySelectorAll('option'))option.toggleAttribute('selected',option.value===String(value));}});
+window.HTMLCanvasElement.prototype.getContext=()=>({setTransform(){},clearRect(){},fillRect(){}});
+window.HTMLElement.prototype.pause=()=>{};window.HTMLCanvasElement.prototype.toDataURL=()=>"data:image/png;base64,fixture";
+const storage={};
+Object.assign(globalThis,{document,window,ResizeObserver:class {observe(){} disconnect(){}},localStorage:{getItem(key){return storage[key]||null;},setItem(key,value){storage[key]=value;}}});
+const calls=[];
+const models=[
+  {id:'targeted',name:'Targeted repair',files:[{folder:'diffusion_models',filename:'repair.safetensors',size_bytes:100,installed:false}]},
+  {id:'full',name:'Full-scene clean plate',files:[{folder:'loras',filename:'clean.safetensors',size_bytes:50,installed:false}]},
+  {id:'inpaint',name:'Object inpainting',files:[{folder:'loras',filename:'inpaint.safetensors',size_bytes:60,installed:false}]},
+  {id:'inpaint_hdr',name:'Object inpainting · HDR',files:[{folder:'loras',filename:'inpaint-hdr.safetensors',size_bytes:60,installed:false}]},
+  {id:'hdr_conversion',name:'HDR conversion',files:[{folder:'loras',filename:'hdr.safetensors',size_bytes:25,installed:false}]},
+];
+const owner={root:document.querySelector('#root'),studio:{close(){}},app:{},api:{clientId:'test',apiURL:p=>p,addEventListener(){},removeEventListener(){}},async fetch(path,body){calls.push({path,body});if(path==='/zura/paintout/model-downloads')return {models};if(path==='/object_info')return {};throw Error(path);}};
+const ui=new PaintoutWorkspace(owner,{mode:'ripple',storageKey:'ripple-test'});
+assert.equal(ui.state.mode,'ripple');assert.equal(ui.ripple,true);assert.ok(ui.page.classList.contains('is-ripple'));
+assert.match(ui.$('workflow-label').textContent,/Object replacement.*first frame/);
+assert.match(ui.cleanupPrompt,/Replace the selected/);
+assert.equal(ui.editor.nav.querySelector('[data-stage=clean]').textContent,'Replacement frame');
+assert.equal(ui.editor.$('track').hidden,true);assert.equal(ui.editor.projects.hidden,true);
+assert.equal(ui.editor.$('import-mask').hidden,true);
+ui.state.source='source.mp4';ui.sourceInfo={kind:'video',width:512,height:896,frames:200,fps:24};
+ui.state.startFrame=12;ui.state.frameCount=97;ui.state.clipTrimConfirmed=true;
+ui.editor.source=ui.state.source;ui.editor.projectSource=ui.state.source;ui.editor.project='test';ui.editor.document={mask_coverage:[]};
+ui.editor.frameChanged=async()=>{};ui.editor.persist=async()=>{};ui.editor.flushManual=async()=>{};ui.preview=()=>{};
+ui.playhead=70;await ui.editor.setStage('mask');assert.equal(ui.playhead,12);
+ui.seek(90);assert.equal(ui.playhead,12,'Mask/edit views cannot scrub to a later source frame');
+assert.equal(ui.editor.timelineHost.hidden,true);assert.equal(ui.editor.$('track').hidden,true);
+ui.editor.createFrame(90);assert.equal(ui.state.anchors[0].frame,12,'New anchors are forcibly first-frame only');
+ui.state.anchors.push({frame:30,file:'later.png',status:'accepted',enabled:true});
+ui.selected=0;ui.editor.selectFrame(1);assert.equal(ui.selected,0,'A later-frame anchor cannot be selected');
+await ui.editor.setStage('render');assert.equal(ui.editor.stage,'clean','Missing reviewed replacement routes to first-frame creation');
+ui.state.anchors[0]={frame:12,file:'first.png',status:'accepted',enabled:true};
+await ui.editor.setStage('render');assert.equal(ui.editor.stage,'clean','Navigation cannot skip the explicit first-frame review');await ui.editor.$('render-next').onclick();assert.equal(ui.editor.stage,'render');assert.equal(ui.state.anchors[0].rippleReviewedFile,'first.png');
+assert.deepEqual(ui.config().anchors.map(a=>a.frame),[12]);assert.equal(ui.config().sequenceFps,24);
+await ui.editor.confirmClipTrim();assert.equal(ui.state.anchors[0].rippleReviewedFile,undefined,'Confirming a new trim requires renewed first-frame review');ui.state.startFrame=20;assert.equal(ui.config().anchors.length,0,'Moving trim invalidates the previous first-frame guide');
+ui.state.source='';ui.sourceInfo=null;ui.state.anchors=[];ui.selected=-1;
+ui.setMode('inpaint');assert.equal(ui.ripple,false);assert.equal(ui.editor.$('track').hidden,false);assert.equal(ui.editor.projects.hidden,false);
+assert.equal(ui.editor.nav.querySelector('[data-stage=clean]').textContent,'Reference frame');
+assert.equal(ui.editor.$('instruction').closest('label').firstChild.textContent,'Instruction');
+ui.close();console.log('Ripple first-frame locking, guided stages, trim invalidation and return to any-frame Inpaint passed.');

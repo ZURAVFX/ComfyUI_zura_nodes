@@ -32,3 +32,7 @@ frame_layers.register_routes()
 
 from . import model_downloads
 model_downloads.register_routes()
+
+from .ripple import NODE_CLASS_MAPPINGS as RIPPLE_NODES, NODE_DISPLAY_NAME_MAPPINGS as RIPPLE_NAMES
+NODE_CLASS_MAPPINGS.update(RIPPLE_NODES)
+NODE_DISPLAY_NAME_MAPPINGS.update(RIPPLE_NAMES)

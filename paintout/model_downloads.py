@@ -314,6 +314,21 @@ for _package, _base in (('inpaint', 'targeted'), ('inpaint_hdr', 'targeted_hdr')
     }
 del _package, _base
 
+# Verified against the publisher's API on 1 November 2026. Reuse the same LTX
+# components and downloader; choosing this package does not start a download.
+CATALOG['ripple'] = {
+    'name': 'Object replacement · Ripple',
+    'files': [dict(item) for item in CATALOG['targeted']['files'] if item['folder'] != 'loras'] + [{
+        'folder': 'loras', 'filename': 'LTX25_Ripple_v11.safetensors',
+        'repo': 'WepeNerd/LTX-Ripple', 'revision': '76abac5ede8a3415b9d1cd803843a38ecb351600',
+        'remote_path': 'LTX25_Ripple_v11.safetensors', 'size_bytes': 654443392,
+        'sha256': 'bde543610144e5bba78782fb0ac18daa663fc087c2212244b8116deb1925ee2a',
+        'gated': False, 'model_card': 'https://huggingface.co/WepeNerd/LTX-Ripple',
+    }],
+    'note': 'Propagates an edited first frame through SDR footage. The mask guides the image edit only; video propagation is maskless.',
+    'license_url': 'https://huggingface.co/WepeNerd/LTX-Ripple',
+}
+
 
 class DownloadError(RuntimeError):
     """Only controlled messages from this exception may reach the browser."""

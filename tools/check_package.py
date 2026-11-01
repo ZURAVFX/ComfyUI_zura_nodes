@@ -35,6 +35,8 @@ for asset in ('studio_launchers.py', 'web/studio_launchers.js', 'web/studio_laun
               'web/paintout_studio/paintout_editor.js',
               'web/paintout_studio/paintout_editor.css',
               'web/paintout_studio/inpaint_recipes.js',
+              'paintout/ripple.py', 'web/paintout_studio/ripple_editor.js',
+              'web/paintout_studio/ripple_recipes.js', 'docs/RIPPLE_OBJECT_REPLACEMENT.md',
               'web/paintout_studio/paintout_frame_recipes.js',
               'web/paintout_studio/studio_paintout.js',
               'web/paintout_studio/assets/fonts/Manrope-Variable.ttf',

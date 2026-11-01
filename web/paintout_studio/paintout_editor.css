@@ -319,3 +319,31 @@
 @media(max-width:700px){.zp-editor-guide-actions{grid-row:auto}.zp-editor-viewer-toolbar{justify-content:flex-start}.zp-editor-mask-sizing{width:100%}.zp-editor-mask-actions>.zp-editor-mask-intro{margin-right:auto}.zp-editor-action-menu>div{min-width:190px}}
 
 .zp-editor-action-menu>div>details{position:static;padding:6px 10px;border:0;border-radius:0}.zp-editor-action-menu>div>details>summary{cursor:pointer;min-height:32px;align-content:center}.zp-editor-action-menu>div:has(details[open]){width:min(380px,calc(100vw - 40px));max-height:65vh;overflow:auto}.zp-editor-action-menu .zp-editor-track-range{display:grid;grid-template-columns:minmax(0,1fr);gap:8px}.zp-editor-action-menu .zp-editor-track-range label{display:flex;justify-content:space-between;align-items:center;gap:8px;min-width:0}.zp-editor-action-menu .zp-editor-track-range input{width:90px}.zp-editor-action-menu .zp-editor-track-range select{max-width:65%}
+
+/* Ripple is intentionally first-frame-only, with a lighter guide workflow. */
+#genj-studio .is-ripple .zps-start-mode,
+#genj-studio .is-ripple #zps-workspace-menu,
+#genj-studio .is-ripple #zps-colour-status,
+#genj-studio .is-ripple #zps-anchors-section,
+#genj-studio .is-ripple #zps-anchor-settings,
+#genj-studio .is-ripple #zps-block-control,
+#genj-studio .is-ripple #zps-scrubber,
+#genj-studio .is-ripple .zp-editor-mask-intro,
+#genj-studio .is-ripple .zp-editor-segment-actions,
+#genj-studio .is-ripple .zp-editor-segments,
+#genj-studio .is-ripple .zp-editor-segment-draft,
+#genj-studio .is-ripple .zp-editor-track-guide,
+#genj-studio .is-ripple [data-editor=tracking-options],
+#genj-studio .is-ripple [data-timeline-only],
+#genj-studio .is-ripple #zps-begin-sequence,
+#genj-studio .is-ripple .zp-editor-projects{display:none}
+#genj-studio .zp-page:not(.is-ripple) .ripple-import{display:none}
+#genj-studio .is-ripple .zp-editor-guide{grid-template-columns:minmax(0,1fr) auto;gap:8px 20px;align-items:center}
+#genj-studio .is-ripple .zp-editor-guide>span{grid-column:1;max-width:74ch;line-height:1.5;color:var(--gs-muted,#ababab);font-size:13px}
+#genj-studio .is-ripple .zp-editor-guide-actions{grid-column:2;grid-row:1 / 3;align-self:center;flex-wrap:wrap;justify-content:flex-end;gap:8px}
+#genj-studio .is-ripple .ripple-import{min-height:36px;padding:8px 12px}
+#genj-studio .is-ripple .zp-editor-object-references{display:flex;flex-wrap:wrap;gap:12px;align-items:center;margin-bottom:12px}
+#genj-studio .is-ripple .zp-editor-description input{min-height:44px}
+@media(max-width:700px){#genj-studio .is-ripple .zp-editor-guide{grid-template-columns:minmax(0,1fr)}#genj-studio .is-ripple .zp-editor-guide-actions{grid-column:1;grid-row:auto;justify-content:flex-start}}
+
+#genj-studio .is-ripple #zps-render-settings label:has(#zps-output){display:none}

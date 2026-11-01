@@ -20,7 +20,7 @@ export const composerIcons={
   takes:svg('<rect x="3" y="7" width="18" height="14" rx="2"/><path d="M7 3h10m-8 9 6 3-6 3z"/>'),
   download:svg('<path d="M12 3v12m-4-4 4 4 4-4M4 17v4h16v-4"/>'),
 };
-export const VIDEO_WORKFLOWS=[['swap','Character replacement'],['viewport','Viewport to final'],['camera','Change camera angle'],['relight','Relight'],['paintout','Paintout / clean plate'],['inpaint','Inpaint · preview'],['outpaint','Frame extension · preview'],['hdr','Convert to HDR'],['frames','First & last frame'],['references','Reference to video']];
+export const VIDEO_WORKFLOWS=[['swap','Character replacement'],['objects','Object replacement · Ripple'],['viewport','Viewport to final'],['camera','Change camera angle'],['relight','Relight'],['paintout','Paintout / clean plate'],['inpaint','Inpaint · preview'],['outpaint','Frame extension · preview'],['hdr','Convert to HDR'],['frames','First & last frame'],['references','Reference to video']];
 
 /** A compact surface over the existing controls, never a second configuration. */
 export class VideoComposer {
@@ -102,8 +102,9 @@ export class VideoComposer {
     this.studio.navigationStep=null;
     if(value==='camera'){this.workspace.show('panorama');return;}
     if(value==='hdr'){this.workspace.openHDR();return;}
+    if(value==='objects'){this.workspace.show('paintout');this.workspace.paintout.setMode('ripple');this.syncWorkflow();return;}
     if(value==='inpaint'){this.workspace.show('paintout');this.workspace.paintout.setMode('inpaint');this.syncWorkflow();return;}
-    if(value==='paintout'&&this.workspace.paintout?.state.mode==='inpaint'){this.workspace.show('paintout');this.workspace.paintout.setMode('targeted');this.syncWorkflow();return;}
+    if(value==='paintout'&&['inpaint','ripple'].includes(this.workspace.paintout?.state.mode)){this.workspace.show('paintout');this.workspace.paintout.setMode('targeted');this.syncWorkflow();return;}
     if(['frames','references','paintout','outpaint'].includes(value)){this.workspace.show(value);return;}
     if(!VIDEO_WORKFLOWS.some(([id])=>id===value))return;
     const input=this.root.querySelector(`input[name="gs-workflow"][value="${value}"]`);
@@ -142,6 +143,7 @@ export class VideoComposer {
     select.value=independent?this.workspace.mode:this.studio.config.workflow_mode==='motion'?'swap':this.studio.config.workflow_mode;
     if(this.workspace.mode==='panorama')select.value='camera';
     if(this.workspace.mode==='paintout'&&this.workspace.paintout?.state.mode==='inpaint')select.value='inpaint';
+    if(this.workspace.mode==='paintout'&&this.workspace.paintout?.state.mode==='ripple')select.value='objects';
     select.disabled=!independent&&(this.studio.busy||this.studio.project?.phase==='working');
     for(const option of select.querySelectorAll('option')){
       const input=this.root.querySelector(`input[name="gs-workflow"][value="${option.value}"]`);

@@ -1,0 +1,960 @@
+{
+  "ZuraPaintoutFullFrame": {
+    "input": {
+      "required": {
+        "plate_path": [
+          "STRING",
+          {
+            "default": ""
+          }
+        ],
+        "colour_space": [
+          [
+            "auto",
+            "acescg",
+            "acescct",
+            "hlg_rec2020",
+            "pq_rec2020",
+            "linear_rec709",
+            "srgb_display",
+            "rec709_gamma24",
+            "rec709_oetf"
+          ]
+        ],
+        "start_frame": [
+          "INT",
+          {
+            "default": 0,
+            "min": 0,
+            "max": 100000
+          }
+        ],
+        "frame_count": [
+          "INT",
+          {
+            "default": 81,
+            "min": 1,
+            "max": 993
+          }
+        ],
+        "sequence_fps": [
+          "FLOAT",
+          {
+            "default": 25,
+            "min": 1,
+            "max": 120,
+            "step": 0.01
+          }
+        ],
+        "context_pixels": [
+          "INT",
+          {
+            "default": 128,
+            "min": 32,
+            "max": 2048
+          }
+        ],
+        "max_crop_side": [
+          "INT",
+          {
+            "default": 768,
+            "min": 128,
+            "max": 2048
+          }
+        ],
+        "repair_grow": [
+          "INT",
+          {
+            "default": 16,
+            "min": 0,
+            "max": 256
+          }
+        ],
+        "feather_pixels": [
+          "INT",
+          {
+            "default": 0,
+            "min": 0,
+            "max": 256
+          }
+        ]
+      },
+      "optional": {
+        "processing_mode": [
+          [
+            "HDR (ACEScct)",
+            "SDR (sRGB)"
+          ]
+        ],
+        "framing_mode": [
+          [
+            "Plate resolution (stretch to next grid)",
+            "Smart crop (experimental)",
+            "Full frame (original method)",
+            "Full frame (fit, no crop)",
+            "Source resolution (pad, no resize)"
+          ]
+        ],
+        "render_width": [
+          "INT",
+          {
+            "default": 1152,
+            "min": 64,
+            "max": 4096
+          }
+        ],
+        "render_height": [
+          "INT",
+          {
+            "default": 640,
+            "min": 64,
+            "max": 4096
+          }
+        ]
+      }
+    },
+    "output": [
+      "IMAGE",
+      "MASK",
+      "ZURA_PLATE",
+      "INT",
+      "INT",
+      "INT",
+      "FLOAT",
+      "STRING"
+    ]
+  },
+  "ZuraPaintoutAnchors": {
+    "input": {
+      "required": {
+        "plate": [
+          "ZURA_PLATE"
+        ],
+        "anchors": [
+          "STRING",
+          {
+            "default": "[]",
+            "multiline": true
+          }
+        ]
+      }
+    },
+    "output": [
+      "ZURA_ANCHORS",
+      "STRING"
+    ]
+  },
+  "ZuraPaintoutTake": {
+    "input": {
+      "required": {
+        "plate": [
+          "ZURA_PLATE"
+        ]
+      }
+    },
+    "output": [
+      "IMAGE",
+      "MASK",
+      "INT",
+      "INT",
+      "INT",
+      "FLOAT"
+    ]
+  },
+  "ZuraRippleGuide": {
+    "input": {
+      "required": {
+        "plate": [
+          "ZURA_PLATE"
+        ],
+        "anchors": [
+          "ZURA_ANCHORS"
+        ]
+      }
+    },
+    "output": [
+      "IMAGE",
+      "INT"
+    ]
+  },
+  "UNETLoader": {
+    "input": {
+      "required": {
+        "unet_name": [
+          [
+            "ltx-2.5-22b-distilled-transformer-comfy-int8-convrot.safetensors"
+          ]
+        ],
+        "weight_dtype": [
+          [
+            "default",
+            "fp8_e4m3fn",
+            "fp8_e4m3fn_fast",
+            "fp8_e5m2"
+          ],
+          {
+            "advanced": true
+          }
+        ]
+      }
+    },
+    "output": [
+      "MODEL"
+    ]
+  },
+  "LoraLoaderModelOnly": {
+    "input": {
+      "required": {
+        "model": [
+          "MODEL"
+        ],
+        "lora_name": [
+          [
+            "LTX25_Ripple_v11.safetensors"
+          ]
+        ],
+        "strength_model": [
+          "FLOAT",
+          {
+            "default": 1.0,
+            "min": -100.0,
+            "max": 100.0,
+            "step": 0.01
+          }
+        ]
+      }
+    },
+    "output": [
+      "MODEL"
+    ]
+  },
+  "ModelAttentionBackend": {
+    "input": {
+      "required": {
+        "model": [
+          "MODEL",
+          {
+            "tooltip": "The model to patch."
+          }
+        ],
+        "attention": [
+          "COMBO",
+          {
+            "display_name": "backend",
+            "tooltip": "The dense attention backend. Comfy Kitchen attention uses quantized INT8 attention and is available only on Nvidia and AMD GPUs.",
+            "default": "pytorch attention",
+            "multiselect": false,
+            "options": [
+              "pytorch attention",
+              "comfy kitchen attention"
+            ]
+          }
+        ]
+      }
+    },
+    "output": [
+      "MODEL"
+    ]
+  },
+  "CLIPLoader": {
+    "input": {
+      "required": {
+        "clip_name": [
+          [
+            "gemma4-12b-with-proj-ltx-2.5-comfy-int8-convrot.safetensors"
+          ]
+        ],
+        "type": [
+          [
+            "stable_diffusion",
+            "stable_cascade",
+            "sd3",
+            "stable_audio",
+            "mochi",
+            "ltxv",
+            "pixart",
+            "cosmos",
+            "lumina2",
+            "wan",
+            "hidream",
+            "chroma",
+            "ace",
+            "omnigen2",
+            "qwen_image",
+            "hunyuan_image",
+            "flux2",
+            "ovis",
+            "longcat_image",
+            "cogvideox",
+            "lens",
+            "pixeldit",
+            "ideogram4",
+            "boogu",
+            "krea2",
+            "joyimage",
+            "mage",
+            "minimax",
+            "yue2",
+            "flux3",
+            "moss_image",
+            "fibo2"
+          ]
+        ]
+      },
+      "optional": {
+        "device": [
+          [
+            "default",
+            "cpu"
+          ],
+          {
+            "advanced": true
+          }
+        ]
+      }
+    },
+    "output": [
+      "CLIP"
+    ]
+  },
+  "CLIPTextEncode": {
+    "input": {
+      "required": {
+        "text": [
+          "STRING",
+          {
+            "multiline": true,
+            "dynamicPrompts": true,
+            "tooltip": "The text to be encoded."
+          }
+        ],
+        "clip": [
+          "CLIP",
+          {
+            "tooltip": "The CLIP model used for encoding the text."
+          }
+        ]
+      }
+    },
+    "output": [
+      "CONDITIONING"
+    ]
+  },
+  "VAELoader": {
+    "input": {
+      "required": {
+        "vae_name": [
+          [
+            "ltx-2.5-audio-vae-bf16.safetensors",
+            "ltx-2.5-video-vae-conv-bf16.safetensors"
+          ]
+        ]
+      }
+    },
+    "output": [
+      "VAE"
+    ]
+  },
+  "LTXVConditioning": {
+    "input": {
+      "required": {
+        "positive": [
+          "CONDITIONING",
+          {}
+        ],
+        "negative": [
+          "CONDITIONING",
+          {}
+        ],
+        "frame_rate": [
+          "FLOAT",
+          {
+            "default": 25.0,
+            "min": 0.0,
+            "max": 1000.0,
+            "step": 0.01
+          }
+        ]
+      }
+    },
+    "output": [
+      "CONDITIONING",
+      "CONDITIONING"
+    ]
+  },
+  "EmptyLTXVLatentVideo": {
+    "input": {
+      "required": {
+        "width": [
+          "INT",
+          {
+            "default": 768,
+            "min": 64,
+            "max": 16384,
+            "step": 32
+          }
+        ],
+        "height": [
+          "INT",
+          {
+            "default": 512,
+            "min": 64,
+            "max": 16384,
+            "step": 32
+          }
+        ],
+        "length": [
+          "INT",
+          {
+            "default": 97,
+            "min": 1,
+            "max": 16384,
+            "step": 8
+          }
+        ],
+        "batch_size": [
+          "INT",
+          {
+            "default": 1,
+            "min": 1,
+            "max": 4096
+          }
+        ]
+      }
+    },
+    "output": [
+      "LATENT"
+    ]
+  },
+  "LTXAddVideoICLoRAGuide": {
+    "input": {
+      "required": {
+        "positive": [
+          "CONDITIONING",
+          {}
+        ],
+        "negative": [
+          "CONDITIONING",
+          {}
+        ],
+        "vae": [
+          "VAE",
+          {}
+        ],
+        "latent": [
+          "LATENT",
+          {
+            "tooltip": "Video-only latent to condition. Must be a 5D video latent (batch, channels, frames, height, width)."
+          }
+        ],
+        "image": [
+          "IMAGE",
+          {}
+        ],
+        "frame_idx": [
+          "INT",
+          {
+            "tooltip": "RoPE position of the reference, in pixel frames.\n0 aligns the reference with the generated clip. Use for video references.\n>0 places the reference at a specific pixel-frame position in the clip.\n-1 places the reference outside the generated frame range, while still using it for attention conditioning. Use for single-image references.\nFor multi-frame references, >0 values are rounded down to 1 mod 8.",
+            "default": 0,
+            "min": -9999,
+            "max": 9999
+          }
+        ],
+        "strength": [
+          "FLOAT",
+          {
+            "default": 1.0,
+            "min": 0.0,
+            "max": 1.0,
+            "step": 0.01
+          }
+        ],
+        "latent_downscale_factor": [
+          "FLOAT",
+          {
+            "tooltip": "For IC-LoRA on small grid. 1 means original size, 2 means half size, 3 means third, etc.",
+            "default": 1.0,
+            "min": 1.0,
+            "max": 10.0,
+            "step": 1.0
+          }
+        ],
+        "crop": [
+          "COMBO",
+          {
+            "tooltip": "Crop mode when resizing. 'center' crops to fit, 'disabled' stretches to fit.",
+            "default": "disabled",
+            "multiselect": false,
+            "options": [
+              "disabled",
+              "center"
+            ]
+          }
+        ],
+        "use_tiled_encode": [
+          "BOOLEAN",
+          {
+            "tooltip": "Enable tiled VAE encoding for large resolutions/long videos to reduce memory usage.",
+            "default": false
+          }
+        ],
+        "tile_size": [
+          "INT",
+          {
+            "tooltip": "Spatial tile size for tiled encoding. Only used when use_tiled_encode is enabled.",
+            "default": 256,
+            "min": 64,
+            "max": 512,
+            "step": 32
+          }
+        ],
+        "tile_overlap": [
+          "INT",
+          {
+            "tooltip": "Overlap between tiles for tiled encoding. Only used when use_tiled_encode is enabled.",
+            "default": 64,
+            "min": 16,
+            "max": 256,
+            "step": 16
+          }
+        ]
+      },
+      "optional": {
+        "use_streaming": [
+          "BOOLEAN",
+          {
+            "tooltip": "Off (default): encode the whole clip as one IC-LoRA guide. On: re-encode one fresh guide per LTXVTiledFusionSampler temporal window and write the plan the sampler reads. Set tile_frames on this node and the sampler to the same value (97 for LTX).",
+            "default": false
+          }
+        ],
+        "tile_frames": [
+          "INT",
+          {
+            "tooltip": "Window length in pixel frames, used only when use_streaming is on. Snapped to 8n+1. Must match LTXVTiledFusionSampler. Ignored when use_streaming is off.",
+            "default": 97,
+            "min": 0,
+            "max": 1000,
+            "step": 1
+          }
+        ]
+      }
+    },
+    "output": [
+      "CONDITIONING",
+      "CONDITIONING",
+      "LATENT"
+    ]
+  },
+  "LTXVEmptyLatentAudio": {
+    "input": {
+      "required": {
+        "frames_number": [
+          "INT",
+          {
+            "tooltip": "Number of frames.",
+            "default": 97,
+            "min": 1,
+            "max": 1000,
+            "step": 1,
+            "display": "number"
+          }
+        ],
+        "frame_rate": [
+          "FLOAT,INT",
+          {
+            "tooltip": "Number of frames per second.",
+            "default": 25.0,
+            "widgetType": "FLOAT",
+            "min": 1.0,
+            "max": 1000.0,
+            "step": 0.01,
+            "display": "number"
+          }
+        ],
+        "batch_size": [
+          "INT",
+          {
+            "tooltip": "The number of latent audio samples in the batch.",
+            "default": 1,
+            "min": 1,
+            "max": 4096,
+            "display": "number"
+          }
+        ],
+        "audio_vae": [
+          "VAE",
+          {
+            "display_name": "Audio VAE",
+            "tooltip": "The Audio VAE model to get configuration from."
+          }
+        ]
+      }
+    },
+    "output": [
+      "LATENT"
+    ]
+  },
+  "LTXVConcatAVLatent": {
+    "input": {
+      "required": {
+        "video_latent": [
+          "LATENT",
+          {}
+        ],
+        "audio_latent": [
+          "LATENT",
+          {}
+        ]
+      }
+    },
+    "output": [
+      "LATENT"
+    ]
+  },
+  "CFGGuider": {
+    "input": {
+      "required": {
+        "model": [
+          "MODEL",
+          {}
+        ],
+        "positive": [
+          "CONDITIONING",
+          {}
+        ],
+        "negative": [
+          "CONDITIONING",
+          {}
+        ],
+        "cfg": [
+          "FLOAT",
+          {
+            "default": 8.0,
+            "min": 0.0,
+            "max": 100.0,
+            "step": 0.1,
+            "round": 0.01
+          }
+        ]
+      }
+    },
+    "output": [
+      "GUIDER"
+    ]
+  },
+  "RandomNoise": {
+    "input": {
+      "required": {
+        "noise_seed": [
+          "INT",
+          {
+            "default": 0,
+            "min": 0,
+            "max": 18446744073709551615,
+            "control_after_generate": true
+          }
+        ]
+      }
+    },
+    "output": [
+      "NOISE"
+    ]
+  },
+  "KSamplerSelect": {
+    "input": {
+      "required": {
+        "sampler_name": [
+          "COMBO",
+          {
+            "multiselect": false,
+            "options": [
+              "euler",
+              "euler_cfg_pp",
+              "euler_ancestral",
+              "euler_ancestral_cfg_pp",
+              "heun",
+              "heunpp2",
+              "exp_heun_2_x0",
+              "exp_heun_2_x0_sde",
+              "dpm_2",
+              "dpm_2_ancestral",
+              "lms",
+              "dpm_fast",
+              "dpm_adaptive",
+              "dpmpp_2s_ancestral",
+              "dpmpp_2s_ancestral_cfg_pp",
+              "dpmpp_sde",
+              "dpmpp_sde_gpu",
+              "dpmpp_2m",
+              "dpmpp_2m_cfg_pp",
+              "dpmpp_2m_sde",
+              "dpmpp_2m_sde_gpu",
+              "dpmpp_2m_sde_heun",
+              "dpmpp_2m_sde_heun_gpu",
+              "dpmpp_3m_sde",
+              "dpmpp_3m_sde_gpu",
+              "ddpm",
+              "lcm",
+              "ipndm",
+              "ipndm_v",
+              "deis",
+              "cfgpp_ud10_ab",
+              "res_multistep",
+              "res_multistep_cfg_pp",
+              "res_multistep_ancestral",
+              "res_multistep_ancestral_cfg_pp",
+              "gradient_estimation",
+              "gradient_estimation_cfg_pp",
+              "er_sde",
+              "seeds_2",
+              "seeds_3",
+              "sa_solver",
+              "sa_solver_pece",
+              "ddim",
+              "uni_pc",
+              "uni_pc_bh2",
+              "legacy_rk",
+              "rk",
+              "rk_beta",
+              "deis_3m_ode",
+              "deis_2m_ode",
+              "deis_3m",
+              "deis_2m",
+              "res_6s_ode",
+              "res_5s_ode",
+              "res_3s_ode",
+              "res_2s_ode",
+              "res_3m_ode",
+              "res_2m_ode",
+              "res_6s",
+              "res_5s",
+              "res_3s",
+              "res_2s",
+              "res_3m",
+              "res_2m"
+            ]
+          }
+        ]
+      }
+    },
+    "output": [
+      "SAMPLER"
+    ]
+  },
+  "BasicScheduler": {
+    "input": {
+      "required": {
+        "model": [
+          "MODEL",
+          {}
+        ],
+        "scheduler": [
+          "COMBO",
+          {
+            "multiselect": false,
+            "options": [
+              "simple",
+              "sgm_uniform",
+              "karras",
+              "exponential",
+              "ddim_uniform",
+              "beta",
+              "normal",
+              "linear_quadratic",
+              "kl_optimal",
+              "bong_tangent",
+              "beta57"
+            ]
+          }
+        ],
+        "steps": [
+          "INT",
+          {
+            "default": 20,
+            "min": 1,
+            "max": 10000
+          }
+        ],
+        "denoise": [
+          "FLOAT",
+          {
+            "default": 1.0,
+            "min": 0.0,
+            "max": 1.0,
+            "step": 0.01
+          }
+        ]
+      }
+    },
+    "output": [
+      "SIGMAS"
+    ]
+  },
+  "SamplerCustomAdvanced": {
+    "input": {
+      "required": {
+        "noise": [
+          "NOISE",
+          {}
+        ],
+        "guider": [
+          "GUIDER",
+          {}
+        ],
+        "sampler": [
+          "SAMPLER",
+          {}
+        ],
+        "sigmas": [
+          "SIGMAS",
+          {}
+        ],
+        "latent_image": [
+          "LATENT",
+          {}
+        ]
+      }
+    },
+    "output": [
+      "LATENT",
+      "LATENT"
+    ]
+  },
+  "LTXVSeparateAVLatent": {
+    "input": {
+      "required": {
+        "av_latent": [
+          "LATENT",
+          {}
+        ]
+      }
+    },
+    "output": [
+      "LATENT",
+      "LATENT"
+    ]
+  },
+  "LTXVCropGuides": {
+    "input": {
+      "required": {
+        "positive": [
+          "CONDITIONING",
+          {}
+        ],
+        "negative": [
+          "CONDITIONING",
+          {}
+        ],
+        "latent": [
+          "LATENT",
+          {}
+        ]
+      }
+    },
+    "output": [
+      "CONDITIONING",
+      "CONDITIONING",
+      "LATENT"
+    ]
+  },
+  "VAEDecode": {
+    "input": {
+      "required": {
+        "samples": [
+          "LATENT",
+          {
+            "tooltip": "The latent to be decoded."
+          }
+        ],
+        "vae": [
+          "VAE",
+          {
+            "tooltip": "The VAE model used for decoding the latent."
+          }
+        ]
+      }
+    },
+    "output": [
+      "IMAGE"
+    ]
+  },
+  "ImageFromBatch": {
+    "input": {
+      "required": {
+        "image": [
+          "IMAGE",
+          {}
+        ],
+        "batch_index": [
+          "INT",
+          {
+            "default": 0,
+            "min": -16384,
+            "max": 16384
+          }
+        ],
+        "length": [
+          "INT",
+          {
+            "default": 1,
+            "min": 1,
+            "max": 4096
+          }
+        ]
+      }
+    },
+    "output": [
+      "IMAGE"
+    ]
+  },
+  "ZuraPaintoutUncrop": {
+    "input": {
+      "required": {
+        "decoded_crop": [
+          "IMAGE"
+        ],
+        "plate": [
+          "ZURA_PLATE"
+        ],
+        "output_name": [
+          "STRING",
+          {
+            "default": "paintout/take"
+          }
+        ],
+        "precision": [
+          [
+            "float32",
+            "float16"
+          ]
+        ],
+        "match_context": [
+          "BOOLEAN",
+          {
+            "default": true
+          }
+        ]
+      },
+      "optional": {
+        "export_format": [
+          [
+            "EXR + HLG video",
+            "EXR sequence",
+            "HLG video",
+            "EXR + SDR video",
+            "SDR video"
+          ]
+        ],
+        "motion_preview": [
+          "BOOLEAN",
+          {
+            "default": true
+          }
+        ]
+      }
+    },
+    "output": [
+      "STRING"
+    ]
+  }
+}

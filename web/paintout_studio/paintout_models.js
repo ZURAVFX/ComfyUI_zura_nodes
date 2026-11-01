@@ -25,7 +25,7 @@ export class PaintoutModels{
   }
   positionPanel(){if(!this.root?.open)return;const panel=this.root.querySelector('.zps-models-panel'),button=this.root.querySelector('summary').getBoundingClientRect(),width=Math.min(560,innerWidth-24),top=innerWidth<=700?70:Math.max(12,Math.min(button.bottom+8,innerHeight-160));Object.assign(panel.style,{left:`${Math.max(12,Math.min(button.right-width,innerWidth-width-12))}px`,right:'auto',top:`${top}px`,width:`${width}px`,maxHeight:`${Math.max(120,Math.min(720,innerHeight-top-12))}px`});}
   active(){return !!this.job&&ACTIVE.has(this.job.phase);}
-  videoGroup(){return (this.context.mode==='full'?'full':this.context.mode==='inpaint'?'inpaint':'targeted')+(this.context.pipeline==='hdr_hdr'?'_hdr':'');}
+  videoGroup(){if(this.context.mode==='ripple')return 'ripple';return (this.context.mode==='full'?'full':this.context.mode==='inpaint'?'inpaint':'targeted')+(this.context.pipeline==='hdr_hdr'?'_hdr':'');}
   recommended(){const c=this.context;if(c.stage==='mask')return 'mask';if(c.stage==='clean')return 'clean';if(c.phase==='hdr')return 'hdr_conversion';if(c.pipeline==='sdr_hdr')return '_sdr_hdr';return this.videoGroup();}
   updatePackages(raw){
     this.catalogue=raw;this.models=[...raw];
