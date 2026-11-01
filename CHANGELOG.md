@@ -1,5 +1,14 @@
 # Release notes
 
+## 1.3.39 - 1 November 2026
+
+- Add ChatGPT and Gemini browser sign-in image generation and editing, including the starting-image stages of video workflows such as Relight. Reuse the existing account nodes, show sign-in beside the prompt and explain website allowance and reference uploads. No paid developer API key is required.
+- Keep the original video frame as Image 1 when generating or retrying a starting image. Request its proportions and exact target dimensions, then restore the source dimensions without stretching. Provider output sizes remain best effort.
+- Add Image Auto sizing, larger resolution controls, optional Image 1 comparison, image saving and a configurable delivery folder under ZURA STUDIO. Skip unnecessary starting-image processing when a finished frame is supplied.
+- Fix completed H3 output recovery when the model pads the frame count, and show clearer image-generation and section progress.
+- Include the Panorama camera workspace, simpler camera keyframes, uploaded-source preview, shared reset/navigation and LTX two-stage preview improvements. Existing experimental routes retain their preview labels and restrictions.
+- Keep the standalone Paintout contest release separate. New browser starting-image routes have CPU and UI regression coverage; actual provider generation and visual sign-off remain separate checks.
+
 ## 1.3.38 - 31 October 2026
 
 - Add the approved Wan Animate 2 full-character masked preview, with a clear Keep original background or Replace character + background choice. Keep native model conditioning, expand and fill block masks, and lock source latents during sampling. No final RGB composite is used.

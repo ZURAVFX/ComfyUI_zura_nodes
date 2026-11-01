@@ -27,3 +27,20 @@ Details: [ChatGPT node](../CHATGPT_IMAGE.md), [Gemini node](../GEMINI_IMAGE.md).
 
 Local FLUX.2 Klein 9B and Flux 3 Klein remain available in both Create and Edit,
 with their existing model downloads, native sampling and LoRA support.
+
+## Video starting images
+
+In a video workflow's starting-image stage, open the image model menu and choose
+**ChatGPT Image · browser sign-in** or **Gemini Image · browser sign-in**. The
+same sign-in controls appear beside the prompt. This includes Relight and the
+shared character/viewport starting-image stages. Camera image editing also
+supports the existing browser models.
+
+The original selected video frame is always Image 1. Add up to seven appearance
+references after it. Regenerating starts from the original video frame, not the
+previous result. Local image LoRAs do not apply to browser generators.
+
+Studio asks the provider to preserve Image 1's proportions and framing, with an
+explicit aspect ratio and target pixel dimensions. The provider may return a
+different size; Studio fits the result proportionally back to the source canvas
+without stretching. Review the starting image before animating it.

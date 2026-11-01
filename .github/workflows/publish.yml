@@ -122,6 +122,21 @@ jobs:
           node tests/test_browser_image_login.mjs
           python tests/test_subscription_sessions.py
           python tests/test_browser_image_routes.py
+          python -m unittest discover -s tests -p 'test_video_browser_openings.py'
+          python -m unittest discover -s tests -p 'test_opening_models.py'
+          python -m unittest discover -s tests -p 'test_opening_edit.py'
+          python -m unittest discover -s tests -p 'test_finished_frame_fastpath.py'
+          python -m unittest discover -s tests -p 'test_h3_delivery_contract.py'
+          python -m unittest discover -s tests -p 'test_output_settings.py'
+          python -m unittest discover -s tests -p 'test_panorama_camera.py'
+          node tests/test_opening_model_ui.mjs
+          node tests/test_video_browser_connection.mjs
+          node tests/test_studio_image_compare.mjs
+          node tests/test_image_auto_resolution.mjs
+          node tests/test_panorama_controls.mjs
+          node tests/test_panorama_editor.mjs
+          node tests/test_panorama_windows_handoff.mjs
+          node tests/test_studio_restart_navigation.mjs
           node tests/test_frame_video.mjs
           node tests/test_endpoint_ui.mjs
           node tests/test_wan_frame_video_recipes.mjs
