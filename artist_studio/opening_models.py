@@ -7,6 +7,10 @@ import json
 from pathlib import Path
 
 MODELS = {
+    "chatgpt": {"id": "chatgpt", "name": "ChatGPT Image · browser sign-in", "provider": "chatgpt",
+                "node": "ZuraChatGPTImage", "max_references": 7, "files": ()},
+    "gemini": {"id": "gemini", "name": "Gemini Image · browser sign-in", "provider": "gemini",
+               "node": "ZuraGeminiImage", "max_references": 7, "files": ()},
     "flux3": {
         "id": "flux3", "name": "Flux 3 Klein", "max_references": 9,
         "files": (("diffusion_models", "flux3-image-klein-int8-convrot.safetensors"),
@@ -35,7 +39,30 @@ MODELS = {
 }
 
 
-def apply_model(graph, model="klein9b", references=None):
+PROPORTIONS = ("Do not change the proportions of Image 1 at all. Preserve its aspect ratio and output canvas dimensions; "
+               "do not stretch or squash the image. Keep the framing unchanged unless the requested edit explicitly "
+               "changes the camera view. Make only the requested edit.")
+
+
+def browser_node(model, prompt, source, references, width, height, *, identity="92:105"):
+    recipe = MODELS[model]
+    if len(references) > recipe['max_references']:
+        raise ValueError('Browser image generation accepts seven appearance references plus the original frame.')
+    inputs = dict(prompt=prompt.strip() + '\n\n' + PROPORTIONS, size='Custom',
+                  custom_width=width, custom_height=height, timeout_seconds=300, reference_1=source)
+    graph = {}
+    for index, ref in enumerate(references, 2):
+        if not isinstance(ref, dict) or not ref.get('file'):
+            raise ValueError('Upload each appearance reference before generating the starting image.')
+        key = f'zura_browser_reference_{index}'
+        graph[key] = {'class_type': 'LoadImage', 'inputs': {'image': ref['file']}}
+        inputs[f'reference_{index}'] = [key, 0]
+    graph[identity] = {'class_type': recipe['node'], 'inputs': inputs,
+                       '_meta': {'title': recipe['name'] + ' · original frame edit'}}
+    return graph
+
+
+def apply_model(graph, model="klein9b", references=None, *, dimensions=None):
     """Apply a native recipe, keeping existing source and mask connections.
 
     references contains appearance images only. Qwen's first image is always
@@ -47,6 +74,12 @@ def apply_model(graph, model="klein9b", references=None):
     if model == "klein9b":
         return graph  # Keep the existing approved Klein recipe exactly.
     references = references or []
+    if MODELS[model].get('provider'):
+        graph['zura_original_size'] = {'class_type': 'GetImageSize', 'inputs': {'image': ['125', 0]}}
+        width, height = dimensions or (['zura_original_size', 0], ['zura_original_size', 1])
+        graph.update(browser_node(model, graph['127']['inputs']['value'], ['125', 0], references, width, height))
+        # Browser providers cannot consume local diffusion weights or latents.
+        return _prune(graph, roots=('122', 'zura_original_size'))
     if model == "flux3":
         return _apply_flux3(graph, references)
     if model == "qwen21":
@@ -97,6 +130,11 @@ def readiness(node_mappings, get_full_path):
     template = json.loads((Path(__file__).parent / "graphs" / "01B_Design_Opening_Frame.json").read_text(encoding="utf-8"))
     result = {}
     for identity, model in MODELS.items():
+        if model.get('provider'):
+            missing = [name for name in (model['node'], 'LoadImage', 'GetImageSize', 'SaveImage') if name not in node_mappings]
+            result[identity] = {**{key: model[key] for key in ('id', 'name', 'max_references', 'provider')},
+                                'ready': not missing, 'missing_nodes': missing, 'model_files': []}
+            continue
         graph = json.loads(json.dumps(template))
         apply_model(graph, identity, [{"file": "availability-check.png"}])
         missing = sorted({node["class_type"] for node in graph.values()} - set(node_mappings))
@@ -108,7 +146,7 @@ def readiness(node_mappings, get_full_path):
     return result
 
 
-def _prune(graph):
+def _prune(graph, roots=None):
     reachable = set()
     def visit(identity):
         if identity in reachable or identity not in graph:
@@ -117,7 +155,7 @@ def _prune(graph):
         for value in graph[identity].get("inputs", {}).values():
             if isinstance(value, list) and len(value) == 2 and isinstance(value[0], str):
                 visit(value[0])
-    for identity in ("122", "zura_original_size", "92:114", "125", "92:111", "92:127", "92:105", "92:104", "127"):
+    for identity in (roots if roots is not None else ("122", "zura_original_size", "92:114", "125", "92:111", "92:127", "92:105", "92:104", "127")):
         visit(identity)
     for identity in list(graph):
         if identity not in reachable:

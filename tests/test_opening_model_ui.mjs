@@ -29,3 +29,15 @@ console.log('Starting image generator menu preserves selected model, finished-im
 composer.studio.modelStatus.opening_models.flux3={ready:true};composer.studio.config.opening_model='flux3';composer.studio.lookMode='build';composer.syncOpeningModel(false);
 assert.equal(composer.imageModel.querySelector('[data-opening-model-label]').textContent,'Flux 3 Klein');assert.equal(composer.imageModel.querySelector('[data-opening-model="flux3"]').disabled,false);
 delete composer.studio.modelStatus.opening_models.flux3;composer.syncOpeningModel(false);assert.equal(composer.imageModel.querySelector('[data-opening-model="flux3"]').disabled,true,'Older backends must restart before a newly added recipe can be selected');
+
+for(const provider of ['chatgpt','gemini']){
+  const option=document.createElement('option');option.value=provider;composer.imageModel.querySelector('select').append(option);
+  const button=document.createElement('button');button.dataset.openingModel=provider;composer.imageModel.append(button);
+  composer.studio.modelStatus.opening_models[provider]={ready:true,provider};
+  composer.studio.config.opening_model=provider;composer.syncOpeningModel(false);
+  assert.match(composer.imageModel.querySelector('[data-opening-model-label]').textContent,/browser sign-in/);
+  assert.equal(button.disabled,false,'Browser images do not depend on local diffusion model readiness');
+  assert.equal(button.getAttribute('aria-checked'),'true');
+  assert.match(button.title,/no API credits/);
+}
+console.log('ChatGPT and Gemini starting-frame choices retain browser labels and independent availability.');

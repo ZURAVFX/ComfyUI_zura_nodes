@@ -11,6 +11,8 @@ def _friendly_node(class_type, stage=None):
     name = str(class_type or "").split(".")[-1]
     low = name.lower()
     if stage == "design":
+        if 'zurachatgptimage' in low: return 'Creating image with ChatGPT · browser account'
+        if 'zurageminiimage' in low: return 'Creating image with Gemini · browser account'
         if "textencodeqwenimage21" in low or "textencodeqwenimageeditplus" in low:
             return "Preparing image references and prompt"
         if "unetloader" in low: return "Loading image model"

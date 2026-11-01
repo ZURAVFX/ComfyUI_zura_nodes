@@ -312,8 +312,9 @@ class ArtistStudio {
     return true;
   }
   changeOpeningModel(value) {
-    if(this.busy || this.project?.phase==="working" || !["flux3","klein9b","qwen2511","qwen21"].includes(value))return;
+    if(this.busy || this.project?.phase==="working" || !["flux3","klein9b","qwen2511","qwen21","chatgpt","gemini"].includes(value))return;
     this.config={...this.readConfig(),opening_model:value,h3_viewport_direct:false};
+    if(['chatgpt','gemini'].includes(value))this.config.opening_loras=[];
     if(value==='qwen21'&&this.config.opening_width&&this.config.opening_height){for(const key of ['opening_width','opening_height'])this.config[key]=Math.floor(this.config[key]/32)*32;}
     this.useGeneratedLook();
     this.promptStage="image";this.preview="original";
@@ -699,7 +700,7 @@ class ArtistStudio {
     await this.perform(async(epoch)=>{
       if(type==="opening" && this.config.preserve_people)throw new Error("Regenerate the starting frame to keep the original people protected.");
       if(type==="opening" && !this.project)throw new Error("Prepare and review the shot before choosing a starting image.");
-      const referenceLimit=this.headSwap()||this.openjutsu()?1:this.config.workflow_mode==="camera"?5:this.directViewport()?9:({flux3:9,klein9b:3,qwen2511:2,qwen21:9}[this.config.opening_model||"klein9b"]||3);
+      const referenceLimit=this.headSwap()||this.openjutsu()?1:this.config.workflow_mode==="camera"?5:this.directViewport()?9:({flux3:9,klein9b:3,qwen2511:2,qwen21:9,chatgpt:7,gemini:7}[this.config.opening_model||"klein9b"]||3);
       if(type==="character" && this.references.length+files.length>referenceLimit)throw new Error(`Use up to ${referenceLimit} reference images. Remove one before adding more.`);
       for(const file of files){
       const form=new FormData();form.append("file",file);
@@ -1015,7 +1016,8 @@ class ArtistStudio {
       this.$("redesign").disabled=this.busy || !this.project?.opening_input || this.project?.phase==="working";
       this.$("video-options").hidden=!this.project?.opening_input || this.cameraStillDirty();
       const cameraStage=this.project?.opening_input||this.lookMode==="ready"?"video":"still";
-      const unavailable=!!this.modelStatus && (this.modelStatus.h3_camera?.[cameraStage]?.ready ?? this.modelStatus.engine_ready?.h3_camera)===false;
+      const cameraBackend=cameraStage==='still'&&this.openingModelStatus()?.provider?this.openingModelStatus():this.modelStatus?.h3_camera?.[cameraStage];
+      const unavailable=!!this.modelStatus && (cameraBackend?.ready ?? this.modelStatus.engine_ready?.h3_camera)===false;
       if(this.project?.phase!=="working" && !this.busy){
         if(unavailable){this.$("primary").disabled=true;this.$("action-note").textContent="Camera mode setup needed. Check About this workflow.";}
         else if(this.source?.has_audio===false){this.$("primary").disabled=true;this.$("action-note").textContent="Camera mode needs a source video with its original audio track.";}
@@ -1241,7 +1243,7 @@ class ArtistStudio {
     }
     if(this.guidedFrame() && stage!=="video")this.$("video-options").hidden=true;
     if(image && !camera && !readyImage && !working && !this.busy){
-      const model=this.openingModelStatus(),maximum=model?.max_references ?? ({flux3:9,klein9b:3,qwen2511:2,qwen21:9}[this.config.opening_model||"klein9b"]||3);
+      const model=this.openingModelStatus(),maximum=model?.max_references ?? ({flux3:9,klein9b:3,qwen2511:2,qwen21:9,chatgpt:7,gemini:7}[this.config.opening_model||"klein9b"]||3);
       if(model?.ready===false || this.references.length>maximum){
         this.$("primary").disabled=true;
         this.$("action-note").textContent=this.references.length>maximum?`This image model accepts ${maximum} references. Remove extras or choose another model.`:"Set up this image model, choose another, or upload a finished image.";
@@ -1686,7 +1688,7 @@ class ArtistStudio {
     const enhancementRequested=engine==="h3"&&this.config.delivery_mode==="enhanced1080";
     const viewport=this.config.workflow_mode==="viewport";
     const camera=this.config.workflow_mode==="camera";
-    const cameraStatus=this.modelStatus.h3_camera?.[this.project?.opening_input||this.lookMode==="ready"?"video":"still"];
+    const cameraStatus=!this.project?.opening_input&&this.lookMode!=="ready"&&this.openingModelStatus()?.provider?this.openingModelStatus():this.modelStatus.h3_camera?.[this.project?.opening_input||this.lookMode==="ready"?"video":"still"];
     const route=this.openjutsu()?"openjutsu":camera?"h3_camera":this.headSwap()?"h3_head_swap":viewport&&engine==="local"?"local_viewport":viewport&&engine==="h3"?"h3_viewport":engine==="local"&&this.config.edit_area==="scene"?"local_scene":engine;
     const openingStatus=this.openingModelStatus();
     const needsImage=!this.directViewport() && this.lookMode!=="ready" && !this.project?.opening_input;

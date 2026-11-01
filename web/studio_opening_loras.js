@@ -14,7 +14,7 @@ export class OpeningLoraControl {
   save(items){const s=this.studio;if(s.busy||s.project?.phase==='working')return;s.perform(async epoch=>{const config={...s.readConfig(),opening_loras:items};if(s.project){const id=s.project.id,updated=await s.requestOpeningLoraConfig(id,config);if(epoch!==s.resetEpoch||s.project?.id!==id)return;s.project=updated;}s.config=config;s.render();});}
   sync(stage){
     const s=this.studio,c=s.config,entries=c.opening_loras||[],busy=s.busy||s.project?.phase==='working',family=this.family(),doc=this.el.ownerDocument;
-    this.el.hidden=stage==='video'||s.lookMode==='ready'||s.directViewport?.()||s.headSwap?.();
+    this.el.hidden=stage==='video'||s.lookMode==='ready'||['chatgpt','gemini'].includes(c.opening_model)||s.directViewport?.()||s.headSwap?.();
     this.el.querySelector('[data-count]').textContent=entries.length?`(${entries.length})`:'';
     const picker=this.el.querySelector('[data-picker]'),selection=picker.value;picker.replaceChildren();
     const blank=doc.createElement('option');blank.value='';blank.textContent='Choose an installed LoRA';picker.append(blank);

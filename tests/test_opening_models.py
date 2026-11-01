@@ -83,6 +83,7 @@ class OpeningModelTests(unittest.TestCase):
         qwen21 = models.apply_model(self.graph(), "qwen21", [{"file": "ref.png"}])
         kinds.update({node["class_type"]: object for node in qwen21.values()})
         kinds.update({node["class_type"]: object for node in models.apply_model(self.graph(), "flux3").values()})
+        kinds.update({'ZuraChatGPTImage': object, 'ZuraGeminiImage': object, 'GetImageSize': object})
         files = {pair for model in models.MODELS.values() for pair in model["files"]}
         status = models.readiness(kinds, lambda folder, name: "installed" if (folder, name) in files else None)
         self.assertTrue(all(m["ready"] for m in status.values()))

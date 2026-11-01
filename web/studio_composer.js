@@ -1,5 +1,6 @@
 import {VideoResolutionControl} from './studio_resolution.js';
 import {OpeningLoraControl} from './studio_opening_loras.js';
+import {BrowserImageConnection} from './studio_browser_images.js';
 import {clipLength} from './studio_length.js';
 import {MainLTXDelivery} from './studio_main_ltx_delivery.js';
 const svg=body=>`<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${body}</svg>`;
@@ -52,6 +53,10 @@ export class VideoComposer {
     recipeTools.append(model);
     const imageModel=document.createElement('details');imageModel.className='zc-tool-popup zc-frame-model';
     imageModel.innerHTML=`<summary aria-label="Starting image model" aria-haspopup="menu">${composerIcons.model}<span data-opening-model-label>FLUX Klein 9B</span>${composerIcons.chevron}</summary><select id="zc-opening-model" hidden aria-hidden="true" tabindex="-1" aria-label="Starting image model"><option value="flux3">Flux 3 Klein</option><option value="klein9b">FLUX Klein 9B</option><option value="qwen2511">Qwen Image Edit 2511</option><option value="qwen21">Qwen Image 2.1</option></select><div class="zc-tool-panel zc-workflow-menu zc-opening-menu" role="menu" aria-label="Starting image generator"><button type="button" role="menuitemradio" aria-checked="false" data-opening-model="flux3">Flux 3 Klein<span aria-hidden="true"></span></button><button type="button" role="menuitemradio" aria-checked="true" data-opening-model="klein9b">FLUX Klein 9B<span aria-hidden="true"></span></button><button type="button" role="menuitemradio" aria-checked="false" data-opening-model="qwen2511">Qwen Image Edit 2511<span aria-hidden="true"></span></button><button type="button" role="menuitemradio" aria-checked="false" data-opening-model="qwen21">Qwen Image 2.1<span aria-hidden="true"></span></button><p data-opening-status hidden></p><button type="button" role="menuitemradio" aria-checked="false" data-use-finished-image>Use finished image<span aria-hidden="true"></span></button></div>`;
+    for(const [id,label] of [['chatgpt','ChatGPT Image'],['gemini','Gemini Image']]){
+      const option=document.createElement('option');option.value=id;option.textContent=label+' · browser sign-in';imageModel.querySelector('select').append(option);
+      const button=document.createElement('button');button.type='button';button.setAttribute('role','menuitemradio');button.setAttribute('aria-checked','false');button.dataset.openingModel=id;button.textContent=label+' · browser sign-in';imageModel.querySelector('[data-opening-status]').before(button);
+    }
     imageModel.querySelector('select').onchange=e=>studio.changeOpeningModel(e.target.value);
     imageModel.addEventListener('click',e=>{if(studio.busy||studio.project?.phase==='working'){e.preventDefault();return;}const option=e.target.closest('[data-opening-model]');if(option&&!option.disabled){imageModel.open=false;studio.changeOpeningModel(option.dataset.openingModel);}const ready=e.target.closest('[data-use-finished-image]');if(ready&&!ready.disabled){imageModel.open=false;const input=this.root.querySelector('input[name="gs-look"][value="ready"]');if(input&&!input.disabled){input.checked=true;input.dispatchEvent(new this.root.ownerDocument.defaultView.Event('change',{bubbles:true}));studio.$('ready').click();}}});
     imageModel.addEventListener('keydown',e=>{if(!['ArrowDown','ArrowUp','Home','End'].includes(e.key)||studio.busy||studio.project?.phase==='working')return;e.preventDefault();imageModel.open=true;const items=[...imageModel.querySelectorAll('[role="menuitemradio"]')].filter(b=>!b.disabled),index=items.indexOf(this.root.ownerDocument.activeElement),next=e.key==='Home'?0:e.key==='End'?items.length-1:index<0?0:(index+(e.key==='ArrowUp'?-1:1)+items.length)%items.length;items[next]?.focus({preventScroll:true});});
@@ -87,6 +92,10 @@ export class VideoComposer {
     // One popover at a time. Escape returns focus to its trigger.
     composer.addEventListener('toggle',e=>{const detail=e.target;if(detail.tagName==='DETAILS'&&detail.open)for(const other of composer.querySelectorAll('details.zc-tool-popup,.zc-composer-audio>details'))if(other!==detail&&!other.contains(detail)&&!detail.contains(other))other.open=false;},true);
     composer.addEventListener('keydown',e=>{if(e.key!=='Escape')return;const open=Array.from(composer.querySelectorAll('details')).find(d=>d.open);if(open){open.open=false;open.querySelector('summary').focus({preventScroll:true});e.stopPropagation();}});
+    const connectionHost=document.createElement('div');attachments.after(connectionHost);
+    const connectionOwner={fetch:(...args)=>workspace.fetch(...args),render:()=>studio.render(),
+      get job(){return studio.project?.phase==='working';},get submitting(){return studio.busy;}};
+    this.browserConnection=new BrowserImageConnection(connectionOwner,connectionHost);
     this.composer=composer;this.ltxOutput=new MainLTXDelivery(studio,workspace.api,outputTools);this.sync();
   }
   selectWorkflow(value){
@@ -105,6 +114,7 @@ export class VideoComposer {
     }
   }
   mountWorkflow(mode){
+    if(mode!=='video')this.browserConnection?.close();else if(this.browserConnection)this.browserConnection.closed=false;
     if(mode==='hdr'){
       const tool=this.studio.hdrTool,anchor=tool?.root?.querySelector('.zh-model')||tool?.root?.querySelector('.zh-composer-heading strong');
       if(anchor){anchor.after(this.task);this.syncWorkflow();}
@@ -145,12 +155,13 @@ export class VideoComposer {
   syncOpeningModel(working){
     const chosen=this.studio.config.opening_model||'klein9b',status=this.studio.modelStatus?.opening_models,ready=this.studio.lookMode==='ready';
     this.imageModel.querySelector('select').value=chosen;
-    const names={flux3:'Flux 3 Klein',klein9b:'FLUX Klein 9B',qwen2511:'Qwen Image Edit 2511',qwen21:'Qwen Image 2.1'};
+    const names={flux3:'Flux 3 Klein',klein9b:'FLUX Klein 9B',qwen2511:'Qwen Image Edit 2511',qwen21:'Qwen Image 2.1',chatgpt:'ChatGPT Image · browser sign-in',gemini:'Gemini Image · browser sign-in'};
     this.imageModel.querySelector('[data-opening-model-label]').textContent=ready?'Finished image':names[chosen]||names.klein9b;
     this.imageModel.querySelector('summary').setAttribute('aria-disabled',String(working));
     for(const option of this.imageModel.querySelectorAll('[data-opening-model]')){
       const model=status?.[option.dataset.openingModel],needsRestart=!model&&option.dataset.openingModel!=='klein9b';option.disabled=working||needsRestart||model?.ready===false;
       option.setAttribute('aria-checked',String(!ready&&chosen===option.dataset.openingModel));
+      if(model?.provider){option.title='Browser sign-in · no API credits. The original frame and references are uploaded to your account.';continue;}
       option.title=needsRestart?'Restart ComfyUI to enable the new image models.':model?.ready===false?'Model setup needed. Check Models & setup.':option.dataset.openingModel==='flux3'?'16-step INT8 edit · original frame + up to 9 references':option.dataset.openingModel==='qwen21'?'Experimental base model - 40 steps, INT8, up to 9 references':option.dataset.openingModel==='qwen2511'?'4-step INT8 edit · original frame + up to 2 references':'4-step FP8 edit · original frame + up to 3 references';
     }
     const note=this.imageModel.querySelector('[data-opening-status]'),missing=status&&Object.values(status).some(m=>!m.ready);note.hidden=!missing&&chosen!=='qwen21';note.textContent=chosen==='qwen21'?'Qwen Image 2.1 is experimental and has not been render-tested here.':missing?'Unavailable generators need their model files or nodes installed.':'';
@@ -182,6 +193,12 @@ export class VideoComposer {
     // Keep that engine selector mounted so the artist can always switch back.
     this.model.hidden=false;this.model.title='Video model · available throughout this workflow';this.imageModel.hidden=stage==='video';
     this.syncOpeningModel(working);
+    const openingStatus=s.openingModelStatus?.(),browserImage=openingStatus?.provider&&s.lookMode!=='ready'&&stage!=='video'&&this.workspace.mode==='video';
+    this.browserConnection?.sync(browserImage?{...openingStatus,name:openingStatus.provider==='chatgpt'?'ChatGPT Image':'Gemini Image'}:null);
+    if(browserImage&&stage==='image'&&this.browserConnection&&!this.browserConnection.connected(openingStatus)&&!working){
+      s.$('primary').disabled=true;
+      if(s.source)s.$('action-note').textContent='Sign in beside the prompt to create the starting image. Uses your website account allowance, with no API credits.';
+    }
     this.openingLoras.sync(stage);
     this.syncWorkflow();
     this.resolution.hidden=false;this.settings.hidden=stage!=='video'||['relight','camera'].includes(s.config.workflow_mode);this.audio.hidden=s.$('audio-settings').hidden||stage!=='video';

@@ -782,6 +782,8 @@ def apply_opening_loras(project, graph, *, camera=False):
         return graph
     if project.get("look_mode") == "ready":
         raise ValueError("A finished frame cannot use image LoRAs. Choose image generation or remove them.")
+    if config.get('opening_model') in ('chatgpt', 'gemini'):
+        raise ValueError('Browser image generation cannot use local image LoRAs. Remove the image LoRAs or select a local model.')
     family = "flux3_klein" if camera else {"klein9b": "flux2_klein9b", "flux3": "flux3_klein", "qwen2511": "qwen2511", "qwen21": "qwen21"}.get(config.get("opening_model", "klein9b"))
     from .custom_loras import apply_to_graph
     return apply_to_graph(graph, family, selected, folder_paths.get_filename_list("loras"), folder_paths.get_full_path)
@@ -798,6 +800,21 @@ def build_graph(project, stage, use_cache=True, run_id=None):
     if camera_setup(project["config"]):
         from .h3_camera import build_studio_graph, build_studio_still_graph
         if stage == "design":
+            if project.get('look_mode') != 'ready' and project['config'].get('opening_model') in ('chatgpt', 'gemini'):
+                from .opening_models import browser_node, _prune
+                graph = build_studio_still_graph(project, check_asset)
+                source = ['source_still_size', 0]
+                c = project['config']
+                refs = project.get('references') or ([project['character']] if project.get('character') else [])
+                for ref in refs:
+                    check_asset(ref)
+                graph.update(browser_node(c['opening_model'], graph['still_prompt']['inputs']['text'],
+                    source, refs, c['camera_width'], c['camera_height'], identity='still_decode'))
+                graph['zura_browser_camera_size'] = {'class_type': 'ImageScale', 'inputs': {
+                    'image': ['still_decode', 0], 'width': c['camera_width'], 'height': c['camera_height'],
+                    'upscale_method': 'lanczos', 'crop': 'center'}}
+                graph['camera_still']['inputs']['images'] = ['zura_browser_camera_size', 0]
+                return apply_opening_loras(project, _prune(graph, roots=('camera_still',)), camera=True)
             return apply_opening_loras(project, build_studio_still_graph(project, check_asset), camera=True)
         if stage == "h3":
             return apply_video_loras(project, stage, build_studio_graph(project, check_asset))
@@ -1150,7 +1167,8 @@ def build_graph(project, stage, use_cache=True, run_id=None):
             if c.get("workflow_mode") in ("swap", "motion"):
                 constrain_sampling(graph, ["zura_look_boundary", 0])
         from .opening_models import apply_model
-        apply_model(graph, c.get("opening_model", "klein9b"), references)
+        apply_model(graph, c.get("opening_model", "klein9b"), references,
+                    dimensions=(c['opening_width'], c['opening_height']) if c.get('opening_width') and c.get('opening_height') else None)
         graph = apply_opening_loras(project, graph)
         if c.get("opening_width") and c.get("opening_height"):
             graph["92:111"] = {"class_type": "ImageScale", "inputs": {
@@ -1159,7 +1177,7 @@ def build_graph(project, stage, use_cache=True, run_id=None):
                 "_meta": {"title": "Starting image generation resolution"}}
         restore_source_size(graph)
         graph["122"]["inputs"]["filename_prefix"] = "genj/studio_images/" + project["id"]
-        if c.get("workflow_mode") == "relight" and not references:
+        if c.get('opening_model') in ('chatgpt', 'gemini') or c.get("workflow_mode") == "relight" and not references:
             from .h3 import reachable_graph
             graph = reachable_graph(graph, ["122"])
     elif stage in ("background", "restyle"):
