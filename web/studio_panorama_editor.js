@@ -1,3 +1,5 @@
+import {cameraOnlyControls} from './studio_panorama_controls.js';
+
 /** Open the installed Panorama editor on an isolated native graph.
  * The artist's Graph view is never replaced. Only Apply returns native state.
  */
@@ -27,11 +29,11 @@ export async function openPanoramaEditor({app,state,geometryKey,output,onApply,o
   set(output);
   const controls=document.createElement('div');controls.className='zc-panorama-actions';
   controls.setAttribute('role','group');controls.setAttribute('aria-label','Camera changes');
-  controls.innerHTML='<span>Adjust the camera in the 3D preview. Timeline keyframes are supported.</span><button type="button" data-cancel>Cancel</button><button type="button" class="zc-panorama-apply" data-apply>Apply camera</button>';
-  let handle,done=false,applying=false;
+  controls.innerHTML='<span>Review the camera move, then apply.</span><button type="button" data-cancel>Cancel</button><button type="button" class="zc-panorama-apply" data-apply>Apply camera</button>';
+  let handle,disposeCamera,done=false,applying=false;
   const previousCallback=widget.callback;
   const cleanup=()=>{
-    if(done)return;done=true;observer.disconnect();controls.remove();widget.callback=previousCallback;
+    if(done)return;done=true;observer.disconnect();disposeCamera?.();controls.remove();widget.callback=previousCallback;
     if(outputs instanceof Map)outputs.delete(node.id);else delete outputs[node.id];
     graph.clear();document.body.classList.remove('zura-camera-editor-open');
   };
@@ -51,6 +53,7 @@ export async function openPanoramaEditor({app,state,geometryKey,output,onApply,o
     document.body.classList.add('zura-camera-editor-open');
     handle=await button.callback();
     if(!handle?.close)throw new Error('Panorama did not open its camera editor. Enable its new editor and retry.');
+    disposeCamera=cameraOnlyControls(handle,document.querySelector('.pano-studio-backdrop'));
     document.body.append(controls);observer.observe(document.body,{childList:true,subtree:true});
     controls.querySelector('[data-apply]').focus({preventScroll:true});
     return {cancel};

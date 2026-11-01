@@ -107,3 +107,38 @@ Evidence is in `consolidated-local-install-20261031.json` and
 The remaining main-Studio integration check needs the requested manual restart
 and desktop visual review. Automatic approval review rejected the attempted
 test-server restart; no alternative restart or hot reload was used.
+
+## 1 November: restarted runtime and camera refinement
+
+This supersedes the restart requirement above: the user restarted ComfyUI.
+The main server now reports Panorama ready, including geometry cache nodes.
+The initial native popout was visually checked by the user; their feedback
+requested a simpler camera-only workspace and a source preview during preparation.
+
+- Uploaded clips without an explicit playback URL now resolve their input
+  path to the media endpoint. A thumbnail poster and source filename appear
+  in the large viewer; compatible MOV proxy URLs retain priority.
+- The native popout opens directly through the camera. Painting, masks,
+  scene-object tools, alternate-view tabs and unrelated timeline format
+  controls are hidden for this camera workflow. Native navigation, inspector,
+  timeline, playback, easing and Undo remain available.
+- Reset view restores the source pose at the current frame. Set camera
+  keyframe records position, rotation, field of view and lens together.
+  Repeated presses do not remove keys. Native session tests verify two poses,
+  interpolation, preserving earlier keys, reset, one-step Undo and camera lock.
+- Windows output subfolders are normalised on the frontend handoff so a
+  reviewed camera warp reaches the strict render route. Backend validation
+  still rejects a stale camera/warp pairing.
+- A fresh main-server integration completed: source geometry, a cached-geometry
+  changed-angle preview, then the approved CrossView H3 recipe. The final MP4
+  is 1920 × 1080, 48 frames at 24 fps and exactly 2 seconds, including audio.
+  Original-audio comparison gives zero sample lag and 0.99877 correlation.
+  Its uncached H3 request took 767.516 seconds by history timestamps; this is
+  functional integration evidence, not a speed claim or new visual approval.
+
+Three frontend suites and all eight camera backend tests pass. The design
+detector found one colour advisory; the new border was changed to the existing
+design-system colour. Four installed frontend files match the source hashes.
+Evidence, backups and the generated clip receipt are in the private
+`release-check-1.3.38/panorama-live-integration` folder. The refined popout's
+desktop visual check is requested. No public release or shutdown was performed.

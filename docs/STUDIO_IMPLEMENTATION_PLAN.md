@@ -805,3 +805,11 @@ and optional real two-stage LTX first/last-frame recipe. Local installation is
 backed up. No public release was made. Validation and the bounded remaining
 checks are recorded in `LOCAL_UPDATE_2026-10-31.md`; the current two-stage
 capability map is `LTX_25_TWO_STAGE_MATRIX.md`.
+
+1 November continuation: the user restarted ComfyUI, and the live Panorama
+geometry → cached camera guide → H3 render integration completed with exact
+48-frame/2-second 1080p delivery and zero-lag original audio. Their initial UI
+review prompted a camera-only popout, all-property keyframe action, Reset view
+and visible source playback during preparation. These refinements are locally
+installed and tested; the refreshed desktop visual check remains pending.
+See the dated continuation in `LOCAL_UPDATE_2026-10-31.md` for timings and limits.

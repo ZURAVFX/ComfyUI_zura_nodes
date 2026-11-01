@@ -4,7 +4,14 @@ import {ClipTrimmer} from './studio_trim.js';
 import {installOwnedExecuting} from './studio_progress.js';
 import {submitOwnedGraph,recoverOwnedSubmission,cancelOwnedJob} from './studio_owned_jobs.js';
 const KEY='zura-panorama-camera-v1';
-const view=file=>'/view?'+new URLSearchParams({filename:file.filename,subfolder:file.subfolder||'',type:file.type||'output'});
+// SaveVideo returns native Windows separators; the validated API uses URL paths.
+const mediaRef=file=>file?{...file,subfolder:(file.subfolder||'').replaceAll('\\','/')}:file;
+const view=file=>'/view?'+new URLSearchParams({filename:file.filename,subfolder:mediaRef(file).subfolder,type:file.type||'output'});
+const sourceView=asset=>{
+  if(asset.preview_url||asset.url)return asset.preview_url||asset.url;
+  const path=String(asset.file||'').replaceAll('\\','/'),slash=path.lastIndexOf('/');
+  return path?view({filename:path.slice(slash+1),subfolder:slash<0?'':path.slice(0,slash),type:'input'}):'';
+};
 
 /** A camera workspace in the existing shell, using native Panorama UI and H3. */
 export class PanoramaCameraWorkspace{
@@ -14,9 +21,9 @@ export class PanoramaCameraWorkspace{
     this.state=saved.state||{};this.job=saved.job||null;this.pendingSubmission=saved.pendingSubmission||null;
     this.page=document.createElement('section');this.page.className='zpc-page';
     this.page.innerHTML=`<header class="zpc-heading"><div><strong>Change camera angle</strong><span data-steps>1 Source · 2 Camera · 3 Preview · 4 Render</span></div><button type="button" data-new>New shot</button></header>
-      <div class="zpc-viewer"><div data-empty><h2>Find a new angle.</h2><p>Import a clip, then move the camera in a 3D preview.</p></div><video data-result controls playsinline hidden></video>
+      <div class="zpc-viewer"><div data-empty><h2>Find a new angle.</h2><p>Import a clip, then position the camera.</p></div><video data-result controls playsinline preload="metadata" hidden></video><span class="zpc-media-label" data-media-label hidden></span>
       <div class="zpc-progress" data-progress hidden><div><strong data-progress-title>Preparing</strong><button type="button" data-cancel>Cancel run</button></div><progress data-bar max="100"></progress><span data-progress-detail role="status"></span></div></div>
-      <form class="zpc-composer zc-prompt-card"><div class="zpc-title"><strong data-title>Prepare your camera shot</strong><button type="button" data-edit hidden>Edit camera in 3D</button></div>
+      <form class="zpc-composer zc-prompt-card"><div class="zpc-title"><strong data-title>Prepare your camera shot</strong><button type="button" data-edit hidden>Edit camera</button></div>
       <div class="zpc-attachments"><button type="button" data-source>Add source video</button><button type="button" data-look>Look image · optional</button><button type="button" data-create-look hidden>Create look image</button><button type="button" data-remove-look aria-label="Remove look image" hidden>×</button><button type="button" data-original hidden>View original</button><button type="button" data-warp hidden>View camera guide</button><a data-download hidden download>Download take</a></div>
       <input data-source-file type="file" accept="video/*,.mov,.mkv" hidden><input data-look-file type="file" accept="image/png,image/jpeg,image/webp" hidden>
       <label class="zc-sr-only" for="zpc-prompt">Camera shot direction</label><textarea id="zpc-prompt" data-prompt placeholder="Describe the shot or lighting. The 3D editor controls the camera angle…" maxlength="12000"></textarea>
@@ -71,17 +78,17 @@ export class PanoramaCameraWorkspace{
     this.$('progress').hidden=!this.job&&!this.pendingSubmission&&!this.submitting;
     if(this.pendingSubmission)this.$('progress-title').textContent='Checking your run';
   }
-  async requestGraph(stage,state=this.state.camera){return this.fetch('/zura/studio/panorama/graph',{source_id:this.state.source?.id,config:this.config(),state,stage,warp:this.state.warp,look_id:this.state.look?.id,prompt:this.$('prompt').value,seed:1052});}
+  async requestGraph(stage,state=this.state.camera){return this.fetch('/zura/studio/panorama/graph',{source_id:this.state.source?.id,config:this.config(),state,stage,warp:mediaRef(this.state.warp),look_id:this.state.look?.id,prompt:this.$('prompt').value,seed:1052});}
   async generate(){if(this.busy())return;const stage=!this.state.geometry?'geometry':!this.state.warp?'warp':'render';if(stage==='warp'&&!this.state.cameraReviewed){await this.editCamera();return;}this.submitting=true;this.render();this.message('');try{const prepared=await this.requestGraph(stage);this.state.selection=prepared.selection;this.state.camera=prepared.state;await submitOwnedGraph(this,prepared.graph,{stage,selection:prepared.selection,state:prepared.state},'auto',{zura_panorama:true});}catch(error){this.message(error.message);}finally{this.submitting=false;this.render();}}
   async editCamera(){if(this.busy()||!this.state.geometry)return;try{this.editor=await openPanoramaEditor({app:this.app,state:this.state.camera,geometryKey:this.state.selection.key,output:this.state.geometry,onCancel:()=>{this.editor=null;this.render();},onError:error=>{this.editor=null;this.message(error.message);this.render();},onApply:async state=>{this.editor=null;this.state.camera=state;this.state.cameraReviewed=true;delete this.state.warp;delete this.state.result;delete this.state.opening;delete this.state.look;this.save();this.render();await this.generate();}});this.render();}catch(error){this.editor=null;this.message(error.message);this.render();}}
-  showMedia(kind){const ref=this.state[kind];if(!ref)return;const video=this.$('result');video.pause();video.src=kind==='source'?(ref.preview_url||ref.url):view(ref);video.hidden=false;this.$('empty').hidden=true;this.viewing=kind;}
+  showMedia(kind){const ref=this.state[kind];if(!ref)return;const video=this.$('result');video.pause();video.poster=kind==='source'?(ref.thumbnail_url||''):'';video.src=kind==='source'?sourceView(ref):view(ref);video.hidden=false;this.$('empty').hidden=true;this.$('media-label').hidden=false;this.$('media-label').textContent=kind==='source'?`Source · ${ref.name||'Imported clip'}`:kind==='result'?'Finished take':'Camera guide';this.viewing=kind;}
   elapsed(){return Math.floor((Date.now()-(this.job?.started||Date.now()))/1000)+'s elapsed';}
   startPolling(){if(!this.timer)this.timer=setInterval(()=>this.poll(),1500);this.poll();}
   stopPolling(){clearInterval(this.timer);this.timer=null;}
   async poll(){if(this.pendingSubmission&&!this.job)return recoverOwnedSubmission(this);if(!this.job||this.polling)return;this.polling=true;const job=this.job;try{const history=await this.fetch('/history/'+encodeURIComponent(job.id)),entry=history[job.id];if(this.job!==job)return;
     if(entry?.status?.completed||entry?.status?.status_str==='error'){
       const failed=entry.status.status_str==='error',file=!failed&&entry.outputs?.save?.images?.find(f=>/\.(mp4|mov)$/i.test(f.filename));
-      this.job=null;this.stopPolling();if(file){if(job.config.stage==='render'){this.state.result=file;this.showMedia('result');this.message('Finished. Compare with the source or camera guide, or download your take.');}else{this.state.selection=job.config.selection;this.state.camera=job.config.state;this.state.opening=entry.outputs.opening?.images?.[0];if(job.config.stage==='geometry'){this.state.sourceOpening=entry.outputs.source_opening_save?.images?.[0];this.state.geometry=entry.outputs.panorama;this.state.guidePreview=file;this.showMedia('guidePreview');this.message('Geometry ready. Open the 3D camera editor to choose your angle.');}else{this.state.warp=file;this.showMedia('warp');this.message('Camera preview ready. Check the movement, then render with H3.');}}}else this.message(entry.status.messages?.find(m=>m[0]==='execution_error')?.[1]?.exception_message||'Run stopped. Your source and previous result are retained.');this.save();this.render();
+      this.job=null;this.stopPolling();if(file){if(job.config.stage==='render'){this.state.result=file;this.showMedia('result');this.message('Finished. Compare with the source or camera guide, or download your take.');}else{this.state.selection=job.config.selection;this.state.camera=job.config.state;this.state.opening=entry.outputs.opening?.images?.[0];if(job.config.stage==='geometry'){this.state.sourceOpening=entry.outputs.source_opening_save?.images?.[0];this.state.geometry=entry.outputs.panorama;this.state.guidePreview=file;this.showMedia('guidePreview');this.message('Geometry ready. Choose your camera angle, then set keyframes for movement.');}else{this.state.warp=file;this.showMedia('warp');this.message('Camera preview ready. Check the movement, then render with H3.');}}}else this.message(entry.status.messages?.find(m=>m[0]==='execution_error')?.[1]?.exception_message||'Run stopped. Your source and previous result are retained.');this.save();this.render();
     }else{const queue=await this.fetch('/queue');if(this.job!==job)return;const active=[...(queue.queue_running||[]),...(queue.queue_pending||[])].some(r=>r[1]===job.id);if(!active){const again=await this.fetch('/history/'+encodeURIComponent(job.id));if(again[job.id])return;this.job=null;this.stopPolling();this.save();this.render();this.message(job.cancelPending?'Run cancelled.':'This run is no longer in the queue. It has not been resubmitted.');}else if(!this.activeNode)this.$('progress-detail').textContent=this.elapsed()+' · waiting for ComfyUI';}
     }catch{this.message('Connection interrupted. Reconnecting to your existing run…');}finally{this.polling=false;}}
   async createLook(){
@@ -98,7 +105,7 @@ export class PanoramaCameraWorkspace{
       owner.message('Optional camera look. Choose a local model or browser sign-in, generate, then use the image for your camera shot. The full video warp remains the motion guide.');
     }catch(error){this.message(error.message);}
   }
-  reset(){if(this.busy())return false;this.state={};this.$('prompt').value='';this.$('size').value='1920,1080';this.save();this.render();this.$('result').pause();this.$('result').removeAttribute('src');this.$('result').hidden=true;this.$('empty').hidden=false;this.message('');return true;}
+  reset(){if(this.busy())return false;this.state={};this.$('prompt').value='';this.$('size').value='1920,1080';this.save();this.render();this.$('result').pause();this.$('result').removeAttribute('src');this.$('result').poster='';this.$('result').hidden=true;this.$('media-label').hidden=true;this.$('empty').hidden=false;this.message('');return true;}
   async graph(){try{const stage=this.state.warp?'render':this.state.geometry?'warp':'geometry',prepared=await this.requestGraph(stage),before=(this.app.rootGraph||this.app.graph)?.serialize?.();if(!before)throw new Error('Update ComfyUI to export an editable camera graph.');try{await this.app.loadApiJson(prepared.graph,'Zura Panorama Camera.json');await import('./vendor/elk.bundled.js');await tidyArtistGraph(this.app,prepared.graph,'camera',window.ELK);}catch(error){await this.app.loadGraphData(before);throw error;}this.studio.close();}catch(error){this.message(error.message);}}
   close(){this.editor?.cancel();this.editor=null;this.save();this.stopPolling();this.disposeExecuting?.();this.api.removeEventListener?.('progress',this.progress);}
 }

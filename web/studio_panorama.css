@@ -4,6 +4,7 @@
 #genj-studio .zpc-heading [data-steps]{font-size:12px;color:var(--gs-muted)}
 #genj-studio .zpc-viewer{flex:1;min-height:150px;position:relative;display:flex;align-items:center;justify-content:center;background:var(--zc-canvas);border:1px solid var(--gs-line);border-radius:12px;overflow:hidden}
 #genj-studio .zpc-viewer video{position:absolute;inset:0;width:100%;height:100%;min-height:0;object-fit:contain}
+#genj-studio .zpc-media-label{position:absolute;top:12px;left:12px;max-width:calc(100% - 48px);padding:8px 12px;border-radius:8px;background:#222;color:#f2f2f2;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 #genj-studio .zpc-viewer [data-empty]{text-align:center;padding:32px;color:var(--gs-muted)}
 #genj-studio .zpc-viewer h2{font-size:24px;color:var(--zc-text);margin:0 0 8px}
 #genj-studio .zpc-composer{flex-shrink:0;display:flex;flex-direction:column;gap:14px;padding:20px 24px;border:1px solid var(--gs-line);border-radius:14px;background:var(--zc-composer)}
@@ -28,4 +29,17 @@
 .zc-panorama-actions button{font:inherit;white-space:nowrap;border:1px solid #383838;border-radius:8px;padding:10px 18px;color:#eee;background:transparent;cursor:pointer}
 .zc-panorama-actions .zc-panorama-apply{background:#caff00;color:#111111;border:0;font-weight:600}
 .zc-panorama-actions button:focus-visible{outline:2px solid #caff00;outline-offset:3px}
+.zc-camera-only .pano-studio-tabs,.zc-camera-only [data-tool="paint"],.zc-camera-only [data-tool="mask"],.zc-camera-only [data-tool="add"],.zc-camera-only [data-tool="camera"],.zc-camera-only [data-tool="cursor"],.zc-camera-only .pano-studio-at-output,.zc-camera-only .pano-studio-at-bar,.zc-camera-only .pano-studio-at-buttons{display:none!important}
+.zc-camera-only .pano-studio-at-rail .pano-studio-sep,.zc-camera-only [data-card="camera"] [data-row="Mode"],.zc-camera-only [data-card="camera"] [data-row="Range"],.zc-camera-only [data-card="camera"] [data-row="Aspect"]{display:none!important}
+.zc-camera-only .pano-studio-tl-field,.zc-camera-only [data-tl="length-reset"]{display:none!important}
+.zc-camera-toolbar{flex-shrink:0;display:flex;align-items:center;gap:12px;padding:16px 20px;background:#222;color:#f2f2f2;font:14px/1.5 Manrope,system-ui,sans-serif}
+.zc-camera-toolbar>div{flex:1;min-width:0;display:flex;flex-direction:column;gap:4px}
+.zc-camera-toolbar>div span,.zc-camera-toolbar [data-camera-status]{color:#ababab;font-size:12px}
+.zc-camera-toolbar [data-camera-status]:empty{display:none}
+.zc-camera-toolbar button{font:inherit;min-height:44px;padding:10px 16px;border:1px solid #383838;border-radius:8px;background:transparent;color:#f2f2f2;cursor:pointer;white-space:nowrap}
+.zc-camera-toolbar [data-key-camera]{background:#caff00;border:0;color:#111;font-weight:600}
+.zc-camera-toolbar button:hover{filter:brightness(1.1)}
+.zc-camera-toolbar button:focus-visible{outline:2px solid #caff00;outline-offset:3px}
+.zc-camera-toolbar [data-camera-status]{max-width:24ch}
+@media(max-width:900px){.zc-camera-toolbar{flex-wrap:wrap;padding:12px}.zc-camera-toolbar>div{flex-basis:100%}.zc-camera-toolbar [data-camera-status]{max-width:none}}
 @media(max-width:760px){#genj-studio .zpc-page{width:calc(100% - 24px)}#genj-studio .zpc-heading [data-steps],.zc-panorama-actions span{display:none}#genj-studio .zpc-composer{padding:16px}#genj-studio .zpc-page .zc-prompt-bottom{flex-wrap:wrap}}

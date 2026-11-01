@@ -15,7 +15,8 @@ const app={graph:new Graph(),nodeOutputs:{existing:{images:['retained']}},ui:{se
     native={id:'old',inputs:[{name:'world'}],widgets:[{name:'state_json'}]};
     native.widgets.push({name:'Open Studio Editor',callback:async()=>{
       const backdrop=document.createElement('div');backdrop.className='pano-studio-backdrop';document.body.append(backdrop);
-      return {close(){native.widgets[0].value=edited;backdrop.remove();}};
+      backdrop.innerHTML='<div class="pano-studio-main"><div class="pano-studio-tabs"><button data-value="camera"></button></div><div data-head="camera"><button data-part="name"></button></div><span class="pano-studio-tl-frame">0 / 48</span></div>';
+      return {session:{state:{camera:{}},applyInspector(){}},stage:()=>({settle(){},redraw(){}}),close(){native.widgets[0].value=edited;backdrop.remove();}};
     }});
     return native;
   }};
@@ -24,10 +25,13 @@ const args={app,state:originalState,geometryKey:'cached-key',output:{pano_timeli
 const first=await openPanoramaEditor(args);
 assert.equal(native.graph===app.graph,false,'Native camera nodes must not replace the artist graph');
 assert.equal(document.querySelector('[data-apply]').textContent,'Apply camera');
+assert.equal(document.querySelector('[data-key-camera]').textContent,'Set camera keyframe');
+assert.ok(document.querySelector('.zc-camera-only'));
 document.querySelector('[data-cancel]').click();
 assert.equal(applied,null);assert.equal(cancelled,1);assert.equal(native.widgets[0].value,originalState);
 assert.deepEqual(app.nodeOutputs,{existing:{images:['retained']}});
 assert.equal(document.querySelector('.zc-panorama-actions'),null);
+assert.equal(document.querySelector('.zc-camera-toolbar'),null);
 assert.equal(document.querySelector('#artist-workflow')!==null,true);
 first.cancel();assert.equal(cancelled,1,'Cancelling twice is harmless');
 await openPanoramaEditor(args);

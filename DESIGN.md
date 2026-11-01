@@ -76,6 +76,13 @@ State transitions use short ease-out changes. Indeterminate progress conveys ong
 
 ## Do's and Don'ts
 
+The Panorama camera workspace keeps the uploaded video and its filename visible
+while geometry prepares. Its popout opens through the camera, with native camera
+navigation and a timeline. A prominent Set camera keyframe action captures the
+whole pose and lens at the playhead; Reset view restores that frame's source
+camera without erasing other keys. Painting, mask authoring and separate 3D-view
+tabs belong to the full native editor, not this guided camera task.
+
 Keep native labelled inputs, keyboard focus outlines, current-step ARIA and progressbar semantics. Do not invent results, source imagery, account avatars or unsupported controls. Source and behavioural checks do not replace a live visual review.
 
 Clip range uses Use source / Trim buttons and a source filmstrip with draggable start/end handles. Precision timing is collapsed beneath it. Dragging seeks the source and commits once on release, with frame-level keyboard adjustments. Remaining native option popups have explicit dark surface and readable text colours.
