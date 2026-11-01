@@ -21,7 +21,7 @@ Object.defineProperty(window.HTMLSelectElement.prototype,'selectedOptions',{conf
 Object.defineProperty(window.HTMLInputElement.prototype,'checked',{configurable:true,get(){return this.hasAttribute('checked');},set(v){v?this.setAttribute('checked',''):this.removeAttribute('checked');}});
 for(const method of ['pause','play','load'])window.HTMLElement.prototype[method]=()=>{};
 let storage={};const localStorage={getItem:k=>storage[k]||null,setItem:(k,v)=>storage[k]=v,removeItem:k=>delete storage[k]};
-Object.assign(globalThis,{document,window,localStorage,ResizeObserver});
+Object.assign(globalThis,{document,window,localStorage,ResizeObserver,createImageBitmap:async()=>({width:1024,height:1024,close(){}})});
 {
   const host=document.createElement('div'); document.body.append(host);
   const state={config:{opening_model:'klein9b',opening_loras:[],custom_loras:[]},lookMode:'build',loraCatalog:[{name:'portrait.safetensors',usable:true,metadata_family:'flux2_klein9b'}],directViewport:()=>false,headSwap:()=>false,readConfig(){return this.config;},perform(fn){return fn(0);},render(){},resetEpoch:0};

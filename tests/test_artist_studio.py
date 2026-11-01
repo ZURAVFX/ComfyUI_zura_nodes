@@ -466,11 +466,13 @@ class SharedEngineTests(unittest.TestCase):
         self.assertIn('data-reference-role', text)
 
     def test_zura_routes_keep_legacy_projects_accessible(self):
-        server = types.SimpleNamespace(routes=studio.web.RouteTableDef())
+        server = types.SimpleNamespace(routes=studio.web.RouteTableDef(),
+            prompt_queue=types.SimpleNamespace(get_history=lambda **kwargs: {}))
         module = types.ModuleType('server')
         module.PromptServer = types.SimpleNamespace(instance=server)
         with patch.dict('os.environ', {'ZURA_HDR_LONG_PREVIEW': '1'}), patch.dict(sys.modules, {'server': module}), patch.object(studio, 'Studio'), \
-                patch.object(studio.folder_paths, 'get_folder_paths', return_value=[], create=True):
+                patch.object(studio.folder_paths, 'get_folder_paths', return_value=[], create=True), \
+                patch.object(studio.folder_paths, 'get_user_directory', return_value=tempfile.gettempdir(), create=True):
             studio.register()
             routes = {(r.method, r.path) for r in server.routes}
             branded = {(method, path.replace('/zura/studio', '/genj/studio'))
@@ -479,6 +481,7 @@ class SharedEngineTests(unittest.TestCase):
             self.assertEqual(branded, legacy)
             self.assertGreaterEqual(len(branded), 14)
             self.assertIn(('GET', '/zura/studio/status'), routes)
+            self.assertIn(('GET', '/zura/studio/output-settings'), routes)
             self.assertIn(('POST', '/zura/studio/projects/{identity}/wan-graph/plan'), routes)
             self.assertIn(('POST', '/zura/studio/projects/{identity}/opening'), routes)
             self.assertIn(('POST', '/zura/studio/hdr/source-info'), routes)

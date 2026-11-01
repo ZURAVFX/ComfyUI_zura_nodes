@@ -314,7 +314,9 @@ const guardFocus=element=>element.focus=options=>{
 };
 guardFocus(ui.$('ready'));guardFocus(ui.$('source'));guardFocus(ui.$('camera_preset'));
 lookPanel.scrollIntoView=()=>{throw new Error('Ancestor-scrolling navigation is forbidden');};
-ui.container.querySelector('[data-step="1"]').onclick();
+// Backward stage navigation now has its own stateful contract in
+// test_studio_restart_navigation.mjs. Check the panel-only focus helper here.
+ui.revealControl(lookPanel,ui.$('ready'));
 assert.equal(controlPanel.scrollTop,350,'Only the reference panel scrolls to reveal the look section');
 assert.equal(ui.container.scrollTop,0,'Step navigation must keep the fixed shell at the top');
 assert.equal(document.body.scrollTop,0,'Comfy behind Studio must stay still');

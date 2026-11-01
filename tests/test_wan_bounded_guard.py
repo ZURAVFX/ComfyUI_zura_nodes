@@ -315,7 +315,8 @@ class BoundedSpeechGuardTests(unittest.TestCase):
         output_root.mkdir(parents=True,exist_ok=True)
         namespace = {"CATEGORY":"Zura/Artist Studio","Path":Path,"re":re,"av":media.av,
             "InputImpl":media.InputImpl,"digest_file":io.file_digest,"source_path":lambda v:Path(v.get_stream_source()),
-            "root":lambda:output_root,"ffmpeg":ffmpeg,"np":np}
+            "root":lambda:output_root,"ffmpeg":ffmpeg,"np":np,
+            "Fraction":__import__('fractions').Fraction}
         exec(compile(ast.Module(body=[definition],type_ignores=[]),str(path),"exec"),namespace)
         generated = media.NativeFile(str(media.write_video(self.fixture.base/"neutral-generated.mov",count=24)))
         result = namespace["GenjRestoreSoundtrack"]().restore(generated,{**self.details,"full_source":False},"neutral_take")

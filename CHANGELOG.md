@@ -2,6 +2,7 @@
 
 ## 1.3.39 - 1 November 2026
 
+- Preserve the original frame rate and selected frame count in Wan 2.1 Relight, including fractional rates such as 29.97. Reload original source frames instead of the 24 fps review proxy, keep the original soundtrack aligned and remove internal model-padding frames from delivery.
 - Add ChatGPT and Gemini browser sign-in image generation and editing, including the starting-image stages of video workflows such as Relight. Reuse the existing account nodes, show sign-in beside the prompt and explain website allowance and reference uploads. No paid developer API key is required.
 - Keep the original video frame as Image 1 when generating or retrying a starting image. Request its proportions and exact target dimensions, then restore the source dimensions without stretching. Provider output sizes remain best effort.
 - Add Image Auto sizing, larger resolution controls, optional Image 1 comparison, image saving and a configurable delivery folder under ZURA STUDIO. Skip unnecessary starting-image processing when a finished frame is supplied.

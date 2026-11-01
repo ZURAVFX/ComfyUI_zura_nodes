@@ -407,6 +407,8 @@ class GenjLoadReviewedShot:
                     "tooltip": "0 uses the reviewed preview. Higher values reread the original footage and resize the approved mask."}),
                     "output_scale": ("INT", {"default": 1, "min": 1, "max": 2}),
                     "preview_seconds": ("FLOAT", {"default": 0, "min": 0, "max": 30}),
+                    "preserve_source_timing": ("BOOLEAN", {"default": False,
+                        "tooltip": "Reload original frames at their source rate. Enabled by Wan 2.1 Relight."}),
                     "preserve_aspect": ("BOOLEAN", {"default": False,
                         "tooltip": "Keep source proportions before the downstream model resize."})}}
 
@@ -416,20 +418,26 @@ class GenjLoadReviewedShot:
     CATEGORY = CATEGORY
 
     @classmethod
-    def IS_CHANGED(cls, shot_id, approved_shot_id, render_long_edge=0, output_scale=1, preview_seconds=0, preserve_aspect=False):
+    def IS_CHANGED(cls, shot_id, approved_shot_id, render_long_edge=0, output_scale=1, preview_seconds=0, preserve_aspect=False, preserve_source_timing=False):
         if shot_id and shot_id == approved_shot_id:
             directory, manifest = verify_review(shot_id)
             source_hash = digest_file(manifest["clip"]["source"]) if render_long_edge else ""
-            return digest_file(directory / "review.json") + source_hash + str((render_long_edge, output_scale, preview_seconds, preserve_aspect))
+            return digest_file(directory / "review.json") + source_hash + str((render_long_edge, output_scale, preview_seconds, preserve_aspect, preserve_source_timing))
         return float("nan")
 
-    def load(self, shot_id, approved_shot_id, render_long_edge=0, output_scale=1, preview_seconds=0, preserve_aspect=False):
+    def load(self, shot_id, approved_shot_id, render_long_edge=0, output_scale=1, preview_seconds=0, preserve_aspect=False, preserve_source_timing=False):
         if not shot_id or shot_id != approved_shot_id:
             raise ValueError("Approve the reviewed mask in Zura Studio before generation. Standalone graphs require matching reviewed and approved shot IDs.")
         directory, manifest = verify_review(shot_id)
         details = {**manifest["clip"], "review_shot_id": shot_id}
         has_genuine_mask = "performer_mask.mp4" in manifest.get("files", {})
         genuine_mask = directory / ("performer_mask.mp4" if has_genuine_mask else "mask.mp4")
+        if preserve_source_timing:
+            from .source_timing import reload_review
+            paths = reload_review(directory, details, render_long_edge, output_scale,
+                                  preserve_aspect, preview_seconds, ffmpeg)
+            return tuple(value if index == 3 else InputImpl.VideoFromFile(str(value))
+                         for index, value in enumerate(paths))
         if render_long_edge:
             source = Path(details["source"])
             if digest_file(source) != details["source_hash"]:
@@ -683,6 +691,11 @@ class GenjRestoreSoundtrack:
         if digest_file(source) != clip_details["source_hash"]:
             raise ValueError("The original source changed after review. Prepare and review the shot again.")
         generated = source_path(video)
+        fps = (Fraction(clip_details['fps_num'], clip_details['fps_den'])
+               if clip_details.get('fps_num') and clip_details.get('fps_den')
+               else Fraction(str(clip_details.get('fps', 24))))
+        if not 0 < fps <= 240:
+            raise ValueError('The selected video frame rate is invalid.')
         with av.open(str(generated)) as c:
             vs = c.streams.video[0]
             duration = float(vs.duration * vs.time_base) if vs.duration else float(c.duration / av.time_base)
@@ -692,9 +705,9 @@ class GenjRestoreSoundtrack:
         if model_stride not in (0, 4, 8) or (model_stride and target_frames):
             raise ValueError("Choose either a model frame stride or an explicit padded length.")
         final_frames = (original_frames + (1 - original_frames) % model_stride) if model_stride else (target_frames or original_frames)
-        target_duration = final_frames / 24 if target_frames or model_stride else clip_details["duration"]
-        required_duration = original_frames / 24 if model_stride else target_duration
-        if duration + 1 / 24 < required_duration:
+        target_duration = float(final_frames / fps) if target_frames or model_stride else clip_details["duration"]
+        required_duration = float(original_frames / fps) if model_stride else target_duration
+        if duration + float(1 / fps) < required_duration:
             raise ValueError(f"Generated video is too short ({duration:.3f}s for {target_duration:.3f}s). The source soundtrack will not be shortened to hide this.")
         destination = root() / output_subfolder
         destination.mkdir(exist_ok=True)
@@ -708,7 +721,7 @@ class GenjRestoreSoundtrack:
         offset = 0 if external else clip_details["start"]
         with av.open(str(soundtrack)) as media:
             audio_codec_name = media.streams.audio[0].codec_context.name if media.streams.audio else None
-        selected_audio_duration = min(float(clip_details.get("selected_duration", clip_details["duration"])), original_frames / 24)
+        selected_audio_duration = min(float(clip_details.get("selected_duration", clip_details["duration"])), float(original_frames / fps))
         if not np.isfinite(selected_audio_duration) or selected_audio_duration <= 0:
             raise ValueError("The selected audio duration must be positive and finite.")
         extend_audio = bool(audio_codec_name) and (final_frames > original_frames or selected_audio_duration < target_duration - 1e-6)
@@ -719,8 +732,8 @@ class GenjRestoreSoundtrack:
         # Model decoding can end up one frame short after timebase rounding.
         # The duration check above still rejects larger shortages; holding just
         # one frame gives the selected soundtrack an exact frame-aligned end.
-        vf = (f"fps=24,trim=end_frame={original_frames},tpad=stop_mode=clone:stop={final_frames - original_frames + 1}"
-              if model_stride else "fps=24,tpad=stop_mode=clone:stop=1")
+        vf = (f"fps={fps},trim=end_frame={original_frames},tpad=stop_mode=clone:stop={final_frames - original_frames + 1}"
+              if model_stride else f"fps={fps},tpad=stop_mode=clone:stop=1")
         if output_width or output_height:
             if any(type(v) is not int or v < 2 or v > 16384 or v % 2 for v in (output_width, output_height)):
                 raise ValueError("Output width and height must be even numbers from 2 to 16384.")

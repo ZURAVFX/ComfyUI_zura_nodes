@@ -181,7 +181,8 @@ def register(server, routes, response):
     service = OutputSettings(folder_paths.get_output_directory(),
                              Path(folder_paths.get_user_directory()) / 'default' / 'zura_studio')
     # Ignore old history. New successful native image/video graphs also get delivery copies.
-    seen = set(server.prompt_queue.get_history(map_function=lambda item: None))
+    history_reader = getattr(getattr(server, 'prompt_queue', None), 'get_history', None)
+    seen = set(history_reader(map_function=lambda item: None)) if history_reader else set()
     task = None
 
     async def watch():
@@ -197,22 +198,27 @@ def register(server, routes, response):
 
     def start():
         nonlocal task
+        if not getattr(getattr(server, 'prompt_queue', None), 'get_history', None):
+            return  # ComfyUI may still be constructing its queue during startup.
         if task is None or task.done():
             task = asyncio.create_task(watch())
 
     @routes.get('/zura/studio/output-settings')
+    @routes.get('/genj/studio/output-settings')
     @response
     async def get_settings(request):
         start()
         return web.json_response(service.describe())
 
     @routes.post('/zura/studio/output-settings')
+    @routes.post('/genj/studio/output-settings')
     @response
     async def save_settings(request):
         data = await request.json()
         return web.json_response(await asyncio.to_thread(service.save, data.get('folder')))
 
     @routes.post('/zura/studio/save-output')
+    @routes.post('/genj/studio/save-output')
     @response
     async def save_output(request):
         data = await request.json()

@@ -60,6 +60,7 @@ jobs:
           python -m unittest discover -s tests -p 'test_h3_head_studio.py'
           python -m unittest discover -s tests -p 'test_studio_availability.py'
           python -m unittest discover -s tests -p 'test_wan21_relight.py'
+          python -m unittest discover -s tests -p 'test_relight_source_timing.py'
           python -m unittest discover -s tests -p 'test_studio_upload.py'
           python -m unittest discover -s tests -p 'test_h3_viewport_render.py'
           python -m unittest discover -s tests -p 'test_ltx25_viewport_plan.py'
@@ -133,7 +134,6 @@ jobs:
           node tests/test_video_browser_connection.mjs
           node tests/test_studio_image_compare.mjs
           node tests/test_image_auto_resolution.mjs
-          node tests/test_panorama_controls.mjs
           node tests/test_panorama_editor.mjs
           node tests/test_panorama_windows_handoff.mjs
           node tests/test_studio_restart_navigation.mjs

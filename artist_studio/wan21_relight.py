@@ -62,7 +62,7 @@ def readiness(node_mappings: Mapping[str, Any], get_full_path) -> dict[str, Any]
         "model_files": files,
         "missing_nodes": missing_nodes,
         "limits": {"long_edge": LONG_EDGE, "window_frames": WINDOW_FRAMES,
-                   "fps": 24, "steps": STEPS, "sampler": SAMPLER},
+                   "preserve_source_timing": True, "steps": STEPS, "sampler": SAMPLER},
         "quality_verified_locally": False,
         "source_workflow_artist_confirmed": True,
         "note": ("Based on the artist-confirmed Switch X relight workflow. The Studio graph "
@@ -149,7 +149,7 @@ def build_studio_graph(project: Mapping[str, Any], check_asset) -> dict[str, dic
         # shot IDs, not that hash, just like the other Studio animation graphs.
         "inputs": {"shot_id": project["review"], "approved_shot_id": project["review"],
                    "render_long_edge": max(width, height), "output_scale": 1, "preview_seconds": 0,
-                   "preserve_aspect": True},
+                   "preserve_aspect": True, "preserve_source_timing": True},
         "_meta": {"title": "Load approved source clip"},
     }
     graph["wan21_source_frames"] = {
@@ -174,13 +174,13 @@ def build_studio_graph(project: Mapping[str, Any], check_asset) -> dict[str, dic
         "_meta": {"title": "Hold final frame to a supported Wan length"}}
     graph["wan21_video"] = {
         "class_type": "CreateVideo",
-        "inputs": {"images": ["wan21_hold_result", 0], "fps": 24.0},
+        "inputs": {"images": ["wan21_hold_result", 0], "fps": ["wan21_source_frames", 2]},
         "_meta": {"title": "Assemble relit frames"},
     }
     graph["wan21_export"] = {
         "class_type": "GenjRestoreSoundtrack",
         "inputs": {"video": ["wan21_video", 0],
-                   "clip_details": ["wan21_shot", 3], "target_frames": ["wan21_hold_result", 1],
+                   "clip_details": ["wan21_shot", 3],
                    "take_name": "studio_" + str(project["id"])[:8] + "_wan21_relight"},
         "_meta": {"title": "Save relight with original soundtrack"},
     }

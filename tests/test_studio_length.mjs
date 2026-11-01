@@ -11,7 +11,9 @@ assert.equal(recoverClipLength({...original,engine:'wan',audio_id:'speech',lip_s
 assert.equal(clipLength({...original,length_mode:'custom',duration:5},15).invalid,false);
 assert.equal(clipLength({...original,length_mode:'custom',duration:2.1},15).frames,51, 'Custom selections keep the fractional end frame');
 assert.equal(clipLength({...original,length_mode:'custom',duration:2.1},15).deliveryFrames,56, 'H3 holds to its next supported length');
-assert.equal(clipLength({...original,engine:'wan',workflow_mode:'relight',length_mode:'custom',duration:2.1},15).deliveryFrames,53, 'Wan relight holds to its next supported length');
+assert.equal(clipLength({...original,engine:'wan',workflow_mode:'relight',length_mode:'custom',duration:2.1},15).deliveryFrames,51, 'Wan relight removes internal model padding from delivery');
+assert.equal(clipLength({...original,workflow_mode:'relight',length_mode:'custom',duration:2},15,30).frames,60,'Relight counts original source frames');
+assert.equal(clipLength({...original,workflow_mode:'relight',length_mode:'custom',duration:2},15,30).outputSeconds,2);
 assert.equal(clipLength({...original,engine:'local',length_mode:'custom',duration:2.1},15).deliveryFrames,57, 'LTX holds to its next supported length');
 assert.equal(clipLength({...original,engine:'wan',workflow_mode:'relight'}, 53/25).frames,51, 'Full source rounds up so its final fraction is not discarded');
 const legacyRelight={...original,workflow_mode:'relight',relight_engine:'h3'};

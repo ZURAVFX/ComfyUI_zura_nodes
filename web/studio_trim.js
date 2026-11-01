@@ -4,9 +4,9 @@ export function trimRange(config={},seconds=0){
   const start=original?0:clamp(Number(config.start)||0,0,total);
   return {start,end:original?total:clamp(start+(Number(config.duration)||2),start,total),total};
 }
-export function trimEdge(range,edge,time,maximum=null){
+export function trimEdge(range,edge,time,maximum=null,fps=24){
   const min=Math.min(.25,range.total),max=maximum||range.total;
-  const snap=Math.round(time*24)/24;
+  const snap=Math.round(time*fps)/fps;
   if(edge==="start"){
     const start=clamp(snap,0,Math.max(0,range.end-min));
     return {...range,start,end:Math.min(range.end,start+max)};
@@ -14,9 +14,9 @@ export function trimEdge(range,edge,time,maximum=null){
   const end=clamp(snap,Math.min(range.total,range.start+min),range.total);
   return {...range,end,start:Math.max(range.start,end-max)};
 }
-export function trimTime(seconds){
-  const frames=Math.max(0,Math.round((Number(seconds)||0)*24));
-  const hundredths=Math.round(frames*100/24),minutes=Math.floor(hundredths/6000);
+export function trimTime(seconds,fps=24){
+  const frames=Math.max(0,Math.round((Number(seconds)||0)*fps));
+  const hundredths=Math.round(frames*100/fps),minutes=Math.floor(hundredths/6000);
   return `${minutes}:${(hundredths%6000/100).toFixed(2).padStart(5,'0')}`;
 }
 
@@ -44,19 +44,20 @@ export class ClipTrimmer {
         if(this.disabled || !['ArrowLeft','ArrowRight','Home','End'].includes(e.key))return;
         e.preventDefault();e.stopPropagation();
         const edge=handle.dataset.edge,value=this.range[edge];
-        const time=e.key==='Home'?0:e.key==='End'?this.range.total:value+(e.key==='ArrowLeft'?-1:1)*(e.shiftKey?1:1/24);
+        const time=e.key==='Home'?0:e.key==='End'?this.range.total:value+(e.key==='ArrowLeft'?-1:1)*(e.shiftKey?1:1/(this.fps||24));
         this.move(edge,time);this.commit();
       };
     }
     this.track.onpointerdown=e=>{if(!this.disabled && !e.target.closest('[data-edge]'))this.onSeek?.(this.timeAt(e.clientX));};
   }
   timeAt(clientX){const box=this.track.getBoundingClientRect();return clamp((clientX-box.left)/Math.max(1,box.width),0,1)*this.range.total;}
-  move(edge,time){this.range=trimEdge(this.range,edge,time,this.maximum);this.paint();this.onSeek?.(this.range[edge]);}
+  move(edge,time){this.range=trimEdge(this.range,edge,time,this.maximum,this.fps||24);this.paint();this.onSeek?.(this.range[edge]);}
   commit(){this.onCommit?.({start:this.range.start,duration:this.range.end-this.range.start});}
   update(source,config,{disabled=false,maximum=null}={}){
     const key=source?.url||'';
     if(disabled || key!==this.sourceKey)this.drag=null;
     this.disabled=disabled;this.maximum=maximum;
+    this.fps=config.workflow_mode==='relight'&&Number(source?.fps)>0?Number(source.fps):24;
     this.host.hidden=!source || !(Number(source.duration)>0);
     if(!this.drag)this.range=trimRange(config,source?.duration);
     for(const handle of this.host.querySelectorAll('[data-edge]'))handle.disabled=disabled;
@@ -67,11 +68,11 @@ export class ClipTrimmer {
     const {start,end,total}=this.range;
     this.host.style.setProperty('--trim-in',`${total?start/total*100:0}%`);
     this.host.style.setProperty('--trim-out',`${total?end/total*100:100}%`);
-    this.host.querySelector('[data-range]').textContent=`${trimTime(start)} – ${trimTime(end)}`;
+    this.host.querySelector('[data-range]').textContent=`${trimTime(start,this.fps)} – ${trimTime(end,this.fps)}`;
     this.host.querySelector('[data-duration]').textContent=`${(end-start).toFixed(2)}s selected${this.maximum?` · ${this.maximum.toFixed(2).replace(/\.?0+$/,'')}s max`:''}`;
     for(const handle of this.host.querySelectorAll('[data-edge]')){
       const edge=handle.dataset.edge,value=this.range[edge];
-      handle.setAttribute('aria-valuenow',String(value));handle.setAttribute('aria-valuetext',trimTime(value));
+      handle.setAttribute('aria-valuenow',String(value));handle.setAttribute('aria-valuetext',trimTime(value,this.fps));
       handle.setAttribute('aria-valuemax',String(edge==='start'?Math.max(0,end-.25):total));
       handle.setAttribute('aria-valuemin',String(edge==='end'?Math.min(total,start+.25):0));
     }

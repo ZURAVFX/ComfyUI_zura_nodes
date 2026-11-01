@@ -2166,12 +2166,12 @@ class Studio:
                 actual = inspect_video(path, expected_frames=action.get("expected_frames"),
                                        expected_width=action.get("output_raster", {}).get("width"),
                                        expected_height=action.get("output_raster", {}).get("height"),
-                                       expected_fps=24)
+                                       expected_fps=action.get('output_fps', 24))
                 item.update(label="Wan 2.1 Relight", delivery_mode="native",
                             generation_resolution=action.get("generation_resolution"),
                             generation_raster=copy.deepcopy(action.get("generation_raster")),
                             output_raster=actual, relight_recipe=action.get("relight_recipe"),
-                            sha256=sha(path))
+                            duration=actual['frames'] / actual['fps'], sha256=sha(path))
             if action.get("h3_character_method") == "openjutsu":
                 item.update(label="OpenJutsu", h3_character_method="openjutsu")
             append_result_once(p, item)
@@ -2498,14 +2498,17 @@ class Studio:
                     action["studio_action_tag"] = prompt_id
         elif stage == "wan21_relight":
             from . import verify_review
+            from .source_timing import timeline
             _, manifest = verify_review(p["review"])
+            timing = timeline(check_asset(p['source']), manifest['clip'])
             size = graph["272:407:89"]["inputs"]
             action.update(label="Wan 2.1 Relight", resolution=max(size["width"], size["height"]),
                           generation_resolution=max(size["width"], size["height"]),
                           generation_raster={"width": size["width"], "height": size["height"]},
-                          expected_frames=manifest["clip"]["frames"] + (1 - manifest["clip"]["frames"]) % 4,
+                          expected_frames=timing['frames'], output_fps=timing['fps'],
+                          output_fps_num=timing['fps_num'], output_fps_den=timing['fps_den'],
                           relight_recipe="wan21-relight-switchx-v1")
-            action.update(segment_total=max(1, (manifest['clip']['frames'] - 2) // 80 + 1),
+            action.update(segment_total=max(1, (timing['frames'] - 2) // 80 + 1),
                           segment_node='272:407:277:19')
             delivery = graph["wan21_export"]["inputs"]
             if delivery.get("output_width") and delivery.get("output_height"):

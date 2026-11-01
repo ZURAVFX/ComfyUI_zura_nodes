@@ -12,6 +12,7 @@ assert.equal(trimEdge({start:1,end:3,total:10},'start',1.019).start,1,'Timing sn
 assert.equal(trimTime(61.5),'1:01.50');
 assert.equal(trimTime(32.625),'0:32.63');
 assert.equal(trimTime(59.999),'1:00.00');
+assert.equal(trimEdge({start:0,end:3,total:10},'start',1.033, null,30).start,31/30,'Relight trim retains source-frame boundaries');
 
 const {document,window}=parseHTML('<html><body><section id="trim"></section></body></html>');
 window.HTMLElement.prototype.focus=()=>{};

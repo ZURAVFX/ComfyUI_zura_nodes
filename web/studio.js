@@ -837,7 +837,7 @@ class ArtistStudio {
       if(!Number.isFinite(seconds)||seconds<5/24||seconds>2){this.message("Choose a clip from 0.21 to 2 seconds for Head & face.",true);return;}
       if(!this.references.length){this.message("Add a portrait reference first.",true);return;}
     }
-    if(clipLength(selectedConfig,this.source?.duration).invalid){
+    if(clipLength(selectedConfig,this.source?.duration,this.source?.fps).invalid){
       this.config=recoverClipLength(selectedConfig,this.source.duration);this.syncForm();this.render();
       this.$("trim-precision").open=true;
       this.revealControl(this.$("duration"));this.$("duration").select();
@@ -995,7 +995,8 @@ class ArtistStudio {
       this.$("resolution").closest("label").hidden=true;
       this.$("engine-hint").textContent="Wan 2.1 Relight · fixed 4-step recipe · original performance and soundtrack";
       const relightSize=this.config.relight_width && this.config.relight_height?`${this.config.relight_width} × ${this.config.relight_height}`:"Source-matched aspect";
-      this.$("output-note").textContent=`${relightSize} · 24 fps · 4 steps. Longer clips run in 81-frame sections; inspect each join.`;
+      const sourceRate=Number(this.source?.fps);
+      this.$("output-note").textContent=`${relightSize} · ${sourceRate>0?Number(sourceRate.toFixed(3))+' fps':'Source frame rate'} · 4 steps. Longer clips run in 81-frame sections; inspect each join.`;
       this.$("limit-note").textContent="Wan 2.1 processes the approved clip in 81-frame sections. The full selected source can be used.";
       this.$("speed-note").textContent="Fixed four-step sampling. Render time grows with clip length and the number of sections.";
     }
@@ -1224,7 +1225,7 @@ class ArtistStudio {
     this.$("image_prompt").placeholder=relight?"Describe the lighting, e.g. warm sunset from the left, soft shadows…":"Describe the look, setting and lighting…";
     this.$("prompt").setAttribute("aria-label","Video direction");
     this.$("image_prompt").setAttribute("aria-label","Starting image direction");
-    const info=clipLength(this.config,this.source?.duration);
+    const info=clipLength(this.config,this.source?.duration,this.source?.fps);
     this.trimTimeline?.update(this.source?{...this.source,url:this.sourcePlayback()}:null,this.config,{disabled:this.busy||working,maximum:info.maximum});
     this.$("trim-controls").hidden=!this.source;
     this.$("trim-precision").hidden=!this.source || this.config.length_mode==="original";
@@ -1359,7 +1360,7 @@ class ArtistStudio {
     const position=this.$("finished_frame_position");
     for(const option of position.options)option.disabled=!timedFrames && option.value!=="first";
     this.$("frame-number-setting").hidden=!timedFrames || this.config.finished_frame_position!=="frame";
-    const frameRange=clipLength(this.config,this.source?.duration);
+    const frameRange=clipLength(this.config,this.source?.duration,this.source?.fps);
     if(Number.isFinite(frameRange.frames))this.$("finished_frame_number").max=String(frameRange.frames);
     else this.$("finished_frame_number").removeAttribute("max");
     this.$("frame-anchor-note").textContent=timedFrames?"Frame numbers start at 1 within the selected 24 fps output clip. The image guides that moment; the generated result may vary.":"This route uses the finished image as an appearance reference. Timed image anchors are available with H3 and whole-scene LTX.";
