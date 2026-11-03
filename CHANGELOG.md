@@ -1,5 +1,11 @@
 # Release notes
 
+## 1.3.43 - 3 November 2026
+
+- Make the Watermark removal model label a dropdown in the main toolbar. Switch between LTX 2.5 Quality and ProPainter Light without losing source footage, mask layers or the current step.
+- Keep the model selector locked during a render and mark ProPainter as SDR-only for HDR footage. Remove the duplicate repair-model selector from Settings.
+
+
 ## 1.3.42 - 3 November 2026
 
 - Improve Watermark removal with clearer static mask layers and an optional clean first-frame guide for Quality mode, including crop and HDR colour handling. Keep guided Paintout separate.
