@@ -1,0 +1,21 @@
+import assert from 'node:assert/strict';
+import {buildPaintoutGraph,paintoutValidation,PAINTOUT_MODELS} from '../../web/paintout_studio/paintout_recipes.js';
+const c={mode:'targeted',targetedMethod:'automatic',source:'C:/fixtures/plate.exr',mask:'C:/fixtures/mask.png',anchors:[],startFrame:0,frameCount:17,sequenceFps:25,sourceColour:'acescg',processingSpace:'HDR (ACEScct)',colourPipeline:'hdr_hdr',width:512,height:320,outputMode:'EXR sequence',processingScale:.5,seed:43};
+assert.equal(paintoutValidation(c),'');
+const g=buildPaintoutGraph(c);
+assert.equal(g.lora.class_type,'LTXICLoRALoaderModelOnly');assert.equal(g.lora.inputs.lora_name,PAINTOUT_MODELS.inpaintLora);assert.equal(g.lora.inputs.strength_model,1);
+assert.equal(g.source.inputs.framing_mode,'Smart crop (experimental)');assert.equal(g.source.inputs.processing_scale,.5);
+assert.equal(g.video_vae.inputs.vae_name,PAINTOUT_MODELS.videoVae);assert.equal(g.float_vae.class_type,'LTXVVAEForceFloat32');
+assert.equal(g.inpaint_preprocess.class_type,'LTXVInpaintPreprocess');assert.deepEqual(g.guide.inputs.image,['inpaint_preprocess',0]);assert.ok(!('attention_mask' in g.guide.inputs));
+assert.equal(g.sample.class_type,'SamplerCustomAdvanced');assert.equal(g.sampler.inputs.sampler_name,'euler_ancestral_cfg_pp');assert.equal(g.sigmas.inputs.sigmas,'1.0, 0.99375, 0.9875, 0.98125, 0.975, 0.909375, 0.725, 0.421875, 0.0');
+assert.equal(g.positive.inputs.text,'');assert.equal(g.negative.inputs.text,'');assert.equal(g.save.inputs.match_context,false);assert.ok(!g.apply_anchors);
+for(const [id,n] of Object.entries(g))for(const v of Object.values(n.inputs))if(Array.isArray(v)&&typeof v[0]==='string')assert.ok(g[v[0]],`${id} refers to missing ${v[0]}`);
+const guided=buildPaintoutGraph({...c,anchors:[{file:'C:/fixtures/anchor.exr',frame:0,strength:.75}]});assert.ok(guided.apply_anchors);assert.deepEqual(guided.combine.inputs.video_latent,['apply_anchors',2]);
+const sdr={...c,targetedMethod:'guided',colourPipeline:'sdr_sdr',sourceColour:'srgb_display',processingSpace:'SDR (sRGB)',outputMode:'SDR video'};assert.match(paintoutValidation(sdr),/clean frame/);
+assert.match(paintoutValidation({...c,processingScale:.3}),/processing scale/);
+console.log('PASS targeted HDR single-pass graph, optional anchors, scale, and SDR isolation');
+
+const auto=buildPaintoutGraph({...sdr,targetedMethod:'automatic'});assert.equal(auto.sample.class_type,'SamplerCustomAdvanced');assert.equal(auto.lora.inputs.lora_name,PAINTOUT_MODELS.inpaintLora);assert.equal(auto.single_mask.inputs.expand,2);assert.ok(!auto.apply_anchors);
+const light=buildPaintoutGraph({...sdr,targetedMethod:'light'});assert.equal(light.light.class_type,'ProPainterInpaint');assert.deepEqual(light.save.inputs.decoded_crop,['light',0]);assert.ok(!light.model&&!light.sample);assert.equal(light.source.inputs.processing_scale,.5);
+const upgrade=buildPaintoutGraph({...sdr,targetedMethod:'light',colourPipeline:'sdr_hdr',outputMode:'HLG video'});assert.equal(upgrade.repair_save.inputs.export_format,'EXR sequence');assert.equal(upgrade.save.class_type,'ZuraPaintoutHDRSave');
+console.log('PASS automatic and light SDR paths; optional HDR conversion');

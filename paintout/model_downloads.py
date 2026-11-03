@@ -144,24 +144,24 @@ CATALOG = {'targeted': {'name': 'Targeted video repair',
                              'gated': True,
                              'model_card': 'https://huggingface.co/Lightricks/LTX-2.5'},
                             {'folder': 'vae',
-                             'filename': 'ltx-2.5-video-vae-bf16.safetensors',
-                             'repo': 'Lightricks/LTX-2.5',
-                             'revision': '49b093a39c19169a8a81721dcc541e07e945232f',
-                             'remote_path': 'vae/ltx-2.5-video-vae-bf16.safetensors',
-                             'size_bytes': 1472223346,
-                             'sha256': '847e14ca7f3355debca0cea4eaa24ac0fbcdf0061da054ac89ca638a869ddba3',
-                             'gated': True,
-                             'model_card': 'https://huggingface.co/Lightricks/LTX-2.5'},
-                            {'filename': 'LTX23_Obscura_Remova_v1.safetensors',
-                             'repo': 'WepeNerd/Obscura_Remova',
-                             'revision': '907f5d25e0b1d8fcc15936a064fd85b4609e7d2b',
-                             'remote_path': 'LTX23_Obscura_Remova_v1.safetensors',
+                         'filename': 'ltx-2.5-video-vae-conv-bf16.safetensors',
+                         'repo': 'Lightricks/LTX-2.5',
+                         'revision': '49b093a39c19169a8a81721dcc541e07e945232f',
+                         'remote_path': 'vae/ltx-2.5-video-vae-conv-bf16.safetensors',
+                         'size_bytes': 1452269922,
+                         'sha256': '685b06ee3d9b2039647698fc4ea33175112462fc374e2777312c907897dfce8d',
+                         'gated': True,
+                         'model_card': 'https://huggingface.co/Lightricks/LTX-2.5'},
+                            {'filename': 'ltx-2.3-22b-ic-lora-in-outpainting-0.9.safetensors',
+                             'repo': 'Lightricks/LTX-2.3-22b-IC-LoRA-In-Outpainting',
+                             'revision': '8becd61405133263d9e580be41a92e8f827b01ed',
+                             'remote_path': 'ltx-2.3-22b-ic-lora-in-outpainting-0.9.safetensors',
                              'folder': 'loras',
-                             'size_bytes': 327344864,
-                             'sha256': 'e58ff6e1076caf40707b9b890aeae1d1c0bd26f285f7666aafc052a06d35f22a',
-                             'gated': False,
-                             'model_card': 'https://huggingface.co/WepeNerd/Obscura_Remova'}],
-                  'note': 'Uses the full HDR video VAE; the SDR-only VAE is not downloaded.',
+                             'size_bytes': 1308778338,
+                             'sha256': '73dd0841c0d4f0eb26fb1f017781b841b2752021944ac5ecefe57917f6dae6b5',
+                             'gated': True,
+                             'model_card': 'https://huggingface.co/Lightricks/LTX-2.3-22b-IC-LoRA-In-Outpainting'}],
+                  'note': 'Uses the float32 convolutional VAE and the official in/outpainting adapter.',
                   'license_url': 'https://huggingface.co/Lightricks/LTX-2.5'},
  'full_hdr': {'name': 'Full-scene HDR clean plate',
               'files': [{'folder': 'diffusion_models',
@@ -291,14 +291,30 @@ CATALOG = {'targeted': {'name': 'Targeted video repair',
                     'license_url': 'https://huggingface.co/Lightricks/LTX-2.5-22b-IC-LoRA-SDR-To-HDR'}}
 
 
+# Automatic repair uses the official in/outpainting adapter; guided repair
+# keeps its existing Remova package. Reuse pinned entries, not mutable dicts.
+# Preserve the established anchor-guided HDR package; the experimental
+# inpainting adapter belongs to an explicitly chosen automatic variant.
+CATALOG['targeted_auto_hdr'] = {'name': 'Automatic targeted HDR repair', 'files': [dict(item) for item in CATALOG['targeted_hdr']['files']], 'note': 'Single-pass HDR inpainting with the official adapter.', 'license_url': 'https://huggingface.co/Lightricks/LTX-2.5'}
+CATALOG['targeted_hdr']['files'] = [dict(next(x for x in CATALOG['full_hdr']['files'] if x['filename']=='ltx-2.5-video-vae-bf16.safetensors')) if item['filename']=='ltx-2.5-video-vae-conv-bf16.safetensors' else dict(next(x for x in CATALOG['targeted']['files'] if x['filename']=='LTX23_Obscura_Remova_v1.safetensors')) if item['filename']=='ltx-2.3-22b-ic-lora-in-outpainting-0.9.safetensors' else dict(item) for item in CATALOG['targeted_hdr']['files']]
+CATALOG['targeted_hdr']['note'] = 'Anchor-guided HDR repair with the full HDR VAE and Remova adapter.'
+CATALOG['targeted_light'] = {'name': 'Light video repair (ProPainter)', 'files': [], 'note': 'Requires the ProPainter custom node; it downloads its own weights when first used.', 'license_url': 'https://github.com/sczhou/ProPainter'}
+CATALOG['targeted_auto'] = {
+    'name': 'Automatic targeted video repair',
+    'files': [dict(item) for item in CATALOG['targeted']['files'] if item['filename'] != 'LTX23_Obscura_Remova_v1.safetensors'] + [dict(next(item for item in CATALOG['targeted_auto_hdr']['files'] if item['filename'] == 'ltx-2.3-22b-ic-lora-in-outpainting-0.9.safetensors'))],
+    'note': 'Single-pass masked video repair using the official in/outpainting adapter.',
+    'license_url': 'https://huggingface.co/Lightricks/LTX-2.5',
+}
+
+
 # Inpainting shares the LTX 2.5 base and encoders with repair, but uses the
 # official in/outpainting adapter instead of the removal-only Remova adapter.
 # Keep independent file dictionaries so package discovery cannot mutate repair.
 for _package, _base in (('inpaint', 'targeted'), ('inpaint_hdr', 'targeted_hdr')):
     CATALOG[_package] = {
         'name': 'Object inpainting' + (' · HDR' if _package.endswith('_hdr') else ''),
-        'files': [dict(item) for item in CATALOG[_base]['files']
-                  if item['filename'] != 'LTX23_Obscura_Remova_v1.safetensors'] + [{
+        'files': [dict(next(x for x in CATALOG['full_hdr']['files'] if x['filename']=='ltx-2.5-video-vae-bf16.safetensors')) if _package=='inpaint_hdr' and item['filename']=='ltx-2.5-video-vae-conv-bf16.safetensors' else dict(item) for item in CATALOG[_base]['files']
+                  if item['filename'] not in ('LTX23_Obscura_Remova_v1.safetensors', 'ltx-2.3-22b-ic-lora-in-outpainting-0.9.safetensors')] + [{
             'folder': 'loras',
             'filename': 'ltx-2.3-22b-ic-lora-in-outpainting-0.9.safetensors',
             'repo': 'Lightricks/LTX-2.3-22b-IC-LoRA-In-Outpainting',

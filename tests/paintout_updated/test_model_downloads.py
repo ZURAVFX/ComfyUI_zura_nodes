@@ -330,8 +330,11 @@ class ModelDownloadTests(unittest.TestCase):
                 for item in recipe['files']:
                     downloads._safe_item(item)
             names = {item['filename'] for recipe in downloads.CATALOG.values() for item in recipe['files']}
-            self.assertEqual(len(names), 14)
+            self.assertEqual(len(names), 15)
             self.assertFalse(any('upscal' in name or 'refine' in name for name in names))
+            auto_hdr = {item['filename'] for item in downloads.CATALOG['targeted_auto_hdr']['files']}
+            self.assertIn('ltx-2.3-22b-ic-lora-in-outpainting-0.9.safetensors', auto_hdr)
+            self.assertFalse(downloads.CATALOG['targeted_light']['files'])
             hdr = {item['filename'] for item in downloads.CATALOG['targeted_hdr']['files']}
             self.assertIn('ltx-2.5-video-vae-bf16.safetensors', hdr)
             self.assertNotIn('ltx-2.5-video-vae-conv-bf16.safetensors', hdr)

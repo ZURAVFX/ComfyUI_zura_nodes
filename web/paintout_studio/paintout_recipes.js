@@ -7,6 +7,7 @@ export const PAINTOUT_MODELS={
   hdrVideoVae:'ltx-2.5-video-vae-bf16.safetensors',
   audioVae:'ltx-2.5-audio-vae-bf16.safetensors',
   targetedLora:'LTX23_Obscura_Remova_v1.safetensors',
+  inpaintLora:'ltx-2.3-22b-ic-lora-in-outpainting-0.9.safetensors',
   hdrLora:'ltx-2.5-22b-ic-lora-sdr-to-hdr-1.0.safetensors',
   hdrEmbeddings:'ltx-2.5-22b-ic-lora-sdr-to-hdr-scene-emb.safetensors',
   fullLora:'ltx-2.5-22b-ic-lora-clean-plate-1.0.safetensors',
@@ -14,7 +15,7 @@ export const PAINTOUT_MODELS={
 const modelOptions=(info,node,key)=>{const field=info?.[node]?.input?.required?.[key]||info?.[node]?.input?.optional?.[key];return field?.[0]==='COMBO'?field[1]?.options||[]:Array.isArray(field?.[0])?field[0]:[];};
 const modelChoice=(files,name)=>files.find(file=>file===name)||files.find(file=>String(file).replaceAll('\\','/').split('/').pop()===name);
 function resolvedModelFiles(info){
-  const inputs={model:['UNETLoader','unet_name'],text:['CLIPLoader','clip_name'],videoVae:['VAELoader','vae_name'],hdrVideoVae:['VAELoader','vae_name'],audioVae:['VAELoader','vae_name'],targetedLora:['LoraLoaderModelOnly','lora_name'],fullLora:['LTXICLoRALoaderModelOnly','lora_name'],hdrLora:['LTXICLoRALoaderModelOnly','lora_name'],hdrEmbeddings:['ZuraPaintoutHDRConditioning','file_name']};
+  const inputs={model:['UNETLoader','unet_name'],text:['CLIPLoader','clip_name'],videoVae:['VAELoader','vae_name'],hdrVideoVae:['VAELoader','vae_name'],audioVae:['VAELoader','vae_name'],targetedLora:['LoraLoaderModelOnly','lora_name'],inpaintLora:['LTXICLoRALoaderModelOnly','lora_name'],fullLora:['LTXICLoRALoaderModelOnly','lora_name'],hdrLora:['LTXICLoRALoaderModelOnly','lora_name'],hdrEmbeddings:['ZuraPaintoutHDRConditioning','file_name']};
   return Object.fromEntries(Object.entries(PAINTOUT_MODELS).map(([key,file])=>[key,modelChoice(modelOptions(info,...inputs[key]),file)||file]));
 }
 export const PAINTOUT_DEFAULT_PROMPTS={
@@ -44,7 +45,7 @@ const absolutePath=value=>typeof value==='string'&&(/^[a-z]:[\\/]/i.test(value)|
 const whole=(value,min,max)=>Number.isInteger(Number(value))&&Number(value)>=min&&Number(value)<=max;
 export const paintoutColourPipeline=c=>c.colourPipeline||(c.processingSpace==='HDR (ACEScct)'?'hdr_hdr':'sdr_sdr');
 const hdrSource=c=>['acescg','acescct','hlg_rec2020','pq_rec2020','linear_rec709'].includes(c.sourceColour==='auto'?c.detectedSourceColour:c.sourceColour);
-const normalise=c=>({mode:'targeted',startFrame:0,frameCount:81,sequenceFps:25,sourceColour:'srgb_display',processingSpace:'SDR (sRGB)',width:1152,height:640,outputMode:'SDR video',savePrefix:'paintout/studio',exrPrecision:'float32',keepAudio:true,seed:42,maskBlockSize:32,...c});
+const normalise=c=>({mode:'targeted',startFrame:0,frameCount:81,sequenceFps:25,sourceColour:'srgb_display',processingSpace:'SDR (sRGB)',width:1152,height:640,outputMode:'SDR video',savePrefix:'paintout/studio',exrPrecision:'float32',keepAudio:true,seed:42,maskBlockSize:32,targetedMethod:'guided',...c});
 
 /** Returns an actionable message, or an empty string when ready to queue. */
 export function paintoutHDRFrameLimit(c){
@@ -80,6 +81,9 @@ export function paintoutValidation(config={}){
     const limit=paintoutHDRFrameLimit(c);
     if(c.frameCount>limit)return `SDR to HDR supports ${limit} frames at this plate size (streaming HDR memory limits). This clip has ${c.frameCount} frames. Keep SDR output for the full clip, or trim a shorter clip for HDR.`;
   }
+  if(!['automatic','guided','light'].includes(c.targetedMethod))return 'Choose light, automatic or guided repair.';
+  if(pipeline==='hdr_hdr'&&c.targetedMethod==='light'&&c.mode==='targeted')return 'Light repair currently supports SDR footage. Choose Guided or Quality for HDR footage.';
+  if(c.processingScale!=null&&![1,.75,.5,.25].includes(Number(c.processingScale)))return 'Choose full, three-quarter, half or quarter processing scale.';
   if(!PAINTOUT_OUTPUT_MODES.includes(c.outputMode))return 'Choose a supported video or EXR export.';
   if(!['float32','float16'].includes(c.exrPrecision))return 'Choose float32 or float16 EXR precision.';
   if(!String(c.savePrefix??'').trim()||absolutePath(c.savePrefix)||String(c.savePrefix).split(/[\\/]/).includes('..'))return 'Use an output name inside the ComfyUI output folder.';
@@ -92,7 +96,7 @@ export function paintoutValidation(config={}){
       if(missing!==undefined)return `Track or mark absent the remaining mask section before rendering. First unreviewed frame: ${missing}.`;
     }
     const anchors=(Array.isArray(c.anchors)?c.anchors:[]).filter(a=>a.enabled!==false);
-    if(!anchors.length)return 'Add at least one painted clean frame and enter its source-frame number.';
+    if(!anchors.length&&c.targetedMethod==='guided')return 'Add at least one painted clean frame and enter its source-frame number.';
     const seen=new Set(),start=Number(c.startFrame),last=start+Number(c.frameCount)-1;
     for(let i=0;i<anchors.length;i++){
       const a=anchors[i],frame=Number(a.frame),resolved=frame===-1?last:frame;
@@ -124,7 +128,7 @@ export function paintoutRangeFix(config,sourceFrames,maskFrames){
 
 export function buildPaintoutGraph(config={},info){
   const error=paintoutValidation(config);if(error)throw new Error(error);
-  const c=normalise(config),targeted=c.mode==='targeted',g={},models=resolvedModelFiles(info);
+  const c=normalise(config),targeted=c.mode==='targeted',light=targeted&&paintoutColourPipeline(c)!=='hdr_hdr'&&c.targetedMethod==='light',singleInpaint=targeted&&c.targetedMethod==='automatic',hasAnchors=targeted&&(c.anchors||[]).some(a=>a.enabled!==false),g={},models=resolvedModelFiles(info);
   const ref=(id,slot=0)=>[id,slot],node=(id,class_type,inputs)=>{g[id]={class_type,inputs,_meta:{title:paintoutStages[id]||id}};};
   const projectMask=targeted&&c.maskProject&&Number.isInteger(c.maskRevision);
   if(projectMask)node('mask_source','ZuraPaintoutMaskSource',{project:c.maskProject,revision:c.maskRevision});
@@ -132,42 +136,56 @@ export function buildPaintoutGraph(config={},info){
   node('source',targeted?(projectMask?'ZuraPaintoutEditorCrop':'ZuraPaintoutCrop'):'ZuraPaintoutFullFrame',{
     plate_path:c.colourPipeline?ref('colour_check'):c.source,...(targeted?{mask_path:projectMask?ref('mask_source'):c.mask}:{}),colour_space:c.sourceColour,
     start_frame:Number(c.startFrame),frame_count:Number(c.frameCount),sequence_fps:Number(c.sequenceFps),
-    context_pixels:128,max_crop_side:768,repair_grow:targeted?Number(c.maskGrow??0):0,feather_pixels:targeted?Number(c.maskFeather??0):0,
-    processing_mode:paintoutColourPipeline(c)==='hdr_hdr'?'HDR (ACEScct)':'SDR (sRGB)',framing_mode:'Plate resolution (stretch to next grid)',
+    context_pixels:128,max_crop_side:768,...(singleInpaint||light?{processing_scale:Number(c.processingScale??1)}:{}),repair_grow:targeted?Number(c.maskGrow??0):0,feather_pixels:targeted?Number(c.maskFeather??0):0,
+    processing_mode:paintoutColourPipeline(c)==='hdr_hdr'?'HDR (ACEScct)':'SDR (sRGB)',framing_mode:singleInpaint||light?'Smart crop (experimental)':'Plate resolution (stretch to next grid)',
     render_width:Number(c.width),render_height:Number(c.height),
   });
-  if(targeted)node('anchors','ZuraPaintoutAnchors',{plate:ref('source',2),anchors:JSON.stringify(c.anchors.filter(a=>a.enabled!==false).map(a=>({file:a.file,frame:Number(a.frame),strength:Number(a.strength??.75),enabled:true,...(a.colour_space?{colour_space:a.colour_space}:{})})))});
+  if(light){
+    node('take','ZuraPaintoutTake',{plate:ref('source',2)});
+    node('light','ProPainterInpaint',{image:ref('take'),mask:ref('take',1),width:ref('take',2),height:ref('take',3),mask_dilates:5,flow_mask_dilates:8,ref_stride:6,neighbor_length:6,subvideo_length:50,raft_iter:20,fp16:'enable'});
+    node('save','ZuraPaintoutUncrop',{decoded_crop:ref('light'),plate:ref('source',2),output_name:c.savePrefix,precision:c.exrPrecision,match_context:false,export_format:c.outputMode,motion_preview:true});
+    if(paintoutColourPipeline(c)==='sdr_hdr'){g.repair_save=g.save;delete g.save;Object.assign(g.repair_save.inputs,{export_format:'EXR sequence',motion_preview:false});if(!c.separateHDR)appendHDRConversion(g,c,['repair_save',0],['source',2],info);}
+    return g;
+  }
+  if(hasAnchors)node('anchors','ZuraPaintoutAnchors',{plate:ref('source',2),anchors:JSON.stringify(c.anchors.filter(a=>a.enabled!==false).map(a=>({file:a.file,frame:Number(a.frame),strength:Number(a.strength??.75),enabled:true,...(a.colour_space?{colour_space:a.colour_space}:{})})))});
   node('model','UNETLoader',{unet_name:models.model,weight_dtype:'default'});
-  node('lora',targeted?'LoraLoaderModelOnly':'LTXICLoRALoaderModelOnly',{model:ref('model'),lora_name:targeted?models.targetedLora:models.fullLora,strength_model:targeted?1.25:1});
+  node('lora',targeted&&!singleInpaint?'LoraLoaderModelOnly':'LTXICLoRALoaderModelOnly',{model:ref('model'),lora_name:singleInpaint?models.inpaintLora:targeted?models.targetedLora:models.fullLora,strength_model:targeted&&!singleInpaint?1.25:1});
   node('memory','ZuraPaintoutGuideMemory',{model:ref('lora'),query_chunk:1024});
   node('text','CLIPLoader',{clip_name:models.text,type:'ltxv',device:'default'});
-  node('positive','CLIPTextEncode',{clip:ref('text'),text:String(c.prompt||'').trim()||PAINTOUT_DEFAULT_PROMPTS[c.mode]});
-  node('negative','CLIPTextEncode',{clip:ref('text'),text:targeted?'blurry, low resolution, ugly, garbled mess, compression artifacts, glitch, stop motion, still image, pixelated, robotic voice, oversaturated':'people, person, pedestrian, human, cyclist, car, taxi, vehicle, bicycle, ghosting, blurry, distorted, jitter'});
-  node('video_vae','VAELoader',{vae_name:paintoutColourPipeline(c)==='hdr_hdr'?models.hdrVideoVae:models.videoVae});
+  node('positive','CLIPTextEncode',{clip:ref('text'),text:singleInpaint&&(!String(c.prompt||'').trim()||c.prompt===PAINTOUT_DEFAULT_PROMPTS.targeted)?'':String(c.prompt||'').trim()||PAINTOUT_DEFAULT_PROMPTS[c.mode]});
+  node('negative','CLIPTextEncode',{clip:ref('text'),text:singleInpaint?'':targeted?'blurry, low resolution, ugly, garbled mess, compression artifacts, glitch, stop motion, still image, pixelated, robotic voice, oversaturated':'people, person, pedestrian, human, cyclist, car, taxi, vehicle, bicycle, ghosting, blurry, distorted, jitter'});
+  node('video_vae','VAELoader',{vae_name:singleInpaint?models.videoVae:paintoutColourPipeline(c)==='hdr_hdr'?models.hdrVideoVae:models.videoVae});
   node('float_vae','LTXVVAEForceFloat32',{vae:ref('video_vae')});
   node('audio_vae','VAELoader',{vae_name:models.audioVae});
   node('take','ZuraPaintoutTake',{plate:ref('source',2)});
   node('conditioning','LTXVConditioning',{positive:ref('positive'),negative:ref('negative'),frame_rate:ref('take',5)});
   node('latent','EmptyLTXVLatentVideo',{width:ref('take',2),height:ref('take',3),length:ref('take',4),batch_size:1});
-  if(targeted){
+  if(targeted&&!singleInpaint){
     node('grow_mask','GrowMask',{mask:ref('take',1),expand:32,tapered_corners:true});
     if(Number(c.maskBlockSize)>0)node('block_mask','BlockifyMask',{masks:ref('grow_mask'),block_size:Number(c.maskBlockSize),device:'gpu'});
     node('invert_mask','InvertMask',{mask:ref(Number(c.maskBlockSize)>0?'block_mask':'grow_mask')});
   }
+  if(singleInpaint){if(paintoutColourPipeline(c)!=='hdr_hdr')node('single_mask','GrowMask',{mask:ref('take',1),expand:2,tapered_corners:false});node('inpaint_preprocess','LTXVInpaintPreprocess',{images:ref('take'),mask:paintoutColourPipeline(c)==='hdr_hdr'?ref('take',1):ref('single_mask')});}
   node('guide','LTXAddVideoICLoRAGuideAdvanced',{
-    positive:ref('conditioning'),negative:ref('conditioning',1),vae:ref('float_vae'),latent:ref('latent'),image:ref('take'),
-    ...(targeted?{attention_mask:ref('invert_mask')}:{}),frame_idx:0,strength:1,latent_downscale_factor:1,crop:'disabled',
+    positive:ref('conditioning'),negative:ref('conditioning',1),vae:ref('float_vae'),latent:ref('latent'),image:ref(singleInpaint?'inpaint_preprocess':'take'),
+    ...(targeted&&!singleInpaint?{attention_mask:ref('invert_mask')}:{}),frame_idx:0,strength:1,latent_downscale_factor:1,crop:'disabled',
     use_tiled_encode:false,tile_size:256,tile_overlap:64,attention_strength:1,use_streaming:false,tile_frames:97,
   });
-  const conditioned=targeted?'apply_anchors':'guide';
-  if(targeted)node('apply_anchors','ZuraPaintoutApplyAnchors',{positive:ref('guide'),negative:ref('guide',1),vae:ref('float_vae'),latent:ref('guide',2),anchors:ref('anchors')});
+  const conditioned=hasAnchors?'apply_anchors':'guide';
+  if(hasAnchors)node('apply_anchors','ZuraPaintoutApplyAnchors',{positive:ref('guide'),negative:ref('guide',1),vae:ref('float_vae'),latent:ref('guide',2),anchors:ref('anchors')});
   node('audio','LTXVEmptyLatentAudio',{audio_vae:ref('audio_vae'),frames_number:ref('take',4),frame_rate:ref('take',5),batch_size:1});
   node('combine','LTXVConcatAVLatent',{video_latent:ref(conditioned,2),audio_latent:ref('audio')});
-  node('sample','KSampler',{model:ref('memory'),positive:ref(conditioned),negative:ref(conditioned,1),latent_image:ref('combine'),seed:Number(c.seed),steps:8,cfg:1,sampler_name:'euler_ancestral',scheduler:'linear_quadratic',denoise:1});
+  if(singleInpaint){
+    node('noise','RandomNoise',{noise_seed:Number(c.seed)});
+    node('guider','CFGGuider',{model:ref('memory'),positive:ref(conditioned),negative:ref(conditioned,1),cfg:1});
+    node('sampler','KSamplerSelect',{sampler_name:'euler_ancestral_cfg_pp'});
+    node('sigmas','ManualSigmas',{sigmas:'1.0, 0.99375, 0.9875, 0.98125, 0.975, 0.909375, 0.725, 0.421875, 0.0'});
+    node('sample','SamplerCustomAdvanced',{noise:ref('noise'),guider:ref('guider'),sampler:ref('sampler'),sigmas:ref('sigmas'),latent_image:ref('combine')});
+  }else node('sample','KSampler',{model:ref('memory'),positive:ref(conditioned),negative:ref(conditioned,1),latent_image:ref('combine'),seed:Number(c.seed),steps:8,cfg:1,sampler_name:'euler_ancestral',scheduler:'linear_quadratic',denoise:1});
   node('separate','LTXVSeparateAVLatent',{av_latent:ref('sample')});
   node('crop_guides','LTXVCropGuides',{positive:ref(conditioned),negative:ref(conditioned,1),latent:ref('separate')});
   node('decode','VAEDecodeTiled',{samples:ref('crop_guides',2),vae:ref('float_vae'),tile_size:512,overlap:64,temporal_size:128,temporal_overlap:32});
-  node('save','ZuraPaintoutUncrop',{decoded_crop:ref('decode'),plate:ref('source',2),output_name:c.savePrefix,precision:c.exrPrecision,match_context:targeted,export_format:c.outputMode,motion_preview:true});
+  node('save','ZuraPaintoutUncrop',{decoded_crop:ref('decode'),plate:ref('source',2),output_name:c.savePrefix,precision:c.exrPrecision,match_context:targeted&&!singleInpaint,export_format:c.outputMode,motion_preview:true});
   if(paintoutColourPipeline(c)==='sdr_hdr'){
     g.repair_save=g.save;delete g.save;
     Object.assign(g.repair_save.inputs,{export_format:'EXR sequence',motion_preview:false});
@@ -178,14 +196,23 @@ export function buildPaintoutGraph(config={},info){
 
 /** Availability is mode-specific: one adapter need not block the other mode. */
 export function paintoutAvailability(info={},mode='targeted',config={}){
-  const targeted=mode!=='full',missing=[];if(config.colourPipeline&&!info.ZuraPaintoutColourCheck)missing.push('ZuraPaintoutColourCheck (restart ComfyUI after updating)');
+  const targeted=mode!=='full',light=targeted&&paintoutColourPipeline(config)!=='hdr_hdr'&&config.targetedMethod==='light',singleInpaint=targeted&&(config.targetedMethod??'guided')==='automatic',missing=[];if(config.colourPipeline&&!info.ZuraPaintoutColourCheck)missing.push('ZuraPaintoutColourCheck (restart ComfyUI after updating)');
   const options=(node,key)=>{const f=info[node]?.input?.required?.[key]||info[node]?.input?.optional?.[key];return f?.[0]==='COMBO'?f[1]?.options||[]:Array.isArray(f?.[0])?f[0]:[];};
-  const expected={UNETLoader:['unet_name',PAINTOUT_MODELS.model],CLIPLoader:['clip_name',PAINTOUT_MODELS.text],[targeted?'LoraLoaderModelOnly':'LTXICLoRALoaderModelOnly']:['lora_name',targeted?PAINTOUT_MODELS.targetedLora:PAINTOUT_MODELS.fullLora]};
+  if(light){
+    for(const type of ['ZuraPaintoutCrop','ZuraPaintoutTake','ZuraPaintoutUncrop','ProPainterInpaint',...(config.maskProject?['ZuraPaintoutEditorCrop','ZuraPaintoutMaskSource']:[])])if(!info[type])missing.push(type);
+    if(paintoutColourPipeline(config)==='sdr_hdr'){
+      for(const [type,key,file] of [['UNETLoader','unet_name',PAINTOUT_MODELS.model],['VAELoader','vae_name',PAINTOUT_MODELS.hdrVideoVae],['LTXICLoRALoaderModelOnly','lora_name',PAINTOUT_MODELS.hdrLora],['ZuraPaintoutHDRConditioning','file_name',PAINTOUT_MODELS.hdrEmbeddings]])if(!modelChoice(options(type,key),file))missing.push(file);
+      for(const type of ['ZuraPaintoutHDRPrepare','ZuraPaintoutHDRSave','ZuraPaintoutHDRResume','LTXVVAEForceFloat32','LTXVConditioning','EmptyLTXVLatentVideo','LTXAddVideoICLoRAGuide','ManualSigmas','LTXVTiledFusionSampler','KSamplerSelect','VAEDecodeTiled'])if(!info[type])missing.push(type);
+    }
+    return {ready:!missing.length,missing:[...new Set(missing)]};
+  }
+  const expected={UNETLoader:['unet_name',PAINTOUT_MODELS.model],CLIPLoader:['clip_name',PAINTOUT_MODELS.text],[targeted&&!singleInpaint?'LoraLoaderModelOnly':'LTXICLoRALoaderModelOnly']:['lora_name',singleInpaint?PAINTOUT_MODELS.inpaintLora:targeted?PAINTOUT_MODELS.targetedLora:PAINTOUT_MODELS.fullLora]};
   for(const [node,[key,file]] of Object.entries(expected))if(!modelChoice(options(node,key),file))missing.push(file);
-  for(const file of [paintoutColourPipeline(config)==='hdr_hdr'?PAINTOUT_MODELS.hdrVideoVae:PAINTOUT_MODELS.videoVae,PAINTOUT_MODELS.audioVae])if(!modelChoice(options('VAELoader','vae_name'),file))missing.push(file);
+  for(const file of [paintoutColourPipeline(config)==='hdr_hdr'&&!singleInpaint?PAINTOUT_MODELS.hdrVideoVae:PAINTOUT_MODELS.videoVae,PAINTOUT_MODELS.audioVae])if(!modelChoice(options('VAELoader','vae_name'),file))missing.push(file);
   const types=['UNETLoader','CLIPLoader','CLIPTextEncode','VAELoader','ZuraPaintoutTake','ZuraPaintoutUncrop','ZuraPaintoutGuideMemory','LTXVVAEForceFloat32','LTXVConditioning','EmptyLTXVLatentVideo','LTXAddVideoICLoRAGuideAdvanced','LTXVEmptyLatentAudio','LTXVConcatAVLatent','KSampler','LTXVSeparateAVLatent','LTXVCropGuides','VAEDecodeTiled',...(targeted?['ZuraPaintoutCrop','ZuraPaintoutAnchors','ZuraPaintoutApplyAnchors','GrowMask',...(config.maskBlockSize===0?[]:['BlockifyMask']),'InvertMask','LoraLoaderModelOnly']:['ZuraPaintoutFullFrame','LTXICLoRALoaderModelOnly'])];
-  for(const node of types)if(!info[node])missing.push(node);
-  if(info.KSampler&&!options('KSampler','scheduler').includes('linear_quadratic'))missing.push('LTX linear_quadratic scheduler');
+  if(singleInpaint){for(const node of ['GrowMask','LTXICLoRALoaderModelOnly','LTXVInpaintPreprocess','RandomNoise','CFGGuider','KSamplerSelect','ManualSigmas','SamplerCustomAdvanced'])if(!info[node])missing.push(node);}
+  for(const node of types)if(!info[node]&&!(singleInpaint&&['GrowMask','BlockifyMask','InvertMask','LoraLoaderModelOnly','KSampler'].includes(node)))missing.push(node);
+  if(!singleInpaint&&info.KSampler&&!options('KSampler','scheduler').includes('linear_quadratic'))missing.push('LTX linear_quadratic scheduler');
   const guideInputs=info.LTXAddVideoICLoRAGuideAdvanced?.input;
   if(guideInputs&&!guideInputs.optional?.use_streaming&&!guideInputs.required?.use_streaming)missing.push('Current ComfyUI-LTXVideo guide nodes');
   if(paintoutColourPipeline(config)==='sdr_hdr'){

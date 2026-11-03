@@ -172,7 +172,10 @@ class ZuraPaintoutHDRPrepare:
         return {'required': {'saved_sequence': ('STRING',), 'plate': ('ZURA_PLATE',)},
                 'optional': {'sampling_mode': (HDR_SAMPLING_MODES,), 'release_models': ('BOOLEAN', {'default': False}),
                              'model_name': ('STRING', {'default': DEFAULT_HDR_MODEL})}}
-    RETURN_TYPES = ('IMAGE', 'ZURA_HDR_TAKE', 'INT', 'INT', 'INT', 'FLOAT', 'INT', 'COMBO')
+    # Native UNETLoader exposes its filename as a legacy list-valued COMBO.
+    # A wildcard output permits that link on both old and current ComfyUI;
+    # prepare validates the model name before returning it and gates loading.
+    RETURN_TYPES = ('IMAGE', 'ZURA_HDR_TAKE', 'INT', 'INT', 'INT', 'FLOAT', 'INT', '*')
     RETURN_NAMES = ('acescct_guide', 'take', 'width', 'height', 'frames', 'fps', 'tile_frames', 'model_name')
     FUNCTION = 'prepare'
     CATEGORY = CATEGORY

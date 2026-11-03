@@ -118,7 +118,7 @@ export class PaintoutEditor{
     this.tool='include';this.viewer.setTool(this.tool);this.$('brush').oninput=()=>{this.viewer.setBrushSize(Number(this.$('brush').value));this.$('brush-value').textContent=this.$('brush').value+' px';};this.viewer.setBrushSize(32);
     this.$('opacity').oninput=()=>this.viewer.setOpacity(Number(this.$('opacity').value)/100);
     this.$('undo').onclick=()=>{this.viewer.undo();if(this.stage==='clean')this.saveCleanMask();if(this.stage==='mask'&&this.manualDirty)this.flushManual().catch(e=>this.status(e.message));};this.$('clear').onclick=()=>this.clearSelection();
-    this.$('continue').onclick=()=>this.setStage('clean');this.$('selection').onclick=()=>this.runMask(true);this.$('track').onclick=()=>this.runMask(false);this.$('absent').onclick=()=>this.runMask(false,'absent');
+    this.$('continue').onclick=()=>this.setStage(this.w.state.mode==='targeted'&&((this.w.state.targetedMethod??'guided')!=='guided')?'render':'clean');this.$('selection').onclick=()=>this.runMask(true);this.$('track').onclick=()=>this.runMask(false);this.$('absent').onclick=()=>this.runMask(false,'absent');
     for(const field of ['range-start','range-end','direction','operation'])this.$(field).onchange=()=>{this.customRange=true;this.saveSegmentRange();this.updateControls();};
     this.$('repair-segment').onclick=()=>this.beginMaskSegment('replace').catch(error=>this.status(error.message));
     this.$('add-segment').onclick=()=>this.beginMaskSegment('add').catch(error=>this.status(error.message));
@@ -356,6 +356,8 @@ export class PaintoutEditor{
   hydrateControls(){
     const w=this.w;
     for(const [field,key]of Object.entries({start:'startFrame',count:'frameCount',fps:'sequenceFps',colour:'sourceColour',processing:'processingSpace',width:'width',height:'height',output:'outputMode',seed:'seed'})){const input=w.$(field);if(input)input.value=w.state[key];}
+    if(w.$('method'))w.$('method').value=w.state.targetedMethod??'guided';
+    if(w.$('hdr-scale'))w.$('hdr-scale').value=String(w.state.processingScale??1);
     if(w.$('prompt'))w.$('prompt').value=w.prompts[w.state.mode]||'';
     this.$('grow').value=w.state.maskGrow??0;w.state.maskFeather=0;
     this.$('instruction').value=this.cleanupInstruction();this.$('range-start').value=w.state.startFrame;this.$('range-end').value=w.state.startFrame+w.state.frameCount-1;
@@ -461,12 +463,13 @@ export class PaintoutEditor{
     this.updateControls();
   }
   updateControls(){
-    const clean=this.stage==='clean',busy=this.w.busy();this.projects.hidden=false;this.$('track').hidden=false;this.$('import-mask').hidden=false;this.guideHelp.hidden=true;if(this.rippleImport)this.rippleImport.hidden=true;
+    const clean=this.stage==='clean',busy=this.w.busy();
+    this.projects.hidden=false;this.$('track').hidden=false;this.$('import-mask').hidden=false;this.guideHelp.hidden=true;if(this.rippleImport)this.rippleImport.hidden=true;
     const inpaint=['inpaint','ripple'].includes(this.w.state.mode);this.objectReferenceTools.hidden=!inpaint||!clean;
     this.objectReferenceAdd.disabled=busy;this.objectReferenceAdd.textContent=this.referenceUploading?'Uploading…':'Add object references';
     this.objectReferenceList.replaceChildren(...(this.w.state.objectReferences||[]).map((item,index)=>{const button=el('button',item.name+' ×');button.type='button';button.disabled=busy;button.title='Remove '+item.name;button.setAttribute('aria-label','Remove '+item.name);button.onclick=()=>{this.w.state.objectReferences.splice(index,1);this.w.save();this.updateControls();};return button;}));
     const cleanStage=this.nav.querySelector('[data-stage="clean"]');if(cleanStage)cleanStage.textContent=inpaint?'Reference frame':'Clean frames';
-    const continueLabel=this.$('continue').querySelector('span');if(continueLabel)continueLabel.textContent=inpaint?'Next: reference frame':'Next: clean frames';
+    const continueLabel=this.$('continue').querySelector('span');if(continueLabel)continueLabel.textContent=inpaint?'Next: reference frame':this.w.state.mode==='targeted'&&((this.w.state.targetedMethod??'guided')!=='guided')?'Next: render':'Next: clean frames';
     this.$('instruction').placeholder=inpaint?'Describe the object and how it fits the scene':'e.g. Remove only the silver car. Keep the other vehicles.';
     this.$('clean').textContent=inpaint?'Create reference frame':'Clean with FLUX 3';
     if(clean&&['include','exclude'].includes(this.tool)){this.tool='brush';this.viewer.setTool('brush');}

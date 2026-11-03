@@ -403,14 +403,15 @@ class ZuraPaintoutCrop:
         'colour_space':(COLOUR_SPACES,),
         'start_frame':integer(0),'frame_count':integer(81,1,993),'sequence_fps':floating(25,1,120),
         'context_pixels':integer(128,32,2048),'max_crop_side':integer(768,128,2048),
-        'repair_grow':integer(16,0,256),'feather_pixels':integer(0,0,256)},'optional':{'processing_mode':(PROCESSING_MODES,), 'framing_mode':(['Plate resolution (stretch to next grid)','Smart crop (experimental)','Full frame (original method)','Full frame (fit, no crop)','Source resolution (pad, no resize)'],), 'render_width':integer(1152,64,4096), 'render_height':integer(640,64,4096)}}
+        'repair_grow':integer(16,0,256),'feather_pixels':integer(0,0,256)},'optional':{'processing_mode':(PROCESSING_MODES,), 'framing_mode':(['Plate resolution (stretch to next grid)','Smart crop (experimental)','Full frame (original method)','Full frame (fit, no crop)','Source resolution (pad, no resize)'],), 'render_width':integer(1152,64,4096), 'render_height':integer(640,64,4096), 'processing_scale':('FLOAT',{'default':1.0,'min':0.25,'max':1.0,'step':0.25})}}
     RETURN_TYPES=('IMAGE','MASK','ZURA_PLATE','INT','INT','INT','FLOAT','STRING')
     RETURN_NAMES=('crop_frames','crop_mask','plate','width','height','padded_frames','fps','crop_report')
     FUNCTION='prepare'; CATEGORY=CATEGORY
     @classmethod
     def IS_CHANGED(cls,**kw):return float('nan')
     @cpu_frames
-    def prepare(self,plate_path,mask_path,colour_space,start_frame,frame_count,sequence_fps,context_pixels,max_crop_side,repair_grow,feather_pixels,processing_mode='HDR (ACEScct)',framing_mode='Smart crop (experimental)',render_width=1152,render_height=640):
+    def prepare(self,plate_path,mask_path,colour_space,start_frame,frame_count,sequence_fps,context_pixels,max_crop_side,repair_grow,feather_pixels,processing_mode='HDR (ACEScct)',framing_mode='Smart crop (experimental)',render_width=1152,render_height=640,processing_scale=1.0):
+        if processing_scale not in (1.,.75,.5,.25):raise ValueError('Choose a supported processing scale')
         if not str(plate_path).strip():raise ValueError('Select the original footage before running the paintout')
         if not isinstance(mask_path,dict) and not str(mask_path).strip():raise ValueError('Select matching removal-mask footage: white = remove, black = keep')
         d=describe(plate_path);m=mask_path if isinstance(mask_path,dict) else describe(mask_path)
@@ -456,7 +457,7 @@ class ZuraPaintoutCrop:
             if x1<=x0:raise ValueError('Mask is empty: white must mark the object to remove')
             margin=max(context_pixels,repair_grow+feather_pixels+32)
             x0=max(0,x0-margin);y0=max(0,y0-margin);x1=min(W,x1+margin);y1=min(H,y1+margin)
-            w,h=x1-x0,y1-y0;scale=min(1.,max_crop_side/max(w,h));rw=max(1,round(w*scale));rh=max(1,round(h*scale))
+            w,h=x1-x0,y1-y0;scale=min(float(processing_scale),max_crop_side/max(w,h));rw=max(1,round(w*scale));rh=max(1,round(h*scale))
             pw=max(64,math.ceil(rw/64)*64);ph=max(64,math.ceil(rh/64)*64)
         else:scale=max(rw/w,rh/h)
         padded=math.ceil((frame_count-1)/8)*8+1

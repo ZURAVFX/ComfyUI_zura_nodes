@@ -35,6 +35,14 @@ class HDRCheckpointTests(unittest.TestCase):
     def write(self):
         (self.folder/'paintout.json').write_text(json.dumps(dict(plate=self.plate)),encoding='utf-8')
 
+    def test_model_gateway_type_connects_to_native_loader_combo(self):
+        self.assertEqual(hdr.ZuraPaintoutHDRPrepare.RETURN_TYPES[7], '*')
+        try:
+            from comfy_execution.validation import validate_node_input
+        except ImportError:
+            return  # Live ComfyUI integration also validates this link.
+        self.assertTrue(validate_node_input(hdr.ZuraPaintoutHDRPrepare.RETURN_TYPES[7], ['ltx-model.safetensors']))
+
     def test_tiled_shape_allows_87_hd_frames_without_smaller_proxy(self):
         self.assertEqual(hdr.conversion_shape(1920,1080,87,'tiled_fusion'),(1920,1088,89))
         self.assertEqual(hdr.conversion_window(1920,1088),17)

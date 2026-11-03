@@ -1,0 +1,9 @@
+import assert from 'node:assert/strict';
+import {buildPaintoutGraph,paintoutValidation,PAINTOUT_MODELS} from '../../web/paintout_studio/paintout_recipes.js';
+const base={mode:'targeted',source:'C:/fixtures/plate.mp4',mask:'C:/fixtures/mask.png',startFrame:10,frameCount:17,sequenceFps:25,width:512,height:320,seed:42,maskBlockSize:32,anchors:[{file:'C:/fixtures/a.png',frame:10,strength:.75},{file:'C:/fixtures/b.png',frame:26,strength:.55}]};
+for(const [pipeline,space,processing,output,ext] of [['sdr_sdr','srgb_display','SDR (sRGB)','SDR video','png'],['sdr_hdr','srgb_display','SDR (sRGB)','HLG video','png'],['hdr_hdr','acescg','HDR (ACEScct)','EXR sequence','exr']]){
+ const c={...base,colourPipeline:pipeline,sourceColour:space,processingSpace:processing,outputMode:output,separateHDR:true,anchors:base.anchors.map(a=>({...a,file:a.file.replace('.png','.'+ext)}))};
+ const g=buildPaintoutGraph(c);assert.equal(g.lora.class_type,'LoraLoaderModelOnly');assert.equal(g.lora.inputs.lora_name,PAINTOUT_MODELS.targetedLora);assert.equal(g.lora.inputs.strength_model,1.25);assert.equal(g.sample.class_type,'KSampler');assert.equal(g.sample.inputs.sampler_name,'euler_ancestral');assert.equal(g.sample.inputs.scheduler,'linear_quadratic');assert.equal(g.source.inputs.framing_mode,'Plate resolution (stretch to next grid)');assert.deepEqual(g.combine.inputs.video_latent,['apply_anchors',2]);assert.equal(g.guide.inputs.image[0],'take');assert.equal(g.save?.inputs.match_context??g.repair_save?.inputs.match_context,true);assert.equal(g.video_vae.inputs.vae_name,pipeline==='hdr_hdr'?PAINTOUT_MODELS.hdrVideoVae:PAINTOUT_MODELS.videoVae);
+ assert.deepEqual(JSON.parse(g.anchors.inputs.anchors).map(a=>[a.frame,a.strength]),[[10,.75],[26,.55]]);assert.match(paintoutValidation({...c,anchors:[]}),/painted clean frame/);
+}
+console.log('PASS default guided recipe and two timed anchors across colour modes');
