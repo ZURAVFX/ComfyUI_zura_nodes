@@ -1,5 +1,12 @@
 # Release notes
 
+## 1.3.44 - 3 November 2026
+
+- Share a validated Hugging Face connection across all Studio model installers. Offer optional local credential storage, clear model terms links and retry of missing files after connecting.
+- Add token-free browser download and verified streamed import to Image, Video, HDR and the integrated Paintout tools. Reuse the chosen models folder, keep original downloads and reject incorrect or incomplete files without overwriting installed models.
+- Fix Watermark removal getting stuck with an empty optional first-frame guide. Choosing Use reference now opens the image picker; cancelling keeps the guide off.
+- Use ComfyUI workflow readiness for the model setup banner, so installed models do not trigger contradictory missing-download warnings. Keep genuinely missing extensions and model files separate.
+
 ## 1.3.43 - 3 November 2026
 
 - Make the Watermark removal model label a dropdown in the main toolbar. Switch between LTX 2.5 Quality and ProPainter Light without losing source footage, mask layers or the current step.

@@ -74,7 +74,7 @@ class ModelDownloadRouteTests(unittest.IsolatedAsyncioTestCase):
         self.addCleanup(self.catalog.stop)
         self.downloads.register_routes()
         self.downloads.register_routes()
-        self.assertEqual(len(self.routes), 5, 'Repeated registration must not add duplicate endpoints.')
+        self.assertEqual(len(self.routes), 10, 'Repeated registration must not duplicate download, access or browser import endpoints.')
         guard = importlib.import_module(prefix + '.media_source')
         self.assertEqual(Path(guard.__file__).resolve(), (Path(package.__path__[0]) / 'media_source.py').resolve())
         app = web.Application()

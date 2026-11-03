@@ -1,8 +1,10 @@
 import {maskIcons} from './paintout_icons.js';
 import {groupMissingNodes} from '../studio_node_setup.js';
 import {ModelStorage} from '../studio_model_storage.js';
+import {ModelAccess,importModelFile} from '../studio_model_access.js';
 
 const ROUTE='/zura/paintout/model-downloads';
+const jobAccess=job=>job?.phase==='failed'&&job.auth_required?job:null;
 const ACTIVE=new Set(['queued','downloading','verifying','cancelling']);
 const el=(tag,text)=>{const node=document.createElement(tag);if(text!=null)node.textContent=text;return node;};
 const bytes=value=>{const size=Number(value)||0;return size>=1e9?`${(size/1e9).toFixed(1)} GB`:size>=1e6?`${Math.ceil(size/1e6)} MB`:`${Math.max(0,Math.round(size/1e3))} KB`;};
@@ -15,8 +17,9 @@ export class PaintoutModels{
     this.w=workspace;this.models=[];this.job=null;this.context={};this.loading=false;this.closed=false;this.generation=0;
     const style=el('link');style.rel='stylesheet';style.href=new URL('./paintout_models.css',import.meta.url).href;workspace.page.append(style);style.onload=()=>this.positionPanel();
     this.root=el('details');this.root.className='zps-models';
-    this.root.innerHTML=`<summary title="Check and download Paintout models">${maskIcons.download}<span>Models</span><span data-model-badge></span></summary><section class="zps-models-panel" aria-label="Paintout model setup"><header><div><h3>Set up your models</h3><p>Files already on this computer are reused.</p></div><button type="button" data-model-close aria-label="Close model setup">${maskIcons.x}</button></header><label class="zps-models-choice">Models for<select data-model-package aria-label="Choose what to set up"></select></label><p class="zps-models-reason" data-model-reason></p><div data-model-files></div><details class="zps-models-access"><summary>Model licences and access</summary><div data-model-licences></div><p>For gated files, sign in and accept the licence on Hugging Face, download in your browser, then choose Install downloaded file below. No API token is needed for that route.</p><details><summary>Advanced: use a read token instead</summary><label>Hugging Face read token <span>(only if needed)</span><input data-model-token type="password" autocomplete="off" spellcheck="false" placeholder="Paste a read token" /></label><p>Your token is used for this download only and is not saved in Studio.</p></details></details><div class="zps-models-actions"><button type="button" data-model-download>${maskIcons.download}<span>Download missing models</span></button><button type="button" data-model-refresh>Check again</button></div><div class="zps-models-download" data-model-job hidden><strong data-model-job-title></strong><progress data-model-progress aria-label="Model download progress"></progress><p data-model-progress-text></p><button type="button" data-model-cancel>Cancel download</button></div><p class="zps-models-status" data-model-status role="status" aria-live="polite"></p><div class="zps-models-nodes" data-model-nodes hidden></div></section>`;
+    this.root.innerHTML=`<summary title="Check and download Paintout models">${maskIcons.download}<span>Models</span><span data-model-badge></span></summary><section class="zps-models-panel" aria-label="Paintout model setup"><header><div><h3>Set up your models</h3><p>Files already on this computer are reused.</p></div><button type="button" data-model-close aria-label="Close model setup">${maskIcons.x}</button></header><label class="zps-models-choice">Models for<select data-model-package aria-label="Choose what to set up"></select></label><p class="zps-models-reason" data-model-reason></p><div data-model-files></div><details class="zps-models-access"><summary>Model licences and access</summary><div data-model-licences></div><p>Accept the publisher’s terms with the same account you connect below. You can also download in your browser and install the completed file.</p></details><div class="zps-models-actions"><button type="button" data-model-download>${maskIcons.download}<span>Download missing models</span></button><button type="button" data-model-refresh>Check again</button></div><div class="zps-models-download" data-model-job hidden><strong data-model-job-title></strong><progress data-model-progress aria-label="Model download progress"></progress><p data-model-progress-text></p><button type="button" data-model-cancel>Cancel download</button></div><p class="zps-models-status" data-model-status role="status" aria-live="polite"></p><div class="zps-models-nodes" data-model-nodes hidden></div></section>`;
     this.$=key=>this.root.querySelector(`[data-model-${key}]`);
+    this.access=new ModelAccess(this.root.querySelector('.zps-models-panel'),(path,body)=>workspace.fetch('/zura/studio'+path,body),()=>this.start());this.access.$('token').setAttribute('data-model-token','');
     this.storage=new ModelStorage(this.root.querySelector('.zps-models-panel'),(path,body)=>workspace.fetch('/zura/studio'+path,body),()=>this.refresh());
     this.quick=el('section');this.quick.className='gs-model-quick';this.quick.hidden=true;
     this.quick.innerHTML='<div class="gs-model-quick-copy"><strong>Models needed for this step</strong><small></small></div><button type="button" data-quick-install>Install missing models</button><button type="button" data-quick-details>Details</button><button type="button" data-quick-cancel hidden>Cancel install</button><progress hidden aria-label="Model installation progress"></progress><p data-quick-status role="status" aria-live="polite"></p>';
@@ -34,7 +37,17 @@ export class PaintoutModels{
   }
   positionPanel(){if(!this.root?.open)return;const panel=this.root.querySelector('.zps-models-panel'),button=this.root.querySelector('summary').getBoundingClientRect(),width=Math.min(560,innerWidth-24),top=innerWidth<=700?70:Math.max(12,Math.min(button.bottom+8,innerHeight-160));Object.assign(panel.style,{left:`${Math.max(12,Math.min(button.right-width,innerWidth-width-12))}px`,right:'auto',top:`${top}px`,width:`${width}px`,maxHeight:`${Math.max(120,Math.min(720,innerHeight-top-12))}px`});}
   active(){return !!this.job&&ACTIVE.has(this.job.phase);}
-  modelsReady(){const model=this.models.find(model=>model.id===this.$('package').value);return !!model&&!this.loading&&!this.active()&&model.files?.every(file=>file.installed);}
+  modelForContext(id){
+    const model=this.models.find(model=>model.id===id);
+    // The workspace checks video requirements. Mask tracking and frame editing
+    // have separate dependencies; do not infer those from video readiness.
+    if(!model||!this.context.checked||id!==this.recommended()||['mask','clean'].includes(id))return model;
+    const leaf=name=>String(name).replaceAll('\\','/').split('/').pop();
+    const missing=new Set((this.context.missingNodes||[]).map(leaf));
+    const files=model.files.map(file=>file.installed||missing.has(leaf(file.filename))?file:{...file,installed:true,incomplete:false,available_in_workflow:true});
+    return {...model,files,remaining_bytes:files.filter(file=>!file.installed).reduce((sum,file)=>sum+(Number(file.size_bytes)||0),0)};
+  }
+  modelsReady(){const model=this.modelForContext(this.$('package').value);return !!model&&!this.loading&&!this.active()&&model.files?.every(file=>file.installed);}
   videoGroup(){if(this.context.mode==='ripple')return 'ripple';return (this.context.mode==='full'?'full':this.context.mode==='inpaint'?'inpaint':'targeted')+(this.context.pipeline==='hdr_hdr'?'_hdr':'');}
   recommended(){const c=this.context;if(c.stage==='mask')return 'mask';if(c.stage==='clean')return 'clean';if(c.phase==='hdr')return 'hdr_conversion';if(c.pipeline==='sdr_hdr')return '_sdr_hdr';return this.videoGroup();}
   updatePackages(raw){
@@ -61,13 +74,15 @@ export class PaintoutModels{
     finally{this.loading=false;this.render();}
   }
   renderSummary(){
-    const model=this.models.find(model=>model.id===this.recommended()),missing=model?.files?.filter(file=>!file.installed)||[],active=this.active(),nodes=(this.context.missingNodes||[]).filter(name=>! /\.(safetensors|onnx|pt|pth|ckpt|bin)$/i.test(name));
+    const model=this.modelForContext(this.recommended()),missing=model?.files?.filter(file=>!file.installed)||[],active=this.active(),nodes=(this.context.missingNodes||[]).filter(name=>! /\.(safetensors|onnx|pt|pth|ckpt|bin)$/i.test(name));
     this.$('badge').textContent=active?'Downloading':missing.length?`${missing.length} missing`:nodes.length?'Setup needed':'';
     this.quick.hidden=!active&&!missing.length&&!nodes.length;
     this.quick.querySelector('strong').textContent=nodes.length&&!missing.length?'Workflow extensions needed':'Models needed for this step';
     this.quick.querySelector('small').textContent=missing.length?`${missing.length} missing files · ${bytes(model?.remaining_bytes)} to download${nodes.length?' · extensions also needed':''}`:'Enable the required extensions from Details, then restart ComfyUI.';
     const button=this.quick.querySelector('[data-quick-install]');button.hidden=!missing.length&&!active;button.textContent=active?'Installing…':`Install missing models · ${bytes(model?.remaining_bytes)}`;button.disabled=active||this.loading||!model||!missing.length||missing.some(f=>f.incomplete);
     this.quickStorage.root.hidden=!missing.length;
+    if(!this.quickAccess){this.quickAccess=el('button','Hugging Face access');this.quickAccess.type='button';this.quickAccess.onclick=()=>{this.open();this.access.root.open=true;void this.access.load();};this.quick.querySelector('[data-quick-status]').before(this.quickAccess);}
+    this.quickAccess.hidden=!missing.some(file=>file.gated)&&!jobAccess(this.job);
     this.quick.querySelector('[data-quick-status]').textContent=this.error||this.$('progress-text').textContent||'';this.quick.querySelector('[data-quick-cancel]').hidden=!active;this.quick.querySelector('[data-quick-cancel]').disabled=!!this.cancelling||this.job?.phase==='cancelling';const bar=this.quick.querySelector('progress');bar.hidden=!active;if(this.job?.total_bytes){bar.max=this.job.total_bytes;bar.value=this.job.done_bytes||0;}else bar.removeAttribute('value');
   }
   renderNodes(){
@@ -82,18 +97,19 @@ export class PaintoutModels{
   }
   link(label,url){try{const parsed=new URL(url);if(parsed.protocol!=='https:')return null;const link=el('a',label);link.href=parsed.href;link.target='_blank';link.rel='noopener noreferrer';return link;}catch{return null;} }
   render(){
-    const model=this.models.find(model=>model.id===this.$('package').value),active=this.active(),files=model?.files||[],missing=files.filter(file=>!file.installed),incomplete=missing.some(file=>file.incomplete),total=Number(model?.remaining_bytes)||0;
+    const model=this.modelForContext(this.$('package').value),active=this.active(),files=model?.files||[],missing=files.filter(file=>!file.installed),incomplete=missing.some(file=>file.incomplete),total=Number(model?.remaining_bytes)||0;
     this.$('package').disabled=active||this.loading||!this.models.length;
     this.$('reason').textContent=model?(REASONS[model.id]||model.note||'Download the missing files for this step.'):this.loading?'Checking installed model files…':'Choose what you want to set up.';
     this.$('files').replaceChildren();
     if(model){
       const heading=el('p',missing.length?`${files.length-missing.length} of ${files.length} files ready · ${total?bytes(total)+' to download':'download size checked when it starts'}`:files.length?'All model files for this step are installed.':'No separate Studio model download is needed.');heading.className='zps-models-file-summary';this.$('files').append(heading);
       const list=el('ul');list.className='zps-models-file-list';
-      for(const file of files){const row=el('li'),label=el('span'),state=el('small',file.installed?'Installed':file.incomplete?'Check existing file':file.size_bytes?bytes(file.size_bytes):'Missing');label.append(el('strong',file.label||file.filename),el('small',file.folder?`models/${file.folder}`:''));row.append(label,state);if(!file.installed&&file.gated&&file.browser_url){const actions=el('div');actions.className='zura-browser-model-actions';const link=this.link('Download in browser',file.browser_url),button=el('button','Install downloaded file');button.type='button';button.disabled=active||this.loading;button.onclick=()=>this.importFile(model,file);if(link)actions.append(link);actions.append(button);label.append(actions);}
+      for(const file of files){const row=el('li'),label=el('span'),state=el('small',file.available_in_workflow?'Available in ComfyUI':file.installed?'Installed':file.incomplete?'Check existing file':file.size_bytes?bytes(file.size_bytes):'Missing');label.append(el('strong',file.label||file.filename),el('small',file.folder?`models/${file.folder}`:''));row.append(label,state);if(!file.installed&&file.gated&&file.browser_url){const actions=el('div');actions.className='zura-browser-model-actions';const link=this.link('Download in browser',file.browser_url),button=el('button','Install downloaded file');button.type='button';button.disabled=active||this.loading;button.onclick=()=>this.importFile(model,file);if(link)actions.append(link);actions.append(button);label.append(actions);}
       row.dataset.state=file.installed?'installed':file.incomplete?'incomplete':'missing';list.append(row);}
       this.$('files').append(list);
       if(incomplete)this.$('files').append(el('p','An existing file does not match this package. It will not be overwritten. Check its version or move it out of the model folder, then check again.'));
     }
+    this.access?.setFiles(missing,jobAccess(this.job));
     this.$('licences').replaceChildren();for(const url of [...new Set([model?.license_url,...files.map(file=>file.model_card||file.repo&&`https://huggingface.co/${file.repo}`)].filter(Boolean))]){const link=this.link('Review model terms',url);if(link)this.$('licences').append(link);}
     this.$('download').disabled=active||this.loading||!model||incomplete;this.$('download').querySelector('span').textContent=active?'Download in progress':this.submissionUnknown?'Check download status':incomplete?'Check existing files':!missing.length&&model?'Back to workflow':this.job?.phase==='failed'&&(this.job.model_id===model?.id||model?.model_ids?.some(id=>this.job.model_ids?.includes(id)))?'Retry missing models':'Download missing models';
     this.$('download').querySelector('svg')?.toggleAttribute('hidden',this.modelsReady());
@@ -110,8 +126,8 @@ export class PaintoutModels{
     this.renderSummary();this.renderNodes();this.positionPanel();
   }
   async importFile(model,file){
-    if(this.loading||this.active())return;this.loading=true;this.error='Choose the completed download on the ComfyUI computer.';this.render();
-    try{const data=await this.w.fetch(ROUTE+'/import',{model_id:model.model_ids?.find(id=>this.catalogue.find(m=>m.id===id)?.files.some(f=>f.filename===file.filename))||model.id,filename:file.filename});if(data.cancelled){this.error='';return;}if(!data.id)throw Error('The import was not confirmed. Check model status before trying again.');this.job={id:data.id,phase:'queued',total_bytes:file.size_bytes,done_bytes:0};this.error='';this.inlineActive=true;this.closed=false;this.schedulePoll(0);}
+    if(this.loading||this.active())return;this.loading=true;this.error='Choose the completed model download.';this.render();
+    try{const owner=model.model_ids?.find(id=>this.catalogue.find(m=>m.id===id)?.files.some(f=>f.filename===file.filename))||model.id;const data=await importModelFile(ROUTE,owner,file,(done,total)=>{this.error=`Importing ${file.filename} · ${Math.floor(done/total*100)}%`;this.renderSummary();});if(data.cancelled){this.error='';return;}if(!data.id)throw Error('The import was not confirmed. Check model status before trying again.');this.job={id:data.id,phase:'queued',total_bytes:file.size_bytes,done_bytes:0};this.error='';this.inlineActive=true;this.closed=false;this.schedulePoll(0);}
     catch(error){this.error=safeError(error.message);}
     finally{this.loading=false;this.render();}
   }
@@ -119,7 +135,7 @@ export class PaintoutModels{
     if(this.loading||this.active())return;
     if(this.modelsReady()){this.close();return;}
     if(this.submissionUnknown){await this.load();return;}
-    const model=this.models.find(model=>model.id===this.$('package').value);if(!model)return;
+    const model=this.modelForContext(this.$('package').value);if(!model)return;
     const token=this.$('token').value.trim();this.$('token').value='';this.error='';this.loading=true;this.render();
     try{const data=await this.w.fetch(ROUTE,{...(model.model_ids?{model_ids:model.model_ids}:{model_id:model.id}),...(token?{token}:{})});if(!data?.id)throw Error('The download did not start. Check again and retry.');this.job={id:data.id,model_id:model.id,phase:'queued',done_bytes:0,total_bytes:model.remaining_bytes||0};this.render();this.schedulePoll(0);}
     catch(error){

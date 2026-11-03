@@ -33,15 +33,15 @@ jobs:
             sudo apt-get install -y --no-install-recommends ffmpeg
           fi
           python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
-          python -m pip install numpy scipy pillow requests soundfile av aiohttp opencv-python-headless safetensors OpenImageIO psutil
+          python -m pip install numpy scipy pillow requests soundfile av aiohttp opencv-python-headless safetensors OpenImageIO psutil huggingface_hub
       - name: Install graph test DOM dependency outside the package
         run: npm install --prefix "$GITHUB_WORKSPACE/../ui-check" --ignore-scripts --no-audit --no-fund linkedom@0.18.13
       - name: Run regression checks
         run: |
-          python -m unittest discover -s tests -p 'test_model_install*.py'
-          python -m unittest discover -s tests -p 'test_model_downloads.py'
+          python -m unittest discover -s tests -p 'test_model*.py'
           node tests/test_studio_model_download.mjs
           node tests/test_model_install_ui.mjs
+          node tests/test_model_access_ui.mjs
           node tests/test_paintout_download_recovery.mjs
           python -m unittest discover -s tests/paintout_updated -p 'test_browser_model_import.py'
           python -m unittest discover -s tests/paintout_updated -p 'test_model_download_routes.py'

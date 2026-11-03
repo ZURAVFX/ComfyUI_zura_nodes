@@ -37,5 +37,15 @@ assert.equal(ui.quick.querySelector('[data-quick-install]').hidden,true,'A missi
 assert.equal(ui.$('nodes').querySelector('a').href,'https://github.com/daniabib/ComfyUI_ProPainter_Nodes');
 models[0].files=[];ui.render();
 assert.match(ui.$('files').textContent,/No separate Studio model download/,'Empty packages must not claim installed model files');
+models[0].files=[{filename:'registered.safetensors',installed:false,incomplete:true,size_bytes:100}];models[0].remaining_bytes=100;
+ui.setContext({mode:'targeted',checked:true,missingNodes:[]});ui.render();
+assert.equal(ui.quick.hidden,true,'ComfyUI readiness prevents a misleading pinned-version download banner');
+assert.equal(ui.modelsReady(),true);assert.match(ui.$('download').textContent,/Back to workflow/);
+assert.match(ui.$('files').textContent,/Available in ComfyUI/);
+ui.setContext({mode:'targeted',checked:true,missingNodes:['registered.safetensors']});ui.render();
+assert.equal(ui.quick.hidden,false,'A genuinely missing model is still offered for setup');
+ui.models.push({id:'mask',name:'Mask tracking',files:[{filename:'sam.safetensors',installed:false,size_bytes:100}],remaining_bytes:100});
+ui.setContext({mode:'targeted',stage:'mask',checked:true,missingNodes:[]});ui.render();
+assert.equal(ui.quick.hidden,false,'Video readiness must not hide missing mask-tracking models');
 ui.destroy();
 console.log('Paintout downloads prevent duplicate starts and recover lost start responses, including an offline retry.');

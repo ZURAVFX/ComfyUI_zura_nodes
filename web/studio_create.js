@@ -1,5 +1,6 @@
 import {ImageEditInputs} from './studio_image_edit_inputs.js';
 import {StudioModelDownloads} from './studio_model_download.js';
+import {ModelAccess,importModelFile} from './studio_model_access.js';
 import {resolutionSize,editableDimension} from './studio_resolution.js';
 import {IMAGE_MODELS,IMAGE_SIZES,buildImageGraph,imageAvailability,imageDimensions} from "./image_recipes.js";
 import {VideoComposer,composerIcons} from "./studio_composer.js";
@@ -417,10 +418,22 @@ export class CreativeWorkspace {
         const variantNote=m.variants.length?`<p>Local file differs from the pinned download: ${escape(m.variants.join(', '))}. This can be another version; file size alone does not establish compatibility. The existing file is retained.</p>`:'';
         return `<div class="zc-model-setup" data-image-model="${escape(m.id)}"><strong>${escape(m.name)}</strong><p>${m.ready?"Available in ComfyUI":escape("Missing: "+m.missing.join(", "))}</p>${variantNote}${nodeSetup}${download||`<a href="${escape(m.url)}" target="_blank" rel="noopener noreferrer">Model files & instructions</a>`}</div>`;
       }).join("");
+      this.imageDownloadPackages=available;this.imageModelAccess=new Map();
+      for(const pack of available){const model=this.models.find(m=>map[m.id]===pack.id),host=model&&this.$('setup').querySelector(`[data-image-model="${model.id}"]`);if(!host||!pack.remaining_bytes)continue;
+        const access=new ModelAccess(host,(path,body)=>this.fetch('/zura/studio'+path,body),()=>this.startModelDownload(pack.id));access.setFiles(pack.files);this.imageModelAccess.set(pack.id,access);
+        for(const file of pack.files.filter(f=>!f.installed&&f.gated&&f.browser_url)){const actions=document.createElement('div');actions.className='zura-browser-model-actions';const link=document.createElement('a');link.textContent=`Download ${file.filename} in browser`;link.href=file.browser_url;link.target='_blank';link.rel='noopener noreferrer';const install=document.createElement('button');install.type='button';install.textContent='Install downloaded file';install.disabled=!!file.incomplete;install.onclick=()=>this.importImageModelFile(pack,file);actions.append(link,install);host.append(actions);}
+      }
       this.$('setup').onclick=event=>{const button=event.target.closest('[data-download-model]');if(button)this.startModelDownload(button.dataset.downloadModel);const cancel=event.target.closest('[data-download-cancel]');if(cancel&&this.modelDownloadJob)this.fetch('/zura/studio/model-downloads/'+encodeURIComponent(this.modelDownloadJob)+'/cancel',{}).catch(error=>this.message(error.message));};
       if(activeDownload?.id&&!this.modelDownloadActive&&this.$('setup').querySelector(`[data-download-status="${activeDownload.model_id}"]`))void this.startModelDownload(activeDownload.model_id,activeDownload.id);
     }
     catch(e){this.message(e.message);}finally{this.loading=false;this.render();}
+  }
+  async importImageModelFile(pack,file){
+    if(this.modelDownloadActive)return;this.modelDownloadActive=true;
+    const set=text=>this.$('setup').querySelectorAll(`[data-download-status="${pack.id}"]`).forEach(node=>node.textContent=text);
+    try{set('Choose the completed model download.');const data=await importModelFile('/zura/studio/model-downloads',pack.id,file,(done,total)=>set(`Importing ${file.filename} · ${Math.floor(done/total*100)}%`));this.modelDownloadActive=false;if(data.cancelled){set('');return;}await this.startModelDownload(pack.id,data.id);}
+    catch(error){set(error.message);}
+    finally{this.modelDownloadActive=false;}
   }
   async startModelDownload(modelId,existingJobId=null){
     const entries=()=>[...this.$('setup').querySelectorAll(`[data-download-status="${modelId}"]`)];
@@ -455,7 +468,7 @@ export class CreativeWorkspace {
           set('Connection lost. Reconnecting to the existing download…');
           await new Promise(resolve=>setTimeout(resolve,1000));continue;
         }
-        if(status.phase==='failed')throw new Error(status.error||'Download failed.');
+        if(status.phase==='failed'){if(status.auth_required){const access=this.imageModelAccess?.get(modelId);access?.setFiles(this.imageDownloadPackages?.find(pack=>pack.id===modelId)?.files||[],status);if(access){access.root.closest('.zc-advanced')?.setAttribute('open','');access.root.open=true;}}throw new Error(status.error||'Download failed.');}
         if(status.phase==='cancelled'){set('Download cancelled.');break;}
         if(status.phase==='done'){set('Installed. Refreshing models…');await this.loadModels();break;}
         const percent=status.total_bytes?Math.min(100,Math.floor(100*status.done_bytes/status.total_bytes)):0;

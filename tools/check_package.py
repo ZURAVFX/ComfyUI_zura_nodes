@@ -16,7 +16,8 @@ tree = ast.parse(Path('__init__.py').read_text(encoding='utf-8'))
 module_version = next(ast.literal_eval(n.value) for n in tree.body if isinstance(n, ast.Assign) and any(isinstance(t, ast.Name) and t.id == '__version__' for t in n.targets))
 assert version == module_version, 'Update __version__ as well as pyproject.toml'
 assert Path('LICENSE').is_file()
-for asset in ('model_folders.py', 'web/studio_model_storage.js',
+for asset in ('model_folders.py', 'model_access.py', 'model_file_import.py', 'web/studio_model_access.js',
+              'tests/test_model_access.py', 'tests/test_model_access_ui.mjs', 'web/studio_model_storage.js',
               'web/studio_model_setup.css', 'web/studio_model_download.js',
               'tests/test_model_install.py', 'tests/test_model_install_routes.py',
               'tests/test_model_install_ui.mjs'):

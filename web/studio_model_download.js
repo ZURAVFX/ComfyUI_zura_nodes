@@ -1,5 +1,6 @@
 import {groupMissingNodes} from './studio_node_setup.js';
 import {ModelStorage} from './studio_model_storage.js';
+import {ModelAccess,importModelFile} from './studio_model_access.js';
 // Model packages are allowlisted by the backend. Fetching the list never starts a download.
 const PACKAGE_IDS=['openjutsu_h3','sam31','fasth3_draft','h3_reference_core','wan_animate_2','wan21_relight','wan22_animate_core','wan22_pose','wan22_style','wan22_first_last','h3_birefnet','h3_head_acceleration','h3_head_adapters','h3_taomate','h3_dmd_ref2va','h3_int8_vae','h3_control','h3_crossview','h3_first_last','ltx25_core','ltx25_full_vae','ltx25_refine','ltx25_sdr_hdr','ltx25_text_encoder','ltx25_text_int8','ltx25_clean_plate','ltx25_outpaint','ltx25_in_outpaint','ltx_control','flux2_klein_start','flux2_klein_9b','flux3_klein','zimage_turbo','qwen2511','qwen21'];
 const ROUTE_NAMES={openjutsu:'OpenJutsu character replacement',wan2:'Wan Animate 2',wan:'Wan 2.2 character replacement',wan21_relight:'Wan 2.1 relight',h3_camera:'H3 camera angle',h3_head_swap:'H3 head swap',h3_viewport:'H3 viewport to final',h3:'MiniMax H3',local:'LTX 2.5',local_scene:'LTX 2.5 whole scene',h3_first_last:'H3 first & last frame',ltx_first_last:'LTX first & last frame',wan_first_last:'Wan first & last frame',h3_reference:'H3 reference video',ltx_outpaint_hdr_long:'LTX long HDR frame extension',ltx_outpaint_hdr:'LTX HDR frame extension',ltx_outpaint_expand:'LTX frame extension',ltx_outpaint_black:'LTX black-area fill',ltx_outpaint_long:'LTX long frame extension',paintout_targeted:'Targeted paintout',paintout_full:'Full-scene clean plate',hdr_sdr:'SDR to HDR',hdr_native:'HDR to HDR',ltx_hdr_endpoints:'LTX native HDR first and last frame'};
@@ -24,7 +25,7 @@ export class StudioModelDownloads {
     this.select=panel.querySelector('[data-model-package]');this.files=panel.querySelector('[data-model-files]');this.actions=panel.querySelector('[data-model-actions]');this.progress=panel.querySelector('[data-model-progress]');
     this.select.onchange=()=>this.render();panel.ontoggle=()=>{if(panel.open && !this.packages.length)this.load();};
     this.storage=new ModelStorage(panel.querySelector('.gs-advanced-body'),request,async()=>{await this.load();await this.onInstalled?.();});
-    const access=this.el('details','');access.innerHTML='<summary>Hugging Face access, if required</summary><label>Read token<input type="password" autocomplete="off" spellcheck="false" /></label><p>Accept the publisher’s model terms first. Your token is used for this download only.</p>';panel.querySelector('.gs-advanced-body').append(access);this.token=access.querySelector('input');
+    this.access=new ModelAccess(panel.querySelector('.gs-advanced-body'),request,()=>this.retryRequest?this.start(this.retryRequest):this.startWorkflow());this.token=this.access.$('token');
   }
   el(tag,text){const e=document.createElement(tag);e.textContent=text;return e;}
   async load(){
@@ -95,8 +96,22 @@ export class StudioModelDownloads {
     button.hidden=!missing&&!this.job;button.disabled=!!this.job||this.starting||this.uncertain||this.loadingCatalogue&&!this.packages.length||plan.blocked||!!plan.manual.length&&!plan.files.length;
     this.quickStorage.root.hidden=!missing;
     this.quick.querySelector('[data-quick-cancel]').hidden=!this.job;
+    if(!this.quickAccess){this.quickAccess=this.el('button','Hugging Face access');this.quickAccess.type='button';this.quickAccess.onclick=()=>this.showAccess();this.quick.querySelector('[data-quick-status]').before(this.quickAccess);}
+    this.quickAccess.hidden=!this.accessFailure&&!plan.files.some(file=>file.gated);
     this.quick.querySelector('[data-quick-status]').textContent=this.progress.textContent;
     const bar=this.quick.querySelector('progress');bar.hidden=!this.job;if(this.downloadTotal){bar.max=this.downloadTotal;bar.value=this.downloadDone||0;}else bar.removeAttribute('value');
+  }
+  showAccess(){for(let parent=this.panel;parent;parent=parent.parentElement)if(parent.tagName==='DETAILS')parent.open=true;this.access.root.open=true;void this.access.load();}
+  browserActions(pack,file){
+    if(file.installed||!file.browser_url||!file.gated&&!this.accessFailure)return null;
+    const row=this.el('div','');row.className='zura-browser-model-actions';row.append(this.link('Download in browser',file.browser_url));
+    const button=this.el('button','Install downloaded file');button.type='button';button.disabled=!!this.job||this.starting||file.incomplete;button.onclick=()=>this.importFile(pack,file);row.append(button);return row;
+  }
+  async importFile(pack,file){
+    if(this.job||this.starting)return;this.starting=true;this.closed=false;this.render();
+    try{this.progress.textContent='Choose the completed model download.';const data=await importModelFile('/zura/studio/model-downloads',pack.id,file,(done,total)=>{this.downloadDone=done;this.downloadTotal=total;this.progress.textContent=`Importing ${file.filename} · ${Math.floor(done/total*100)}%`;this.renderQuick();});if(data.cancelled){this.progress.textContent='';return;}this.job=data.id;this.select.disabled=true;this.starting=false;await this.poll();}
+    catch(error){this.progress.textContent=error.message;await this.load();}
+    finally{this.starting=false;this.render();}
   }
   async startWorkflow(){
     const plan=this.workflowPlan();if(!plan.files.length||plan.blocked)return;
@@ -127,7 +142,7 @@ export class StudioModelDownloads {
       const neededBytes=pack.files.filter(file=>keys.has(fileKey(file))&&!file.installed).reduce((sum,file)=>sum+Number(file.size_bytes||0),0);
       const row=this.el('div','');row.className='gs-model-package';row.append(this.el('strong',pack.name),this.el('p',`${gb(neededBytes)} needed for this workflow${pack.note?' · '+pack.note:''}`));
       if(!pack.remaining_bytes)row.append(this.el('p','Files are present. Refresh setup or restart ComfyUI if the workflow still cannot see them.'));
-      for(const file of pack.files.filter(file=>keys.has(fileKey(file))&&!file.installed))row.append(this.el('p',`${file.incomplete?'Existing file differs from this download; check its version':'Needed'} · ${file.filename} · ${gb(file.size_bytes)}`));
+      for(const file of pack.files.filter(file=>keys.has(fileKey(file))&&!file.installed)){const entry=this.el('p',`${file.incomplete?'Existing file differs from this download; check its version':'Needed'} · ${file.filename} · ${gb(file.size_bytes)}`);const actions=this.browserActions(pack,file);if(actions)entry.append(actions);row.append(entry);}
       for(const repo of [...new Set(pack.files.map(file=>file.repo).filter(Boolean))]) row.append(this.link(`Review ${repo}`,`https://huggingface.co/${repo}`),' ');
       if(pack.license_url)row.append(this.link('Review licence',pack.license_url),' ');
       detail.append(row);
@@ -142,11 +157,12 @@ export class StudioModelDownloads {
   }
   render(){
     this.renderQuick();
+    const accessFiles=this.select.value==='__workflow__'?this.workflowPlan().files:this.packages.find(p=>p.id===this.select.value)?.files||[];this.access?.setFiles(accessFiles,this.accessFailure);
     this.files.replaceChildren();this.actions.replaceChildren();if(this.job){const cancel=this.el('button','Cancel download');cancel.type='button';cancel.onclick=()=>this.request(`/model-downloads/${this.job}/cancel`,{}).catch(e=>this.progress.textContent=e.message);this.actions.append(cancel);}if(this.uncertain){const check=this.el('button','Check download status');check.type='button';check.onclick=()=>this.load();this.actions.append(check);}if(this.select.value==='__workflow__'){this.renderWorkflow();return;}const pack=this.packages.find(p=>p.id===this.select.value);if(!pack)return;
     this.files.append(this.el('p',pack.note||''));
     if(pack.error){this.files.append(this.el('p',pack.error));return;}
     this.files.append(this.el('p',`${gb(pack.remaining_bytes)} to download`));
-    for(const file of pack.files){const p=this.el('p',`${file.installed?'Installed':file.incomplete?'Existing file differs; check its version before moving it':'Needed'} · ${file.filename} · ${gb(file.size_bytes)}`);p.className='gs-note';this.files.append(p);}
+    for(const file of pack.files){const p=this.el('p',`${file.installed?'Installed':file.incomplete?'Existing file differs; check its version before moving it':'Needed'} · ${file.filename} · ${gb(file.size_bytes)}`);p.className='gs-note';const actions=this.browserActions(pack,file);if(actions)p.append(actions);this.files.append(p);}
     this.files.append(this.el('p','Review each source’s terms and access requirements before downloading:'));
     if(pack.license_url)this.files.append(this.link('Review licence',pack.license_url),document.createElement('br'));
     for(const repo of [...new Set(pack.files.map(file=>file.repo))]){const link=this.el('a',repo);link.href=`https://huggingface.co/${repo}`;link.target='_blank';link.rel='noopener noreferrer';this.files.append(link,document.createElement('br'));}
@@ -154,7 +170,7 @@ export class StudioModelDownloads {
   }
   async start(id){
     if(this.job||this.starting||this.uncertain)return;
-    this.starting=true;this.render();
+    this.retryRequest=id;this.accessFailure=null;this.closed=false;this.starting=true;this.render();
     const token=this.token?.value.trim();if(this.token)this.token.value='';
     try{this.progress.textContent='Starting download…';const result=await this.request('/model-downloads',{...(typeof id==='object'?id:{model_id:id}),...(token?{token}:{})});if(!result.id)throw new Error('Could not confirm the download started. Refresh setup before retrying.');this.job=result.id;this.starting=false;this.select.disabled=true;this.render();await this.poll();
     }catch(e){this.starting=false;this.job=null;this.uncertain=true;this.select.disabled=false;this.progress.textContent='Checking whether the download started…';this.render();await this.load();if(!this.job&&!this.uncertain)this.progress.textContent=e.message||'The download did not start. Try again.';}
@@ -174,7 +190,7 @@ export class StudioModelDownloads {
         this.downloadTotal=state.total_bytes;this.downloadDone=state.done_bytes;
         this.progress.textContent=state.phase==='done'?'Download complete.':state.phase==='failed'?state.error:state.phase==='cancelled'?'Download cancelled.':`${state.current_file||'Preparing download'} · ${percent}%`;
         this.renderQuick();
-        if(['done','failed','cancelled'].includes(state.phase)){this.job=null;this.select.disabled=false;await this.load();if(state.phase==='done')await this.onInstalled?.();break;}
+        if(['done','failed','cancelled'].includes(state.phase)){if(state.phase==='failed'&&state.auth_required){this.accessFailure=state;this.showAccess();}else if(state.phase==='done')this.accessFailure=null;this.job=null;this.select.disabled=false;await this.load();if(state.phase==='done')await this.onInstalled?.();break;}
         await new Promise(resolve=>setTimeout(resolve,1000));
       }
     }catch(e){this.progress.textContent=e.message||'Could not refresh model setup.';this.job=null;this.select.disabled=false;this.render();}

@@ -277,7 +277,10 @@ def inspect(model_id, locations, filenames=None):
         existing = next((path for path in candidates if path.stat().st_size == item['size_bytes']),
                         candidates[0] if candidates else None)
         incomplete = bool(existing and existing.stat().st_size != item['size_bytes'])
-        files.append({**item, 'installed': bool(existing) and not incomplete, 'incomplete': incomplete,
+        from urllib.parse import quote
+        browser_url = ('https://huggingface.co/' + item['repo'] + '/resolve/' + item['revision'] + '/' + quote(item['remote_path'], safe='/') + '?download=true') if all(item.get(key) for key in ('repo', 'revision', 'remote_path')) else None
+        files.append({**item, 'gated': recipe['gated'], 'model_card': 'https://huggingface.co/' + item['repo'] if item.get('repo') else None, 'browser_url': browser_url,
+                      'installed': bool(existing) and not incomplete, 'incomplete': incomplete,
                       'destination': str(existing or (Path(roots[0]) / relative))})
     return dict(id=model_id, name=recipe['name'], gated=recipe['gated'], note=recipe.get('note', ''),
                 license_url=recipe['license_url'], files=files,
@@ -385,7 +388,7 @@ class DownloadManager:
             job_id = uuid.uuid4().hex
             self._jobs[job_id] = dict(id=job_id, model_id=ids[0], model_ids=list(dict.fromkeys(ids)), phase='queued',
                 done_bytes=0, total_bytes=recipe['remaining_bytes'], current_file='',
-                error='', cancel=threading.Event())
+                error='', auth_required=False, cancel=threading.Event())
             self._active = job_id
         threading.Thread(target=self._run, args=(job_id, recipe, token), daemon=True).start()
         return job_id
@@ -395,10 +398,14 @@ class DownloadManager:
         try:
             if not token:
                 try:
-                    from huggingface_hub import get_token
-                    token = get_token()
-                except (ImportError, OSError):
-                    token = None
+                    from ..model_access import credential
+                    token = credential()
+                except ImportError:  # Direct module loading in catalogue tools.
+                    try:
+                        from huggingface_hub import get_token
+                        token = get_token()
+                    except (ImportError, OSError):
+                        token = None
             for item in recipe['files']:
                 if item['installed']:
                     continue
@@ -420,8 +427,10 @@ class DownloadManager:
                     count = 0
                     headers = {'Authorization': 'Bearer ' + token} if token else {}
                     with requests.get(url, headers=headers, stream=True, timeout=(15, 60)) as response:
-                        if response.status_code in (401, 403):
-                            raise RuntimeError('Access denied. Sign in to Hugging Face and accept the model licence, then retry.')
+                        if response.status_code in (401, 403) or 'text/html' in getattr(response, 'headers', {}).get('Content-Type', '').lower():
+                            with self._lock:
+                                self._jobs[job_id].update(auth_required=True, access_repo=item['repo'], access_reason='terms_or_permissions' if token else 'connect')
+                            raise RuntimeError('Hugging Face access is required. Connect your account, open the model terms and accept or request access, then retry missing models. Or download in your browser and install the file.')
                         response.raise_for_status()
                         with temporary.open('xb') as output:
                             for chunk in response.iter_content(chunk_size=1024*1024):
@@ -483,7 +492,10 @@ def register(routes, response):
     from aiohttp import web
     from ..media_source import require_same_origin
     from ..model_folders import register as register_folders
+    from ..model_access import register as register_access
+    from ..model_file_import import register as register_import
     register_folders(routes, response)
+    register_access(routes, response)
     folders = {item['folder'] for model in CATALOG.values() for item in model['files']}
     manager = DownloadManager(folder_locations(folder_paths, folders))
     manager.on_installed = lambda: getattr(folder_paths, 'filename_list_cache', {}).clear()
@@ -496,6 +508,15 @@ def register(routes, response):
                 manager.filenames[folder] = folder_paths.get_filename_list(folder)
             except (KeyError, OSError):
                 manager.filenames[folder] = []
+
+    def import_item(model_id, filename):
+        if model_id not in CATALOG or not any(item['filename'] == filename for item in CATALOG[model_id]['files']):
+            raise ValueError('Choose a model file from the package list.')
+        refresh_locations()
+        return next(item for item in inspect(model_id, manager.locations, manager.filenames)['files'] if item['filename'] == filename)
+
+    for base in ('/zura/studio/model-downloads', '/genj/studio/model-downloads'):
+        register_import(routes, base, manager, import_item, _check_publish_supported, _publish_verified, response)
 
     @routes.get('/zura/studio/model-downloads')
     @routes.get('/genj/studio/model-downloads')

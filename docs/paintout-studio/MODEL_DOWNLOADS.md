@@ -1,6 +1,14 @@
 # Model downloads
 
-These are the exact filenames used by the supplied recipes. Open each model card and review its separate terms before downloading. LTX 2.5, its clean-plate adapter and FLUX 3 currently require Hugging Face access approval or acceptance of their terms. Sign in on the model page if the file link is unavailable. This package does not download or redistribute weights.
+Studio can install missing files into your selected models folder. Existing files in all configured folders are reused. Model weights are downloaded from their publishers and are not bundled with Studio.
+
+For gated models, open **Hugging Face access** beside the install button. Review the linked model terms, then connect a Hugging Face read token once for all Studio modes. The token must allow reading public gated models approved for that account. Studio also reuses an existing Hugging Face CLI login. Signing in on the website alone does not authorise the ComfyUI server.
+
+After connecting, Studio retries the requested missing models. If the publisher still needs approval, use the model terms link with the same account and retry once access is granted. Completed files are kept. **Remember on this computer** is optional: credentials stay on the ComfyUI server, encrypted with Windows DPAPI on Windows or stored in an owner-only file on other platforms. Disconnect removes Studio's saved credential; it does not change another application's Hugging Face login.
+
+For a token-free alternative, choose **Download in browser** beside a file, sign in and accept its terms there, then choose **Install downloaded file**. Select the completed download in your browser, including when ComfyUI runs on another computer. Studio streams it into the selected models folder and checks the pinned size and SHA-256 before installation. Your original download is kept. Existing models are never overwritten.
+
+The workflow's ready state comes from the model choices exposed by ComfyUI. A valid installed model with a different pinned download version does not force another download. Missing custom nodes are shown separately and require installing or enabling the extension.
 
 | Model file | Put it in | Upstream file |
 | --- | --- | --- |

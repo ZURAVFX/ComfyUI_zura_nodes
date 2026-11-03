@@ -578,10 +578,14 @@ def _partial_lock(path):
 
 def _cached_token():
     try:
-        from huggingface_hub import get_token
-        return get_token()
+        from ..model_access import credential
+        return credential()
     except (ImportError, OSError):
-        return None
+        try:
+            from huggingface_hub import get_token
+            return get_token()
+        except (ImportError, OSError):
+            return None
 
 
 class DownloadManager:
@@ -693,7 +697,8 @@ class DownloadManager:
                 try:
                     with fetch(url, headers=headers, stream=True, timeout=(10, 15)) as response:
                         if response.status_code in (401, 403):
-                            raise DownloadError('Hugging Face access is required. Open the model licence, accept its terms, download in your browser and choose Install downloaded file.', auth_required=True)
+                            self._update(job_id, access_repo=item['repo'], access_reason='terms_or_permissions' if token else 'connect')
+                            raise DownloadError('Hugging Face access is required. Connect your account, open the model licence and accept its terms, then retry missing models. Or download in your browser and choose Install downloaded file.', auth_required=True)
                         if response.status_code >= 400:
                             raise DownloadError('The model server could not provide this file. Check the connection and retry.')
                         if 'text/html' in response.headers.get('Content-Type', '').lower():
@@ -871,6 +876,16 @@ def register_routes():
 
     existing = {(route.method, route.path) for route in server.routes}
     base = '/zura/paintout/model-downloads'
+    if ('POST', base + '/import-file') not in existing:
+        from ..model_access import register as register_access
+        from ..model_file_import import register as register_import
+        register_access(server.routes, lambda fn: fn)
+        def import_item(model_id, filename):
+            if model_id not in CATALOG or not any(item['filename'] == filename for item in CATALOG[model_id]['files']):
+                raise ValueError('Choose a model file from the package list.')
+            manager.locations, manager.filenames = _locations(folder_paths)
+            return next(item for item in inspect(model_id, manager.locations)['files'] if item['filename'] == filename)
+        register_import(server.routes, base, manager, import_item, lambda root, identity: _check_publish_supported(root), _publish_verified)
     for method, path, handler in [('GET', base, catalogue), ('POST', base, start), ('POST', base + '/import', import_download), ('GET', base + '/{identity}', status), ('POST', base + '/{identity}/cancel', cancel)]:
         if (method, path) not in existing:
             getattr(server.routes, method.lower())(path)(handler)

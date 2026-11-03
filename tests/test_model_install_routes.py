@@ -95,5 +95,89 @@ class InstallRoutesTests(unittest.IsolatedAsyncioTestCase):
         response=await self.client.get('/genj/studio/model-folders')
         self.assertEqual(response.status,200)
 
+    async def test_access_failure_connect_and_retry_uses_shared_credential(self):
+        self.downloads.CATALOG['test']['gated'] = True
+        token = 'hf_FixtureDownloadConnection'
+        class Reply:
+            status_code = 200
+            def __enter__(inner):return inner
+            def __exit__(inner,*args):pass
+            def raise_for_status(inner):pass
+            def json(inner):return {'name':'test-account'}
+            def iter_content(inner,chunk_size):yield self.data
+        denied=Reply();denied.status_code=403
+        async def wait(identity):
+            for _ in range(300):
+                state=await (await self.client.get('/zura/studio/model-downloads/'+identity)).json()
+                if state['phase'] in ('done','failed'):return state
+                await asyncio.sleep(.01)
+            self.fail('Download did not finish')
+        with patch('huggingface_hub.get_token',return_value=None), patch('requests.get',return_value=denied):
+            identity=(await (await self.client.post('/zura/studio/model-downloads',json={'model_id':'test'})).json())['id']
+            state=await wait(identity)
+            self.assertTrue(state['auth_required']);self.assertEqual(state['access_repo'],'test/models')
+        with patch('requests.get',return_value=Reply()) as fetch:
+            response=await self.client.post('/zura/studio/model-access',json={'token':token})
+            self.assertEqual(response.status,200)
+            self.assertNotIn(token,await response.text())
+            state=await (await self.client.get('/genj/studio/model-access')).json()
+            self.assertEqual(state['name'],'test-account')
+            identity=(await (await self.client.post('/zura/studio/model-downloads',json={'model_id':'test'})).json())['id']
+            self.assertEqual((await wait(identity))['phase'],'done')
+            self.assertTrue(all(call.kwargs['headers']['Authorization']=='Bearer '+token for call in fetch.call_args_list))
+        response=await self.client.post('/zura/studio/model-access',json={'disconnect':True},headers={'Origin':'https://unrelated.example'})
+        self.assertEqual(response.status,403)
+
+    async def test_browser_import_streams_to_selected_folder_and_verifies_hash(self):
+        external=self.root/'external';external.mkdir()
+        await self.client.post('/zura/studio/model-folders',json={'path':str(external)})
+        url='/zura/studio/model-downloads/import-file?model_id=test&filename=needed.safetensors'
+        response=await self.client.post(url,data=b'x'*len(self.data))
+        self.assertEqual(response.status,400)
+        self.assertFalse((external/'vae/needed.safetensors').exists())
+        self.assertFalse(list(external.rglob('*.part')))
+        response=await self.client.post(url,data=self.data)
+        self.assertEqual(response.status,200,await response.text())
+        identity=(await response.json())['id']
+        state=await (await self.client.get('/zura/studio/model-downloads/'+identity)).json()
+        self.assertEqual(state['phase'],'done')
+        self.assertEqual((external/'vae/needed.safetensors').read_bytes(),self.data)
+        response=await self.client.post(url,data=self.data)
+        self.assertEqual(response.status,400,'No overwrite of an installed model')
+        self.assertFalse(list(external.rglob('*.part')))
+
+    async def test_import_rejects_unlisted_paths_wrong_size_and_cross_origin(self):
+        for query,body,origin in [('model_id=test&filename=../elsewhere',self.data,None),('model_id=test&filename=needed.safetensors',b'too short',None),('model_id=test&filename=needed.safetensors',self.data,'https://unrelated.example')]:
+            response=await self.client.post('/zura/studio/model-downloads/import-file?'+query,data=body,headers={'Origin':origin} if origin else {})
+            self.assertEqual(response.status,403 if origin else 400)
+        self.assertFalse(list(self.root.rglob('*.part')))
+
+    async def test_cancelling_browser_upload_never_installs_partial_model(self):
+        release=asyncio.Event()
+        async def body():
+            yield self.data[:8]
+            await release.wait()
+            yield self.data[8:]
+        task=asyncio.create_task(self.client.post('/zura/studio/model-downloads/import-file?model_id=test&filename=needed.safetensors',data=body(),headers={'Content-Length':str(len(self.data))}))
+        identity=None
+        try:
+            for _ in range(300):
+                active=(await (await self.client.get('/zura/studio/model-downloads')).json()).get('active')
+                if active:identity=active['id'];break
+                await asyncio.sleep(.01)
+            self.assertIsNotNone(identity)
+            response=await self.client.post('/zura/studio/model-downloads/'+identity+'/cancel',json={})
+            self.assertEqual(response.status,200)
+            release.set()
+            response=await task
+            self.assertEqual(response.status,400)
+            state=await (await self.client.get('/zura/studio/model-downloads/'+identity)).json()
+            self.assertEqual(state['phase'],'cancelled')
+            self.assertFalse((self.root/'models/vae/needed.safetensors').exists())
+            self.assertFalse(list(self.root.rglob('*.part')))
+        finally:
+            release.set()
+            if not task.done():await task
+
 
 if __name__=='__main__':unittest.main()
