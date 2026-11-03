@@ -180,4 +180,21 @@ class InstallRoutesTests(unittest.IsolatedAsyncioTestCase):
             if not task.done():await task
 
 
+    async def test_browser_signin_routes_keep_device_secret_server_side(self):
+        class Reply:
+            def raise_for_status(self): pass
+            def json(self): return dict(device_code='private-device-secret', user_code='PUBLIC-CODE', verification_uri='https://huggingface.co/oauth/device', expires_in=300)
+        with patch('requests.post', return_value=Reply()) as post:
+            response=await self.client.post('/zura/studio/model-access',json={'action':'browser_start'},headers={'Origin':'https://unrelated.example'})
+            self.assertEqual(response.status,403);post.assert_not_called()
+            response=await self.client.post('/zura/studio/model-access',json={'action':'browser_start'})
+            self.assertEqual(response.status,200)
+            login=await response.json();self.assertNotIn('private-device-secret',str(login))
+        response=await self.client.post('/genj/studio/model-access',json={'action':'browser_cancel','id':login['id']})
+        self.assertEqual((await response.json())['phase'],'cancelled')
+        response=await self.client.post('/zura/studio/model-access',json={'action':'browser_poll','id':login['id']})
+        self.assertEqual(response.status,400)
+        self.assertTrue((await (await self.client.get('/zura/studio/model-access')).json())['browser_signin_available'])
+
+
 if __name__=='__main__':unittest.main()

@@ -45,3 +45,13 @@ pointer(root.querySelector('#canvas'));
 assert.equal(lookups,1,'Repeated installation replaces rather than accumulates document listeners');
 assert.equal(length.open,false);dispose();
 console.log('Studio floating popover dismissal checks passed');
+
+const menu=document.createElement('details');menu.className='zc-tool-popup';menu.innerHTML='<summary>Workflow</summary><div class="zc-workflow-menu"><button>A</button><button hidden>Hidden</button><button disabled>Unavailable</button><button>B</button></div>';root.append(menu);
+const cleanup=installPopoverDismissal(root);let menuFocus;
+for(const button of menu.querySelectorAll('button'))button.focus=()=>menuFocus=button.textContent;
+const key=(target,value)=>{const event=new window.Event('keydown',{bubbles:true,cancelable:true});event.key=value;target.dispatchEvent(event);return event;};
+length.open=true;menu.open=true;menu.dispatchEvent(new window.Event('toggle',{bubbles:true}));assert.equal(length.open,false,'Opening from a keyboard closes other floating menus');
+key(menu.querySelector('summary'),'ArrowDown');assert.equal(menuFocus,'A');
+key(menu.querySelector('button'),'ArrowDown');assert.equal(menuFocus,'B','Keyboard navigation skips unavailable or hidden choices');
+key(menu.querySelector('button'),'End');assert.equal(menuFocus,'B');key(menu.querySelector('button'),'Home');assert.equal(menuFocus,'A');
+cleanup();console.log('Workflow menu keyboard navigation and exclusive opening passed.');

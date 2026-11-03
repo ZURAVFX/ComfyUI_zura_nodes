@@ -9,7 +9,7 @@ composer.root=document.querySelector('#studio');composer.imageModel=document.que
 composer.studio={config:{opening_model:'klein9b'},lookMode:'build',modelStatus:{opening_models:{klein9b:{ready:true},qwen2511:{ready:false}}}};
 composer.syncOpeningModel(false);
 assert.equal(composer.imageModel.querySelector('[data-opening-model-label]').textContent,'FLUX Klein 9B');
-assert.equal(composer.imageModel.querySelector('[data-opening-model="qwen2511"]').disabled,true,'A missing Qwen setup cannot disable the ready Klein option');
+assert.equal(composer.imageModel.querySelector('[data-opening-model="qwen2511"]').disabled,false,'Missing models remain selectable so their installation can be offered');
 assert.equal(composer.imageModel.querySelector('[data-opening-model="klein9b"]').disabled,false);
 assert.equal(composer.imageModel.querySelector('[data-opening-status]').hidden,false);
 composer.studio.modelStatus.opening_models.qwen2511.ready=true;
@@ -41,3 +41,5 @@ for(const provider of ['chatgpt','gemini']){
   assert.match(button.title,/no API credits/);
 }
 console.log('ChatGPT and Gemini starting-frame choices retain browser labels and independent availability.');
+
+composer.studio.modelStatus.opening_models.qwen2511.ready=false;composer.syncOpeningModel(false);assert.equal(composer.imageModel.querySelector('[data-opening-model="qwen2511"] [data-setup-needed]').hidden,false);

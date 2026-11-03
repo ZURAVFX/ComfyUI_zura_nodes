@@ -131,6 +131,7 @@ jobs:
           node tests/test_paintout_preview.mjs
           node tests/test_paintout_entry.mjs
           node tests/test_studio_create.mjs
+          node tests/test_studio_accessibility.mjs
           node tests/test_image_edit_recipes.mjs
           node tests/test_browser_image_login.mjs
           python tests/test_subscription_sessions.py

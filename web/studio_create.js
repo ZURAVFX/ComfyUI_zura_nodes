@@ -366,6 +366,8 @@ export class CreativeWorkspace {
   }
   show(mode){
     this.mode=mode;this.root.dataset.workspace=mode;
+    // Readiness for the main video recipe must not label unrelated workspaces.
+    const recipeStatus=this.root.querySelector('#gs-models');if(recipeStatus)recipeStatus.hidden=mode!=='video';
     if(mode==='image'){this.browserConnection?.open();this.imageModelSetup?.resume();}else this.browserConnection?.close();
     if(mode==='frames')this.frames??=new FrameVideoWorkspace(this);
     if(mode==='references')this.referencesVideo??=new ReferenceVideoWorkspace(this);
@@ -418,7 +420,7 @@ export class CreativeWorkspace {
         const variantNote=m.variants.length?`<p>Local file differs from the pinned download: ${escape(m.variants.join(', '))}. This can be another version; file size alone does not establish compatibility. The existing file is retained.</p>`:'';
         return `<div class="zc-model-setup" data-image-model="${escape(m.id)}"><strong>${escape(m.name)}</strong><p>${m.ready?"Available in ComfyUI":escape("Missing: "+m.missing.join(", "))}</p>${variantNote}${nodeSetup}${download||`<a href="${escape(m.url)}" target="_blank" rel="noopener noreferrer">Model files & instructions</a>`}</div>`;
       }).join("");
-      this.imageDownloadPackages=available;this.imageModelAccess=new Map();
+      this.imageDownloadPackages=available;for(const access of this.imageModelAccess?.values()||[])access.dispose();this.imageModelAccess=new Map();
       for(const pack of available){const model=this.models.find(m=>map[m.id]===pack.id),host=model&&this.$('setup').querySelector(`[data-image-model="${model.id}"]`);if(!host||!pack.remaining_bytes)continue;
         const access=new ModelAccess(host,(path,body)=>this.fetch('/zura/studio'+path,body),()=>this.startModelDownload(pack.id));access.setFiles(pack.files);this.imageModelAccess.set(pack.id,access);
         for(const file of pack.files.filter(f=>!f.installed&&f.gated&&f.browser_url)){const actions=document.createElement('div');actions.className='zura-browser-model-actions';const link=document.createElement('a');link.textContent=`Download ${file.filename} in browser`;link.href=file.browser_url;link.target='_blank';link.rel='noopener noreferrer';const install=document.createElement('button');install.type='button';install.textContent='Install downloaded file';install.disabled=!!file.incomplete;install.onclick=()=>this.importImageModelFile(pack,file);actions.append(link,install);host.append(actions);}
@@ -596,7 +598,7 @@ export class CreativeWorkspace {
   }
   async cancel(){await cancelOwnedJob(this);}
   stopPolling(){clearInterval(this.timer);this.timer=null;}
-  close(){this.imageModelSetup?.close();this.modelDownloadClosed=true;this.browserConnection?.close();this.videoComposer?.browserConnection?.close();this.videoComposer?.ltxOutput?.close();this.save();this.stopPolling();this.imageZoom?.stopDraw();this.frames?.close();this.referencesVideo?.close();this.outpaint?.close();this.panorama?.close();if(this.paintout?.owner===this)this.paintout.close();if(this.watermark?.owner===this)this.watermark.close();this.disposePopovers?.();}
+  close(){for(const access of this.imageModelAccess?.values()||[])access.dispose();this.imageModelSetup?.close();this.modelDownloadClosed=true;this.browserConnection?.close();this.videoComposer?.browserConnection?.close();this.videoComposer?.ltxOutput?.close();this.save();this.stopPolling();this.imageZoom?.stopDraw();this.frames?.close();this.referencesVideo?.close();this.outpaint?.close();this.panorama?.close();if(this.paintout?.owner===this)this.paintout.close();if(this.watermark?.owner===this)this.watermark.close();this.disposePopovers?.();}
   async graph(){
     try{const graph=await this.imageGraph(this.job?.config||this.config());if(typeof this.app.loadApiJson!=="function")throw new Error("Update ComfyUI to open this image graph.");const original=(this.app.rootGraph||this.app.graph)?.serialize?.();if(!original)throw new Error("Your current graph could not be backed up.");try{await this.app.loadApiJson(graph,"Zura Image · "+Date.now()+".json");}catch(e){await this.app.loadGraphData(original);throw e;}this.studio.close();}catch(e){this.message(e.message);}
   }

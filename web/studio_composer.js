@@ -155,12 +155,13 @@ export class VideoComposer {
     this.imageModel.querySelector('[data-opening-model-label]').textContent=ready?'Finished image':names[chosen]||names.klein9b;
     this.imageModel.querySelector('summary').setAttribute('aria-disabled',String(working));
     for(const option of this.imageModel.querySelectorAll('[data-opening-model]')){
-      const model=status?.[option.dataset.openingModel],needsRestart=!model&&option.dataset.openingModel!=='klein9b';option.disabled=working||needsRestart||model?.ready===false;
+      const model=status?.[option.dataset.openingModel],needsRestart=!model&&option.dataset.openingModel!=='klein9b';option.disabled=working||needsRestart;
+      let badge=option.querySelector('[data-setup-needed]');if(!badge){badge=this.root.ownerDocument.createElement('small');badge.dataset.setupNeeded='';badge.textContent='Setup needed';option.append(badge);}badge.hidden=!model||model.ready!==false;
       option.setAttribute('aria-checked',String(!ready&&chosen===option.dataset.openingModel));
       if(model?.provider){option.title='Browser sign-in · no API credits. The original frame and references are uploaded to your account.';continue;}
-      option.title=needsRestart?'Restart ComfyUI to enable the new image models.':model?.ready===false?'Model setup needed. Check Models & setup.':option.dataset.openingModel==='flux3'?'16-step INT8 edit · original frame + up to 9 references':option.dataset.openingModel==='qwen21'?'Experimental base model - 40 steps, INT8, up to 9 references':option.dataset.openingModel==='qwen2511'?'4-step INT8 edit · original frame + up to 2 references':'4-step FP8 edit · original frame + up to 3 references';
+      option.title=needsRestart?'Restart ComfyUI to enable the new image models.':model?.ready===false?'Select to see missing models and install them for this workflow.':option.dataset.openingModel==='flux3'?'16-step INT8 edit · original frame + up to 9 references':option.dataset.openingModel==='qwen21'?'Experimental base model - 40 steps, INT8, up to 9 references':option.dataset.openingModel==='qwen2511'?'4-step INT8 edit · original frame + up to 2 references':'4-step FP8 edit · original frame + up to 3 references';
     }
-    const note=this.imageModel.querySelector('[data-opening-status]'),missing=status&&Object.values(status).some(m=>!m.ready);note.hidden=!missing&&chosen!=='qwen21';note.textContent=chosen==='qwen21'?'Qwen Image 2.1 is experimental and has not been render-tested here.':missing?'Unavailable generators need their model files or nodes installed.':'';
+    const note=this.imageModel.querySelector('[data-opening-status]'),missing=status&&Object.values(status).some(m=>!m.ready);note.hidden=!missing&&chosen!=='qwen21';note.textContent=chosen==='qwen21'?'Qwen Image 2.1 is experimental and has not been render-tested here.':missing?'Select a generator marked Setup needed to install its missing models.':'';
     const finished=this.imageModel.querySelector('[data-use-finished-image]'),input=this.root.querySelector('input[name="gs-look"][value="ready"]');finished.disabled=working||!!input?.disabled;finished.setAttribute('aria-checked',String(ready));
     if(working)this.imageModel.open=false;
   }

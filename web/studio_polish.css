@@ -172,3 +172,5 @@
  #genj-studio[data-workspace] .zc-workflow-controls>:first-child{flex-basis:116px;width:116px;max-width:116px}
  #genj-studio[data-workspace] .zc-workflow-controls>.zc-task-control{flex:1 1 160px;width:auto;max-width:none}
 }
+
+#genj-studio .zc-opening-menu [data-setup-needed]{font-size:12px;line-height:1.4;color:var(--gs-muted);font-weight:400;margin-left:auto;padding-left:12px}

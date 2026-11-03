@@ -17,6 +17,7 @@ function fixture(Workspace, {lost=true, failureStatus}={}){
   const ui=Object.create(Workspace.prototype), fields=new Map(), calls=[];
   let stored=null, online=false, accepted=null, history={};
   Object.assign(ui,{availability:{ready:true},models:[{id:'flux3',ready:true}],api:{clientId:'test',fetchApi:async()=>({ok:false})},items:[],submitting:false,uploading:false,
+    browserConnection:{connected:()=>true},
     hdrOutput:{busy:false,preflight:async()=>{},start:async()=>{throw Error('Unexpected HDR continuation');}},
     loras:{patch:async graph=>graph},
     config:()=>({model:'flux3',engine:'h3',prompt:'test',frames:9,first:{file:'first.png'},custom_loras:[],random:false}),

@@ -31,7 +31,7 @@ Use your own ComfyUI host and port if they differ.
 
 ## Current release
 
-**1.3.37** fixes Wan 2.1 Relight incorrectly showing an H3 limit and model label. Longer relight shots run in sections; review the joins on your footage. The optional FastH3 draft preset remains available beside normal H3 in **Video > Reference to video**; see its [tested limits and trade-offs](docs/FASTH3_DRAFT.md).
+**1.3.46** improves Studio setup and navigation: browser sign-in for gated Hugging Face downloads, selectable missing image models with installation guidance, visible HDR trimming and more consistent menus. Restart ComfyUI after updating. See the [UI audit and validation limits](docs/UI_AUDIT_20261103.md) and [model setup guide](docs/paintout-studio/MODEL_DOWNLOADS.md).
 
 The [GitHub release](https://github.com/ZURAVFX/ComfyUI_zura_nodes/releases/latest) is available separately. Registry submission does not mean approval or immediate availability through Manager.
 

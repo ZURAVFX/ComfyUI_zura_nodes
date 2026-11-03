@@ -160,3 +160,12 @@ prompt height; prompts remain multiline and resizable.
 
 Adapted from [Unslop by Damir Sokolovsky](https://github.com/heydamir/unslop),
 CC BY 4.0. See THIRD_PARTY_NOTICES.md.
+
+
+## November UI audit refinements
+
+Keep the approved neutral surfaces, Manrope type and lime primary actions. Basic HDR trimming is visible in the composer after a source loads; precise frame values and colour overrides remain in a disclosure. The global video readiness label belongs only to the main video recipe. Other workspaces show their own readiness beside the action.
+
+A missing supported starting-image model remains selectable and says Setup needed. Selecting it exposes the matching installer; it does not enable generation prematurely. Installer connections lead with browser sign-in, publisher terms and automatic retry. Token entry is an advanced fallback. All installers use the same connection and model storage controls.
+
+Floating workflow menus support arrow keys, Home/End and Escape, and opening one closes unrelated floating menus. Progress controls have accessible names. Live visual checks remain separate from DOM and state tests.

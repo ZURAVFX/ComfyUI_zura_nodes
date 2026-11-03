@@ -55,7 +55,7 @@ assert.equal(composerTool.sourceInfo,null);assert.equal(composerTool.outputRef,n
 assert.equal(composerTool.$('source-preview').hidden,true);assert.equal(composerTool.$('timeline').hidden,true);
 composerTool.close();
 
-tool.$('count').value='37';tool.$('count').oninput();assert.match(tool.$('advanced-summary').textContent,/37 frames/);
+tool.$('count').value='37';tool.$('count').oninput();assert.match(tool.$('range-notice').textContent,/Range exceeds the 25-frame source/,'Invalid ranges remain visible beside the timeline');assert.equal(tool.$('timeline').closest('details'),null,'Trim stays visible outside advanced colour settings');
 const rangeTool=new HDRSourceTool(document.querySelector('#host'),api,()=>({}),{longAvailable:true});
 const rangePending=[];rangeTool.request=(path,body)=>new Promise(resolve=>rangePending.push({path,body,resolve}));rangeTool.refreshModelSetup=async()=>{};
 rangeTool.setOutput({type:'output',subfolder:'zura/first_last',filename:'older.mp4'});rangeTool.activate();
@@ -201,12 +201,12 @@ assert.equal(longTool.$('sections-control').hidden,true,'SDR conversion keeps it
 await longTool.start();await new Promise(resolve=>setTimeout(resolve,5));clearTimeout(longTool.longClient.timer);
 assert.equal(longCalls.filter(([path])=>path==='/zura/studio/hdr/jobs').length,1);
 longTool.onProgress({detail:{prompt_id:'own-prompt',node:'sample1',value:2,max:8}});
-assert.match(longTool.$('status').textContent,/Section 2 of 2.*step 2 of 8/);
+assert.match(longTool.$('status').textContent,/Segment 2 of 2.*step 2 of 8/);
 longTool.longUpdate({state:'rendering',completed:1,total:2,active_prompt_id:'own-prompt'});
-assert.match(longTool.$('status').textContent,/Section 2 of 2.*step 2 of 8/,'polling must not erase live sampler progress');
+assert.match(longTool.$('status').textContent,/Segment 2 of 2.*step 2 of 8/,'polling must not erase live sampler progress');
 assert.equal(Number(longTool.$('progress').value),25);
 longTool.longUpdate({state:'rendering',completed:1,total:2,active_prompt_id:'new-prompt'});
-assert.match(longTool.$('status').textContent,/Section 2 of 2 · processing/);assert.equal(longTool.$('progress').hasAttribute('value'),false);
+assert.match(longTool.$('status').textContent,/Segment 2 of 2 · processing/);assert.equal(longTool.$('progress').hasAttribute('value'),false);
 longState='complete';await longTool.longClient.poll();
 assert.equal(longTool.$('result').hidden,false);assert.match(longTool.$('preview').src,/preview.mp4/);
 assert.match(longTool.$('hlg').href,/hdr.mp4/);assert.match(longTool.$('exr').href,/exr.zip/);

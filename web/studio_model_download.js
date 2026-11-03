@@ -28,8 +28,13 @@ export class StudioModelDownloads {
     this.access=new ModelAccess(panel.querySelector('.gs-advanced-body'),request,()=>this.retryRequest?this.start(this.retryRequest):this.startWorkflow());this.token=this.access.$('token');
   }
   el(tag,text){const e=document.createElement(tag);e.textContent=text;return e;}
-  async load(){
-    if(this.loadingCatalogue)return;this.loadingCatalogue=true;
+  load(){
+    if(this.cataloguePromise)return this.cataloguePromise;
+    this.cataloguePromise=this.loadCatalogue().finally(()=>{this.cataloguePromise=null;});
+    return this.cataloguePromise;
+  }
+  async loadCatalogue(){
+    this.loadingCatalogue=true;
     try{const data=await this.request('/model-downloads');this.uncertain=false;this.packages=(data.models||[]).filter(p=>PACKAGE_IDS.includes(p.id));
       const previous=this.select.value;const overview=this.el('option','Current workflow');overview.value='__workflow__';this.select.replaceChildren(overview,...this.packages.map(p=>{const e=this.el('option',p.name);e.value=p.id;return e;}));if(previous==='__workflow__'||this.packages.some(p=>p.id===previous))this.select.value=previous;else if(!this.context&&this.packages.length)this.select.value=this.packages[0].id;if(this.missingContext)this.applyMissingContext();this.render();
       if(data.active?.id&&!this.job&&!this.closed){this.job=data.active.id;this.select.disabled=true;this.progress.textContent='Reconnecting to the existing download…';this.render();void this.poll();}
@@ -198,5 +203,5 @@ export class StudioModelDownloads {
   }
   resume(){this.closed=false;if(this.job)void this.poll();}
   close(){this.closed=true;this.panel.open=false;}
-  dispose(){this.close();this.panel.ontoggle=null;}
+  dispose(){this.access.dispose();this.close();this.panel.ontoggle=null;}
 }

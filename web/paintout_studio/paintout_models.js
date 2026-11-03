@@ -159,5 +159,5 @@ export class PaintoutModels{
     finally{this.polling=false;}
   }
   async cancel(){if(!this.active()||this.cancelling||this.job?.phase==='cancelling')return;this.cancelling=true;this.render();try{await this.w.fetch(`${ROUTE}/${encodeURIComponent(this.job.id)}/cancel`,{});this.job.phase='cancelling';this.schedulePoll(0);}catch(error){this.error=safeError(error.message);}finally{this.cancelling=false;this.render();}}
-  destroy(){this.inlineActive=false;this.close();document.removeEventListener('pointerdown',this.outside);window.removeEventListener('resize',this.viewport);document.removeEventListener('scroll',this.viewport,true);}
+  destroy(){this.access.dispose();this.inlineActive=false;this.close();document.removeEventListener('pointerdown',this.outside);window.removeEventListener('resize',this.viewport);document.removeEventListener('scroll',this.viewport,true);}
 }

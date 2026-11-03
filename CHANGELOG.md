@@ -1,5 +1,14 @@
 # Release notes
 
+## 1.3.46 - 3 November 2026
+
+- Add shared browser sign-in for gated Hugging Face model downloads, with automatic retry, cancellation and a popup-blocked fallback. Read tokens remain an advanced option. Publisher approval is still required.
+- Let users select missing starting-image generators and see the matching installation requirements. Keep generation disabled until setup is ready.
+- Fix overlapping model-catalogue refreshes and stop abandoned sign-in requests when setup panels close or rebuild.
+- Keep HDR trimming visible in the composer, improve download controls in light mode and prevent unrelated workspaces from showing the previous video model's readiness label.
+- Improve floating-menu keyboard navigation and add accessible progress labels.
+- Validated with 95 frontend suites and 30 backend/model-installation tests, without AI generations. Real-account OAuth approval/download and visual browser sign-off remain pending; see the UI audit.
+
 ## 1.3.45 - 3 November 2026
 
 - Fix the shared Start over action in Watermark removal. Save the previous project, clear the clip, masks, optional guide and result, and return to the first step. Add Back to video and protect active renders from accidental resets.

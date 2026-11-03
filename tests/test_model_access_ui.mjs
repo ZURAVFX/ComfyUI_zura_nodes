@@ -46,3 +46,36 @@ document.createElement=tag=>{const node=create(tag);if(tag==='input')node.click=
 assert.deepEqual(await importModelFile('/zura/studio/model-downloads','ltx25_core',file),{cancelled:true});
 document.createElement=create;
 console.log('Shared access, gated failure/reconnect/retry, secret clearing and streamed browser import UI passed.');
+
+// Browser-led connection uses a public device flow; no credential reaches the UI.
+const nativeTimeout=globalThis.setTimeout,nativeClear=globalThis.clearTimeout;
+let scheduled,opened=0,resumed=0;
+globalThis.setTimeout=callback=>{scheduled=callback;return 1;};globalThis.clearTimeout=()=>{scheduled=null;};
+window.open=()=>{opened++;return {opener:{},location:{},close(){}};};
+const browserCalls=[];
+const browserAccess=new ModelAccess(document.querySelector('#access'),async(path,body)=>{
+ browserCalls.push(body);
+ if(body.action==='browser_start')return {id:'device-session',url:'https://huggingface.co/oauth/device',code:'TEST-CODE',interval:5};
+ if(body.action==='browser_poll')return {phase:'connected',connected:true,name:'artist'};
+ if(body.action==='browser_cancel')return {phase:'cancelled'};
+},()=>resumed++);
+await browserAccess.startBrowser();assert.equal(opened,1);assert.equal(browserAccess.$('cancel').hidden,false);
+assert.match(browserAccess.$('code').textContent,/TEST-CODE/);assert.equal(typeof scheduled,'function');
+await browserAccess.pollBrowser();assert.equal(resumed,1);assert.equal(browserAccess.$('browser').hidden,true);assert.equal(scheduled,null);
+assert.deepEqual(browserCalls[1],{action:'browser_poll',id:'device-session'});
+let termsPrevented=false;
+browserAccess.setFiles([file],{access_repo:'Example/gated',access_reason:'terms'});
+browserAccess.request=async()=>({connected:true,name:'artist'});
+browserAccess.$('terms').querySelector('a').onclick({preventDefault(){termsPrevented=true;}});
+assert.equal(termsPrevented,true,'A working popup does not also open a duplicate tab');
+await browserAccess.onTermsReturn();assert.equal(resumed,2,'Returning from model terms resumes the requested download');
+browserAccess.request=async(path,body)=>body.action==='browser_start'?{id:'device-session',url:'https://huggingface.co/oauth/device'}:{phase:'cancelled'};
+// A blocked popup still offers the secure link; cancellation stops polling.
+window.open=()=>null;await browserAccess.startBrowser();assert.equal(browserAccess.$('resume').hidden,false);
+await browserAccess.cancelBrowser();assert.equal(scheduled,null);assert.equal(browserAccess.login,null);
+let resolveStart;
+const interrupted=new ModelAccess(document.querySelector('#access'),async(path,body)=>body.action==='browser_start'?await new Promise(resolve=>resolveStart=resolve):{phase:'cancelled'});
+const starting=interrupted.startBrowser();interrupted.dispose();resolveStart({id:'late',url:'https://huggingface.co/oauth/device'});await starting;
+assert.equal(interrupted.login,null);assert.equal(scheduled,null,'Closing a workspace cannot leave browser sign-in polling');
+globalThis.setTimeout=nativeTimeout;globalThis.clearTimeout=nativeClear;
+console.log('Browser sign-in, blocked-popup fallback, automatic retry and cancellation races passed.');

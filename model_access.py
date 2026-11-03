@@ -11,6 +11,11 @@ from pathlib import Path
 import re
 import threading
 import uuid
+import time
+
+# Public OAuth client registered for Zura Studio. This identifier is not a secret.
+# It requests profile and approved public gated models, never private repositories.
+HF_CLIENT_ID = '949d5cc3-d65d-4529-a0c4-92d61f970044'
 
 
 def _protect(data, decrypt=False):
@@ -41,17 +46,22 @@ class ModelAccess:
         self.name = ''
         self.remembered = False
         self.ignore_cached = False
+        self.browser_login = None
+        self.expires = None
         try:
             if self.path.stat().st_size > 32768:
                 return
             saved = json.loads(_protect(base64.b64decode(self.path.read_bytes()), decrypt=True))
-            if re.fullmatch(r'hf_[A-Za-z0-9_\-]+', saved['token']):
+            if isinstance(saved.get('token'), str) and re.fullmatch(r'[A-Za-z0-9._~+/=\-]{6,4096}', saved['token']):
                 self.token, self.name, self.remembered = saved['token'], str(saved.get('name', ''))[:128], True
+                self.expires = float(saved['expires']) if saved.get('expires') is not None else None
         except (OSError, ValueError, KeyError, TypeError):
             pass
 
     def credential(self):
         with self.lock:
+            if self.expires is not None and time.time() >= self.expires:
+                self.token, self.name, self.remembered, self.ignore_cached = None, '', False, True
             if self.token:
                 return self.token
             if self.ignore_cached:
@@ -64,7 +74,7 @@ class ModelAccess:
 
     def status(self):
         with self.lock:
-            return dict(connected=bool(self.credential()), name=self.name,
+            return dict(connected=bool(self.credential()), name=self.name, browser_signin_available=True,
                         remembered=self.remembered, cached=not self.token and bool(self.credential()))
 
     def connect(self, token, remember=False):
@@ -73,7 +83,13 @@ class ModelAccess:
             raise ValueError('Paste a Hugging Face read token. Create one using the link above.')
         if not isinstance(remember, bool):
             raise ValueError('Choose whether to remember this connection.')
-        token = token.strip()
+        return self._connect(token.strip(), remember)
+
+    def _connect(self, token, remember=False, expires=None):
+        import requests
+        # Browser OAuth tokens are opaque; verify against HF before trusting or saving.
+        if not isinstance(token, str) or not re.fullmatch(r'[A-Za-z0-9._~+/=\-]{6,4096}', token):
+            raise ValueError('Hugging Face returned an invalid connection. Sign in again.')
         try:
             reply = requests.get('https://huggingface.co/api/whoami-v2',
                                  headers={'Authorization': 'Bearer ' + token}, timeout=(10, 20))
@@ -90,7 +106,7 @@ class ModelAccess:
                 self.path.parent.mkdir(parents=True, exist_ok=True)
                 temporary = self.path.with_name('.hf-access-' + uuid.uuid4().hex)
                 try:
-                    data = base64.b64encode(_protect(json.dumps(dict(token=token, name=name)).encode('utf-8')))
+                    data = base64.b64encode(_protect(json.dumps(dict(token=token, name=name, expires=expires)).encode('utf-8')))
                     descriptor = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
                     with os.fdopen(descriptor, 'wb') as file:
                         file.write(data)
@@ -100,13 +116,82 @@ class ModelAccess:
             else:
                 self.path.unlink(missing_ok=True)
             self.token, self.name, self.remembered, self.ignore_cached = token, name[:128], remember, False
+            self.expires = expires
         return self.status()
 
     def disconnect(self):
         with self.lock:
+            self.browser_login = None
+            self.expires = None
             self.path.unlink(missing_ok=True)
             self.token, self.name, self.remembered, self.ignore_cached = None, '', False, True
         return self.status()
+
+    def browser_start(self, remember=False):
+        import requests
+        if not isinstance(remember, bool):
+            raise ValueError('Choose whether to remember this connection.')
+        try:
+            reply = requests.post('https://huggingface.co/oauth/device', data={
+                'client_id': HF_CLIENT_ID, 'scope': 'openid profile gated-repos'}, timeout=(10, 20))
+            reply.raise_for_status()
+            data = reply.json()
+            from urllib.parse import urlparse
+            url = data.get('verification_uri_complete') or data['verification_uri']
+            parsed = urlparse(url)
+            if parsed.scheme != 'https' or parsed.netloc != 'huggingface.co':
+                raise ValueError('Unexpected sign-in destination.')
+            interval = max(5, int(data.get('interval', 5)))
+            session = dict(id=uuid.uuid4().hex, device=data['device_code'],
+                           expires=time.monotonic()+min(1800, int(data['expires_in'])),
+                           interval=interval, next_poll=0, remember=remember)
+            with self.lock:
+                self.browser_login = session
+            return dict(id=session['id'], url=url, code=data.get('user_code', ''), interval=interval)
+        except (requests.RequestException, ValueError, KeyError, TypeError):
+            raise ValueError('Could not open Hugging Face sign-in. Try again shortly.') from None
+
+    def browser_poll(self, login_id, cancel=False):
+        import requests
+        with self.lock:
+            session = self.browser_login
+            if not session or session['id'] != login_id:
+                raise ValueError('This sign-in has ended. Open browser sign-in again.')
+            if cancel:
+                self.browser_login = None
+                return dict(phase='cancelled')
+            if time.monotonic() >= session['expires']:
+                self.browser_login = None
+                raise ValueError('Sign-in expired. Open browser sign-in again.')
+            if time.monotonic() < session['next_poll']:
+                return dict(phase='waiting', interval=session['interval'])
+            session['next_poll'] = time.monotonic()+session['interval']
+        try:
+            reply = requests.post('https://huggingface.co/oauth/token', data={
+                'client_id': HF_CLIENT_ID, 'device_code': session['device'],
+                'grant_type': 'urn:ietf:params:oauth:grant-type:device_code'}, timeout=(10, 20))
+            data = reply.json()
+            error = data.get('error')
+            if error in ('authorization_pending', 'slow_down'):
+                if error == 'slow_down':
+                    session['interval'] += 5
+                    session['next_poll'] = time.monotonic()+session['interval']
+                return dict(phase='waiting', interval=session['interval'])
+            if error:
+                with self.lock:
+                    if self.browser_login is session:
+                        self.browser_login = None
+                raise ValueError('Sign-in was declined or expired. Open browser sign-in to try again.')
+            reply.raise_for_status()
+            with self.lock:
+                if self.browser_login is not session:
+                    raise ValueError('This sign-in has been cancelled.')
+                expires = time.time()+max(0, float(data['expires_in'])-30) if data.get('expires_in') is not None else None
+                state = self._connect(data['access_token'], session['remember'], expires)
+                self.browser_login = None
+            return dict(phase='connected', **state)
+        except (requests.RequestException, json.JSONDecodeError, KeyError, TypeError):
+            raise ValueError('Could not finish Hugging Face sign-in. Try again.') from None
 
 
 _access = None
@@ -146,6 +231,10 @@ def register(routes, response):
                     raise ValueError('Choose a Hugging Face connection action.')
                 if data == {'disconnect': True}:
                     result = await asyncio.to_thread(manager.disconnect)
+                elif data.get('action') == 'browser_start' and set(data) <= {'action', 'remember'}:
+                    result = await asyncio.to_thread(manager.browser_start, data.get('remember', False))
+                elif data.get('action') in ('browser_poll', 'browser_cancel') and set(data) == {'action', 'id'}:
+                    result = await asyncio.to_thread(manager.browser_poll, data['id'], data['action'] == 'browser_cancel')
                 elif set(data) <= {'token', 'remember'} and 'token' in data:
                     result = await asyncio.to_thread(manager.connect, data['token'], data.get('remember', False))
                 else:

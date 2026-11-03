@@ -71,4 +71,63 @@ class AccessTests(unittest.TestCase):
             self.assertIsNone(self.manager.credential())
 
 
+    def device_reply(self, payload):
+        reply = Reply()
+        reply.json = lambda: payload
+        return reply
+
+    def start_device(self):
+        payload = dict(device_code='server-only-device', user_code='ABCD-EFGH',
+                       verification_uri='https://huggingface.co/oauth/device', expires_in=300)
+        with patch('requests.post', return_value=self.device_reply(payload)) as post:
+            login = self.manager.browser_start(True)
+        self.assertEqual(post.call_args.kwargs['data']['scope'], 'openid profile gated-repos')
+        self.assertNotIn('device_code', login)
+        self.assertEqual(login['code'], 'ABCD-EFGH')
+        return login
+
+    def test_browser_pending_slowdown_success_and_expiry(self):
+        login = self.start_device()
+        with patch('requests.post', return_value=self.device_reply({'error':'authorization_pending'})) as post:
+            self.assertEqual(self.manager.browser_poll(login['id'])['phase'], 'waiting')
+            self.manager.browser_poll(login['id'])
+            self.assertEqual(post.call_count, 1, 'Server enforces polling interval')
+        self.manager.browser_login['next_poll'] = 0
+        with patch('requests.post', return_value=self.device_reply({'error':'slow_down'})):
+            self.assertEqual(self.manager.browser_poll(login['id'])['interval'], 10)
+        self.manager.browser_login['next_poll'] = 0
+        with patch('requests.post', return_value=self.device_reply({'access_token':'opaque.oauth.fixture', 'expires_in':3600})), patch('requests.get', return_value=Reply()):
+            state = self.manager.browser_poll(login['id'])
+        self.assertEqual(state['phase'], 'connected')
+        self.assertNotIn('opaque.oauth.fixture', json.dumps(state))
+        restored = access.ModelAccess(self.path)
+        self.assertEqual(restored.credential(), 'opaque.oauth.fixture')
+        with patch.object(access.time, 'time', return_value=restored.expires+1):
+            self.assertFalse(restored.status()['connected'], 'Expired OAuth tokens ask for sign-in again')
+
+    def test_device_cancel_denial_and_untrusted_destination(self):
+        login = self.start_device()
+        with self.assertRaisesRegex(ValueError, 'ended'):
+            self.manager.browser_poll('wrong-session')
+        self.assertEqual(self.manager.browser_poll(login['id'], True)['phase'], 'cancelled')
+        with patch('requests.post') as post, self.assertRaisesRegex(ValueError, 'ended'):
+            self.manager.browser_poll(login['id'])
+        post.assert_not_called()
+        login = self.start_device()
+        with patch('requests.post', return_value=self.device_reply({'error':'access_denied'})), self.assertRaisesRegex(ValueError, 'declined'):
+            self.manager.browser_poll(login['id'])
+        self.assertIsNone(self.manager.browser_login)
+        with patch('requests.post', return_value=self.device_reply(dict(device_code='secret',user_code='code',verification_uri='https://evil.example',expires_in=300))), self.assertRaisesRegex(ValueError, 'Could not open'):
+            self.manager.browser_start()
+
+    def test_cancel_while_token_request_is_in_flight_cannot_connect(self):
+        login = self.start_device()
+        def respond(*args, **kwargs):
+            self.manager.browser_poll(login['id'], True)
+            return self.device_reply({'access_token':TOKEN})
+        with patch('requests.post', side_effect=respond), patch('requests.get') as get, self.assertRaisesRegex(ValueError, 'cancelled'):
+            self.manager.browser_poll(login['id'])
+        get.assert_not_called()
+
+
 if __name__ == '__main__': unittest.main()
