@@ -71,6 +71,7 @@ def pick(kind):
     if os.name!='nt':raise ValueError('Windows file browsing requires a local Windows ComfyUI server.')
     # All dialog text is fixed; no request text is interpolated into shell code.
     filters={
+        'model':'Model files (*.safetensors)|*.safetensors',
         'footage':'Footage (*.mov;*.mp4;*.mxf;*.mkv;*.avi)|*.mov;*.mp4;*.mxf;*.mkv;*.avi|Images (*.exr;*.tif;*.tiff;*.png)|*.exr;*.tif;*.tiff;*.png',
         'anchor':'Painted frames (*.exr;*.tif;*.tiff;*.png)|*.exr;*.tif;*.tiff;*.png',
         'mask':'Mask (*.mov;*.mp4;*.mkv;*.exr;*.png;*.tif;*.tiff)|*.mov;*.mp4;*.mkv;*.exr;*.png;*.tif;*.tiff'}

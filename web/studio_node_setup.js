@@ -1,5 +1,6 @@
 // Shared dependency guidance. Opening setup never installs or updates extensions.
 export const NODE_PACKS=[
+  {name:'ComfyUI ProPainter Nodes',url:'https://github.com/daniabib/ComfyUI_ProPainter_Nodes',nodes:['ProPainterInpaint'],note:'Enable ProPainter in ComfyUI and restart it. If it is already installed, check the startup log for a loading error.'},
   {name:'Zura Nodes',url:'https://github.com/ZURAVFX/ComfyUI_zura_nodes',nodes:['GenjSelectClip','GenjLoadReviewedShot','GenjHoldImages','GenjHoldToModelLength','GenjPadAudioToFrames','GenjRestoreSoundtrack','GenjLTXFramePad','GenjApplyReferenceAudio','GenjH3FramePad','GenjH3ViewportFrameData','GenjSaveH3Conditioning','GenjLoadH3Conditioning','ZuraHDRWriteChunk','ZuraHDRReadChunkAnchor','ZuraHDRPadSDRAnchor','ZuraHDRNativePrepare','ZuraHDRLoadNativeSource','ZuraHDRCompositeOutpaint','ZuraHDRLoadSDRSource','ZuraHDRLoadAudioRange','ZuraHDRLoadTimedAudio','ZuraHDRPackageACEScct','ZuraHDRPackageEXR','ZuraHDRSaveExactRate','ZuraHDRSelectNativeTimeline','ZuraHDRTemporalHold','ZuraHDRTrimAudio','ZuraHDRTemporalDecodeCut','ZuraLTXHDRPrepare','ZuraLTXOutpaintCanvas','ZuraLTXOutpaintHDRCanvas','ZuraOutpaintTemporalHold','ZuraOutpaintReviewOverlay'],note:'Update Zura Nodes and restart ComfyUI to load the required nodes.'},
   {name:'ComfyUI',url:'https://github.com/Comfy-Org/ComfyUI',nodes:['LTXVImgToVideoInplace','LTXVAddGuide','UNETLoader','CLIPLoader','CLIPTextEncode','VAELoader','LoadImage','ImageScale','ImageFromBatch','GrowMask','InvertMask','ReferenceMultiLatent','CheckpointLoaderSimple','SAM3_Detect','SAM3_VideoTrack','ModelAttentionBackend','LTXVConditioning','EmptyLTXVLatentVideo','LTXVEmptyLatentAudio','LTXVConcatAVLatent','LTXVSeparateAVLatent','LTXVCropGuides','LTXVAudioVAELoader','LTXVAudioVAEEncode','LTXVAudioVAEDecode','LTXVLatentUpsampler','KSampler','KSamplerSelect','RandomNoise','CFGGuider','BasicGuider','SamplerCustomAdvanced','VAEDecode','VAEDecodeTiled','LoadAudio','CreateVideo','SaveVideo','MiniMaxH3ImageToVideo','MiniMaxH3ReferenceToVideo','MiniMaxH3AddGuide','EmptyMiniMaxH3LatentAV','MiniMaxH3SigmaShift'],note:'Update ComfyUI and restart it to load these built-in nodes.'},
   {name:'ComfyUI-SelfLift',url:'https://github.com/facok/comfyui-SelfLift',nodes:['SelfLiftH3Sampler']},
@@ -32,7 +33,7 @@ NODE_PACKS.find(pack=>pack.name==='ComfyUI').nodes.push(
 
 // Zura owns these namespaces. Missing classes normally indicate that an older
 // installation is loaded, so direct users to update the host pack.
-const ownedNode=name=>/^(Genj|ZuraPaintout|ZuraHDR|ZuraLTX|ZuraOutpaint)/.test(name);
+const ownedNode=name=>/^(Genj|ZuraPaintout|ZuraWatermark|ZuraHDR|ZuraLTX|ZuraOutpaint)/.test(name);
 export function groupMissingNodes(nodes){
   const missing=[...new Set((Array.isArray(nodes)?nodes:[]).filter(name=>typeof name==='string'&&name.trim()&&!/\.(safetensors|onnx|pt|pth|ckpt|bin)$/i.test(name)))];
   const unknown=new Set(missing),packs=[];

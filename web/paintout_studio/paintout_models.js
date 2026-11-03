@@ -1,5 +1,6 @@
 import {maskIcons} from './paintout_icons.js';
 import {groupMissingNodes} from '../studio_node_setup.js';
+import {ModelStorage} from '../studio_model_storage.js';
 
 const ROUTE='/zura/paintout/model-downloads';
 const ACTIVE=new Set(['queued','downloading','verifying','cancelling']);
@@ -14,10 +15,18 @@ export class PaintoutModels{
     this.w=workspace;this.models=[];this.job=null;this.context={};this.loading=false;this.closed=false;this.generation=0;
     const style=el('link');style.rel='stylesheet';style.href=new URL('./paintout_models.css',import.meta.url).href;workspace.page.append(style);style.onload=()=>this.positionPanel();
     this.root=el('details');this.root.className='zps-models';
-    this.root.innerHTML=`<summary title="Check and download Paintout models">${maskIcons.download}<span>Models</span><span data-model-badge></span></summary><section class="zps-models-panel" aria-label="Paintout model setup"><header><div><h3>Set up your models</h3><p>Files already on this computer are reused.</p></div><button type="button" data-model-close aria-label="Close model setup">${maskIcons.x}</button></header><label class="zps-models-choice">Models for<select data-model-package aria-label="Choose what to set up"></select></label><p class="zps-models-reason" data-model-reason></p><div data-model-files></div><details class="zps-models-access"><summary>Model licences and access</summary><div data-model-licences></div><p>Some publishers require you to accept their licence on Hugging Face before downloading.</p><label>Hugging Face read token <span>(only if needed)</span><input data-model-token type="password" autocomplete="off" spellcheck="false" placeholder="Paste a read token" /></label><p>Your token is used for this download only and is not saved in Paintout.</p></details><div class="zps-models-actions"><button type="button" data-model-download>${maskIcons.download}<span>Download missing models</span></button><button type="button" data-model-refresh>Check again</button></div><div class="zps-models-download" data-model-job hidden><strong data-model-job-title></strong><progress data-model-progress aria-label="Model download progress"></progress><p data-model-progress-text></p><button type="button" data-model-cancel>Cancel download</button></div><p class="zps-models-status" data-model-status role="status" aria-live="polite"></p><div class="zps-models-nodes" data-model-nodes hidden></div></section>`;
+    this.root.innerHTML=`<summary title="Check and download Paintout models">${maskIcons.download}<span>Models</span><span data-model-badge></span></summary><section class="zps-models-panel" aria-label="Paintout model setup"><header><div><h3>Set up your models</h3><p>Files already on this computer are reused.</p></div><button type="button" data-model-close aria-label="Close model setup">${maskIcons.x}</button></header><label class="zps-models-choice">Models for<select data-model-package aria-label="Choose what to set up"></select></label><p class="zps-models-reason" data-model-reason></p><div data-model-files></div><details class="zps-models-access"><summary>Model licences and access</summary><div data-model-licences></div><p>For gated files, sign in and accept the licence on Hugging Face, download in your browser, then choose Install downloaded file below. No API token is needed for that route.</p><details><summary>Advanced: use a read token instead</summary><label>Hugging Face read token <span>(only if needed)</span><input data-model-token type="password" autocomplete="off" spellcheck="false" placeholder="Paste a read token" /></label><p>Your token is used for this download only and is not saved in Studio.</p></details></details><div class="zps-models-actions"><button type="button" data-model-download>${maskIcons.download}<span>Download missing models</span></button><button type="button" data-model-refresh>Check again</button></div><div class="zps-models-download" data-model-job hidden><strong data-model-job-title></strong><progress data-model-progress aria-label="Model download progress"></progress><p data-model-progress-text></p><button type="button" data-model-cancel>Cancel download</button></div><p class="zps-models-status" data-model-status role="status" aria-live="polite"></p><div class="zps-models-nodes" data-model-nodes hidden></div></section>`;
     this.$=key=>this.root.querySelector(`[data-model-${key}]`);
-    this.$('close').onclick=()=>this.close();this.$('package').onchange=()=>this.render();this.$('download').onclick=()=>this.start();this.$('refresh').onclick=()=>this.refresh();this.$('cancel').onclick=()=>this.cancel();
-    this.root.ontoggle=()=>{if(this.root.open){this.closed=false;this.positionPanel();void this.load();}else{this.stopPolling();this.$('token').value='';}};
+    this.storage=new ModelStorage(this.root.querySelector('.zps-models-panel'),(path,body)=>workspace.fetch('/zura/studio'+path,body),()=>this.refresh());
+    this.quick=el('section');this.quick.className='gs-model-quick';this.quick.hidden=true;
+    this.quick.innerHTML='<div class="gs-model-quick-copy"><strong>Models needed for this step</strong><small></small></div><button type="button" data-quick-install>Install missing models</button><button type="button" data-quick-details>Details</button><button type="button" data-quick-cancel hidden>Cancel install</button><progress hidden aria-label="Model installation progress"></progress><p data-quick-status role="status" aria-live="polite"></p>';
+    (workspace.page.querySelector('.zf-composer')||workspace.page).prepend(this.quick);
+    this.quick.querySelector('[data-quick-install]').onclick=()=>{this.$('package').value=this.recommended();this.closed=false;this.inlineActive=true;return this.start();};
+    this.quick.querySelector('[data-quick-details]').onclick=()=>this.open();
+    this.quick.querySelector('[data-quick-cancel]').onclick=()=>this.cancel();
+    this.quickStorage=new ModelStorage(this.quick,(path,body)=>workspace.fetch('/zura/studio'+path,body),()=>this.refresh());this.quickStorage.root.querySelector('summary').textContent='Use existing models or change folder';
+    this.$('close').onclick=()=>this.close();this.$('package').onchange=()=>this.render();this.$('download').onclick=()=>this.modelsReady()?this.close():this.start();this.$('refresh').onclick=()=>this.refresh();this.$('cancel').onclick=()=>this.cancel();
+    this.root.ontoggle=()=>{if(this.root.open){this.closed=false;this.positionPanel();void this.load();}else{if(!this.inlineActive)this.stopPolling();this.$('token').value='';}};
     this.root.addEventListener('keydown',event=>{event.stopPropagation();if(event.key==='Escape'){event.preventDefault();this.close();}});
     this.outside=event=>{if(this.root.open&&!this.root.contains(event.target))this.close();};document.addEventListener('pointerdown',this.outside);this.viewport=()=>this.positionPanel();window.addEventListener('resize',this.viewport);document.addEventListener('scroll',this.viewport,true);
     workspace.page.querySelector('.zf-heading').append(this.root);
@@ -25,17 +34,18 @@ export class PaintoutModels{
   }
   positionPanel(){if(!this.root?.open)return;const panel=this.root.querySelector('.zps-models-panel'),button=this.root.querySelector('summary').getBoundingClientRect(),width=Math.min(560,innerWidth-24),top=innerWidth<=700?70:Math.max(12,Math.min(button.bottom+8,innerHeight-160));Object.assign(panel.style,{left:`${Math.max(12,Math.min(button.right-width,innerWidth-width-12))}px`,right:'auto',top:`${top}px`,width:`${width}px`,maxHeight:`${Math.max(120,Math.min(720,innerHeight-top-12))}px`});}
   active(){return !!this.job&&ACTIVE.has(this.job.phase);}
+  modelsReady(){const model=this.models.find(model=>model.id===this.$('package').value);return !!model&&!this.loading&&!this.active()&&model.files?.every(file=>file.installed);}
   videoGroup(){if(this.context.mode==='ripple')return 'ripple';return (this.context.mode==='full'?'full':this.context.mode==='inpaint'?'inpaint':'targeted')+(this.context.pipeline==='hdr_hdr'?'_hdr':'');}
   recommended(){const c=this.context;if(c.stage==='mask')return 'mask';if(c.stage==='clean')return 'clean';if(c.phase==='hdr')return 'hdr_conversion';if(c.pipeline==='sdr_hdr')return '_sdr_hdr';return this.videoGroup();}
   updatePackages(raw){
-    raw=raw.filter(model=>!['targeted_auto','targeted_auto_hdr','targeted_light'].includes(model.id));
+    if(!this.w.watermark)raw=raw.filter(model=>!['targeted_auto','targeted_auto_hdr','targeted_light'].includes(model.id));
     this.catalogue=raw;this.models=[...raw];
     if(this.context.pipeline==='sdr_hdr'){const video=raw.find(model=>model.id===this.videoGroup()),hdr=raw.find(model=>model.id==='hdr_conversion');if(video&&hdr){const files=[...new Map([...video.files,...hdr.files].map(file=>[(file.folder||'')+'/'+file.filename,file])).values()];this.models.unshift({id:'_sdr_hdr',name:video.name+' + HDR conversion',model_ids:[video.id,hdr.id],files,remaining_bytes:files.filter(file=>!file.installed).reduce((sum,file)=>sum+(Number(file.size_bytes)||0),0),gated:video.gated||hdr.gated});}}
     const previous=this.$('package').value;this.$('package').replaceChildren(...this.models.map(model=>{const option=el('option',model.name);option.value=model.id;return option;}));if(this.models.some(model=>model.id===previous))this.$('package').value=previous;
   }
-  setContext(context){const previous=this.context;this.context=context||{};if(this.catalogue&&(previous.mode!==this.context.mode||previous.pipeline!==this.context.pipeline))this.updatePackages(this.catalogue);this.renderSummary();this.renderNodes();}
+  setContext(context){const previous=this.context;this.context=context||{};if(this.catalogue&&(previous.mode!==this.context.mode||previous.pipeline!==this.context.pipeline||previous.targetedMethod!==this.context.targetedMethod))this.updatePackages(this.catalogue);if(!this.catalogue&&!this.loading)void this.load();this.renderSummary();this.renderNodes();}
   open(scope){this.closed=false;this.root.open=true;this.requested=scope==='video'?(this.context.pipeline==='sdr_hdr'?'_sdr_hdr':this.videoGroup()):scope==='hdr_source'?(this.context.mode==='full'?'full_hdr':this.context.mode==='inpaint'?'inpaint_hdr':'targeted_hdr'):scope||this.recommended();if(this.models.some(model=>model.id===this.requested)){this.$('package').value=this.requested;this.render();}if(!this.loading)void this.load();this.root.querySelector('summary').scrollIntoView?.({block:'nearest'});}
-  close(){this.closed=true;this.root.open=false;this.stopPolling();this.$('token').value='';}
+  close(){this.closed=!this.inlineActive;this.root.open=false;if(!this.inlineActive)this.stopPolling();this.$('token').value='';}
   stopPolling(){clearTimeout(this.timer);this.timer=null;}
   async refresh(){await this.load();try{await this.w.loadModels();}catch{} }
   async load(){
@@ -46,11 +56,20 @@ export class PaintoutModels{
       const previous=this.$('package').value;this.updatePackages(data.models);
       const selection=this.requested||previous||this.recommended();this.requested=null;if(this.models.some(model=>model.id===selection))this.$('package').value=selection;
       this.error='';this.submissionUnknown=false;if(data.active?.id){this.job=data.active;if(!this.job.phase)this.job.phase='queued';}
-      this.render();if(this.active()&&this.root.open)this.schedulePoll(0);
+      this.render();if(this.active()){this.inlineActive=true;this.closed=false;this.schedulePoll(0);}
     }catch(error){this.error=safeError(error.message);this.render();}
     finally{this.loading=false;this.render();}
   }
-  renderSummary(){const badge=this.$('badge');if(this.active()){badge.textContent='Downloading';return;}const model=this.models.find(model=>model.id===this.recommended());const missing=model?.files?.filter(file=>!file.installed).length;badge.textContent=missing?`${missing} missing`:'';}
+  renderSummary(){
+    const model=this.models.find(model=>model.id===this.recommended()),missing=model?.files?.filter(file=>!file.installed)||[],active=this.active(),nodes=(this.context.missingNodes||[]).filter(name=>! /\.(safetensors|onnx|pt|pth|ckpt|bin)$/i.test(name));
+    this.$('badge').textContent=active?'Downloading':missing.length?`${missing.length} missing`:nodes.length?'Setup needed':'';
+    this.quick.hidden=!active&&!missing.length&&!nodes.length;
+    this.quick.querySelector('strong').textContent=nodes.length&&!missing.length?'Workflow extensions needed':'Models needed for this step';
+    this.quick.querySelector('small').textContent=missing.length?`${missing.length} missing files · ${bytes(model?.remaining_bytes)} to download${nodes.length?' · extensions also needed':''}`:'Enable the required extensions from Details, then restart ComfyUI.';
+    const button=this.quick.querySelector('[data-quick-install]');button.hidden=!missing.length&&!active;button.textContent=active?'Installing…':`Install missing models · ${bytes(model?.remaining_bytes)}`;button.disabled=active||this.loading||!model||!missing.length||missing.some(f=>f.incomplete);
+    this.quickStorage.root.hidden=!missing.length;
+    this.quick.querySelector('[data-quick-status]').textContent=this.error||this.$('progress-text').textContent||'';this.quick.querySelector('[data-quick-cancel]').hidden=!active;this.quick.querySelector('[data-quick-cancel]').disabled=!!this.cancelling||this.job?.phase==='cancelling';const bar=this.quick.querySelector('progress');bar.hidden=!active;if(this.job?.total_bytes){bar.max=this.job.total_bytes;bar.value=this.job.done_bytes||0;}else bar.removeAttribute('value');
+  }
   renderNodes(){
     const nodeBox=this.$('nodes'),missing=(this.context.missingNodes||[]).filter(name=>typeof name==='string'&&!/\.(safetensors|onnx|pt|pth|ckpt|bin)$/i.test(name));
     nodeBox.hidden=!missing.length;nodeBox.replaceChildren();if(!missing.length)return;
@@ -68,14 +87,16 @@ export class PaintoutModels{
     this.$('reason').textContent=model?(REASONS[model.id]||model.note||'Download the missing files for this step.'):this.loading?'Checking installed model files…':'Choose what you want to set up.';
     this.$('files').replaceChildren();
     if(model){
-      const heading=el('p',missing.length?`${files.length-missing.length} of ${files.length} files ready · ${total?bytes(total)+' to download':'download size checked when it starts'}`:'All model files for this step are installed.');heading.className='zps-models-file-summary';this.$('files').append(heading);
+      const heading=el('p',missing.length?`${files.length-missing.length} of ${files.length} files ready · ${total?bytes(total)+' to download':'download size checked when it starts'}`:files.length?'All model files for this step are installed.':'No separate Studio model download is needed.');heading.className='zps-models-file-summary';this.$('files').append(heading);
       const list=el('ul');list.className='zps-models-file-list';
-      for(const file of files){const row=el('li'),label=el('span'),state=el('small',file.installed?'Installed':file.incomplete?'Check existing file':file.size_bytes?bytes(file.size_bytes):'Missing');label.append(el('strong',file.label||file.filename),el('small',file.folder?`models/${file.folder}`:''));row.append(label,state);row.dataset.state=file.installed?'installed':file.incomplete?'incomplete':'missing';list.append(row);}
+      for(const file of files){const row=el('li'),label=el('span'),state=el('small',file.installed?'Installed':file.incomplete?'Check existing file':file.size_bytes?bytes(file.size_bytes):'Missing');label.append(el('strong',file.label||file.filename),el('small',file.folder?`models/${file.folder}`:''));row.append(label,state);if(!file.installed&&file.gated&&file.browser_url){const actions=el('div');actions.className='zura-browser-model-actions';const link=this.link('Download in browser',file.browser_url),button=el('button','Install downloaded file');button.type='button';button.disabled=active||this.loading;button.onclick=()=>this.importFile(model,file);if(link)actions.append(link);actions.append(button);label.append(actions);}
+      row.dataset.state=file.installed?'installed':file.incomplete?'incomplete':'missing';list.append(row);}
       this.$('files').append(list);
       if(incomplete)this.$('files').append(el('p','An existing file does not match this package. It will not be overwritten. Check its version or move it out of the model folder, then check again.'));
     }
     this.$('licences').replaceChildren();for(const url of [...new Set([model?.license_url,...files.map(file=>file.model_card||file.repo&&`https://huggingface.co/${file.repo}`)].filter(Boolean))]){const link=this.link('Review model terms',url);if(link)this.$('licences').append(link);}
-    this.$('download').disabled=active||this.loading||!model||!missing.length||incomplete;this.$('download').querySelector('span').textContent=active?'Download in progress':this.submissionUnknown?'Check download status':incomplete?'Check existing files':!missing.length&&model?'Models ready':this.job?.phase==='failed'&&(this.job.model_id===model?.id||model?.model_ids?.some(id=>this.job.model_ids?.includes(id)))?'Retry missing models':'Download missing models';
+    this.$('download').disabled=active||this.loading||!model||incomplete;this.$('download').querySelector('span').textContent=active?'Download in progress':this.submissionUnknown?'Check download status':incomplete?'Check existing files':!missing.length&&model?'Back to workflow':this.job?.phase==='failed'&&(this.job.model_id===model?.id||model?.model_ids?.some(id=>this.job.model_ids?.includes(id)))?'Retry missing models':'Download missing models';
+    this.$('download').querySelector('svg')?.toggleAttribute('hidden',this.modelsReady());
     this.$('refresh').disabled=this.loading;this.$('cancel').disabled=!active||!!this.cancelling||this.job?.phase==='cancelling';
     const job=this.job;this.$('job').hidden=!job;this.$('cancel').hidden=!active;
     if(job){
@@ -88,8 +109,15 @@ export class PaintoutModels{
     if(model?.auth_required||job?.phase==='failed'&&/licen[cs]e|gated|hugging|authori[sz]|access|401|403/i.test(job.error||''))this.root.querySelector('.zps-models-access').open=true;
     this.renderSummary();this.renderNodes();this.positionPanel();
   }
+  async importFile(model,file){
+    if(this.loading||this.active())return;this.loading=true;this.error='Choose the completed download on the ComfyUI computer.';this.render();
+    try{const data=await this.w.fetch(ROUTE+'/import',{model_id:model.model_ids?.find(id=>this.catalogue.find(m=>m.id===id)?.files.some(f=>f.filename===file.filename))||model.id,filename:file.filename});if(data.cancelled){this.error='';return;}if(!data.id)throw Error('The import was not confirmed. Check model status before trying again.');this.job={id:data.id,phase:'queued',total_bytes:file.size_bytes,done_bytes:0};this.error='';this.inlineActive=true;this.closed=false;this.schedulePoll(0);}
+    catch(error){this.error=safeError(error.message);}
+    finally{this.loading=false;this.render();}
+  }
   async start(){
     if(this.loading||this.active())return;
+    if(this.modelsReady()){this.close();return;}
     if(this.submissionUnknown){await this.load();return;}
     const model=this.models.find(model=>model.id===this.$('package').value);if(!model)return;
     const token=this.$('token').value.trim();this.$('token').value='';this.error='';this.loading=true;this.render();
@@ -107,13 +135,13 @@ export class PaintoutModels{
     }
     finally{this.loading=false;this.render();}
   }
-  schedulePoll(delay=1000){this.stopPolling();if(!this.closed&&this.root.open)this.timer=setTimeout(()=>void this.poll(),delay);}
+  schedulePoll(delay=1000){this.stopPolling();if(!this.closed&&(this.root.open||this.inlineActive))this.timer=setTimeout(()=>void this.poll(),delay);}
   async poll(){
-    if(!this.job?.id||this.polling||this.closed||!this.root.open)return;this.polling=true;
+    if(!this.job?.id||this.polling||this.closed||(!this.root.open&&!this.inlineActive))return;this.polling=true;
     try{const data=await this.w.fetch(`${ROUTE}/${encodeURIComponent(this.job.id)}`);if(!data?.id)throw Error('Waiting to reconnect to the download…');this.job=data;this.error='';this.render();if(data.phase==='done'){await this.w.loadModels();await this.load();}else if(ACTIVE.has(data.phase))this.schedulePoll();}
     catch(error){this.error=safeError(error.message)+' Your download has not been restarted.';this.render();this.schedulePoll(2000);}
     finally{this.polling=false;}
   }
   async cancel(){if(!this.active()||this.cancelling||this.job?.phase==='cancelling')return;this.cancelling=true;this.render();try{await this.w.fetch(`${ROUTE}/${encodeURIComponent(this.job.id)}/cancel`,{});this.job.phase='cancelling';this.schedulePoll(0);}catch(error){this.error=safeError(error.message);}finally{this.cancelling=false;this.render();}}
-  destroy(){this.close();document.removeEventListener('pointerdown',this.outside);window.removeEventListener('resize',this.viewport);document.removeEventListener('scroll',this.viewport,true);}
+  destroy(){this.inlineActive=false;this.close();document.removeEventListener('pointerdown',this.outside);window.removeEventListener('resize',this.viewport);document.removeEventListener('scroll',this.viewport,true);}
 }

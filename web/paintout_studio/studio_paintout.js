@@ -468,7 +468,7 @@ export class PaintoutWorkspace{
     this.loras?.setBusy(busy);
     this.validationError=error;this.availability=availability;this.renderColourStatus(c);this.$('block-control').hidden=!targeted;this.$('mask-block').value=String(this.state.maskBlockSize??32);this.$('mask-block').disabled=busy;
 
-    this.page.querySelector('.zf-composer').hidden=!this.state.source;this.$('title').textContent='Review and render';this.$('workflow-label').textContent=inpaint?'Add an object · preview':targeted?'Targeted repair':'Full-scene clean plate';this.$('pipeline').value=paintoutColourPipeline(this.state);this.$('pipeline').disabled=busy;this.$('shot-summary').textContent=this.sourceInfo?`${name(this.state.source)} · ${this.sourceInfo.width} × ${this.sourceInfo.height} · ${this.fps()} fps · frames ${c.startFrame}–${c.startFrame+c.frameCount-1}`:'';
+    const unifiedNavigation=!!this.owner?.videoComposer;this.page.classList.toggle('zp-navigation-only',unifiedNavigation&&(!this.state.source||this.editor?.active&&this.editor.stage!=='render'));this.page.querySelector('.zf-composer').hidden=!this.state.source&&!unifiedNavigation;this.$('title').textContent='Review and render';this.$('workflow-label').textContent=inpaint?'Add an object · preview':targeted?'Targeted repair':'Full-scene clean plate';this.$('pipeline').value=paintoutColourPipeline(this.state);this.$('pipeline').disabled=busy;this.$('shot-summary').textContent=this.sourceInfo?`${name(this.state.source)} · ${this.sourceInfo.width} × ${this.sourceInfo.height} · ${this.fps()} fps · frames ${c.startFrame}–${c.startFrame+c.frameCount-1}`:'';
 
     for(const b of this.page.querySelectorAll('[data-mode]')){b.setAttribute('aria-pressed',String(b.dataset.mode===this.state.mode));b.disabled=busy;}
 

@@ -1,4 +1,5 @@
 import {ImageEditInputs} from './studio_image_edit_inputs.js';
+import {StudioModelDownloads} from './studio_model_download.js';
 import {resolutionSize,editableDimension} from './studio_resolution.js';
 import {IMAGE_MODELS,IMAGE_SIZES,buildImageGraph,imageAvailability,imageDimensions} from "./image_recipes.js";
 import {VideoComposer,composerIcons} from "./studio_composer.js";
@@ -104,10 +105,10 @@ export class CreativeWorkspace {
     const sizePanel=imageResolution.querySelector('.zc-tool-panel');sizePanel.prepend(page.querySelector('.zc-shapes'));sizePanel.append(page.querySelector('.zc-dimensions'),this.$('size'));
     this.$('image-megapixels').oninput=()=>{const ratio=this.imageSizeRatio||Number(this.$('width').value)/Number(this.$('height').value),size=resolutionSize(ratio,Number(this.$('image-megapixels').value),{step:16,min:256,max:8192,maxPixels:8.5e6});this.$('width').value=size.width;this.$('height').value=size.height;this.save();this.render();};
     this.imageOperation=this.draft.operation==="edit"?"edit":"create";
-    const imageTabs=document.createElement('nav');imageTabs.className='zc-image-operation';imageTabs.setAttribute('aria-label','Image task');
-    imageTabs.innerHTML='<button type="button" data-image-operation="create">Create image</button><button type="button" data-image-operation="edit">Edit image</button>';
-    page.querySelector('.zc-image-heading h2').replaceWith(imageTabs);
-    for(const button of imageTabs.querySelectorAll('button'))button.onclick=()=>this.setImageOperation(button.dataset.imageOperation);
+    const imageTabs=document.createElement('details');imageTabs.className='zc-image-operation zc-task-control zc-tool-popup';imageTabs.setAttribute('aria-label','Image task');
+    imageTabs.innerHTML='<summary aria-label="Image mode"><span data-image-operation-label>Create image</span>'+composerIcons.chevron+'</summary><div class="zc-tool-panel zc-workflow-menu"><button type="button" data-image-operation="create">Create image</button><button type="button" data-image-operation="edit">Edit image</button></div>';
+    this.imageTask=imageTabs;page.querySelector('.zc-composer-bottom .zc-model-control').after(imageTabs);
+    for(const button of imageTabs.querySelectorAll('button'))button.onclick=()=>{imageTabs.open=false;this.setImageOperation(button.dataset.imageOperation);};
     const imageHistory=document.createElement('details');imageHistory.className='zc-image-takes';imageHistory.innerHTML='<summary>History</summary><div id="zc-image-history"></div>';
     page.querySelector('.zc-image-tools').prepend(imageHistory);
     imageHistory.addEventListener('click',event=>{const button=event.target.closest('[data-view-image]');if(button){this.selectedImage=Number(button.dataset.viewImage);this.renderGallery();imageHistory.open=false;}});
@@ -119,7 +120,7 @@ export class CreativeWorkspace {
     this.$("seed").value=Number.isSafeInteger(this.draft.seed)?this.draft.seed:42;
     this.$("random").checked=this.draft.random!==false;
     this.$("prompt").oninput=()=>{this.save();this.render();};
-    this.$("model").onchange=()=>{this.save();this.render();this.renderImageLoras();const model=this.models.find(item=>item.id===this.$('model').value);if(model&&!model.ready){this.$('setup').closest('details').open=true;this.$('setup').querySelector(`[data-image-model="${model.id}"]`)?.scrollIntoView?.({block:'nearest'});}};
+    this.$("model").onchange=()=>{this.save();this.render();this.renderImageLoras();};
     for(const id of ["width","height"])this.$(id).oninput=()=>{this.save();this.render();};
     for(const key of ['width','height'])editableDimension(this.$(key),()=>{this.imageSizeRatio=Number(this.$('width').value)/Number(this.$('height').value);this.save();this.render();},()=>({step:16,min:256,max:8192}));
     this.$("swap-size").onclick=()=>{const w=this.$("width").value;this.$("width").value=this.$("height").value;this.$("height").value=w;this.save();this.render();};
@@ -173,6 +174,9 @@ export class CreativeWorkspace {
       if(globalThis.customElements?.get("wa-tooltip"))control.removeAttribute("title");
     }
     this.editInputs.mountControls();
+    const imageModelPanel=document.createElement('details');imageModelPanel.className='gs-model-help';this.$('setup').before(imageModelPanel);
+    this.imageModelSetup=new StudioModelDownloads(imageModelPanel,(path,body)=>this.fetch('/zura/studio'+path,body),()=>this.loadModels());
+    this.imageModelSetup.mountQuick(this.root.querySelector('.zc-image-composer'));
     this.show("video");this.renderGallery();this.render();
   }
   buildVideoInspector(settings){
@@ -361,7 +365,7 @@ export class CreativeWorkspace {
   }
   show(mode){
     this.mode=mode;this.root.dataset.workspace=mode;
-    if(mode==='image')this.browserConnection?.open();else this.browserConnection?.close();
+    if(mode==='image'){this.browserConnection?.open();this.imageModelSetup?.resume();}else this.browserConnection?.close();
     if(mode==='frames')this.frames??=new FrameVideoWorkspace(this);
     if(mode==='references')this.referencesVideo??=new ReferenceVideoWorkspace(this);
     if(mode==='paintout')this.paintout=getPaintoutWorkspace(this);
@@ -466,6 +470,7 @@ export class CreativeWorkspace {
     this.styleControls();
     if(this.$('image-lora-settings').open)this.renderImageLoras();
     const c=this.config(),m=this.models.find(m=>m.id===c.model),busy=!!this.job||!!this.pendingSubmission||this.submitting||this.uploading;
+    if(m&&!m.provider){this.imageModelSetup?.setMissingContext('image',m.ready?[]:m.missing);if(this.mode==='image')this.studio.modelDownloads?.setMissingContext('image',m.ready?[]:m.missing);}else this.imageModelSetup?.setContext(null);
     this.browserConnection.sync(m);
     this.$('image-lora-settings').hidden=!!m?.provider;
     this.$('seed').closest('.zc-advanced').hidden=!!m?.provider;
@@ -476,6 +481,8 @@ export class CreativeWorkspace {
     resolutionPanel.querySelector('.zc-dimensions').hidden=auto;this.$('image-megapixels').parentElement.hidden=auto;
     this.$("generate").disabled=busy||!m?.ready||!this.browserConnection.connected(m)||!c.prompt.trim()||!!error||this.references.length<(m?.minReferences||0)||this.references.length>(m?.maxReferences||0)||!!this.references.length&&!m?.referenceReady;this.$("generate").firstChild.textContent=busy?"Generating… ":this.imageOperation==='edit'?"Apply edit ":"Generate image ";
     for(const button of this.root.querySelectorAll('[data-image-operation]')){button.setAttribute('aria-pressed',String(button.dataset.imageOperation===this.imageOperation));button.disabled=busy;}
+    this.imageTask.querySelector('[data-image-operation-label]').textContent=this.imageOperation==='edit'?'Edit image':'Create image';
+    this.imageTask.querySelector('summary').setAttribute('aria-disabled',String(busy));if(busy)this.imageTask.open=false;
     this.root.querySelector('.zc-image-empty h3').textContent=this.imageOperation==='edit'?'Edit your image':'Create your first image';
     this.root.querySelector('.zc-image-empty>p').textContent=this.imageOperation==='edit'?'Drop or paste the source image below, then describe your change.':'Add references below, or start with a prompt.';
     this.$('prompt').placeholder=this.imageOperation==='edit'?'Describe what to change. Image 1 is your source; keep everything else…':'Describe the image you have in mind…';
@@ -576,7 +583,7 @@ export class CreativeWorkspace {
   }
   async cancel(){await cancelOwnedJob(this);}
   stopPolling(){clearInterval(this.timer);this.timer=null;}
-  close(){this.modelDownloadClosed=true;this.browserConnection?.close();this.videoComposer?.browserConnection?.close();this.videoComposer?.ltxOutput?.close();this.save();this.stopPolling();this.imageZoom?.stopDraw();this.frames?.close();this.referencesVideo?.close();this.outpaint?.close();this.panorama?.close();if(this.paintout?.owner===this)this.paintout.close();if(this.watermark?.owner===this)this.watermark.close();this.disposePopovers?.();}
+  close(){this.imageModelSetup?.close();this.modelDownloadClosed=true;this.browserConnection?.close();this.videoComposer?.browserConnection?.close();this.videoComposer?.ltxOutput?.close();this.save();this.stopPolling();this.imageZoom?.stopDraw();this.frames?.close();this.referencesVideo?.close();this.outpaint?.close();this.panorama?.close();if(this.paintout?.owner===this)this.paintout.close();if(this.watermark?.owner===this)this.watermark.close();this.disposePopovers?.();}
   async graph(){
     try{const graph=await this.imageGraph(this.job?.config||this.config());if(typeof this.app.loadApiJson!=="function")throw new Error("Update ComfyUI to open this image graph.");const original=(this.app.rootGraph||this.app.graph)?.serialize?.();if(!original)throw new Error("Your current graph could not be backed up.");try{await this.app.loadApiJson(graph,"Zura Image · "+Date.now()+".json");}catch(e){await this.app.loadGraphData(original);throw e;}this.studio.close();}catch(e){this.message(e.message);}
   }

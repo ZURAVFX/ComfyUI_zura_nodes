@@ -321,3 +321,26 @@
 
 /* Watermark brushing needs a usable viewer as mask layers accumulate. */
 #genj-studio .zwm-page.zp-editor-open:not([data-editor-stage=render]) > .zf-viewer{min-height:380px}
+
+/* Watermark layers use a compact, unclipped action row. */
+#genj-studio .zwm-page.zp-editor-open{overflow-y:auto}
+#genj-studio .zwm-page.zp-editor-open:not([data-editor-stage=render])>.zf-viewer{min-height:min(280px,30dvh)}
+#genj-studio .zwm-page .zp-editor-tools{max-height:none;overflow:visible;padding:12px 16px}
+#genj-studio .zwm-page .zp-editor-mask-flow>.zp-editor-mask-actions{display:flex;justify-content:flex-start;align-items:center;flex-wrap:wrap;gap:8px 12px}
+#genj-studio .zwm-page .zp-editor-segment-draft{display:flex;flex:1 1 280px;align-items:center;flex-wrap:wrap;gap:4px 10px;width:auto;padding:0;background:none;border:0;min-width:0}
+#genj-studio .zwm-page .zp-editor-segment-draft[hidden]{display:none}
+#genj-studio .zwm-page .zp-editor-segment-draft>span{flex:1 1 220px;color:var(--gs-muted,#ababab)}
+#genj-studio .zwm-page .zp-editor-mask-actions>.zp-editor-mask-intro{margin:0;order:2}
+#genj-studio .zwm-page .zp-editor-mask-actions [data-editor=track]{order:1}
+#genj-studio .zwm-page .zp-editor-mask-actions [data-editor=segment-cancel]{min-height:36px}
+#genj-studio .zwm-page .zwm-reference{display:flex;align-items:center;gap:12px 18px;flex-wrap:wrap;padding:12px 0;border-bottom:1px solid var(--gs-line,#383838)}
+#genj-studio .zwm-page .zwm-reference>div:first-child{flex:1 1 250px}
+#genj-studio .zwm-page .zwm-reference p{margin:4px 0 0;color:var(--gs-muted,#ababab);font-size:12px}
+#genj-studio .zwm-page .zwm-reference label{display:flex;align-items:center;gap:8px;white-space:nowrap}
+#genj-studio .zwm-page .zwm-reference input[type=checkbox]{accent-color:var(--gs-accent,#caff00)}
+#genj-studio .zwm-page #zps-reference-fields{display:flex;align-items:center;gap:8px 12px;flex:1 1 100%;flex-wrap:wrap;min-width:0}
+#genj-studio .zwm-page #zps-reference-fields[hidden]{display:none}
+#genj-studio .zwm-page #zps-reference-name{overflow-wrap:anywhere;color:var(--gs-muted,#ababab)}
+#genj-studio .zwm-page #zps-reference-frame{width:90px}
+@media(max-width:700px){#genj-studio .zwm-page .zp-editor-segment-draft{flex-basis:100%}#genj-studio .zwm-page .zp-editor-mask-actions [data-editor=track]{flex:1}#genj-studio .zwm-page .zwm-reference>div:first-child{flex-basis:100%}}
+#genj-studio .zwm-page .zwm-reference[hidden]{display:none}

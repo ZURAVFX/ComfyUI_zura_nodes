@@ -19,8 +19,8 @@ export class ImageEditInputs {
   }
   mountControls(){
     const o=this.owner,doc=o.root.ownerDocument,bottom=o.root.querySelector('.zc-composer-bottom');
-    const tools=doc.createElement('div');tools.className='zi-output-tools';tools.setAttribute('role','group');tools.setAttribute('aria-label','Image model and output');
-    tools.append(bottom.querySelector('.zc-model-control'),o.$('quick-settings').closest('details'),o.$('settings-toggle'));bottom.prepend(tools);
+    const tools=doc.createElement('div');tools.className='zi-output-tools zc-workflow-controls';tools.setAttribute('role','group');tools.setAttribute('aria-label','Image model and output');
+    tools.append(bottom.querySelector('.zc-model-control'),o.imageTask,o.$('quick-settings').closest('details'),o.$('settings-toggle'));bottom.prepend(tools);
     // Keep the existing action buttons and handlers, with a native fallback
     // that also works before optional web components finish loading.
     const menu=doc.createElement('details');menu.className='zc-tool-popup zi-image-actions';

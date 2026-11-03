@@ -85,7 +85,7 @@ assert.deepEqual([...ui.root.querySelectorAll('.zc-choices [data-space] strong')
 assert.ok(!ui.root.querySelector('.zc-choices button').classList.contains('zu-btn'),'Home choices keep their full-width list-row layout instead of DaisyUI compact-button sizing');
 assert.equal(ui.root.querySelectorAll('.zc-card-art').length,0,'Home uses direct Image and Video choices without placeholder cards');
 ui.show('video');studio.render();
-assert.ok(studio.container.querySelector('#zc-video-task').closest('.zc-prompt-tools'),'Workflow choice sits in the model tool row');assert.equal(studio.container.querySelector('#zc-video-task').closest('.zc-task-control').previousElementSibling,ui.videoComposer.imageModel);
+assert.ok(studio.container.querySelector('#zc-video-task').closest('.zc-prompt-tools'),'Workflow choice sits in the model tool row');assert.equal(studio.container.querySelector('#zc-video-task').closest('.zc-task-control').previousElementSibling,ui.videoComposer.model);
 assert.equal(studio.container.querySelector('.gs-workflow-choice').hidden,true,'The cramped legacy mode grid has no second visible copy');
 for(const id of ['zc-attach-source','zc-attach-refs','zc-video-model','gs-resolution','gs-duration','gs-audio-mode'])assert.ok(studio.container.querySelector('#'+id).closest('.gs-composer'),id+' belongs to the compact composer');
 assert.equal(studio.container.querySelector('#zc-attach-source').closest('.zc-source-choice'),studio.container.querySelector('.zc-source-hdr').closest('.zc-source-choice'),'Source and HDR import are presented as one choice');
@@ -101,10 +101,11 @@ assert.equal(studio.container.querySelector('.zc-source-hdr').hidden,false,'LTX 
 studio.config.workflow_mode='relight';ui.videoComposer.sync();
 assert.equal(studio.container.querySelector('.zc-source-hdr').hidden,true,'Wan relight never advertises LTX HDR input');
 studio.config.engine=originalEngine;studio.config.workflow_mode=originalMode;ui.videoComposer.sync();
+assert.equal(ui.imageTask.previousElementSibling,ui.$('model').closest('.zc-model-control'),'Image mode uses the second toolbar slot too');
 const workflowMenu=ui.videoComposer.task;
 assert.equal(workflowMenu.tagName,'DETAILS');
 assert.equal(workflowMenu.querySelector('select').hidden,true,'OS-native workflow dropdown is hidden behind the styled menu');
-assert.equal(workflowMenu.querySelectorAll('[role="menuitemradio"]').length,11);
+assert.equal(workflowMenu.querySelectorAll('[role="menuitemradio"]').length,12);
 assert.ok(workflowMenu.querySelector('[data-workflow="outpaint"]'),'Frame extension is available as a preview workflow');
 assert.equal(workflowMenu.querySelector('[data-workflow="swap"]').getAttribute('aria-checked'),'true');
 const removedInputs=[],savedRemoveInput=studio.removeInput;studio.removeInput=type=>removedInputs.push(type);
@@ -204,7 +205,7 @@ assert.match(ui.$('setup').textContent,/Update ComfyUI and restart/);
 const missingImageModel=ui.models.find(model=>!model.ready&&!model.edit);assert.ok(missingImageModel);
 const missingOption=ui.$('model').querySelector(`option[value="${missingImageModel.id}"]`);assert.equal(missingOption.hasAttribute('disabled'),false,'An uninstalled model can be selected for setup');
 ui.$('model').value=missingImageModel.id;ui.$('model').dispatchEvent(new window.Event('change'));
-assert.equal(ui.$('generate').disabled,true,'A missing model cannot start generation');assert.equal(ui.$('setup').closest('details').open,true,'Selecting it opens model setup');
+assert.equal(ui.$('generate').disabled,true,'A missing model cannot start generation');assert.equal(ui.imageModelSetup.quick.hidden,false,'Selecting it shows setup beside the image prompt');
 await ui.loadModels();assert.equal(ui.$('model').value,missingImageModel.id,'Refreshing preserves the selected model needing setup');
 ui.fetch=originalFetch;
 ui.fetch=async function(path,body){if(path==='/zura/studio/model-downloads')return {models:[{id:'flux2_klein_9b',remaining_bytes:123,files:[{filename:'flux2-vae.safetensors',size_bytes:123,incomplete:true}]}]};return originalFetch.call(this,path,body);};
@@ -479,11 +480,13 @@ task.value='swap';task.dispatchEvent(new window.Event('change'));assert.equal(na
 task.value='outpaint';task.dispatchEvent(new window.Event('change'));
 assert.equal(navUi.mode,'outpaint');assert.equal(navUi.outpaint.page.hidden,false);
 assert.equal(navUi.outpaint.page.querySelector('#zc-video-task'),task,'Frame extension retains the same workflow selector');
+assert.equal(task.closest('.zc-task-control').previousElementSibling,navUi.outpaint.page.querySelector('.zo-model'));
 while(navStudio.busy)await new Promise(resolve=>setTimeout(resolve,1));
 task.value='swap';task.dispatchEvent(new window.Event('change'));assert.equal(navUi.mode,'video');assert.equal(navUi.outpaint.page.hidden,true);
 task.value='paintout';task.dispatchEvent(new window.Event('change'));
 assert.equal(navUi.mode,'paintout');assert.equal(navUi.paintout.page.hidden,false);assert.equal(navUi.frames.page.hidden,true);assert.equal(navUi.referencesVideo.page.hidden,true);
 assert.equal(navUi.paintout.page.querySelector('#zc-video-task'),task,'Paintout retains the workflow menu beside its model');
+assert.equal(task.closest('.zc-task-control').previousElementSibling,navUi.paintout.page.querySelector('.zf-model'),'Paintout uses the same second toolbar slot');
 task.value='inpaint';task.dispatchEvent(new window.Event('change'));
 assert.equal(navUi.mode,'paintout');assert.equal(navUi.paintout.state.mode,'inpaint');
 assert.match(navUi.paintout.$('prompt').value,/Add the object/);
@@ -629,3 +632,38 @@ api.fetchApi=priorFetch;hdrFlow.creative.close();
 console.log('Reference upload/limits, safe history clearing/undo, saved theme and exact dimensions, Image/Video home, state preservation, native recipe readiness, prompt/action, targeted cancel, history and error recovery pass.');
 
 navUi.panorama?.close();
+
+for(const [mode,modelSelector] of [['video','.zc-model-control'],['frames','.zf-model'],['references','.zf-model'],['paintout','.zf-model'],['outpaint','.zo-model'],['panorama','.zpc-model']]){
+ navUi.show(mode);const group=task.closest('.zc-workflow-controls');assert.ok(group,mode+' has a shared toolbar group');
+ assert.equal(group.children[1],task.closest('.zc-task-control'),mode+' keeps the workflow in slot two');
+ assert.ok(group.firstElementChild.matches(modelSelector),mode+' keeps the model in slot one');
+}
+navUi.panorama?.close();
+
+if(process.env.ZURA_NAV_PREVIEW){
+ const css=['studio.css','studio_create.css','studio_composer.css','studio_panorama.css','studio_outpaint.css','paintout_studio/studio_paintout.css','paintout_studio/paintout_integrated.css','paintout_studio/paintout_editor.css','studio_polish.css'];
+ for(const mode of ['image','video','frames','references','paintout','outpaint','panorama']){
+  navUi.show(mode);fs.writeFileSync(process.env.ZURA_NAV_PREVIEW+'/'+mode+'.html','<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1">'+css.map(name=>'<link rel="stylesheet" href="/web/'+name+'">').join('')+'<title>Studio toolbar check</title>'+navStudio.container.outerHTML);
+ }
+ navUi.panorama?.close();
+}
+
+navUi.show('watermark');
+assert.equal(navUi.mode,'watermark');
+assert.equal(navUi.watermark.page.querySelector('.zf-model').parentElement.children[1],navUi.videoComposer.task);
+assert.equal(navUi.paintout.page.hidden,true);
+const wm=navUi.watermark,ed=wm.editor;
+assert.equal(wm.config().anchors.length,0,'Watermark never reuses hidden guided Paintout anchors');
+assert.equal(ed.$('segment-draft').parentElement,ed.tools.querySelector('.zp-editor-mask-actions'));
+assert.equal(ed.$('tracking-options').parentElement.hidden,true,'Unused tracking settings are outside the visible action row');
+assert.equal(ed.tools.querySelector('.zp-editor-segments').hidden,true);
+assert.ok(wm.$('reference-control'));assert.equal(wm.$('reference-control').hidden,false);
+wm.state.targetedMethod='light';wm.render();assert.equal(wm.$('reference-control').hidden,true);
+let setupOpened=0;wm.openModelSetup=()=>setupOpened++;
+wm.availability={ready:false,missing:['ProPainterInpaint']};wm.reviewSetup();
+assert.equal(setupOpened,0,'Missing nodes do not open model downloads');
+assert.equal(wm.$('render-settings').open,true,'Missing nodes open actionable settings');
+wm.availability={ready:false,missing:['needed.safetensors']};wm.reviewSetup();
+assert.equal(setupOpened,1,'Missing model files use model setup');
+wm.close();
+console.log('PASS separate Watermark navigation, static mask actions, optional Quality reference and Light isolation');

@@ -292,7 +292,8 @@ class ModelDownloadTests(unittest.TestCase):
         public = json.dumps(job) + json.dumps(manager.catalogue())
         self.assertNotIn('TestSecretToken', public)
         self.assertNotIn(str(self.root), public)
-        self.assertNotIn('/resolve/', public)
+        self.assertNotIn('/resolve/', job['error'])
+        self.assertTrue(all(f['browser_url'].startswith('https://huggingface.co/Example/fixture/resolve/' + '1'*40 + '/') for m in manager.catalogue()['models'] for f in m['files']))
         self.assertIn('accept its terms', job['error'])
 
     def test_validation_rejects_url_path_and_token_injection(self):
@@ -331,10 +332,8 @@ class ModelDownloadTests(unittest.TestCase):
                     downloads._safe_item(item)
             names = {item['filename'] for recipe in downloads.CATALOG.values() for item in recipe['files']}
             self.assertEqual(len(names), 15)
+            self.assertTrue(downloads.CATALOG['ripple']['files'], 'The released Ripple option needs its model package')
             self.assertFalse(any('upscal' in name or 'refine' in name for name in names))
-            auto_hdr = {item['filename'] for item in downloads.CATALOG['targeted_auto_hdr']['files']}
-            self.assertIn('ltx-2.3-22b-ic-lora-in-outpainting-0.9.safetensors', auto_hdr)
-            self.assertFalse(downloads.CATALOG['targeted_light']['files'])
             hdr = {item['filename'] for item in downloads.CATALOG['targeted_hdr']['files']}
             self.assertIn('ltx-2.5-video-vae-bf16.safetensors', hdr)
             self.assertNotIn('ltx-2.5-video-vae-conv-bf16.safetensors', hdr)

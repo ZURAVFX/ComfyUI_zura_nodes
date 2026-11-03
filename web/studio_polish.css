@@ -153,3 +153,22 @@
 @media(prefers-reduced-motion:reduce){
  #genj-studio[data-workspace] :is(button,summary,a){transition:none}
 }
+
+/* Keep the workflow in the second toolbar slot through every video stage. */
+#genj-studio[data-workspace] .zc-workflow-controls{display:flex;align-items:center;flex-wrap:wrap;gap:4px;min-width:0}
+#genj-studio[data-workspace] .zc-workflow-controls>:first-child{flex:0 0 148px;width:148px;max-width:148px;min-width:0;overflow:hidden;white-space:nowrap}
+#genj-studio[data-workspace] .zc-workflow-controls>:first-child select{max-width:112px}
+#genj-studio[data-workspace] .zc-workflow-controls>.zc-task-control{flex:0 0 220px;width:220px;max-width:220px}
+#genj-studio[data-workspace] .zc-task-control>summary{width:100%;justify-content:space-between;white-space:nowrap}
+#genj-studio[data-workspace] .zc-task-control[open]>summary [data-workflow-label]{display:inline}
+#genj-studio[data-workspace] .zh-footer>.zc-workflow-controls{margin-right:auto}
+#genj-studio[data-workspace] .zp-page.zp-editor-open:not([data-editor-stage=render])>.zf-composer{display:block}
+#genj-studio[data-workspace] .zp-page.zp-navigation-only>.zf-composer>:not(.zc-prompt-bottom){display:none!important}
+#genj-studio[data-workspace] .zp-page.zp-navigation-only>.zf-composer>.zc-prompt-bottom>:not(.zc-prompt-tools),
+#genj-studio[data-workspace] .zp-page.zp-navigation-only>.zf-composer .zc-prompt-tools>:not(.zc-workflow-controls){display:none!important}
+#genj-studio[data-workspace] .zp-page.zp-navigation-only>.zf-composer{margin-top:auto}
+@media(max-width:600px){
+ #genj-studio[data-workspace] .zc-workflow-controls{width:100%;gap:4px}
+ #genj-studio[data-workspace] .zc-workflow-controls>:first-child{flex-basis:116px;width:116px;max-width:116px}
+ #genj-studio[data-workspace] .zc-workflow-controls>.zc-task-control{flex:1 1 160px;width:auto;max-width:none}
+}

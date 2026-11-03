@@ -5,9 +5,11 @@ catalogue ID, never a URL or destination; no downloads start during discovery.
 """
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import errno
 import os
+import re
 from pathlib import Path
 import shutil
 import threading
@@ -252,25 +254,31 @@ CATALOG.update({
         files=[_file("loras", "ltx-2.5-22b-ic-lora-clean-plate-1.0.safetensors", "Lightricks/LTX-2.5-22b-IC-LoRA-Clean-Plate", "5cdacad3ee33574ecb11120b873dec320de79b37", "ltx-2.5-22b-ic-lora-clean-plate-1.0.safetensors", 327318439, "27f4f7ba552d3bf7273dd817291123a5934f17e7698ca9cd8945b079a5358393")]),
 })
 
-def inspect(model_id, locations):
+def inspect(model_id, locations, filenames=None):
     """Return required files and exact remaining bytes, including shared files."""
     if model_id not in CATALOG:
         raise ValueError("This model has no verified download recipe yet.")
     recipe = CATALOG[model_id]
     files = []
     for item in recipe['files']:
+        relative = Path(*item['filename'].replace('\\', '/').split('/'))
         roots = locations.get(item['folder'], [])
         if not roots:
             raise ValueError("ComfyUI has no configured model folder for " + item['folder'])
-        candidates = [Path(root) / item['filename'] for root in roots
-                      if (Path(root) / item['filename']).is_file()]
+        candidates = [Path(root) / relative for root in roots
+                      if (Path(root) / relative).is_file()]
+        if not candidates and filenames:
+            leaf = item['filename'].replace('\\', '/').rsplit('/', 1)[-1]
+            candidates = [Path(root) / name for name in filenames.get(item['folder'], ())
+                          if name.replace('\\', '/').rsplit('/', 1)[-1] == leaf
+                          for root in roots if (Path(root) / name).is_file()]
         # A broken copy in an earlier search root must not hide a usable copy
         # in a later root. Never overwrite either copy during installation.
         existing = next((path for path in candidates if path.stat().st_size == item['size_bytes']),
                         candidates[0] if candidates else None)
         incomplete = bool(existing and existing.stat().st_size != item['size_bytes'])
         files.append({**item, 'installed': bool(existing) and not incomplete, 'incomplete': incomplete,
-                      'destination': str(existing or (Path(roots[0]) / item['filename']))})
+                      'destination': str(existing or (Path(roots[0]) / relative))})
     return dict(id=model_id, name=recipe['name'], gated=recipe['gated'], note=recipe.get('note', ''),
                 license_url=recipe['license_url'], files=files,
                 remaining_bytes=sum(f['size_bytes'] for f in files if not f['installed']))
@@ -353,8 +361,21 @@ class DownloadManager:
                 raise ValueError('Unknown model download.')
             job['cancel'].set()
 
-    def start(self, model_id):
-        recipe = inspect(model_id, self.locations)
+    def start(self, model_id, file_keys=None, token=None):
+        ids = [model_id] if isinstance(model_id, str) else model_id
+        if not isinstance(ids, list) or not ids or len(ids) > len(CATALOG) or any(not isinstance(value, str) or value not in CATALOG for value in ids):
+            raise ValueError('Choose model packages from the download list.')
+        if token is not None and (not isinstance(token, str) or len(token) > 512 or not re.fullmatch(r'hf_[A-Za-z0-9]+', token)):
+            raise ValueError('Enter a valid Hugging Face read token or leave it empty.')
+        unique = {}
+        for identity in dict.fromkeys(ids):
+            for item in inspect(identity, self.locations, getattr(self, 'filenames', None))['files']:
+                unique[(item['folder'] + '/' + item['filename']).replace('\\', '/').lower()] = item
+        if file_keys is not None:
+            if not isinstance(file_keys, list) or not file_keys or any(not isinstance(key, str) or key not in unique for key in file_keys):
+                raise ValueError('Choose files from the selected model packages.')
+            unique = {key: unique[key] for key in dict.fromkeys(file_keys)}
+        recipe = {'files': list(unique.values()), 'remaining_bytes': sum(item['size_bytes'] for item in unique.values() if not item['installed'])}
         incomplete = next((item for item in recipe['files'] if item['incomplete']), None)
         if incomplete:
             raise ValueError('An existing model file differs from this download: ' + incomplete['filename'] + '. It may be another version or incomplete. Check it before moving it; it will not be overwritten.')
@@ -362,21 +383,22 @@ class DownloadManager:
             if self._active is not None:
                 raise ValueError('Another model download is already running.')
             job_id = uuid.uuid4().hex
-            self._jobs[job_id] = dict(id=job_id, model_id=model_id, phase='queued',
+            self._jobs[job_id] = dict(id=job_id, model_id=ids[0], model_ids=list(dict.fromkeys(ids)), phase='queued',
                 done_bytes=0, total_bytes=recipe['remaining_bytes'], current_file='',
                 error='', cancel=threading.Event())
             self._active = job_id
-        threading.Thread(target=self._run, args=(job_id, recipe), daemon=True).start()
+        threading.Thread(target=self._run, args=(job_id, recipe, token), daemon=True).start()
         return job_id
 
-    def _run(self, job_id, recipe):
+    def _run(self, job_id, recipe, token=None):
         import requests
         try:
-            try:
-                from huggingface_hub import get_token
-                token = get_token()
-            except (ImportError, OSError):
-                token = None
+            if not token:
+                try:
+                    from huggingface_hub import get_token
+                    token = get_token()
+                except (ImportError, OSError):
+                    token = None
             for item in recipe['files']:
                 if item['installed']:
                     continue
@@ -433,6 +455,7 @@ class DownloadManager:
             with self._lock:
                 job = self._jobs[job_id]
                 job.update(phase='cancelled' if job['cancel'].is_set() else 'done', current_file='')
+            getattr(self, 'on_installed', lambda: None)()
         except Exception as exc:
             with self._lock:
                 # Avoid exposing request URLs, tokens or machine paths to the UI.
@@ -458,18 +481,32 @@ def register(routes, response):
     """Register same-origin Studio endpoints; no network call until POST start."""
     import folder_paths
     from aiohttp import web
+    from ..media_source import require_same_origin
+    from ..model_folders import register as register_folders
+    register_folders(routes, response)
     folders = {item['folder'] for model in CATALOG.values() for item in model['files']}
     manager = DownloadManager(folder_locations(folder_paths, folders))
+    manager.on_installed = lambda: getattr(folder_paths, 'filename_list_cache', {}).clear()
+
+    def refresh_locations():
+        manager.locations = folder_locations(folder_paths, folders)
+        manager.filenames = {}
+        for folder in folders:
+            try:
+                manager.filenames[folder] = folder_paths.get_filename_list(folder)
+            except (KeyError, OSError):
+                manager.filenames[folder] = []
 
     @routes.get('/zura/studio/model-downloads')
     @routes.get('/genj/studio/model-downloads')
     @response
     async def catalogue(request):
-        manager.locations = folder_locations(folder_paths, folders)
+        require_same_origin(request)
+        await asyncio.to_thread(refresh_locations)
         models = []
         for name, recipe in CATALOG.items():
             try:
-                models.append(inspect(name, manager.locations))
+                models.append(inspect(name, manager.locations, manager.filenames))
             except ValueError as exc:
                 models.append({'id': name, 'name': recipe['name'], 'error': str(exc), 'files': []})
         return web.json_response({'models': models, 'active': manager.active()})
@@ -478,19 +515,25 @@ def register(routes, response):
     @routes.post('/genj/studio/model-downloads')
     @response
     async def start(request):
+        require_same_origin(request)
         data = await request.json()
-        manager.locations = folder_locations(folder_paths, folders)
-        return web.json_response({'id': manager.start(data.get('model_id'))})
+        if not isinstance(data, dict) or set(data) - {'model_id', 'model_ids', 'file_keys', 'token'}:
+            raise ValueError('Choose model packages from the download list.')
+        await asyncio.to_thread(refresh_locations)
+        identity = await asyncio.to_thread(manager.start, data.get('model_ids', data.get('model_id')), data.get('file_keys'), data.get('token'))
+        return web.json_response({'id': identity})
 
     @routes.get('/zura/studio/model-downloads/{identity}')
     @routes.get('/genj/studio/model-downloads/{identity}')
     @response
     async def status(request):
+        require_same_origin(request)
         return web.json_response(manager.status(request.match_info['identity']))
 
     @routes.post('/zura/studio/model-downloads/{identity}/cancel')
     @routes.post('/genj/studio/model-downloads/{identity}/cancel')
     @response
     async def cancel(request):
+        require_same_origin(request)
         manager.cancel(request.match_info['identity'])
         return web.json_response({'ok': True})

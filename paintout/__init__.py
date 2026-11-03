@@ -36,3 +36,7 @@ model_downloads.register_routes()
 from .ripple import NODE_CLASS_MAPPINGS as RIPPLE_NODES, NODE_DISPLAY_NAME_MAPPINGS as RIPPLE_NAMES
 NODE_CLASS_MAPPINGS.update(RIPPLE_NODES)
 NODE_DISPLAY_NAME_MAPPINGS.update(RIPPLE_NAMES)
+
+from .watermark_reference import ZuraWatermarkReference
+NODE_CLASS_MAPPINGS['ZuraWatermarkReference'] = ZuraWatermarkReference
+NODE_DISPLAY_NAME_MAPPINGS['ZuraWatermarkReference'] = 'Watermark First-frame Reference'

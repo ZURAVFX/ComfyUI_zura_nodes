@@ -1,5 +1,14 @@
 # Release notes
 
+## 1.3.42 - 3 November 2026
+
+- Improve Watermark removal with clearer static mask layers and an optional clean first-frame guide for Quality mode, including crop and HDR colour handling. Keep guided Paintout separate.
+- Share one-click model installation across Image, Video, Paintout and Watermark removal. Show missing download sizes, reuse configured model folders and let users choose a destination from multiple saved folders.
+- Offer browser download and verified local import for gated Watermark/Paintout models, without requiring an API token. Publisher sign-in and licence acceptance still apply.
+- Distinguish missing extensions from missing model files. Replace the disabled Models ready action with Back to workflow, and avoid opening downloads for extension-only setup.
+- Keep the mode selector beside the model across workspaces and stages. Fix the clipped Models menu and model-install button contrast.
+- Retain Ripple object replacement, the approved original full-resolution LTX 2.5 SDR outpaint recipe and original-rate Wan 2.1 Relight delivery.
+
 ## 1.3.41 - 1 November 2026
 
 - Add Video > Object replacement · Ripple with a guided first-frame mask, replacement-image creation or import, explicit review and original-frame-rate/audio delivery. Reuse Paintout selection tools and expose the Ripple model download package. This mode is SDR and first-frame only; video propagation is maskless and surrounding details may change.

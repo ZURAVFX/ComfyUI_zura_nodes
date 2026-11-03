@@ -38,6 +38,18 @@ jobs:
         run: npm install --prefix "$GITHUB_WORKSPACE/../ui-check" --ignore-scripts --no-audit --no-fund linkedom@0.18.13
       - name: Run regression checks
         run: |
+          python -m unittest discover -s tests -p 'test_model_install*.py'
+          python -m unittest discover -s tests -p 'test_model_downloads.py'
+          node tests/test_studio_model_download.mjs
+          node tests/test_model_install_ui.mjs
+          node tests/test_paintout_download_recovery.mjs
+          python -m unittest discover -s tests/paintout_updated -p 'test_browser_model_import.py'
+          python -m unittest discover -s tests/paintout_updated -p 'test_model_download_routes.py'
+          python -m unittest discover -s tests/paintout_updated -p 'test_guided_anchor_conditioning.py'
+          python -m unittest discover -s tests/paintout_updated -p 'test_watermark_static_layers.py'
+          node tests/paintout_updated/test_watermark_reference.mjs
+          node tests/paintout_updated/test_hdr_single_pass.mjs
+          node tests/paintout_updated/test_guided_anchors.mjs
           python -m unittest discover -s tests -p 'test_template_catalogue.py'
           python -m compileall -q paintout
           python -m unittest discover -s tests -p 'test_paintout_*.py'

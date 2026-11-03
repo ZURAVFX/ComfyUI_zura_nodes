@@ -35,6 +35,12 @@ For instruction-based still-image edits, open **Image > Edit image** and choose 
 
 ## Choose an engine and download its weights
 
+Choose your workflow and model in Studio. When supported model files are missing, **Install missing models** shows their combined download size and installs the required model, text encoders, VAEs and adapters in one job. Shared files are counted once and existing files are reused. Download progress and cancellation stay beside the workflow controls.
+
+Under **Use existing models or change folder**, add existing models folders on the computer running ComfyUI. Studio searches all their category subfolders. Choose **Download new models to** to select the destination for missing files, including the normal ComfyUI folders. Your folders and destination are remembered after restart. Removing a saved folder stops searching it; no model files are deleted. Other configured ComfyUI model folders remain searchable.
+
+**Details** lists files, publisher terms and any required node extensions. Gated models may require accepting the publisher's terms and supplying a Hugging Face read token. Files outside the verified download catalogue still show manual setup guidance.
+
 Download only the engine you plan to try first. Put every file under the matching `ComfyUI/models/` folder shown here. Names must match exactly. These are the versions the current Studio graphs request; do not rename other model variants to make them appear installed.
 
 **Shared Studio files** used for masking, starting-image previews and optional audio separation:

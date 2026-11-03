@@ -5,7 +5,7 @@ assert.equal(paintoutValidation(c),'');
 const g=buildPaintoutGraph(c);
 assert.equal(g.lora.class_type,'LTXICLoRALoaderModelOnly');assert.equal(g.lora.inputs.lora_name,PAINTOUT_MODELS.inpaintLora);assert.equal(g.lora.inputs.strength_model,1);
 assert.equal(g.source.inputs.framing_mode,'Smart crop (experimental)');assert.equal(g.source.inputs.processing_scale,.5);
-assert.equal(g.video_vae.inputs.vae_name,PAINTOUT_MODELS.videoVae);assert.equal(g.float_vae.class_type,'LTXVVAEForceFloat32');
+assert.equal(g.video_vae.inputs.vae_name,PAINTOUT_MODELS.hdrVideoVae);assert.equal(g.float_vae.class_type,'LTXVVAEForceFloat32');
 assert.equal(g.inpaint_preprocess.class_type,'LTXVInpaintPreprocess');assert.deepEqual(g.guide.inputs.image,['inpaint_preprocess',0]);assert.ok(!('attention_mask' in g.guide.inputs));
 assert.equal(g.sample.class_type,'SamplerCustomAdvanced');assert.equal(g.sampler.inputs.sampler_name,'euler_ancestral_cfg_pp');assert.equal(g.sigmas.inputs.sigmas,'1.0, 0.99375, 0.9875, 0.98125, 0.975, 0.909375, 0.725, 0.421875, 0.0');
 assert.equal(g.positive.inputs.text,'');assert.equal(g.negative.inputs.text,'');assert.equal(g.save.inputs.match_context,false);assert.ok(!g.apply_anchors);

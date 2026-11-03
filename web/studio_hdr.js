@@ -30,7 +30,9 @@ export class HDRSourceTool {
         <div class="zh-footer"><label data-hdr="long-control" hidden><input data-hdr="long" type="checkbox"/> Longer clip · preview</label><label data-hdr="sections-control" hidden>Section size<select data-hdr="sections"><option value="121">Longer sections · fewer joins</option><option value="25">Shorter sections · potentially faster, more joins</option></select></label><button data-hdr="use-video" type="button" hidden>Use in paintout</button><button data-hdr="use-result" type="button" hidden>Use converted video in paintout</button><button data-hdr="start-job" class="gs-primary" type="button">Convert video</button></div>
         <p data-hdr="limits" role="status" aria-live="polite">Up to 121 frames per run. Large frame selections may need to be shorter.</p><p class="zh-note">HLG video is 10-bit; EXR is ACEScg. The on-screen preview is tone-mapped for SDR.</p>
       </div>`;
-    host.append(this.root);this.loras=new LTXLoras(this.root.querySelector('.zh-advanced-body'),path=>this.request(path),()=>this.busy);this.trimmer=this.createTrimmer();this.$('start-job').onclick=()=>this.start();this.$('cancel').onclick=()=>this.cancel();
+    host.append(this.root);
+    const model=this.$('model');model.classList.add('zc-tool');model.textContent='LTX 2.5';model.removeAttribute('aria-hidden');this.root.querySelector('.zh-footer').prepend(model);
+    this.loras=new LTXLoras(this.root.querySelector('.zh-advanced-body'),path=>this.request(path),()=>this.busy);this.trimmer=this.createTrimmer();this.$('start-job').onclick=()=>this.start();this.$('cancel').onclick=()=>this.cancel();
     this.longAvailable=longAvailable;this.$('long-control').hidden=!longAvailable;
     this.longClient=new HDRLongJobClient(api,job=>this.longUpdate(job));
     this.$('long').onchange=()=>this.updateMode();

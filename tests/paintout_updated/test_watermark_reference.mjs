@@ -1,0 +1,10 @@
+import assert from 'node:assert/strict';
+import {buildPaintoutGraph,paintoutValidation,PAINTOUT_MODELS} from '../../web/paintout_studio/watermark_recipes.js';
+const c={mode:'targeted',targetedMethod:'automatic',source:'C:/shot.mp4',mask:'C:/mask.png',anchors:[],startFrame:8,frameCount:17,sequenceFps:30,sourceColour:'srgb_display',processingSpace:'SDR (sRGB)',colourPipeline:'sdr_sdr',width:640,height:384,outputMode:'SDR video',seed:42};
+assert.equal(paintoutValidation(c),'');assert.ok(!buildPaintoutGraph(c).reference_latent);
+assert.match(paintoutValidation({...c,referenceEnabled:true}),/Choose a clean first-frame/);
+const ref={...c,referenceEnabled:true,referenceImage:{file:'C:/clean.png',colour_space:'srgb_display'}};
+const g=buildPaintoutGraph(ref);assert.equal(g.reference_latent.class_type,'LTXVImgToVideoConditionOnly');assert.equal(g.reference_latent.inputs.strength,.7);assert.deepEqual(g.reference_latent.inputs.latent,['latent',0]);assert.deepEqual(g.guide.inputs.latent,['reference_latent',0]);assert.deepEqual(g.combine.inputs.video_latent,['guide',2]);assert.ok(!g.apply_anchors);assert.equal(g.reference.inputs.file,'C:/clean.png');assert.deepEqual(g.reference.inputs.plate,['source',2]);
+assert.ok(!buildPaintoutGraph({...ref,targetedMethod:'light'}).reference_latent);
+const hdr=buildPaintoutGraph({...ref,source:'C:/shot.exr',sourceColour:'acescg',processingSpace:'HDR (ACEScct)',colourPipeline:'hdr_hdr',outputMode:'EXR sequence',referenceImage:{file:'C:/clean.exr',colour_space:'acescg'}});assert.equal(hdr.video_vae.inputs.vae_name,PAINTOUT_MODELS.hdrVideoVae);assert.equal(hdr.reference.inputs.colour_space,'acescg');
+console.log('PASS optional native first-frame latent guidance, crop/colour routing, HDR VAE and Light isolation');

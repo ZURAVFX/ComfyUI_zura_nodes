@@ -20,7 +20,7 @@ export const composerIcons={
   takes:svg('<rect x="3" y="7" width="18" height="14" rx="2"/><path d="M7 3h10m-8 9 6 3-6 3z"/>'),
   download:svg('<path d="M12 3v12m-4-4 4 4 4-4M4 17v4h16v-4"/>'),
 };
-export const VIDEO_WORKFLOWS=[['swap','Character replacement'],['objects','Object replacement · Ripple'],['viewport','Viewport to final'],['camera','Change camera angle'],['relight','Relight'],['paintout','Paintout / clean plate'],['watermark','Watermark Removal'],['inpaint','Inpaint · preview'],['outpaint','Frame extension · preview'],['hdr','Convert to HDR'],['frames','First & last frame'],['references','Reference to video']];
+export const VIDEO_WORKFLOWS=[['swap','Character replacement'],['objects','Object replacement · Ripple'],['viewport','Viewport to final'],['camera','Change camera angle'],['relight','Relight'],['paintout','Paintout / clean plate'],['watermark','Watermark removal'],['inpaint','Inpaint · preview'],['outpaint','Frame extension · preview'],['hdr','Convert to HDR'],['frames','First & last frame'],['references','Reference to video']];
 
 /** A compact surface over the existing controls, never a second configuration. */
 export class VideoComposer {
@@ -60,7 +60,8 @@ export class VideoComposer {
     imageModel.querySelector('select').onchange=e=>studio.changeOpeningModel(e.target.value);
     imageModel.addEventListener('click',e=>{if(studio.busy||studio.project?.phase==='working'){e.preventDefault();return;}const option=e.target.closest('[data-opening-model]');if(option&&!option.disabled){imageModel.open=false;studio.changeOpeningModel(option.dataset.openingModel);}const ready=e.target.closest('[data-use-finished-image]');if(ready&&!ready.disabled){imageModel.open=false;const input=this.root.querySelector('input[name="gs-look"][value="ready"]');if(input&&!input.disabled){input.checked=true;input.dispatchEvent(new this.root.ownerDocument.defaultView.Event('change',{bubbles:true}));studio.$('ready').click();}}});
     imageModel.addEventListener('keydown',e=>{if(!['ArrowDown','ArrowUp','Home','End'].includes(e.key)||studio.busy||studio.project?.phase==='working')return;e.preventDefault();imageModel.open=true;const items=[...imageModel.querySelectorAll('[role="menuitemradio"]')].filter(b=>!b.disabled),index=items.indexOf(this.root.ownerDocument.activeElement),next=e.key==='Home'?0:e.key==='End'?items.length-1:index<0?0:(index+(e.key==='ArrowUp'?-1:1)+items.length)%items.length;items[next]?.focus({preventScroll:true});});
-    recipeTools.append(imageModel,task);this.imageModel=imageModel;this.model=model;
+    recipeTools.classList.add('zc-workflow-controls');
+    recipeTools.append(task,imageModel);this.imageModel=imageModel;this.model=model;
     this.openingLoras=new OpeningLoraControl(studio,tools);
     const outputTools=document.createElement('div');outputTools.className='zc-tool-group';outputTools.setAttribute('role','group');outputTools.setAttribute('aria-label','Video size and length');tools.append(outputTools);
     const nativeQuality=studio.$('quality-setting');
@@ -116,24 +117,17 @@ export class VideoComposer {
   }
   mountWorkflow(mode){
     if(mode!=='video')this.browserConnection?.close();else if(this.browserConnection)this.browserConnection.closed=false;
-    if(mode==='hdr'){
-      const tool=this.studio.hdrTool,anchor=tool?.root?.querySelector('.zh-model')||tool?.root?.querySelector('.zh-composer-heading strong');
-      if(anchor){anchor.after(this.task);this.syncWorkflow();}
-      return;
-    }
-    // Early Paintout stages hide the composer. Keep the shared task selector
-    // in its heading so the artist can always return to another workflow.
-    if(mode==='paintout'){
-      const heading=this.workspace.paintout.page.querySelector('.zf-heading');
-      heading.querySelector('h2').hidden=true;
-      heading.prepend(this.task);
-      this.syncWorkflow();
-      return;
-    }
     // Reuse the same control and handler in both composers. Its place in the
     // tool row stays immediately after the model, including endpoint video.
     const select=this.task.querySelector('select'),focused=this.root.ownerDocument.activeElement===select;
-    const model=mode==='frames'?this.workspace.frames.page.querySelector('.zf-model'):mode==='references'?this.workspace.referencesVideo.page.querySelector('.zf-model'):mode==='paintout'?this.workspace.paintout.page.querySelector('.zf-model'):mode==='watermark'?this.workspace.watermark.page.querySelector('.zf-model'):mode==='outpaint'?this.workspace.outpaint.page.querySelector('.zo-model'):mode==='panorama'?this.workspace.panorama.page.querySelector('.zpc-model'):this.imageModel;
+    const model=mode==='frames'?this.workspace.frames.page.querySelector('.zf-model'):mode==='references'?this.workspace.referencesVideo.page.querySelector('.zf-model'):mode==='paintout'?this.workspace.paintout.page.querySelector('.zf-model'):mode==='watermark'?this.workspace.watermark.page.querySelector('.zf-model'):mode==='outpaint'?this.workspace.outpaint.page.querySelector('.zo-model'):mode==='panorama'?this.workspace.panorama.page.querySelector('.zpc-model'):mode==='hdr'?this.studio.hdrTool?.root?.querySelector('.zh-model'):this.model;
+    if(!model)return;
+    let group=model.parentElement;
+    if(!group.classList.contains('zc-tool-group')){
+      group=document.createElement('div');group.className='zc-tool-group';group.setAttribute('role','group');group.setAttribute('aria-label','Model and workflow');
+      model.before(group);group.append(model);
+    }
+    group.classList.add('zc-workflow-controls');
     if(model.nextElementSibling!==this.task)model.after(this.task);
     this.syncWorkflow();
     if(focused)select.focus({preventScroll:true});

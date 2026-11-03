@@ -91,7 +91,7 @@ component.packages=[{...pack,id:'h3_dmd_ref2va',name:'H3 eight-step adapter',lic
 component.setContext({route:'h3',files:[{folder:'loras',filename:'minimax_h3_dmd_ref2va_8step_turbo_pruned.safetensors',ready:false}],missingNodes:[]});
 assert.match(component.files.textContent,/H3 eight-step adapter/);
 assert.match(component.files.textContent,/2.29 GB/);
-assert.match(component.files.textContent,/Download missing files/);
+assert.match(component.files.textContent,/Install missing models/);
 component.packages=[{...pack,id:'h3_taomate',name:'H3 TaoMate adapter',remaining_bytes:181697688,files:[{folder:'loras',filename:'minimax_h3_taomate_3step_lora_avg_rank_19_bf16.safetensors',repo:'Kijai/MiniMax-H3_comfy',size_bytes:181697688,installed:false}]}];
 component.setMissingContext('h3_head_swap',['minimax_h3_taomate_3step_lora_avg_rank_19_bf16.safetensors']);
 assert.match(component.files.textContent,/H3 TaoMate adapter/);assert.match(component.files.textContent,/0.18 GB/);

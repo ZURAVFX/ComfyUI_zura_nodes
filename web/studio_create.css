@@ -388,7 +388,8 @@
 /* One model library, accessible without leaving the canvas. */
 #genj-studio .zc-global-models{position:relative}
 #genj-studio .zc-global-models>summary{display:flex;align-items:center;min-height:36px;padding:8px 12px;box-sizing:border-box;color:var(--zc-text);cursor:pointer;list-style:none}
-#genj-studio .zc-global-models>.zc-tool-panel{position:absolute;right:0;left:auto;top:calc(100% + 10px);z-index:100;width:min(420px,calc(100vw - 32px));max-height:calc(100dvh - 110px);overflow:auto;padding:20px;background:var(--gs-panel);border:1px solid var(--gs-line);border-radius:12px;box-shadow:0 12px 36px #0005}
+#genj-studio .zc-global-models>.zc-tool-panel{position:absolute;right:0;left:auto;top:calc(100% + 10px);bottom:auto;z-index:100;width:min(420px,calc(100vw - 32px));max-height:calc(100dvh - 110px);height:auto;overflow:auto;padding:20px;background:var(--gs-panel);border:1px solid var(--gs-line);border-radius:12px;box-shadow:0 12px 36px #0005}
+#genj-studio .gs-top{position:relative;z-index:110}
 #genj-studio .zc-output-settings .zc-tool-panel{display:grid;gap:16px;box-sizing:border-box}
 #genj-studio .zc-output-settings h3{font-size:16px;margin:0}
 #genj-studio .zc-output-settings label{display:grid;gap:8px;font-size:13px}

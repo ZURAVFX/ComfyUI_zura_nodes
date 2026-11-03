@@ -19,6 +19,8 @@ import asyncio
 from pathlib import Path
 
 import folder_paths
+from .model_folders import load_saved_folders
+load_saved_folders(folder_paths)
 from aiohttp import web
 from server import PromptServer
 
@@ -66,7 +68,7 @@ NODE_DISPLAY_NAME_MAPPINGS.update(QWEN_DESIGN_NAMES)
 
 WEB_DIRECTORY = "./web"
 PACKAGE_ROOT = Path(__file__).resolve().parent
-__version__ = "1.3.41"
+__version__ = "1.3.42"
 
 
 def _register_routes():

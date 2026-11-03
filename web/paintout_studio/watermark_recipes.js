@@ -81,6 +81,8 @@ export function paintoutValidation(config={}){
     const limit=paintoutHDRFrameLimit(c);
     if(c.frameCount>limit)return `SDR to HDR supports ${limit} frames at this plate size (streaming HDR memory limits). This clip has ${c.frameCount} frames. Keep SDR output for the full clip, or trim a shorter clip for HDR.`;
   }
+  if(c.targetedMethod==='automatic'&&c.referenceEnabled&&!absolutePath(c.referenceImage?.file))return 'Choose a clean first-frame image, or turn off Use reference.';
+  if(c.targetedMethod==='automatic'&&c.referenceEnabled&&c.referenceImage?.sourceFrame!=null&&c.referenceImage.sourceFrame!==Number(c.startFrame))return 'The trim start changed. Choose a clean guide for the new first frame, or turn off Use reference.';
   if(!['automatic','guided','light'].includes(c.targetedMethod))return 'Choose light, automatic or guided repair.';
   if(pipeline==='hdr_hdr'&&c.targetedMethod==='light'&&c.mode==='targeted')return 'Light repair currently supports SDR footage. Choose Guided or Quality for HDR footage.';
   if(c.processingScale!=null&&![1,.75,.5,.25].includes(Number(c.processingScale)))return 'Choose full, three-quarter, half or quarter processing scale.';
@@ -154,7 +156,7 @@ export function buildPaintoutGraph(config={},info){
   node('text','CLIPLoader',{clip_name:models.text,type:'ltxv',device:'default'});
   node('positive','CLIPTextEncode',{clip:ref('text'),text:singleInpaint&&(!String(c.prompt||'').trim()||c.prompt===PAINTOUT_DEFAULT_PROMPTS.targeted)?'':String(c.prompt||'').trim()||PAINTOUT_DEFAULT_PROMPTS[c.mode]});
   node('negative','CLIPTextEncode',{clip:ref('text'),text:singleInpaint?'':targeted?'blurry, low resolution, ugly, garbled mess, compression artifacts, glitch, stop motion, still image, pixelated, robotic voice, oversaturated':'people, person, pedestrian, human, cyclist, car, taxi, vehicle, bicycle, ghosting, blurry, distorted, jitter'});
-  node('video_vae','VAELoader',{vae_name:singleInpaint?models.videoVae:paintoutColourPipeline(c)==='hdr_hdr'?models.hdrVideoVae:models.videoVae});
+  node('video_vae','VAELoader',{vae_name:paintoutColourPipeline(c)==='hdr_hdr'?models.hdrVideoVae:models.videoVae});
   node('float_vae','LTXVVAEForceFloat32',{vae:ref('video_vae')});
   node('audio_vae','VAELoader',{vae_name:models.audioVae});
   node('take','ZuraPaintoutTake',{plate:ref('source',2)});
@@ -173,6 +175,11 @@ export function buildPaintoutGraph(config={},info){
   });
   const conditioned=hasAnchors?'apply_anchors':'guide';
   if(hasAnchors)node('apply_anchors','ZuraPaintoutApplyAnchors',{positive:ref('guide'),negative:ref('guide',1),vae:ref('float_vae'),latent:ref('guide',2),anchors:ref('anchors')});
+  if(singleInpaint&&c.referenceEnabled){
+    node('reference','ZuraWatermarkReference',{plate:ref('source',2),file:c.referenceImage?.file,colour_space:c.referenceImage?.colour_space||'srgb_display'});
+    node('reference_latent','LTXVImgToVideoConditionOnly',{vae:ref('float_vae'),image:ref('reference'),latent:ref('latent'),strength:.7,bypass:false});
+    g.guide.inputs.latent=ref('reference_latent');
+  }
   node('audio','LTXVEmptyLatentAudio',{audio_vae:ref('audio_vae'),frames_number:ref('take',4),frame_rate:ref('take',5),batch_size:1});
   node('combine','LTXVConcatAVLatent',{video_latent:ref(conditioned,2),audio_latent:ref('audio')});
   if(singleInpaint){
@@ -208,11 +215,12 @@ export function paintoutAvailability(info={},mode='targeted',config={}){
   }
   const expected={UNETLoader:['unet_name',PAINTOUT_MODELS.model],CLIPLoader:['clip_name',PAINTOUT_MODELS.text],[targeted&&!singleInpaint?'LoraLoaderModelOnly':'LTXICLoRALoaderModelOnly']:['lora_name',singleInpaint?PAINTOUT_MODELS.inpaintLora:targeted?PAINTOUT_MODELS.targetedLora:PAINTOUT_MODELS.fullLora]};
   for(const [node,[key,file]] of Object.entries(expected))if(!modelChoice(options(node,key),file))missing.push(file);
-  for(const file of [paintoutColourPipeline(config)==='hdr_hdr'&&!singleInpaint?PAINTOUT_MODELS.hdrVideoVae:PAINTOUT_MODELS.videoVae,PAINTOUT_MODELS.audioVae])if(!modelChoice(options('VAELoader','vae_name'),file))missing.push(file);
+  for(const file of [paintoutColourPipeline(config)==='hdr_hdr'?PAINTOUT_MODELS.hdrVideoVae:PAINTOUT_MODELS.videoVae,PAINTOUT_MODELS.audioVae])if(!modelChoice(options('VAELoader','vae_name'),file))missing.push(file);
   const types=['UNETLoader','CLIPLoader','CLIPTextEncode','VAELoader','ZuraPaintoutTake','ZuraPaintoutUncrop','ZuraPaintoutGuideMemory','LTXVVAEForceFloat32','LTXVConditioning','EmptyLTXVLatentVideo','LTXAddVideoICLoRAGuideAdvanced','LTXVEmptyLatentAudio','LTXVConcatAVLatent','KSampler','LTXVSeparateAVLatent','LTXVCropGuides','VAEDecodeTiled',...(targeted?['ZuraPaintoutCrop','ZuraPaintoutAnchors','ZuraPaintoutApplyAnchors','GrowMask',...(config.maskBlockSize===0?[]:['BlockifyMask']),'InvertMask','LoraLoaderModelOnly']:['ZuraPaintoutFullFrame','LTXICLoRALoaderModelOnly'])];
   if(singleInpaint){for(const node of ['GrowMask','LTXICLoRALoaderModelOnly','LTXVInpaintPreprocess','RandomNoise','CFGGuider','KSamplerSelect','ManualSigmas','SamplerCustomAdvanced'])if(!info[node])missing.push(node);}
   for(const node of types)if(!info[node]&&!(singleInpaint&&['GrowMask','BlockifyMask','InvertMask','LoraLoaderModelOnly','KSampler'].includes(node)))missing.push(node);
   if(!singleInpaint&&info.KSampler&&!options('KSampler','scheduler').includes('linear_quadratic'))missing.push('LTX linear_quadratic scheduler');
+  if(singleInpaint&&config.referenceEnabled)for(const node of ['ZuraWatermarkReference','LTXVImgToVideoConditionOnly'])if(!info[node])missing.push(node);
   const guideInputs=info.LTXAddVideoICLoRAGuideAdvanced?.input;
   if(guideInputs&&!guideInputs.optional?.use_streaming&&!guideInputs.required?.use_streaming)missing.push('Current ComfyUI-LTXVideo guide nodes');
   if(paintoutColourPipeline(config)==='sdr_hdr'){

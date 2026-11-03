@@ -160,7 +160,7 @@ export class PaintoutEditor{
     for(const [tool,label]of [['include','Select'],['exclude','Exclude'],['brush','Paint'],['protect','Erase'],['pan','Pan']]){const button=this.viewerToolbar.querySelector(`[data-tool=${tool}]`);button.querySelector('span').textContent=label;button.setAttribute('aria-label',button.title);}
     this.$('undo').setAttribute('aria-label','Undo');this.$('undo').querySelector('span').hidden=true;
     const maskMenu=actionMenu('Mask actions',[this.$('clear'),this.$('reset-mask-edit')]);maskMenu.dataset.editorMenu='mask';this.viewerToolbar.querySelector('.zp-editor-tool-group').after(maskMenu);
-    const intro=this.tools.querySelector('.zp-editor-mask-intro');const trackingOptions=this.$('tracking-options'),maskHistory=this.$('absent').closest('details');delete trackingOptions.dataset.timelineOnly;delete maskHistory.dataset.timelineOnly;trackingOptions.querySelector('summary').textContent='Tracking settings';trackingOptions.querySelector('p').remove();maskHistory.querySelector('summary').textContent='Mask history';intro.replaceChildren(actionMenu('Mask options',[this.$('import-mask'),trackingOptions,maskHistory]));maskActions.prepend(intro);
+    const intro=this.tools.querySelector('.zp-editor-mask-intro');const trackingOptions=this.$('tracking-options'),maskHistory=this.$('absent').closest('details');const unusedTracking=el('div');unusedTracking.hidden=true;unusedTracking.append(trackingOptions,maskHistory);intro.replaceChildren(this.$('import-mask'),unusedTracking);maskActions.prepend(this.$('segment-draft'));maskActions.append(intro);this.$('segment-cancel').textContent='Cancel layer';
     this.$('import-mask').textContent='Import mask video';
     const cleanActions=this.tools.querySelector('.zp-editor-clean-actions');
     cleanActions.append(actionMenu('Frame actions',[this.$('download'),this.$('import'),this.$('reference'),this.$('reject')]));
@@ -495,7 +495,7 @@ export class PaintoutEditor{
     this.maskSummary.querySelector('span').textContent=!hasRemovalMask?'Go to Mask and mark the object you want to remove.':count<needed?`Your mask covers ${count} of ${needed} frames. Go back to Mask and track the missing sections.`:`Mask ready - ${needed} frames`;
     this.maskSummary.querySelector('button').disabled=busy;
     this.tools.querySelector('.zp-editor-segment-actions').hidden=!hasRemovalMask;
-    this.tools.querySelector('.zp-editor-segments').hidden=!this.document?.mask_history?.length;
+    this.tools.querySelector('.zp-editor-segments').hidden=true;this.tools.querySelector('.zp-editor-segment-actions').hidden=true;
     const pointPreview=this.stage==='mask'&&(this.toolJob?.maskSingle||this.maskStarting&&this.maskPreviewStarting);
     this.viewerHost.inert=busy&&!pointPreview||!!this.candidate;this.viewerHost.setAttribute('aria-busy',String(busy));if(busy)this.viewer.drag=null;
     for(const input of this.tools.querySelectorAll('input,select'))input.disabled=busy;
@@ -521,8 +521,8 @@ export class PaintoutEditor{
     const segment=this.maskSegment(),atSeed=segment?.frame===this.w.playhead;
     this.$('clear').hidden=!clean&&!!this.activeMask()?.tracked&&!segment;this.$('reset-mask-edit').hidden=clean||!this.activeMask()?.tracked||!this.activeMask()?.correction_frames?.includes(this.w.playhead)||this.w.playhead<this.activeMask().start||this.w.playhead>this.activeMask().end;
     this.$('segment-draft').hidden=!segment;
-    this.$('segment-label').textContent=segment?`New layer · paint on frame ${segment.frame}`:'';
-    this.$('segment-help').textContent=segment?(segment.ready?'Ready to track from this frame.':'Paint the watermark. Other layers stay intact.') :'';
+    this.$('segment-label').textContent=segment?`Paint a new layer · frame ${segment.frame}`:'';
+    this.$('segment-help').textContent=segment?(segment.ready?'Ready to save this layer.':'Paint over the watermark, then save the layer.') :'';
     this.$('segment-seed').hidden=!segment||atSeed;
     iconLabel(this.$('track'),'scan-line','Save layer');
     for(const [action,icon] of [['clean','wand-sparkles'],['download','download'],['import','upload'],['import-mask','upload']]){const button=this.$(action);if(button&&!button.querySelector('svg'))iconLabel(button,icon,button.textContent);}

@@ -1,6 +1,7 @@
 import {installOwnedExecuting} from './studio_progress.js';
 import {LTXLoras} from '../studio_ltx_loras.js';
 import {PaintoutModels} from './watermark_models.js';
+import {groupMissingNodes} from '../studio_node_setup.js';
 import {updateGenerationSteps} from './paintout_generation_steps.js';
 import {buildPaintoutGraph,buildPaintoutRepairGraph,buildPaintoutHDRGraph,paintoutValidation,paintoutAvailability,PAINTOUT_DEFAULT_PROMPTS,PAINTOUT_OUTPUT_MODES,PAINTOUT_SIZE_PRESETS,paintoutPresetSize,paintoutRangeFix,paintoutColourPipeline} from './watermark_recipes.js';
 import {buildInpaintRepairGraph,inpaintValidation,inpaintAvailability,INPAINT_PROMPT} from './inpaint_recipes.js';
@@ -101,6 +102,7 @@ export class WatermarkWorkspace{
 
         </div>
 
+        <section class="zwm-reference" id="zps-reference-control" aria-label="First-frame reference"><div><strong>Clean first-frame guide</strong><p>Optional. Use a cleaned image of the first selected frame, at the original source dimensions.</p></div><label><input id="zps-use-reference" type="checkbox" /> Use reference</label><div id="zps-reference-fields" hidden><button id="zps-choose-reference" type="button">Choose image</button><span id="zps-reference-name">No image selected</span><label>Image colour<select id="zps-reference-colour"><option value="srgb_display">sRGB</option><option value="acescg">ACEScg</option><option value="acescct">ACEScct</option><option value="hlg_rec2020">HLG Rec.2020</option><option value="pq_rec2020">PQ Rec.2020</option></select></label><button id="zps-remove-reference" type="button">Remove</button></div></section>
         <section id="zps-anchors-section" aria-label="Painted anchor frames"><div id="zps-anchors" class="zps-anchor-strip"></div><p id="zps-anchor-help">Add full-size painted frames, then enter their original source frame numbers. Numbers start at 0.</p></section>
 
         <label for="zps-prompt" class="zc-sr-only">Describe the paintout</label><textarea id="zps-prompt" maxlength="12000" placeholder="Describe what to remove and what should remain…"></textarea>
@@ -176,6 +178,10 @@ export class WatermarkWorkspace{
 
     };
 
+    this.$('use-reference').onchange=()=>{this.state.referenceEnabled=this.$('use-reference').checked;this.changed();};
+    this.$('choose-reference').onclick=()=>this.pickWatermarkReference();
+    this.$('remove-reference').onclick=()=>{this.state.referenceImage=null;this.state.referenceEnabled=false;this.changed();};
+    this.$('reference-colour').onchange=()=>{if(this.state.referenceImage)this.state.referenceImage.colour_space=this.$('reference-colour').value;this.changed();};
     this.$('method').value=this.state.targetedMethod??'automatic';this.$('method').onchange=()=>{this.state.targetedMethod=this.$('method').value;this.changed();};
     this.$('hdr-scale').value=String(this.state.processingScale??1);this.$('hdr-scale').onchange=()=>{this.state.processingScale=Number(this.$('hdr-scale').value);this.changed();};
     for(const [id,key] of Object.entries({fps:'sequenceFps',colour:'sourceColour',processing:'processingSpace',output:'outputMode',seed:'seed'}))this.$(id).onchange=()=>{
@@ -202,7 +208,7 @@ export class WatermarkWorkspace{
 
     this.$('export').onclick=()=>this.exportFrame();this.$('expand').onclick=()=>this.page.querySelector('.zf-viewer').requestFullscreen?.();
 
-    this.$('refresh').textContent='Open model setup';this.$('refresh').onclick=()=>{this.$('setup').closest('details').open=false;this.openModelSetup('video');};this.$('cancel').onclick=()=>this.cancel();this.$('compare').onclick=()=>this.compare();
+    this.$('refresh').textContent='Check again';this.$('refresh').onclick=()=>this.loadModels();this.$('cancel').onclick=()=>this.cancel();this.$('compare').onclick=()=>this.compare();
 
     this.$('anchors').onclick=e=>{const remove=e.target.closest('[data-remove-anchor]'),select=e.target.closest('[data-select-anchor]');if(remove){if(this.busy())return;this.state.anchors.splice(Number(remove.dataset.removeAnchor),1);this.selected=-1;this.renderAnchors();this.changed();this.preview('source');}else if(select)this.selectAnchor(Number(select.dataset.selectAnchor));};
 
@@ -285,7 +291,7 @@ export class WatermarkWorkspace{
 
   fps(){return this.sourceInfo?.kind==='video'?this.sourceInfo.fps:this.state.sequenceFps;}
 
-  config(){const c={...this.state,custom_loras:this.loras.value(),resolutionMode:'plate',sourceWidth:this.sourceInfo?.width,sourceHeight:this.sourceInfo?.height,detectedSourceColour:this.sourceInfo?.resolved_colour,colourPipeline:paintoutColourPipeline(this.state),anchors:this.state.anchors.filter(a=>(!this.ripple||Number(a.frame)===this.state.startFrame)&&a.file&&(!a.status||a.status==='accepted')&&(Number(a.frame)===-1||Number(a.frame)>=this.state.startFrame&&Number(a.frame)<this.state.startFrame+this.state.frameCount)).map(a=>({...a})),prompt:this.$('prompt').value,keepAudio:true,savePrefix:this.ripple?'ZURA STUDIO/object replacement':'paintout/studio',exrPrecision:'float32'};if(this.sourceInfo){c.width=Math.ceil(c.sourceWidth/64)*64;c.height=Math.ceil(c.sourceHeight/64)*64;c.sequenceFps=this.fps();}return c;}
+  config(){const c={...this.state,custom_loras:this.loras.value(),resolutionMode:'plate',sourceWidth:this.sourceInfo?.width,sourceHeight:this.sourceInfo?.height,detectedSourceColour:this.sourceInfo?.resolved_colour,colourPipeline:paintoutColourPipeline(this.state),anchors:[],prompt:this.$('prompt').value,keepAudio:true,savePrefix:'ZURA STUDIO/watermark removal',exrPrecision:'float32'};if(this.sourceInfo){c.width=Math.ceil(c.sourceWidth/64)*64;c.height=Math.ceil(c.sourceHeight/64)*64;c.sequenceFps=this.fps();}return c;}
 
   applySize(){const mode=this.state.resolutionMode;if(mode==='default'){this.state.width=1152;this.state.height=640;}else if(PAINTOUT_SIZE_PRESETS.some(p=>p[0]===mode))Object.assign(this.state,paintoutPresetSize(mode,this.state.megapixels));this.$('width').value=this.state.width;this.$('height').value=this.state.height;}
 
@@ -304,7 +310,7 @@ export class WatermarkWorkspace{
   async info(path){return this.fetch('/zura/paintout/info?'+new URLSearchParams({file:path}));}
 
   applySourceInfo(info){
-    const file=info.path;this.state.source=file;this.state.activeMaskSegment=null;this.state.maskSegmentDraft=null;this.state.editorProject=null;this.state.maskProject=null;this.state.maskRevision=null;this.state.maskCoverage=null;this.state.editorStage='trim';this.state.clipTrimConfirmed=false;this.state.maskTrackStart=null;this.state.maskTrackEnd=null;this.pendingHDR=null;this.sourceInfo=info;this.state.mask='';this.maskInfo=null;this.state.anchors=[];this.selected=-1;this.state.startFrame=0;this.state.frameCount=Math.min(81,info.frames);this.playhead=0;this.result=null;this.$('export-link').hidden=true;this.$('export-link').removeAttribute('href');this.$('start').value=0;this.$('count').value=this.state.frameCount;this.renderAnchors();this.changed();this.preview('source');this.state.editorStage='trim';this.state.clipTrimConfirmed=false;
+    const file=info.path;this.state.referenceEnabled=false;this.state.referenceImage=null;this.state.source=file;this.state.activeMaskSegment=null;this.state.maskSegmentDraft=null;this.state.editorProject=null;this.state.maskProject=null;this.state.maskRevision=null;this.state.maskCoverage=null;this.state.editorStage='trim';this.state.clipTrimConfirmed=false;this.state.maskTrackStart=null;this.state.maskTrackEnd=null;this.pendingHDR=null;this.sourceInfo=info;this.state.mask='';this.maskInfo=null;this.state.anchors=[];this.selected=-1;this.state.startFrame=0;this.state.frameCount=Math.min(81,info.frames);this.playhead=0;this.result=null;this.$('export-link').hidden=true;this.$('export-link').removeAttribute('href');this.$('start').value=0;this.$('count').value=this.state.frameCount;this.renderAnchors();this.changed();this.preview('source');this.state.editorStage='trim';this.state.clipTrimConfirmed=false;
   }
 
   async importStudioHDR(assetId,colour,output){
@@ -348,6 +354,11 @@ export class WatermarkWorkspace{
 
   }
 
+  async pickWatermarkReference(){
+    if(this.busy())return;this.picking=true;this.render();
+    try{const [file]=await this.pick('anchor');if(!file)return;const info=await this.info(file);if(info.width!==this.sourceInfo?.width||info.height!==this.sourceInfo?.height)throw Error(`Use an image at the original source size: ${this.sourceInfo.width} × ${this.sourceInfo.height}.`);if(paintoutColourPipeline(this.state)==='hdr_hdr'&&!/\.(exr|tiff?)$/i.test(file))throw Error('For HDR footage, choose an EXR or high-bit-depth TIFF guide.');this.state.referenceImage={file,sourceFrame:this.state.startFrame,colour_space:/\.exr$/i.test(file)?'acescg':'srgb_display'};this.state.referenceEnabled=true;this.changed();}
+    catch(e){this.message(this.requestError(e));}finally{this.picking=false;this.render();}
+  }
   async pickAnchors(replace=-1){
 
     if(this.busy())return;this.picking=true;this.render();
@@ -441,6 +452,13 @@ export class WatermarkWorkspace{
   }
 
   openModelSetup(scope){this.$('workspace-menu').open=true;this.modelDownloads?.open(scope);}
+  reviewSetup(){
+    const missing=this.availability?.missing||[];
+    if(missing.some(name=>/\.(safetensors|onnx|pt|pth|ckpt|bin)$/i.test(name))){this.openModelSetup('video');return;}
+    this.$('render-settings').open=true;
+    this.message(this.modelError||this.$('setup').textContent);
+    this.$('setup').scrollIntoView?.({block:'nearest'});this.$('refresh').focus();
+  }
 
   async loadModels(){if(this.loading)return;this.loading=true;this.render();try{this.modelInfo=await this.fetch('/object_info');this.modelError='';}catch(e){this.modelError=e.message;}finally{this.loading=false;this.render();}}
 
@@ -480,16 +498,18 @@ export class WatermarkWorkspace{
     this.loras?.setBusy(busy);
     this.validationError=error;this.availability=availability;this.renderColourStatus(c);this.$('block-control').hidden=!targeted||(!inpaint&&((c.targetedMethod??'automatic')!=='guided'));this.$('mask-block').value=String(this.state.maskBlockSize??32);this.$('mask-block').disabled=busy;
 
-    this.page.querySelector('.zf-composer').hidden=!this.state.source;this.$('title').textContent='Review and render';this.$('workflow-label').textContent='Watermark removal';this.$('pipeline').value=paintoutColourPipeline(this.state);this.$('pipeline').disabled=busy;this.$('shot-summary').textContent=this.sourceInfo?`${name(this.state.source)} · ${this.sourceInfo.width} × ${this.sourceInfo.height} · ${this.fps()} fps · frames ${c.startFrame}–${c.startFrame+c.frameCount-1}`:'';
+    const composer=this.page.querySelector('.zf-composer');composer.hidden=false;composer.classList.toggle('zp-navigation-only',!this.state.source||!!this.editor?.active&&this.editor.stage!=='render');this.$('title').textContent='Review and render';this.$('workflow-label').textContent='Watermark removal';this.$('pipeline').value=paintoutColourPipeline(this.state);this.$('pipeline').disabled=busy;this.$('shot-summary').textContent=this.sourceInfo?`${name(this.state.source)} · ${this.sourceInfo.width} × ${this.sourceInfo.height} · ${this.fps()} fps · frames ${c.startFrame}–${c.startFrame+c.frameCount-1}`:'';
 
     for(const b of this.page.querySelectorAll('[data-mode]')){b.setAttribute('aria-pressed',String(b.dataset.mode===this.state.mode));b.disabled=busy;}
 
+    const reference=this.state.referenceImage;this.$('reference-control').hidden=c.targetedMethod!=='automatic';this.$('use-reference').checked=!!this.state.referenceEnabled;this.$('use-reference').disabled=busy;this.$('reference-fields').hidden=!this.state.referenceEnabled;this.$('reference-name').textContent=reference?name(reference.file):'No image selected';this.$('reference-colour').value=reference?.colour_space||'srgb_display';this.$('reference-colour').disabled=busy||!reference;this.$('choose-reference').disabled=busy;this.$('remove-reference').hidden=!reference;this.$('remove-reference').disabled=busy;
+    this.page.querySelector('.zf-model').innerHTML=icons.model+' '+(c.targetedMethod==='light'?'ProPainter':'LTX 2.5');
     this.$('method-summary').textContent=targeted&&c.targetedMethod==='light'&&paintoutColourPipeline(c)!=='hdr_hdr'?'ProPainter · cropped repair · original-resolution delivery':'LTX 2.5 INT8 · 8 steps · original-resolution delivery';
     this.$('method-control').hidden=!(targeted&&!inpaint);this.$('method').value=c.targetedMethod??'automatic';this.$('method').disabled=busy;
     this.$('hdr-scale-control').hidden=!(targeted&&!inpaint&&((c.targetedMethod??'automatic')!=='guided'));this.$('hdr-scale').disabled=busy;
     this.$('export-mask').disabled=busy||!c.maskProject||c.maskRevision==null;
     if(this.$('mask-download').dataset.maskSignature!==JSON.stringify([c.maskProject,c.maskRevision,c.startFrame,c.frameCount,Number(c.maskGrow||0)]))this.$('mask-download').hidden=true;
-    this.$('mask-control').hidden=!targeted||!!this.editor;this.$('add-anchor').hidden=!targeted||!!this.editor;this.$('add-anchor').disabled=busy||!this.state.source;this.$('mask').disabled=busy||!this.state.source;this.$('anchors-section').hidden=!targeted;
+    this.$('mask-control').hidden=!targeted||!!this.editor;this.$('add-anchor').hidden=!targeted||!!this.editor;this.$('add-anchor').disabled=busy||!this.state.source;this.$('mask').disabled=busy||!this.state.source;this.$('anchors-section').hidden=true;
 
     this.$('anchor-help').textContent=this.state.anchors.length?`Original source frames · numbers start at 0 · selected range ${c.startFrame}–${c.startFrame+c.frameCount-1}. Click a thumbnail to preview or adjust its guide.`:'Add full-size painted frames, then enter their original source frame numbers. Numbers start at 0.';
 
@@ -545,10 +565,13 @@ export class WatermarkWorkspace{
     this.$('export').disabled=busy;this.$('progress').hidden=!this.job&&!this.submitting;this.$('cancel').disabled=!this.job||!!this.job.cancelPending;this.updateGenerationGuide();
 
     this.$('hdr-stage').hidden=!this.pendingHDR;this.$('convert-hdr').disabled=busy;this.$('convert-hdr').textContent=this.pendingHDR?.failed?'Retry HDR conversion':'Convert to HDR';this.$('hdr-stage-note').textContent=this.pendingHDR?.failed?'Conversion stopped. Your repair is saved.':'Repair saved. Ready for HDR.';
-    this.$('generate').disabled=busy;this.$('generate').setAttribute('aria-describedby','zps-note');this.$('generate').textContent=this.job?'Generating…':this.submitting?'Submitting…':error&&/mask section|inpaint mask|removal mask|matching mask/i.test(error)?'Finish mask':error&&/painted clean frame|painted frame|reference frame|replacement image/i.test(error)?'Add reference frame':error||!availability?.ready?'Review setup':inpaint?'Generate inpaint':'Remove watermark';
+    this.$('generate').disabled=busy||this.loading;this.$('generate').setAttribute('aria-describedby','zps-note');this.$('generate').textContent=this.job?'Generating…':this.submitting?'Submitting…':this.loading?'Checking setup…':error&&/mask section|inpaint mask|removal mask|matching mask/i.test(error)?'Finish mask':error&&/painted clean frame|painted frame|reference frame|replacement image/i.test(error)?'Add reference frame':error?'Review setup':!availability?.ready?(availability?.missing?.some(name=>/\.(safetensors|onnx|pt|pth|ckpt|bin)$/i.test(name))?'Install missing models':'Check required nodes'):inpaint?'Generate inpaint':'Remove watermark';
 
     this.modelDownloads?.setContext({stage:this.state.source?this.editor?.stage:'setup',mode:this.state.mode,pipeline:paintoutColourPipeline(this.state),targetedMethod:this.state.targetedMethod??'automatic',phase:this.pendingHDR?'hdr':this.job?.phase,missingNodes:availability?.missing||[]});
-    this.$('setup').textContent=this.loading?'Checking installed models…':this.modelError||(!availability?'Open Paintout to check installed models.':availability.ready?'Required models and nodes are installed.':'Missing: '+availability.missing.join(', '));
+    this.$('setup').textContent=this.loading?'Checking installed models and extensions…':this.modelError||(!availability?'Check installed models and extensions.':availability.ready?'Required models and nodes are installed.':'Not loaded: '+availability.missing.join(', '));
+    if(!this.loading&&!this.modelError&&availability&&!availability.ready){
+      for(const pack of groupMissingNodes(availability.missing).packs){const row=document.createElement('p'),link=document.createElement('a');link.href=pack.url;link.target='_blank';link.rel='noopener noreferrer';link.textContent='Set up '+pack.name;row.append(link,document.createTextNode('. '+(pack.note||'Install or enable this extension, then restart ComfyUI and check again.')));this.$('setup').append(row);}
+    }
 
     this.$('note').textContent=error||(!availability?.ready?this.$('setup').textContent:'');this.$('note').hidden=!this.$('note').textContent;
 
@@ -632,9 +655,9 @@ export class WatermarkWorkspace{
 
     if(invalid){this.message('Enter a valid '+(invalid.closest('label')?.firstChild?.textContent||'frame number').trim().toLowerCase()+'.');invalid.closest('details')?.setAttribute('open','');invalid.focus();return;}
 
-    if(!this.validationError&&!this.availability?.ready){this.message(this.$('setup').textContent);this.openModelSetup('video');return;}
+    if(!this.validationError&&!this.availability?.ready){this.reviewSetup();return;}
 
-    if(this.validationError||!this.availability?.ready){const reason=this.validationError||this.$('setup').textContent;if(this.editor&&/mask section|inpaint mask|removal mask|matching mask/i.test(reason)){await this.editor.setStage('mask');const covered=new Set(this.state.maskCoverage||[]),first=Array.from({length:this.state.frameCount},(_,i)=>this.state.startFrame+i).find(f=>!covered.has(f));if(first!=null)this.seek(first);this.editor.status(reason);return;}if(this.editor&&/painted clean frame|painted frame|reference frame|replacement image/i.test(reason)){await this.editor.setStage('clean');this.editor.status(reason);return;}this.message(reason);const id=/frame|range|mask.*cover/i.test(reason)?'range':/width|height|resolution|pixel/i.test(reason)?'resolution':null;if(id){this.$('render-settings').open=true;this.$(id).open=true;}else if(!this.availability?.ready)this.openModelSetup('video');return;}
+    if(this.validationError||!this.availability?.ready){const reason=this.validationError||this.$('setup').textContent;if(this.editor&&/mask section|inpaint mask|removal mask|matching mask/i.test(reason)){await this.editor.setStage('mask');const covered=new Set(this.state.maskCoverage||[]),first=Array.from({length:this.state.frameCount},(_,i)=>this.state.startFrame+i).find(f=>!covered.has(f));if(first!=null)this.seek(first);this.editor.status(reason);return;}if(this.editor&&/painted clean frame|painted frame|reference frame|replacement image/i.test(reason)){await this.editor.setStage('clean');this.editor.status(reason);return;}this.message(reason);const id=/frame|range|mask.*cover/i.test(reason)?'range':/width|height|resolution|pixel/i.test(reason)?'resolution':null;if(id){this.$('render-settings').open=true;this.$(id).open=true;}else if(!this.availability?.ready)this.reviewSetup();return;}
 
     this.submitting=true;this.message('');this.$('progress-title').textContent='Submitting clean plate';this.$('progress-detail').textContent='Sending your run to ComfyUI…';this.$('bar').removeAttribute('value');this.render();
 

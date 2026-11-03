@@ -74,7 +74,7 @@ class ModelDownloadRouteTests(unittest.IsolatedAsyncioTestCase):
         self.addCleanup(self.catalog.stop)
         self.downloads.register_routes()
         self.downloads.register_routes()
-        self.assertEqual(len(self.routes), 4, 'Repeated registration must not add duplicate endpoints.')
+        self.assertEqual(len(self.routes), 5, 'Repeated registration must not add duplicate endpoints.')
         guard = importlib.import_module(prefix + '.media_source')
         self.assertEqual(Path(guard.__file__).resolve(), (Path(package.__path__[0]) / 'media_source.py').resolve())
         app = web.Application()
@@ -188,6 +188,27 @@ class ModelDownloadRouteTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(response.status, 403)
         self.assertFalse(self.weight_requests)
 
+
+    async def test_browser_download_import_checks_origin_and_uses_selected_folder(self):
+        base='/zura/paintout/model-downloads/import'
+        payload={'model_id':'fixture','filename':'route-fixture.safetensors'}
+        import_name=self.downloads.__package__+'.browser'
+        source=self.root/'browser-download.safetensors';source.write_bytes(self.data)
+        browser=types.ModuleType(import_name);browser.pick=lambda kind:[str(source)]
+        with patch.dict(sys.modules,{import_name:browser}):
+            response=await self.client.post(base,json=payload,headers={'Origin':'https://untrusted.example'})
+            self.assertEqual(response.status,403)
+            response=await self.client.post(base,json={'model_id':'unknown','filename':payload['filename']})
+            self.assertEqual(response.status,400)
+            response=await self.client.post(base,json=payload);self.assertEqual(response.status,200)
+            identity=(await response.json())['id']
+            for _ in range(500):
+                status=await (await self.client.get('/zura/paintout/model-downloads/'+identity)).json()
+                if status['phase'] in ('done','failed','cancelled'):break
+                await asyncio.sleep(.01)
+            self.assertEqual(status['phase'],'done',status)
+            self.assertEqual((self.root/payload['filename']).read_bytes(),self.data)
+            self.assertTrue(source.exists())
 
 if __name__ == '__main__':
     unittest.main()

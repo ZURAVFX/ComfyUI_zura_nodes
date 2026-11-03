@@ -16,6 +16,13 @@ tree = ast.parse(Path('__init__.py').read_text(encoding='utf-8'))
 module_version = next(ast.literal_eval(n.value) for n in tree.body if isinstance(n, ast.Assign) and any(isinstance(t, ast.Name) and t.id == '__version__' for t in n.targets))
 assert version == module_version, 'Update __version__ as well as pyproject.toml'
 assert Path('LICENSE').is_file()
+for asset in ('model_folders.py', 'web/studio_model_storage.js',
+              'web/studio_model_setup.css', 'web/studio_model_download.js',
+              'tests/test_model_install.py', 'tests/test_model_install_routes.py',
+              'tests/test_model_install_ui.mjs'):
+    assert Path(asset).is_file(), f'Missing workflow model setup asset: {asset}'
+for asset in ('paintout/watermark_reference.py','paintout/model_browser_import.py','web/paintout_studio/watermark_workspace.js','web/paintout_studio/watermark_editor.js','web/paintout_studio/watermark_models.js','web/paintout_studio/watermark_recipes.js','web/paintout_studio/watermark_timeline.js'):
+    assert Path(asset).is_file(), f'Missing watermark asset: {asset}'
 assert Path('THIRD_PARTY_NOTICES.md').is_file()
 for asset in ('chatgpt_image.py', 'gemini_image.py', 'web_sessions.py',
               'browser_image_routes.py', 'chatgpt_session_worker.py',

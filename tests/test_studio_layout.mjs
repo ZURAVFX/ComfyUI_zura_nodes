@@ -31,6 +31,7 @@ assert.match(createCss,/textarea\.zu-textarea\{width:100%;max-width:none;min-wid
 assert.match(createCss,/\.zc-viewer-tools \.zc-viewer-trigger\{min-height:40px/,'Small-screen viewer tools retain usable touch targets');
 assert.doesNotMatch(createCss,/\.zc-choices>button:hover\{[^}]*padding-inline/,'Home choices do not shift under the pointer');
 console.log('Studio panel DOM preserves unique labelled controls, native previews, four stages and accessible live cancel/progress.');
+assert.match(createCss,/\.zc-global-models>\.zc-tool-panel\{[^}]*top:calc\(100% \+ 10px\);bottom:auto/,'Header Models explicitly clears the bottom anchor inherited from composer popups');
 
 assert.ok(html.includes('data-length-mode="original" aria-pressed="false"'));
 assert.ok(html.includes('data-length-mode="custom" aria-pressed="true"'));

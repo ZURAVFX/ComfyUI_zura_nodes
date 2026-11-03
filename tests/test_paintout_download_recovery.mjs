@@ -24,5 +24,18 @@ await ui.start();assert.equal(ui.submissionUnknown,true);assert.equal(posts,3);a
 await ui.start();assert.equal(posts,3,'An uncertain submission permits only a status check');
 ui.w.fetch=async()=>({models,active:{id:'recovered',phase:'verifying'}});
 await ui.start();assert.equal(ui.job.id,'recovered');assert.equal(ui.submissionUnknown,false);assert.equal(posts,3);
+
+ui.job=null;ui.error='';models[0].files[0].installed=true;ui.render();
+assert.equal(ui.$('download').disabled,false,'Ready files leave an enabled return action');
+assert.match(ui.$('download').textContent,/Back to workflow/);
+ui.root.open=true;await ui.$('download').onclick();
+assert.equal(ui.root.open,false);assert.equal(posts,3,'Returning never starts a download');
+ui.setContext({missingNodes:['ProPainterInpaint'],mode:'targeted'});
+assert.equal(ui.quick.hidden,false,'Missing extensions remain visible when models are ready');
+assert.match(ui.quick.textContent,/Workflow extensions needed/);
+assert.equal(ui.quick.querySelector('[data-quick-install]').hidden,true,'A missing extension is not offered as a model download');
+assert.equal(ui.$('nodes').querySelector('a').href,'https://github.com/daniabib/ComfyUI_ProPainter_Nodes');
+models[0].files=[];ui.render();
+assert.match(ui.$('files').textContent,/No separate Studio model download/,'Empty packages must not claim installed model files');
 ui.destroy();
 console.log('Paintout downloads prevent duplicate starts and recover lost start responses, including an offline retry.');

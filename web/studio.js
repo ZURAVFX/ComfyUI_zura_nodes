@@ -1793,6 +1793,6 @@ app.registerExtension({
     studio.container.querySelector(".gs-zura-mark").src=new URL("./assets/zura-logo.png",import.meta.url).href;
     const studioQuery=new URLSearchParams(location.search);
     attachWanGraphControls(app,{request,tidy:tidyWanStage});
-    if(studioQuery.get("zura")==="1" || studioQuery.get("genj")==="1" || studioQuery.get("paintout")==="1")await openZuraStudio(studioQuery.get("paintout")==="1"?'paintout':undefined);
+    if(studioQuery.get("zura")==="1" || studioQuery.get("genj")==="1" || studioQuery.get("paintout")==="1")await openZuraStudio(studioQuery.get("paintout")==="1"?'paintout':studioQuery.get("workspace")||undefined);
   },
 });

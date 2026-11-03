@@ -297,12 +297,13 @@ CATALOG = {'targeted': {'name': 'Targeted video repair',
 # inpainting adapter belongs to an explicitly chosen automatic variant.
 CATALOG['targeted_auto_hdr'] = {'name': 'Automatic targeted HDR repair', 'files': [dict(item) for item in CATALOG['targeted_hdr']['files']], 'note': 'Single-pass HDR inpainting with the official adapter.', 'license_url': 'https://huggingface.co/Lightricks/LTX-2.5'}
 CATALOG['targeted_hdr']['files'] = [dict(next(x for x in CATALOG['full_hdr']['files'] if x['filename']=='ltx-2.5-video-vae-bf16.safetensors')) if item['filename']=='ltx-2.5-video-vae-conv-bf16.safetensors' else dict(next(x for x in CATALOG['targeted']['files'] if x['filename']=='LTX23_Obscura_Remova_v1.safetensors')) if item['filename']=='ltx-2.3-22b-ic-lora-in-outpainting-0.9.safetensors' else dict(item) for item in CATALOG['targeted_hdr']['files']]
+CATALOG['targeted_auto_hdr']['files'] = [dict(next(x for x in CATALOG['full_hdr']['files'] if x['filename']=='ltx-2.5-video-vae-bf16.safetensors')) if item['filename']=='ltx-2.5-video-vae-conv-bf16.safetensors' else dict(item) for item in CATALOG['targeted_auto_hdr']['files']]
 CATALOG['targeted_hdr']['note'] = 'Anchor-guided HDR repair with the full HDR VAE and Remova adapter.'
 CATALOG['targeted_light'] = {'name': 'Light video repair (ProPainter)', 'files': [], 'note': 'Requires the ProPainter custom node; it downloads its own weights when first used.', 'license_url': 'https://github.com/sczhou/ProPainter'}
 CATALOG['targeted_auto'] = {
     'name': 'Automatic targeted video repair',
     'files': [dict(item) for item in CATALOG['targeted']['files'] if item['filename'] != 'LTX23_Obscura_Remova_v1.safetensors'] + [dict(next(item for item in CATALOG['targeted_auto_hdr']['files'] if item['filename'] == 'ltx-2.3-22b-ic-lora-in-outpainting-0.9.safetensors'))],
-    'note': 'Single-pass masked video repair using the official in/outpainting adapter.',
+    'note': 'LTX 2.5 single-pass repair. The official compatible in/outpainting adapter has 2.3 in its filename; no LTX 2.3 base model is required.',
     'license_url': 'https://huggingface.co/Lightricks/LTX-2.5',
 }
 
@@ -510,7 +511,7 @@ def inspect(model_id, locations, index=None, checked=None):
 
 
 def _public_recipe(recipe):
-    return {**recipe, 'files': [{key: value for key, value in item.items() if key not in {'destination', 'destination_root', 'repo', 'revision', 'remote_path', 'existing_variants'}} for item in recipe['files']]}
+    return {**recipe, 'files': [{**{key: value for key, value in item.items() if key not in {'destination', 'destination_root', 'repo', 'revision', 'remote_path', 'existing_variants'}}, 'browser_url': 'https://huggingface.co/' + item['repo'] + '/resolve/' + item['revision'] + '/' + item['remote_path'] + '?download=true'} for item in recipe['files']]}
 
 
 def _rename_noreplace(source, destination):
@@ -692,11 +693,11 @@ class DownloadManager:
                 try:
                     with fetch(url, headers=headers, stream=True, timeout=(10, 15)) as response:
                         if response.status_code in (401, 403):
-                            raise DownloadError('Hugging Face access is required. Open the model licence, accept its terms, then enter a Hugging Face read token and retry.', auth_required=True)
+                            raise DownloadError('Hugging Face access is required. Open the model licence, accept its terms, download in your browser and choose Install downloaded file.', auth_required=True)
                         if response.status_code >= 400:
                             raise DownloadError('The model server could not provide this file. Check the connection and retry.')
                         if 'text/html' in response.headers.get('Content-Type', '').lower():
-                            raise DownloadError('The model server returned a sign-in page. Accept the licence and retry with a Hugging Face read token.', auth_required=True)
+                            raise DownloadError('The model server returned a sign-in page. Download in your signed-in browser, then choose Install downloaded file.', auth_required=True)
                         if response.status_code == 206:
                             match = re.fullmatch(r'bytes (\d+)-(\d+)/(\d+)', response.headers.get('Content-Range', ''))
                             if not match or tuple(map(int, match.groups())) != (offset, item['size_bytes'] - 1, item['size_bytes']):
@@ -834,6 +835,25 @@ def register_routes():
             # contain local paths and must not be reflected into the browser.
             return web.json_response({'error': str(error) if isinstance(error, ValueError) else 'The model folder is unavailable. Check its permissions and retry.'}, status=400, headers={'Cache-Control': 'no-store'})
 
+    async def import_download(request):
+        require_same_origin(request)
+        try:
+            data = await request.json()
+            if not isinstance(data, dict) or set(data) != {'model_id','filename'}:
+                raise ValueError('Choose a model file from the package list.')
+            # Validate before opening a local dialog.
+            if not isinstance(data['model_id'],str) or not isinstance(data['filename'],str) or data['model_id'] not in CATALOG or not any(item['filename']==data['filename'] for item in CATALOG[data['model_id']]['files']):
+                raise ValueError('Choose a model file from the package list.')
+            from .browser import pick
+            from .model_browser_import import start_import
+            paths = await asyncio.to_thread(pick, 'model')
+            if not paths: return web.json_response({'cancelled':True})
+            manager.locations, manager.filenames = await asyncio.to_thread(_locations, folder_paths)
+            identity = await asyncio.to_thread(start_import, manager, data['model_id'], data['filename'], paths[0])
+            return web.json_response({'id':identity}, headers={'Cache-Control':'no-store'})
+        except (ValueError, OSError) as error:
+            return web.json_response({'error':str(error) if isinstance(error,ValueError) else 'Could not read the selected file. Check its location and try again.'},status=400)
+
     async def status(request):
         require_same_origin(request)
         try:
@@ -851,6 +871,6 @@ def register_routes():
 
     existing = {(route.method, route.path) for route in server.routes}
     base = '/zura/paintout/model-downloads'
-    for method, path, handler in [('GET', base, catalogue), ('POST', base, start), ('GET', base + '/{identity}', status), ('POST', base + '/{identity}/cancel', cancel)]:
+    for method, path, handler in [('GET', base, catalogue), ('POST', base, start), ('POST', base + '/import', import_download), ('GET', base + '/{identity}', status), ('POST', base + '/{identity}/cancel', cancel)]:
         if (method, path) not in existing:
             getattr(server.routes, method.lower())(path)(handler)

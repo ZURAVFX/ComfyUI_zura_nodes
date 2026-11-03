@@ -34,4 +34,21 @@ class GuidedAnchors(unittest.TestCase):
             rows[0]['frame']=27
             with self.assertRaisesRegex(ValueError,'outside selected source range'):core.ZuraPaintoutAnchors().load(plate,json.dumps(rows))
 
+class WatermarkReference(unittest.TestCase):
+    def test_first_frame_reference_shares_smart_crop_and_hdr_colour_transform(self):
+        import torch
+        import OpenImageIO as oiio
+        reference=importlib.import_module('guided_anchor_test.watermark_reference')
+        with tempfile.TemporaryDirectory() as tmp:
+            root=Path(tmp);data=np.linspace(.01,2,96*128*3,dtype=np.float32).reshape(96,128,3)
+            path=root/'reference.exr';out=oiio.ImageOutput.create(str(path));out.open(str(path),oiio.ImageSpec(128,96,3,oiio.FLOAT));out.write_image(data);out.close()
+            plate=dict(source=dict(width=128,height=96),start=42,count=9,space='acescg',processing='HDR (ACEScct)',rect=[20,12,72,60],resized=[60,72],padded=[64,128],framing_mode='Smart crop (experimental)')
+            result=reference.ZuraWatermarkReference().load(plate,str(path),'acescg')[0]
+            expected=core.crop_work(data,plate,'acescg')
+            self.assertTrue(torch.equal(result,expected));self.assertEqual(tuple(result.shape),(1,64,128,3))
+            png=root/'sdr.png';Image.fromarray(np.full((96,128,3),128,np.uint8)).save(png)
+            with self.assertRaisesRegex(ValueError,'HDR anchors'):reference.ZuraWatermarkReference().load(plate,str(png),'srgb_display')
+            wrong=root/'wrong.exr';out=oiio.ImageOutput.create(str(wrong));out.open(str(wrong),oiio.ImageSpec(64,64,3,oiio.FLOAT));out.write_image(data[:64,:64]);out.close()
+            with self.assertRaisesRegex(ValueError,'full-resolution'):reference.ZuraWatermarkReference().load(plate,str(wrong),'acescg')
+
 if __name__=='__main__':unittest.main()
