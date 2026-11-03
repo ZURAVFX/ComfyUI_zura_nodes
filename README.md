@@ -31,7 +31,7 @@ Use your own ComfyUI host and port if they differ.
 
 ## Current release
 
-**1.3.46** improves Studio setup and navigation: browser sign-in for gated Hugging Face downloads, selectable missing image models with installation guidance, visible HDR trimming and more consistent menus. Restart ComfyUI after updating. See the [UI audit and validation limits](docs/UI_AUDIT_20261103.md) and [model setup guide](docs/paintout-studio/MODEL_DOWNLOADS.md).
+**1.3.47** fixes image previews expanding over the workspace, aligns Image and Video controls, expands SDR endpoint/reference resolution controls and corrects LTX first-frame conditioning. Restart ComfyUI and refresh Studio after updating. See the [validation and limits](docs/STUDIO_1347_VALIDATION.md) and [model setup guide](docs/paintout-studio/MODEL_DOWNLOADS.md).
 
 The [GitHub release](https://github.com/ZURAVFX/ComfyUI_zura_nodes/releases/latest) is available separately. Registry submission does not mean approval or immediate availability through Manager.
 

@@ -1,3 +1,4 @@
+import {VIDEO_CANVAS_LIMITS} from './studio_resolution.js';
 // Native Wan 2.2 I2V endpoint recipe: matched high/low models and Lightx2v
 // adapters, four Euler/simple steps split 2 + 2, CFG 1 and shift 5.
 // The supplied example's subject-specific rotation adapter is not a speedup.
@@ -12,7 +13,7 @@ export const WAN_FRAME_VIDEO_MODELS=Object.freeze({
 export const WAN_FRAME_VIDEO_CAPABILITIES=Object.freeze({
   id:'wan',label:'Wan 2.2',fps:24,dimensionStep:16,frameStep:4,
   minFrames:9,maxFrames:361,defaultFrames:81,defaultSteps:4,minSteps:4,maxSteps:4,
-  minDimension:256,maxDimension:1536,maxPixels:1344*768,
+  ...VIDEO_CANVAS_LIMITS,
   supportsAudioReference:false,generatesAudio:false,
   precision:'FP8 scaled',attention:'comfy kitchen attention',
   nodeTypes:['LoadImage','ImageScale','UNETLoader','LoraLoaderModelOnly','ModelSamplingSD3',
@@ -23,8 +24,8 @@ const negative='Overexposed, blurry, low quality, JPEG artefacts, unwanted text,
 const ref=(id,output=0)=>[id,output];
 export function wanFrameVideoDimensions(c){
   const width=Number(c.width),height=Number(c.height),cap=WAN_FRAME_VIDEO_CAPABILITIES;
-  if(![width,height].every(n=>Number.isInteger(n)&&n>=cap.minDimension&&n<=cap.maxDimension&&n%cap.dimensionStep===0))throw new Error('Wan dimensions must be multiples of 16, from 256 to 1536 pixels.');
-  if(width*height>cap.maxPixels)throw new Error('Choose a smaller size. This Wan endpoint preset supports up to 1.03 megapixels per section.');
+  if(![width,height].every(n=>Number.isInteger(n)&&n>=cap.minDimension&&n<=cap.maxDimension&&n%cap.dimensionStep===0))throw new Error('Wan dimensions must be multiples of 16, from 256 to 4096 pixels.');
+  if(width*height>cap.maxPixels)throw new Error('Choose a canvas up to 8.39 MP. This is the Studio canvas limit, not a model limit.');
   return {width,height};
 }
 export function buildWanFrameVideoGraph(c){

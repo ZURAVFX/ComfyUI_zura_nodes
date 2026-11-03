@@ -1,4 +1,4 @@
-import {resolutionSize} from './studio_resolution.js';
+import {resolutionSize,VIDEO_CANVAS_LIMITS,megapixelMaximum} from './studio_resolution.js';
 // The artist-approved H3 FL2VA recipe. Endpoints are native keyframes, not
 // ingredients. Keep the supplied sampler, Turbo adapter and Kitchen backend.
 export const FRAME_VIDEO_MODELS={
@@ -20,14 +20,14 @@ export const FRAME_SIZE_PRESETS=[
 export const FRAME_MEGAPIXELS=[0.25,0.5,0.75,1];
 export function frameVideoPresetSize(id,megapixels){
   const preset=FRAME_SIZE_PRESETS.find(p=>p.id===id),mp=Number(megapixels);
-  if(!preset||!(Number.isFinite(mp)&&mp>=.25&&mp<=1))throw new Error('Choose a shape and megapixel size.');
-  return resolutionSize(preset.ratio,mp,{step:32,min:256,max:1536,maxPixels:1344*768});
+  if(!preset||!(Number.isFinite(mp)&&mp>=.25&&mp<=megapixelMaximum(VIDEO_CANVAS_LIMITS)))throw new Error('Choose a shape and megapixel size.');
+  return resolutionSize(preset.ratio,mp,{step:32,min:256,max:VIDEO_CANVAS_LIMITS.maxDimension,maxPixels:VIDEO_CANVAS_LIMITS.maxPixels});
 }
 const ref=id=>[id,0];
 export function frameVideoDimensions(c){
   const width=Number(c.width),height=Number(c.height);
-  if(![width,height].every(n=>Number.isInteger(n)&&n>=256&&n<=1536&&n%32===0))throw new Error('Use dimensions in 32-pixel increments, from 256 to 1536 pixels.');
-  if(width*height>1344*768)throw new Error('Choose smaller dimensions or a lower megapixel size. H3 supports up to 1.03 megapixels in this mode.');
+  if(![width,height].every(n=>Number.isInteger(n)&&n>=256&&n<=VIDEO_CANVAS_LIMITS.maxDimension&&n%32===0))throw new Error('Use dimensions in 32-pixel increments, from 256 to 4096 pixels.');
+  if(width*height>VIDEO_CANVAS_LIMITS.maxPixels)throw new Error('Choose a canvas up to 8.39 MP. This is the Studio canvas limit, not a model limit.');
   return {width,height};
 }
 export function buildFrameVideoGraph(c){

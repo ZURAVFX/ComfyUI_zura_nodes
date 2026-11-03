@@ -1,3 +1,7 @@
+// Studio's configurable 4K canvas budget, not a model training limit.
+// Native model nodes accept larger sizes; high-resolution renders need more memory.
+export const VIDEO_CANVAS_LIMITS=Object.freeze({minDimension:256,maxDimension:4096,maxPixels:8_388_608});
+export const megapixelMaximum=cap=>Math.floor(cap.maxPixels/1e6/.05)*.05;
 // Shared size maths and editing behaviour for every Studio composer.
 export function resolutionSize(ratio, megapixels, {step=32,min=256,max=1536,maxPixels=Infinity}={}) {
   const pixels=Math.min(Number(megapixels)*1e6,maxPixels);
@@ -32,8 +36,8 @@ export function editableDimension(input, commit, limits=()=>({step:32,min:256,ma
   input.commitDimension=finish;
 }
 
-export function megapixelSlider(select,{min=.25,max=1,step=.05}={}) {
-  const input=select.ownerDocument.createElement('input');input.type='range';input.id=select.id;input.min=min;input.max=max;input.step=step;input.value=select.value||1;input.setAttribute('aria-label','Megapixels');
+export function megapixelSlider(select,{min=.25,max=1,step=.05,value=select.value}={}) {
+  const input=select.ownerDocument.createElement('input');input.type='range';input.id=select.id;input.min=min;input.max=max;input.step=step;input.value=value||1;input.setAttribute('aria-label','Megapixels');
   const output=select.ownerDocument.createElement('output');output.className='zc-resolution-readout';output.setAttribute('for',input.id);output.setAttribute('aria-live','polite');
   const handler=select.onchange;
   select.replaceWith(input);input.after(output);

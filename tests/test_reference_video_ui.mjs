@@ -26,6 +26,7 @@ assert.equal(ui.$('audio-direction').value,'','Audio remains reference-only unti
 assert.match(ui.$('audio-direction').textContent,/Follow Audio 1/);
 assert.equal(ui.$('first-frame-control').hidden,false);
 assert.equal(ui.$('first-frame').value,'','References remain unanchored until selected');
+assert.match(ui.$('first-frame').textContent,/Start: Reference only/,'Unanchored references are explicit, not an ambiguous Auto setting');
 ui.$('first-frame').value='zura_references/coat.png';ui.$('first-frame').dispatchEvent(new window.Event('change'));
 assert.equal(ui.config().firstFrame,'zura_references/coat.png');
 assert.match(ui.$('image-slot').querySelector('img').src,/coat.png/,'Preview the chosen first frame');

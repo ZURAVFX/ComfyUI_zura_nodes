@@ -12,8 +12,8 @@ for(const id of ['first','last']){
  assert.deepEqual(fast[`small_${id}`].inputs,{image:[`pad_${id}`,0],upscale_method:'lanczos',width:480,height:288,crop:'disabled'});
  assert.deepEqual(fast[`preprocess_${id}`].inputs.image,[`small_${id}`,0]);
 }
-assert.equal(fast.guide_first.inputs.frame_idx,0);assert.equal(fast.guide_last.inputs.frame_idx,48);
-assert.deepEqual(fast.guide_last.inputs.latent,['guide_first',2]);assert.deepEqual(fast.av_latent.inputs.audio_latent,['freeze_audio',0]);
+assert.equal(fast.guide_first.class_type,'LTXVImgToVideoInplace');assert.equal(fast.guide_last.inputs.frame_idx,48);
+assert.deepEqual(fast.guide_last.inputs.latent,['guide_first',0]);assert.deepEqual(fast.av_latent.inputs.audio_latent,['freeze_audio',0]);
 assert.deepEqual(fast.upscale.inputs,{samples:['crop_guides',2],upscale_model:['upscale_model',0],vae:['video_vae',0]});
 assert.equal(fast.upscale_model.inputs.model_name,models.latentUpscaler);
 assert.deepEqual(fast.decode.inputs.samples,['upscale',0]);

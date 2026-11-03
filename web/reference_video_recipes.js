@@ -1,3 +1,4 @@
+import {VIDEO_CANVAS_LIMITS} from './studio_resolution.js';
 // Native MiniMax H3 Ref2Video recipe. References are ingredients for identity,
 // appearance, scene, motion cues and audio. A selected picture can also anchor
 // the first frame through H3's native timeline guide.
@@ -27,7 +28,7 @@ export const REFERENCE_VIDEO_CAPABILITIES=Object.freeze({
   defaultSteps:8,
   minSteps:4,
   maxSteps:80,
-  maxPixels:1344*768,
+  ...VIDEO_CANVAS_LIMITS,
   maxImages:9,
   maxVideos:3,
   maxAudios:3,
@@ -155,11 +156,11 @@ export function referenceAudioSources(c={}){
 
 export function referenceVideoDimensions(c={}){
   const width=Number(c.width),height=Number(c.height),caps=REFERENCE_VIDEO_CAPABILITIES;
-  if(![width,height].every(n=>Number.isInteger(n)&&n>=32&&n%caps.dimensionStep===0)){
-    throw new Error('H3 width and height must be whole numbers in multiples of 32.');
+  if(![width,height].every(n=>Number.isInteger(n)&&n>=32&&n<=caps.maxDimension&&n%caps.dimensionStep===0)){
+    throw new Error('H3 width and height must be whole numbers in multiples of 32, up to 4096 per side.');
   }
   if(width*height>caps.maxPixels){
-    throw new Error('Choose a smaller size. H3 supports up to 1.03 megapixels in this mode.');
+    throw new Error('Choose a canvas up to 8.39 MP. This is the Studio canvas limit, not a model limit.');
   }
   return {width,height};
 }

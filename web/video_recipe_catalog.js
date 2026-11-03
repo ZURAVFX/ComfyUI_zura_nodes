@@ -1,9 +1,9 @@
-import {resolutionSize} from './studio_resolution.js';
+import {resolutionSize,VIDEO_CANVAS_LIMITS,megapixelMaximum} from './studio_resolution.js';
 import {buildFrameVideoGraph,frameVideoAvailability,FRAME_LENGTHS,FRAME_SIZE_PRESETS,FRAME_MEGAPIXELS} from './frame_video_recipes.js';
 import {buildWanFrameVideoGraph,wanFrameVideoAvailability,WAN_FRAME_VIDEO_CAPABILITIES} from './wan_frame_video_recipes.js';
 import {buildLtxFrameVideoGraph,ltxFrameVideoAvailability,LTX_FRAME_VIDEO_CAPABILITIES} from './ltx_frame_video_recipes.js';
 
-const h3={id:'h3',label:'MiniMax H3',fps:24,dimensionStep:32,minDimension:256,maxDimension:1536,maxPixels:1344*768,
+const h3={id:'h3',label:'MiniMax H3',fps:24,dimensionStep:32,...VIDEO_CANVAS_LIMITS,
   minFrames:22,maxFrames:362,frameStep:17,frameOffset:5,defaultFrames:73,defaultSteps:8,minSteps:4,maxSteps:40,
   supportsAudioReference:true,generatesAudio:true,precision:'INT8',
   nodeTypes:['UNETLoader','CLIPLoader','VAELoader','LoraLoaderModelOnly','ModelAttentionBackend','MiniMaxH3ImageToVideo','MiniMaxH3AddGuide','LoadAudio','LoadImage','ImageScale','BasicGuider','BasicScheduler','KSamplerSelect','RandomNoise','SamplerCustomAdvanced','VAEDecode','VAEDecodeAudio','CreateVideo','SaveVideo']};
@@ -19,8 +19,8 @@ export function endpointLengths(id){
   const values=[];for(let n=c.minFrames;n<=c.maxFrames;n+=c.frameStep)values.push(n);
   return values;
 }
-export function endpointPresetSize(engine,shape,megapixels){
-  const c=endpointRecipe(engine),preset=FRAME_SIZE_PRESETS.find(p=>p.id===shape),mp=Number(megapixels);
-  if(!preset||!(Number.isFinite(mp)&&mp>=.25&&mp<=1))throw new Error('Choose a shape and megapixel size.');
+export function endpointPresetSize(engine,shape,megapixels,cap=null){
+  const c=cap||endpointRecipe(engine),preset=FRAME_SIZE_PRESETS.find(p=>p.id===shape),mp=Number(megapixels);
+  if(!preset||!(Number.isFinite(mp)&&mp>=.25&&mp<=megapixelMaximum(c)))throw new Error('Choose a shape and megapixel size.');
   return resolutionSize(preset.ratio,mp,{step:c.dimensionStep,min:c.minDimension||256,max:c.maxDimension||1536,maxPixels:c.maxPixels});
 }

@@ -262,6 +262,11 @@ assert.match(ui.$('generate').textContent,/Apply edit/);assert.match(ui.$('refer
   assert.ok(ui.$('model').closest('.zi-output-tools'));
   assert.ok(ui.$('quick-settings').closest('.zi-output-tools'));
   assert.ok(ui.$('settings-toggle').closest('.zi-output-tools'));
+  const workflowGroup=ui.$('model').closest('[aria-label="Model and workflow"]');
+  assert.ok(workflowGroup);
+  assert.equal(workflowGroup.children[1],ui.imageTask,'Image mode follows the model in the same toolbar slot as Video');
+  assert.ok(ui.$('quick-settings').closest('[aria-label="Image size and settings"]'),'Image output controls form a separate group');
+  assert.equal(ui.root.querySelector('.zc-image-heading h2').textContent,'Edit image');
   assert.ok(ui.$('new').closest('.zi-image-actions'));
   assert.equal(ui.root.querySelectorAll('#zc-new').length,1);
   ui.$('settings-toggle').click();assert.equal(ui.$('settings-toggle').getAttribute('aria-expanded'),'true');
@@ -271,6 +276,15 @@ assert.match(ui.$('generate').textContent,/Apply edit/);assert.match(ui.$('refer
   const plate=ui.references[0],guide=ui.references[1],inputs=ui.editInputs;
   assert.equal(inputs.source.hidden,false,'First uploaded image immediately appears on the canvas');
   assert.match(inputs.source.querySelector('img').src,new RegExp(plate.filename));
+  const imageCss=fs.readFileSync(new URL('../web/studio_create.css',import.meta.url),'utf8');
+  assert.match(imageCss,/\.zc-image-source\{[^}]*position:relative[^}]*min-height:0[^}]*height:100%[^}]*overflow:hidden/,'The source is contained within its allocated viewer');
+  assert.match(imageCss,/\.zc-image-source figure\{[^}]*position:absolute;inset:0[^}]*overflow:hidden/,'Large source dimensions cannot expand the workspace grid');
+  assert.match(imageCss,/\.zc-image-source figure>img\{[^}]*position:absolute;inset:0[^}]*object-fit:contain/,'Portrait and landscape sources fit the viewer without stretching');
+  ui.submitting=true;ui.render();
+  assert.equal(inputs.source.hidden,false,'Submitting keeps the original source in the viewer');
+  assert.equal(ui.$('progress').hidden,false,'Generation progress remains available when submitting an edit');
+  assert.ok(ui.$('prompt').closest('.zc-image-composer'),'Prompt and actions remain in the composer during generation');
+  ui.submitting=false;ui.render();
   assert.equal(ui.$('reference-list').querySelector('.zc-edit-main [data-remove-ref]').dataset.removeRef,'0');
   assert.equal(ui.$('reference-list').querySelector('.zc-edit-guides [data-remove-ref]').dataset.removeRef,'1');
   assert.equal(ui.$('add-references').closest('.zi-reference-panel')!==null,true);

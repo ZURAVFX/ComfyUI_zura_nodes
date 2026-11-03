@@ -19,8 +19,11 @@ export class ImageEditInputs {
   }
   mountControls(){
     const o=this.owner,doc=o.root.ownerDocument,bottom=o.root.querySelector('.zc-composer-bottom');
-    const tools=doc.createElement('div');tools.className='zi-output-tools zc-workflow-controls';tools.setAttribute('role','group');tools.setAttribute('aria-label','Image model and output');
-    tools.append(bottom.querySelector('.zc-model-control'),o.imageTask,o.$('quick-settings').closest('details'),o.$('settings-toggle'));bottom.prepend(tools);
+    const tools=doc.createElement('div');tools.className='zi-output-tools zc-prompt-tools';
+    const workflow=doc.createElement('div');workflow.className='zc-tool-group zc-workflow-controls';workflow.setAttribute('role','group');workflow.setAttribute('aria-label','Model and workflow');
+    workflow.append(bottom.querySelector('.zc-model-control'),o.imageTask);
+    const output=doc.createElement('div');output.className='zc-tool-group';output.setAttribute('role','group');output.setAttribute('aria-label','Image size and settings');
+    output.append(o.$('quick-settings').closest('details'),o.$('settings-toggle'));tools.append(workflow,output);bottom.prepend(tools);
     // Keep the existing action buttons and handlers, with a native fallback
     // that also works before optional web components finish loading.
     const menu=doc.createElement('details');menu.className='zc-tool-popup zi-image-actions';
@@ -31,6 +34,7 @@ export class ImageEditInputs {
   sync(){
     const o=this.owner,doc=o.root.ownerDocument,edit=o.imageOperation==='edit',main=edit&&!o.editMainMissing?o.references[0]:null,busy=!!o.job||!!o.pendingSubmission||o.submitting||o.uploading;
     this.heading.textContent=edit?'Edit your image':'Create an image';
+    o.root.querySelector('.zc-image-heading h2').textContent=edit?'Edit image':'Create image';
     const key=main?JSON.stringify([main.file||main.filename,main.subfolder||'']):'',item=o.items[o.selectedImage||0],resultKey=JSON.stringify(item?.file||null);
     if(key!==this.key){this.key=key;this.showSource=!!main;this.resultKey=resultKey;}
     else if(resultKey!==this.resultKey){this.resultKey=resultKey;this.showSource=false;}
@@ -70,6 +74,7 @@ export class ImageEditInputs {
       if(groups){const cards=[...list.querySelectorAll('.zc-reference')];list.replaceChildren(...cards);o.referenceFingerprint=null;}
     }
     this.toggle.hidden=!edit||!main||!item;this.toggle.textContent=this.showSource?'View result':'View main image';
+    this.toggle.setAttribute('aria-label',this.showSource?'View generated result':'View main image');
     const visible=edit&&!!main&&this.showSource;this.source.hidden=!visible;
     if(visible){
       let image=this.source.querySelector('img');if(!image){const figure=doc.createElement('figure');image=doc.createElement('img');image.alt='Main image being edited';figure.append(image);this.source.append(figure);this.sourceZoom=new PreviewZoom(figure,()=>image);}

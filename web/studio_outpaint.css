@@ -1,8 +1,9 @@
-#genj-studio .zo-page{flex:1;min-height:0;display:flex;flex-direction:column;gap:12px;padding:12px 20px;color:var(--zc-text)}
+#genj-studio .zo-page{flex:1;min-height:0;display:flex;flex-direction:column;gap:12px;padding:12px 20px;color:var(--zc-text);overflow:hidden}
+#genj-studio .zo-page>:not(.zo-stage){flex-shrink:0}
 #genj-studio .zo-page[hidden]{display:none}
 #genj-studio .zo-page header{display:flex;align-items:center;justify-content:space-between;gap:12px}
 #genj-studio .zo-page header h2{font-size:16px;margin:0}
-#genj-studio .zo-stage{flex:1;min-height:160px;display:flex;align-items:center;justify-content:center;overflow:hidden;background:var(--gs-bg);border:1px solid var(--gs-line);border-radius:12px}
+#genj-studio .zo-stage{flex:1;min-height:0;display:flex;align-items:center;justify-content:center;overflow:hidden;background:var(--gs-bg);border:1px solid var(--gs-line);border-radius:12px}
 #genj-studio .zo-canvas{position:relative;width:min(100%,1050px);height:auto;max-width:100%;max-height:100%;flex:none;background:#000;overflow:hidden;touch-action:none}
 #genj-studio .zo-canvas video{position:absolute;object-fit:contain;cursor:grab}
 #genj-studio .zo-border{position:absolute;border:1px solid var(--gs-accent);pointer-events:none}
@@ -41,7 +42,7 @@
 #genj-studio .zo-progress{display:flex;align-items:center;gap:12px;font-size:12px;color:var(--gs-muted)}
 #genj-studio .zo-progress[hidden]{display:none}
 #genj-studio .zo-progress progress{flex:1;min-width:80px;accent-color:var(--gs-accent)}
-@media(max-width:900px){#genj-studio .zo-page{padding:12px;overflow:auto}#genj-studio .zo-settings input{width:90px}}
+@media(max-width:900px){#genj-studio .zo-page{padding:12px}#genj-studio .zo-settings input{width:90px}}
 @media(max-width:700px){#genj-studio .zo-composer{grid-template-columns:minmax(0,1fr)}#genj-studio .zo-page .zo-composer>*{grid-area:auto;grid-column:1;justify-self:stretch;min-width:0;text-align:left}#genj-studio .zo-settings{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));width:100%}#genj-studio .zo-settings label{min-width:0}#genj-studio .zo-settings input{width:100%;min-width:0}#genj-studio .zo-settings label:has([data-scale]){grid-column:1/-1}#genj-studio .zo-composer>.zo-trim,#genj-studio .zo-composer>.gs-custom-loras{justify-self:start}}
 #genj-studio .zo-trim{position:relative;justify-self:start;max-width:100%}
 #genj-studio .zo-trim[hidden]{display:none}

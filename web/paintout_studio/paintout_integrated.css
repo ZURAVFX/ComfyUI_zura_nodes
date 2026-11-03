@@ -29,8 +29,8 @@
 #genj-studio .zp-page .zf-heading .zc-workflow-menu button{padding:12px;min-height:44px;border-radius:6px;color:var(--zc-text);text-align:left}
 #genj-studio .zp-page #zps-new{margin-left:0}
 /* Watermark rendering keeps an uninterrupted picture above its progress. */
-#genj-studio .zwm-page.zp-editor-open[data-editor-stage=render]{overflow:auto}
-#genj-studio .zwm-page.zp-editor-open[data-editor-stage=render]>.zf-viewer{flex:1 0 clamp(280px,45dvh,560px);min-height:clamp(280px,45dvh,560px)}
+#genj-studio .zwm-page.zp-editor-open[data-editor-stage=render]{overflow:hidden}
+#genj-studio .zwm-page.zp-editor-open[data-editor-stage=render]>.zf-viewer{flex:1 1 0;min-height:0}
 #genj-studio .zwm-page>#zps-progress{position:relative;inset:auto;width:100%;max-width:var(--zc-video-width,1200px);margin-inline:auto;box-sizing:border-box;border:1px solid var(--gs-line);border-radius:10px}
 #genj-studio .zwm-page .zura-live-sample>figcaption{bottom:12px}
 #genj-studio .zwm-page .zps-back-video{margin-left:auto;min-height:36px;padding:8px 12px;border:1px solid var(--gs-line);border-radius:6px;background:transparent;color:var(--zc-text);cursor:pointer}

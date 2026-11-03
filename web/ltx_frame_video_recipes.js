@@ -1,3 +1,4 @@
+import {VIDEO_CANVAS_LIMITS} from './studio_resolution.js';
 // LTX 2.5 native endpoint conditioning, based on Lightricks' distilled recipe.
 // INT8 + convrot checkpoints are intended for ComfyUI. No cross-family LoRA.
 export const LTX_FRAME_VIDEO_MODELS=Object.freeze({
@@ -15,9 +16,9 @@ export const LTX_FRAME_VIDEO_CAPABILITIES=Object.freeze({
   supportsFast:true,supportsTwoStage:true,
   twoStageLabel:'Two-stage · preview',twoStageDefault:false,
   twoStageDescription:'Lower-resolution sample, followed by latent upscale and refinement. More detail, with extra processing work.',
-  maxPixels:1344*768,
+  ...VIDEO_CANVAS_LIMITS,
   nodeTypes:['LoadImage','ImageScale','UNETLoader','ModelAttentionBackend','CLIPLoader','CLIPTextEncode','VAELoader',
-    'LTXVConditioning','EmptyLTXVLatentVideo','LTXVPreprocess','LTXVAddGuide','LTXVCropGuides','LTXVEmptyLatentAudio',
+    'LTXVConditioning','LTXVImgToVideoInplace','EmptyLTXVLatentVideo','LTXVPreprocess','LTXVAddGuide','LTXVCropGuides','LTXVEmptyLatentAudio',
     'LoadAudio','TrimAudioDuration','EmptyAudio','AudioConcat','LTXVAudioVAEEncode','SolidMask','SetLatentNoiseMask','LTXVConcatAVLatent',
     'CFGGuider','KSamplerSelect','RandomNoise','ManualSigmas','SamplerCustomAdvanced','LTXVSeparateAVLatent',
     'VAEDecodeTiled','LTXVAudioVAEDecode','CreateVideo','SaveVideo',
@@ -28,8 +29,8 @@ export function buildLtxFrameVideoGraph(c){
   if(!c.first?.file)throw new Error('Add a first frame. The last frame is optional.');
   if(!String(c.prompt||'').trim())throw new Error('Describe the video you want to generate.');
   const width=Number(c.width),height=Number(c.height),frames=Number(c.frames),steps=Number(c.steps??8),seed=Number(c.seed??42);
-  if(![width,height].every(n=>Number.isInteger(n)&&n>=256&&n<=1536&&n%32===0))throw new Error('Use dimensions in 32-pixel increments, from 256 to 1536 pixels.');
-  if(width*height>LTX_FRAME_VIDEO_CAPABILITIES.maxPixels)throw new Error('Choose a size up to 1.03 megapixels for this LTX recipe.');
+  if(![width,height].every(n=>Number.isInteger(n)&&n>=256&&n<=VIDEO_CANVAS_LIMITS.maxDimension&&n%32===0))throw new Error('Use dimensions in 32-pixel increments, from 256 to 4096 pixels.');
+  if(width*height>LTX_FRAME_VIDEO_CAPABILITIES.maxPixels)throw new Error('Choose a canvas up to 8.39 MP. This is the Studio canvas limit, not a model limit.');
   if(!Number.isInteger(frames)||frames<9||frames>LTX_FRAME_VIDEO_CAPABILITIES.maxFrames||(frames-1)%8!==0)throw new Error('LTX needs 8n + 1 frames, from 9 to 361 (about 15 seconds).');
   if(steps!==8)throw new Error('The LTX 2.5 distilled model uses its fixed 8-step schedule.');
   if(c.fps!=null&&Number(c.fps)!==24)throw new Error('This LTX recipe runs at 24 fps.');
@@ -70,8 +71,13 @@ export function buildLtxFrameVideoGraph(c){
       guideImage=ref(`small_${id}`);
     }
     node(`preprocess_${id}`,'LTXVPreprocess',{image:guideImage,img_compression:18});
-    node(`guide_${id}`,'LTXVAddGuide',{positive,negative,vae:ref('video_vae'),latent,image:ref(`preprocess_${id}`),frame_idx,strength:1},`Anchor ${id} frame at frame ${frame_idx+1}`);
-    positive=ref(`guide_${id}`);negative=ref(`guide_${id}`,1);latent=ref(`guide_${id}`,2);
+    if(id==='first'){
+      node('guide_first','LTXVImgToVideoInplace',{vae:ref('video_vae'),image:ref('preprocess_first'),latent,strength:0.7,bypass:false},'Condition the starting video latent');
+      latent=ref('guide_first');
+    }else{
+      node(`guide_${id}`,'LTXVAddGuide',{positive,negative,vae:ref('video_vae'),latent,image:ref(`preprocess_${id}`),frame_idx,strength:1},`Anchor ${id} frame at frame ${frame_idx+1}`);
+      positive=ref(`guide_${id}`);negative=ref(`guide_${id}`,1);latent=ref(`guide_${id}`,2);
+    }
   }
   let audioLatent;
   if(c.audioEnabled){
@@ -106,8 +112,13 @@ export function buildLtxFrameVideoGraph(c){
     let refinePositive=basePositive,refineNegative=baseNegative;
     for(const {id,image,frame_idx} of anchors){
       node(`preprocess_refine_${id}`,'LTXVPreprocess',{image,img_compression:18},`Prepare ${id} frame for refinement`);
-      node(`guide_refine_${id}`,'LTXVAddGuide',{positive:refinePositive,negative:refineNegative,vae:ref('video_vae'),latent:videoLatent,image:ref(`preprocess_refine_${id}`),frame_idx,strength:1},`Re-anchor ${id} frame at frame ${frame_idx+1}`);
-      refinePositive=ref(`guide_refine_${id}`);refineNegative=ref(`guide_refine_${id}`,1);videoLatent=ref(`guide_refine_${id}`,2);
+      if(id==='first'){
+        node('guide_refine_first','LTXVImgToVideoInplace',{vae:ref('video_vae'),image:ref('preprocess_refine_first'),latent:videoLatent,strength:1,bypass:false},'Restore the starting frame for refinement');
+        videoLatent=ref('guide_refine_first');
+      }else{
+        node(`guide_refine_${id}`,'LTXVAddGuide',{positive:refinePositive,negative:refineNegative,vae:ref('video_vae'),latent:videoLatent,image:ref(`preprocess_refine_${id}`),frame_idx,strength:1},`Re-anchor ${id} frame at frame ${frame_idx+1}`);
+        refinePositive=ref(`guide_refine_${id}`);refineNegative=ref(`guide_refine_${id}`,1);videoLatent=ref(`guide_refine_${id}`,2);
+      }
     }
     let refineAudio=ref('separate',1);
     if(c.audioEnabled){
@@ -117,7 +128,7 @@ export function buildLtxFrameVideoGraph(c){
     node('av_latent_refine','LTXVConcatAVLatent',{video_latent:videoLatent,audio_latent:refineAudio});
     node('guider_refine','CFGGuider',{model:ref('attention'),positive:refinePositive,negative:refineNegative,cfg:1});
     node('sigmas_refine','ManualSigmas',{sigmas:LTX_REFINE_SIGMAS},'Official distilled 3-step refine schedule');
-    node('sampler_refine','KSamplerSelect',{sampler_name:'euler_ancestral'});
+    node('sampler_refine','KSamplerSelect',{sampler_name:'euler'});
     node('noise_refine','RandomNoise',{noise_seed:seed});
     node('sample_refine','SamplerCustomAdvanced',{noise:ref('noise_refine'),guider:ref('guider_refine'),sampler:ref('sampler_refine'),sigmas:ref('sigmas_refine'),latent_image:ref('av_latent_refine')},'Refine upscaled video and audio: 3 steps');
     node('separate_refine','LTXVSeparateAVLatent',{av_latent:ref('sample_refine')});
@@ -149,5 +160,6 @@ export function ltxFrameVideoAvailability(info={},config={}){
   }
   if(info.ModelAttentionBackend&&!options('ModelAttentionBackend','attention').includes('comfy kitchen attention'))missing.push('Comfy Kitchen attention');
   if(info.KSamplerSelect&&!options('KSamplerSelect','sampler_name').includes('euler_ancestral'))missing.push('Euler ancestral sampler');
+  if(config.twoStage===true&&info.KSamplerSelect&&!options('KSamplerSelect','sampler_name').includes('euler'))missing.push('Euler refinement sampler');
   return {ready:missing.length===0,missing:[...new Set(missing)]};
 }

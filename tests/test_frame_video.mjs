@@ -24,7 +24,8 @@ for(const preset of FRAME_SIZE_PRESETS)for(const mp of FRAME_MEGAPIXELS){
   assert.doesNotThrow(()=>buildFrameVideoGraph({...config,...size}));
 }
 assert.throws(()=>frameVideoDimensions({width:720,height:1280}),/32-pixel/);
-assert.throws(()=>frameVideoDimensions({width:1024,height:1024}),/smaller/);
+assert.deepEqual(frameVideoDimensions({width:1024,height:1024}),{width:1024,height:1024});
+assert.throws(()=>frameVideoDimensions({width:4096,height:4096}),/canvas/);
 const firstOnly=buildFrameVideoGraph({...config,last:null});assert.ok(!firstOnly.last&&!firstOnly.fit_last);assert.ok(!('last_frame' in firstOnly.endpoints.inputs));
 assert.deepEqual(firstOnly.endpoints.inputs.first_frame,['fit_first',0]);
 assert.ok(buildFrameVideoGraph({...config,last:null,audioEnabled:true}).audio_guide,'First-frame-only supports the same optional audio guide');

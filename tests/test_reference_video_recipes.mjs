@@ -229,8 +229,8 @@ assert.throws(
   /17k \+ 5/,
 );
 assert.throws(
-  ()=>buildReferenceVideoGraph({...config,width:1504,height:896}),
-  /smaller size/,
+  ()=>buildReferenceVideoGraph({...config,width:4096,height:4096}),
+  /canvas/,
 );
 assert.throws(
   ()=>referenceVideoDimensions({width:720,height:1280}),

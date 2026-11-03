@@ -1,6 +1,6 @@
 import {installOwnedExecuting} from './studio_progress.js';
 import {submitOwnedGraph,recoverOwnedSubmission,cancelOwnedJob} from './studio_owned_jobs.js';
-import {megapixelSlider,editableDimension} from './studio_resolution.js';
+import {megapixelSlider,editableDimension,megapixelMaximum} from './studio_resolution.js';
 import {FRAME_LENGTHS,FRAME_SIZE_PRESETS,FRAME_MEGAPIXELS} from './frame_video_recipes.js';
 import {composerIcons as icons} from './studio_composer.js';
 import {tidyArtistGraph} from './artist_graph.js';
@@ -50,7 +50,7 @@ export class FrameVideoWorkspace{
             <div class="zc-tool-panel"><strong>Output resolution</strong>
               <label class="zf-presets" for="zf-size-preset">Shape<select id="zf-size-preset">${FRAME_SIZE_PRESETS.map(p=>`<option value="${p.id}">${p.label}</option>`).join('')}<option value="custom">Custom dimensions</option></select></label>
               <label class="zf-presets" id="zf-megapixels-setting" for="zf-megapixels">Megapixels<select id="zf-megapixels">${FRAME_MEGAPIXELS.map(mp=>`<option value="${mp}" ${mp===1?'selected':''}>${mp} MP</option>`).join('')}</select></label>
-              <div class="zf-dimensions" id="zf-custom-size"><label>Width (px)<input id="zf-width" type="number" min="256" max="1536" step="32" value="1344"/></label><label>Height (px)<input id="zf-height" type="number" min="256" max="1536" step="32" value="768"/></label></div>
+              <div class="zf-dimensions" id="zf-custom-size"><label>Width (px)<input id="zf-width" type="number" min="256" max="4096" step="32" value="1344"/></label><label>Height (px)<input id="zf-height" type="number" min="256" max="4096" step="32" value="768"/></label></div>
               <p id="zf-size-hint">Dimensions follow H3’s 32-pixel grid. Megapixel sizes are approximate.</p><p>Both frames scale proportionally to fill the output, then crop centrally. No stretching.</p><p id="zf-canvas-note"></p>
             </div>
           </details>
@@ -81,7 +81,7 @@ export class FrameVideoWorkspace{
     this.normaliseDimensions();
     const width=Number(this.$('width').value),height=Number(this.$('height').value);
     this.$('size-preset').value=FRAME_SIZE_PRESETS.some(p=>p.id===draft.sizePreset)?draft.sizePreset:draft.sizePreset==='custom'?'custom':FRAME_SIZE_PRESETS.find(p=>p.width===width&&p.height===height||FRAME_MEGAPIXELS.some(mp=>{const s=endpointPresetSize(this.recipe().id,p.id,mp);return s.width===width&&s.height===height;}))?.id||'custom';
-    this.$('megapixels').value=Number(draft.megapixels)>=.25&&Number(draft.megapixels)<=1?draft.megapixels:FRAME_MEGAPIXELS.reduce((best,mp)=>Math.abs(mp-width*height/1e6)<Math.abs(best-width*height/1e6)?mp:best,1);
+    const initialMegapixels=Number(draft.megapixels)>=.25&&Number(draft.megapixels)<=megapixelMaximum(this.recipe())?draft.megapixels:FRAME_MEGAPIXELS.reduce((best,mp)=>Math.abs(mp-width*height/1e6)<Math.abs(best-width*height/1e6)?mp:best,1);
     this.$('two-stage').checked=draft.twoStage===true;this.$('fast').checked=!this.$('two-stage').checked&&(draft.fastLtx===true||draft.fast===true);this.$('audio-enabled').checked=this.recipe().supportsAudioReference&&draft.audioEnabled===true;this.$('random').checked=draft.random!==false;
     this.$('refresh').onclick=()=>this.refreshSetup();
     this.$('convert-hdr').onclick=()=>this.owner.openHDR();
@@ -91,11 +91,11 @@ export class FrameVideoWorkspace{
     for(const id of ['prompt','width','height','length','steps','seed','audio-enabled','random','output','fast','two-stage'])for(const event of ['input','change'])this.$(id).addEventListener(event,()=>{if(id==='width'||id==='height')this.normaliseDimensions();if(id==='fast'&&this.$('fast').checked)this.$('two-stage').checked=false;if(id==='two-stage'&&this.$('two-stage').checked)this.$('fast').checked=false;if(['output','fast','two-stage'].includes(id))this.selectAvailability();this.save();this.render();});
     const applySize=()=>{
       const preset=FRAME_SIZE_PRESETS.find(p=>p.id===this.$('size-preset').value);
-      if(preset){const size=endpointPresetSize(this.$('engine').value,preset.id,this.$('megapixels').value);this.$('width').value=size.width;this.$('height').value=size.height;this.dimensionNotice='';}
+      if(preset){const size=endpointPresetSize(this.$('engine').value,preset.id,this.$('megapixels').value,this.recipe());this.$('width').value=size.width;this.$('height').value=size.height;this.dimensionNotice='';}
       this.normaliseDimensions();this.save();this.render();
     };
     this.$('size-preset').onchange=applySize;this.$('megapixels').onchange=applySize;
-    megapixelSlider(this.$('megapixels'));
+    megapixelSlider(this.$('megapixels'),{max:megapixelMaximum(this.recipe()),value:initialMegapixels});
     for(const key of ['width','height'])editableDimension(this.$(key),()=>{this.$('size-preset').value='custom';this.normaliseDimensions();this.save();this.render();},()=>({step:this.recipe().dimensionStep,min:this.recipe().minDimension||256,max:this.recipe().maxDimension||1536}));
     for(const id of ['first','last']){
       const button=this.page.querySelector(`[data-frame="${id}"]`);button.onclick=()=>this.$(id).click();
@@ -165,17 +165,19 @@ export class FrameVideoWorkspace{
     for(const id of ['engine','prompt','width','height','size-preset','megapixels','length','steps','seed','audio-enabled','random','swap','clear','output','fast','two-stage'])this.$(id).disabled=busy;
     this.loras.root.hidden=c.engine==='wan';this.wanHighLoras.root.hidden=c.engine!=='wan';this.wanLowLoras.root.hidden=c.engine!=='wan';for(const control of [this.loras,this.wanHighLoras,this.wanLowLoras])control.setBusy(busy);
     this.$('steps').min=cap.minSteps;this.$('steps').max=cap.maxSteps;this.$('steps').disabled=busy||cap.minSteps===cap.maxSteps;this.$('output').querySelector('option[value="sdr"]').disabled=hasHDREndpoint(c);this.$('output-control').title=hasHDREndpoint(c)?'Native HDR generation from your original EXR endpoints.':'HDR adds an LTX conversion pass after generation. The SDR take is retained.';this.$('recipe-hint').textContent=cap.hint;
+    if(c.engine==='ltx'&&!hasHDREndpoint(c)){const w=c.fast||c.twoStage?Math.ceil(c.width/64)*32:c.width,h=c.fast||c.twoStage?Math.ceil(c.height/64)*32:c.height;this.$('recipe-hint').textContent+=` · Samples at ${w} × ${h}${c.fast?' then upscales without refinement':c.twoStage?' then upscales and refines':''}.`;}
     this.$('audio-enabled').closest('label').hidden=!cap.supportsAudioReference;this.$('output-control').hidden=c.engine!=='ltx';this.$('fast-control').hidden=c.engine!=='ltx'||hasHDREndpoint(c);this.$('two-stage-control').hidden=c.engine!=='ltx'||hasHDREndpoint(c);
     for(const slot of ['first','last']){this.$(slot).accept=c.engine==='ltx'&&this.nativeHDR.info?.enabled?'image/png,image/jpeg,image/webp,.exr':'image/png,image/jpeg,image/webp';const button=this.page.querySelector(`[data-frame="${slot}"]`),asset=this.assets[slot],remove=this.$('remove-'+slot);button.disabled=busy;remove.disabled=busy;remove.hidden=!asset;let image=button.querySelector('img');if(asset){if(!image){image=document.createElement('img');image.alt='';button.prepend(image);}image.src=view(this.api,asset,'input');button.title=`${slot==='first'?'First':'Last'} frame · ${asset.name||asset.filename}`;}else {image?.remove();button.title=`Choose ${slot} frame`;}button.classList.toggle('has-media',!!asset);}
     this.$('audio-slot').hidden=!cap.supportsAudioReference||(!c.audioEnabled&&!this.assets.audio);this.$('audio-file-button').disabled=busy;this.$('remove-audio').hidden=!this.assets.audio;this.$('remove-audio').disabled=busy;this.$('audio-file-button').querySelector('span').textContent=this.assets.audio?.name||'Add audio reference';
     this.$('swap').hidden=!this.assets.first||!this.assets.last;
     this.page.querySelector('[data-frame="last"] span').textContent=this.assets.last?'Last frame':'Last frame · optional';
+    this.$('megapixels').max=megapixelMaximum(cap);this.$('megapixels').updateReadout?.();
     this.$('custom-size').hidden=c.sizePreset!=='custom';
     this.$('megapixels-setting').hidden=c.sizePreset==='custom';
-    this.$('size-hint').textContent=c.sizePreset==='custom'?`Enter exact dimensions. Values snap to the nearest ${cap.dimensionStep} pixels (${cap.minDimension||256}–${cap.maxDimension||1536} per side).`:`Megapixel sizes are approximate, aligned to ${cap.label}’s ${cap.dimensionStep}-pixel grid.`;
+    this.$('size-hint').textContent=c.sizePreset==='custom'?`Enter exact dimensions. Values snap to the nearest ${cap.dimensionStep} pixels (${cap.minDimension||256}–${cap.maxDimension||1536} per side).`:`Up to ${megapixelMaximum(cap).toFixed(2)} MP on a ${cap.dimensionStep}-pixel grid. Higher resolutions need more memory.`;
     this.$('generate').disabled=busy||!this.availability?.ready||!!error;this.$('generate').textContent=busy?'Generating…':'Generate video';this.$('progress').hidden=!this.job&&!this.pendingSubmission&&!this.submitting&&!this.hdrOutput.busy;this.$('cancel').disabled=(!this.job&&!this.hdrOutput.busy)||!!(this.job?.cancelPending&&!this.job.cancelRetryAvailable);this.$('cancel').textContent=this.job?.cancelRetryAvailable?'Retry cancellation':'Cancel run';if(this.job?.cancelPending){this.$('bar').removeAttribute('value');this.$('progress-title').textContent='Cancelling…';this.$('progress-detail').textContent='Waiting for ComfyUI to stop this run.';}else if(this.pendingSubmission){this.$('bar').removeAttribute('value');this.$('progress-title').textContent='Checking your run';this.$('progress-detail').textContent='Reconnecting without submitting again…';}
     this.$('size-label').textContent=`${c.width} × ${c.height}`;
-    this.$('canvas-note').textContent=`${c.width} × ${c.height} · ${(c.width*c.height/1e6).toFixed(2)} MP`;
+    this.$('canvas-note').textContent=`${c.width} × ${c.height} · ${(c.width*c.height/1e6).toFixed(2)} MP`+(c.engine==='ltx'&&(c.fast||c.twoStage)?` · Samples at ${Math.ceil(c.width/64)*32} × ${Math.ceil(c.height/64)*32}, then ${c.twoStage?'upscales and refines':'upscales without refinement'}.`:'');
     this.$('setup').textContent=this.availability?.ready?'All required models and nodes are installed.':this.availability?'Missing: '+this.availability.missing.join(', '):'Open this workflow to check installed models.';
     const setup=this.loading?`Checking installed ${cap.label} models…`:this.modelError||(!this.availability?`Open this workflow to check installed ${cap.label} models.`:!this.availability.ready?`${cap.label} setup is incomplete. Open generation settings to see missing models.`:'');
     this.$('note').textContent=error||setup||this.dimensionNotice||`${c.frames} frames at ${cap.fps} fps · ${c.last?.file?'First + last frame':'First frame only'} · ${c.audioEnabled?'Follows your audio reference':cap.generatesAudio?`${cap.label} generates audio`:'Silent video'}`;

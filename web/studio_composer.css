@@ -8,6 +8,8 @@
  display:flex;flex-direction:column;gap:12px;align-self:stretch;width:100%;min-width:0;min-height:0;max-height:none;overflow:visible;
  margin:0 auto;padding:16px 20px;max-width:var(--zc-video-width);border:1px solid var(--gs-line);border-radius:16px;background:var(--zc-composer);position:relative;
 }
+/* Keep attachment and action rows intact; the viewer takes remaining space. */
+#genj-studio[data-workspace=video] .gs-composer>*,#genj-studio .zf-composer>*,#genj-studio .zc-image-composer>*{flex-shrink:0}
 #genj-studio[data-workspace=video] #gs-prompt-stage{display:flex;align-items:center;gap:16px;min-height:24px;flex-wrap:wrap;margin:0}
 #genj-studio[data-workspace=video] #gs-prompt-heading{font-size:14px;line-height:24px;font-weight:600;color:var(--zc-text)}
 #genj-studio[data-workspace=video] #gs-prompt-stage button{padding:4px 8px;min-height:28px;background:none;border:0;border-radius:6px;color:var(--gs-muted);font-size:12px}
@@ -94,7 +96,7 @@
 #genj-studio:not([data-workspace=paintout])>.zp-page:not(.zwm-page),#genj-studio:not([data-workspace=watermark])>.zwm-page{display:none!important}
 #genj-studio:is([data-workspace=frames],[data-workspace=references],[data-workspace=paintout],[data-workspace=watermark])>:is(.gs-workspace,.gs-steps){display:none!important}
 #genj-studio:is([data-workspace=frames],[data-workspace=references],[data-workspace=paintout],[data-workspace=watermark]) #gs-models{display:none}
-#genj-studio .zf-page{display:grid;grid-template-rows:auto minmax(0,1fr) auto;gap:12px;flex:1;min-width:0;min-height:0;padding:16px;overflow:hidden}
+#genj-studio .zf-page{display:grid;grid-template-rows:auto minmax(0,1fr) max-content;gap:12px;flex:1;min-width:0;min-height:0;padding:16px;overflow:hidden}
 #genj-studio .zf-heading{display:flex;align-items:center;gap:16px;min-width:0}
 #genj-studio .zf-heading h2{font-size:14px;font-weight:600;flex:1}
 #genj-studio .zf-heading button,#genj-studio .zf-heading summary{padding:8px 12px;min-height:36px;font-size:12px;color:var(--gs-muted);background:none;border:0;border-radius:6px;cursor:pointer;list-style:none}
@@ -344,3 +346,6 @@
 #genj-studio .zwm-page #zps-reference-frame{width:90px}
 @media(max-width:700px){#genj-studio .zwm-page .zp-editor-segment-draft{flex-basis:100%}#genj-studio .zwm-page .zp-editor-mask-actions [data-editor=track]{flex:1}#genj-studio .zwm-page .zwm-reference>div:first-child{flex-basis:100%}}
 #genj-studio .zwm-page .zwm-reference[hidden]{display:none}
+
+/* Workflow setup remains available from the missing-model card. */
+#genj-studio .gs-model-downloads.zc-tool-popup:not(.zc-global-models):not([open]){display:none}

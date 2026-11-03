@@ -1,5 +1,16 @@
 # Release notes
 
+## 1.3.47 - 3 November 2026
+
+- Keep edit-source and generated images inside their preview instead of allowing large images to push the controls off-screen.
+- Align Image and Video preview widths, toolbar grouping and responsive prompt sizing. Protect attachment/action rows from shrinking and remove conflicting Watermark and Frame Extension page-scrolling rules.
+- Keep model management in the top bar, with workflow installation controls shown when models are missing.
+- Raise first/last-frame SDR and H3 reference-video resolution controls to an 8.35 MP slider range within the shared 4096-pixel-side / 8,388,608-pixel canvas budget. Actual model and GPU limits still apply; native HDR retains separate limits.
+- Preserve decimal megapixel selections and show the actual sampling resolution for LTX Fast and two-stage modes.
+- Correct LTX starting-image conditioning to the official in-place I2V approach and use Euler for the refinement pass.
+- Rename H3's unanchored Start option to Reference only and explain choosing Picture 1 to preserve its initial composition. This does not guarantee exact text rendering.
+- See [validation and remaining limits](docs/STUDIO_1347_VALIDATION.md). The revised layout has code/DOM checks but no final visual sign-off.
+
 ## 1.3.46 - 3 November 2026
 
 - Add shared browser sign-in for gated Hugging Face model downloads, with automatic retry, cancellation and a popup-blocked fallback. Read tokens remain an advanced option. Publisher approval is still required.

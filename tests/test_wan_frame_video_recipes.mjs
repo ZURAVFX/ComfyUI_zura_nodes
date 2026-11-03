@@ -34,7 +34,7 @@ assert.throws(()=>buildWanFrameVideoGraph({...c,frames:50}),/4n \+ 1/);assert.th
 assert.equal(caps.maxFrames,361);
 assert.equal(buildWanFrameVideoGraph({...c,frames:361}).endpoints.inputs.length,361);
 assert.throws(()=>buildWanFrameVideoGraph({...c,steps:8}),/four sampling steps/);assert.throws(()=>buildWanFrameVideoGraph({...c,seed:-1}),/Seed/);
-assert.throws(()=>wanFrameVideoDimensions({width:730,height:416}),/multiples of 16/);assert.throws(()=>wanFrameVideoDimensions({width:1536,height:1536}),/megapixels/);
+assert.throws(()=>wanFrameVideoDimensions({width:730,height:416}),/multiples of 16/);assert.throws(()=>wanFrameVideoDimensions({width:4096,height:4096}),/canvas/);
 assert.equal(buildWanFrameVideoGraph({...c,lowMemoryDecode:true}).decode.class_type,'VAEDecodeTiled');
 assert.equal(buildWanFrameVideoGraph({...c,fastFp8:false}).high_model.inputs.weight_dtype,'default');
 const info=Object.fromEntries(caps.nodeTypes.map(name=>[name,{input:{required:{}}}]));
