@@ -91,9 +91,9 @@
 #genj-studio:not([data-workspace=frames])>.zf-page:not(.zr-page):not(.zp-page):not(.zh-page){display:none!important}
 #genj-studio:not([data-workspace=hdr])>.zh-page{display:none!important}
 #genj-studio:not([data-workspace=references])>.zr-page{display:none!important}
-#genj-studio:not([data-workspace=paintout])>.zp-page{display:none!important}
-#genj-studio:is([data-workspace=frames],[data-workspace=references],[data-workspace=paintout])>:is(.gs-workspace,.gs-steps){display:none!important}
-#genj-studio:is([data-workspace=frames],[data-workspace=references],[data-workspace=paintout]) #gs-models{display:none}
+#genj-studio:not([data-workspace=paintout])>.zp-page:not(.zwm-page),#genj-studio:not([data-workspace=watermark])>.zwm-page{display:none!important}
+#genj-studio:is([data-workspace=frames],[data-workspace=references],[data-workspace=paintout],[data-workspace=watermark])>:is(.gs-workspace,.gs-steps){display:none!important}
+#genj-studio:is([data-workspace=frames],[data-workspace=references],[data-workspace=paintout],[data-workspace=watermark]) #gs-models{display:none}
 #genj-studio .zf-page{display:grid;grid-template-rows:auto minmax(0,1fr) auto;gap:12px;flex:1;min-width:0;min-height:0;padding:16px;overflow:hidden}
 #genj-studio .zf-heading{display:flex;align-items:center;gap:16px;min-width:0}
 #genj-studio .zf-heading h2{font-size:14px;font-weight:600;flex:1}
@@ -318,3 +318,6 @@
   height:72px;min-height:72px!important;max-height:120px;
  }
 }
+
+/* Watermark brushing needs a usable viewer as mask layers accumulate. */
+#genj-studio .zwm-page.zp-editor-open:not([data-editor-stage=render]) > .zf-viewer{min-height:380px}

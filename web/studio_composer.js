@@ -20,7 +20,7 @@ export const composerIcons={
   takes:svg('<rect x="3" y="7" width="18" height="14" rx="2"/><path d="M7 3h10m-8 9 6 3-6 3z"/>'),
   download:svg('<path d="M12 3v12m-4-4 4 4 4-4M4 17v4h16v-4"/>'),
 };
-export const VIDEO_WORKFLOWS=[['swap','Character replacement'],['objects','Object replacement · Ripple'],['viewport','Viewport to final'],['camera','Change camera angle'],['relight','Relight'],['paintout','Paintout / clean plate'],['inpaint','Inpaint · preview'],['outpaint','Frame extension · preview'],['hdr','Convert to HDR'],['frames','First & last frame'],['references','Reference to video']];
+export const VIDEO_WORKFLOWS=[['swap','Character replacement'],['objects','Object replacement · Ripple'],['viewport','Viewport to final'],['camera','Change camera angle'],['relight','Relight'],['paintout','Paintout / clean plate'],['watermark','Watermark Removal'],['inpaint','Inpaint · preview'],['outpaint','Frame extension · preview'],['hdr','Convert to HDR'],['frames','First & last frame'],['references','Reference to video']];
 
 /** A compact surface over the existing controls, never a second configuration. */
 export class VideoComposer {
@@ -105,7 +105,7 @@ export class VideoComposer {
     if(value==='objects'){this.workspace.show('paintout');this.workspace.paintout.setMode('ripple');this.syncWorkflow();return;}
     if(value==='inpaint'){this.workspace.show('paintout');this.workspace.paintout.setMode('inpaint');this.syncWorkflow();return;}
     if(value==='paintout'&&['inpaint','ripple'].includes(this.workspace.paintout?.state.mode)){this.workspace.show('paintout');this.workspace.paintout.setMode('targeted');this.syncWorkflow();return;}
-    if(['frames','references','paintout','outpaint'].includes(value)){this.workspace.show(value);return;}
+    if(['frames','references','paintout','watermark','outpaint'].includes(value)){this.workspace.show(value);return;}
     if(!VIDEO_WORKFLOWS.some(([id])=>id===value))return;
     const input=this.root.querySelector(`input[name="gs-workflow"][value="${value}"]`);
     if(input&&!input.disabled){
@@ -133,13 +133,13 @@ export class VideoComposer {
     // Reuse the same control and handler in both composers. Its place in the
     // tool row stays immediately after the model, including endpoint video.
     const select=this.task.querySelector('select'),focused=this.root.ownerDocument.activeElement===select;
-    const model=mode==='frames'?this.workspace.frames.page.querySelector('.zf-model'):mode==='references'?this.workspace.referencesVideo.page.querySelector('.zf-model'):mode==='paintout'?this.workspace.paintout.page.querySelector('.zf-model'):mode==='outpaint'?this.workspace.outpaint.page.querySelector('.zo-model'):mode==='panorama'?this.workspace.panorama.page.querySelector('.zpc-model'):this.imageModel;
+    const model=mode==='frames'?this.workspace.frames.page.querySelector('.zf-model'):mode==='references'?this.workspace.referencesVideo.page.querySelector('.zf-model'):mode==='paintout'?this.workspace.paintout.page.querySelector('.zf-model'):mode==='watermark'?this.workspace.watermark.page.querySelector('.zf-model'):mode==='outpaint'?this.workspace.outpaint.page.querySelector('.zo-model'):mode==='panorama'?this.workspace.panorama.page.querySelector('.zpc-model'):this.imageModel;
     if(model.nextElementSibling!==this.task)model.after(this.task);
     this.syncWorkflow();
     if(focused)select.focus({preventScroll:true});
   }
   syncWorkflow(){
-    const independent=['frames','references','paintout','outpaint','panorama','hdr'].includes(this.workspace.mode),select=this.task.querySelector('select');
+    const independent=['frames','references','paintout','watermark','outpaint','panorama','hdr'].includes(this.workspace.mode),select=this.task.querySelector('select');
     select.value=independent?this.workspace.mode:this.studio.config.workflow_mode==='motion'?'swap':this.studio.config.workflow_mode;
     if(this.workspace.mode==='panorama')select.value='camera';
     if(this.workspace.mode==='paintout'&&this.workspace.paintout?.state.mode==='inpaint')select.value='inpaint';

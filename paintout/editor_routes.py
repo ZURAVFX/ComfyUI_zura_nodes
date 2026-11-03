@@ -2,6 +2,7 @@
 from .media_tools import find_media_tool
 import asyncio
 import io
+import re
 import secrets
 import subprocess
 import tempfile
@@ -272,6 +273,104 @@ async def import_mask(request):
         return web.json_response({'error': str(error)}, status=400)
 
 
+
+def save_watermark_layer(body):
+    """Persist one painted static mask over the selected clip, with a trimmable active range."""
+    from .mask_segments import commit_segment
+    project = body['project']
+    document = load_project(project)
+    expected = body.get('expected_revision')
+    if isinstance(expected, bool) or not isinstance(expected, int) or expected != document['revision']:
+        raise RevisionConflict('This layer changed. Reload the project and retry.')
+    if document.get('data', {}).get('workspace') != 'watermark':
+        raise ValueError('Paint watermark layers in a Watermark Removal project.')
+    source = checked_path(body['source'])
+    draft = document.get('data', {}).get('draft', {})
+    if not draft.get('source') or checked_path(draft['source']) != source:
+        raise ValueError('This layer belongs to different footage.')
+    desc = describe(str(source))
+    numbers = [body[k] for k in ('clip_start','clip_end','layer_start','layer_end')]
+    if any(isinstance(v,bool) or not isinstance(v,int) for v in numbers):
+        raise ValueError('Layer timing must use whole frame numbers.')
+    clip_start, clip_end, start, end = numbers
+    if not 0 <= clip_start <= start <= end <= clip_end < desc['count']:
+        raise ValueError('Choose a layer range inside the clip.')
+    if (clip_start,clip_end)!=(draft.get('startFrame'),draft.get('startFrame')+draft.get('frameCount')-1):
+        raise ValueError('The clip range changed. Reload before saving this layer.')
+    mask = (_decode_paint(body['mask'],desc['width'],desc['height']) >= .5).astype(np.float32)
+    if not np.any(mask): raise ValueError('Paint the watermark before saving the layer.')
+    metadata = dict(segment_id=body['segment_id'],method='watermark_static',tracked=True,layer_start=start,layer_end=end,frame=start)
+    commit_segment(project,source_identity(str(source),desc),{i:mask for i in range(clip_start,clip_end+1)},'replace',expected,metadata)
+    return project_response(load_project(project))
+
+
+
+def export_watermark_mask(body):
+    from .editor_store import read_project_mask
+    project=body['project'];document=load_project(project);data=document.get('data',{})
+    if data.get('workspace')!='watermark':raise ValueError('Choose a Watermark Removal project.')
+    draft=data.get('draft',{});source=checked_path(body['source'])
+    if not draft.get('source') or checked_path(draft['source'])!=source:raise ValueError('This mask belongs to different footage.')
+    desc=describe(str(source));revision=body['revision'];start=body['start'];count=body['count'];grow=body.get('grow',0)
+    if any(isinstance(v,bool) or not isinstance(v,int) for v in (revision,start,count,grow)) or not 0<=start<desc['count'] or not 1<=count<=desc['count']-start or not 0<=grow<=256:
+        raise ValueError('Choose a valid mask revision, clip range and expansion.')
+    descriptor=mask_descriptor(project,revision)
+    if descriptor['source']!=source_identity(str(source),desc):raise ValueError('The source changed. Reload the footage.')
+    if any(i not in descriptor['covered_frames'] for i in range(start,start+count)):raise ValueError('The mask does not cover the selected clip.')
+    rate=Fraction(desc['fps_rational']) if desc.get('fps_rational') else Fraction(str(body.get('fps',25))).limit_denominator(100000)
+    if rate<=0:raise ValueError('Choose a valid frame rate.')
+    directory=project_dir(project)/'exports';directory.mkdir(exist_ok=True);filename='watermark_mask_'+secrets.token_hex(12)+'.mkv';target=directory/filename
+    cmd=[find_media_tool('ffmpeg'),'-v','error','-y','-f','rawvideo','-pix_fmt','gray','-s',f"{desc['width']}x{desc['height']}",'-r',str(rate),'-i','-','-frames:v',str(count),'-an','-c:v','ffv1','-level','3','-pix_fmt','gray',str(target)]
+    process=subprocess.Popen(cmd,stdin=subprocess.PIPE,stderr=subprocess.PIPE)
+    try:
+        for frame in range(start,start+count):
+            mask=read_project_mask(project,frame,revision,grow,0);process.stdin.write(np.rint(mask*255).astype(np.uint8).tobytes())
+        process.stdin.close();error=process.stderr.read().decode('utf8','replace');code=process.wait()
+        if code:raise RuntimeError('Mask export failed: '+error[-1000:])
+    except BaseException:
+        if process.poll() is None:process.kill();process.wait()
+        target.unlink(missing_ok=True);raise
+    finally:
+        if process.stdin and not process.stdin.closed:
+            try:process.stdin.close()
+            except OSError:pass
+        if process.stderr:process.stderr.close()
+    return {'filename':filename,'frames':count,'fps':str(rate)}
+
+
+async def watermark_mask_export(request):
+    from ..media_source import require_same_origin
+    require_same_origin(request)
+    try:
+        body=await request.json();return web.json_response(await asyncio.to_thread(export_watermark_mask,body),headers={'Cache-Control':'no-store'})
+    except (ValueError,KeyError,TypeError,OSError,RuntimeError) as error:
+        return web.json_response({'error':str(error)},status=400)
+
+
+async def watermark_mask_file(request):
+    from ..media_source import require_same_origin
+    require_same_origin(request)
+    try:
+        project=request.query['project'];filename=request.query['file'];document=load_project(project)
+        if document.get('data',{}).get('workspace')!='watermark' or not re.fullmatch(r'watermark_mask_[0-9a-f]{24}\.mkv',filename):raise ValueError('Choose a saved watermark mask.')
+        path=project_dir(project)/'exports'/filename
+        if not path.is_file():raise ValueError('The mask export is unavailable.')
+        return web.FileResponse(path,headers={'Content-Disposition':f'attachment; filename="{filename}"','Cache-Control':'no-store'})
+    except (ValueError,KeyError,OSError) as error:
+        return web.json_response({'error':str(error)},status=400)
+
+async def watermark_layer(request):
+    from ..media_source import require_same_origin
+    require_same_origin(request)
+    try:
+        body=await request.json()
+        if not isinstance(body,dict): raise ValueError('Provide a painted watermark layer.')
+        return web.json_response(await asyncio.to_thread(save_watermark_layer,body),headers={'Cache-Control':'no-store'})
+    except RevisionConflict as error:
+        return web.json_response({'error':str(error)},status=409)
+    except (ValueError,KeyError,TypeError,OSError) as error:
+        return web.json_response({'error':str(error)},status=400)
+
 async def paint_mask(request):
     from ..media_source import require_same_origin
     require_same_origin(request)
@@ -321,7 +420,9 @@ def register_routes():
     if server is None:
         return
     existing = {(route.method, route.path) for route in server.routes}
-    for path, handler in (('/zura/paintout/editor/segment-range', segment_range), ('/zura/paintout/editor/select-mask-candidate', select_mask_candidate), ('/zura/paintout/editor/effective-mask', effective_preview), ('/zura/paintout/editor/import-frame', import_frame), ('/zura/paintout/editor/import-local-frame', import_local_frame), ('/zura/paintout/editor/paint-mask', paint_mask), ('/zura/paintout/editor/import-mask', import_mask)):
+    if ('GET','/zura/paintout/editor/watermark-mask-file') not in existing:
+        server.routes.get('/zura/paintout/editor/watermark-mask-file')(watermark_mask_file)
+    for path, handler in (('/zura/paintout/editor/watermark-mask-export', watermark_mask_export), ('/zura/paintout/editor/watermark-layer', watermark_layer), ('/zura/paintout/editor/segment-range', segment_range), ('/zura/paintout/editor/select-mask-candidate', select_mask_candidate), ('/zura/paintout/editor/effective-mask', effective_preview), ('/zura/paintout/editor/import-frame', import_frame), ('/zura/paintout/editor/import-local-frame', import_local_frame), ('/zura/paintout/editor/paint-mask', paint_mask), ('/zura/paintout/editor/import-mask', import_mask)):
         if ('POST', path) not in existing:
             server.routes.post(path)(handler)
     from . import import_review

@@ -678,7 +678,7 @@ async def project_list_route(request):
                 source = draft.get('source', '')
                 if source:
                     projects.append(dict(id=document['id'], source=source, name=Path(source).name,
-                                         updated=path.stat().st_mtime, frames=draft.get('frameCount')))
+                                         updated=path.stat().st_mtime, frames=draft.get('frameCount'), workspace=document.get('data', {}).get('workspace','paintout')))
             except (ValueError, OSError, KeyError):
                 continue
         return sorted(projects, key=lambda project: project['updated'], reverse=True)

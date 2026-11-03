@@ -139,7 +139,7 @@ def commit_segment(project, identity, frame_masks, operation, expected, metadata
         owned.mkdir(parents=True)
         try:
             for frame, mask in sorted(frame_masks.items()):
-                if segment.get('tracked') and not segment['start'] <= frame <= segment['end']:
+                if segment.get('tracked') and metadata.get('method')!='watermark_static' and not segment['start'] <= frame <= segment['end']:
                     raise ValueError('Move inside this mask bar before correcting it.')
                 if isinstance(frame, bool) or not isinstance(frame, int) or not 0 <= frame < identity['count']:
                     raise ValueError('A mask frame is outside the source footage.')
@@ -158,6 +158,8 @@ def commit_segment(project, identity, frame_masks, operation, expected, metadata
             if (metadata.get('tracked') and not segment['tracked']) or 'start' not in segment:
                 segment.update(start=available[0], end=available[-1])
             segment['tracked'] = segment['tracked'] or bool(metadata.get('tracked'))
+            if metadata.get('method')=='watermark_static':
+                segment.update(start=metadata['layer_start'],end=metadata['layer_end'],static=True,name=segment['name'].replace('Mask ','Layer ',1))
             base = manifest or dict(source=identity, files={})
             summary = _publish(project, base, segments, expected, metadata, seed_masks=frame_masks, affected=frame_masks)
             summary['segment_id'] = segment_id

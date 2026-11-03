@@ -8,14 +8,8 @@ For GitHub installs, update this repository, install its requirements using Comf
 
 Uses the same ComfyUI Python and local models as Zura Nodes, plus LTXVideo and KJNodes. Required Python libraries include NumPy, Pillow, SciPy, OpenImageIO and OpenCV. No models are bundled. See [model setup](docs/paintout-studio/MODEL_DOWNLOADS.md) and [manual checks](docs/paintout-studio/MANUAL_TESTING.md). Model licences and gated access remain separate from this code's licence.
 
-## Targeted repair methods
+## Watermark Removal
 
-Guided repair remains the default and uses the painted clean frames at their selected source-frame times. The existing guided LTX graph, mask handling and model settings are retained. In Settings, Automatic selects the experimental cropped single-pass LTX inpainting path; Light selects SDR ProPainter and requires the `ComfyUI_ProPainter_Nodes` custom nodes. ProPainter may download its own weights on first use. Full-scene clean plate remains separate.
+Watermark Removal is a separate Video workspace. Paint and save each static mask layer, then drag the ends of its timeline bar to set the active frame range. Add more layers for different marks or timings. Prepare and download the full-frame lossless mask from the Workspace menu for use in a compositor. Quality uses the cropped single-pass LTX path; Light uses ProPainter for SDR footage. Colour options are SDR to SDR, SDR to HDR and HDR to HDR. The original Paintout workspace continues to use its guided clean-frame anchors.
 
-SDR-to-SDR, SDR-to-HDR and HDR-to-HDR remain distinct. Automatic supports HDR-to-HDR; Light supports SDR inputs and can feed SDR-to-HDR conversion. Automatic and Light offer full, three-quarter, half and quarter AI processing scales, capped to a 768-pixel crop, then composite into the original frame. HDR-to-HDR should be reviewed with genuine HDR footage on an appropriate display. SDR-to-HDR generates an HDR interpretation, not the source's lost highlight information.
-
-These modes currently process one continuous shot per run. Automatic shot detection and long-range chunking are not integrated in this Studio path. The separate SDR-to-HDR conversion is limited by frame count and memory. Check mask edges, motion and colour on your footage before delivery.
-
-Test: open each Studio separately; import footage; preview a hard mask; scrub and paint/erase; repair tracking from a visible frame; add another segment; add a clean frame and adjust Expand mask; generate and accept/reject a FLUX result; render and check source dimensions, frame count and frame rate. Tracking after full occlusion may require a new seed. Saved projects in the isolated 8189 test instance remain there; the regular instance has its own project/output directory.
-
-This is a public testing release submitted to Comfy Registry for processing. Registry approval and Manager availability must be checked separately. It does not submit a contest entry. Representative removal quality and a second-machine installation remain manual acceptance checks.
+The current implementation processes one continuous shot at a time, with a maximum of 993 frames per clip. Automatic shot detection and long-range chunking are not integrated. HDR results should be checked on the source footage.

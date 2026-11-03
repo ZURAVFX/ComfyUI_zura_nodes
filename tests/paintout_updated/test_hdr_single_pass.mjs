@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import {buildPaintoutGraph,paintoutValidation,PAINTOUT_MODELS} from '../../web/paintout_studio/paintout_recipes.js';
+import {buildPaintoutGraph,paintoutValidation,PAINTOUT_MODELS} from '../../web/paintout_studio/watermark_recipes.js';
 const c={mode:'targeted',targetedMethod:'automatic',source:'C:/fixtures/plate.exr',mask:'C:/fixtures/mask.png',anchors:[],startFrame:0,frameCount:17,sequenceFps:25,sourceColour:'acescg',processingSpace:'HDR (ACEScct)',colourPipeline:'hdr_hdr',width:512,height:320,outputMode:'EXR sequence',processingScale:.5,seed:43};
 assert.equal(paintoutValidation(c),'');
 const g=buildPaintoutGraph(c);

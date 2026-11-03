@@ -1762,7 +1762,7 @@ let registeredStudio;
 export async function openZuraStudio(workspace){
   if(!registeredStudio)return;
   if(!registeredStudio.container.isConnected)await registeredStudio.open();
-  if(['home','image','video','frames','references','paintout','outpaint'].includes(workspace))registeredStudio.creative?.show(workspace);
+  if(['home','image','video','frames','references','paintout','watermark','outpaint'].includes(workspace))registeredStudio.creative?.show(workspace);
   return registeredStudio;
 }
 
