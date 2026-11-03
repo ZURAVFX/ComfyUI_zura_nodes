@@ -3,6 +3,7 @@ import {parseHTML} from '../../ui-check/node_modules/linkedom/esm/index.js';
 import {
   installStudioRestartNavigation,
   resetStudioWorkspace,
+  studioWorkspaceBusy,
 } from '../web/studio_restart.js';
 
 const {document} = parseHTML('<!doctype html><html><head></head><body></body></html>');
@@ -95,6 +96,17 @@ assert.equal(savedImage.draft.operation,'edit');
 assert.equal(savedImage.draft.model,'qwen2511');
 assert.equal(savedImage.items.length,1,'Reset preserves saved image history');
 assert.equal(shown,'image');
+
+let watermarkResets=0;
+const watermarkCreative={mode:'watermark',studio:{busy:true},watermark:{job:null,busy(){return !!this.job;},async reset(){watermarkResets++;return true;}},show(mode){shown=mode;}};
+assert.equal(studioWorkspaceBusy(watermarkCreative),false,'Watermark checks its own workspace, not an unrelated video run');
+watermarkCreative.watermark.job={id:'watermark-job'};
+assert.equal(studioWorkspaceBusy(watermarkCreative),true);
+watermarkCreative.watermark.job=null;
+assert.equal(await resetStudioWorkspace(watermarkCreative),true);
+assert.equal(watermarkResets,1);assert.equal(shown,'watermark');
+watermarkCreative.watermark.reset=async()=>false;
+assert.equal(await resetStudioWorkspace(watermarkCreative),false,'A failed save/reset cannot be reported as complete');
 
 function workspaceResetFixture(mode,className){
   const page=document.createElement('section');

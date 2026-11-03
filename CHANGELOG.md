@@ -1,5 +1,11 @@
 # Release notes
 
+## 1.3.45 - 3 November 2026
+
+- Fix the shared Start over action in Watermark removal. Save the previous project, clear the clip, masks, optional guide and result, and return to the first step. Add Back to video and protect active renders from accidental resets.
+- Keep the watermark preview large while generating. Move progress beneath the picture so stage details never cover the footage.
+- Use Blender-style camera navigation in Change camera angle: middle mouse to orbit, Shift + middle mouse to pan, wheel or Ctrl + middle mouse to dolly, Home to frame the scene and I to key all camera properties. Retain native camera interpolation, Undo, locking and the source-view reset.
+
 ## 1.3.44 - 3 November 2026
 
 - Share a validated Hugging Face connection across all Studio model installers. Offer optional local credential storage, clear model terms links and retry of missing files after connecting.

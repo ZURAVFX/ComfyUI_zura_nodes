@@ -15,6 +15,7 @@ function workspaceFor(creative){
     case 'frames': return creative.frames;
     case 'references': return creative.referencesVideo;
     case 'paintout': return creative.paintout;
+    case 'watermark': return creative.watermark;
     case 'outpaint': return creative.outpaint;
     case 'hdr': return creative.studio?.hdrTool;
     case 'panorama': return creative.panorama;
@@ -39,7 +40,7 @@ export function studioWorkspaceBusy(creative){
     workspace?.job||workspace?.pendingSubmission||workspace?.submitting||workspace?.uploading||
     workspace?.hdrOutput?.busy||invokeBusy(workspace)
   );
-  if(mode==='paintout')return !!(workspace?.job||workspace?.submitting||workspace?.picking||workspace?.exporting||invokeBusy(workspace));
+  if(mode==='paintout'||mode==='watermark')return !!(workspace?.job||workspace?.submitting||workspace?.picking||workspace?.exporting||invokeBusy(workspace));
   if(mode==='outpaint')return !!(
     workspace?.job||workspace?.submitting||workspace?.hdrSubmitting||
     workspace?.layers?.busy||workspace?.hdrDelivery?.busy||invokeBusy(workspace)
@@ -221,6 +222,11 @@ export async function resetStudioWorkspace(creative){
     creative?.show?.('paintout');
     return result!==false;
   }
+  if(mode==='watermark'){
+    const result=await creative?.watermark?.reset?.();
+    creative?.show?.('watermark');
+    return result===true;
+  }
   if(mode==='outpaint')return resetOutpaintWorkspace(creative);
   if(mode==='hdr'){
     const tool=creative?.studio?.hdrTool;
@@ -244,6 +250,7 @@ export async function resetStudioWorkspace(creative){
 async function cancelStudioWorkspace(creative){
   const mode=currentMode(creative),workspace=workspaceFor(creative);
   if(mode==='video')return false;
+  if(mode==='watermark'&&workspace?.editor?.busy())await workspace.editor.cancel?.();
   if(mode==='hdr')await workspace?.cancel?.();
   else if(mode==='panorama'&&typeof workspace?.cancel!=='function')await cancelOwnedJob(workspace);
   else await workspace?.cancel?.();
@@ -277,6 +284,7 @@ function modeLabel(mode){
     frames:'First & last frame',
     references:'Reference to video',
     paintout:'Paintout',
+    watermark:'Watermark removal',
     outpaint:'Frame extension',
     hdr:'HDR',
     panorama:'Camera angle',

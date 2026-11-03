@@ -146,6 +146,7 @@ jobs:
           node tests/test_video_browser_connection.mjs
           node tests/test_studio_image_compare.mjs
           node tests/test_image_auto_resolution.mjs
+          node tests/test_panorama_navigation.mjs
           node tests/test_panorama_editor.mjs
           node tests/test_panorama_windows_handoff.mjs
           node tests/test_studio_restart_navigation.mjs

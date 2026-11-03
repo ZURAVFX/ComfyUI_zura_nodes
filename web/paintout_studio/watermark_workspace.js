@@ -126,6 +126,11 @@ export class WatermarkWorkspace{
       </form>`;
 
     owner.root.append(this.page);
+    // Progress must never cover or take height away from the picture.
+    this.page.querySelector('.zf-viewer').after(this.$('progress'));
+    const back=document.createElement('button');back.type='button';back.className='zps-back-video';back.textContent='Back to video';
+    back.onclick=()=>{if(this.busy()){this.message('Cancel the active run before leaving this workspace.');return;}this.owner.show('video');};
+    this.page.querySelector('.zf-heading').append(back);
 
     this.loras=new LTXLoras(this.page.querySelector('.zc-prompt-tools'),(path,body)=>this.fetch(path,body),()=>this.busy(),()=> 'ltx25',true);
     this.loras.setValue(saved.draft?.custom_loras);this.loras.onchange=()=>{this.state.custom_loras=this.loras.value();this.save();};
@@ -382,9 +387,32 @@ export class WatermarkWorkspace{
 
   requestError(e){return /404|405|not found|could not complete this request/i.test(e.message)?'Restart ComfyUI after your current work finishes to enable the new Paintout browser.':e.message;}
 
-  async resetSource(){if(this.busy())return false;try{await this.editor?.flushManual();await this.editor?.persist();}catch(e){this.message(e.message);return false;}this.state.source='';this.state.editorProject=null;this.state.maskProject=null;this.state.maskRevision=null;this.state.mask='';this.state.anchors=[];this.sourceInfo=this.maskInfo=null;this.pendingHDR=null;this.selected=-1;this.result=null;this.$('export-link').hidden=true;this.$('export-link').removeAttribute('href');this.renderAnchors();this.changed();this.preview('source');return true;}
+  async resetSource(){
+    if(this.busy())return false;
+    try{await this.editor?.flushManual();await this.editor?.persist();}catch(e){this.message(e.message);return false;}
+    Object.assign(this.state,{source:'',editorProject:null,maskProject:null,maskRevision:null,maskCoverage:null,mask:'',anchors:[],referenceImage:null,referenceEnabled:false,objectReferences:[],maskSegmentDraft:null,activeMaskSegment:null,editorStage:'trim',editorPlayhead:0,editorSelected:-1,editorUpdatedAt:0,clipTrimConfirmed:false,startFrame:0,frameCount:81});
+    this.sourceInfo=this.maskInfo=null;this.pendingHDR=null;this.selected=-1;this.result=null;this.playhead=0;
+    if(this.editor){
+      const editor=this.editor;clearTimeout(editor.saveTimer);clearTimeout(editor.autoPreviewTimer);
+      editor.sequence++;editor.previewSequence++;editor.maskEditVersion++;editor.autoPreviewPending=false;
+      Object.assign(editor,{stage:'trim',active:false,source:null,project:null,projectSource:null,document:null,revision:-1,frameKey:null,candidate:null,selectionDirty:false,customRange:false,maskChoices:null});
+      editor.viewer.setSelection({});editor.status('');
+    }
+    for(const id of ['export-link','mask-download','download']){this.$(id).hidden=true;this.$(id).removeAttribute('href');}
+    for(const popup of this.page.querySelectorAll('details[open]'))popup.open=false;
+    this.nativeSamplePreview?.clear();this.comparison?.hide();this.$('image-slot').replaceChildren();
+    const video=this.$('video');video.pause();video.removeAttribute('src');video.load();
+    this.$('start').value=0;this.$('count').value=81;this.message('');this.renderAnchors();this.changed();this.preview('source');return true;
+  }
 
-  async reset(){if(this.busy())return;if(!await this.resetSource())return;this.items=[];this.cleanupPrompt=this.state.mode==='ripple'?'Replace the selected object with the object shown in the reference image':this.state.mode==='inpaint'?'Add the object shown in the reference image':DEFAULT_FRAME_EDIT_PROMPT;if(this.editor)this.editor.$('instruction').value=this.cleanupPrompt;this.state.startFrame=0;this.state.frameCount=81;this.playhead=0;this.$('start').value=0;this.$('count').value=81;this.save();this.render();}
+  async reset(){
+    if(!await this.resetSource())return false;
+    this.prompts={};this.state=paintoutDraft({mode:'targeted',targetedMethod:this.state.targetedMethod,editorStage:'trim',clipTrimConfirmed:false,referenceEnabled:false,referenceImage:null});
+    this.cleanupPrompt=DEFAULT_FRAME_EDIT_PROMPT;this.editor.$('instruction').value=this.cleanupPrompt;
+    this.$('prompt').value=PAINTOUT_DEFAULT_PROMPTS.targeted;this.loras.setValue([]);
+    for(const [id,key] of Object.entries({colour:'sourceColour',processing:'processingSpace',width:'width',height:'height',output:'outputMode',seed:'seed',fps:'sequenceFps'}))this.$(id).value=this.state[key];
+    this.save();this.render();this.$('begin').focus({preventScroll:true});return true;
+  }
 
   setMode(mode){if(this.busy()||!['targeted','full','inpaint','ripple'].includes(mode))return;this.prompts[this.state.mode]=this.$('prompt').value;this.state.mode=mode;this.ripple=mode==='ripple';this.page.classList.toggle('is-ripple',this.ripple);this.$('prompt').value=this.prompts[mode]||(mode==='ripple'?'':mode==='inpaint'?INPAINT_PROMPT:PAINTOUT_DEFAULT_PROMPTS[mode]);this.cleanupPrompt=mode==='ripple'?'Replace the selected object with the object shown in the reference image':mode==='inpaint'?'Add the object shown in the reference image':DEFAULT_FRAME_EDIT_PROMPT;if(this.editor)this.editor.$('instruction').value=this.cleanupPrompt;this.changed();if(mode==='full'&&['mask','anchor'].includes(this.view))this.preview('source');if(this.ripple&&this.state.source){this.playhead=this.state.startFrame;this.editor?.setStage(this.state.clipTrimConfirmed===false?'trim':'mask');}}
 
