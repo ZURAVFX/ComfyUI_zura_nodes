@@ -24,6 +24,10 @@ def _file(folder, name, repo, revision, path, size, sha):
                 remote_path=path, size_bytes=size, sha256=sha)
 
 CATALOG = {
+    "panorama_geometry": dict(name="Camera angle · MoGe 3 geometry", gated=False,
+        license_url="https://huggingface.co/Comfy-Org/MoGe",
+        note="Geometry model for Change camera angle. Studio also checks the Panorama extension and H3 render models for this mode.",
+        files=[_file("geometry_estimation", "moge_3_vitg_fp16.safetensors", "Comfy-Org/MoGe", "1484985258ba7ef45c314144fcf0e90924ffbf44", "geometry_estimation/moge_3_vitg_fp16.safetensors", 2501605198, "a587e42936ae7080b419df4c047b0f0b075d3492418f76ce81fb0779925a1fe6")]),
     "openjutsu_h3": dict(name="OpenJutsu · H3 character replacement", gated=False,
         license_url="https://huggingface.co/Comfy-Org/MiniMax-H3",
         note="Requires the separate h3_character_swap node pack. Review the licences for all component repositories before downloading.",
@@ -183,7 +187,7 @@ CATALOG.update({
         files=[_file("model_patches", "minimax_h3_fun_controlnet_union_2.0_pruned_int8_convrot.safetensors", "Comfy-Org/MiniMax-H3", "912b6e38b2092ec4d2e86d24183e0d59ea059d48", "model_patches/minimax_h3_fun_controlnet_union_2.0_pruned_int8_convrot.safetensors", 4531220608, "890af58bb350f0c2f6c409b1c67ea8f4196654297d037769b72de1e6f504c612")]),
     "h3_crossview": dict(name="MiniMax H3 · CrossView camera adapter", gated=False,
         license_url="https://huggingface.co/Cseti/MiniMax-H3_Ref2VA-LoRA-CrossView-Warp_v1",
-        note="CrossView camera adapter. The H3 models, acceleration LoRA, depth model and CrossViewWarp nodes are separate. Review the MiniMax H3 licence.",
+        note="Camera render adapter. Change camera angle also uses MoGe 3 geometry, Panorama and H3; its mode setup selects all required files. Review the MiniMax H3 licence.",
         files=[_file("loras", "MiniMax-H3_Ref2VA-LoRA-CrossView-Warp_v1_3500.safetensors", "Cseti/MiniMax-H3_Ref2VA-LoRA-CrossView-Warp_v1", "94dc2a07c5a3f7e10b7c1d053cc700762d15c35d", "MiniMax-H3_Ref2VA-LoRA-CrossView-Warp_v1_3500.safetensors", 596452584, "aab492964261f6611ced672c70866ce9d64bab66fbd28fd39d26bcd09c852f91")]),
     "ltx_control": dict(name="LTX · motion guidance adapter", gated=False,
         license_url="https://huggingface.co/Lightricks/LTX-2.3-22b-IC-LoRA-Union-Control",
@@ -495,7 +499,7 @@ def register(routes, response):
     from ..model_access import register as register_access
     from ..model_file_import import register as register_import
     register_folders(routes, response)
-    register_access(routes, response)
+    register_access(routes, response, CATALOG)
     folders = {item['folder'] for model in CATALOG.values() for item in model['files']}
     manager = DownloadManager(folder_locations(folder_paths, folders))
     manager.on_installed = lambda: getattr(folder_paths, 'filename_list_cache', {}).clear()

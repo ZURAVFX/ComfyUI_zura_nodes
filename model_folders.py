@@ -9,7 +9,7 @@ import threading
 
 CATEGORIES = ('diffusion_models', 'text_encoders', 'vae', 'loras', 'checkpoints',
               'clip_vision', 'embeddings', 'latent_upscale_models', 'model_patches',
-              'detection', 'background_removal', 'upscale_models')
+              'detection', 'background_removal', 'upscale_models', 'geometry_estimation')
 
 
 class ModelFolders:

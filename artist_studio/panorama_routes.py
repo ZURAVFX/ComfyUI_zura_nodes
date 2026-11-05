@@ -11,14 +11,27 @@ from .panorama_camera import MODELS, build_graph, camera_state, cache_path, dige
 def readiness():
     import folder_paths
     import nodes
-    needed = {'PanoramaStudio', 'MoGeInference', 'LoadMoGeModel', 'ZuraPanoramaSaveGeometry',
-              'ZuraPanoramaLoadGeometry', 'MiniMaxH3ReferenceToVideo', 'MiniMaxH3AddGuide',
-              'MiniMaxH3SigmaShift', 'ModelAttentionBackend', 'ZuraH3LockReferenceAudio'}
-    missing = sorted(needed - nodes.NODE_CLASS_MAPPINGS.keys())
-    missing += [name for category, name in MODELS.values() if not folder_paths.get_full_path(category, name)]
+    # Derive dependencies from all real stages, including optional look images.
+    # An abbreviated node list used to mark fresh installations as ready.
+    source = {'sha': '0' * 64, 'duration': 2, 'has_audio': True, 'file': 'setup.mp4'}
+    selection = plan(source, {})
+    needed = set()
+    for stage in ('geometry', 'warp', 'render'):
+        graph = build_graph(source, selection, None, stage, warp='setup.mp4', look='setup.png')
+        needed.update(node['class_type'] for node in graph.values())
+    missing_nodes = sorted(needed - nodes.NODE_CLASS_MAPPINGS.keys())
+    files = []
+    for category, name in MODELS.values():
+        try:
+            ready = bool(folder_paths.get_full_path(category, name))
+        except (KeyError, OSError):
+            ready = False
+        files.append({'folder': category, 'filename': name, 'ready': ready})
+    missing = missing_nodes + [file['filename'] for file in files if not file['ready']]
     unavailable = [str(getattr(module, 'FEATURE_3D_UNAVAILABLE')) for name, module in tuple(sys.modules.items())
                    if 'comfyui_pano_suite' in name and name.endswith('.core_adapters') and getattr(module, 'FEATURE_3D_UNAVAILABLE', None)]
     return {'ready': not missing and not unavailable, 'missing': missing, 'errors': unavailable,
+            'route': 'panorama', 'files': files, 'missingNodes': missing_nodes,
             'recipe': 'panorama-crossview-v1', 'fps': 24, 'max_seconds': 5}
 
 

@@ -21,16 +21,16 @@ assert.equal(access.$('terms').querySelectorAll('a').length,1,'Paintout model-ca
 
 let authorised=false,downloads=0;const pack={id:'ltx25_core',name:'LTX',files:[file],remaining_bytes:32};
 const installer=new StudioModelDownloads(document.querySelector('#models'),async(path,body)=>{
- if(path==='/model-access'){if(body?.token)authorised=true;return {connected:authorised,name:authorised?'artist':''};}
+ if(path==='/model-access'){if(body?.action==='check_files')return {allowed:authorised,auth_required:!authorised,access_repo:'Example/gated',access_reason:'connect'};if(body?.token)authorised=true;return {connected:authorised,name:authorised?'artist':''};}
  if(path==='/model-downloads'&&body){downloads++;return {id:'fixture'};}
  if(path==='/model-downloads/fixture'){if(authorised){file.installed=true;pack.remaining_bytes=0;return {phase:'done',total_bytes:32,done_bytes:32};}return {phase:'failed',auth_required:true,access_repo:'Example/gated',access_reason:'connect',error:'Access required'};}
  if(path==='/model-downloads')return {models:[pack]};
  throw Error(path);
 });
 await installer.load();installer.select.value=pack.id;await installer.start(pack.id);
-assert.equal(downloads,1);assert.equal(installer.panel.open,true);assert.equal(installer.access.root.open,true);assert.ok(installer.accessFailure);
+assert.equal(downloads,0,'Gated access is checked before any model download');assert.equal(installer.panel.open,true);assert.equal(installer.access.root.open,true);assert.ok(installer.access.blocked);
 installer.access.$('token').value='hf_FixtureOnly';await installer.access.connect();
-assert.equal(downloads,2);assert.equal(installer.progress.textContent,'Download complete.');assert.equal(installer.accessFailure,null);installer.dispose();
+assert.equal(downloads,1);assert.equal(installer.progress.textContent,'Download complete.');assert.equal(installer.accessFailure,null);installer.dispose();
 
 const create=document.createElement.bind(document);let xhrBody,importProgress;
 document.createElement=tag=>{const node=create(tag);if(tag==='input')node.click=()=>{Object.defineProperty(node,'files',{value:[{name:'download (1).safetensors',size:32}]});node.onchange();};return node;};

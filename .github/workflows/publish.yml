@@ -39,6 +39,10 @@ jobs:
       - name: Run regression checks
         run: |
           python -m unittest discover -s tests -p 'test_model*.py'
+          python -m unittest discover -s tests -p 'test_mode_model_setup.py'
+          node tests/test_mode_model_setup.mjs
+          node tests/test_studio_model_readiness.mjs
+          node tests/test_studio_node_setup.mjs
           node tests/test_studio_model_download.mjs
           node tests/test_model_install_ui.mjs
           node tests/test_model_access_ui.mjs

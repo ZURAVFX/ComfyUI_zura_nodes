@@ -879,7 +879,7 @@ def register_routes():
     if ('POST', base + '/import-file') not in existing:
         from ..model_access import register as register_access
         from ..model_file_import import register as register_import
-        register_access(server.routes, lambda fn: fn)
+        register_access(server.routes, lambda fn: fn, CATALOG)
         def import_item(model_id, filename):
             if model_id not in CATALOG or not any(item['filename'] == filename for item in CATALOG[model_id]['files']):
                 raise ValueError('Choose a model file from the package list.')

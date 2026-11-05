@@ -22,6 +22,7 @@
 #genj-studio .zpc-progress progress{width:100%;height:4px;accent-color:var(--gs-accent)}
 #genj-studio .zpc-progress span{font-size:12px;color:var(--gs-muted)}
 #genj-studio .zpc-trim .zc-tool-panel{width:min(560px,80vw)}
+#genj-studio .zpc-page .gs-model-downloads>.zc-tool-panel{position:fixed;inset:auto auto 80px 50%;transform:translateX(-50%);width:min(560px,calc(100vw - 32px));max-height:calc(100vh - 120px);overflow:auto;z-index:80;box-sizing:border-box}
 #genj-studio .zpc-page [data-dimensions]{display:flex;gap:12px;margin-top:12px}
 .zura-camera-editor-open .pano-studio-backdrop{z-index:2147483000;padding-bottom:64px;box-sizing:border-box}
 .zc-panorama-actions{position:fixed;z-index:2147483001;bottom:16px;left:50%;transform:translateX(-50%);display:flex;align-items:center;gap:12px;max-width:calc(100vw - 32px);padding:10px 14px;background:#222;color:#eee;border:1px solid #383838;border-radius:12px;font:14px/1.5 Manrope,system-ui,sans-serif;box-shadow:0 6px 24px #0008}

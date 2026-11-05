@@ -18,6 +18,16 @@ python_embeded\python.exe -m pip install -r ComfyUI\custom_nodes\ComfyUI_zura_no
 
 For a virtual-environment install, use that installation's Python in place of `python_embeded\python.exe`. Restart ComfyUI after installation. Do not install a similarly named fork.
 
+## Install models for your selected mode
+
+Choose the mode you want to use. Its setup card shows the files still needed and the download size. Select **Install missing models** to install that selection. Studio reuses existing files and shared models; selecting a mode does not start a download.
+
+**Change camera angle** now includes MoGe 3 geometry and the complete H3 render requirements. In **Setup details**, follow any Panorama extension or ComfyUI update instructions. Install extensions through ComfyUI Manager, restart ComfyUI, then select **Check setup**. The render button stays disabled until the required files and nodes are available.
+
+For gated files, Studio checks access before downloading. Sign in with Hugging Face, open each listed publisher page and accept its terms or request access yourself. Use the same account in Studio. Return and select **Continue download**; an approval that is still pending must be granted by the publisher first. Browser downloads and **Install downloaded file** remain available. Read tokens are an advanced fallback.
+
+Use **Use existing models or change folder** to reuse another model collection or choose a download drive. Camera geometry belongs in its `geometry_estimation` subfolder. Existing files with a different size are reported and never overwritten automatically.
+
 ## Create a character replacement
 
 1. Add your source video and character references. Choose the clip interval.

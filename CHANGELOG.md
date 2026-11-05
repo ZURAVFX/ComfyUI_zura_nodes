@@ -1,5 +1,14 @@
 # Release notes
 
+## 1.3.48 - 5 November 2026
+
+- Add model setup directly to Change camera angle, including the missing MoGe 3 download and all six H3 render files. Only missing files for the chosen mode are downloaded; existing files are reused.
+- Check every node in the camera geometry, preview and render graphs before marking setup ready. Explain Panorama installation and ComfyUI updates with a Check setup action after restarting.
+- Check access to all selected gated files before beginning large downloads. Show the relevant publisher terms, browser sign-in, account switching and retry controls across Image, Video, HDR and Paintout tools. Publisher approval is still required.
+- Keep setup tied to the selected mode, prevent stale catalogue responses from restoring another mode, and cancel a pending install intent when the mode changes during an access check.
+- Include geometry models in shared-folder discovery and refresh readiness after completed, cancelled or failed downloads.
+- See [setup instructions and validation](docs/STUDIO_1348_VALIDATION.md). GPU output quality and existing experimental-mode limits are unchanged.
+
 ## 1.3.47 - 3 November 2026
 
 - Keep edit-source and generated images inside their preview instead of allowing large images to push the controls off-screen.

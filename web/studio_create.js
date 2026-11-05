@@ -366,6 +366,7 @@ export class CreativeWorkspace {
   }
   show(mode){
     this.mode=mode;this.root.dataset.workspace=mode;
+    const globalModels=this.studio.$('model-downloads');if(globalModels){globalModels.hidden=!['video','image'].includes(mode);globalModels.open=false;}
     // Readiness for the main video recipe must not label unrelated workspaces.
     const recipeStatus=this.root.querySelector('#gs-models');if(recipeStatus)recipeStatus.hidden=mode!=='video';
     if(mode==='image'){this.browserConnection?.open();this.imageModelSetup?.resume();}else this.browserConnection?.close();
@@ -443,6 +444,7 @@ export class CreativeWorkspace {
     if(this.modelDownloadActive){set('A model download is already running.');return;}
     this.modelDownloadActive=true;
     try{
+      if(!existingJobId){const access=this.imageModelAccess?.get(modelId);if(access&&!await access.check(this.imageDownloadPackages?.find(pack=>pack.id===modelId)?.files||[])){access.root.closest('.zc-advanced')?.setAttribute('open','');access.root.open=true;return;}}
       set(existingJobId?'Reconnecting to the existing download…':'Starting download…');
       let job;
       if(existingJobId)job={id:existingJobId};

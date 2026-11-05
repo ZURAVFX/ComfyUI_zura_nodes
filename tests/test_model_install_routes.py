@@ -56,6 +56,20 @@ class InstallRoutesTests(unittest.IsolatedAsyncioTestCase):
         for name in list(sys.modules):
             if name.startswith('install_fixture'):sys.modules.pop(name,None)
 
+    async def test_gated_preflight_uses_registered_catalogue_over_http(self):
+        item = self.downloads.CATALOG['test']['files'][0]
+        chosen = {key: item[key] for key in ('repo', 'revision', 'remote_path')}
+        reply = types.SimpleNamespace(status_code=403, close=lambda: None)
+        with patch('requests.head', return_value=reply):
+            result = await self.client.post('/zura/studio/model-access', json={'action': 'check_files', 'files': [chosen]})
+        self.assertEqual(result.status, 200)
+        data = await result.json()
+        self.assertFalse(data['allowed'])
+        self.assertEqual(data['access_repos'], ['test/models'])
+        with patch('requests.head', side_effect=AssertionError('Unlisted request')):
+            result = await self.client.post('/zura/studio/model-access', json={'action': 'check_files', 'files': [{**chosen, 'repo': 'bad/repo'}]})
+        self.assertEqual(result.status, 400)
+
     async def test_storage_and_batch_install_refresh_over_real_http(self):
         external=self.root/'shared';external.mkdir()
         response=await self.client.post('/zura/studio/model-folders',json={'path':str(external)})

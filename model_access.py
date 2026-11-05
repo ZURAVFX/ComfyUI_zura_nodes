@@ -212,7 +212,55 @@ def credential():
     return access().credential()
 
 
-def register(routes, response):
+def check_files(requested, catalogs, token=None):
+    """Check pinned gated files without downloading bytes or accepting terms."""
+    import requests
+    from concurrent.futures import ThreadPoolExecutor
+    from urllib.parse import quote
+    keys = ('repo', 'revision', 'remote_path')
+    allowed = {tuple(file.get(key) for key in keys)
+               for catalog in catalogs for recipe in catalog.values() for file in recipe['files']}
+    if (not isinstance(requested, list) or not 1 <= len(requested) <= 100
+            or any(not isinstance(file, dict) or set(file) != set(keys)
+                   or not all(isinstance(file.get(key), str) for key in keys)
+                   or tuple(file[key] for key in keys) not in allowed for file in requested)):
+        raise ValueError('Choose files from Studio’s model setup list.')
+    selected = list(dict.fromkeys(tuple(file[key] for key in keys) for file in requested))
+    def check(item):
+        repo, revision, path = item
+        try:
+            # Do not follow CDN redirects or forward credentials to another host.
+            reply = requests.head('https://huggingface.co/' + repo + '/resolve/' + revision + '/' + quote(path, safe='/'),
+                                  headers={'Authorization': 'Bearer ' + token} if token else {},
+                                  allow_redirects=False, timeout=(10, 15))
+            try:
+                code = reply.status_code
+                if code in (200, 206, 302, 303, 307, 308):
+                    return {'repo': repo, 'status': 'ready'}
+                if code in (401, 403):
+                    return {'repo': repo, 'status': 'access_required'}
+                return {'repo': repo, 'status': 'unavailable' if code == 404 else 'retry'}
+            finally:
+                reply.close()
+        except requests.RequestException:
+            return {'repo': repo, 'status': 'retry'}
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        checks = list(pool.map(check, selected))
+    blocked = list(dict.fromkeys(item['repo'] for item in checks if item['status'] == 'access_required'))
+    return {'allowed': all(item['status'] == 'ready' for item in checks), 'checks': checks,
+            'auth_required': bool(blocked), 'access_repos': blocked,
+            'access_repo': blocked[0] if blocked else '',
+            'access_reason': 'terms_or_permissions' if token else 'connect'}
+
+
+def register(routes, response, catalog=None):
+    # Each installer contributes its allowlist without importing other runtimes.
+    catalogs = getattr(routes, '_zura_model_catalogs', None)
+    if catalogs is None:
+        catalogs = []
+        routes._zura_model_catalogs = catalogs
+    if catalog is not None and all(item is not catalog for item in catalogs):
+        catalogs.append(catalog)
     if getattr(routes, '_zura_model_access', False):
         return
     routes._zura_model_access = True
@@ -231,6 +279,9 @@ def register(routes, response):
                     raise ValueError('Choose a Hugging Face connection action.')
                 if data == {'disconnect': True}:
                     result = await asyncio.to_thread(manager.disconnect)
+                elif data.get('action') == 'check_files' and set(data) == {'action', 'files'}:
+                    result = await asyncio.to_thread(check_files, data['files'],
+                                                     catalogs, manager.credential())
                 elif data.get('action') == 'browser_start' and set(data) <= {'action', 'remember'}:
                     result = await asyncio.to_thread(manager.browser_start, data.get('remember', False))
                 elif data.get('action') in ('browser_poll', 'browser_cancel') and set(data) == {'action', 'id'}:
