@@ -201,7 +201,7 @@ primary.id='gs-primary';
 topActions.append(primary,exit);
 const navRoot=document.createElement('div');
 navRoot.id='genj-studio';
-navRoot.append(topActions);
+navRoot.append(topActions);const heading=document.createElement('div');heading.className='gs-preview-heading';navRoot.append(heading);
 document.body.append(navRoot);
 let selectedPanel='';
 let renders=0;
@@ -220,6 +220,15 @@ const studio={
 };
 studio.creative.studio=studio;
 const controller=installStudioRestartNavigation(studio);
+assert.equal(controller.button.closest('.gs-top-actions'),null,'Start over is not in the app header');
+assert.equal(controller.button.parentElement.parentElement,heading,'Start over is in the main preview heading');
+for(const [mode,selector] of [['image','zc-image-heading'],['frames','zf-heading'],['references','zf-heading'],['paintout','zf-heading'],['watermark','zf-heading'],['outpaint','header'],['panorama','zpc-heading'],['hdr','zf-heading']]){
+ const page=document.createElement('section'),host=document.createElement(selector==='header'?'header':'div');host.className=selector;page.append(host);navRoot.append(page);
+ const member=({references:'referencesVideo',hdr:'hdrTool'})[mode]||mode;
+ if(mode==='hdr')studio.hdrTool={root:page};else studio.creative[member]={page};
+ studio.creative.mode=mode;controller.sync();assert.equal(controller.button.parentElement.parentElement,host,mode+' has its own main-workspace reset');
+}
+studio.creative.mode='video';controller.sync();
 assert.equal(controller.navigateStep(2),true);
 assert.equal(studio.navigationStep,2);
 assert.equal(studio.preview,'look');

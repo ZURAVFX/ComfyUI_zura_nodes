@@ -48,6 +48,23 @@ export class OutpaintWorkspace {
     this.resizeObserver=typeof ResizeObserver==='function'?new ResizeObserver(()=>this.fitCanvas()):null;this.resizeObserver?.observe(this.stage);
     this.trim=new OutpaintTrim(this);
     this.firstFrame=new OutpaintFirstFrame(this);
+    // Use Studio's common attachment / prompt / toolbar order. Geometry stays
+    // directly visible; generation and review handlers keep the same elements.
+    const composer=this.page.querySelector('.zo-composer'),sources=this.page.querySelector('.zo-sources'),action=this.page.querySelector('.zo-action');
+    composer.classList.add('zc-prompt-card');action.classList.add('zc-prompt-bottom');
+    const title=document.createElement('strong');title.className='zo-composer-title';title.textContent='Extend the scene';composer.prepend(title);
+    sources.classList.add('zc-composer-attachments');for(const id of ['source','hdr'])this.$(id).classList.add('zc-attachment');
+    const geometry=this.page.querySelector('.zo-settings');geometry.prepend(this.$('mode').closest('label'));sources.after(geometry);
+    const help=document.createElement('div');help.className='zo-canvas-help';geometry.after(help);help.append(this.$('help'),this.$('canvas-info'),this.$('method-info'));
+    const tools=document.createElement('div');tools.className='zc-prompt-tools';action.prepend(tools);
+    tools.append(this.page.querySelector('.zo-model'),this.trim.container,this.$('delivery-label'),this.loras.root);
+    const actions=document.createElement('div');actions.className='zo-run-actions';action.append(actions);
+    for(const id of ['download','download-exr','download-sdr','retry-hdr','cancel','review','generate'])actions.append(this.$(id));
+    actions.append(this.layers.root);composer.append(this.$('status'));this.stage.after(this.$('progress-wrap'));
+    sources.append(this.firstFrame.root);this.firstFrame.root.classList.add('zc-tool-popup');this.firstFrame.root.querySelector('summary').classList.add('zc-tool');
+    const guidePanel=document.createElement('div');guidePanel.className='zc-tool-panel';for(const node of [...this.firstFrame.root.children])if(node.tagName!=='SUMMARY')guidePanel.append(node);this.firstFrame.root.append(guidePanel);
+    this.$('review').classList.add('gs-primary');this.$('generate').classList.add('gs-primary');
+
     // A pointer captured before HDR delivery began must not alter its source range.
     const commitTrim=this.trim.commit.bind(this.trim);
     this.trim.commit=range=>{if(!this.job&&!this.submitting&&!this.hdrBusy())return commitTrim(range);};

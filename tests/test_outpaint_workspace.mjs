@@ -14,6 +14,14 @@ const owner={root:document.querySelector('#genj-studio'),api:{clientId:'studio-c
     if(path.endsWith('/jobs/review'))return {id:'review',kind:'review',state:'complete',url:'/view?review=1'};
     if(path.endsWith('/jobs/render'))return {id:'render',kind:'render',state:'complete',url:'/view?render=1'};throw Error(path);}};
 const ui=new OutpaintWorkspace(owner);
+const composer=ui.page.querySelector('.zo-composer');
+assert.ok(composer.classList.contains('zc-prompt-card'));
+assert.equal(ui.trim.container.closest('.zc-prompt-tools').parentElement,ui.page.querySelector('.zo-action'),'Trim stays in the shared bottom toolbar');
+assert.equal(ui.firstFrame.root.parentElement,ui.page.querySelector('.zo-sources'),'Optional first frame belongs with attachments');
+assert.equal(ui.$('progress-wrap').parentElement,ui.page,'Progress cannot cover the frame extension preview');
+assert.equal(ui.$('mode').closest('.zo-settings'),ui.page.querySelector('.zo-settings'),'Canvas method stays beside dimensions and scale');
+assert.equal(composer.querySelector('textarea'),ui.$('prompt'));
+
 ui.source={id:'a'.repeat(32),width:768,height:432,duration:4};ui.reframe();ui.invalidate();ui.paint();
 ui.trim.initial();
 assert.equal(ui.page.querySelector('[data-timeline] [data-duration]').tagName,'OUTPUT');

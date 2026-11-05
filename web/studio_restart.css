@@ -2,9 +2,11 @@
   position: relative;
   display: inline-flex;
   flex: 0 0 auto;
+  margin-left: auto;
+  align-self: center;
 }
 
-/* The shared header owns starting a new task; page-local duplicates stay hidden. */
+/* One shared action follows the active workspace, beside its preview heading. */
 #genj-studio #zc-new,
 #genj-studio #gs-new,
 #genj-studio #zps-new,

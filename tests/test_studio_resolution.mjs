@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import {parseHTML} from '../../ui-check/node_modules/linkedom/esm/index.js';
-import {editableDimension,VideoResolutionControl} from '../web/studio_resolution.js';
+import {editableDimension,VideoResolutionControl,megapixelSlider} from '../web/studio_resolution.js';
 import {ENDPOINT_RECIPES,endpointPresetSize} from '../web/video_recipe_catalog.js';
 const {document,window}=parseHTML('<html><body><section id="panel"></section><select id="native"><option value="1280">720p</option><option value="1920">1080p</option></select><input id="number" value="640"/></body></html>');
 Object.defineProperty(window.HTMLSelectElement.prototype,'value',{configurable:true,get(){return this.querySelector('option[selected]')?.value||this.querySelector('option')?.value||'';},set(v){for(const o of this.querySelectorAll('option'))o.toggleAttribute('selected',o.value===String(v));}});
@@ -43,3 +43,10 @@ for(const recipe of ENDPOINT_RECIPES)for(const shape of ['landscape','portrait',
   assert.equal(size.width%recipe.dimensionStep,0);assert.equal(size.height%recipe.dimensionStep,0);assert.ok(size.width*size.height<=recipe.maxPixels);assert.ok(size.width>0&&size.height>0);
 }
 console.log('Resolution: live MP sizing, model grids and budgets, independent relight stages, whole-number selection and deferred validation pass.');
+
+const sliderSource=document.createElement('select');document.body.append(sliderSource);
+assert.ok(Number(megapixelSlider(sliderSource).max)>=4,'The shared megapixel slider must not silently fall back to a 1 MP maximum');
+for(const recipe of ENDPOINT_RECIPES){
+  const size=endpointPresetSize(recipe.id,'landscape',4);
+  assert.ok(size.width>=2560&&size.height>=1408,recipe.id+' exposes at least a 2K landscape processing size');
+}

@@ -79,7 +79,7 @@ export class PaintoutEditor{
 
         <details class="zp-editor-segments"><summary data-editor="segments-label">Tracking segments</summary><ol data-editor="segments"></ol></details>
         <details><summary>Absence / mask history</summary><div class="zp-editor-tool-row"><button type="button" data-editor="absent">Subject absent in section</button><button type="button" data-editor="previous-mask">Previous mask pass</button><button type="button" data-editor="next-mask">Next mask pass</button></div></details></div>
-      <div class="zp-editor-clean-actions" hidden><strong data-editor="frame-label">Add a clean frame on the timeline</strong><label class="zp-editor-description">Cleanup instruction<input data-editor="instruction" value="Remove the foreground object" /></label><button type="button" class="zp-editor-primary" data-editor="clean">Clean with FLUX 3</button><button type="button" data-editor="download">Download original</button><button type="button" data-editor="reference" hidden>Download frame reference</button><button type="button" data-editor="import">Import edited frame</button><label data-editor="version-control" hidden>Saved version<select data-editor="version" aria-label="Saved clean-frame version"></select></label><button type="button" data-editor="reject" hidden>Remove all paint layers</button></div>
+      <div class="zp-editor-clean-actions" hidden><strong data-editor="frame-label">Add a clean frame on the timeline</strong><label class="zp-editor-description">Cleanup instruction<textarea data-editor="instruction" rows="3" aria-label="Edit prompt">Remove the foreground object</textarea></label><button type="button" class="zp-editor-primary" data-editor="clean">Clean with FLUX 3</button><button type="button" data-editor="download">Download original</button><button type="button" data-editor="reference" hidden>Download frame reference</button><button type="button" data-editor="import">Import edited frame</button><label data-editor="version-control" hidden>Saved version<select data-editor="version" aria-label="Saved clean-frame version"></select></label><button type="button" data-editor="reject" hidden>Remove all paint layers</button></div>
       <p data-editor="status" role="status" aria-live="polite"></p><div data-editor="job" hidden><progress aria-label="Mask or frame processing progress"></progress><span data-editor="job-label">Queued</span><button type="button" data-editor="cancel">Cancel this run</button><div data-editor="job-steps"></div></div>`;
     const nextRender=el('button','Next: render');nextRender.type='button';nextRender.dataset.editor='render-next';nextRender.onclick=()=>this.setStage('render');this.tools.querySelector('.zp-editor-clean-actions').append(nextRender);
     this.$('instruction').placeholder='e.g. Remove only the silver car. Keep the other vehicles.';
@@ -127,7 +127,7 @@ export class PaintoutEditor{
     for(const [key,field]of [['range-in','range-start'],['range-out','range-end']])this.$(key).onclick=()=>{this.$(field).value=this.w.playhead;this.customRange=true;this.saveSegmentRange();this.updateControls();};
     this.$('previous-mask').onclick=()=>this.selectMask(-1);this.$('next-mask').onclick=()=>this.selectMask(1);
     this.maskReview=el('div');this.maskReview.className='zp-editor-mask-review';this.maskReview.hidden=true;this.maskReview.innerHTML='<span data-editor="review-count"></span><button type="button" data-editor="review-next">Review next change</button><small data-editor="review-reason"></small>';this.tools.querySelector('.zp-editor-mask-actions').append(this.maskReview);this.$('review-next').onclick=()=>this.nextMaskReview().catch(error=>this.status(error.message));
-    this.$('instruction').oninput=()=>{const anchor=this.selected();this.w.cleanupPrompt=this.$('instruction').value;if(anchor)anchor.editPrompt=this.w.cleanupPrompt;this.w.save();this.updateControls();};this.$('clean').onclick=()=>this.cleanFrame();this.$('reject').onclick=()=>this.discardFrame();
+    this.$('instruction').oninput=()=>{const anchor=this.selected();this.w.cleanupPrompt=this.$('instruction').value;if(isRipple(this)){this.w.$('prompt').value=this.w.cleanupPrompt;this.w.prompts.ripple=this.w.cleanupPrompt;}if(anchor)anchor.editPrompt=this.w.cleanupPrompt;this.w.save();this.updateControls();};this.$('clean').onclick=()=>this.cleanFrame();this.$('reject').onclick=()=>this.discardFrame();
     this.$('version').onchange=()=>this.selectVersion(this.$('version').value);
     this.layersPanel=el('section');this.layersPanel.className='zp-editor-paint-layers';this.layersPanel.setAttribute('aria-label','Paint layers');this.layersPanel.hidden=true;this.tools.querySelector('.zp-editor-clean-actions').after(this.layersPanel);
     this.$('reference').onclick=()=>{const a=this.selected();if(!a?.exportReference)return;const blob=new Blob([JSON.stringify(a.exportReference,null,2)],{type:'application/json'}),url=URL.createObjectURL(blob),link=el('a');link.href=url;link.download=`${this.project}_frame_${String(a.frame).padStart(6,'0')}.reference.json`;link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);};this.$('download').onclick=()=>this.downloadFrame();this.$('import').onclick=()=>this.importFrame();this.$('cancel').onclick=()=>this.cancel();
@@ -162,7 +162,7 @@ export class PaintoutEditor{
     const maskMenu=actionMenu('Mask actions',[this.$('clear'),this.$('reset-mask-edit')]);maskMenu.dataset.editorMenu='mask';this.viewerToolbar.querySelector('.zp-editor-tool-group').after(maskMenu);
     const intro=this.tools.querySelector('.zp-editor-mask-intro');const trackingOptions=this.$('tracking-options'),maskHistory=this.$('absent').closest('details');delete trackingOptions.dataset.timelineOnly;delete maskHistory.dataset.timelineOnly;trackingOptions.querySelector('summary').textContent='Tracking settings';trackingOptions.querySelector('p').remove();maskHistory.querySelector('summary').textContent='Mask history';intro.replaceChildren(actionMenu('Mask options',[this.$('import-mask'),trackingOptions,maskHistory]));maskActions.prepend(intro);
     this.$('import-mask').textContent='Import mask video';
-    const cleanActions=this.tools.querySelector('.zp-editor-clean-actions');
+    const cleanActions=this.tools.querySelector('.zp-editor-clean-actions');this.cleanActions=cleanActions;
     cleanActions.append(actionMenu('Frame actions',[this.$('download'),this.$('import'),this.$('reference'),this.$('reject')]));
     this.objectReferenceTools=el('div');this.objectReferenceTools.className='zp-editor-object-references';
     this.objectReferenceInput=el('input');this.objectReferenceInput.type='file';this.objectReferenceInput.accept='image/png,image/jpeg,image/webp';this.objectReferenceInput.multiple=true;this.objectReferenceInput.hidden=true;
@@ -173,9 +173,17 @@ export class PaintoutEditor{
     this.$('compare').classList.add('zp-editor-compare');this.viewerToolbar.append(this.$('compare'));
     const instructionLabel=this.$('instruction').closest('label');instructionLabel.firstChild.textContent='Instruction';
     for(const menu of this.tools.querySelectorAll('.zp-editor-action-menu'))menu.title='More actions for this step';
+    // Keep references and the edit prompt in the same composer as the video step.
+    const composer=workspace.page.querySelector('.zf-composer'),bottom=composer.querySelector('.zc-prompt-bottom');
+    this.frameActions=el('div');this.frameActions.className='zp-frame-actions';
+    this.frameActions.append(this.$('version-control'),cleanActions.querySelector('.zp-editor-action-menu'),this.$('clean'));
+    bottom.append(this.frameActions);bottom.before(cleanActions);
+    this.$('clean').classList.add('gs-primary');
+    this.objectReferenceTools.classList.add('zc-composer-attachments');this.objectReferenceAdd.classList.add('zc-attachment');
+    for(const type of ['pointerdown','pointerup','mousedown','mouseup','click','dblclick','keydown','keyup','selectstart','copy','cut','paste'])cleanActions.addEventListener(type,event=>{if(event.target.closest?.('textarea,input'))event.stopPropagation();});
     this.morph(false);this.update();
   }
-  $(key){return this.tools.querySelector(`[data-editor="${key}"]`)||this.guide?.querySelector(`[data-editor="${key}"]`)||this.viewerToolbar?.querySelector(`[data-editor="${key}"]`);}
+  $(key){return this.w.page.querySelector(`[data-editor="${key}"]`)||this.guide?.querySelector(`[data-editor="${key}"]`)||this.viewerToolbar?.querySelector(`[data-editor="${key}"]`);}
   status(message){this.$('status').textContent=message||'';}
   busy(){return !!(this.frameLoading||this.toolJob||this.maskStarting||this.submitting||this.loadingProject||this.openingProject||this.importing||this.referenceUploading);}
   async uploadObjectReferences(files){
@@ -418,7 +426,15 @@ export class PaintoutEditor{
   }
   async loadDocument(){const doc=await this.w.fetch(endpoint+'/project',{id:this.project});this.document=doc;this.revision=doc.revision;this.w.state.maskCoverage=doc.mask_coverage;return doc;}
   async setStage(stage){
-    if(this.w.busy()||!['trim','mask','clean','render'].includes(stage))return;if(isRipple(this)&&stage==='render'&&!this.w.state.anchors.some(a=>a.frame===this.w.state.startFrame&&a.file&&a.rippleReviewedFile===a.file&&a.status==='accepted'&&a.enabled!==false)){stage='clean';this.status('Create or import the first-frame replacement before generating.');}if(isRipple(this)&&['mask','clean'].includes(stage))this.w.playhead=this.w.state.startFrame;if(this.w.state.clipTrimConfirmed===false&&stage!=='trim')stage='trim';if(stage!==this.stage){this.autoPreviewPending=false;clearTimeout(this.autoPreviewTimer);this.maskEditVersion++;}try{await this.flushManual();}catch(e){this.status(e.message);return;}this.closed=false;this.stage=stage;this.w.state.editorStage=stage;if(stage==='clean')this.$('instruction').value=this.cleanupInstruction();this.active=['mask','clean'].includes(stage)&&!!this.w.state.source;this.candidate=stage==='clean'?this.selected()?.candidate||null:null;if(this.candidate&&!this.candidate.review){this.addPaintLayer(this.selected(),{...this.candidate,method:'flux3',layer_mask:this.candidate.layer_mask||this.candidate.effective_mask||this.candidate.target_mask});this.candidate=null;}
+    if(this.w.busy()||!['trim','mask','clean','render'].includes(stage))return;if(isRipple(this)&&stage==='render'&&!this.w.state.anchors.some(a=>a.frame===this.w.state.startFrame&&a.file&&a.rippleReviewedFile===a.file&&a.status==='accepted'&&a.enabled!==false)){stage='clean';this.status('Create or import the first-frame replacement before generating.');}if(isRipple(this)&&['mask','clean'].includes(stage))this.w.playhead=this.w.state.startFrame;if(this.w.state.clipTrimConfirmed===false&&stage!=='trim')stage='trim';if(stage!==this.stage){this.autoPreviewPending=false;clearTimeout(this.autoPreviewTimer);this.maskEditVersion++;}try{await this.flushManual();}catch(e){this.status(e.message);return;}if(isRipple(this)&&this.stage==='mask'&&stage==='clean'){
+      const selection=this.viewer.getSelection();
+      if(selection.hasMask&&this.viewer.frame===this.w.state.startFrame){
+        this.w.state.rippleSelection={source:this.w.state.source,frame:this.w.state.startFrame,mask:selection.mask,grow:Number(this.$('grow').value)};
+        const anchor=this.w.state.anchors.find(a=>a.frame===this.w.state.startFrame);
+        if(anchor){anchor.editMask=selection.mask;anchor.editGrow=Number(this.$('grow').value);delete anchor.rippleReviewedFile;}
+      }
+    }
+    this.closed=false;this.stage=stage;this.w.state.editorStage=stage;if(stage==='clean')this.$('instruction').value=this.cleanupInstruction();this.active=['mask','clean'].includes(stage)&&!!this.w.state.source;this.candidate=stage==='clean'?this.selected()?.candidate||null:null;if(this.candidate&&!this.candidate.review){this.addPaintLayer(this.selected(),{...this.candidate,method:'flux3',layer_mask:this.candidate.layer_mask||this.candidate.effective_mask||this.candidate.target_mask});this.candidate=null;}
     if(stage==='clean'&&(!this.selected()||isRipple(this)&&this.selected().frame!==this.w.state.startFrame)&&this.w.state.source)this.createFrame(this.w.playhead);
     if(this.active){this.w.view=stage==='clean'?'anchor':'mask';this.w.comparison?.hide();if(this.w.$('comparison'))this.w.$('comparison').hidden=true;this.w.$('video').pause();this.w.$('video').hidden=true;this.w.$('image-slot').hidden=true;await this.frameChanged(true);}
     else this.w.preview(stage==='trim'?'source':this.w.result?'result':'source');
@@ -446,6 +462,9 @@ export class PaintoutEditor{
   }
   update(){
     const w=this.w,has=!!w.state.source;
+    w.page.classList.toggle('zp-navigation-only',!!w.owner?.videoComposer&&(!has||this.stage!=='render'));
+    w.page.classList.toggle('zp-frame-editing',has&&this.stage==='clean');
+    this.frameActions.hidden=!has||this.stage!=='clean';
     w.page.classList.toggle('zp-editor-open',has);w.page.dataset.editorStage=this.stage;
     this.timelineHost.hidden=!has||w.state.mode==='full'&&this.stage!=='trim';this.tools.hidden=!has||!['mask','clean'].includes(this.stage)||w.state.mode==='full';this.nav.hidden=!has;this.trimTools.hidden=!has||this.stage!=='trim';this.trimTools.querySelector('button').disabled=this.busy();this.trimTools.querySelector('[data-trim-summary]').textContent=`Frames ${w.state.startFrame}–${w.state.startFrame+w.state.frameCount-1} · ${w.state.frameCount} frames · ${(w.state.frameCount/w.fps()).toFixed(2)} s`;
     this.viewerHost.hidden=!this.active||!has||w.state.mode==='full';
@@ -482,12 +501,12 @@ export class PaintoutEditor{
     this.tools.querySelector('.zp-editor-segments').hidden=!this.document?.mask_history?.length;
     const pointPreview=this.stage==='mask'&&(this.toolJob?.maskSingle||this.maskStarting&&this.maskPreviewStarting);
     this.viewerHost.inert=busy&&!pointPreview||!!this.candidate;this.viewerHost.setAttribute('aria-busy',String(busy));if(busy)this.viewer.drag=null;
-    for(const input of this.tools.querySelectorAll('input,select'))input.disabled=busy;
+    for(const input of this.w.page.querySelectorAll('[data-editor]'))if(['INPUT','SELECT','TEXTAREA'].includes(input.tagName))input.disabled=busy;
     for(const b of this.tools.querySelectorAll('button'))b.disabled=busy;
     for(const b of this.viewerToolbar.querySelectorAll('button'))b.disabled=busy||!!this.candidate;
     for(const input of this.viewerToolbar.querySelectorAll('input,select'))input.disabled=busy;
     if(pointPreview)for(const b of this.viewerToolbar.querySelectorAll('[data-tool=include],[data-tool=exclude],[data-tool=pan]'))b.disabled=false;
-    this.tools.querySelector('.zp-editor-mask-actions').hidden=clean;this.tools.querySelector('.zp-editor-clean-actions').hidden=!clean;
+    this.tools.querySelector('.zp-editor-mask-actions').hidden=clean;this.cleanActions.hidden=!clean;
     this.tools.querySelector('.zp-editor-mask-flow').classList.toggle('is-clean',clean);this.$('selection').closest('.zp-editor-selection-row').hidden=clean;
     this.tools.querySelector('.zp-editor-mask-intro').hidden=clean;
     this.$('brush-control').hidden=!['brush','protect'].includes(this.tool);
@@ -607,10 +626,11 @@ export class PaintoutEditor{
     if(this.manualDirty||this.manualSaving){this.flushManual().then(()=>this.createFrame(frame)).catch(e=>this.status(e.message));return;}
     if(this.w.busy()||!this.w.state.source)return;if(isRipple(this))frame=this.w.state.startFrame;frame=number(frame,0,(this.w.sourceInfo?.frames||1)-1);if(frame<this.w.state.startFrame||frame>=this.w.state.startFrame+this.w.state.frameCount){this.status('This frame is outside your clip. Open Trim clip to change the exported range.');return;}
     const old=this.w.state.anchors.findIndex(a=>a.frame===frame);if(old>=0){this.selectFrame(old);return;}
-    this.w.state.anchors.push({id:crypto.randomUUID(),frame,file:'',strength:.75,enabled:true,status:'draft',colour_space:this.w.state.sourceColour,versions:[]});
+    const rippleMask=isRipple(this)&&this.w.state.rippleSelection?.source===this.w.state.source&&this.w.state.rippleSelection.frame===frame?this.w.state.rippleSelection:null;
+    this.w.state.anchors.push({...(rippleMask?{editMask:rippleMask.mask,editGrow:rippleMask.grow}:{}),id:crypto.randomUUID(),frame,file:'',strength:.75,enabled:true,status:'draft',colour_space:this.w.state.sourceColour,versions:[]});
     this.selectFrame(this.w.state.anchors.length-1);this.w.save();
   }
-  selectFrame(index){if(this.manualDirty||this.manualSaving){this.flushManual().then(()=>this.selectFrame(index)).catch(e=>this.status(e.message));return;}if(this.w.busy())return;const a=this.w.state.anchors[index];if(!a)return;if(isRipple(this)&&a.frame!==this.w.state.startFrame){this.status('Ripple edits only the first selected frame. Change the clip trim to use another frame.');return;}this.w.selected=index;this.w.syncAnchorControls?.(index);this.w.playhead=a.frame;this.stage='clean';this.$('instruction').value=this.cleanupInstruction();this.w.state.editorStage='clean';this.w.view='anchor';this.active=true;this.candidate=a.candidate||null;if(this.candidate&&!this.candidate.review){this.addPaintLayer(a,{...this.candidate,method:'flux3',layer_mask:this.candidate.layer_mask||this.candidate.effective_mask||this.candidate.target_mask});this.candidate=null;}this.tool='brush';this.viewer.setTool('brush');this.w.comparison?.hide();if(this.w.$('comparison'))this.w.$('comparison').hidden=true;this.w.updatePlayhead();this.frameChanged(true);this.update();this.w.save();}
+  selectFrame(index){if(this.manualDirty||this.manualSaving){this.flushManual().then(()=>this.selectFrame(index)).catch(e=>this.status(e.message));return;}if(this.w.busy())return;const a=this.w.state.anchors[index];if(!a)return;if(isRipple(this)&&a.frame!==this.w.state.startFrame){this.status('Ripple edits only the first selected frame. Change the clip trim to use another frame.');return;}this.w.selected=index;this.w.syncAnchorControls?.(index);this.w.playhead=a.frame;this.stage='clean';this.$('instruction').value=this.cleanupInstruction();this.w.state.editorStage='clean';this.w.view='anchor';this.active=true;this.candidate=a.candidate||null;if(this.candidate&&!this.candidate.review){this.addPaintLayer(a,{...this.candidate,method:'flux3',layer_mask:this.candidate.layer_mask||this.candidate.effective_mask||this.candidate.target_mask});this.candidate=null;}this.tool=isRipple(this)?'pan':'brush';this.viewer.setTool(this.tool);this.w.comparison?.hide();if(this.w.$('comparison'))this.w.$('comparison').hidden=true;this.w.updatePlayhead();this.frameChanged(true);this.update();this.w.save();}
   async compareFrame(){try{this.showOriginal=!this.showOriginal;const a=this.selected(),url=this.showOriginal?this.w.thumbnail(this.w.state.source,this.w.playhead,this.w.state.sourceColour,1280):this.candidate?.file?this.w.thumbnail(this.candidate.png_file||this.candidate.file,0,this.candidate.png_file?(this.candidate.preview_colour_space||'srgb_display'):this.candidate.colour_space,1280):this.w.thumbnail(a.preview_file||a.file,0,a.preview_file?(a.preview_colour_space||'srgb_display'):a.colour_space,1280);await this.viewer.setDisplayImage(url);this.viewer.setOpacity(0);this.updateControls();}catch(e){this.status(e.message);}}
   removeFrame(index){if(this.w.busy())return;this.w.state.anchors.splice(index,1);this.w.selected=-1;this.candidate=null;this.w.changed();}
   async downloadFrame(){
@@ -778,7 +798,7 @@ export class PaintoutEditor{
       this.w.save();this.w.render();
     }catch(e){this.status('Reconnecting to your run: '+e.message);}finally{this.polling=false;if(!this.toolJob){if(this.manualDirty)this.flushManual().catch(error=>this.status(error.message));else if(this.autoPreviewPending)this.scheduleMaskPreview(0);}}
   }
-  cleanupInstruction(){return this.w.cleanupPrompt??this.selected()?.editPrompt??DEFAULT_FRAME_EDIT_PROMPT;}
+  cleanupInstruction(){if(isRipple(this))return this.w.cleanupPrompt??this.w.$('prompt').value;return this.w.cleanupPrompt??this.selected()?.editPrompt??DEFAULT_FRAME_EDIT_PROMPT;}
   fullFrameMask(){
     const canvas=document.createElement('canvas');canvas.width=this.w.sourceInfo.width;canvas.height=this.w.sourceInfo.height;
     const context=canvas.getContext('2d');context.fillStyle='#fff';context.fillRect(0,0,canvas.width,canvas.height);return canvas.toDataURL('image/png');
@@ -791,7 +811,7 @@ export class PaintoutEditor{
     const layers=this.ensureLayers(anchor);
     layers.push({...result,brightness_ev:result.brightness_ev||0,id:crypto.randomUUID(),layer_mask:result.layer_mask||result.effective_mask||result.mask||this.fullFrameMask()});
     Object.assign(anchor,{file:result.file,preview_file:result.png_file||result.preview_file||'',preview_colour_space:result.preview_colour_space||'srgb_display',colour_space:result.colour_space,status:'accepted'});
-    const blank=document.createElement('canvas');blank.width=this.w.sourceInfo.width;blank.height=this.w.sourceInfo.height;anchor.editMask=blank.toDataURL('image/png');anchor.editGrow=0;
+    const blank=document.createElement('canvas');blank.width=this.w.sourceInfo.width;blank.height=this.w.sourceInfo.height;if(!isRipple(this)){anchor.editMask=blank.toDataURL('image/png');anchor.editGrow=0;}
     delete anchor.candidate;anchor.editSeed=((anchor.editSeed??Number(this.w.state.seed))+1)%2147483647;
     this.w.save();
   }

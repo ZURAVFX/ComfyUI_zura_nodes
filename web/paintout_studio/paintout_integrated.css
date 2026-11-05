@@ -15,7 +15,7 @@
 #genj-studio .zp-page .zp-editor-trim-tools{width:100%;max-width:var(--zc-video-width,1200px);margin-inline:auto;min-width:0;box-sizing:border-box}
 #genj-studio .zp-page.zp-editor-open{grid-template-rows:auto auto minmax(0,1fr) auto auto auto auto;overflow:hidden;gap:10px}
 #genj-studio .zp-page.zp-editor-open>.zf-viewer{min-height:120px}
-#genj-studio .zp-page.zp-editor-open:not([data-editor-stage=render])>.zf-composer{display:none!important}
+#genj-studio .zp-page.zp-editor-open:not([data-editor-stage=render])>.zf-composer{display:flex!important;overflow:visible;max-height:none}
 #genj-studio .zp-page .zp-editor-stages{font-family:inherit;gap:6px}
 #genj-studio .zp-page .zp-editor-stages>button{font-family:inherit;background:transparent;border-color:transparent}
 #genj-studio .zp-page .zp-editor-stages>button[aria-current=step]{background:var(--gs-selected);color:var(--zc-text)}
@@ -28,7 +28,30 @@
 #genj-studio .zp-page .zf-composer{max-height:36dvh;overflow:auto;overscroll-behavior:contain}
 #genj-studio .zp-page .zf-heading .zc-workflow-menu button{padding:12px;min-height:44px;border-radius:6px;color:var(--zc-text);text-align:left}
 #genj-studio .zp-page #zps-new{margin-left:0}
-/* Watermark rendering keeps an uninterrupted picture above its progress. */
+/* Rendering keeps an uninterrupted picture above compact progress. */
+#genj-studio .zp-page>#zps-progress{position:relative;inset:auto;flex:none;width:100%;max-width:var(--zc-video-width,1200px);margin-inline:auto;box-sizing:border-box;border:1px solid var(--gs-line);border-radius:8px;gap:4px 12px;padding:8px 12px}
+#genj-studio .zp-page>#zps-progress .zps-generation-steps{margin:4px 0;gap:16px}
+#genj-studio .zp-page>#zps-progress :is(.zps-generation-help,.zps-generation-next){display:none}
+#genj-studio .zp-page.is-generating .zp-editor-guide{display:none}
+#genj-studio .zp-page .zura-live-sample>figcaption{bottom:12px}
+/* The same references, prompt and action row throughout first-frame editing. */
+#genj-studio .zp-page .zp-editor-clean-actions{display:flex;flex-direction:column;align-items:stretch;border:0;padding:0;gap:12px;min-width:0}
+#genj-studio .zp-page .zp-editor-clean-actions[hidden],
+#genj-studio .zp-page .zp-frame-actions[hidden]{display:none!important}
+#genj-studio .zp-page .zp-editor-clean-actions .zp-editor-description{display:flex;flex-direction:column;align-items:stretch;flex:none;max-width:none;min-width:0!important;gap:4px;font-size:12px;color:var(--gs-muted)}
+#genj-studio .zp-page .zp-editor-description textarea{width:100%;min-width:0;box-sizing:border-box;flex:none;min-height:64px;height:clamp(64px,10dvh,104px);resize:none;padding:8px 0;border:0;background:transparent;color:var(--zc-text);font-family:inherit;font-size:15px;line-height:24px}
+#genj-studio .zp-page .zp-frame-actions{display:flex;align-items:center;gap:12px;margin-left:auto;flex:none}
+#genj-studio .zp-page.zp-frame-editing>.zf-composer .zp-frame-actions{display:flex!important}
+#genj-studio .zp-page .zp-editor-object-references{display:flex;align-items:center;gap:12px;min-width:0;flex-wrap:wrap}
+#genj-studio .zp-page .zp-editor-object-references>div{display:flex;flex-wrap:wrap;gap:8px;min-width:0}
+#genj-studio .zp-page .zp-editor-object-references button{max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-height:40px}
+#genj-studio .zp-page.zp-frame-editing .zp-editor-tools{max-height:18dvh}
+#genj-studio .zp-page.is-ripple.zp-frame-editing:not(.ripple-adjust-mask) .zp-editor-mask-flow>.zp-editor-tool-row{display:none}
+#genj-studio .zp-page.zp-frame-editing .zp-editor-description textarea{font-family:inherit;font-size:15px;line-height:24px}
+#genj-studio .zp-page.zp-frame-editing .zc-prompt-bottom{align-items:center}
+#genj-studio .zp-page.is-generating .zf-composer :is(.zps-shot-summary,#zps-note,#zps-framing-help){display:none}
+#genj-studio .zp-page.zp-navigation-only>.zf-composer{padding-block:12px;gap:8px}
+#genj-studio .zp-page.zp-navigation-only:not(.zp-frame-editing)>.zf-composer .zp-editor-clean-actions{display:none!important}
 #genj-studio .zwm-page.zp-editor-open[data-editor-stage=render]{overflow:hidden}
 #genj-studio .zwm-page.zp-editor-open[data-editor-stage=render]>.zf-viewer{flex:1 1 0;min-height:0}
 #genj-studio .zwm-page>#zps-progress{position:relative;inset:auto;width:100%;max-width:var(--zc-video-width,1200px);margin-inline:auto;box-sizing:border-box;border:1px solid var(--gs-line);border-radius:10px}
@@ -39,6 +62,9 @@
 #genj-studio .zp-page.zp-editor-open>.zf-viewer{flex:1 1 0;min-height:140px}
 #genj-studio .zp-page[data-editor-stage=render]>.zp-editor-timeline-host,
 #genj-studio .zp-page[data-editor-stage=render] #zps-scrubber{display:none!important}
+/* The render stage has no scrubber; reclaim its reserved media space too. */
+#genj-studio .zp-page[data-editor-stage=render] .zf-viewer:has(#zps-scrubber)>:is(video,#zps-image-slot){height:100%}
+#genj-studio .zp-page[data-editor-stage=render] .zf-viewer:has(#zps-scrubber) .zura-live-sample{bottom:0}
 #genj-studio .zp-page[data-editor-stage=render]>.zf-composer{max-height:none;overflow:visible;padding:14px 18px;gap:8px}
 #genj-studio .zp-page[data-editor-stage=render] #zps-prompt{flex:0 0 auto;box-sizing:border-box;min-height:80px!important;height:80px;max-height:160px;resize:vertical;overflow-y:auto}
 #genj-studio .zp-page .zps-start-mode{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;width:min(480px,100%);margin-block:8px}

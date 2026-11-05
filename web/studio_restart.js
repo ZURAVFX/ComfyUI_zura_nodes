@@ -337,8 +337,13 @@ export function installStudioRestartNavigation(studio,options={}){
   if(studio.restartNavigation?.dispose)studio.restartNavigation.dispose();
   const document=creative.root.ownerDocument;
   const style=installStyles(document);
-  const actions=creative.root.querySelector('.gs-top-actions');
-  if(!actions)throw new Error('Studio restart navigation needs the shared Studio header.');
+  const workspaceHeading=()=>{
+    const mode=currentMode(creative),workspace=workspaceFor(creative);
+    if(mode==='image')return creative.root.querySelector('.zc-image-heading');
+    if(mode==='video')return creative.root.querySelector('.gs-preview-heading');
+    const page=workspace?.page||workspace?.root;
+    return page?.querySelector('.zf-heading,.zpc-heading,header');
+  };
 
   const wrap=document.createElement('div');
   wrap.className='zrn-restart-wrap';
@@ -348,8 +353,6 @@ export function installStudioRestartNavigation(studio,options={}){
   const cancelReset=wrap.querySelector('[data-cancel-reset]');
   const keepRun=wrap.querySelector('[data-keep-run]');
   const primary=studio.$?.('primary');
-  const exit=actions.querySelector('#gs-exit');
-  actions.insertBefore(wrap,exit||null);
 
   let operationMode=null;
   let working=false;
@@ -368,6 +371,9 @@ export function installStudioRestartNavigation(studio,options={}){
 
   const sync=()=>{
     const mode=currentMode(creative);
+    const heading=workspaceHeading();
+    if(heading&&wrap.parentElement!==heading){heading.append(wrap);closeConfirmation();}
+    wrap.hidden=!heading;
     if(operationMode&&operationMode!==mode)closeConfirmation();
     button.disabled=working;
     button.textContent=working?'Starting over…':RESTART_LABEL;

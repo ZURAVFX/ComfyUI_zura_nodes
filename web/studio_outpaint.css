@@ -8,18 +8,21 @@
 #genj-studio .zo-canvas video{position:absolute;object-fit:contain;cursor:grab}
 #genj-studio .zo-border{position:absolute;border:1px solid var(--gs-accent);pointer-events:none}
 #genj-studio .zo-result{width:100%;height:100%;object-fit:contain}
-#genj-studio .zo-composer{width:min(100%,1050px);align-self:center;border:1px solid var(--gs-line);border-radius:12px;background:var(--zc-composer);padding:14px 16px;display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:8px 16px}
-#genj-studio .zo-composer>.zo-sources{grid-area:1/1/2/2}
-#genj-studio .zo-composer>[data-help]{grid-area:2/1}
-#genj-studio .zo-composer>[data-method-info]{grid-area:2/2}
-#genj-studio .zo-composer>[data-canvas-info]{grid-area:2/3;text-align:right}
-#genj-studio .zo-composer>.zo-settings{grid-area:1/2/2/4;justify-self:end}
-#genj-studio .zo-composer>.zo-trim{grid-area:3/3;justify-self:end;align-self:center}
-#genj-studio .zo-composer>textarea{grid-area:3/1/4/3}
-#genj-studio .zo-composer>.gs-custom-loras{grid-area:4/3;position:relative;align-self:center;justify-self:end}
-#genj-studio .zo-composer>.zo-action{grid-area:4/1/5/3}
-#genj-studio .zo-composer>.zo-progress{grid-area:5/1/6/4}
-#genj-studio .zo-composer>.gs-custom-loras>.gs-advanced-body{position:absolute;z-index:20;bottom:calc(100% + 8px);right:0;width:min(380px,calc(100vw - 48px));max-height:min(400px,calc(100vh - 96px));overflow:auto;padding:16px;border:1px solid var(--gs-line);border-radius:12px;background:var(--zc-composer);box-shadow:0 14px 40px #0006}
+#genj-studio .zo-composer{width:100%;max-width:var(--zc-video-width,1200px);align-self:center;border:1px solid var(--gs-line);border-radius:12px;background:var(--zc-composer);padding:16px 18px;display:flex;flex-direction:column;gap:12px;min-width:0;box-sizing:border-box}
+#genj-studio .zo-composer-title{font-size:14px;font-weight:600;line-height:24px}
+#genj-studio .zo-composer>textarea{width:100%;box-sizing:border-box}
+#genj-studio .zo-composer>.zo-settings{justify-content:flex-start;gap:16px}
+#genj-studio .zo-canvas-help{display:flex;flex-wrap:wrap;gap:4px 16px;font-size:12px;color:var(--gs-muted)}
+#genj-studio .zo-canvas-help [data-method-info]{display:none}
+#genj-studio .zo-action{justify-content:space-between;min-width:0}
+#genj-studio .zo-action .zc-prompt-tools{display:flex;align-items:center;gap:8px;flex-wrap:wrap;min-width:0;flex:1}
+#genj-studio .zo-run-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-left:auto}
+#genj-studio .zo-sources>[data-source-info]{font-size:12px;color:var(--gs-muted);max-width:32ch;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#genj-studio .zo-page>.zo-progress{width:100%;max-width:var(--zc-video-width,1200px);align-self:center;padding:8px 12px;border:1px solid var(--gs-line);border-radius:8px;box-sizing:border-box}
+#genj-studio .zo-composer>[data-status]{font-size:12px;color:var(--gs-muted)}
+#genj-studio .zo-composer>[data-status].is-error{color:#ffad9f}
+#genj-studio .zo-action .gs-custom-loras{position:relative}
+#genj-studio .zo-action .gs-custom-loras>.gs-advanced-body{position:absolute;z-index:20;bottom:calc(100% + 8px);right:0;width:min(380px,calc(100vw - 48px));max-height:min(400px,calc(100vh - 96px));overflow:auto;padding:16px;border:1px solid var(--gs-line);border-radius:12px;background:var(--zc-composer)}
 #genj-studio .zo-sources,#genj-studio .zo-settings,#genj-studio .zo-action{display:flex;align-items:end;gap:12px;flex-wrap:wrap}
 #genj-studio .zo-settings label,#genj-studio .zo-sources label{display:grid;gap:5px;font-size:12px}
 #genj-studio .zo-settings input{width:110px;min-height:36px;padding:6px 10px}
@@ -30,14 +33,14 @@
 #genj-studio .zo-scale-controls button{min-height:36px;padding:6px 9px;border:1px solid var(--gs-line);border-radius:8px;background:var(--gs-panel);color:var(--zc-text);font:inherit;cursor:pointer}
 #genj-studio .zo-composer p{margin:0;color:var(--gs-muted);font-size:12px}
 #genj-studio .zo-composer textarea{min-height:80px;max-height:160px;resize:vertical;overflow-y:auto;background:transparent;border:0;color:var(--zc-text);padding:8px 2px;font:inherit;line-height:1.55}
-#genj-studio .zo-action span{flex:1;min-width:180px;font-size:12px;color:var(--gs-muted)}
+#genj-studio .zo-action>span{flex:1;min-width:180px;font-size:12px;color:var(--gs-muted)}
 #genj-studio .zo-action .zo-model{flex:0 0 auto;min-width:0}
 #genj-studio .zo-action [data-status].is-error{flex-basis:100%;padding:12px 14px;background:color-mix(in srgb,var(--gs-panel) 92%,#e66 8%);color:var(--zc-text);border-radius:8px;font-size:13px;line-height:1.5}
 #genj-studio .zo-action [data-delivery-label]{display:grid;gap:5px;flex:0 1 180px;font-size:12px;color:var(--gs-muted)}
 #genj-studio .zo-action [data-delivery-label][hidden]{display:none}
 #genj-studio .zo-action [data-delivery]{width:100%;min-height:36px;padding:7px 10px;font:inherit;color:var(--zc-text);background:var(--gs-panel);border:1px solid var(--gs-line);border-radius:8px}
 #genj-studio .zo-action [data-delivery-note]{font-size:12px;line-height:1.5}
-#genj-studio .zo-action button,#genj-studio .zo-action a,#genj-studio .zo-sources button,#genj-studio .zo-page header button{min-height:38px;padding:8px 14px;border:1px solid var(--gs-line);border-radius:8px;background:var(--gs-panel);color:var(--zc-text)}
+#genj-studio .zo-run-actions>button,#genj-studio .zo-run-actions>a,#genj-studio .zo-sources>button,#genj-studio .zo-page header button{min-height:38px;padding:8px 14px;border:1px solid var(--gs-line);border-radius:8px;background:var(--gs-panel);color:var(--zc-text)}
 #genj-studio .zo-action [data-generate]{background:var(--gs-accent);border-color:var(--gs-accent);color:var(--gs-ink)}
 #genj-studio .zo-progress{display:flex;align-items:center;gap:12px;font-size:12px;color:var(--gs-muted)}
 #genj-studio .zo-progress[hidden]{display:none}
@@ -62,7 +65,7 @@
 #genj-studio .zo-trim [data-precision]{display:flex;gap:12px;flex-wrap:wrap;padding-top:10px}
 #genj-studio .zo-trim [data-precision] label{display:grid;gap:5px;font-size:12px}
 #genj-studio .zo-trim [data-precision] input{width:110px;min-height:36px;padding:6px 10px}
-#genj-studio .zo-first-frame{padding:12px 0;border-top:1px solid var(--gs-line);width:100%}
+#genj-studio .zo-first-frame{position:relative;padding:0;border:0;width:auto}
 #genj-studio .zo-first-frame summary{cursor:pointer;font-size:13px;font-weight:600}
 #genj-studio .zo-first-frame summary span{margin-left:8px;color:var(--gs-muted);font-weight:400}
 #genj-studio .zo-guide-tools{display:flex;align-items:center;flex-wrap:wrap;gap:10px;margin-top:12px}
@@ -84,3 +87,11 @@
 #genj-studio .zo-run-state[data-phase=failed]{border-color:#ba5b4b}
 #genj-studio .zo-run-state[data-phase=failed] strong{color:#ffad9f}
 #genj-studio .zo-run-state[data-phase=complete] strong{color:var(--gs-accent)}
+
+#genj-studio .zo-sources>.zc-attachment{display:inline-flex;align-items:center;gap:8px;min-height:44px;border-style:dashed;background:transparent}
+#genj-studio .zo-action [data-delivery-label]{display:flex;align-items:center;gap:8px;flex:none}
+#genj-studio .zo-action [data-delivery]{width:auto;min-height:36px;border:0;background:transparent;padding:6px}
+#genj-studio .zo-action .zo-trim-menu>summary{border:0;background:transparent;padding:6px 10px}
+#genj-studio .zo-first-frame>.zc-tool-panel{min-width:min(400px,calc(100vw - 48px))}
+#genj-studio .zo-settings label{min-width:0}
+@media(max-height:800px){#genj-studio .zo-page .zo-composer{padding:12px 16px;gap:8px}#genj-studio .zo-page .zo-composer textarea{min-height:64px;height:64px;resize:none}#genj-studio .zo-canvas-help{display:none}}

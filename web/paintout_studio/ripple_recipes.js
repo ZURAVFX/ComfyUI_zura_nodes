@@ -14,6 +14,7 @@ export function rippleValidation(c){
   if(c.colourPipeline&&c.colourPipeline!=='sdr_sdr'||c.processingSpace&&c.processingSpace!=='SDR (sRGB)')return 'Ripple object replacement currently supports SDR footage only.';
   if(!Number.isInteger(c.startFrame)||c.startFrame<0||!Number.isInteger(c.frameCount)||c.frameCount<1||c.frameCount>985)return 'Choose a valid clip range of 1 to 985 source frames (including the model’s held tail).';
   if(!Number.isFinite(c.sequenceFps)||c.sequenceFps<1||c.sequenceFps>120)return 'Choose a valid source frame rate.';
+  if(![c.width||1152,c.height||640].every(n=>Number.isInteger(n)&&n>=64&&n<=4096&&n%64===0)||(c.width||1152)*(c.height||640)>8_388_608)return 'Choose processing dimensions on the 64-pixel grid, up to 4096 pixels per side and 8.39 MP.';
   const anchors=(c.anchors||[]).filter(a=>a.enabled!==false);
   if(anchors.length!==1||!anchors[0].file||Number(anchors[0].frame)!==c.startFrame)return 'Create or import a replacement image for the first selected frame.';
   if(anchors[0].rippleReviewedFile!==anchors[0].file)return 'Review the first-frame replacement image, then click Use this first frame.';
@@ -32,7 +33,7 @@ export function rippleAvailability(info={}){
 export function buildRippleGraph(c,info){
   const error=rippleValidation(c);if(error)throw Error(error);
   const g={},r=(id,slot=0)=>[id,slot],n=(id,class_type,inputs,title)=>{g[id]={class_type,inputs,_meta:{title}};return r(id);};
-  n('source','ZuraPaintoutFullFrame',{plate_path:c.source,colour_space:c.sourceColour||'srgb_display',start_frame:c.startFrame,frame_count:c.frameCount,sequence_fps:c.sequenceFps,context_pixels:128,max_crop_side:768,repair_grow:0,feather_pixels:0,processing_mode:'SDR (sRGB)',framing_mode:'Plate resolution (stretch to next grid)',render_width:c.width||1152,render_height:c.height||640},'Reading the selected clip at its original frame rate');
+  n('source','ZuraPaintoutFullFrame',{plate_path:c.source,colour_space:c.sourceColour||'srgb_display',start_frame:c.startFrame,frame_count:c.frameCount,sequence_fps:c.sequenceFps,context_pixels:128,max_crop_side:768,repair_grow:0,feather_pixels:0,processing_mode:'SDR (sRGB)',framing_mode:c.resolutionMode==='plate'||c.resolutionMode==='source'?'Plate resolution (stretch to next grid)':'Full frame (fit, no crop)',render_width:c.width||1152,render_height:c.height||640},'Reading the selected clip at its original frame rate');
   n('anchors','ZuraPaintoutAnchors',{plate:r('source',2),anchors:JSON.stringify(c.anchors.filter(a=>a.enabled!==false).map(a=>({file:a.file,frame:c.startFrame,strength:1,enabled:true,colour_space:a.colour_space||c.sourceColour||'srgb_display'})))},'Loading your replacement first frame');
   n('take','ZuraPaintoutTake',{plate:r('source',2)},'Preparing source frames and held tail');
   n('ripple_guide','ZuraRippleGuide',{plate:r('source',2),anchors:r('anchors')},'Preparing the first-frame Ripple guide');

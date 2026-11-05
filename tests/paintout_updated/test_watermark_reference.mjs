@@ -5,6 +5,6 @@ assert.equal(paintoutValidation(c),'');assert.ok(!buildPaintoutGraph(c).referenc
 assert.match(paintoutValidation({...c,referenceEnabled:true}),/Choose a clean first-frame/);
 const ref={...c,referenceEnabled:true,referenceImage:{file:'C:/clean.png',colour_space:'srgb_display'}};
 const g=buildPaintoutGraph(ref);assert.equal(g.reference_latent.class_type,'LTXVImgToVideoConditionOnly');assert.equal(g.reference_latent.inputs.strength,.7);assert.deepEqual(g.reference_latent.inputs.latent,['latent',0]);assert.deepEqual(g.guide.inputs.latent,['reference_latent',0]);assert.deepEqual(g.combine.inputs.video_latent,['guide',2]);assert.ok(!g.apply_anchors);assert.equal(g.reference.inputs.file,'C:/clean.png');assert.deepEqual(g.reference.inputs.plate,['source',2]);
-assert.ok(!buildPaintoutGraph({...ref,targetedMethod:'light'}).reference_latent);
+const migrated=buildPaintoutGraph({...ref,targetedMethod:'light'});assert.ok(migrated.reference_latent);assert.ok(!Object.values(migrated).some(node=>node.class_type==='ProPainterInpaint'),'Saved ProPainter settings use LTX with the optional guide retained');
 const hdr=buildPaintoutGraph({...ref,source:'C:/shot.exr',sourceColour:'acescg',processingSpace:'HDR (ACEScct)',colourPipeline:'hdr_hdr',outputMode:'EXR sequence',referenceImage:{file:'C:/clean.exr',colour_space:'acescg'}});assert.equal(hdr.video_vae.inputs.vae_name,PAINTOUT_MODELS.hdrVideoVae);assert.equal(hdr.reference.inputs.colour_space,'acescg');
-console.log('PASS optional native first-frame latent guidance, crop/colour routing, HDR VAE and Light isolation');
+console.log('PASS optional native first-frame latent guidance, crop/colour routing, HDR VAE and legacy ProPainter migration');

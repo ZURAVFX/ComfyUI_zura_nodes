@@ -45,7 +45,7 @@ const absolutePath=value=>typeof value==='string'&&(/^[a-z]:[\\/]/i.test(value)|
 const whole=(value,min,max)=>Number.isInteger(Number(value))&&Number(value)>=min&&Number(value)<=max;
 export const paintoutColourPipeline=c=>c.colourPipeline||(c.processingSpace==='HDR (ACEScct)'?'hdr_hdr':'sdr_sdr');
 const hdrSource=c=>['acescg','acescct','hlg_rec2020','pq_rec2020','linear_rec709'].includes(c.sourceColour==='auto'?c.detectedSourceColour:c.sourceColour);
-const normalise=c=>({mode:'targeted',startFrame:0,frameCount:81,sequenceFps:25,sourceColour:'srgb_display',processingSpace:'SDR (sRGB)',width:1152,height:640,outputMode:'SDR video',savePrefix:'paintout/studio',exrPrecision:'float32',keepAudio:true,seed:42,maskBlockSize:32,targetedMethod:'guided',...c});
+const normalise=c=>({mode:'targeted',startFrame:0,frameCount:81,sequenceFps:25,sourceColour:'srgb_display',processingSpace:'SDR (sRGB)',width:1152,height:640,outputMode:'SDR video',savePrefix:'paintout/studio',exrPrecision:'float32',keepAudio:true,seed:42,maskBlockSize:32,targetedMethod:'guided',...c,...(c?.targetedMethod==='light'?{targetedMethod:'automatic'}:{})});
 
 /** Returns an actionable message, or an empty string when ready to queue. */
 export function paintoutHDRFrameLimit(c){
@@ -83,8 +83,7 @@ export function paintoutValidation(config={}){
   }
   if(c.targetedMethod==='automatic'&&c.referenceEnabled&&!absolutePath(c.referenceImage?.file))return 'Choose a clean first-frame image, or turn off Use reference.';
   if(c.targetedMethod==='automatic'&&c.referenceEnabled&&c.referenceImage?.sourceFrame!=null&&c.referenceImage.sourceFrame!==Number(c.startFrame))return 'The trim start changed. Choose a clean guide for the new first frame, or turn off Use reference.';
-  if(!['automatic','guided','light'].includes(c.targetedMethod))return 'Choose light, automatic or guided repair.';
-  if(pipeline==='hdr_hdr'&&c.targetedMethod==='light'&&c.mode==='targeted')return 'Light repair currently supports SDR footage. Choose Guided or Quality for HDR footage.';
+  if(!['automatic','guided'].includes(c.targetedMethod))return 'Choose automatic or guided repair.';
   if(c.processingScale!=null&&![1,.75,.5,.25].includes(Number(c.processingScale)))return 'Choose full, three-quarter, half or quarter processing scale.';
   if(!PAINTOUT_OUTPUT_MODES.includes(c.outputMode))return 'Choose a supported video or EXR export.';
   if(!['float32','float16'].includes(c.exrPrecision))return 'Choose float32 or float16 EXR precision.';
@@ -130,7 +129,7 @@ export function paintoutRangeFix(config,sourceFrames,maskFrames){
 
 export function buildPaintoutGraph(config={},info){
   const error=paintoutValidation(config);if(error)throw new Error(error);
-  const c=normalise(config),targeted=c.mode==='targeted',light=targeted&&paintoutColourPipeline(c)!=='hdr_hdr'&&c.targetedMethod==='light',singleInpaint=targeted&&c.targetedMethod==='automatic',hasAnchors=targeted&&(c.anchors||[]).some(a=>a.enabled!==false),g={},models=resolvedModelFiles(info);
+  const c=normalise(config),targeted=c.mode==='targeted',singleInpaint=targeted&&c.targetedMethod==='automatic',hasAnchors=targeted&&(c.anchors||[]).some(a=>a.enabled!==false),g={},models=resolvedModelFiles(info);
   const ref=(id,slot=0)=>[id,slot],node=(id,class_type,inputs)=>{g[id]={class_type,inputs,_meta:{title:paintoutStages[id]||id}};};
   const projectMask=targeted&&c.maskProject&&Number.isInteger(c.maskRevision);
   if(projectMask)node('mask_source','ZuraPaintoutMaskSource',{project:c.maskProject,revision:c.maskRevision});
@@ -138,17 +137,10 @@ export function buildPaintoutGraph(config={},info){
   node('source',targeted?(projectMask?'ZuraPaintoutEditorCrop':'ZuraPaintoutCrop'):'ZuraPaintoutFullFrame',{
     plate_path:c.colourPipeline?ref('colour_check'):c.source,...(targeted?{mask_path:projectMask?ref('mask_source'):c.mask}:{}),colour_space:c.sourceColour,
     start_frame:Number(c.startFrame),frame_count:Number(c.frameCount),sequence_fps:Number(c.sequenceFps),
-    context_pixels:128,max_crop_side:768,...(singleInpaint||light?{processing_scale:Number(c.processingScale??1)}:{}),repair_grow:targeted?Number(c.maskGrow??0):0,feather_pixels:targeted?Number(c.maskFeather??0):0,
-    processing_mode:paintoutColourPipeline(c)==='hdr_hdr'?'HDR (ACEScct)':'SDR (sRGB)',framing_mode:singleInpaint||light?'Smart crop (experimental)':'Plate resolution (stretch to next grid)',
+    context_pixels:128,max_crop_side:768,...(singleInpaint?{processing_scale:Number(c.processingScale??1)}:{}),repair_grow:targeted?Number(c.maskGrow??0):0,feather_pixels:targeted?Number(c.maskFeather??0):0,
+    processing_mode:paintoutColourPipeline(c)==='hdr_hdr'?'HDR (ACEScct)':'SDR (sRGB)',framing_mode:singleInpaint?'Smart crop (experimental)':'Plate resolution (stretch to next grid)',
     render_width:Number(c.width),render_height:Number(c.height),
   });
-  if(light){
-    node('take','ZuraPaintoutTake',{plate:ref('source',2)});
-    node('light','ProPainterInpaint',{image:ref('take'),mask:ref('take',1),width:ref('take',2),height:ref('take',3),mask_dilates:5,flow_mask_dilates:8,ref_stride:6,neighbor_length:6,subvideo_length:50,raft_iter:20,fp16:'enable'});
-    node('save','ZuraPaintoutUncrop',{decoded_crop:ref('light'),plate:ref('source',2),output_name:c.savePrefix,precision:c.exrPrecision,match_context:false,export_format:c.outputMode,motion_preview:true});
-    if(paintoutColourPipeline(c)==='sdr_hdr'){g.repair_save=g.save;delete g.save;Object.assign(g.repair_save.inputs,{export_format:'EXR sequence',motion_preview:false});if(!c.separateHDR)appendHDRConversion(g,c,['repair_save',0],['source',2],info);}
-    return g;
-  }
   if(hasAnchors)node('anchors','ZuraPaintoutAnchors',{plate:ref('source',2),anchors:JSON.stringify(c.anchors.filter(a=>a.enabled!==false).map(a=>({file:a.file,frame:Number(a.frame),strength:Number(a.strength??.75),enabled:true,...(a.colour_space?{colour_space:a.colour_space}:{})})))});
   node('model','UNETLoader',{unet_name:models.model,weight_dtype:'default'});
   node('lora',targeted&&!singleInpaint?'LoraLoaderModelOnly':'LTXICLoRALoaderModelOnly',{model:ref('model'),lora_name:singleInpaint?models.inpaintLora:targeted?models.targetedLora:models.fullLora,strength_model:targeted&&!singleInpaint?1.25:1});
@@ -203,16 +195,9 @@ export function buildPaintoutGraph(config={},info){
 
 /** Availability is mode-specific: one adapter need not block the other mode. */
 export function paintoutAvailability(info={},mode='targeted',config={}){
-  const targeted=mode!=='full',light=targeted&&paintoutColourPipeline(config)!=='hdr_hdr'&&config.targetedMethod==='light',singleInpaint=targeted&&(config.targetedMethod??'guided')==='automatic',missing=[];if(config.colourPipeline&&!info.ZuraPaintoutColourCheck)missing.push('ZuraPaintoutColourCheck (restart ComfyUI after updating)');
+  config=normalise(config);
+  const targeted=mode!=='full',singleInpaint=targeted&&(config.targetedMethod??'guided')==='automatic',missing=[];if(config.colourPipeline&&!info.ZuraPaintoutColourCheck)missing.push('ZuraPaintoutColourCheck (restart ComfyUI after updating)');
   const options=(node,key)=>{const f=info[node]?.input?.required?.[key]||info[node]?.input?.optional?.[key];return f?.[0]==='COMBO'?f[1]?.options||[]:Array.isArray(f?.[0])?f[0]:[];};
-  if(light){
-    for(const type of ['ZuraPaintoutCrop','ZuraPaintoutTake','ZuraPaintoutUncrop','ProPainterInpaint',...(config.maskProject?['ZuraPaintoutEditorCrop','ZuraPaintoutMaskSource']:[])])if(!info[type])missing.push(type);
-    if(paintoutColourPipeline(config)==='sdr_hdr'){
-      for(const [type,key,file] of [['UNETLoader','unet_name',PAINTOUT_MODELS.model],['VAELoader','vae_name',PAINTOUT_MODELS.hdrVideoVae],['LTXICLoRALoaderModelOnly','lora_name',PAINTOUT_MODELS.hdrLora],['ZuraPaintoutHDRConditioning','file_name',PAINTOUT_MODELS.hdrEmbeddings]])if(!modelChoice(options(type,key),file))missing.push(file);
-      for(const type of ['ZuraPaintoutHDRPrepare','ZuraPaintoutHDRSave','ZuraPaintoutHDRResume','LTXVVAEForceFloat32','LTXVConditioning','EmptyLTXVLatentVideo','LTXAddVideoICLoRAGuide','ManualSigmas','LTXVTiledFusionSampler','KSamplerSelect','VAEDecodeTiled'])if(!info[type])missing.push(type);
-    }
-    return {ready:!missing.length,missing:[...new Set(missing)]};
-  }
   const expected={UNETLoader:['unet_name',PAINTOUT_MODELS.model],CLIPLoader:['clip_name',PAINTOUT_MODELS.text],[targeted&&!singleInpaint?'LoraLoaderModelOnly':'LTXICLoRALoaderModelOnly']:['lora_name',singleInpaint?PAINTOUT_MODELS.inpaintLora:targeted?PAINTOUT_MODELS.targetedLora:PAINTOUT_MODELS.fullLora]};
   for(const [node,[key,file]] of Object.entries(expected))if(!modelChoice(options(node,key),file))missing.push(file);
   for(const file of [paintoutColourPipeline(config)==='hdr_hdr'?PAINTOUT_MODELS.hdrVideoVae:PAINTOUT_MODELS.videoVae,PAINTOUT_MODELS.audioVae])if(!modelChoice(options('VAELoader','vae_name'),file))missing.push(file);

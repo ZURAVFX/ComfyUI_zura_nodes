@@ -39,3 +39,11 @@ assert.match(createCss,/\.zc-global-models>\.zc-tool-panel\{[^}]*top:calc\(100% 
 assert.ok(html.includes('data-length-mode="original" aria-pressed="false"'));
 assert.ok(html.includes('data-length-mode="custom" aria-pressed="true"'));
 assert.ok(html.includes('id="gs-length_mode" hidden aria-hidden="true" tabindex="-1"'),'Native clip popup is removed from visible and keyboard navigation');
+
+const paintCss=fs.readFileSync(new URL('../web/paintout_studio/paintout_integrated.css',import.meta.url),'utf8');
+assert.match(paintCss,/\.zp-page>#zps-progress\{position:relative;inset:auto/,'Paintout progress is a separate row');
+assert.match(paintCss,/\.zp-page\.is-generating \.zp-editor-guide\{display:none/,'Live progress replaces the duplicate waiting guide');
+assert.match(paintCss,/\.zf-viewer:has\(#zps-scrubber\)>:is\(video,#zps-image-slot\)\{height:100%\}/,'Hidden render scrubbers reserve no picture height');
+assert.match(paintCss,/\.zp-page\.zp-editor-open:not\(\[data-editor-stage=render\]\)>\.zf-composer\{display:flex!important/,'The mode toolbar stays visible during trim and masking');
+const outpaintCss=fs.readFileSync(new URL('../web/studio_outpaint.css',import.meta.url),'utf8');
+assert.doesNotMatch(outpaintCss,/\.zo-action span\{/,'Frame extension styles cannot expand every label in the shared workflow picker');

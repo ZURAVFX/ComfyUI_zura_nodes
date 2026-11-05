@@ -517,7 +517,7 @@ assert.equal(advanced.hasAttribute('open'),false,'Precise tracking controls star
 for(const key of ['range-start','range-end','direction','operation'])assert.ok(advanced.querySelector(`[data-editor=${key}]`),'Advanced tracking retains '+key);
 assert.ok(!paintTools.querySelector('[data-editor=track]').closest('details'),'Tracking stays visible without opening advanced options');
 assert.ok(!paintTools.querySelector('[data-editor=add-segment]').closest('details'),'Adding another mask stays directly accessible');
-let escapedTextEvents=0;const input=paintTools.querySelector('[data-editor=instruction]');
+let escapedTextEvents=0;const input=navUi.paintout.editor.$('instruction');
 for(const type of ['mousedown','dblclick','keydown','selectstart','copy']){
  const listener=()=>escapedTextEvents++;navUi.paintout.page.addEventListener(type,listener);
  const event=new window.Event(type,{bubbles:true,cancelable:true});Object.defineProperty(event,'key',{value:'a'});
@@ -673,22 +673,17 @@ assert.equal(ed.$('segment-draft').parentElement,ed.tools.querySelector('.zp-edi
 assert.equal(ed.$('tracking-options').parentElement.hidden,true,'Unused tracking settings are outside the visible action row');
 assert.equal(ed.tools.querySelector('.zp-editor-segments').hidden,true);
 assert.ok(wm.$('reference-control'));assert.equal(wm.$('reference-control').hidden,false);
-wm.state.targetedMethod='light';wm.render();assert.equal(wm.$('reference-control').hidden,true);
-assert.equal(wm.$('method').closest('.zf-model'),wm.$('method-control'),'Repair model is selectable in the first toolbar slot');
-assert.equal(wm.$('render-settings').querySelector('#zps-method'),null,'No duplicate repair selector in Settings');
-const savedMask={mask:wm.state.mask,project:wm.state.maskProject,revision:wm.state.maskRevision,source:wm.state.source,stage:ed.stage};
-wm.$('method').value='automatic';wm.$('method').onchange();
-assert.equal(wm.config().targetedMethod,'automatic');assert.equal(wm.$('reference-control').hidden,false);
-assert.deepEqual({mask:wm.state.mask,project:wm.state.maskProject,revision:wm.state.maskRevision,source:wm.state.source,stage:ed.stage},savedMask,'Switching repair model preserves footage, mask and stage');
-wm.$('method').value='light';wm.$('method').onchange();assert.equal(wm.config().targetedMethod,'light');
-wm.job={id:'running'};wm.render();assert.equal(wm.$('method').disabled,true);
-wm.$('method').value='automatic';wm.$('method').onchange();assert.equal(wm.config().targetedMethod,'light','A running repair cannot change model');
-wm.job=null;wm.state.colourPipeline='hdr_hdr';wm.render();
-assert.equal(wm.$('method').querySelector('[value=light]').disabled,true,'ProPainter remains marked SDR only');
-wm.$('method').value='automatic';wm.$('method').onchange();assert.equal(wm.config().targetedMethod,'automatic','HDR can switch back to Quality');
+wm.state.targetedMethod='light';wm.render();
+assert.equal(wm.config().targetedMethod,'automatic','Old ProPainter projects migrate to LTX');
+assert.equal(wm.state.targetedMethod,'automatic');
+assert.equal(wm.$('reference-control').hidden,false);
+assert.equal(wm.$('method'),null,'No redundant one-option model selector');
+assert.match(wm.$('method-control').textContent,/LTX 2.5/);
+assert.doesNotMatch(wm.page.textContent,/ProPainter/);
+wm.state.colourPipeline='hdr_hdr';wm.render();assert.equal(wm.config().targetedMethod,'automatic');
 wm.state.colourPipeline='sdr_sdr';wm.render();
 let setupOpened=0;wm.openModelSetup=()=>setupOpened++;
-wm.availability={ready:false,missing:['ProPainterInpaint']};wm.reviewSetup();
+wm.availability={ready:false,missing:['LTXVInpaintPreprocess']};wm.reviewSetup();
 assert.equal(setupOpened,0,'Missing nodes do not open model downloads');
 assert.equal(wm.$('render-settings').open,true,'Missing nodes open actionable settings');
 wm.availability={ready:false,missing:['needed.safetensors']};wm.reviewSetup();
@@ -726,4 +721,4 @@ wm.page.querySelector('.zps-back-video').click();assert.equal(navUi.mode,'video'
 ed.flushManual=flush;ed.persist=persist;
 watermarkRestart.dispose();
 wm.close();
-console.log('PASS separate Watermark navigation, static mask actions, optional Quality reference and Light isolation');
+console.log('PASS separate Watermark navigation, static mask actions, optional LTX reference and ProPainter migration');

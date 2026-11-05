@@ -163,8 +163,8 @@
 #genj-studio[data-workspace] .zc-task-control[open]>summary [data-workflow-label]{display:inline}
 #genj-studio[data-workspace] .zh-footer>.zc-workflow-controls{margin-right:auto}
 #genj-studio[data-workspace] .zp-page.zp-editor-open:not([data-editor-stage=render])>.zf-composer{display:block}
-#genj-studio[data-workspace] .zp-page.zp-navigation-only>.zf-composer>:not(.zc-prompt-bottom){display:none!important}
-#genj-studio[data-workspace] .zp-page.zp-navigation-only>.zf-composer>.zc-prompt-bottom>:not(.zc-prompt-tools),
+#genj-studio[data-workspace] .zp-page.zp-navigation-only>.zf-composer>:not(.zc-prompt-bottom):not(.zp-editor-clean-actions){display:none!important}
+#genj-studio[data-workspace] .zp-page.zp-navigation-only>.zf-composer>.zc-prompt-bottom>:not(.zc-prompt-tools):not(.zp-frame-actions),
 #genj-studio[data-workspace] .zp-page.zp-navigation-only>.zf-composer .zc-prompt-tools>:not(.zc-workflow-controls){display:none!important}
 #genj-studio[data-workspace] .zp-page.zp-navigation-only>.zf-composer{margin-top:auto}
 @media(max-width:600px){

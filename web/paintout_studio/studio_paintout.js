@@ -1,3 +1,4 @@
+import {megapixelSlider,resolutionSize} from '../studio_resolution.js';
 import {installOwnedExecuting} from './studio_progress.js';
 import {LTXLoras} from '../studio_ltx_loras.js';
 import {PaintoutModels} from './paintout_models.js';
@@ -128,7 +129,8 @@ export class PaintoutWorkspace{
     this.loras=new LTXLoras(this.page.querySelector('.zc-prompt-tools'),(path,body)=>this.fetch(path,body),()=>this.busy(),()=> 'ltx25',true);
     this.loras.setValue(saved.draft?.custom_loras);this.loras.onchange=()=>{this.state.custom_loras=this.loras.value();this.save();};
     this.$('prompt').value=this.prompts[this.state.mode]||(this.ripple?'':this.state.mode==='inpaint'?INPAINT_PROMPT:PAINTOUT_DEFAULT_PROMPTS[this.state.mode]);
-    if(this.ripple&&typeof saved.cleanupPrompt!=='string')this.cleanupPrompt='Replace the selected object with the object shown in the reference image';
+    if(this.ripple&&(!saved.draft?.resolutionMode||saved.draft.resolutionMode==='default'))this.state.resolutionMode='source';
+    if(this.ripple){this.cleanupPrompt=this.prompts.ripple??(typeof saved.cleanupPrompt==='string'?saved.cleanupPrompt:'Replace the selected object with the object shown in the reference image');this.prompts.ripple=this.cleanupPrompt;this.$('prompt').value=this.cleanupPrompt;}
     if(this.state.mode==='inpaint'&&typeof saved.cleanupPrompt!=='string'&&!this.state.anchors[this.selected]?.editPrompt)this.cleanupPrompt='Add the object shown in the reference image';
 
     for(const [id,key] of Object.entries({start:'startFrame',count:'frameCount',fps:'sequenceFps',colour:'sourceColour',processing:'processingSpace',width:'width',height:'height',output:'outputMode',seed:'seed'}))this.$(id).value=this.state[key];
@@ -145,13 +147,14 @@ export class PaintoutWorkspace{
 
     this.$('megapixels').onchange=()=>{this.state.megapixels=Number(this.$('megapixels').value);this.applySize();this.changed();};
 
+    megapixelSlider(this.$('megapixels'),{max:8.35});
     for(const button of this.page.querySelectorAll('[data-mode]'))button.onclick=()=>this.setMode(button.dataset.mode);
 
     for(const button of this.page.querySelectorAll('[data-view]'))button.onclick=()=>{this.$('preview-menu').open=false;this.preview(button.dataset.view);};
 
     this.$('source-colour-confirm').onchange=()=>{if(this.busy())return;this.$('colour').value=this.$('source-colour-confirm').value;this.$('check-colour').open=false;this.$('colour').onchange();};
 
-    this.$('prompt').oninput=()=>{this.prompts[this.state.mode]=this.$('prompt').value;this.save();};
+    this.$('prompt').oninput=()=>{this.prompts[this.state.mode]=this.$('prompt').value;if(this.ripple){this.cleanupPrompt=this.$('prompt').value;if(this.editor)this.editor.$('instruction').value=this.cleanupPrompt;}this.save();};
 
     this.$('mask-block').onchange=()=>{if(this.busy())return;this.state.maskBlockSize=Number(this.$('mask-block').value);this.changed();};
 
@@ -221,7 +224,9 @@ export class PaintoutWorkspace{
     this.modelDownloads=new PaintoutModels(this);this.$('model-setup').onclick=()=>this.openModelSetup('video');
     this.page.querySelector('[data-project-menu]').append(this.modelDownloads.root);
     const renderPanel=this.$('render-settings').querySelector('.zc-tool-panel');
-    for(const id of ['resolution','range'])renderPanel.append(this.$(id));
+    renderPanel.append(this.$('range'));
+    this.page.querySelector('.zf-viewer').after(this.$('progress'));
+    const sourceShape=document.createElement('option');sourceShape.value='source-proportions';sourceShape.textContent='Source proportions';this.$('size-mode').append(sourceShape);
     this.$('new').addEventListener('click',()=>{this.$('workspace-menu').open=false;});
     this.$('workspace-menu').addEventListener('toggle',()=>{if(!this.$('workspace-menu').open)this.modelDownloads?.close();});
     this.menuOutside=event=>{for(const id of ['workspace-menu','preview-menu','check-colour']){const menu=this.$(id);if(menu.open&&!menu.contains(event.target))menu.open=false;}};
@@ -273,9 +278,9 @@ export class PaintoutWorkspace{
 
   fps(){return this.sourceInfo?.kind==='video'?this.sourceInfo.fps:this.state.sequenceFps;}
 
-  config(){const c={...this.state,custom_loras:this.loras.value(),resolutionMode:'plate',sourceWidth:this.sourceInfo?.width,sourceHeight:this.sourceInfo?.height,detectedSourceColour:this.sourceInfo?.resolved_colour,colourPipeline:paintoutColourPipeline(this.state),anchors:this.state.anchors.filter(a=>(!this.ripple||Number(a.frame)===this.state.startFrame)&&a.file&&(!a.status||a.status==='accepted')&&(Number(a.frame)===-1||Number(a.frame)>=this.state.startFrame&&Number(a.frame)<this.state.startFrame+this.state.frameCount)).map(a=>({...a})),prompt:this.$('prompt').value,keepAudio:true,savePrefix:this.ripple?'ZURA STUDIO/object replacement':'paintout/studio',exrPrecision:'float32'};if(this.sourceInfo){c.width=Math.ceil(c.sourceWidth/64)*64;c.height=Math.ceil(c.sourceHeight/64)*64;c.sequenceFps=this.fps();}return c;}
+  config(){const c={...this.state,custom_loras:this.loras.value(),resolutionMode:'plate',sourceWidth:this.sourceInfo?.width,sourceHeight:this.sourceInfo?.height,detectedSourceColour:this.sourceInfo?.resolved_colour,colourPipeline:paintoutColourPipeline(this.state),anchors:this.state.anchors.filter(a=>(!this.ripple||Number(a.frame)===this.state.startFrame)&&a.file&&(!a.status||a.status==='accepted')&&(Number(a.frame)===-1||Number(a.frame)>=this.state.startFrame&&Number(a.frame)<this.state.startFrame+this.state.frameCount)).map(a=>({...a})),prompt:this.$('prompt').value,keepAudio:true,savePrefix:this.ripple?'ZURA STUDIO/object replacement':'paintout/studio',exrPrecision:'float32'};if(this.sourceInfo){if(!this.ripple||['source','plate'].includes(this.state.resolutionMode)){c.width=Math.ceil(c.sourceWidth/64)*64;c.height=Math.ceil(c.sourceHeight/64)*64;}c.sequenceFps=this.fps();}if(this.ripple)c.resolutionMode=this.state.resolutionMode;return c;}
 
-  applySize(){const mode=this.state.resolutionMode;if(mode==='default'){this.state.width=1152;this.state.height=640;}else if(PAINTOUT_SIZE_PRESETS.some(p=>p[0]===mode))Object.assign(this.state,paintoutPresetSize(mode,this.state.megapixels));this.$('width').value=this.state.width;this.$('height').value=this.state.height;}
+  applySize(){const mode=this.state.resolutionMode;if(mode==='default'){this.state.width=1152;this.state.height=640;}else if(mode==='source-proportions'&&this.sourceInfo)Object.assign(this.state,resolutionSize(this.sourceInfo.width/this.sourceInfo.height,this.state.megapixels,{step:64,min:64,max:4096,maxPixels:8_388_608}));else if(PAINTOUT_SIZE_PRESETS.some(p=>p[0]===mode))Object.assign(this.state,this.ripple?resolutionSize(paintoutPresetSize(mode,1).width/paintoutPresetSize(mode,1).height,this.state.megapixels,{step:64,min:64,max:4096,maxPixels:8_388_608}):paintoutPresetSize(mode,this.state.megapixels));this.$('width').value=this.state.width;this.$('height').value=this.state.height;}
 
   save(){this.editor?.saveSoon();try{localStorage.setItem(this.storageKey,JSON.stringify({draft:this.state,prompts:this.prompts,sourceInfo:this.sourceInfo,maskInfo:this.maskInfo,job:this.job,pendingHDR:this.pendingHDR,cleanupPrompt:this.cleanupPrompt,items:this.items,result:this.result}));}catch{this.message('Browser storage is full. Your output files remain on disk.');}}
 
@@ -354,11 +359,33 @@ export class PaintoutWorkspace{
 
   requestError(e){return /404|405|not found|could not complete this request/i.test(e.message)?'Restart ComfyUI after your current work finishes to enable the new Paintout browser.':e.message;}
 
-  async resetSource(){if(this.busy())return false;try{await this.editor?.flushManual();await this.editor?.persist();}catch(e){this.message(e.message);return false;}this.state.source='';this.state.editorProject=null;this.state.maskProject=null;this.state.maskRevision=null;this.state.mask='';this.state.anchors=[];this.sourceInfo=this.maskInfo=null;this.pendingHDR=null;this.selected=-1;this.result=null;this.$('export-link').hidden=true;this.$('export-link').removeAttribute('href');this.renderAnchors();this.changed();this.preview('source');return true;}
+  async resetSource(){
+    if(this.busy())return false;
+    try{await this.editor?.flushManual();await this.editor?.persist();}catch(e){this.message(e.message);return false;}
+    delete this.state.rippleSelection;
+    Object.assign(this.state,{source:'',editorProject:null,maskProject:null,maskRevision:null,maskCoverage:null,mask:'',anchors:[],referenceImage:null,referenceEnabled:false,objectReferences:[],maskSegmentDraft:null,activeMaskSegment:null,editorStage:'trim',editorPlayhead:0,editorSelected:-1,editorUpdatedAt:0,clipTrimConfirmed:false,startFrame:0,frameCount:81});
+    this.sourceInfo=this.maskInfo=null;this.pendingHDR=null;this.selected=-1;this.result=null;this.playhead=0;
+    if(this.editor){
+      const editor=this.editor;clearTimeout(editor.saveTimer);clearTimeout(editor.autoPreviewTimer);
+      editor.sequence++;editor.previewSequence++;editor.maskEditVersion++;editor.autoPreviewPending=false;
+      Object.assign(editor,{stage:'trim',active:false,source:null,project:null,projectSource:null,document:null,revision:-1,frameKey:null,candidate:null,selectionDirty:false,customRange:false,maskChoices:null});
+      editor.viewer.setSelection({});editor.status('');
+    }
+    for(const id of ['export-link','download']){this.$(id).hidden=true;this.$(id).removeAttribute('href');}
+    for(const popup of this.page.querySelectorAll('details[open]'))popup.open=false;
+    this.nativeSamplePreview?.clear();this.comparison?.hide();this.$('image-slot').replaceChildren();
+    const video=this.$('video');video.pause();video.removeAttribute('src');video.load?.();
+    this.$('start').value=0;this.$('count').value=81;this.message('');this.renderAnchors();this.changed();this.preview('source');return true;
+  }
 
-  async reset(){if(this.busy())return;if(!await this.resetSource())return;this.items=[];this.cleanupPrompt=this.state.mode==='ripple'?'Replace the selected object with the object shown in the reference image':this.state.mode==='inpaint'?'Add the object shown in the reference image':DEFAULT_FRAME_EDIT_PROMPT;if(this.editor)this.editor.$('instruction').value=this.cleanupPrompt;this.state.startFrame=0;this.state.frameCount=81;this.playhead=0;this.$('start').value=0;this.$('count').value=81;this.save();this.render();}
+  async reset(){
+    if(!await this.resetSource())return false;
+    this.items=[];this.prompts[this.state.mode]='';this.$('prompt').value='';this.cleanupPrompt='';
+    if(this.editor)this.editor.$('instruction').value='';
+    this.save();this.render();this.$('begin').focus({preventScroll:true});return true;
+  }
 
-  setMode(mode){if(this.busy()||!['targeted','full','inpaint','ripple'].includes(mode))return;this.prompts[this.state.mode]=this.$('prompt').value;this.state.mode=mode;this.ripple=mode==='ripple';this.page.classList.toggle('is-ripple',this.ripple);this.$('prompt').value=this.prompts[mode]||(mode==='ripple'?'':mode==='inpaint'?INPAINT_PROMPT:PAINTOUT_DEFAULT_PROMPTS[mode]);this.cleanupPrompt=mode==='ripple'?'Replace the selected object with the object shown in the reference image':mode==='inpaint'?'Add the object shown in the reference image':DEFAULT_FRAME_EDIT_PROMPT;if(this.editor)this.editor.$('instruction').value=this.cleanupPrompt;this.changed();if(mode==='full'&&['mask','anchor'].includes(this.view))this.preview('source');if(this.ripple&&this.state.source){this.playhead=this.state.startFrame;this.editor?.setStage(this.state.clipTrimConfirmed===false?'trim':'mask');}}
+  setMode(mode){if(this.busy()||!['targeted','full','inpaint','ripple'].includes(mode))return;this.prompts[this.state.mode]=this.$('prompt').value;this.state.mode=mode;this.ripple=mode==='ripple';this.page.classList.toggle('is-ripple',this.ripple);this.$('prompt').value=this.prompts[mode]||(mode==='ripple'?'':mode==='inpaint'?INPAINT_PROMPT:PAINTOUT_DEFAULT_PROMPTS[mode]);this.cleanupPrompt=mode==='ripple'?(this.prompts.ripple??'Replace the selected object with the object shown in the reference image'):mode==='inpaint'?'Add the object shown in the reference image':DEFAULT_FRAME_EDIT_PROMPT;if(this.ripple){if(this.state.resolutionMode==='default')this.state.resolutionMode='source';this.$('prompt').value=this.cleanupPrompt;this.prompts.ripple=this.cleanupPrompt;}if(this.editor)this.editor.$('instruction').value=this.cleanupPrompt;this.changed();if(mode==='full'&&['mask','anchor'].includes(this.view))this.preview('source');if(this.ripple&&this.state.source){this.playhead=this.state.startFrame;this.editor?.setStage(this.state.clipTrimConfirmed===false?'trim':'mask');}}
 
   renderAnchors(){
 
@@ -468,7 +495,7 @@ export class PaintoutWorkspace{
     this.loras?.setBusy(busy);
     this.validationError=error;this.availability=availability;this.renderColourStatus(c);this.$('block-control').hidden=!targeted;this.$('mask-block').value=String(this.state.maskBlockSize??32);this.$('mask-block').disabled=busy;
 
-    const unifiedNavigation=!!this.owner?.videoComposer;this.page.classList.toggle('zp-navigation-only',unifiedNavigation&&(!this.state.source||this.editor?.active&&this.editor.stage!=='render'));this.page.querySelector('.zf-composer').hidden=!this.state.source&&!unifiedNavigation;this.$('title').textContent='Review and render';this.$('workflow-label').textContent=inpaint?'Add an object · preview':targeted?'Targeted repair':'Full-scene clean plate';this.$('pipeline').value=paintoutColourPipeline(this.state);this.$('pipeline').disabled=busy;this.$('shot-summary').textContent=this.sourceInfo?`${name(this.state.source)} · ${this.sourceInfo.width} × ${this.sourceInfo.height} · ${this.fps()} fps · frames ${c.startFrame}–${c.startFrame+c.frameCount-1}`:'';
+    const unifiedNavigation=!!this.owner?.videoComposer;this.page.classList.toggle('zp-navigation-only',unifiedNavigation&&(!this.state.source||this.editor&&this.editor.stage!=='render'));this.page.querySelector('.zf-composer').hidden=!this.state.source&&!unifiedNavigation;this.$('title').textContent='Review and render';this.$('workflow-label').textContent=inpaint?'Add an object · preview':targeted?'Targeted repair':'Full-scene clean plate';this.$('pipeline').value=paintoutColourPipeline(this.state);this.$('pipeline').disabled=busy;this.$('shot-summary').textContent=this.sourceInfo?`${name(this.state.source)} · ${this.sourceInfo.width} × ${this.sourceInfo.height} · ${this.fps()} fps · frames ${c.startFrame}–${c.startFrame+c.frameCount-1}`:'';
 
     for(const b of this.page.querySelectorAll('[data-mode]')){b.setAttribute('aria-pressed',String(b.dataset.mode===this.state.mode));b.disabled=busy;}
 
@@ -488,19 +515,19 @@ export class PaintoutWorkspace{
 
     this.$('range-help').textContent=this.sourceInfo?`Source frames 0–${this.sourceInfo.frames-1}. One continuous shot. ${c.frameCount>81?'Long ranges can exceed VRAM; this workflow samples the whole range at once.':'Longer ranges need more memory.'}`:'Add footage to choose its frame range.';
 
-    const sizeMode=this.state.resolutionMode,preset=PAINTOUT_SIZE_PRESETS.some(p=>p[0]===sizeMode);
+    const sizeMode=this.state.resolutionMode,preset=sizeMode==='source-proportions'||PAINTOUT_SIZE_PRESETS.some(p=>p[0]===sizeMode);
 
-    this.$('resolution-label').textContent=`Plate · ${c.width} × ${c.height}`;
+    this.$('resolution-label').textContent=`${this.ripple?'':'Plate · '}${c.width} × ${c.height}`;this.page.classList.toggle('is-generating',!!this.job||this.submitting);
 
     this.$('size-mode').value=sizeMode;this.$('megapixels').value=this.state.megapixels;
 
-    this.$('custom-size').hidden=true;this.$('megapixels-control').hidden=true;this.$('size-mode').closest('label').hidden=true;
+    this.$('custom-size').hidden=!this.ripple||sizeMode!=='custom';this.$('megapixels-control').hidden=!this.ripple||!preset;this.$('size-mode').closest('label').hidden=!this.ripple;this.$('megapixels').updateReadout?.();
 
     const original=this.sourceInfo?`${this.sourceInfo.width} × ${this.sourceInfo.height}`:'the source resolution';
 
     this.$('size-help').textContent=`AI processing: ${c.width} × ${c.height} · ${(c.width*c.height/1e6).toFixed(2)} MP. Saved output: ${original}.`;
 
-    this.$('framing-help').textContent=(c.colourPipeline==='sdr_hdr'?'First save the SDR repair, then choose Convert repaired clip to HDR. The separate HDR pass can change the whole shot. ':'')+`The plate, masks and clean-frame guides share the same stretch to the nearest larger 64-pixel model grid. The result returns to the exact original dimensions at ${this.fps()} fps. No crop or letterbox.`;
+    this.$('framing-help').textContent=this.ripple?'Processing fits the whole frame without cropping; the saved video returns to the source size and frame rate. Higher resolutions need more memory.':(c.colourPipeline==='sdr_hdr'?'First save the SDR repair, then choose Convert repaired clip to HDR. The separate HDR pass can change the whole shot. ':'')+`The plate, masks and clean-frame guides share the same stretch to the nearest larger 64-pixel model grid. The result returns to the exact original dimensions at ${this.fps()} fps. No crop or letterbox.`;
 
     this.$('scrubber').hidden=!this.sourceInfo||this.view==='result';this.$('scrub').max=this.$('frame').max=Math.max(0,(this.sourceInfo?.frames||1)-1);this.updatePlayhead();
 

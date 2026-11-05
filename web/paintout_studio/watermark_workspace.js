@@ -60,7 +60,7 @@ export class WatermarkWorkspace{
     this.storageKey=workspaceOptions.storageKey||KEY;this.ripple=workspaceOptions.mode==='ripple';
     let saved={};try{saved=JSON.parse(localStorage.getItem(this.storageKey))||{};}catch{}
 
-    this.state=paintoutDraft(saved.draft);this.watermark=true;this.state.mode='targeted';if(!this.state.referenceImage?.file)this.state.referenceEnabled=false;this.state.targetedMethod=this.state.targetedMethod==='light'?'light':'automatic';
+    this.state=paintoutDraft(saved.draft);this.watermark=true;this.state.mode='targeted';if(!this.state.referenceImage?.file)this.state.referenceEnabled=false;this.state.targetedMethod='automatic';
     this.ripple=this.state.mode==='ripple'||this.ripple;
     if(this.ripple)this.state.mode='ripple';
 
@@ -109,7 +109,7 @@ export class WatermarkWorkspace{
 
         <div class="zc-prompt-bottom"><div class="zc-prompt-tools">
 
-          <div class="zc-tool-group"><label class="zc-tool zf-model zc-model-control" id="zps-method-control">${icons.model}<select id="zps-method" aria-label="Watermark repair model"><option value="automatic">LTX 2.5 · Quality</option><option value="light">ProPainter · Light</option></select>${icons.chevron}</label></div>
+          <div class="zc-tool-group"><span class="zc-tool zf-model" id="zps-method-control">${icons.model}<span>LTX 2.5</span></span></div>
 
           <details class="zc-tool-popup" id="zps-resolution"><summary class="zc-tool" aria-label="Processing resolution">${icons.size}<span id="zps-resolution-label">1152 × 640</span>${icons.chevron}</summary><div class="zc-tool-panel"><strong>Processing resolution</strong><label>Size<select id="zps-size-mode">${options([['default','Default · 1152 × 640'],['source','Use source'],...PAINTOUT_SIZE_PRESETS.map(([id,label])=>[id,label]),['custom','Custom dimensions']],this.state.resolutionMode)}</select></label><label id="zps-megapixels-control">Detail<select id="zps-megapixels">${options([['0.25','0.25 MP · fastest'],['0.5','0.5 MP'],['0.75','0.75 MP'],['1','1 MP'],['2','2 MP · more memory']],String(this.state.megapixels))}</select></label><div class="zf-dimensions" id="zps-custom-size"><label>Width<input id="zps-width" type="text" inputmode="numeric" min="64" max="4096" step="64" value="1152"/></label><label>Height<input id="zps-height" type="text" inputmode="numeric" min="64" max="4096" step="64" value="640"/></label></div><p id="zps-size-help"></p><p id="zps-framing-help"></p></div></details>
 
@@ -187,7 +187,6 @@ export class WatermarkWorkspace{
     this.$('choose-reference').onclick=()=>this.pickWatermarkReference();
     this.$('remove-reference').onclick=()=>{this.state.referenceImage=null;this.state.referenceEnabled=false;this.changed();};
     this.$('reference-colour').onchange=()=>{if(this.state.referenceImage)this.state.referenceImage.colour_space=this.$('reference-colour').value;this.changed();};
-    this.$('method').value=this.state.targetedMethod??'automatic';this.$('method').onchange=()=>{const method=this.$('method').value;if(this.busy()||!['automatic','light'].includes(method)||method==='light'&&paintoutColourPipeline(this.state)==='hdr_hdr'){this.render();return;}this.state.targetedMethod=method;this.changed();};
     this.$('hdr-scale').value=String(this.state.processingScale??1);this.$('hdr-scale').onchange=()=>{this.state.processingScale=Number(this.$('hdr-scale').value);this.changed();};
     for(const [id,key] of Object.entries({fps:'sequenceFps',colour:'sourceColour',processing:'processingSpace',output:'outputMode',seed:'seed'}))this.$(id).onchange=()=>{
 
@@ -296,7 +295,7 @@ export class WatermarkWorkspace{
 
   fps(){return this.sourceInfo?.kind==='video'?this.sourceInfo.fps:this.state.sequenceFps;}
 
-  config(){const c={...this.state,referenceEnabled:!!this.state.referenceEnabled&&!!this.state.referenceImage?.file,custom_loras:this.loras.value(),resolutionMode:'plate',sourceWidth:this.sourceInfo?.width,sourceHeight:this.sourceInfo?.height,detectedSourceColour:this.sourceInfo?.resolved_colour,colourPipeline:paintoutColourPipeline(this.state),anchors:[],prompt:this.$('prompt').value,keepAudio:true,savePrefix:'ZURA STUDIO/watermark removal',exrPrecision:'float32'};if(this.sourceInfo){c.width=Math.ceil(c.sourceWidth/64)*64;c.height=Math.ceil(c.sourceHeight/64)*64;c.sequenceFps=this.fps();}return c;}
+  config(){const c={...this.state,targetedMethod:'automatic',referenceEnabled:!!this.state.referenceEnabled&&!!this.state.referenceImage?.file,custom_loras:this.loras.value(),resolutionMode:'plate',sourceWidth:this.sourceInfo?.width,sourceHeight:this.sourceInfo?.height,detectedSourceColour:this.sourceInfo?.resolved_colour,colourPipeline:paintoutColourPipeline(this.state),anchors:[],prompt:this.$('prompt').value,keepAudio:true,savePrefix:'ZURA STUDIO/watermark removal',exrPrecision:'float32'};if(this.sourceInfo){c.width=Math.ceil(c.sourceWidth/64)*64;c.height=Math.ceil(c.sourceHeight/64)*64;c.sequenceFps=this.fps();}return c;}
 
   applySize(){const mode=this.state.resolutionMode;if(mode==='default'){this.state.width=1152;this.state.height=640;}else if(PAINTOUT_SIZE_PRESETS.some(p=>p[0]===mode))Object.assign(this.state,paintoutPresetSize(mode,this.state.megapixels));this.$('width').value=this.state.width;this.$('height').value=this.state.height;}
 
@@ -521,6 +520,7 @@ export class WatermarkWorkspace{
   }
 
   render(){
+    this.state.targetedMethod='automatic';this.page.classList.toggle('is-generating',!!this.job||this.submitting);
 
     const busy=this.busy(),inpaint=this.state.mode==='inpaint',targeted=this.state.mode!=='full',c=this.config(),availability=this.modelInfo?(this.ripple?rippleAvailability(this.modelInfo):inpaint?inpaintAvailability(this.modelInfo,c):paintoutAvailability(this.modelInfo,this.state.mode,c)):null;let error=[...this.page.querySelectorAll('[data-input-error]')].find(input=>!input.disabled)?.dataset.inputError||(this.ripple?rippleValidation(c):inpaint?inpaintValidation(c):paintoutValidation(c));
 
@@ -531,13 +531,12 @@ export class WatermarkWorkspace{
     this.loras?.setBusy(busy);
     this.validationError=error;this.availability=availability;this.renderColourStatus(c);this.$('block-control').hidden=!targeted||(!inpaint&&((c.targetedMethod??'automatic')!=='guided'));this.$('mask-block').value=String(this.state.maskBlockSize??32);this.$('mask-block').disabled=busy;
 
-    const composer=this.page.querySelector('.zf-composer');composer.hidden=false;composer.classList.toggle('zp-navigation-only',!this.state.source||!!this.editor?.active&&this.editor.stage!=='render');this.$('title').textContent='Review and render';this.$('workflow-label').textContent='Watermark removal';this.$('pipeline').value=paintoutColourPipeline(this.state);this.$('pipeline').disabled=busy;this.$('shot-summary').textContent=this.sourceInfo?`${name(this.state.source)} · ${this.sourceInfo.width} × ${this.sourceInfo.height} · ${this.fps()} fps · frames ${c.startFrame}–${c.startFrame+c.frameCount-1}`:'';
+    const composer=this.page.querySelector('.zf-composer');composer.hidden=false;this.page.classList.toggle('zp-navigation-only',!this.state.source||!!this.editor&&this.editor.stage!=='render');this.$('title').textContent='Review and render';this.$('workflow-label').textContent='Watermark removal';this.$('pipeline').value=paintoutColourPipeline(this.state);this.$('pipeline').disabled=busy;this.$('shot-summary').textContent=this.sourceInfo?`${name(this.state.source)} · ${this.sourceInfo.width} × ${this.sourceInfo.height} · ${this.fps()} fps · frames ${c.startFrame}–${c.startFrame+c.frameCount-1}`:'';
 
     for(const b of this.page.querySelectorAll('[data-mode]')){b.setAttribute('aria-pressed',String(b.dataset.mode===this.state.mode));b.disabled=busy;}
 
     const reference=this.state.referenceImage;this.$('reference-control').hidden=c.targetedMethod!=='automatic';this.$('use-reference').checked=!!this.state.referenceEnabled;this.$('use-reference').disabled=busy;this.$('reference-fields').hidden=!this.state.referenceEnabled;this.$('reference-name').textContent=reference?name(reference.file):'No image selected';this.$('reference-colour').value=reference?.colour_space||'srgb_display';this.$('reference-colour').disabled=busy||!reference;this.$('choose-reference').disabled=busy;this.$('remove-reference').hidden=!reference;this.$('remove-reference').disabled=busy;
-    this.$('method-summary').textContent=targeted&&c.targetedMethod==='light'&&paintoutColourPipeline(c)!=='hdr_hdr'?'ProPainter · cropped repair · original-resolution delivery':'LTX 2.5 INT8 · 8 steps · original-resolution delivery';
-    this.$('method').value=c.targetedMethod??'automatic';this.$('method').disabled=busy;const lightOption=this.$('method').querySelector('[value=light]');lightOption.disabled=paintoutColourPipeline(c)==='hdr_hdr';lightOption.textContent=lightOption.disabled?'ProPainter · SDR only':'ProPainter · Light';this.$('method-control').title=c.targetedMethod==='light'?'Light repair with ProPainter. Its weights download automatically on first use.':'Quality repair with LTX 2.5. Supports SDR and HDR footage.';
+    this.$('method-summary').textContent='LTX 2.5 INT8 · 8 steps · original-resolution delivery';this.$('method-control').title='LTX 2.5 watermark removal. Supports SDR and HDR footage.';
     this.$('hdr-scale-control').hidden=!(targeted&&!inpaint&&((c.targetedMethod??'automatic')!=='guided'));this.$('hdr-scale').disabled=busy;
     this.$('export-mask').disabled=busy||!c.maskProject||c.maskRevision==null;
     if(this.$('mask-download').dataset.maskSignature!==JSON.stringify([c.maskProject,c.maskRevision,c.startFrame,c.frameCount,Number(c.maskGrow||0)]))this.$('mask-download').hidden=true;

@@ -28,3 +28,9 @@ for(const change of [{anchors:[{frame:10,file:'later.png'}]},{anchors:config.anc
 assert.equal(rippleAvailability(info).ready,true);
 delete info.ZuraRippleGuide;assert.match(rippleAvailability(info).missing.join(' '),/restart ComfyUI/);
 console.log('Ripple graph matches native schemas, first-frame alignment and original-FPS/audio delivery contracts.');
+
+const custom=buildRippleGraph({...config,resolutionMode:'custom',width:1920,height:1088,prompt:'Replace the silver car'},info);
+assert.equal(custom.source.inputs.framing_mode,'Full frame (fit, no crop)');
+assert.equal(custom.source.inputs.render_width,1920);assert.equal(custom.source.inputs.render_height,1088);
+assert.match(rippleValidation({...config,width:1919}),/64-pixel/);
+assert.match(rippleValidation({...config,width:4096,height:4096}),/8.39/);

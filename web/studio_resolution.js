@@ -36,7 +36,7 @@ export function editableDimension(input, commit, limits=()=>({step:32,min:256,ma
   input.commitDimension=finish;
 }
 
-export function megapixelSlider(select,{min=.25,max=1,step=.05,value=select.value}={}) {
+export function megapixelSlider(select,{min=.25,max=megapixelMaximum(VIDEO_CANVAS_LIMITS),step=.05,value=select.value}={}) {
   const input=select.ownerDocument.createElement('input');input.type='range';input.id=select.id;input.min=min;input.max=max;input.step=step;input.value=value||1;input.setAttribute('aria-label','Megapixels');
   const output=select.ownerDocument.createElement('output');output.className='zc-resolution-readout';output.setAttribute('for',input.id);output.setAttribute('aria-live','polite');
   const handler=select.onchange;
@@ -52,7 +52,7 @@ export function sourceResolution(width,height,cap){
   const scale=Math.min(1,cap.max/width,cap.max/height,Math.sqrt(cap.maxPixels/(width*height)));
   return resolutionSize(width/height,width*height*scale*scale/1e6,cap);
 }
-export function resolutionMarkup(prefix){return `<div class="zc-resolution-header"><strong>Resolution</strong><output id="${prefix}-dimensions" class="zc-resolution-dimensions" aria-live="polite"></output></div><label class="zc-resolution-field"><span>Size</span><select id="${prefix}-shape">${RESOLUTION_SHAPES.map(([id,label])=>`<option value="${id}">${label}</option>`).join('')}</select></label><label class="zc-resolution-field zc-resolution-mp" id="${prefix}-mp-setting"><span class="zc-resolution-field-heading"><span>Megapixels</span><output id="${prefix}-mp-label" class="zc-resolution-readout"></output></span><input id="${prefix}-mp" type="range" min="0.25" max="1" step="0.05" value="1"/></label><div class="zf-dimensions" id="${prefix}-custom"><label>Width (px)<input id="${prefix}-width" value="1280"/></label><label>Height (px)<input id="${prefix}-height" value="720"/></label></div><p class="zc-resolution-hint" id="${prefix}-hint"></p>`;}
+export function resolutionMarkup(prefix){return `<div class="zc-resolution-header"><strong>Resolution</strong><output id="${prefix}-dimensions" class="zc-resolution-dimensions" aria-live="polite"></output></div><label class="zc-resolution-field"><span>Size</span><select id="${prefix}-shape">${RESOLUTION_SHAPES.map(([id,label])=>`<option value="${id}">${label}</option>`).join('')}</select></label><label class="zc-resolution-field zc-resolution-mp" id="${prefix}-mp-setting"><span class="zc-resolution-field-heading"><span>Megapixels</span><output id="${prefix}-mp-label" class="zc-resolution-readout"></output></span><input id="${prefix}-mp" type="range" min="0.25" max="8.35" step="0.05" value="1"/></label><div class="zf-dimensions" id="${prefix}-custom"><label>Width (px)<input id="${prefix}-width" value="1280"/></label><label>Height (px)<input id="${prefix}-height" value="720"/></label></div><p class="zc-resolution-hint" id="${prefix}-hint"></p>`;}
 
 /** Uses actual pipeline controls; fixed recipes expose their supported sizes. */
 export class VideoResolutionControl {

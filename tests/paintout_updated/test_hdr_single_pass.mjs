@@ -16,6 +16,6 @@ assert.match(paintoutValidation({...c,processingScale:.3}),/processing scale/);
 console.log('PASS targeted HDR single-pass graph, optional anchors, scale, and SDR isolation');
 
 const auto=buildPaintoutGraph({...sdr,targetedMethod:'automatic'});assert.equal(auto.sample.class_type,'SamplerCustomAdvanced');assert.equal(auto.lora.inputs.lora_name,PAINTOUT_MODELS.inpaintLora);assert.equal(auto.single_mask.inputs.expand,2);assert.ok(!auto.apply_anchors);
-const light=buildPaintoutGraph({...sdr,targetedMethod:'light'});assert.equal(light.light.class_type,'ProPainterInpaint');assert.deepEqual(light.save.inputs.decoded_crop,['light',0]);assert.ok(!light.model&&!light.sample);assert.equal(light.source.inputs.processing_scale,.5);
+const light=buildPaintoutGraph({...sdr,targetedMethod:'light'});assert.equal(light.sample.class_type,'SamplerCustomAdvanced');assert.ok(light.model&&!light.light,'Legacy Light projects now build LTX');assert.equal(light.source.inputs.processing_scale,.5);
 const upgrade=buildPaintoutGraph({...sdr,targetedMethod:'light',colourPipeline:'sdr_hdr',outputMode:'HLG video'});assert.equal(upgrade.repair_save.inputs.export_format,'EXR sequence');assert.equal(upgrade.save.class_type,'ZuraPaintoutHDRSave');
-console.log('PASS automatic and light SDR paths; optional HDR conversion');
+console.log('PASS automatic SDR and legacy project migration; optional HDR conversion');
