@@ -5,7 +5,7 @@ const create=buildImageGraph({model:'flux2',prompt:'A natural portrait',width:10
 assert.equal(create.model.inputs.unet_name,'flux-2-klein-9b-fp8.safetensors');
 assert.equal(create.text.inputs.clip_name,'qwen_3_8b_fp4mixed.safetensors');
 assert.equal(create.schedule.class_type,'Flux2Scheduler');
-assert.equal(create.schedule.inputs.steps,4);
+assert.equal(create.schedule.inputs.steps,4);assert.ok(!create.kv_cache);assert.deepEqual(create.guider.inputs.model,['model',0]);
 assert.equal(IMAGE_MODELS.find(m=>m.id==='flux3').name,'Flux 3 Klein','Flux 3 remains available');
 for(const model of ['qwen2511','klein9b','flux3edit']){
   assert.throws(()=>buildImageGraph({model,prompt:'Edit the image'}),/image you want to edit/);
@@ -27,7 +27,7 @@ for(const model of ['qwen2511','klein9b','flux3edit']){
   }else if(model==='klein9b'){
     assert.equal(graph.sample.class_type,'SamplerCustomAdvanced');
     assert.deepEqual(graph.schedule.inputs,{steps:4,width:1280,height:720});
-    assert.equal(graph.kv_cache.class_type,'FluxKVCache');assert.equal(graph.noise.inputs.noise_seed,17);
+    assert.ok(!Object.values(graph).some(n=>n.class_type==='FluxKVCache'),'Regular Klein must not receive the separately trained KV model patch');assert.deepEqual(graph.guider.inputs.model,['model',0]);assert.equal(graph.noise.inputs.noise_seed,17);
   }else{
     assert.equal(graph.text.inputs.type,'flux3');assert.equal(graph.sample.inputs.steps,16);
     assert.deepEqual(graph.sample.inputs.positive,['references',0]);
@@ -38,7 +38,7 @@ for(const model of ['qwen2511','klein9b','flux3edit']){
 for(const model of ['flux2','flux3','flux3edit','klein9b','qwen2511','zimage']){
   const graph=buildImageGraph({model,prompt:'Check',references:IMAGE_MODELS.find(m=>m.id===model).minReferences?[refs[0]]:[],loras:[{name:'face.safetensors',strength:.75}]});
   assert.deepEqual(graph.custom_image_lora_1.inputs.model,['model',0]);
-  const consumer=model==='qwen2511'?graph.lightning:model==='flux2'||model==='klein9b'?graph.kv_cache:model==='zimage'?graph.sampling:graph.sample;
+  const consumer=model==='qwen2511'?graph.lightning:model==='flux2'||model==='klein9b'?graph.guider:model==='zimage'?graph.sampling:graph.sample;
   assert.deepEqual(consumer.inputs.model,['custom_image_lora_1',0]);
 }
 assert.throws(()=>buildImageGraph({model:'flux2',prompt:'Check',loras:[{name:'x',strength:3}]}),/strength/);

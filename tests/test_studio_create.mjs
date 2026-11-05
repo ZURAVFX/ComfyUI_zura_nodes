@@ -198,7 +198,7 @@ ui.show('image');await ui.loadModels();
 for(let i=0;i<10&&ui.loading;i++)await Promise.resolve();
 assert.equal(ui.models.length,IMAGE_MODELS.length);
 const originalFetch=ui.fetch;
-ui.fetch=async function(path,body){if(path==='/object_info/FluxKVCache')return {};return originalFetch.call(this,path,body);};
+ui.fetch=async function(path,body){if(path==='/object_info/Flux2Scheduler')return {};return originalFetch.call(this,path,body);};
 await ui.loadModels();
 assert.ok([...ui.$('setup').querySelectorAll('a')].some(a=>a.href==='https://github.com/Comfy-Org/ComfyUI'),'Image setup points missing core image nodes to ComfyUI');
 assert.match(ui.$('setup').textContent,/Update ComfyUI and restart/);
@@ -299,7 +299,7 @@ assert.match(ui.$('generate').textContent,/Apply edit/);assert.match(ui.$('refer
   assert.equal(inputs.source.hidden,false);
   await ui.uploadReferences([new File(['new plate'],'newplate.png',{type:'image/png'})],{main:true});
   assert.equal(ui.references.length,2,'Replacing the plate retains guidance without adding a third input');assert.equal(ui.references[1],guide);
-  ui.items=[{file:{filename:'edited-result.png'},references:ui.references.map(r=>({...r}))}];ui.renderGallery();
+  ui.items=[{file:{filename:'edited-result.png'},references:ui.references.map(r=>({...r}))}];ui.selectedImage=0;ui.renderGallery();
   assert.equal(inputs.source.hidden,true,'A new generation displays its result');
   assert.equal(ui.$('gallery').hidden,false);
   inputs.toggle.click();assert.equal(inputs.source.hidden,false,'The original plate remains available for inspection');
@@ -320,7 +320,7 @@ ui.items=[];ui.references=[];ui.setImageOperation('create');ui.$('prompt').value
 {
   const fetchApi=api.fetchApi,extra={file:'identity.png',filename:'identity.png',name:'Identity'};
   ui.items=[{file:{filename:'newest.png',subfolder:'zura_images'}},{file:{filename:'selected.png',subfolder:'zura_images'}}];
-  ui.selectedImage=1;ui.references=[extra];let copies=0,requested='';
+  ui.selectedImage=1;ui.autoCanvasSuppressed=false;ui.references=[extra];let copies=0,requested='';
   api.fetchApi=async(path,options)=>{
     if(path.startsWith('/view?')){requested=path;return {ok:true,blob:async()=>new Blob(['canvas'],{type:'image/png'})};}
     if(path==='/upload/image'){copies++;assert.equal(options.body.get('type'),'input');return {ok:true,json:async()=>({name:'canvas.png',subfolder:'zura_images/references'})};}
@@ -334,7 +334,31 @@ ui.items=[];ui.references=[];ui.setImageOperation('create');ui.$('prompt').value
   ui.references.reverse();await ui.setImageOperation('edit');assert.equal(ui.references[0].filename,'canvas.png','Existing canvas source is promoted back to Image 1');
   ui.items=[{file:{filename:'unavailable.png'}}];ui.renderGallery();api.fetchApi=async()=>({ok:false});
   const before=ui.references.slice();await ui.setImageOperation('edit');assert.deepEqual(ui.references,before);assert.match(ui.$('message').textContent,/Could not load the canvas/);assert.equal(ui.uploading,false);
-  api.fetchApi=fetchApi;ui.items=[];ui.references=[];ui.selectedImage=0;await ui.setImageOperation('create');ui.message('');ui.renderGallery();ui.render();
+  api.fetchApi=fetchApi;
+  ui.items=[{file:{filename:'retained.png'}}];ui.selectedImage=0;ui.references=[{file:'main.png',filename:'main.png'},extra];ui.editMainMissing=false;ui.renderGallery();ui.render();
+  ui.$('reference-list').querySelector('[data-remove-ref="0"]').click();
+  await ui.setImageOperation('create');await ui.setImageOperation('edit');
+  assert.deepEqual(ui.references,[extra],'A removed main image is not recreated from an old result on a mode switch');
+  assert.equal(ui.editMainMissing,true,'Guidance stays guidance after switching modes');
+  assert.equal(ui.selectedImage,-1,'Removing the main image does not expose an unrelated old result');
+  ui.$('clear-references').click();
+  await ui.setImageOperation('create');await ui.setImageOperation('edit');
+  assert.deepEqual(ui.references,[],'Removing all images stays empty when returning to Edit');
+  ui.references=[{file:'main.png',filename:'main.png'}];ui.editMainMissing=false;ui.selectedImage=0;ui.renderGallery();ui.render();
+  const prompt=ui.$('prompt').value;
+  ui.editInputs.clear.click();
+  assert.equal(ui.items.length,1,'Clear result retains history and saved files');
+  assert.equal(ui.$('gallery').querySelector('img'),null);
+  assert.equal(ui.editInputs.source.hidden,false,'Clearing an edit result returns to the main image');
+  assert.equal(ui.$('prompt').value,prompt);
+  assert.equal(JSON.parse(storage['zura-image-workspace-v1']).selectedImage,-1,'Cleared selection persists across reloads');
+  assert.equal(JSON.parse(storage['zura-image-workspace-v1']).draft.autoCanvasSuppressed,true);
+  await ui.setImageOperation('create');await ui.setImageOperation('edit');
+  assert.equal(ui.$('gallery').querySelector('img'),null,'Mode changes do not restore a cleared result');
+  ui.$('image-history').querySelector('[data-view-image="0"]').click();
+  assert.equal(ui.selectedImage,0,'An explicit history selection can restore a cleared result');
+  assert.equal(ui.autoCanvasSuppressed,false);
+  ui.items=[];ui.references=[];ui.selectedImage=0;await ui.setImageOperation('create');ui.message('');ui.renderGallery();ui.render();
 }
 assert.equal(ui.$('settings-panel').hidden,true);
 ui.$('settings-toggle').onclick();
@@ -594,7 +618,7 @@ ui.browserConnection.close();assert.equal(ui.browserConnection.timer,null);ui.br
 ui.$('model').value=originalModel;ui.$('prompt').value=originalPrompt;ui.imageLoras=originalLoras;ui.fetch=oldImageFetch;ui.render();assert.equal(ui.browserConnection.host.hidden,true);assert.equal(ui.$('image-lora-settings').hidden,false);
 ui.close();
 assert.equal(JSON.parse(storage['zura-image-workspace-v1']).items.length,1);
-const oldFiles=ui.items.map(i=>i.file.filename);ui.$('clear-history').onclick();assert.equal(ui.items.length,0);assert.equal(ui.$('gallery').querySelectorAll('img').length,0);assert.equal(ui.$('image-empty').hidden,false);ui.$('undo-history').onclick();assert.deepEqual(ui.items.map(i=>i.file.filename),oldFiles);ui.$('clear-history').onclick();
+const oldFiles=ui.items.map(i=>i.file.filename);ui.$('clear-history').onclick();assert.equal(ui.items.length,0);assert.equal(ui.$('gallery').querySelectorAll('img').length,0);assert.equal(ui.$('image-empty').hidden,!ui.editInputs.source.hidden,'Clearing history keeps the supplied main image visible');ui.$('undo-history').onclick();assert.deepEqual(ui.items.map(i=>i.file.filename),oldFiles);ui.$('clear-history').onclick();
 const reopened=new context.Studio();assert.equal(reopened.creative.items.length,0);assert.equal(reopened.container.dataset.theme,'light');assert.equal(Number(reopened.creative.$('width').value),720);assert.equal(Number(reopened.creative.$('height').value),1280);reopened.creative.close();
 const relightUi=new context.Studio();relightUi.source={id:'long-source',duration:15,width:1080,height:1920,url:'/source.mp4'};
 relightUi.config={...relightUi.config,workflow_mode:'relight',engine:'h3',relight_engine:'wan21',length_mode:'original',edit_area:'scene'};

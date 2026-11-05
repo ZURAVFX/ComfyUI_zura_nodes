@@ -4,7 +4,7 @@ export const IMAGE_MODELS = [
   {id:"flux3",maxReferences:10,name:"Flux 3 Klein",hint:"Detailed scenes and prompt following",model:"flux3-image-klein-int8-convrot.safetensors",text:"qwen3vl_4b_int8_convrot.safetensors",vae:"flux2-vae.safetensors",type:"flux3",steps:16,latent:"EmptyFlux2LatentImage",url:"https://huggingface.co/black-forest-labs/flux-3-image-klein-comfy"},
   {id:"zimage",maxReferences:0,name:"Z-Image Turbo",hint:"Fast photography and illustration",model:"z_image_turbo_bf16.safetensors",text:"qwen_3_4b.safetensors",vae:"ae.safetensors",type:"lumina2",steps:9,latent:"EmptySD3LatentImage",url:"https://huggingface.co/Comfy-Org/z_image_turbo"},
   {id:"qwen2511",minReferences:1,maxReferences:3,edit:true,name:"Qwen Image Edit 2511",hint:"Edit an image with up to two extra references. Your 4-step Lightning recipe; INT8 with CPU offloading on 16 GB.",model:"qwen_image_edit_2511_int8_convrot.safetensors",text:"qwen_2.5_vl_7b_fp8_scaled.safetensors",vae:"qwen_image_vae.safetensors",type:"qwen_image",steps:4,lora:"Qwen-Image-Edit-2511-Lightning-4steps-V1.0-bf16.safetensors",url:"https://huggingface.co/Qwen/Qwen-Image-Edit-2511"},
-  {id:"klein9b",minReferences:1,maxReferences:4,edit:true,name:"FLUX Klein 9B",hint:"Full-frame edits and reference-led changes. Your FP8 9B recipe: native Flux 2 scheduling, 4 steps and reference KV cache.",model:"flux-2-klein-9b-fp8.safetensors",text:"qwen_3_8b_fp4mixed.safetensors",vae:"flux2-vae.safetensors",type:"flux2",steps:4,latent:"EmptyFlux2LatentImage",url:"https://huggingface.co/black-forest-labs/FLUX.2-klein-9B"},
+  {id:"klein9b",minReferences:1,maxReferences:4,edit:true,name:"FLUX Klein 9B",hint:"Full-frame edits and reference-led changes. Your FP8 9B recipe: native Flux 2 scheduling, 4 steps and ordered image references.",model:"flux-2-klein-9b-fp8.safetensors",text:"qwen_3_8b_fp4mixed.safetensors",vae:"flux2-vae.safetensors",type:"flux2",steps:4,latent:"EmptyFlux2LatentImage",url:"https://huggingface.co/black-forest-labs/FLUX.2-klein-9B"},
   {id:"flux3edit",minReferences:1,maxReferences:10,edit:true,name:"Flux 3 Klein",hint:"Edit Image 1 using your prompt and optional appearance references. Native INT8 recipe, 16 steps.",model:"flux3-image-klein-int8-convrot.safetensors",text:"qwen3vl_4b_int8_convrot.safetensors",vae:"flux2-vae.safetensors",type:"flux3",steps:16,latent:"EmptyFlux2LatentImage",url:"https://huggingface.co/black-forest-labs/flux-3-image-klein-comfy"},
   ...['chatgpt','gemini'].flatMap(provider=>[false,true].map(edit=>({id:provider+(edit?'edit':''),provider,edit,minReferences:edit?1:0,maxReferences:8,name:provider==='chatgpt'?'ChatGPT Image':'Gemini Image',node:provider==='chatgpt'?'ZuraChatGPTImage':'ZuraGeminiImage',hint:'Sign in through your browser. Uses your website account allowance, with no Zura or paid API credits. References are sent to the selected provider.',url:provider==='chatgpt'?'https://chatgpt.com':'https://gemini.google.com'}))),
 ];
@@ -69,7 +69,10 @@ export function buildImageGraph({model="flux3",prompt,shape="square",seed=42,wid
   const latent=node("size",recipe.latent,"Image size",{width,height,batch_size:1});
   let samples;
   if(model==="klein9b"||model==="flux2"){
-    unet=node("kv_cache","FluxKVCache","Cache reference attention",{model:unet});
+    // This is the regular Klein checkpoint, not the separately trained 9B-KV
+    // model. FluxKVCache overrides reference timing/positions and is not valid
+    // here. Match the official distilled recipe: retain the model's native
+    // reference conditioning throughout all four sampling steps.
     const noise=node("noise","RandomNoise","Seed",{noise_seed:seed});
     const guider=node("guider","BasicGuider","Distilled guidance",{model:unet,conditioning:positive});
     const sampler=node("sampler","KSamplerSelect","Euler",{sampler_name:"euler"});

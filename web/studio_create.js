@@ -34,10 +34,10 @@ export class CreativeWorkspace {
   constructor(studio,api,app){
     this.studio=studio;this.api=api;this.app=app;this.root=studio.container;
     this.disposePopovers=installPopoverDismissal(this.root);
-    const saved=read();this.items=Array.isArray(saved.items)?saved.items.slice(0,30):[];
+    const saved=read();this.selectedImage=Number.isInteger(saved.selectedImage)?saved.selectedImage:0;this.items=Array.isArray(saved.items)?saved.items.slice(0,30):[];
     this.job=saved.job||null;this.pendingSubmission=saved.pendingSubmission||null;this.draft=saved.draft||{};this.models=[];this.submitting=false;this.uploading=false;this.references=Array.isArray(this.draft.references)?this.draft.references:[];
     if(this.job?.cancelPending)this.job.cancelRetryAvailable=true;
-    this.editMainMissing=!!this.draft.editMainMissing;
+    this.editMainMissing=!!this.draft.editMainMissing;this.autoCanvasSuppressed=!!this.draft.autoCanvasSuppressed;
     this.imageLoras=Array.isArray(this.draft.loras)?this.draft.loras.map(l=>({...l})):[];this.imageLoraCatalog=[];
     const nav=document.createElement("nav");nav.className="zc-nav";nav.setAttribute("aria-label","Workspace");
     nav.innerHTML='<button type="button" data-space="home" hidden>Home</button><button type="button" data-space="image">Image</button><button type="button" data-space="video">Video</button><button type="button" id="zc-open-hdr" hidden>Convert to HDR</button>';
@@ -112,7 +112,7 @@ export class CreativeWorkspace {
     for(const button of imageTabs.querySelectorAll('button'))button.onclick=()=>{imageTabs.open=false;this.setImageOperation(button.dataset.imageOperation);};
     const imageHistory=document.createElement('details');imageHistory.className='zc-image-takes';imageHistory.innerHTML='<summary>History</summary><div id="zc-image-history"></div>';
     page.querySelector('.zc-image-tools').prepend(imageHistory);
-    imageHistory.addEventListener('click',event=>{const button=event.target.closest('[data-view-image]');if(button){this.selectedImage=Number(button.dataset.viewImage);this.renderGallery();imageHistory.open=false;}});
+    imageHistory.addEventListener('click',event=>{const button=event.target.closest('[data-view-image]');if(button){this.selectedImage=Number(button.dataset.viewImage);this.autoCanvasSuppressed=false;this.save();this.renderGallery();imageHistory.open=false;}});
     const imageStatus=document.createElement('div');imageStatus.className='zc-image-status';imageStatus.append(this.$('progress'),this.$('message'));page.querySelector('.zc-image-scroll').append(imageStatus);
     for(const button of this.root.querySelectorAll("[data-space]"))button.onclick=()=>this.show(button.dataset.space);
     this.root.querySelector('#zc-open-hdr').onclick=()=>this.openHDR();
@@ -151,8 +151,8 @@ export class CreativeWorkspace {
     drop.ondragleave=()=>drop.classList.remove("is-dragging");
     drop.ondrop=e=>{e.preventDefault();e.stopPropagation();drop.classList.remove("is-dragging");this.uploadReferences(Array.from(e.dataTransfer?.files||[]));};
     this.root.onpaste=e=>this.pasteReferences(e);
-    this.$("reference-list").onclick=e=>{if(this.job||this.pendingSubmission||this.submitting||this.uploading)return;const remove=e.target.closest("[data-remove-ref]"),move=e.target.closest("[data-move-ref]");if(!remove&&!move)return;if(remove){const index=Number(remove.dataset.removeRef);if(this.imageOperation==='edit'&&index===0&&!this.editMainMissing)this.editMainMissing=true;this.references.splice(index,1);if(!this.references.length)this.editMainMissing=false;}if(move){const i=Number(move.dataset.moveRef);[this.references[i-1],this.references[i]]=[this.references[i],this.references[i-1]];}this.save();this.render();};
-    this.$("clear-references").onclick=()=>{this.references=[];this.editMainMissing=false;this.save();this.render();};
+    this.$("reference-list").onclick=e=>{if(this.job||this.pendingSubmission||this.submitting||this.uploading)return;const remove=e.target.closest("[data-remove-ref]"),move=e.target.closest("[data-move-ref]");if(!remove&&!move)return;if(remove)this.removeImageReference(Number(remove.dataset.removeRef));if(move){const i=Number(move.dataset.moveRef);[this.references[i-1],this.references[i]]=[this.references[i],this.references[i-1]];}this.save();this.render();};
+    this.$("clear-references").onclick=()=>{this.references=[];this.editMainMissing=true;this.autoCanvasSuppressed=true;this.clearImageResult();};
     this.$("refresh").onclick=()=>this.loadModels();this.$("cancel").onclick=()=>this.cancel();
     this.$("new").onclick=()=>{this.$("prompt").value="";this.save();this.render();this.$("prompt").focus({preventScroll:true});};
     this.$("gallery").onclick=e=>{
@@ -161,7 +161,7 @@ export class CreativeWorkspace {
       const button=e.target.closest("[data-reuse]");if(!button)return;
       const item=this.items[Number(button.dataset.reuse)];
       this.setImageOperation(IMAGE_MODELS.find(m=>m.id===item.model)?.edit?'edit':'create',{useCanvas:false});
-      this.editMainMissing=false;this.references=item.references||[];this.$("prompt").value=item.prompt;this.$("model").value=item.model;this.$("shape").value=item.shape;
+      this.editMainMissing=false;this.references=(item.references||[]).map(ref=>({...ref}));this.$("prompt").value=item.prompt;this.$("model").value=item.model;this.$("shape").value=item.shape;
       const size=imageDimensions(item);this.$("width").value=size[0];this.$("height").value=size[1];this.$("seed").value=item.seed;this.$("random").checked=false;this.save();this.render();
     };
     this.root.querySelector("#gs-exit").onclick=()=>this.mode==="image"?this.graph():this.mode==="frames"?this.frames.graph():this.mode==="references"?this.referencesVideo.graph():this.mode==="paintout"?this.paintout.graph():this.mode==="watermark"?this.watermark.graph():this.mode==="outpaint"?this.outpaint.graph():studio.graphView();
@@ -290,14 +290,25 @@ export class CreativeWorkspace {
     if(!Array.isArray(result.loras)||result.loras.length!==config.loras.length)throw new Error('Could not validate the selected image LoRAs.');
     return buildImageGraph({...config,loras:result.loras});
   }
-  config(){return {...(this.outpaintGuide?.request?{outpaint_guide:this.outpaintGuide.request.id}:{}),operation:this.imageOperation,editMainMissing:!!this.editMainMissing,model:this.$("model").value||(this.imageOperation==='edit'?'qwen2511':'flux2'),prompt:this.$("prompt").value,shape:this.$("shape").value,references:this.references.map(r=>({...r})),loras:IMAGE_MODELS.find(model=>model.id===this.$('model').value)?.provider?[]:this.imageLoras.map(l=>({...l})),width:Number(this.$("width").value),height:Number(this.$("height").value),seed:Number(this.$("seed").value),random:this.$("random").checked};}
+  config(){return {...(this.outpaintGuide?.request?{outpaint_guide:this.outpaintGuide.request.id}:{}),operation:this.imageOperation,editMainMissing:!!this.editMainMissing,autoCanvasSuppressed:!!this.autoCanvasSuppressed,model:this.$("model").value||(this.imageOperation==='edit'?'qwen2511':'flux2'),prompt:this.$("prompt").value,shape:this.$("shape").value,references:this.references.map(r=>({...r})),loras:IMAGE_MODELS.find(model=>model.id===this.$('model').value)?.provider?[]:this.imageLoras.map(l=>({...l})),width:Number(this.$("width").value),height:Number(this.$("height").value),seed:Number(this.$("seed").value),random:this.$("random").checked};}
   async setImageOperation(operation,{useCanvas=true}={}){
     if(this.job||this.pendingSubmission||this.submitting||this.uploading)return;
     this.imageOperation=operation;
     for(const option of this.$('model').querySelectorAll('option'))option.hidden=!!this.models.find(m=>m.id===option.value)?.edit!==(operation==='edit');
     if(!this.models.some(m=>m.id===this.$('model').value&&!!m.edit===(operation==='edit')))this.$('model').value=this.models.find(m=>m.ready&&!!m.edit===(operation==='edit'))?.id||this.models.find(m=>!!m.edit===(operation==='edit'))?.id||'';
     this.save();this.render();
-    if(operation==='edit'&&useCanvas)await this.useCanvasReference();
+    if(operation==='edit'&&useCanvas&&!this.autoCanvasSuppressed)await this.useCanvasReference();
+  }
+  removeImageReference(index){
+    if(!Number.isInteger(index)||index<0||index>=this.references.length)return;
+    const main=index===0&&(this.imageOperation!=='edit'||!this.editMainMissing);
+    this.references.splice(index,1);
+    if(main){this.editMainMissing=true;this.autoCanvasSuppressed=true;this.clearImageResult();}
+  }
+  clearImageResult(){
+    this.selectedImage=-1;this.autoCanvasSuppressed=true;
+    if(this.imageComparison)this.imageComparison.active=false;
+    this.save();this.renderGallery();this.render();
   }
   async useCanvasReference(){
     const file=this.items[this.selectedImage||0]?.file;if(!file?.filename)return;
@@ -318,7 +329,7 @@ export class CreativeWorkspace {
     }catch(error){this.message(error.name==='AbortError'?'Adding the canvas image timed out. Choose Edit image again to retry.':error.message);}
     finally{clearTimeout(timer);this.uploading=false;this.render();}
   }
-  save(){this.draft=this.config();try{localStorage.setItem(KEY,JSON.stringify({draft:this.draft,items:this.items,job:this.job,pendingSubmission:this.pendingSubmission}));return true;}catch{this.message("Browser storage is full. Your generated files remain saved on disk.");return false;}}
+  save(){this.draft=this.config();try{localStorage.setItem(KEY,JSON.stringify({draft:this.draft,items:this.items,selectedImage:this.selectedImage,job:this.job,pendingSubmission:this.pendingSubmission}));return true;}catch{this.message("Browser storage is full. Your generated files remain saved on disk.");return false;}}
   message(text){this.$("message").textContent=text||"";this.$("message").hidden=!text;}
   open(){
     this.modelDownloadClosed=false;
@@ -529,8 +540,8 @@ export class CreativeWorkspace {
   renderGallery(){
     this.outpaintGuide?.syncImageUI();
     this.imageZoom?.dispose();this.imageZoom=null;
-    this.$("image-empty").hidden=!!this.items.length;
-    this.selectedImage=Math.min(this.selectedImage||0,Math.max(0,this.items.length-1));
+    this.selectedImage=Math.max(-1,Math.min(this.selectedImage??0,Math.max(0,this.items.length-1)));
+    this.$("image-empty").hidden=!!this.items[this.selectedImage];
     this.$("gallery").innerHTML=this.items.map((item,i)=>i!==this.selectedImage?'':`<figure><a href="${escape(this.api.apiURL(view(item.file)))}" target="_blank" rel="noopener"><img src="${escape(this.api.apiURL(view(item.file)))}" alt="${escape(item.prompt)}"/></a><figcaption><span>${escape(IMAGE_MODELS.find(m=>m.id===item.model)?.name||item.model)}${item.seconds?` · ${Math.round(item.seconds)}s`:""}</span><div><button type="button" data-save-image="${i}" title="Save to your Studio output folder">Save image</button><button type="button" data-reuse="${i}">Reuse prompt</button><a href="${escape(this.api.apiURL(view(item.file)))}" download="${escape(item.file.filename)}">Download</a></div></figcaption></figure>`).join("");
     const frame=this.$("gallery").querySelector('figure');
     if(frame && typeof PreviewZoom!=="undefined"){this.imageZoom=new PreviewZoom(frame,()=>frame.querySelector('a>img'));this.imageZoom.update(String(this.selectedImage));}
@@ -593,7 +604,7 @@ export class CreativeWorkspace {
       if(entry?.status?.completed||entry?.status?.status_str==="error"){
         const files=entry.status.status_str==='error'?[]:entry.outputs?.save?.images||[];
         const messages=entry.status.messages||[],start=messages.find(m=>m[0]==="execution_start")?.[1]?.timestamp,end=messages.find(m=>m[0]==="execution_success")?.[1]?.timestamp;
-        for(const file of files)this.items.unshift({...job.config,file,seconds:start&&end?(end-start)/1000:null});this.items=this.items.slice(0,30);if(files.length)this.selectedImage=0;
+        for(const file of files)this.items.unshift({...job.config,file,seconds:start&&end?(end-start)/1000:null});this.items=this.items.slice(0,30);if(files.length){this.selectedImage=0;this.autoCanvasSuppressed=false;}
         const error=messages.find(m=>m[0]==="execution_error")?.[1];this.message(files.length?(job.cancelPending?"Image finished before cancellation. Your image is saved.":""):error?.exception_message||(job.cancelPending?"Run cancelled. Your previous images are safe.":"Generation stopped. Your previous images are safe."));this.job=null;this.stopPolling();this.save();this.renderGallery();this.render();
       }else{const queue=await this.fetch("/queue");if(this.job!==job)return;const running=queue.queue_running.some(r=>r[1]===job.id),pending=queue.queue_pending.some(r=>r[1]===job.id);if(!running&&!pending){const again=await this.fetch("/history/"+encodeURIComponent(job.id));if(this.job!==job)return;if(again[job.id])return;this.job=null;this.stopPolling();this.save();this.message(job.cancelPending?"Run cancelled. Your previous images are safe.":"This run is no longer in ComfyUI's queue. You can generate again.");this.render();}else if(job.cancelPending){this.$('progress-title').textContent='Cancelling…';this.$('progress-detail').textContent='Waiting for ComfyUI to stop this run.';}else this.$("progress-detail").textContent=running?this.elapsed():"Waiting for other ComfyUI jobs";}
     }catch(e){this.connectionLost=true;this.message("Connection interrupted. Reconnecting to your image run…");}finally{this.polling=false;}

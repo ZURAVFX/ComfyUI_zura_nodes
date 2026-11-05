@@ -13,6 +13,8 @@ export class ImageEditInputs {
     this.source=doc.createElement('div');this.source.className='zc-image-source zc-gallery';this.source.hidden=true;owner.$('gallery').before(this.source);
     this.toggle=doc.createElement('button');this.toggle.type='button';this.toggle.textContent='View main image';this.toggle.hidden=true;owner.root.querySelector('.zc-image-tools').prepend(this.toggle);
     this.toggle.onclick=()=>{this.showSource=!this.showSource;this.sync();};
+    this.clear=doc.createElement('button');this.clear.type='button';this.clear.textContent='Clear result';this.clear.title='Remove this generation from the canvas. It stays in History and on disk.';
+    this.clear.onclick=()=>owner.clearImageResult();owner.root.querySelector('.zc-image-tools').prepend(this.clear);
     this.file=doc.createElement('input');this.file.type='file';this.file.accept='image/png,image/jpeg,image/webp';this.file.hidden=true;owner.$('reference-drop').append(this.file);
     this.file.onchange=()=>{const file=this.file.files?.[0];this.file.value='';if(file)void owner.uploadReferences([file],{main:true});};
     this.addReferences=owner.$('add-references');this.addLabel=this.addReferences.innerHTML;this.addHome=this.addReferences.parentElement;
@@ -37,7 +39,7 @@ export class ImageEditInputs {
     o.root.querySelector('.zc-image-heading h2').textContent=edit?'Edit image':'Create image';
     const key=main?JSON.stringify([main.file||main.filename,main.subfolder||'']):'',item=o.items[o.selectedImage||0],resultKey=JSON.stringify(item?.file||null);
     if(key!==this.key){this.key=key;this.showSource=!!main;this.resultKey=resultKey;}
-    else if(resultKey!==this.resultKey){this.resultKey=resultKey;this.showSource=false;}
+    else if(resultKey!==this.resultKey){this.resultKey=resultKey;this.showSource=!item&&!!main;}
     const list=o.$('reference-list');list.classList.toggle('zc-edit-inputs',edit);this.addHome.hidden=edit;
     let groups=list.querySelector('.zc-edit-main');
     if(edit){
@@ -73,6 +75,7 @@ export class ImageEditInputs {
       this.addHome.prepend(this.addReferences);this.addReferences.innerHTML=this.addLabel;this.addReferences.classList.add('zc-attachment');
       if(groups){const cards=[...list.querySelectorAll('.zc-reference')];list.replaceChildren(...cards);o.referenceFingerprint=null;}
     }
+    this.clear.hidden=!item;this.clear.disabled=busy;
     this.toggle.hidden=!edit||!main||!item;this.toggle.textContent=this.showSource?'View result':'View main image';
     this.toggle.setAttribute('aria-label',this.showSource?'View generated result':'View main image');
     const visible=edit&&!!main&&this.showSource;this.source.hidden=!visible;
@@ -82,6 +85,6 @@ export class ImageEditInputs {
       if(image.getAttribute('src')!==url)image.src=url;
       this.sourceZoom?.update(key);
       o.$('gallery').hidden=true;o.$('image-empty').hidden=true;if(o.imageComparison?.host)o.imageComparison.host.hidden=true;
-    }else{ o.imageComparison?.render();o.$('image-empty').hidden=!!o.items.length; }
+    }else{ o.imageComparison?.render();o.$('image-empty').hidden=!!item; }
   }
 }

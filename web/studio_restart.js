@@ -167,6 +167,8 @@ function resetImageWorkspace(creative){
   creative.submitting=false;
   creative.uploading=false;
   creative.references=[];
+  creative.editMainMissing=false;
+  creative.autoCanvasSuppressed=true;
   creative.imageLoras=[];
   creative.imageOperation=operation;
   creative.draft={operation,...(selectedModel?{model:selectedModel}:{})};
