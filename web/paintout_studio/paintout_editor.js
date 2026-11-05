@@ -535,6 +535,7 @@ export class PaintoutEditor{
     if(this.maskChoices&&!this.subjectChoices.hidden){this.$('track').disabled=true;this.$('track-help').textContent='Choose a subject from the previews above before tracking.';}
     this.$('continue').disabled=busy||!(this.w.state.mask||this.w.state.maskRevision!=null)||Array.isArray(this.document?.mask_segments)&&!this.document.mask_segments.some(m=>m.tracked);
     this.$('continue').hidden=this.stage!=='mask'||this.w.state.mode==='full';
+    this.$('render-next').querySelector('span').textContent='Review & render';
     this.$('render-next').hidden=this.stage!=='clean'||this.w.state.mode==='full';
     this.$('render-next').disabled=busy||!!this.candidate||!this.w.state.anchors.some(anchor=>anchor.file&&anchor.status==='accepted'&&anchor.enabled!==false&&anchor.frame>=this.w.state.startFrame&&anchor.frame<this.w.state.startFrame+this.w.state.frameCount);
 

@@ -81,4 +81,12 @@ ui.setMode('inpaint');assert.equal(ui.ripple,false);assert.equal(ui.editor.$('tr
 assert.equal(ui.editor.nav.querySelector('[data-stage=clean]').textContent,'Reference frame');
 assert.equal(ui.editor.$('instruction').closest('label').firstChild.textContent,'Instruction');
 assert.equal(ui.editor.viewerToolbar.querySelector('[data-tool=brush]').hidden,false,'Ordinary mask tools return when leaving Ripple');
+assert.equal(ui.editor.$('render-next').querySelector('span').textContent,'Review & render','Ripple first-frame wording must not leak into Inpaint');
+ui.setMode('targeted');
+ui.state.source='source.mp4';ui.state.startFrame=0;ui.state.frameCount=97;ui.state.clipTrimConfirmed=true;
+ui.state.anchors=[{frame:30,file:'clean30.png',status:'accepted',enabled:true},{frame:60,file:'clean60.png',status:'accepted',enabled:true}];
+ui.editor.stage='clean';ui.editor.updateControls();
+assert.equal(ui.editor.$('render-next').querySelector('span').textContent,'Review & render','Paintout accepts multiple clean frames, not just the first');
+assert.equal(ui.editor.$('render-next').disabled,false);
+assert.deepEqual(ui.config().anchors.map(a=>a.frame),[30,60]);
 ui.close();console.log('Ripple first-frame locking, guided stages, trim invalidation and return to any-frame Inpaint passed.');
