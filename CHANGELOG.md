@@ -1,5 +1,15 @@
 # Release notes
 
+## 1.3.50 - 5 November 2026
+
+- Unify Image and Video layouts, workspace controls and Start over placement. Keep previews usable during setup and generation, with progress below the image.
+- Keep dropdowns inside the window, simplify model setup controls and remove repeated headings and unnecessary nested scrolling.
+- Add Qwen Image 2.1 and full FLUX.2 dev as local image-edit previews with model downloads and compatible LoRA selection. Generation-quality testing is still outstanding for these new options.
+- Correct FLUX.2 Klein 9B edit conditioning. Removed main images and cleared results stay cleared when switching modes.
+- Keep Ripple's prompt and mask between stages, expose its processing resolution and retain workflow switching during trimming. Restore multi-frame wording in Paintout.
+- Remove ProPainter from Watermark removal and migrate saved selections to LTX. Expand shared resolution controls up to 8.35 MP where supported.
+- Validate UI layouts in isolated browser fixtures across four window sizes, including 75 popup checks, plus targeted UI, recipe, download and LoRA regressions. No new GPU generations were run for this release. See the [UI audit](docs/UI_COHESION_AUDIT_2026-11-05.md).
+
 
 ## 1.3.49
 

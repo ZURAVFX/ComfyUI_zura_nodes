@@ -31,7 +31,7 @@ Use your own ComfyUI host and port if they differ.
 
 ## Current release
 
-**1.3.49** adds a browser selector for ChatGPT and Gemini sign-in, including Chrome, Edge and Safari on macOS. The selected browser opens and supplies the session; pending sign-ins can be cancelled. See [browser setup](docs/STUDIO_BROWSER_IMAGES.md) and [validation notes](docs/STUDIO_1349_VALIDATION.md).
+**1.3.50** brings consistent Image and Video layouts, protected preview space, clearer setup controls and dropdowns that stay inside the window. It fixes Klein editing and cleared-image persistence, improves Ripple's shared prompt, mask and resolution controls, and adds **Qwen Image 2.1** and **FLUX.2 dev** as image-edit previews. See the [UI audit](docs/UI_COHESION_AUDIT_2026-11-05.md) and [release notes](CHANGELOG.md).
 
 The previous update adds complete camera-angle model setup, including MoGe 3, and checks gated-model access before large downloads. Choose a mode to see its missing files and extension guidance. Restart ComfyUI and refresh Studio after updating. See the [model setup notes](docs/STUDIO_1348_VALIDATION.md).
 
