@@ -65,6 +65,10 @@ CATALOG = {
             _file("text_encoders", "qwen_3_8b_fp4mixed.safetensors", SHARED, "1138ce884c8e977cdacacbe779784fec4426bb3f", "split_files/text_encoders/qwen_3_8b_fp4mixed.safetensors", 6802593327, "bbf16f981d98e16d080c566134814c4e9f6aadd0d0e1383c60bc44ba939d760d"),
             _file("vae", "flux2-vae.safetensors", SHARED, "1138ce884c8e977cdacacbe779784fec4426bb3f", "split_files/vae/flux2-vae.safetensors", 336211292, "868fe7b343cc8f3a19dbcfcafbc3d5f888802be3f89bd81b65b3621a066ce8f3"),
         ]),
+    "flux2_klein_9b_bf16": dict(name="FLUX.2 Klein 9B · BF16 test weights", gated=True,
+        license_url="https://huggingface.co/black-forest-labs/FLUX.2-klein-9B",
+        note="BF16 diffusion weights for a local quality comparison. Studio reuses the already installed FP4 Qwen encoder and Flux 2 VAE, so only diffusion-weight precision changes. About 18.2 GB; expect slower loading and CPU offload on 16 GB GPUs.",
+        files=[_file("diffusion_models", "flux-2-klein-9b.safetensors", "black-forest-labs/FLUX.2-klein-9B", "92196c8e11f7b6cf2b7493e037d8c5345c559216", "flux-2-klein-9b.safetensors", 18157185168, "0975d6b77b5f510b99547d6724a208e36527df654e8f6134f59ece3f9f30da58")]),
     "flux3_klein": dict(name="FLUX.3 Image Klein", gated=True,
         license_url="https://huggingface.co/black-forest-labs/flux-3-image-klein-comfy",
         files=[
@@ -72,6 +76,10 @@ CATALOG = {
             _file("text_encoders", "qwen3vl_4b_int8_convrot.safetensors", FLUX3, "feef60b0aaf63a4773ace96636ebbcf43b881312", "text_encoders/qwen3vl_4b_int8_convrot.safetensors", 4858559240, "32de113cbf8282b02cbff0794b637b9d6676da09314a1db5a30bcea9bf4ee01c"),
             _file("vae", "flux2-vae.safetensors", SHARED, "1138ce884c8e977cdacacbe779784fec4426bb3f", "split_files/vae/flux2-vae.safetensors", 336211292, "868fe7b343cc8f3a19dbcfcafbc3d5f888802be3f89bd81b65b3621a066ce8f3"),
         ]),
+    "flux3_klein_bf16": dict(name="FLUX.3 Image Klein · BF16 test weights", gated=True,
+        license_url="https://huggingface.co/black-forest-labs/flux-3-image-klein-comfy",
+        note="BF16 diffusion weights for a local quality comparison. Studio reuses the already installed INT8 Qwen VL encoder and Flux 2 VAE, so only diffusion-weight precision changes. About 11.1 GB; expect slower loading and CPU offload on 16 GB GPUs.",
+        files=[_file("diffusion_models", "flux3-image-klein-bf16.safetensors", FLUX3, "9d36114cf7a2e03a45c28f5cc4987d20ebfdb6c1", "diffusion_models/flux3-image-klein-bf16.safetensors", 11097404512, "c3e9813cdd049c831c836b2e9db61150e49a93fc1a4c63b256494642fee0bd7c")]),
 }
 
 CATALOG.update({

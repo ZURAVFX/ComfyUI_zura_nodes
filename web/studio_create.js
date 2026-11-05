@@ -275,7 +275,7 @@ export class CreativeWorkspace {
   }
   $(id){return this.root.querySelector("#zc-"+id);}
   async fetch(path,body){const r=await this.api.fetchApi(path,body===undefined?{}:{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});let data;try{data=await r.json();}catch{if(r.ok)return {};const e=new Error("ComfyUI is unavailable. Reconnect and try again.");e.status=r.status;throw e;}if(!r.ok){const e=new Error(data.error?.message||data.error||"ComfyUI could not complete this request.");e.status=r.status;throw e;}return data;}
-  imageLoraFamily(){return {flux2:'flux2_klein9b',klein9b:'flux2_klein9b',flux3:'flux3_klein',flux3edit:'flux3_klein',qwen2511:'qwen2511',qwen21edit:'qwen21',flux2devedit:'flux2_dev',zimage:'zimage'}[this.$('model').value]||null;}
+  imageLoraFamily(){return {flux2:'flux2_klein9b',flux2bf16:'flux2_klein9b',klein9b:'flux2_klein9b',klein9bbf16:'flux2_klein9b',flux3:'flux3_klein',flux3bf16:'flux3_klein',flux3edit:'flux3_klein',flux3editbf16:'flux3_klein',qwen2511:'qwen2511',qwen21edit:'qwen21',flux2devedit:'flux2_dev',zimage:'zimage'}[this.$('model').value]||null;}
   async loadImageLoras(){try{const data=await this.fetch('/zura/studio/loras');this.imageLoraCatalog=Array.isArray(data.loras)?data.loras:[];this.$('image-lora-message').textContent='';this.renderImageLoras();}catch(error){this.$('image-lora-message').textContent=error.message;}}
   renderImageLoras(){
     const picker=this.$('image-lora-picker'),list=this.$('image-lora-list'),family=this.imageLoraFamily(),selected=picker.value;
@@ -415,7 +415,7 @@ export class CreativeWorkspace {
       const parts=await Promise.all(types.map(t=>this.fetch("/object_info/"+t).catch(error=>{if(error.status===404)return {};throw error;})));
       this.models=imageAvailability(Object.assign({},...parts));const edit=this.imageOperation==='edit';
       let available=[],activeDownload=null;try{const catalogue=await this.fetch('/zura/studio/model-downloads');available=catalogue.models||[];activeDownload=catalogue.active||null;}catch{}
-      const map={flux2:'flux2_klein_9b',flux3:'flux3_klein',flux3edit:'flux3_klein',zimage:'zimage_turbo',klein9b:'flux2_klein_9b',qwen2511:'qwen2511',qwen21edit:'qwen21',flux2devedit:'flux2_dev'};
+      const map={flux2:'flux2_klein_9b',flux2bf16:'flux2_klein_9b_bf16',flux3:'flux3_klein',flux3bf16:'flux3_klein_bf16',flux3edit:'flux3_klein',flux3editbf16:'flux3_klein_bf16',zimage:'zimage_turbo',klein9b:'flux2_klein_9b',klein9bbf16:'flux2_klein_9b_bf16',qwen2511:'qwen2511',qwen21edit:'qwen21',flux2devedit:'flux2_dev'};
       // The catalogue pins a download version, not every valid local conversion.
       // Keep Comfy's file/node readiness separate from overwrite protection.
       for(const model of this.models){const pack=available.find(p=>p.id===map[model.id]);model.variants=(pack?.files||[]).filter(file=>file.incomplete).map(file=>file.filename);}

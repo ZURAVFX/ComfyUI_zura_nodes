@@ -213,7 +213,11 @@ IMAGE_FAMILIES = {
     "flux2devedit": ("flux2_dev", "flux2-dev-nvfp4.safetensors"),
     "flux2": ("flux2_klein9b", "flux-2-klein-9b-fp8.safetensors"),
     "klein9b": ("flux2_klein9b", "flux-2-klein-9b-fp8.safetensors"),
+    "flux2bf16": ("flux2_klein9b", "flux-2-klein-9b.safetensors"),
+    "klein9bbf16": ("flux2_klein9b", "flux-2-klein-9b.safetensors"),
     "flux3": ("flux3_klein", "flux3-image-klein-int8-convrot.safetensors"),
+    "flux3bf16": ("flux3_klein", "flux3-image-klein-bf16.safetensors"),
+    "flux3editbf16": ("flux3_klein", "flux3-image-klein-bf16.safetensors"),
     "qwen2511": ("qwen2511", "qwen_image_edit_2511_int8_convrot.safetensors"),
     "zimage": ("zimage", "z_image_turbo_bf16.safetensors"),
 }
