@@ -2,14 +2,21 @@
 
 Open **Image**, choose **Create image** or **Edit image**, then select
 **ChatGPT Image** or **Gemini Image** under **Browser sign-in · no API credits**.
-Click the sign-in button beside the prompt. This reuses the same account nodes
+Choose **Browser**, then click the sign-in button beside the prompt. This reuses the same account nodes
 available in the ComfyUI graph, without API keys or a Zura credit balance.
 Your website subscription and generation limits still apply.
 
-The existing session connection currently supports your default Firefox profile
-on Windows. Sign in to the selected website in a normal Firefox window, outside
-containers or private browsing. First connection prepares an isolated client;
-progress appears beside the prompt. Restart ComfyUI after updating Zura Nodes.
+The selector lists browsers installed on the computer running ComfyUI:
+
+- Chrome, Edge, Brave, Vivaldi, Chromium and Opera open a dedicated sign-in window. Sign in once there, even if you already use that account in your everyday browser.
+- Safari on macOS reads your normal Safari session. If macOS blocks access, follow the Full Disk Access guidance shown in Studio or choose another browser.
+- Firefox uses its default profile on Windows, macOS or Linux, outside containers and private browsing.
+
+First connection prepares an isolated client; progress appears beside the prompt.
+Use **Cancel connection** to stop waiting and choose another browser. After
+**Connected**, you can close the sign-in window. Reconnect after restarting
+ComfyUI or changing accounts. Restart ComfyUI and refresh Studio after updating
+Zura Nodes. Remote ComfyUI cannot use a browser session from another computer.
 
 Add up to eight reference images by upload, drop or paste. For edits, Image 1 is
 the image to change. Selecting Edit automatically uses the current canvas image

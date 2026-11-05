@@ -1,6 +1,6 @@
 """ChatGPT website image generation for Zura Nodes.
 
-Uses the user's existing Firefox website session through an isolated direct-request client.
+Uses the user's explicitly connected website session through an isolated direct-request client.
 No Codex, paid developer API or browser automation. The website may change at any time.
 """
 from __future__ import annotations

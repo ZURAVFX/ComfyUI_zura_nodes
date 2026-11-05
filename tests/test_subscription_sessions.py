@@ -17,6 +17,7 @@ if not (SOURCE / 'web_sessions.py').exists():
     SOURCE = SOURCE.parent
 sys.path.insert(0, str(SOURCE))
 
+import browser_sessions as browsers
 import gemini_session_worker as gemini
 import chatgpt_session_worker as chatgpt
 
@@ -66,8 +67,8 @@ class SessionTests(unittest.TestCase):
                     ('__Secure-1PSID', 'other-site', 9999999999, '.example.com', '', 4),
                     ('password', 'unrelated', 9999999999, '.google.com', '', 5),
                 ])
-            with patch.dict(os.environ, {'APPDATA': temp}):
-                self.assertEqual(gemini.firefox_cookies(), {'__Secure-1PSID': 'normal'})
+            with patch.dict(os.environ, {'APPDATA': temp}), patch.object(browsers.sys, 'platform', 'win32'):
+                self.assertEqual(browsers.firefox_cookies('gemini'), {'__Secure-1PSID': 'normal'})
 
     def test_download_does_not_forward_auth_to_external_redirect(self):
         calls = []

@@ -1,17 +1,12 @@
 """Isolated worker for the published gemini-webapi client. No credential output."""
 import asyncio
-import configparser
 import contextlib
 import io
 import hashlib
 import importlib
 import json
-import os
 import re
-import sqlite3
 import sys
-import time
-from pathlib import Path
 
 
 class SessionError(RuntimeError):
@@ -23,7 +18,7 @@ def safe_failure(exc, stage):
     kind = type(exc).__name__
     text = str(exc)
     if kind == 'AuthError' or isinstance(exc, SessionError) and stage == 'connecting':
-        return 'auth', 'Gemini did not accept your Firefox session. Open Gemini in normal Firefox, then reconnect.'
+        return 'auth', 'Gemini did not accept your browser session. Open Gemini in your selected browser, then reconnect.'
     if kind == 'UsageLimitExceededError':
         return 'quota', 'Gemini reports that this account has reached its usage limit. Wait for the account allowance to reset.'
     if kind == 'TemporarilyBlockedError':
@@ -36,13 +31,13 @@ def safe_failure(exc, stage):
     if status:
         code = status.group(1)
         if code in ('401', '403'):
-            return 'access', f'Google rejected the {stage} request (HTTP {code}). Open Gemini in Firefox to check account access, then reconnect if requested.'
-        return 'service', f'Google returned HTTP {code} while {stage}. Check Gemini in Firefox before retrying.'
+            return 'access', f'Google rejected the {stage} request (HTTP {code}). Open Gemini in your selected browser to check account access, then reconnect if requested.'
+        return 'service', f'Google returned HTTP {code} while {stage}. Check Gemini in your selected browser before retrying.'
     if 'Failed to parse response' in text:
         return 'protocol', 'The Gemini client could not read Google’s response. The website format may have changed. Signing in again may not help.'
     if isinstance(exc, SessionError):
         return 'result', str(exc)
-    return 'request', f'Gemini failed while {stage} ({kind}). Check the conversation in Firefox before retrying. This does not necessarily mean your sign-in expired.'
+    return 'request', f'Gemini failed while {stage} ({kind}). Check the conversation in your selected browser before retrying. This does not necessarily mean your sign-in expired.'
 
 
 async def generated_asset(client, request, generated_type, progress):
@@ -81,36 +76,6 @@ async def generated_asset(client, request, generated_type, progress):
     raise SessionError('Gemini returned no generated image. The request may have been refused or the account may have reached its limit.')
 
 
-def firefox_profile():
-    root = Path(os.environ['APPDATA']) / 'Mozilla' / 'Firefox'
-    config = configparser.ConfigParser()
-    config.read(root / 'profiles.ini', encoding='utf8')
-    profile = None
-    for section in config.sections():
-        if section.startswith('Install') and config.has_option(section, 'Default'):
-            profile = root / config[section]['Default']
-            break
-    if profile is None:
-        for section in config.sections():
-            if section.startswith('Profile') and config[section].get('Default') == '1':
-                value = config[section]['Path']
-                profile = root / value if config[section].get('IsRelative') == '1' else Path(value)
-                break
-    if profile is None or not (profile / 'cookies.sqlite').is_file():
-        raise SessionError('Default Firefox profile not found. Open Firefox and sign in first.')
-    return profile.resolve()
-
-
-def firefox_cookies():
-    uri = (firefox_profile() / 'cookies.sqlite').as_uri() + '?mode=ro'
-    with contextlib.closing(sqlite3.connect(uri, uri=True, timeout=5)) as connection:
-        rows = connection.execute("SELECT name,value,expiry FROM moz_cookies WHERE host IN ('.google.com','google.com') AND name IN ('__Secure-1PSID','__Secure-1PSIDTS') AND originAttributes='' ORDER BY lastAccessed").fetchall()
-    values = {name:value for name,value,expiry in rows if not expiry or expiry > time.time()}
-    if not values.get('__Secure-1PSID'):
-        raise SessionError('No signed-in Google session found in the default Firefox profile. Sign in to Gemini there, then reconnect.')
-    return values
-
-
 def private_cache_names(values):
     """Keep upstream 2.1.1's raw cookie value out of cache filenames."""
     rotation = importlib.import_module('gemini_webapi.utils.rotate_1psidts')
@@ -136,7 +101,9 @@ async def run(request):
     from gemini_webapi.types import GeneratedImage
     from loguru import logger
     logger.remove()
-    cookies = firefox_cookies()
+    cookies = request.get('cookies') or {}
+    if not cookies.get('__Secure-1PSID'):
+        raise SessionError('Connect Gemini using the browser selector before generating.')
     private_cache_names(cookies)
     client = GeminiClient(cookies['__Secure-1PSID'], cookies.get('__Secure-1PSIDTS'))
     def progress(stage):
@@ -150,7 +117,7 @@ async def run(request):
         # Upstream can fall back to a guest session; that is not a connection.
         source = str(getattr(client, '_cookie_source', ''))
         if source.startswith('Guest'):
-            raise SessionError('Google did not accept the saved Firefox session. Sign in again in Firefox.')
+            raise SessionError('Google did not accept the saved browser session. Sign in again in your selected browser.')
         if request['action'] == 'connect':
             return {'ok':True}
         progress('generating')

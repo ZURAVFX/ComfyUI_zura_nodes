@@ -25,7 +25,7 @@ for asset in ('model_folders.py', 'model_access.py', 'model_file_import.py', 'we
 for asset in ('paintout/watermark_reference.py','paintout/model_browser_import.py','web/paintout_studio/watermark_workspace.js','web/paintout_studio/watermark_editor.js','web/paintout_studio/watermark_models.js','web/paintout_studio/watermark_recipes.js','web/paintout_studio/watermark_timeline.js'):
     assert Path(asset).is_file(), f'Missing watermark asset: {asset}'
 assert Path('THIRD_PARTY_NOTICES.md').is_file()
-for asset in ('chatgpt_image.py', 'gemini_image.py', 'web_sessions.py',
+for asset in ('chatgpt_image.py', 'gemini_image.py', 'web_sessions.py', 'browser_sessions.py',
               'browser_image_routes.py', 'chatgpt_session_worker.py',
               'gemini_session_worker.py', 'web/studio_browser_images.js',
               'web/browser_image_login.js', 'CHATGPT_IMAGE.md', 'GEMINI_IMAGE.md'):

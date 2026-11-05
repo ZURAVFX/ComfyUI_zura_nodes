@@ -31,7 +31,9 @@ Use your own ComfyUI host and port if they differ.
 
 ## Current release
 
-**1.3.48** adds complete camera-angle model setup, including MoGe 3, and checks gated-model access before large downloads. Choose a mode to see its missing files and extension guidance. Restart ComfyUI and refresh Studio after updating. See the [setup and validation notes](docs/STUDIO_1348_VALIDATION.md).
+**1.3.49** adds a browser selector for ChatGPT and Gemini sign-in, including Chrome, Edge and Safari on macOS. The selected browser opens and supplies the session; pending sign-ins can be cancelled. See [browser setup](docs/STUDIO_BROWSER_IMAGES.md) and [validation notes](docs/STUDIO_1349_VALIDATION.md).
+
+The previous update adds complete camera-angle model setup, including MoGe 3, and checks gated-model access before large downloads. Choose a mode to see its missing files and extension guidance. Restart ComfyUI and refresh Studio after updating. See the [model setup notes](docs/STUDIO_1348_VALIDATION.md).
 
 The [GitHub release](https://github.com/ZURAVFX/ComfyUI_zura_nodes/releases/latest) is available separately. Registry submission does not mean approval or immediate availability through Manager.
 

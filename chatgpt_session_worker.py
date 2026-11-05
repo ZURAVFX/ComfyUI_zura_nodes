@@ -4,32 +4,26 @@ import contextlib
 import io
 import json
 import logging
-import sqlite3
 import sys
-import time
 from pathlib import Path
 from urllib.parse import urlsplit, urljoin
 
-from gemini_session_worker import firefox_profile
 
 
 class SessionError(RuntimeError):
     pass
 
 
-def session():
+def session(cookies):
     from curl_cffi import requests
-    with contextlib.closing(sqlite3.connect((firefox_profile() / 'cookies.sqlite').as_uri() + '?mode=ro', uri=True, timeout=5)) as db:
-        rows = db.execute("SELECT name,value,expiry FROM moz_cookies WHERE host IN ('.chatgpt.com','chatgpt.com') AND originAttributes='' AND (name LIKE '__Secure-next-auth.session-token%' OR name IN ('cf_clearance','oai-did')) ORDER BY lastAccessed").fetchall()
-    cookies = {name: value for name, value, expiry in rows if not expiry or expiry > time.time()}
     if not any(name.startswith('__Secure-next-auth.session-token') for name in cookies):
-        raise SessionError('Sign in to ChatGPT in your normal Firefox, then reconnect.')
+        raise SessionError('Sign in to ChatGPT in your selected browser, then reconnect.')
     response = requests.get('https://chatgpt.com/api/auth/session', cookies=cookies, impersonate='chrome', timeout=30)
     if response.status_code != 200:
-        raise SessionError('ChatGPT did not accept the Firefox session. Open ChatGPT normally, then reconnect.')
+        raise SessionError('ChatGPT did not accept the browser session. Open ChatGPT normally, then reconnect.')
     token = response.json().get('accessToken')
     if not token:
-        raise SessionError('No signed-in ChatGPT session found. Sign in in your normal Firefox, then reconnect.')
+        raise SessionError('No signed-in ChatGPT session found. Sign in in your selected browser, then reconnect.')
     return token, cookies
 
 
@@ -50,7 +44,7 @@ def download(url, token, cookies):
 
 
 async def run(request):
-    token, cookies = await asyncio.to_thread(session)
+    token, cookies = await asyncio.to_thread(session, request.get('cookies') or {})
     if request['action'] == 'connect':
         return {'ok': True}
     import g4f
@@ -86,7 +80,7 @@ if __name__ == '__main__':
         with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
             answer = asyncio.run(asyncio.wait_for(run(request), request.get('timeout', 300)))
     except SessionError as exc:
-        answer = {'ok': False, 'error': str(exc)}
+        answer = {'ok': False, 'code': 'auth' if locals().get('request', {}).get('action') == 'connect' else 'request', 'error': str(exc)}
     except Exception as exc:
-        answer = {'ok': False, 'error': f'ChatGPT request failed ({type(exc).__name__}). Open ChatGPT in Firefox and check your session or account limits, then reconnect.'}
+        answer = {'ok': False, 'error': f'ChatGPT request failed ({type(exc).__name__}). Open ChatGPT in your selected browser and check your session or account limits, then reconnect.'}
     print(json.dumps(answer))

@@ -1,4 +1,4 @@
-"""Direct website sessions. No WebDriver, browser profiles or Codex credentials."""
+"""Direct website clients with explicit, provider-scoped browser connections."""
 from __future__ import annotations
 
 import json
@@ -9,15 +9,17 @@ import sys
 import tempfile
 import threading
 import time
-import webbrowser
 
 from .chatgpt_image import _interrupt
+from . import browser_sessions as browsers
 
 _locks = {name: threading.Lock() for name in ('gemini', 'chatgpt')}
 _setup_locks = {name: threading.Lock() for name in ('gemini', 'chatgpt')}
 _state_lock = threading.Lock()
 _states = {}
-_urls = {'gemini': 'https://gemini.google.com/app', 'chatgpt': 'https://chatgpt.com/auth/login'}
+_attempts = {}
+_cookies = {}
+_selected = {}
 _labels = {'gemini': 'Gemini', 'chatgpt': 'ChatGPT'}
 _requirements = {
     'gemini': ('gemini-webapi-2.1.1', ['gemini-webapi==2.1.1']),
@@ -40,15 +42,21 @@ def _provider(provider):
         raise ValueError('Unknown image provider.')
 
 
-def _state(provider, state, message):
+def _state(provider, state, message, attempt=None):
     with _state_lock:
+        if attempt is not None and _attempts.get(provider) is not attempt:
+            return False
         _states[provider] = {'state': state, 'message': message}
+        return True
 
 
 def login_status(provider):
     _provider(provider)
     with _state_lock:
-        return dict(_states.get(provider, {'state': 'disconnected', 'message': 'Connect your signed-in Firefox session.'}))
+        result = dict(_states.get(provider, {'state': 'disconnected', 'message': 'Choose a browser, then connect your website account.'}))
+        result['browser'] = _selected.get(provider, '')
+    result['browsers'] = browsers.available_browsers()
+    return result
 
 
 def _runtime(provider):
@@ -92,7 +100,7 @@ def _worker(provider, request, *, interrupt=False):
             if interrupt:
                 _interrupt()
             if time.monotonic() >= deadline:
-                raise RuntimeError(f'{label} timed out. Check the conversation in Firefox before retrying to avoid a duplicate generation.')
+                raise RuntimeError(f'{label} timed out. Check the conversation in your selected browser before retrying to avoid a duplicate generation.')
             try:
                 output, _ = process.communicate(input=payload, timeout=0.25)
                 break
@@ -111,61 +119,85 @@ def _worker(provider, request, *, interrupt=False):
         process.communicate()
 
 
-def _open_default(provider):
-    if os.name == 'nt':
-        os.startfile(_urls[provider])
-    else:
-        webbrowser.open(_urls[provider])
-
-
-def start_login(provider):
+def start_login(provider, browser=None):
     _provider(provider)
+    choices = browsers.available_browsers()
+    browser = browser or _selected.get(provider) or (choices[0]['id'] if choices else '')
+    if not isinstance(browser, str) or browser not in {item['id'] for item in choices}:
+        raise ValueError('Choose a browser installed on the computer running ComfyUI. Safari is available on macOS.')
+    attempt = threading.Event()
     with _state_lock:
-        if _states.get(provider, {}).get('state') in ('setting_up', 'signing_in', 'checking'):
-            return
-        _states[provider] = {'state': 'checking', 'message': 'Checking your existing Firefox session…'}
+        old = _attempts.get(provider)
+        if old:
+            old.set()
+        _attempts[provider] = attempt
+        _selected[provider] = browser
+        _cookies.pop(provider, None)
+        _states[provider] = {'state': 'checking', 'message': f'Connecting with {browsers.LABELS[browser]}…'}
 
     def connect():
         label = _labels[provider]
         try:
-            _state(provider, 'setting_up', 'Preparing the session client. First connection may take a minute…')
+            if not _state(provider, 'setting_up', 'Preparing the session client. First connection may take a minute…', attempt):
+                return
             _runtime(provider)
-            opened = False
+            if attempt.is_set():
+                return
+            browsers.open_browser(provider, browser, _root)
             deadline = time.monotonic() + 600
-            while time.monotonic() < deadline:
+            while time.monotonic() < deadline and not attempt.is_set():
                 try:
+                    cookies = browsers.read_cookies(provider, browser)
                     with _locks[provider]:
-                        _worker(provider, {'action': 'connect', 'timeout': 45})
-                    _state(provider, 'connected', f'Your Firefox session was accepted by {label}. Reconnect after changing accounts.')
+                        if attempt.is_set():
+                            return
+                        _worker(provider, {'action': 'connect', 'cookies': cookies, 'timeout': 45})
+                    with _state_lock:
+                        if _attempts.get(provider) is not attempt or attempt.is_set():
+                            return
+                        _cookies[provider] = cookies
+                        _states[provider] = {'state': 'connected', 'message': f'{label} connected through {browsers.LABELS[browser]}. You can close the sign-in window. Reconnect to change accounts.'}
                     return
                 except RuntimeError as exc:
-                    if not opened:
-                        _open_default(provider)
-                        opened = True
-                    _state(provider, 'signing_in', f'Sign in to {label} in your normal Firefox. Checking automatically. {exc}')
-                    time.sleep(5)
-            _state(provider, 'error', f'No usable {label} session found. Sign in in your normal Firefox, then reconnect.')
+                    _state(provider, 'signing_in', f'{browsers.LABELS[browser]}: {exc} Checking automatically.', attempt)
+                    attempt.wait(5)
+            _state(provider, 'error', f'No usable {label} session found. Reconnect and sign in using the selected browser.', attempt)
         except RuntimeError as exc:
-            _state(provider, 'error', str(exc))
+            _state(provider, 'error', str(exc), attempt)
         except Exception:
-            _state(provider, 'error', f'Could not connect the {label} session. Check your connection, then reconnect.')
+            _state(provider, 'error', f'Could not connect the {label} session. Check your connection, then reconnect.', attempt)
 
     threading.Thread(target=connect, name=f'zura-{provider}-connect', daemon=True).start()
+
+
+def cancel_login(provider):
+    _provider(provider)
+    with _state_lock:
+        attempt = _attempts.pop(provider, None)
+        if attempt:
+            attempt.set()
+        _cookies.pop(provider, None)
+        _states[provider] = {'state': 'disconnected', 'message': 'Connection cancelled. Choose a browser and sign in when ready.'}
 
 
 def generate_image(provider, prompt, paths, timeout):
     _provider(provider)
     with _locks[provider], tempfile.TemporaryDirectory(prefix=f'zura-{provider}-output-') as directory:
         try:
+            with _state_lock:
+                cookies = dict(_cookies.get(provider, {}))
+                attempt = _attempts.get(provider)
+            if not cookies:
+                raise ProviderError(f'Connect {_labels[provider]} using the browser selector before generating.', 'auth')
             result = _worker(provider, {'action': 'generate', 'prompt': prompt, 'paths': paths,
-                              'timeout': timeout, 'output_dir': directory}, interrupt=True)
+                              'cookies': cookies, 'timeout': timeout, 'output_dir': directory}, interrupt=True)
             path = Path(result['path']).resolve()
             if path.parent != Path(directory).resolve() or not path.is_file():
                 raise RuntimeError(f'{_labels[provider]} returned an invalid output file.')
             image = path.read_bytes()
-            _state(provider, 'connected', 'Generated using your existing Firefox session.')
+            _state(provider, 'connected', f'Generated using your connected {_labels[provider]} account.', attempt)
             return image
         except RuntimeError as exc:
             authenticated = isinstance(exc, ProviderError) and exc.code in ('quota', 'limited', 'aborted', 'timeout', 'protocol', 'result')
-            _state(provider, 'connected' if authenticated else 'error', str(exc))
+            _state(provider, 'connected' if authenticated else 'error', str(exc), attempt)
             raise

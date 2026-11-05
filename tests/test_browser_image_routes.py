@@ -18,6 +18,7 @@ class BrowserRoutesTest(unittest.IsolatedAsyncioTestCase):
         self.routes = {route.path: route.handler for route in routes}
         self.sessions = types.ModuleType('ComfyUI_zura_nodes.web_sessions')
         self.sessions.start_login = Mock()
+        self.sessions.cancel_login = Mock()
         self.sessions.login_status = Mock(return_value={'state': 'disconnected', 'message': 'Connect'})
         self.modules = patch.dict(sys.modules, {self.sessions.__name__: self.sessions})
         self.modules.start()
@@ -35,7 +36,7 @@ class BrowserRoutesTest(unittest.IsolatedAsyncioTestCase):
         self.sessions.start_login.assert_not_called()
         response = await self.routes['/zura/browser_image_login'](self.request({'provider': 'gemini'}))
         self.assertEqual(response.status, 200)
-        self.sessions.start_login.assert_called_once_with('gemini')
+        self.sessions.start_login.assert_called_once_with('gemini', None)
 
     async def test_cross_site_requests_never_touch_session_state(self):
         for handler in self.routes.values():
@@ -44,6 +45,15 @@ class BrowserRoutesTest(unittest.IsolatedAsyncioTestCase):
                     await handler(self.request({'provider': 'gemini'}, headers))
         self.sessions.start_login.assert_not_called()
         self.sessions.login_status.assert_not_called()
+        self.sessions.cancel_login.assert_not_called()
+
+    async def test_browser_choice_reaches_connection_and_can_be_cancelled(self):
+        response = await self.routes['/zura/browser_image_login'](self.request({'provider': 'gemini', 'browser': 'safari'}))
+        self.assertEqual(response.status, 200)
+        self.sessions.start_login.assert_called_once_with('gemini', 'safari')
+        response = await self.routes['/zura/browser_image_cancel'](self.request({'provider': 'gemini'}))
+        self.sessions.cancel_login.assert_called_once_with('gemini')
+        self.assertEqual(response.headers['Cache-Control'], 'no-store')
 
     async def test_invalid_request_is_reported_without_session_access(self):
         response = await self.routes['/zura/browser_image_login'](self.request(['gemini']))

@@ -14,7 +14,7 @@ const app = { registerExtension(value) { extension = value; } };
 const api = { async fetchApi(url, options) {
   calls.push({ url, options });
   return { ok: true, async json() { return url.includes('_status')
-    ? { state: 'connected', message: 'Live session accepted' } : { ok: true }; } };
+    ? { state: 'connected', message: 'Live session accepted', browser: 'chrome', browsers: [{id:'chrome',name:'Chrome'},{id:'safari',name:'Safari'}] } : { ok: true }; } };
 } };
 const oldInterval = globalThis.setInterval;
 const oldClear = globalThis.clearInterval;
@@ -41,8 +41,13 @@ try {
     assert.equal(node.widgets[0].options.serialize, false);
     assert.match(node.widgets[0].name, /^Connected/);
     assert.deepEqual(node.widgets.filter(w => w.options.serialize !== false).map(w => w.value), ['keep this prompt']);
+    const browser = node.widgets.find(widget => widget.type === 'combo');
+    assert.deepEqual(browser.options.values, ['Chrome', 'Safari']);
+    browser.value = 'Safari'; await browser.callback();
+    assert.equal(calls.findLast(c => c.options?.method === 'POST').url, '/zura/browser_image_cancel');
     await node.widgets[0].callback();
     assert.equal(calls.findLast(c => c.options?.method === 'POST').url, '/zura/browser_image_login');
+    assert.equal(JSON.parse(calls.findLast(c => c.options?.method === 'POST').options.body).browser, 'safari');
     node.onRemoved();
   }
   assert.equal(cleared, 2);

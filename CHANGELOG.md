@@ -1,5 +1,14 @@
 # Release notes
 
+
+## 1.3.49
+
+- ChatGPT and Gemini sign-in now offer an installed-browser selector in Studio and in their standalone nodes. Chrome, Edge, Brave, Vivaldi, Chromium and Opera use a dedicated sign-in window; Safari uses its macOS session; Firefox works across Windows, macOS and Linux.
+- The selected browser opens and supplies the session. Zura no longer opens a default browser while silently checking Firefox.
+- Pending sign-ins can be cancelled. Browser switches and cancelled attempts cannot restore an older account connection.
+- Safari permission errors explain the macOS setting and offer another browser. Provider cookies stay scoped and outside workflows, logs and status responses.
+
+
 ## 1.3.48 - 5 November 2026
 
 - Add model setup directly to Change camera angle, including the missing MoGe 3 download and all six H3 render files. Only missing files for the chosen mode are downloaded; existing files are reused.

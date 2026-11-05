@@ -1,4 +1,4 @@
-"""Generate images using the existing Firefox Gemini session, without a browser driver."""
+"""Generate images using the explicitly connected Gemini session, without a browser driver."""
 from __future__ import annotations
 
 import asyncio
