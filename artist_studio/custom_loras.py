@@ -15,7 +15,7 @@ from pathlib import Path
 MAX_HEADER = 16 * 1024 * 1024
 MAX_ADAPTERS = 4
 FAMILIES = ("h3", "wan21", "wan22", "wan_animate2", "ltx25",
-            "flux2_klein9b", "flux3_klein", "qwen2511", "qwen21", "zimage")
+            "flux2_klein9b", "flux2_dev", "flux3_klein", "qwen2511", "qwen21", "zimage")
 
 
 def model_family(name):
@@ -35,6 +35,8 @@ def model_family(name):
         return "flux3_klein"
     if ("flux_2" in text or "flux2" in text) and "klein" in text and "9b" in text:
         return "flux2_klein9b"
+    if ("flux_2" in text or "flux2" in text) and "dev" in text and "klein" not in text:
+        return "flux2_dev"
     if "qwen_image" in text and "2511" in text:
         return "qwen2511"
     if "qwen_image" in text and "2.1" in text:
@@ -207,6 +209,8 @@ def apply_studio_video_loras(graph, family, selections, registered_names, get_pa
 
 
 IMAGE_FAMILIES = {
+    "qwen21edit": ("qwen21", "qwen_image_2.1_int8_convrot.safetensors"),
+    "flux2devedit": ("flux2_dev", "flux2-dev-nvfp4.safetensors"),
     "flux2": ("flux2_klein9b", "flux-2-klein-9b-fp8.safetensors"),
     "klein9b": ("flux2_klein9b", "flux-2-klein-9b-fp8.safetensors"),
     "flux3": ("flux3_klein", "flux3-image-klein-int8-convrot.safetensors"),

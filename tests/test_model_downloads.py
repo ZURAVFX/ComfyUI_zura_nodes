@@ -43,7 +43,7 @@ class ModelDownloadTest(unittest.TestCase):
         script = "import {IMAGE_MODELS} from './web/image_recipes.js'; console.log(JSON.stringify(IMAGE_MODELS));"
         models = json.loads(subprocess.check_output(['node', '--input-type=module', '-e', script], cwd=root, text=True))
         packages = {'flux2': 'flux2_klein_9b', 'flux3': 'flux3_klein', 'flux3edit': 'flux3_klein', 'zimage': 'zimage_turbo',
-                    'klein9b': 'flux2_klein_9b', 'qwen2511': 'qwen2511'}
+                    'klein9b': 'flux2_klein_9b', 'qwen2511': 'qwen2511', 'qwen21edit': 'qwen21', 'flux2devedit': 'flux2_dev'}
         for model in models:
             if model.get('provider'):
                 self.assertIn(model['provider'], ('chatgpt', 'gemini'))

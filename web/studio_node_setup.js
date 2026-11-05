@@ -30,7 +30,7 @@ NODE_PACKS.find(pack=>pack.name==='ComfyUI').nodes.push(
   'SaveImage','VAEEncode','ConditioningZeroOut','EmptyFlux2LatentImage',
   'EmptySD3LatentImage','FluxKVCache','Flux2Scheduler','ModelSamplingAuraFlow',
   'CFGNorm','TextEncodeQwenImageEditPlus','FluxKontextMultiReferenceLatentMethod',
-  'LoraLoaderModelOnly');
+  'LoraLoaderModelOnly','TextEncodeQwenImage21','QwenImage21Cache','FluxGuidance','ImageScaleToTotalPixels');
 
 // Zura owns these namespaces. Missing classes normally indicate that an older
 // installation is loaded, so direct users to update the host pack.

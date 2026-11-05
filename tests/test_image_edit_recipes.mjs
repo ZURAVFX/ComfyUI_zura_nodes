@@ -69,3 +69,31 @@ for(const model of IMAGE_MODELS.filter(m=>m.provider)){
  const withoutProvider={...info};delete withoutProvider[model.node];assert.equal(imageAvailability(withoutProvider).find(m=>m.id===model.id).ready,false);
 }
 console.log('Browser create/edit recipes: ordered references, limits, requested size, no local model or API-key inputs pass.');
+
+// Preview editors retain their own conditioning, precision and sampler recipe.
+for (const model of ['qwen21edit','flux2devedit']) {
+  assert.throws(()=>buildImageGraph({model,prompt:'Edit'}),/image you want to edit/);
+  const g=buildImageGraph({model,prompt:'Change only the coat',references:refs,width:1280,height:720,seed:17});
+  assert.equal(g.reference_1.inputs.image,'edit/source.png');
+  assert.equal(g.reference_3.inputs.image,'edit/subject.png');
+  assert.ok(!g.lightning && !g.kv_cache);
+  if(model==='qwen21edit') {
+    assert.equal(g.prompt.class_type,'TextEncodeQwenImage21');
+    assert.deepEqual(g.prompt.inputs['images.image_1'],['source_size',0]);
+    assert.deepEqual(g.sample.inputs.latent_image,['prompt',2]);
+    assert.equal(g.source_size.inputs.height,736);
+    assert.equal(g.sample.inputs.steps,40);
+    assert.equal(g.reference_cache.inputs.device,'cpu');
+    assert.equal(g.reference_cache.inputs.dtype,'default');
+  } else {
+    assert.equal(g.model.inputs.unet_name,'flux2-dev-nvfp4.safetensors');
+    assert.equal(g.text.inputs.clip_name,'mistral_3_small_flux2_fp8.safetensors');
+    assert.equal(g.schedule.inputs.steps,20);
+    assert.ok(Object.values(g).some(n=>n.class_type==='FluxGuidance'&&n.inputs.guidance===4));
+    assert.equal(g.size.inputs.height,720);
+  }
+  const missingEncoder=structuredClone(info);
+  missingEncoder.CLIPLoader.input.required.clip_name=combo(IMAGE_MODELS.filter(m=>m.id!==model).map(m=>m.text));
+  assert.equal(imageAvailability(missingEncoder).find(m=>m.id===model).ready,false);
+}
+console.log('Qwen 2.1 and full FLUX.2 dev native edit recipes pass.');

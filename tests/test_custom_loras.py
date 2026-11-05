@@ -75,6 +75,14 @@ class CustomLoraTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "incompatible"):
             self.patch("wan22")
 
+    def test_new_image_families_do_not_accept_klein_adapters(self):
+        selection = {"name": self.path.name, "strength": 0.8}
+        for model, family in [("qwen21edit", "qwen_image_2.1"), ("flux2devedit", "flux2-dev")]:
+            self.write_header({"__metadata__": {"base_model": family}})
+            self.assertEqual(module.validate_image_loras(model, [selection], [self.path.name], self.lookup), [selection])
+            with self.assertRaisesRegex(ValueError, "incompatible"):
+                module.validate_image_loras("klein9b", [selection], [self.path.name], self.lookup)
+
     def test_image_validation_requires_correct_family_and_confirmation(self):
         selection = {"name": self.path.name, "strength": 0.8}
         self.write_header({"__metadata__": {"base_model": "flux-2-klein-9b"}})

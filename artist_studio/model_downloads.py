@@ -115,9 +115,17 @@ CATALOG.update({
             _file("vae", "minimax_h3_video_vae_int8_convrot.safetensors", "FastVideo/FastH3-Omni-Comfy", "82eff2a6eee6c962846879f4bab52610a4df24d3", "vae/minimax_h3_video_vae_int8_convrot.safetensors", 2811065184, "52a2c8c73583c86e4f41cdcce3a6ad0ea562987bc0bf3d60a0cef5f5c8e60c0e"),
             CATALOG["openjutsu_h3"]["files"][3],
         ]),
+    "flux2_dev": dict(name="FLUX.2 dev · NVFP4 image editing", gated=False,
+        license_url="https://huggingface.co/black-forest-labs/FLUX.2-dev-NVFP4",
+        note="Preview 20-step full FLUX.2 dev editing recipe. Includes the Mistral encoder and VAE. Requires substantial system RAM and offloading on 16 GB GPUs; review the upstream licence.",
+        files=[
+            _file("diffusion_models", "flux2-dev-nvfp4.safetensors", "black-forest-labs/FLUX.2-dev-NVFP4", "142b87e70bc3006937b7093d89ff287b5f59f071", "flux2-dev-nvfp4.safetensors", 21035602376, "be024af73a82d193b1c5aca4d2f7cd1a3fb361f4b621bb214b9ee422b1e04a5e"),
+            _file("text_encoders", "mistral_3_small_flux2_fp8.safetensors", "Comfy-Org/flux2-dev", "9630c1b4b6e690497ae0c19bb6b1b35d4ebedcb7", "split_files/text_encoders/mistral_3_small_flux2_fp8.safetensors", 18034640095, "e3467b7d912a234fb929cdf215dc08efdb011810b44bc21081c4234cc75b370e"),
+            _file("vae", "flux2-vae.safetensors", "Comfy-Org/flux2-dev", "9630c1b4b6e690497ae0c19bb6b1b35d4ebedcb7", "split_files/vae/flux2-vae.safetensors", 336213556, "d64f3a68e1cc4f9f4e29b6e0da38a0204fe9a49f2d4053f0ec1fa1ca02f9c4b5"),
+        ]),
     "qwen21": dict(name="Qwen Image 2.1 · INT8 starting frame", gated=False,
         license_url="https://huggingface.co/Qwen/Qwen-Image-2.1/blob/main/LICENSE",
-        note="Experimental 40-step starting-image recipe. Comfy's repository identifies a Qwen research licence; review its terms and hardware needs before downloading.",
+        note="Experimental 40-step image-editing and starting-frame recipe. Comfy's repository identifies a Qwen research licence; review its terms and hardware needs before downloading.",
         files=[
             _file("diffusion_models", "qwen_image_2.1_int8_convrot.safetensors", "Comfy-Org/Qwen-Image-2.1", "aacf31a6d48e707f352ecba714cee0680da3479b", "diffusion_models/qwen_image_2.1_int8_convrot.safetensors", 7256783064, "cb74113cb03faecd79611b01fd7fd642f0aa60d6f0b95086abee214d75eaa57d"),
             _file("text_encoders", "qwen3vl_8b_int8_convrot.safetensors", "Comfy-Org/Qwen-Image-2.1", "aacf31a6d48e707f352ecba714cee0680da3479b", "text_encoders/qwen3vl_8b_int8_convrot.safetensors", 9350798360, "8bfd0f6e12abf2d2d697ecc888e5e90b0d6741d6708f05799f53afa560452e8f"),
