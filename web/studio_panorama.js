@@ -33,6 +33,7 @@ export class PanoramaCameraWorkspace{
       <details class="zc-tool-popup zpc-trim"><summary data-length>Trim footage</summary><div class="zc-tool-panel"><div data-timeline></div><p>Up to 5 seconds in this preview. Original timing and audio are retained.</p></div></details>
       </div><button class="zpc-primary" type="submit" data-generate>Prepare geometry</button></div><p data-message role="status" hidden></p></form>`;
     owner.root.append(this.page);
+    this.page.querySelector('.zpc-viewer').after(this.$('progress'));
     const setup=document.createElement('details');setup.className='zc-tool-popup';
     this.page.querySelector('.zc-prompt-tools').append(setup);
     this.modelDownloads=new StudioModelDownloads(setup,(path,body)=>this.fetch('/zura/studio'+path,body),()=>this.refreshSetup());

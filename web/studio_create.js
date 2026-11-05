@@ -113,7 +113,7 @@ export class CreativeWorkspace {
     const imageHistory=document.createElement('details');imageHistory.className='zc-image-takes';imageHistory.innerHTML='<summary>History</summary><div id="zc-image-history"></div>';
     page.querySelector('.zc-image-tools').prepend(imageHistory);
     imageHistory.addEventListener('click',event=>{const button=event.target.closest('[data-view-image]');if(button){this.selectedImage=Number(button.dataset.viewImage);this.autoCanvasSuppressed=false;this.save();this.renderGallery();imageHistory.open=false;}});
-    const imageStatus=document.createElement('div');imageStatus.className='zc-image-status';imageStatus.append(this.$('progress'),this.$('message'));page.querySelector('.zc-image-scroll').append(imageStatus);
+    const imageStatus=document.createElement('div');imageStatus.className='zc-image-status';imageStatus.append(this.$('progress'),this.$('message'));page.querySelector('.zc-image-scroll').after(imageStatus);
     for(const button of this.root.querySelectorAll("[data-space]"))button.onclick=()=>this.show(button.dataset.space);
     this.root.querySelector('#zc-open-hdr').onclick=()=>this.openHDR();
     this.$("prompt").value=this.draft.prompt||"";this.$("shape").value=IMAGE_SIZES[this.draft.shape]?this.draft.shape:"auto";
@@ -194,6 +194,8 @@ export class CreativeWorkspace {
   }
   buildVideoCanvas(timing){
     const main=this.root.querySelector('.gs-main'),stage=this.root.querySelector('.gs-preview-scroll');
+    this.studio.$('canvas').append(this.studio.$('live-preview'));
+    stage.after(this.studio.$('working'));
     const heading=this.root.querySelector('.gs-preview-heading'),tools=document.createElement('div');
     tools.className='zc-viewer-tools';heading.append(tools);
     this.studio.$('compare-toggle').innerHTML= composerIcons.compare+'<span>Compare</span>';this.studio.$('compare-toggle').setAttribute('aria-label','Compare source and final render');

@@ -28,18 +28,17 @@ export class FrameVideoWorkspace{
         <h2>First & last frame</h2>
         <button type="button" id="zf-convert-hdr" class="zc-tool" hidden>Convert result to HDR</button>
         <span id="zf-hdr-downloads" hidden></span>
-        <details id="zf-history"><summary>History</summary><div id="zf-takes"></div></details><button type="button" id="zf-clear">Clear history</button>
+        <details id="zf-history"><summary>History</summary><div class="zc-tool-panel zc-takes-panel"><div id="zf-takes"></div><button type="button" id="zf-clear">Clear history</button></div></details>
       </div>
       <div class="zf-viewer">
-        <div id="zf-empty"><h3>Bring your image to life.</h3><p>Add a first frame and describe the movement. Add a last frame if you want to guide the ending.</p></div>
+        <div id="zf-empty"><h3>Bring your image to life</h3><p>Add a first frame and describe the movement. Add a last frame if you want to guide the ending.</p></div>
         <div id="zf-image-slot" hidden></div><video id="zf-result" controls playsinline hidden></video>
         <div id="zf-progress" hidden><strong id="zf-progress-title">Queued</strong><button id="zf-cancel" type="button">Cancel run</button><progress id="zf-bar" max="100" aria-label="Video generation progress"></progress><span id="zf-progress-detail"></span></div>
         <p id="zf-message" role="status" hidden></p>
       </div>
       <form class="zf-composer zc-prompt-card">
-        <strong>Generate video</strong>
         <div class="zc-composer-attachments">
-          ${['first','last'].map(id=>`<div class="zf-frame-slot"><button type="button" class="zc-attachment" data-frame="${id}" aria-label="Choose ${id} frame">${icons.image}<span>${id==='first'?'First frame':'Last frame · optional'}</span></button><button type="button" class="zf-remove-frame" id="zf-remove-${id}" aria-label="Remove ${id} frame" title="Remove ${id} frame" hidden><svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><path d="m4 4 8 8M12 4l-8 8"/></svg></button><input id="zf-${id}" type="file" accept="image/png,image/jpeg,image/webp" hidden/></div>`).join('')}
+          ${['first','last'].map(id=>`<div class="zf-frame-slot"><button type="button" class="zc-attachment" data-frame="${id}" aria-label="Choose ${id} frame">${icons.image}<span>${id==='first'?'First frame':'Last frame (optional)'}</span></button><button type="button" class="zf-remove-frame" id="zf-remove-${id}" aria-label="Remove ${id} frame" title="Remove ${id} frame" hidden><svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><path d="m4 4 8 8M12 4l-8 8"/></svg></button><input id="zf-${id}" type="file" accept="image/png,image/jpeg,image/webp" hidden/></div>`).join('')}
           <button type="button" id="zf-swap" class="zc-tool" aria-label="Swap first and last frames" title="Swap first and last frames" hidden><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8h16m-4-4 4 4-4 4M20 16H4m4-4-4 4 4 4"/></svg></button>
           <div class="zf-frame-slot" id="zf-audio-slot" hidden><button type="button" id="zf-audio-file-button" class="zc-attachment">${icons.audio}<span>Add audio reference</span></button><button type="button" class="zf-remove-frame" id="zf-remove-audio" aria-label="Remove audio reference" title="Remove audio reference" hidden><svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><path d="m4 4 8 8M12 4l-8 8"/></svg></button><input id="zf-audio-file" type="file" accept="audio/*,.wav,.mp3,.m4a,.flac,.ogg" hidden/></div>
         </div>
@@ -61,6 +60,9 @@ export class FrameVideoWorkspace{
         <p id="zf-note" aria-live="polite">Add a first frame to begin. The last frame is optional.</p>
       </form>`;
     owner.root.append(this.page);
+    // Progress gets its own row; it must never cover the shot being reviewed.
+    this.page.querySelector('.zf-viewer').after(this.$('progress'));
+    this.$('progress').classList.add('zs-progress-row');
     this.hdrOutput=new LTXHDRDelivery(this.api,{key:'zura-first-last-hdr',onSetup:info=>{this.hdrSetup=info;this.selectAvailability();if(!info.ready)this.$('model-downloads').open=true;},onUpdate:job=>this.hdrUpdate(job),onComplete:take=>{
       if(!this.items.some(item=>item.file.filename===take.file.filename&&item.file.subfolder===take.file.subfolder))this.items.unshift(take);
       this.items=this.items.slice(0,12);this.save();this.renderHistory();
@@ -170,7 +172,7 @@ export class FrameVideoWorkspace{
     for(const slot of ['first','last']){this.$(slot).accept=c.engine==='ltx'&&this.nativeHDR.info?.enabled?'image/png,image/jpeg,image/webp,.exr':'image/png,image/jpeg,image/webp';const button=this.page.querySelector(`[data-frame="${slot}"]`),asset=this.assets[slot],remove=this.$('remove-'+slot);button.disabled=busy;remove.disabled=busy;remove.hidden=!asset;let image=button.querySelector('img');if(asset){if(!image){image=document.createElement('img');image.alt='';button.prepend(image);}image.src=view(this.api,asset,'input');button.title=`${slot==='first'?'First':'Last'} frame · ${asset.name||asset.filename}`;}else {image?.remove();button.title=`Choose ${slot} frame`;}button.classList.toggle('has-media',!!asset);}
     this.$('audio-slot').hidden=!cap.supportsAudioReference||(!c.audioEnabled&&!this.assets.audio);this.$('audio-file-button').disabled=busy;this.$('remove-audio').hidden=!this.assets.audio;this.$('remove-audio').disabled=busy;this.$('audio-file-button').querySelector('span').textContent=this.assets.audio?.name||'Add audio reference';
     this.$('swap').hidden=!this.assets.first||!this.assets.last;
-    this.page.querySelector('[data-frame="last"] span').textContent=this.assets.last?'Last frame':'Last frame · optional';
+    this.page.querySelector('[data-frame="last"] span').textContent=this.assets.last?'Last frame':'Last frame (optional)';
     this.$('megapixels').max=megapixelMaximum(cap);this.$('megapixels').updateReadout?.();
     this.$('custom-size').hidden=c.sizePreset!=='custom';
     this.$('megapixels-setting').hidden=c.sizePreset==='custom';

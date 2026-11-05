@@ -156,8 +156,8 @@
 
 /* Keep the workflow in the second toolbar slot through every video stage. */
 #genj-studio[data-workspace] .zc-workflow-controls{display:flex;align-items:center;flex-wrap:wrap;gap:4px;min-width:0}
-#genj-studio[data-workspace] .zc-workflow-controls>:first-child{flex:0 0 148px;width:148px;max-width:148px;min-width:0;overflow:hidden;white-space:nowrap}
-#genj-studio[data-workspace] .zc-workflow-controls>:first-child select{max-width:112px}
+#genj-studio[data-workspace] .zc-workflow-controls>:first-child{flex:0 1 204px;width:204px;max-width:260px;min-width:132px;overflow:visible;white-space:nowrap}
+#genj-studio[data-workspace] .zc-workflow-controls>:first-child select{width:100%;max-width:100%;min-width:0;text-overflow:ellipsis}
 #genj-studio[data-workspace] .zc-workflow-controls>.zc-task-control{flex:0 0 220px;width:220px;max-width:220px}
 #genj-studio[data-workspace] .zc-task-control>summary{width:100%;justify-content:space-between;white-space:nowrap}
 #genj-studio[data-workspace] .zc-task-control[open]>summary [data-workflow-label]{display:inline}
@@ -169,8 +169,102 @@
 #genj-studio[data-workspace] .zp-page.zp-navigation-only>.zf-composer{margin-top:auto}
 @media(max-width:600px){
  #genj-studio[data-workspace] .zc-workflow-controls{width:100%;gap:4px}
- #genj-studio[data-workspace] .zc-workflow-controls>:first-child{flex-basis:116px;width:116px;max-width:116px}
+ #genj-studio[data-workspace] .zc-workflow-controls>:first-child{flex:1 1 160px;width:auto;max-width:none;min-width:132px}
  #genj-studio[data-workspace] .zc-workflow-controls>.zc-task-control{flex:1 1 160px;width:auto;max-width:none}
 }
 
 #genj-studio .zc-opening-menu [data-setup-needed]{font-size:12px;line-height:1.4;color:var(--gs-muted);font-weight:400;margin-left:auto;padding-left:12px}
+
+/* A shared workspace rhythm. Only the page scrolls when content genuinely
+   cannot fit; prompt cards and previews never become nested scroll wells. */
+#genj-studio[data-workspace]{--zs-preview-min:clamp(200px,30dvh,300px)}
+#genj-studio[data-workspace] :is(.zf-page,.zo-page,.zpc-page){overflow:auto;overscroll-behavior:contain;scrollbar-width:thin}
+#genj-studio[data-workspace] .zf-page{display:flex;flex-direction:column}
+#genj-studio[data-workspace] .zf-page>:not(.zf-viewer){flex-shrink:0}
+#genj-studio[data-workspace] :is(.zf-viewer,.zo-stage,.zpc-viewer){flex:1 0 var(--zs-preview-min);min-height:var(--zs-preview-min)}
+#genj-studio[data-workspace] :is(.zf-heading,.gs-preview-heading,.zc-image-heading,.zo-page>header,.zpc-heading){width:100%;max-width:var(--zc-video-width);margin-inline:auto;box-sizing:border-box;gap:12px;flex-wrap:wrap}
+#genj-studio[data-workspace] :is(.zf-heading,.zc-image-heading,.zo-page>header,.zpc-heading){min-height:40px}
+#genj-studio[data-workspace] :is(.zf-heading h2,.zo-page>header h2,.zpc-heading h2){font-size:14px;line-height:20px;margin:0}
+#genj-studio[data-workspace] .zrn-restart{min-height:36px;padding:8px 12px;border-radius:8px;font-size:13px;font-weight:500;background:transparent;color:var(--zc-text);border:1px solid var(--gs-line)}
+#genj-studio[data-workspace] .zc-viewer-tools{margin-left:auto;flex-wrap:wrap}
+#genj-studio[data-workspace] .gs-preview-heading>.zrn-restart-wrap{margin-left:0}
+#genj-studio[data-workspace=video] .gs-workspace{overflow:auto;overscroll-behavior:contain}
+#genj-studio[data-workspace=video] .gs-main{display:flex;flex-direction:column;overflow:visible;min-height:100%}
+#genj-studio[data-workspace=video] .gs-preview-scroll{flex:1 0 calc(var(--zs-preview-min) + 64px);min-height:calc(var(--zs-preview-min) + 64px)}
+#genj-studio[data-workspace=video] .gs-composer{flex:none}
+#genj-studio[data-workspace=image] .zc-image-page{overflow:auto}
+#genj-studio[data-workspace=image] .zc-image-main{overflow:visible;min-height:100%}
+#genj-studio[data-workspace=image] .zc-image-scroll{flex:1 0 calc(var(--zs-preview-min) + 48px);min-height:calc(var(--zs-preview-min) + 48px)}
+#genj-studio[data-workspace=image] .zc-image-composer{flex:none}
+#genj-studio[data-workspace] .zc-image-status{position:relative;inset:auto;flex:none;width:100%;max-width:var(--zc-video-width);margin-inline:auto;padding:8px 12px;box-sizing:border-box;border-radius:8px}
+#genj-studio[data-workspace] :is(#zf-progress,#zr-progress).zs-progress-row{position:relative;inset:auto;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 12px;flex:none;width:100%;max-width:var(--zc-video-width);margin-inline:auto;box-sizing:border-box;padding:8px 12px;border:1px solid var(--gs-line);border-radius:8px;background:var(--gs-panel)}
+#genj-studio[data-workspace] :is(#zf-progress,#zr-progress).zs-progress-row[hidden]{display:none}
+#genj-studio[data-workspace] .zs-progress-row :is(progress,#zf-progress-detail,#zr-progress-detail){grid-column:1/-1}
+#genj-studio[data-workspace] .zp-page[data-editor-stage=render]>.zf-viewer{flex:1 0 var(--zs-preview-min);min-height:var(--zs-preview-min)}
+#genj-studio[data-workspace] .zp-page>.zf-composer{max-height:none;overflow:visible}
+#genj-studio[data-workspace] .zp-page[data-editor-stage=render] .zc-prompt-bottom{position:static;padding-block:0}
+#genj-studio[data-workspace] .zc-prompt-tools{flex:1 1 640px;min-width:0;gap:8px 12px}
+#genj-studio[data-workspace] :is(.zc-prompt-bottom,.zc-composer-bottom){flex-wrap:wrap;gap:12px}
+#genj-studio[data-workspace] .zc-prompt-submit{flex:0 0 auto;margin-left:auto;align-self:flex-end}
+#genj-studio[data-workspace] .zc-tool-group{padding-right:12px;gap:8px}
+#genj-studio[data-workspace] .zc-workflow-controls>.zc-task-control{flex:0 1 200px;width:200px;max-width:none;min-width:160px}
+#genj-studio[data-workspace] .zc-workflow-menu{width:264px;max-width:calc(100vw - 32px);min-width:0;padding:8px;gap:4px}
+#genj-studio[data-workspace] .zc-workflow-menu button{white-space:normal;word-break:normal;min-height:36px;padding:8px 12px;margin:0;border:0}
+#genj-studio[data-workspace] .zc-workflow-menu button[aria-checked=true]::after{display:none}
+#genj-studio[data-workspace] .zc-tool-panel>label:first-child{margin-top:0}
+#genj-studio[data-workspace] .zc-tool-panel p{font-size:12px;line-height:1.5;color:var(--gs-muted)}
+#genj-studio[data-workspace] :is(.zf-frame-slot,.zc-attachment,.zr-reference){flex-shrink:0}
+#genj-studio[data-workspace] .zf-frame-slot>.zc-attachment{max-width:280px}
+#genj-studio[data-workspace] .zc-source-choice:has(.zc-source-hdr[hidden]){padding:0;border:0;background:transparent}
+#genj-studio[data-workspace] .gs-model-quick{gap:8px;padding:0 0 12px;margin:0;border-color:var(--gs-line)}
+#genj-studio[data-workspace] .gs-model-quick-copy{flex:1 1 220px}
+#genj-studio[data-workspace] .gs-model-quick-copy strong{font-size:13px}
+#genj-studio[data-workspace] .gs-model-quick-copy small{font-size:12px;margin:0}
+#genj-studio[data-workspace] .gs-model-quick>button{min-height:36px;padding:8px 12px;border:1px solid var(--gs-line);border-radius:8px;background:transparent;color:var(--zc-text);font:inherit;font-size:13px}
+#genj-studio[data-workspace] .gs-model-quick>[data-quick-install]{background:var(--gs-accent);color:var(--gs-ink);border-color:var(--gs-accent)}
+#genj-studio[data-workspace] .gs-model-quick>[data-quick-install]:disabled{opacity:1;background:var(--zc-disabled);color:var(--zc-disabled-text);border-color:var(--gs-line)}
+#genj-studio[data-workspace] .gs-model-quick :is([data-quick-status]:empty,progress[hidden]){display:none}
+#genj-studio[data-workspace] .gs-model-quick>.zura-model-storage>summary{padding:4px 0;font-size:12px;color:var(--gs-muted)}
+#genj-studio[data-workspace] .zh-composer{gap:12px}
+#genj-studio[data-workspace] .zh-composer :is(p,.zh-range-summary){margin:0}
+#genj-studio[data-workspace] .zh-controls{align-items:start}
+#genj-studio[data-workspace] .zh-colour-summary{display:flex;flex-direction:column;gap:4px}
+#genj-studio[data-workspace] .zh-footer{gap:12px;flex-wrap:wrap}
+#genj-studio[data-workspace] .zh-footer>label{white-space:normal;min-width:0}
+@media(max-width:700px){
+ #genj-studio[data-workspace] .zc-prompt-submit{width:100%}
+ #genj-studio[data-workspace] .zc-prompt-submit>.gs-primary{width:100%}
+ #genj-studio[data-workspace] .zc-workflow-controls{width:100%}
+ #genj-studio[data-workspace] .zc-workflow-controls>.zc-task-control{flex:1 1 180px}
+ #genj-studio[data-workspace] .gs-preview-heading>div:first-child{display:block}
+ #genj-studio[data-workspace] .zc-image-tools{flex-wrap:wrap}
+ #genj-studio[data-workspace] .zi-output-tools>.zc-model-control{max-width:100%}
+}
+
+#genj-studio[data-workspace] .zf-frame-slot>.zc-attachment:not(.has-media){width:auto;min-width:144px;padding-inline:16px}
+#genj-studio[data-workspace] .zc-image-tools{margin-left:auto}
+#genj-studio[data-workspace] .zc-image-heading>.zrn-restart-wrap{margin-left:0}
+#genj-studio[data-workspace] .zh-composer{position:relative}
+#genj-studio[data-workspace] .zh-composer-heading{position:absolute;top:12px;right:12px;width:auto}
+#genj-studio[data-workspace] .zh-inputs{padding-right:36px}
+#genj-studio[data-workspace] .zf-heading>details>summary{border:1px solid var(--gs-line);border-radius:8px;color:var(--zc-text)}
+#genj-studio[data-workspace] .zc-takes-panel{width:360px}
+#genj-studio[data-workspace] .zc-takes-panel :is(#zf-takes,#zr-takes){position:static;width:100%;max-height:none;border:0;padding:0;overflow:visible;background:transparent}
+#genj-studio[data-workspace] .zc-takes-panel>button{margin-top:12px;border-top:1px solid var(--gs-line);border-radius:0;width:100%;text-align:left}
+
+#genj-studio[data-workspace] .zp-page .zp-editor-tools{max-height:none;overflow:visible}
+#genj-studio[data-workspace] .zp-page.zp-editor-open>.zf-viewer{flex:1 0 var(--zs-preview-min);min-height:var(--zs-preview-min)}
+#genj-studio[data-workspace] .zc-tool-panel input[type=range]{width:100%;min-width:0}
+#genj-studio[data-workspace] .gs-model-quick .zura-model-storage[open]>div{max-width:none}
+
+#genj-studio[data-workspace=video] .gs-main>.gs-working{position:relative;inset:auto;flex:none;display:flex;flex-direction:column;gap:4px;padding:8px 12px;width:100%;max-width:var(--zc-video-width);margin-inline:auto;box-sizing:border-box;background:var(--gs-panel);border:1px solid var(--gs-line);border-radius:8px;pointer-events:auto}
+#genj-studio[data-workspace=video] .gs-main>.gs-working[hidden]{display:none}
+#genj-studio[data-workspace=video] .gs-working>:is(.gs-progress-heading,.gs-progress-caption){padding:0;background:none}
+#genj-studio[data-workspace=video] .gs-canvas>.gs-live-preview{position:absolute;inset:0;width:100%;height:100%;margin:0}
+#genj-studio[data-workspace] :is(.zh-page>.zh-progress,.zpc-page>.zpc-progress){position:relative;inset:auto;flex:none;width:100%;max-width:var(--zc-video-width);margin-inline:auto;padding:8px 12px;box-sizing:border-box;gap:8px;background:var(--gs-panel);border:1px solid var(--gs-line);border-radius:8px}
+#genj-studio[data-workspace] .zh-page>.zh-progress:has(progress[hidden]):has(button[hidden]):has(p:empty){display:none}
+#genj-studio[data-workspace] .zh-page>.zh-progress{flex-wrap:wrap}
+#genj-studio[data-workspace] .zh-page>.zh-progress p:not(:empty){padding:0;flex:1 1 240px}
+
+#genj-studio[data-workspace] .gs-model-quick>.zura-model-storage:not([open]){flex:0 0 auto;width:auto}
+#genj-studio[data-workspace] .gs-model-quick>.zura-model-storage:not([open])>summary{padding:8px;min-height:36px;box-sizing:border-box}

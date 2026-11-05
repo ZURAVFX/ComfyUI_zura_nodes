@@ -89,7 +89,7 @@ export class StudioModelDownloads {
       this.quick.querySelector('[data-quick-refresh]').onclick=async()=>{await this.load();await this.onInstalled?.();};
       this.quick.querySelector('[data-quick-cancel]').onclick=()=>this.request(`/model-downloads/${this.job}/cancel`,{}).catch(e=>{this.progress.textContent=e.message;this.renderQuick();});
       this.quickStorage=new ModelStorage(this.quick,this.request,async()=>{await this.load();await this.onInstalled?.();});
-      this.quickStorage.root.querySelector('summary').textContent='Use existing models or change folder';
+      this.quickStorage.root.querySelector('summary').textContent='Model folders';
     }
     if(this.quick.parentNode!==host)host.prepend(this.quick);
   }
@@ -105,6 +105,7 @@ export class StudioModelDownloads {
     this.quickStorage.root.hidden=!missing;
     this.quick.querySelector('[data-quick-cancel]').hidden=!this.job;
     this.quick.querySelector('[data-quick-refresh]').disabled=!!this.job||this.starting;
+    this.quick.querySelector('[data-quick-refresh]').hidden=!button.hidden&&!plan.files.length;
     if(!this.quickAccess){this.quickAccess=this.el('button','Hugging Face access');this.quickAccess.type='button';this.quickAccess.onclick=()=>this.showAccess();this.quick.querySelector('[data-quick-status]').before(this.quickAccess);}
     this.quickAccess.hidden=!this.accessFailure&&!plan.files.some(file=>file.gated);
     this.quick.querySelector('[data-quick-status]').textContent=this.progress.textContent;

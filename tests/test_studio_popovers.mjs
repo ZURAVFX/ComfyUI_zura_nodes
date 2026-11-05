@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import {parseHTML} from '../../ui-check/node_modules/linkedom/esm/index.js';
-import {installPopoverDismissal} from '../web/studio_popovers.js';
+import {installPopoverDismissal,positionStudioPopover} from '../web/studio_popovers.js';
 
 const {document,window}=parseHTML(`<html><body><section id="studio">
   <details class="zc-tool-popup"><summary>Clip length</summary><div><input id="seconds"/></div></details>
@@ -55,3 +55,17 @@ key(menu.querySelector('summary'),'ArrowDown');assert.equal(menuFocus,'A');
 key(menu.querySelector('button'),'ArrowDown');assert.equal(menuFocus,'B','Keyboard navigation skips unavailable or hidden choices');
 key(menu.querySelector('button'),'End');assert.equal(menuFocus,'B');key(menu.querySelector('button'),'Home');assert.equal(menuFocus,'A');
 cleanup();console.log('Workflow menu keyboard navigation and exclusive opening passed.');
+
+{
+// A menu opened near an edge fits the viewport and retains its DOM ownership.
+const menu=document.createElement('details');menu.open=true;menu.innerHTML='<summary>Mode</summary><div class="zc-tool-panel">Options</div>';root.append(menu);
+Object.defineProperty(window,'innerWidth',{value:800,configurable:true});Object.defineProperty(window,'innerHeight',{value:600,configurable:true});
+root.getBoundingClientRect=()=>({left:0,right:800,top:0,bottom:600});
+menu.querySelector('summary').getBoundingClientRect=()=>({left:700,right:790,top:550,bottom:590});
+const panel=menu.querySelector('div');panel.getBoundingClientRect=()=>({width:320});Object.defineProperty(panel,'scrollHeight',{value:400});
+positionStudioPopover(menu,root);
+assert.equal(panel.style.left,'468px');assert.equal(panel.style.top,'142px');assert.equal(panel.style.position,'fixed');assert.equal(panel.parentNode,menu);
+menu.querySelector('summary').getBoundingClientRect=()=>({left:20,right:110,top:20,bottom:56});positionStudioPopover(menu,root);assert.equal(panel.style.top,'64px');
+console.log('Menu placement stays inside the window above or below its trigger.');
+
+}

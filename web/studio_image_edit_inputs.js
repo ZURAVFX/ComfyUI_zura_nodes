@@ -9,7 +9,7 @@ export class ImageEditInputs {
   constructor(owner){
     this.owner=owner;const doc=owner.root.ownerDocument;
     owner.root.classList.add('image-composer-refined');
-    this.heading=doc.createElement('strong');this.heading.className='zi-composer-heading';owner.root.querySelector('.zc-image-composer').prepend(this.heading);
+    this.heading=doc.createElement('strong');this.heading.className='zi-composer-heading zc-sr-only';owner.root.querySelector('.zc-image-composer').prepend(this.heading);
     this.source=doc.createElement('div');this.source.className='zc-image-source zc-gallery';this.source.hidden=true;owner.$('gallery').before(this.source);
     this.toggle=doc.createElement('button');this.toggle.type='button';this.toggle.textContent='View main image';this.toggle.hidden=true;owner.root.querySelector('.zc-image-tools').prepend(this.toggle);
     this.toggle.onclick=()=>{this.showSource=!this.showSource;this.sync();};

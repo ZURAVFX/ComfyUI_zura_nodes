@@ -53,6 +53,9 @@ vm.createContext(context);
 const source=fs.readFileSync(new URL('../web/studio.js',import.meta.url),'utf8').replace(/^import .*;\r?\n/gm,'').replace(/^export /gm,'').split('app.registerExtension({')[0];
 vm.runInContext(source+'\nthis.Studio=ArtistStudio;',context);
 const studio=new context.Studio(),ui=studio.creative;
+assert.equal(studio.$('working').parentElement,studio.container.querySelector('.gs-main'),'Progress is outside the video preview');
+assert.equal(studio.$('live-preview').parentElement,studio.$('canvas'),'Live image keeps the full canvas');
+assert.equal(ui.$('progress').closest('.zc-image-scroll'),null,'Image progress never covers the comparison or result');
 {
   const probe=Object.create(context.Studio.prototype),elements={models:{classList:{toggle(){}}},'model-checklist':{}};
   Object.assign(probe,{config:{engine:'h3',workflow_mode:'swap',opening_model:'flux3',delivery_mode:'base',edit_area:'mask'},lookMode:'build',project:null,
