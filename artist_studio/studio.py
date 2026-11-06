@@ -234,7 +234,7 @@ def clean_config(value):
     from .mask_selection import clean_points
     c["mask_points"] = clean_points(c["mask_points"], require_positive=False)
     relight_large = c['workflow_mode'] == 'relight' and c['relight_engine'] == 'wan21'
-    for prefix, step, maximum, pixels in (("opening", 32 if c["opening_model"] == "qwen21" else 16, 4096, 4_000_000), ("relight", 16, 4096 if relight_large else 1920, 8_388_608 if relight_large else 1920 * 1088)):
+    for prefix, step, maximum, pixels in (("opening", 32 if c["opening_model"] in ("qwen21", "ph3") else 16, 4096, 4_000_000), ("relight", 16, 4096 if relight_large else 1920, 8_388_608 if relight_large else 1920 * 1088)):
         pair = []
         for side in ("width", "height"):
             raw = c[prefix + "_" + side]
@@ -784,7 +784,7 @@ def apply_opening_loras(project, graph, *, camera=False):
         raise ValueError("A finished frame cannot use image LoRAs. Choose image generation or remove them.")
     if config.get('opening_model') in ('chatgpt', 'gemini'):
         raise ValueError('Browser image generation cannot use local image LoRAs. Remove the image LoRAs or select a local model.')
-    family = "flux3_klein" if camera else {"klein9b": "flux2_klein9b", "flux3": "flux3_klein", "qwen2511": "qwen2511", "qwen21": "qwen21"}.get(config.get("opening_model", "klein9b"))
+    family = "flux3_klein" if camera else {"klein9b": "flux2_klein9b", "flux3": "flux3_klein", "qwen2511": "qwen2511", "qwen21": "qwen21", "ph3": "h3"}.get(config.get("opening_model", "klein9b"))
     from .custom_loras import apply_to_graph
     return apply_to_graph(graph, family, selected, folder_paths.get_filename_list("loras"), folder_paths.get_full_path)
 

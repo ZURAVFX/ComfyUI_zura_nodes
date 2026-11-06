@@ -274,6 +274,23 @@ CATALOG.update({
         files=[_file("loras", "ltx-2.5-22b-ic-lora-clean-plate-1.0.safetensors", "Lightricks/LTX-2.5-22b-IC-LoRA-Clean-Plate", "5cdacad3ee33574ecb11120b873dec320de79b37", "ltx-2.5-22b-ic-lora-clean-plate-1.0.safetensors", 327318439, "27f4f7ba552d3bf7273dd817291123a5934f17e7698ca9cd8945b079a5358393")]),
 })
 
+# Full packages keep a fresh installation usable in one action. Installed
+# shared files are recognised by inspect() and never downloaded again.
+CATALOG["flux2_klein_9b_bf16"]["files"] += CATALOG["flux2_klein_9b"]["files"][1:]
+CATALOG["flux3_klein_bf16"]["files"] += CATALOG["flux3_klein"]["files"][1:]
+CATALOG["ph3_image_edit"] = dict(
+    name="P-H3 Image · edit", gated=False,
+    license_url="https://huggingface.co/PrunaAI/P-H3-Image-Comfy",
+    note="Native eight-step P-H3 image editing, including its prompt upsampler. Reuses the H3 first/last-frame diffusion model. Requires a recent ComfyUI with PH3ImageConditioning; large images can need RAM offloading on 16 GB GPUs. Review the P-H3 and MiniMax H3 licences.",
+    files=[
+        CATALOG["h3_first_last"]["files"][0],
+        _file("loras", "p-h3-image_lora_bf16.safetensors", "PrunaAI/P-H3-Image-Comfy", "44a0fb73f299da1bb715bdb5ff59ce3fd3c6f543", "loras/p-h3-image_lora_bf16.safetensors", 1956195360, "0e9013ae2873e3415dcb7bb59a9677293bdbdb6f663e138a79bb9bdced00ea61"),
+        _file("text_encoders", "p-h3-image_text_encoder_int8_convrot.safetensors", "PrunaAI/P-H3-Image-Comfy", "44a0fb73f299da1bb715bdb5ff59ce3fd3c6f543", "text_encoders/p-h3-image_text_encoder_int8_convrot.safetensors", 5120870504, "fb42c9ff0597e61729475d0b48b69b591ffe06d0b442a79dde22b14fadbe1c0f"),
+        _file("text_encoders", "p-h3-image_prompt_upsampler_w4a8.safetensors", "PrunaAI/P-H3-Image-Comfy", "44a0fb73f299da1bb715bdb5ff59ce3fd3c6f543", "text_encoders/p-h3-image_prompt_upsampler_w4a8.safetensors", 6724096116, "74b206c0e3133aa0d1983fd8658c1526a53863cdcca5184538388e927f4e989b"),
+        _file("vae", "p-h3-image_vae_int8_convrot.safetensors", "PrunaAI/P-H3-Image-Comfy", "44a0fb73f299da1bb715bdb5ff59ce3fd3c6f543", "vae/p-h3-image_vae_int8_convrot.safetensors", 3146996440, "583e0d43354b6b833aa9a0815a5fac831b1ef6d0c19a7eaa0616980a3dab5ffe"),
+    ])
+
+
 def inspect(model_id, locations, filenames=None):
     """Return required files and exact remaining bytes, including shared files."""
     if model_id not in CATALOG:

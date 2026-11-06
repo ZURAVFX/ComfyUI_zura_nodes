@@ -46,7 +46,7 @@ export function studioWorkspaceBusy(creative){
     workspace?.layers?.busy||workspace?.hdrDelivery?.busy||invokeBusy(workspace)
   );
   if(mode==='hdr')return !!(
-    workspace?.job||workspace?.busy||workspace?.cancelling||
+    workspace?.job||workspace?.busy||workspace?.starting||workspace?.cancelling||
     workspace?.longClient?.busy||workspace?.longClient?.cancelPending||
     (typeof workspace?.busy==='function'&&workspace.busy())
   );

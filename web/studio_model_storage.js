@@ -1,7 +1,7 @@
 // Shared by Image, Video and Paintout. These are paths on the ComfyUI host.
 export class ModelStorage {
   constructor(host,request,onChange){
-    this.request=request;this.onChange=onChange;this.busy=false;this.folders=[];this.target='';
+    this.request=request;this.onChange=onChange;this.busy=false;this.folders=[];this.target='';this.revision=0;
     this.root=document.createElement('details');this.root.className='zura-model-storage';
     this.root.innerHTML='<summary>Model storage</summary><div><p>Search all saved folders for existing models. Choose where new downloads go.</p><label>Download new models to<select data-storage-target aria-label="Download new models to"></select></label><ul data-storage-folders aria-label="Saved model folders"></ul><label>Add a models folder on the ComfyUI computer<input type="text" data-storage-path spellcheck="false" placeholder="Full path to your models folder" /></label><div class="zura-storage-actions"><button type="button" data-storage-save>Add folder</button></div><p data-storage-status role="status" aria-live="polite"></p></div>';
     host.append(this.root);this.$=key=>this.root.querySelector(`[data-storage-${key}]`);
@@ -11,7 +11,12 @@ export class ModelStorage {
     this.$('path').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();void this.add();}});
     if(!document.querySelector('[data-zura-model-setup-style]')){const style=document.createElement('link');style.rel='stylesheet';style.href=new URL('./studio_model_setup.css',import.meta.url).href;style.dataset.zuraModelSetupStyle='';(document.head||host).append(style);}
   }
-  async load(){try{this.show(await this.request('/model-folders'));}catch(error){this.$('status').textContent=error.message||'Could not read model storage. Try again.';}}
+  async load(){
+    if(this.busy)return;
+    const revision=++this.revision;
+    try{const info=await this.request('/model-folders');if(revision===this.revision)this.show(info);}
+    catch(error){if(revision===this.revision)this.$('status').textContent=error.message||'Could not read model storage. Try again.';}
+  }
   show(info){
     this.loaded=true;this.folders=info.folders|| (info.external?[info.external]:[]);this.target=info.external||'';
     const option=(label,value)=>{const e=document.createElement('option');e.textContent=label;e.value=value;return e;};
@@ -31,8 +36,8 @@ export class ModelStorage {
     if(await this.save([...new Set([...this.folders,path])],path))this.$('path').value='';
   }
   async save(folders,download_to){
-    if(this.busy)return false;this.busy=true;this.controls(true);this.$('status').textContent='Checking folders and refreshing models…';
-    try{const info=await this.request('/model-folders',{folders,download_to});this.show(info);await this.onChange?.();return true;}
+    if(this.busy)return false;this.busy=true;++this.revision;this.controls(true);this.$('status').textContent='Checking folders and refreshing models…';
+    try{const info=await this.request('/model-folders',{folders,download_to});this.show(info);try{await this.onChange?.();}catch{this.$('status').textContent='Folder saved. Model status could not refresh; choose Check setup to try again.';}return true;}
     catch(error){this.$('target').value=this.target;this.$('status').textContent=error.message||'Could not save model folders. Check their paths and permissions.';return false;}
     finally{this.busy=false;this.controls(false);}
   }

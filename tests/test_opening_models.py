@@ -70,6 +70,35 @@ class OpeningModelTests(unittest.TestCase):
         self.assertEqual(graph["92:108"]["inputs"]["clip_name"], "qwen3vl_8b_int8_convrot.safetensors")
         self.assertEqual(graph["92:108"]["inputs"]["device"], "default", "Allow Comfy to use the GPU and offload as needed")
 
+    def test_ph3_uses_original_frame_and_references_with_native_av_latent(self):
+        graph = self.graph()
+        graph["zura_opening_latent_mask"] = {"class_type": "SetLatentNoiseMask", "inputs": {
+            "samples": ["92:127", 0], "mask": ["source_mask", 0]}}
+        graph["source_mask"] = {"class_type": "SolidMask", "inputs": {"value": 1.0, "width": 512, "height": 512}}
+        graph["92:104"]["inputs"]["latent_image"] = ["zura_opening_latent_mask", 0]
+        graph["zura_masked_look"] = {"class_type": "ImageCompositeMasked", "inputs": {
+            "destination": ["125", 0], "source": ["92:105", 0], "mask": ["source_mask", 0],
+            "x": 0, "y": 0, "resize_source": False}}
+        graph["122"]["inputs"]["images"] = ["zura_masked_look", 0]
+        result = models.apply_model(graph, "ph3", [{"file": "one.png"}, {"file": "two.png"}])
+        self.assertEqual(result["92:107"]["inputs"]["unet_name"], "minimax_h3_fl2va_pruned_int8_convrot.safetensors")
+        self.assertEqual(result["zura_ph3_adapter"]["class_type"], "LoraLoaderBypassModelOnly")
+        self.assertEqual(result["zura_ph3_shift"]["inputs"]["shift_video"], 1.0)
+        conditioning = result["92:109"]["inputs"]
+        self.assertEqual(conditioning["images.image_1"], ["92:111", 0])
+        self.assertEqual(result[conditioning["images.image_2"][0]]["inputs"]["image"], "one.png")
+        self.assertEqual(result[conditioning["images.image_3"][0]]["inputs"]["image"], "two.png")
+        self.assertEqual(result["92:104"]["inputs"]["latent_image"], ["92:109", 1])
+        self.assertEqual(result["92:103"]["class_type"], "BasicGuider")
+        self.assertEqual(result["92:102"]["class_type"], "ManualSigmas")
+        self.assertEqual(result["zura_ph3_prompt"]["inputs"]["sampling_mode"], "off")
+        self.assertIn("<Picture 3>", result["zura_ph3_prompt"]["inputs"]["prompt"])
+        self.assertIn("zura_masked_look", result, "The artist's reviewed mask still controls the final composite")
+        self.assertNotIn("zura_opening_latent_mask", result, "An image-only latent cannot drive the nested P-H3 sampler")
+        self.assertFalse(any(node["class_type"] == "EmptyFlux2LatentImage" for node in result.values()))
+        with self.assertRaisesRegex(ValueError, "seven appearance references"):
+            models.apply_model(self.graph(), "ph3", [{"file": "ref.png"}] * 8)
+
     def test_unknown_model_and_excess_references_fail_clearly(self):
         with self.assertRaisesRegex(ValueError, "Choose an available"):
             models.apply_model(self.graph(), "unknown")
@@ -83,6 +112,7 @@ class OpeningModelTests(unittest.TestCase):
         qwen21 = models.apply_model(self.graph(), "qwen21", [{"file": "ref.png"}])
         kinds.update({node["class_type"]: object for node in qwen21.values()})
         kinds.update({node["class_type"]: object for node in models.apply_model(self.graph(), "flux3").values()})
+        kinds.update({node["class_type"]: object for node in models.apply_model(self.graph(), "ph3", [{"file": "ref.png"}]).values()})
         kinds.update({'ZuraChatGPTImage': object, 'ZuraGeminiImage': object, 'GetImageSize': object})
         files = {pair for model in models.MODELS.values() for pair in model["files"]}
         status = models.readiness(kinds, lambda folder, name: "installed" if (folder, name) in files else None)

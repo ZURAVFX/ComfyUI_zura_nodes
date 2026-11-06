@@ -275,7 +275,7 @@ export class CreativeWorkspace {
   }
   $(id){return this.root.querySelector("#zc-"+id);}
   async fetch(path,body){const r=await this.api.fetchApi(path,body===undefined?{}:{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});let data;try{data=await r.json();}catch{if(r.ok)return {};const e=new Error("ComfyUI is unavailable. Reconnect and try again.");e.status=r.status;throw e;}if(!r.ok){const e=new Error(data.error?.message||data.error||"ComfyUI could not complete this request.");e.status=r.status;throw e;}return data;}
-  imageLoraFamily(){return {flux2:'flux2_klein9b',flux2bf16:'flux2_klein9b',klein9b:'flux2_klein9b',klein9bbf16:'flux2_klein9b',flux3:'flux3_klein',flux3bf16:'flux3_klein',flux3edit:'flux3_klein',flux3editbf16:'flux3_klein',qwen2511:'qwen2511',qwen21edit:'qwen21',flux2devedit:'flux2_dev',zimage:'zimage'}[this.$('model').value]||null;}
+  imageLoraFamily(){return {flux2:'flux2_klein9b',flux2bf16:'flux2_klein9b',klein9b:'flux2_klein9b',klein9bbf16:'flux2_klein9b',flux3:'flux3_klein',flux3bf16:'flux3_klein',flux3edit:'flux3_klein',flux3editbf16:'flux3_klein',qwen2511:'qwen2511',qwen21edit:'qwen21',flux2devedit:'flux2_dev',ph3edit:'h3',zimage:'zimage'}[this.$('model').value]||null;}
   async loadImageLoras(){try{const data=await this.fetch('/zura/studio/loras');this.imageLoraCatalog=Array.isArray(data.loras)?data.loras:[];this.$('image-lora-message').textContent='';this.renderImageLoras();}catch(error){this.$('image-lora-message').textContent=error.message;}}
   renderImageLoras(){
     const picker=this.$('image-lora-picker'),list=this.$('image-lora-list'),family=this.imageLoraFamily(),selected=picker.value;
@@ -413,12 +413,14 @@ export class CreativeWorkspace {
     try{
       const types=[...new Set(IMAGE_MODELS.flatMap(m=>Object.values(buildImageGraph({model:m.id,prompt:"check",references:m.minReferences?[{file:"availability-check.png"}]:[]})).map(n=>n.class_type)).concat("ReferenceMultiLatent","LoadImage"))];
       const parts=await Promise.all(types.map(t=>this.fetch("/object_info/"+t).catch(error=>{if(error.status===404)return {};throw error;})));
-      this.models=imageAvailability(Object.assign({},...parts));const edit=this.imageOperation==='edit';
+      this.models=imageAvailability(Object.assign({},...parts));
       let available=[],activeDownload=null;try{const catalogue=await this.fetch('/zura/studio/model-downloads');available=catalogue.models||[];activeDownload=catalogue.active||null;}catch{}
-      const map={flux2:'flux2_klein_9b',flux2bf16:'flux2_klein_9b_bf16',flux3:'flux3_klein',flux3bf16:'flux3_klein_bf16',flux3edit:'flux3_klein',flux3editbf16:'flux3_klein_bf16',zimage:'zimage_turbo',klein9b:'flux2_klein_9b',klein9bbf16:'flux2_klein_9b_bf16',qwen2511:'qwen2511',qwen21edit:'qwen21',flux2devedit:'flux2_dev'};
+      const map={flux2:'flux2_klein_9b',flux2bf16:'flux2_klein_9b_bf16',flux3:'flux3_klein',flux3bf16:'flux3_klein_bf16',flux3edit:'flux3_klein',flux3editbf16:'flux3_klein_bf16',zimage:'zimage_turbo',klein9b:'flux2_klein_9b',klein9bbf16:'flux2_klein_9b_bf16',qwen2511:'qwen2511',qwen21edit:'qwen21',flux2devedit:'flux2_dev',ph3edit:'ph3_image_edit'};
       // The catalogue pins a download version, not every valid local conversion.
       // Keep Comfy's file/node readiness separate from overwrite protection.
       for(const model of this.models){const pack=available.find(p=>p.id===map[model.id]);model.variants=(pack?.files||[]).filter(file=>file.incomplete).map(file=>file.filename);}
+      // The catalogue request may have been pending while the artist changed tasks.
+      const edit=this.imageOperation==='edit';
       this.$("model").innerHTML=[false,true].map(browser=>`<optgroup label="${browser?'Browser sign-in · no API credits':'Local models'}">${this.models.filter(m=>!!m.provider===browser).map(m=>`<option value="${m.id}" ${!!m.edit===edit?'':'hidden'}>${escape(m.name)}${m.provider?' · Browser sign-in':''}${m.ready?'':' · Setup needed'}</option>`).join('')}</optgroup>`).join('');
       this.$("model").value=this.models.find(m=>m.id===this.draft.model&&!!m.edit===edit)?.id||this.models.find(m=>m.ready&&!!m.edit===edit)?.id||this.models.find(m=>!!m.edit===edit)?.id||"";
       this.$("setup").innerHTML=this.models.map(m=>{
@@ -528,7 +530,8 @@ export class CreativeWorkspace {
     const fingerprint=JSON.stringify([this.references,busy,this.imageOperation,this.editMainMissing]);
     if(fingerprint!==this.referenceFingerprint){if(this.editInputs?.addHome)this.editInputs.addHome.prepend(this.editInputs.addReferences);this.referenceFingerprint=fingerprint;this.$("reference-list").innerHTML=this.references.map((r,i)=>`<div class="zc-reference"><img src="${escape(this.api.apiURL('/view?'+new URLSearchParams({filename:r.filename,subfolder:r.subfolder||'',type:'input'})))}" alt="${escape(r.name||'Reference '+(i+1))}"/><span>Image ${i+1}</span><button type="button" data-remove-ref="${i}" aria-label="Remove reference ${i+1}" ${busy?'disabled':''}>${closeIcon()}</button>${i?`<button type="button" class="zc-ref-move" data-move-ref="${i}" aria-label="Move reference ${i+1} earlier" ${busy?'disabled':''}>${previousIcon()}</button>`:''}</div>`).join('');}
     this.$("model-hint").textContent=m?.hint||"Checking local model files.";
-    this.$("size").textContent=error || (auto?(m?.provider?"Auto · No size instruction is sent. The website chooses the final size.":this.references.length?"Auto · Uses Image 1 dimensions, aligned to 16 px.":"Auto · 1024 × 1024 when no reference is supplied.") : size.join(" × ")+" px · "+(size[0]*size[1]/1e6).toFixed(2)+" MP"+(m?.provider?" requested · The website determines the final size.":size[0]*size[1]>1048576?" · Above the tested 1 MP size; needs more memory.":" · Multiples of 16"));
+    const sizeStep=m?.sizeStep||16;
+    this.$("size").textContent=error || (auto?(m?.provider?"Auto · No size instruction is sent. The website chooses the final size.":this.references.length?`Auto · Uses Image 1 dimensions, aligned to ${sizeStep} px.`:"Auto · 1024 × 1024 when no reference is supplied.") : size.join(" × ")+" px · "+(size[0]*size[1]/1e6).toFixed(2)+" MP"+(m?.provider?" requested · The website determines the final size.":m?.id==='ph3edit'?" · 4–8 MP recommended; larger sizes need more memory.":size[0]*size[1]>1048576?" · Above the tested 1 MP size; needs more memory.":` · Multiples of ${sizeStep}`));
     for(const id of ["width","height"])this.$(id).setAttribute("aria-invalid",String(!!error));
     this.$('image-megapixels').disabled=busy;this.$('image-mp-label').textContent=size?`${(size[0]*size[1]/1e6).toFixed(2)} MP`:'';
     if(this.$('image-megapixels')!==document.activeElement&&size)this.$('image-megapixels').value=Math.min(8.5,size[0]*size[1]/1e6);

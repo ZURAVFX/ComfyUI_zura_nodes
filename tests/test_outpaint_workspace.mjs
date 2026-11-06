@@ -187,4 +187,16 @@ ui.invalidate();assert.equal(ui.$('run-state').hidden,true,'Changing the selecti
   assert.equal(ui.trim.long,true,'A range larger than 120 native frames enables sections');
   assert.equal(Number(ui.$('duration').value),5,'Reading the source rate does not shorten the selection');
 }
+// A slow browser-compatible preview of the old source must not replace the
+// new source after the user chooses another clip.
+{
+  let resolvePreview, requestStarted;
+  const started=new Promise(resolve=>{requestStarted=resolve;});
+  ui.source={id:'old-source'};ui.video.src='/new-source-preview';
+  ui.fetch=async()=>{requestStarted();return new Promise(resolve=>{resolvePreview=resolve;});};
+  const polling=ui.pollPreview('old-source');await started;
+  ui.source={id:'new-source'};
+  resolvePreview({preview_status:'ready',preview_url:'/old-source-preview'});await polling;
+  assert.equal(ui.video.src,'/new-source-preview','Late preview results cannot replace a newer clip');
+}
 ui.dispose();console.log('Outpaint prototype requires review and approval before rendering, and invalidates stale selection.');

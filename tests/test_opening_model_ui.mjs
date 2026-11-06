@@ -42,4 +42,19 @@ for(const provider of ['chatgpt','gemini']){
 }
 console.log('ChatGPT and Gemini starting-frame choices retain browser labels and independent availability.');
 
+{
+  const option=document.createElement('option');option.value='ph3';composer.imageModel.querySelector('select').append(option);
+  const button=document.createElement('button');button.dataset.openingModel='ph3';composer.imageModel.append(button);
+  composer.studio.modelStatus.opening_models.ph3={ready:true,max_references:7};
+  composer.studio.config.opening_model='ph3';composer.studio.lookMode='build';composer.syncOpeningModel(false);
+  assert.equal(composer.imageModel.querySelector('[data-opening-model-label]').textContent,'P-H3 Image');
+  assert.equal(button.disabled,false);
+  assert.equal(button.getAttribute('aria-checked'),'true');
+  composer.studio.config.workflow_mode='camera';composer.syncOpeningModel(false);
+  assert.equal(composer.imageModel.querySelector('[data-opening-model-label]').textContent,'Flux 3 Klein');
+  assert.equal(button.hidden,true,'Camera does not promise unsupported local starting-image recipes');
+  composer.studio.config.workflow_mode='relight';composer.syncOpeningModel(false);
+  assert.equal(button.hidden,false,'P-H3 remains available in supported video workflows');
+}
+
 composer.studio.modelStatus.opening_models.qwen2511.ready=false;composer.syncOpeningModel(false);assert.equal(composer.imageModel.querySelector('[data-opening-model="qwen2511"] [data-setup-needed]').hidden,false);

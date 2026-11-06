@@ -21,7 +21,7 @@ FAMILIES = ("h3", "wan21", "wan22", "wan_animate2", "ltx25",
 def model_family(name):
     """Recognise only exact model families for which Studio builds a native UNET."""
     text = str(name).lower().replace("-", "_").replace(" ", "_")
-    if "minimax_h3" in text or text.startswith("h3_") or text.startswith("fasth3_omniref_8step_pruned_"):
+    if "minimax_h3" in text or text.startswith("p_h3_image") or text.startswith("h3_") or text.startswith("fasth3_omniref_8step_pruned_"):
         return "h3"
     if "wan_animate_2" in text or "wananimate2" in text:
         return "wan_animate2"
@@ -209,6 +209,7 @@ def apply_studio_video_loras(graph, family, selections, registered_names, get_pa
 
 
 IMAGE_FAMILIES = {
+    "ph3edit": ("h3", "minimax_h3_fl2va_pruned_int8_convrot.safetensors"),
     "qwen21edit": ("qwen21", "qwen_image_2.1_int8_convrot.safetensors"),
     "flux2devedit": ("flux2_dev", "flux2-dev-nvfp4.safetensors"),
     "flux2": ("flux2_klein9b", "flux-2-klein-9b-fp8.safetensors"),
@@ -216,6 +217,7 @@ IMAGE_FAMILIES = {
     "flux2bf16": ("flux2_klein9b", "flux-2-klein-9b.safetensors"),
     "klein9bbf16": ("flux2_klein9b", "flux-2-klein-9b.safetensors"),
     "flux3": ("flux3_klein", "flux3-image-klein-int8-convrot.safetensors"),
+    "flux3edit": ("flux3_klein", "flux3-image-klein-int8-convrot.safetensors"),
     "flux3bf16": ("flux3_klein", "flux3-image-klein-bf16.safetensors"),
     "flux3editbf16": ("flux3_klein", "flux3-image-klein-bf16.safetensors"),
     "qwen2511": ("qwen2511", "qwen_image_edit_2511_int8_convrot.safetensors"),

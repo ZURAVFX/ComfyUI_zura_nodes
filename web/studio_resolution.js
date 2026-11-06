@@ -66,7 +66,7 @@ export class VideoResolutionControl {
     const s=this.studio,c=s.config,source=s.source||{},ratio=(source.width||16)/(source.height||9),opening=s.composerStage()!=='video',camera=c.workflow_mode==='camera',relight=c.workflow_mode==='relight';
     const exact=opening||camera||relight;
     const openingMax=s.modelStatus?.opening_max_pixels>=4e6?4e6:2e6,largeRelight=relight&&!opening&&c.relight_engine==='wan21'&&s.modelStatus?.wan21_relight_max_pixels>=8_388_608;
-    const cap=camera?{step:32,min:128,max:1280,maxPixels:1280*1280}:opening?{step:c.opening_model==='qwen21'?32:16,min:256,max:openingMax>2e6?4096:2048,maxPixels:openingMax}:largeRelight?{step:16,min:256,max:4096,maxPixels:8_388_608}:{step:16,min:256,max:1920,maxPixels:1920*1088};
+    const cap=camera?{step:32,min:128,max:1280,maxPixels:1280*1280}:opening?{step:['qwen21','ph3'].includes(c.opening_model)?32:16,min:256,max:openingMax>2e6?4096:2048,maxPixels:openingMax}:largeRelight?{step:16,min:256,max:4096,maxPixels:8_388_608}:{step:16,min:256,max:1920,maxPixels:1920*1088};
     return {s,c,source,ratio,opening,camera,relight,exact,cap,key:camera?'camera':opening?'opening':'relight'};
   }
   apply(custom=false){

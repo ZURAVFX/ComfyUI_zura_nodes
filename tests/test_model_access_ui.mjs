@@ -29,6 +29,12 @@ const installer=new StudioModelDownloads(document.querySelector('#models'),async
 });
 await installer.load();installer.select.value=pack.id;await installer.start(pack.id);
 assert.equal(downloads,0,'Gated access is checked before any model download');assert.equal(installer.panel.open,true);assert.equal(installer.access.root.open,true);assert.ok(installer.access.blocked);
+const other=document.createElement('option');other.value='other-package';installer.select.append(other);
+installer.select.value='other-package';installer.select.onchange();
+assert.equal(installer.retryRequest,null,'Changing package cancels the old gated download intent');
+installer.access.request=async()=>({connected:true});await installer.access.onTermsReturn();
+assert.equal(downloads,0,'Returning from terms cannot start a package the user has left');
+installer.access.request=installer.request;installer.select.value=pack.id;installer.select.onchange();await installer.start(pack.id);
 installer.access.$('token').value='hf_FixtureOnly';await installer.access.connect();
 assert.equal(downloads,1);assert.equal(installer.progress.textContent,'Download complete.');assert.equal(installer.accessFailure,null);installer.dispose();
 

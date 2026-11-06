@@ -83,6 +83,14 @@ class CustomLoraTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "incompatible"):
                 module.validate_image_loras("klein9b", [selection], [self.path.name], self.lookup)
 
+    def test_ph3_and_flux3_edit_validate_the_actual_diffusion_family(self):
+        selection = {"name": self.path.name, "strength": 0.8}
+        for model, base in (("ph3edit", "p-h3-image"), ("flux3edit", "flux3-image-klein")):
+            self.write_header({"__metadata__": {"base_model": base}})
+            self.assertEqual(module.validate_image_loras(model, [selection], [self.path.name], self.lookup), [selection])
+            with self.assertRaisesRegex(ValueError, "incompatible"):
+                module.validate_image_loras("klein9b", [selection], [self.path.name], self.lookup)
+
     def test_image_validation_requires_correct_family_and_confirmation(self):
         selection = {"name": self.path.name, "strength": 0.8}
         self.write_header({"__metadata__": {"base_model": "flux-2-klein-9b"}})

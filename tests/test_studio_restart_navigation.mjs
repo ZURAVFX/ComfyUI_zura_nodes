@@ -176,6 +176,9 @@ const hdrCreative={
   studio:{hdrTool:{async reset(options){hdrResetOptions=options;return true;}}},
   show(mode){shown=mode;},
 };
+hdrCreative.studio.hdrTool.starting=true;
+assert.equal(studioWorkspaceBusy(hdrCreative),true,'HDR setup is busy before the job is queued');
+hdrCreative.studio.hdrTool.starting=false;
 assert.equal(await resetStudioWorkspace(hdrCreative),true);
 assert.deepEqual(hdrResetOptions,{keepSource:false});
 

@@ -71,7 +71,9 @@ def restore_source_size(graph):
         'image': generated, 'upscale_method': 'lanczos', 'crop': 'center',
         'width': ['zura_original_size', 0], 'height': ['zura_original_size', 1]}}
     graph['122']['inputs']['images'] = ['zura_opening_original_resolution', 0]
-    if 'zura_opening_latent_mask' in graph:
+    # Preserve the actual source pixels outside a reviewed mask even when the
+    # selected image model uses a latent format that cannot be noise-masked.
+    if 'zura_masked_look' in graph and 'zura_look_inside_mask' in graph:
         graph['zura_opening_preserve_source'] = {'class_type': 'ImageCompositeMasked', 'inputs': {
             'destination': ['125', 0], 'source': ['zura_opening_original_resolution', 0],
             'mask': ['zura_look_inside_mask', 0], 'x': 0, 'y': 0, 'resize_source': False}}

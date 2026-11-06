@@ -36,7 +36,7 @@ Object.assign(globalThis,{document,window,localStorage,ResizeObserver,createImag
 }
 const info={};
 for(const m of IMAGE_MODELS)for(const n of Object.values(buildImageGraph({model:m.id,prompt:'test',references:m.minReferences?[{file:'source.png'}]:[]})))info[n.class_type]={input:{required:{}}};
-info.UNETLoader.input.required.unet_name=[IMAGE_MODELS.map(m=>m.model)];info.CLIPLoader.input.required={clip_name:[IMAGE_MODELS.map(m=>m.text)],type:[IMAGE_MODELS.map(m=>m.type)]};info.VAELoader.input.required.vae_name=[IMAGE_MODELS.map(m=>m.vae)];info.LoraLoaderModelOnly.input.required.lora_name=[IMAGE_MODELS.map(m=>m.lora).filter(Boolean)];
+info.UNETLoader.input.required.unet_name=[IMAGE_MODELS.map(m=>m.model)];info.CLIPLoader.input.required={clip_name:[IMAGE_MODELS.flatMap(m=>[m.text,m.upsampler].filter(Boolean))],type:[IMAGE_MODELS.map(m=>m.type)]};info.VAELoader.input.required.vae_name=[IMAGE_MODELS.map(m=>m.vae)];info.LoraLoaderModelOnly.input.required.lora_name=[IMAGE_MODELS.map(m=>m.lora).filter(Boolean)];info.LoraLoaderBypassModelOnly.input.required.lora_name=[IMAGE_MODELS.map(m=>m.lora).filter(Boolean)];
 assert.ok(imageAvailability(info).every(m=>m.ready));
 assert.throws(()=>buildImageGraph({prompt:' '}),/Describe/);
 assert.throws(()=>buildImageGraph({prompt:'test',seed:NaN}),/Seed/);
@@ -201,6 +201,20 @@ ui.show('image');await ui.loadModels();
 for(let i=0;i<10&&ui.loading;i++)await Promise.resolve();
 assert.equal(ui.models.length,IMAGE_MODELS.length);
 const originalFetch=ui.fetch;
+{
+  // Refresh must use the task and model the artist chose while the catalogue was loading.
+  let resume,waiting;const pending=new Promise(resolve=>resume=resolve),started=new Promise(resolve=>waiting=resolve);
+  ui.fetch=async function(path,body){if(path==='/zura/studio/model-downloads'){waiting();return pending;}return originalFetch.call(this,path,body);};
+  await ui.setImageOperation('create',{useCanvas:false});
+  const refreshing=ui.loadModels();await started;
+  await ui.setImageOperation('edit',{useCanvas:false});
+  ui.$('model').value='ph3edit';ui.$('model').dispatchEvent(new window.Event('change'));
+  resume({models:[]});await refreshing;
+  assert.equal(ui.imageOperation,'edit');assert.equal(ui.$('model').value,'ph3edit');
+  assert.equal(ui.$('model').querySelector('option[value="ph3edit"]').hidden,false);
+  assert.equal(ui.$('model').querySelector('option[value="flux2"]').hidden,true);
+  ui.fetch=originalFetch;await ui.setImageOperation('create',{useCanvas:false});
+}
 ui.fetch=async function(path,body){if(path==='/object_info/Flux2Scheduler')return {};return originalFetch.call(this,path,body);};
 await ui.loadModels();
 assert.ok([...ui.$('setup').querySelectorAll('a')].some(a=>a.href==='https://github.com/Comfy-Org/ComfyUI'),'Image setup points missing core image nodes to ComfyUI');

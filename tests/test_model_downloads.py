@@ -43,7 +43,10 @@ class ModelDownloadTest(unittest.TestCase):
         script = "import {IMAGE_MODELS} from './web/image_recipes.js'; console.log(JSON.stringify(IMAGE_MODELS));"
         models = json.loads(subprocess.check_output(['node', '--input-type=module', '-e', script], cwd=root, text=True))
         packages = {'flux2': 'flux2_klein_9b', 'flux3': 'flux3_klein', 'flux3edit': 'flux3_klein', 'zimage': 'zimage_turbo',
-                    'klein9b': 'flux2_klein_9b', 'qwen2511': 'qwen2511', 'qwen21edit': 'qwen21', 'flux2devedit': 'flux2_dev'}
+                    'flux2bf16': 'flux2_klein_9b_bf16', 'klein9bbf16': 'flux2_klein_9b_bf16',
+                    'flux3bf16': 'flux3_klein_bf16', 'flux3editbf16': 'flux3_klein_bf16',
+                    'klein9b': 'flux2_klein_9b', 'qwen2511': 'qwen2511', 'qwen21edit': 'qwen21', 'flux2devedit': 'flux2_dev',
+                    'ph3edit': 'ph3_image_edit'}
         for model in models:
             if model.get('provider'):
                 self.assertIn(model['provider'], ('chatgpt', 'gemini'))
@@ -54,8 +57,17 @@ class ModelDownloadTest(unittest.TestCase):
             expected = {('diffusion_models', model['model']), ('text_encoders', model['text']), ('vae', model['vae'])}
             if model.get('lora'):
                 expected.add(('loras', model['lora']))
+            if model['id'] == 'ph3edit':
+                expected.add(('text_encoders', 'p-h3-image_prompt_upsampler_w4a8.safetensors'))
             self.assertEqual(files, expected, model['name'])
             self.assertTrue(all(len(file['revision']) == 40 and len(file['sha256']) == 64 for file in package['files']))
+
+    def test_ph3_package_reuses_h3_base_without_video_only_components(self):
+        package = downloads.CATALOG['ph3_image_edit']
+        self.assertEqual(package['files'][0], downloads.CATALOG['h3_first_last']['files'][0])
+        self.assertEqual(len(package['files']), 5)
+        self.assertEqual(sum(f['size_bytes'] for f in package['files']), 37918538036)
+        self.assertFalse(any('audio' in f['filename'] or 'turbo' in f['filename'] for f in package['files']))
 
     def test_optional_model_folder_can_register_after_routes_load(self):
         class Folders:

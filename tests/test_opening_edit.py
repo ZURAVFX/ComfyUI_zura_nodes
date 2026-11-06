@@ -34,6 +34,23 @@ class OpeningEditTests(fixture.unittest.TestCase):
         self.assertLessEqual(retry['zura_original_slice']['inputs']['duration'], 0.1)
         self.assertNotIn('another-generated-image.png', str(retry))
 
+    def test_ph3_retry_uses_original_frame_and_keeps_reviewed_mask_composite(self):
+        p = self.project()
+        p['config']['opening_model'] = 'ph3'
+        first = self.graph(p)
+        p['opening_input']['file'] = 'another-generated-image.png'
+        retry = self.graph(p)
+        self.assertEqual(first, retry)
+        self.assertEqual(retry['zura_original_video']['inputs']['file'], 'source.mp4')
+        self.assertEqual(retry['92:109']['inputs']['images.image_1'], ['92:111', 0])
+        self.assertEqual(retry['92:104']['inputs']['latent_image'], ['92:109', 1])
+        self.assertIn('zura_masked_look', retry)
+        self.assertEqual(retry['zura_opening_preserve_source']['inputs']['destination'], ['125', 0])
+        self.assertEqual(retry['zura_opening_preserve_source']['inputs']['mask'], ['zura_look_inside_mask', 0])
+        self.assertEqual(retry['122']['inputs']['images'], ['zura_opening_preserve_source', 0])
+        self.assertNotIn('zura_opening_latent_mask', retry)
+        self.assertNotIn('another-generated-image.png', str(retry))
+
     def test_motion_video_settings_cannot_make_image_edit_replace_whole_scene(self):
         p = self.project()
         before = copy.deepcopy(p)

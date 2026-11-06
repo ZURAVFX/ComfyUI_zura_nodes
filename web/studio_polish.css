@@ -177,7 +177,7 @@
 
 /* A shared workspace rhythm. Only the page scrolls when content genuinely
    cannot fit; prompt cards and previews never become nested scroll wells. */
-#genj-studio[data-workspace]{--zs-preview-min:clamp(200px,30dvh,300px)}
+#genj-studio[data-workspace]{--zs-preview-min:clamp(256px,38dvh,360px)}
 #genj-studio[data-workspace] :is(.zf-page,.zo-page,.zpc-page){overflow:auto;overscroll-behavior:contain;scrollbar-width:thin}
 #genj-studio[data-workspace] .zf-page{display:flex;flex-direction:column}
 #genj-studio[data-workspace] .zf-page>:not(.zf-viewer){flex-shrink:0}

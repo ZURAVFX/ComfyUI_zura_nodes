@@ -24,7 +24,8 @@ let storage={};const localStorage={getItem:k=>storage[k]||null,setItem:(k,v)=>st
 Object.assign(globalThis,{document,window,localStorage,ResizeObserver,createImageBitmap:async()=>({width:1024,height:1024,close(){}})});
 const info={};
 for(const m of IMAGE_MODELS)for(const n of Object.values(buildImageGraph({model:m.id,prompt:'test',references:m.minReferences?[{file:'source.png'}]:[]})))info[n.class_type]={input:{required:{}}};
-info.UNETLoader.input.required.unet_name=[IMAGE_MODELS.map(m=>m.model)];info.CLIPLoader.input.required={clip_name:[IMAGE_MODELS.map(m=>m.text)],type:[IMAGE_MODELS.map(m=>m.type)]};info.VAELoader.input.required.vae_name=[IMAGE_MODELS.map(m=>m.vae)];info.LoraLoaderModelOnly.input.required.lora_name=[IMAGE_MODELS.map(m=>m.lora).filter(Boolean)];
+info.UNETLoader.input.required.unet_name=[IMAGE_MODELS.map(m=>m.model)];info.CLIPLoader.input.required={clip_name:[IMAGE_MODELS.flatMap(m=>[m.text,m.upsampler]).filter(Boolean)],type:[IMAGE_MODELS.map(m=>m.type)]};info.VAELoader.input.required.vae_name=[IMAGE_MODELS.map(m=>m.vae)];info.LoraLoaderModelOnly.input.required.lora_name=[IMAGE_MODELS.map(m=>m.lora).filter(Boolean)];
+if(info.LoraLoaderBypassModelOnly)info.LoraLoaderBypassModelOnly.input.required.lora_name=[IMAGE_MODELS.map(m=>m.lora).filter(Boolean)];
 assert.ok(imageAvailability(info).every(m=>m.ready));
 assert.throws(()=>buildImageGraph({prompt:' '}),/Describe/);
 assert.throws(()=>buildImageGraph({prompt:'test',seed:NaN}),/Seed/);

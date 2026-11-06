@@ -25,6 +25,11 @@ await setup.quick.querySelector('[data-quick-install]').onclick();
 assert.equal(posts.length,1,'One click submits one server job');
 assert.deepEqual(posts[0],{model_ids:['h3_first_last'],file_keys:['vae/shared.safetensors','vae/needed.safetensors']});
 assert.equal(refreshed,1);assert.equal(setup.progress.textContent,'Download complete.');
+setup.setContext({route:'h3_first_last',files:[{folder:'vae',filename:'manual-model.safetensors',ready:false}],missingNodes:[]});
+assert.equal(setup.quick.querySelector('[data-quick-install]').disabled,true,'An unlisted file has no automatic download');
+assert.equal(setup.quick.querySelector('[data-quick-refresh]').hidden,false,'Users can recheck setup after installing an unlisted file');
+await setup.quick.querySelector('[data-quick-refresh]').onclick();
+assert.equal(refreshed,2,'Check setup refreshes workflow readiness after manual installation');
 setup.dispose();
 const requests=[];let updates=0;
 let folders=['/external/models'],target=folders[0];
@@ -40,4 +45,24 @@ assert.equal(requests.at(-1)[1].download_to,'');assert.equal(storage.folders.len
 await storage.$('folders').querySelector('button').onclick();
 assert.deepEqual(requests.at(-1)[1],{folders:['/shared/models'],download_to:''});
 assert.equal(storage.$('save').disabled,false);
+
+// Opening the storage panel can overlap a save or another refresh. A stale
+// response must never put the previously selected download folder back.
+let resolveOldLoad;
+const delayedStorage=new ModelStorage(document.body,async(path,body)=>{
+ if(!body)return await new Promise(resolve=>{resolveOldLoad=resolve;});
+ return {folders:body.folders,external:body.download_to,default:'/comfy/models'};
+});
+const oldLoad=delayedStorage.load();
+await delayedStorage.save(['/new/models'],'/new/models');
+resolveOldLoad({folders:['/old/models'],external:'/old/models',default:'/comfy/models'});
+await oldLoad;
+assert.equal(delayedStorage.$('target').value,'/new/models','An older load cannot overwrite a saved destination');
+
+const refreshFailure=new ModelStorage(document.body,async(path,body)=>({folders:body.folders,external:body.download_to,default:'/comfy/models'}),async()=>{throw Error('offline');});
+refreshFailure.loaded=true;refreshFailure.$('path').value='/saved/models';
+await refreshFailure.add();
+assert.equal(refreshFailure.target,'/saved/models');
+assert.equal(refreshFailure.$('path').value,'','A saved folder is not reported as a failed save when the status refresh fails');
+assert.match(refreshFailure.$('status').textContent,/Folder saved.*Check setup/);
 console.log('One-click exact-file workflow install, shared-file deduplication, storage choice and readiness refresh passed.');

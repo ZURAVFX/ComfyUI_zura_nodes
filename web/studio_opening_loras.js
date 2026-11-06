@@ -10,7 +10,7 @@ export class OpeningLoraControl {
     this.el.querySelector('[data-list]').addEventListener('click',event=>{const btn=event.target.closest('[data-remove-opening-lora]');if(!btn)return;const items=[...(studio.config.opening_loras||[])];items.splice(Number(btn.dataset.removeOpeningLora),1);this.save(items);});
     this.el.querySelector('[data-list]').addEventListener('change',event=>{const input=event.target,index=Number(input.dataset.openingIndex),items=(studio.config.opening_loras||[]).map(item=>({...item}));if(!Number.isInteger(index)||!items[index])return;if(input.dataset.openingField==='strength')items[index].strength=Number(input.value);if(input.dataset.openingField==='confirm')items[index].confirm_unknown=!!input.checked;this.save(items);});
   }
-  family(){const c=this.studio.config;return c.workflow_mode==='camera'?'flux3_klein':({klein9b:'flux2_klein9b',flux3:'flux3_klein',qwen2511:'qwen2511',qwen21:'qwen21'})[c.opening_model||'klein9b'];}
+  family(){const c=this.studio.config;return c.workflow_mode==='camera'?'flux3_klein':({klein9b:'flux2_klein9b',flux3:'flux3_klein',qwen2511:'qwen2511',qwen21:'qwen21',ph3:'h3'})[c.opening_model||'klein9b'];}
   save(items){const s=this.studio;if(s.busy||s.project?.phase==='working')return;s.perform(async epoch=>{const config={...s.readConfig(),opening_loras:items};if(s.project){const id=s.project.id,updated=await s.requestOpeningLoraConfig(id,config);if(epoch!==s.resetEpoch||s.project?.id!==id)return;s.project=updated;}s.config=config;s.render();});}
   sync(stage){
     const s=this.studio,c=s.config,entries=c.opening_loras||[],busy=s.busy||s.project?.phase==='working',family=this.family(),doc=this.el.ownerDocument;

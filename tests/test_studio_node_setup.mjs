@@ -12,6 +12,12 @@ assert.equal(result.packs.find(p=>p.name==='ComfyUI-LTXVideo').missing.length,2)
 assert.ok(result.packs.find(p=>p.name==='ComfyUI').note.includes('built-in'));
 assert.ok(result.packs.every(p=>p.url.startsWith('https://github.com/')));
 assert.deepEqual(groupMissingNodes(null),{packs:[],unknown:[]});
+const ph3Nodes=['PH3ImageConditioning','LoraLoaderBypassModelOnly','TextGenerate','GetImageSize','ResizeAndPadImage','BatchImagesNode'];
+const ph3=groupMissingNodes(ph3Nodes);
+assert.deepEqual(ph3.unknown,[],'P-H3 prerequisites need actionable update guidance');
+assert.equal(ph3.packs.length,1);
+assert.equal(ph3.packs[0].name,'ComfyUI','P-H3 nodes are built in, not a separate extension');
+assert.deepEqual(ph3.packs[0].missing,ph3Nodes);
 const image=groupMissingNodes(['FluxKVCache','Flux2Scheduler','TextEncodeQwenImageEditPlus','CFGNorm','flux3 text support','weights.safetensors']);
 assert.equal(image.packs.length,1);
 assert.equal(image.packs[0].name,'ComfyUI');

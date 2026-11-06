@@ -6,6 +6,7 @@ export const IMAGE_MODELS = [
   {id:"flux3bf16",maxReferences:10,name:"Flux 3 Klein · BF16 test",hint:"Full-precision diffusion weights for comparison. Shares the installed INT8 text encoder and VAE with the INT8 option; slower and may offload on 16 GB GPUs.",model:"flux3-image-klein-bf16.safetensors",text:"qwen3vl_4b_int8_convrot.safetensors",vae:"flux2-vae.safetensors",type:"flux3",steps:16,latent:"EmptyFlux2LatentImage",url:"https://huggingface.co/black-forest-labs/flux-3-image-klein-comfy"},
   {id:"zimage",maxReferences:0,name:"Z-Image Turbo",hint:"Fast photography and illustration",model:"z_image_turbo_bf16.safetensors",text:"qwen_3_4b.safetensors",vae:"ae.safetensors",type:"lumina2",steps:9,latent:"EmptySD3LatentImage",url:"https://huggingface.co/Comfy-Org/z_image_turbo"},
   {id:"qwen2511",minReferences:1,maxReferences:3,edit:true,name:"Qwen Image Edit 2511",hint:"Edit an image with up to two extra references. Your 4-step Lightning recipe; INT8 with CPU offloading on 16 GB.",model:"qwen_image_edit_2511_int8_convrot.safetensors",text:"qwen_2.5_vl_7b_fp8_scaled.safetensors",vae:"qwen_image_vae.safetensors",type:"qwen_image",steps:4,lora:"Qwen-Image-Edit-2511-Lightning-4steps-V1.0-bf16.safetensors",url:"https://huggingface.co/Qwen/Qwen-Image-Edit-2511"},
+  {id:"ph3edit",minReferences:1,maxReferences:8,edit:true,name:"P-H3 Image",hint:"Edit Image 1 with up to seven references. Uses prompt expansion and eight steps. 4–8 MP is recommended; larger images need more memory and may be slow.",model:"minimax_h3_fl2va_pruned_int8_convrot.safetensors",text:"p-h3-image_text_encoder_int8_convrot.safetensors",upsampler:"p-h3-image_prompt_upsampler_w4a8.safetensors",vae:"p-h3-image_vae_int8_convrot.safetensors",lora:"p-h3-image_lora_bf16.safetensors",type:"minimax",steps:8,sizeStep:32,url:"https://huggingface.co/PrunaAI/P-H3-Image-Comfy"},
   {id:"klein9b",minReferences:1,maxReferences:4,edit:true,name:"FLUX Klein 9B",hint:"Full-frame edits and reference-led changes. Your FP8 9B recipe: native Flux 2 scheduling, 4 steps and ordered image references.",model:"flux-2-klein-9b-fp8.safetensors",text:"qwen_3_8b_fp4mixed.safetensors",vae:"flux2-vae.safetensors",type:"flux2",steps:4,latent:"EmptyFlux2LatentImage",url:"https://huggingface.co/black-forest-labs/FLUX.2-klein-9B"},
   {id:"klein9bbf16",minReferences:1,maxReferences:4,edit:true,name:"FLUX Klein 9B · BF16 test",hint:"Full-precision diffusion weights for comparison. Shares the installed FP4 text encoder and VAE with the FP8 option; slower and may offload on 16 GB GPUs.",model:"flux-2-klein-9b.safetensors",text:"qwen_3_8b_fp4mixed.safetensors",vae:"flux2-vae.safetensors",type:"flux2",steps:4,latent:"EmptyFlux2LatentImage",url:"https://huggingface.co/black-forest-labs/FLUX.2-klein-9B"},
   {id:"flux3edit",minReferences:1,maxReferences:10,edit:true,name:"Flux 3 Klein",hint:"Edit Image 1 using your prompt and optional appearance references. Native INT8 recipe, 16 steps.",model:"flux3-image-klein-int8-convrot.safetensors",text:"qwen3vl_4b_int8_convrot.safetensors",vae:"flux2-vae.safetensors",type:"flux3",steps:16,latent:"EmptyFlux2LatentImage",url:"https://huggingface.co/black-forest-labs/flux-3-image-klein-comfy"},
@@ -51,6 +52,34 @@ export function buildImageGraph({model="flux3",prompt,shape="square",seed=42,wid
   }
   const clip=node("text","CLIPLoader","Text encoder",{clip_name:recipe.text,type:recipe.type,device:"default"});
   const vae=node("vae","VAELoader","Image decoder",{vae_name:recipe.vae});
+  if(model==="ph3edit"){
+    // Pruna's FL2VA LoRA workflow: bypass loading is required for its quantised base.
+    // https://huggingface.co/PrunaAI/P-H3-Image-Comfy/blob/main/workflows/p-h3-image_lora_edit.json
+    unet=node("image_adapter","LoraLoaderBypassModelOnly","P-H3 image adapter",{model:unet,lora_name:recipe.lora,strength_model:1});
+    unet=node("sampling","MiniMaxH3SigmaShift","P-H3 sampling",{model:unet,shift_video:1,shift_audio:1});
+    const images={},batch={};let promptSource;
+    references.forEach((ref,i)=>{
+      const original=node(`reference_${i+1}`,"LoadImage",i?`Reference ${i+1}`:"Image to edit",{image:ref.file});
+      images[`images.image_${i+1}`]=i?original:node("source_size","ImageScale","Output dimensions",{image:original,upscale_method:"lanczos",width,height,crop:"disabled"});
+      if(!i){
+        promptSource=node("prompt_source","ImageScaleToTotalPixels","Prompt image size",{image:original,upscale_method:"lanczos",megapixels:1,resolution_steps:1});
+        node("prompt_source_size","GetImageSize","Prompt image dimensions",{image:promptSource});
+        batch['images.image0']=promptSource;
+      }else batch[`images.image${i}`]=node(`prompt_reference_${i+1}`,"ResizeAndPadImage",`Prompt reference ${i+1}`,{image:original,target_width:["prompt_source_size",0],target_height:["prompt_source_size",1],padding_color:"white",interpolation:"lanczos"});
+    });
+    const promptImages=node("prompt_images","BatchImagesNode","Ordered prompt references",batch);
+    const promptEncoder=node("prompt_encoder","CLIPLoader","Prompt expansion model",{clip_name:recipe.upsampler,type:"minimax",device:"default"});
+    const pictureTokens=references.map((_,i)=>`<Picture ${i+1}>: <|vision_start|><|image_pad|><|vision_end|>`).join("");
+    const expanded=node("expand_prompt","TextGenerate","Expand edit instruction",{clip:promptEncoder,image:promptImages,prompt:`<|im_start|>user\n${pictureTokens}Edit <Picture 1>. ${prompt.trim()}<|im_end|>\n<|im_start|>assistant\n<think>\n`,max_length:3072,sampling_mode:"off",thinking:false,use_default_template:true,mtp:"auto"});
+    const conditioning=node("prompt","PH3ImageConditioning","Source image and edit instruction",{clip,vae,prompt:expanded,width,height,...images});
+    const noise=node("noise","RandomNoise","Seed",{noise_seed:seed});
+    const guider=node("guider","BasicGuider","P-H3 guidance",{model:unet,conditioning});
+    const sampler=node("sampler","KSamplerSelect","Euler",{sampler_name:"euler"});
+    const sigmas=node("schedule","ManualSigmas","P-H3 eight-step schedule",{sigmas:"1.0, 0.984753, 0.967905, 0.951688, 0.925372, 0.881923, 0.810083, 0.528718, 0.0"});
+    const samples=node("sample","SamplerCustomAdvanced","Edit image",{noise,guider,sampler,sigmas,latent_image:["prompt",1]});
+    const image=node("decode","VAEDecode","Decode edited image",{samples,vae});
+    node("save","SaveImage","Save edited image",{images:image,filename_prefix:"ZURA STUDIO/images/"+model});return graph;
+  }
   if(model==="qwen21edit"){
     unet=node("reference_cache","QwenImage21Cache","Reference cache in RAM",{model:unet,device:"cpu",dtype:"default"});
     const images={};references.forEach((ref,i)=>{
@@ -114,7 +143,8 @@ export function imageAvailability(info){
       for(const [type,key,file] of [["UNETLoader","unet_name",model.model],["CLIPLoader","clip_name",model.text],["VAELoader","vae_name",model.vae]])if(!files(type,key).includes(file))missing.push(file);
       if(!files("CLIPLoader","type").includes(model.type))missing.push(model.type+" text support");
     }
-    if(model.lora&&!files("LoraLoaderModelOnly","lora_name").includes(model.lora))missing.push(model.lora);
-    return {...model,referenceReady:!!info.LoadImage&&(model.provider?!!info[model.node]:model.id==="qwen2511"?!!info.TextEncodeQwenImageEditPlus:model.id==="qwen21edit"?!!info.TextEncodeQwenImage21:!!info.ReferenceMultiLatent),ready:!missing.length,missing:[...new Set(missing)]};
+    if(model.upsampler&&!files("CLIPLoader","clip_name").includes(model.upsampler))missing.push(model.upsampler);
+    if(model.lora&&!files(model.id==="ph3edit"?"LoraLoaderBypassModelOnly":"LoraLoaderModelOnly","lora_name").includes(model.lora))missing.push(model.lora);
+    return {...model,referenceReady:!!info.LoadImage&&(model.provider?!!info[model.node]:model.id==="qwen2511"?!!info.TextEncodeQwenImageEditPlus:model.id==="qwen21edit"?!!info.TextEncodeQwenImage21:model.id==="ph3edit"?!!info.PH3ImageConditioning:!!info.ReferenceMultiLatent),ready:!missing.length,missing:[...new Set(missing)]};
   });
 }
