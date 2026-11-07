@@ -102,3 +102,7 @@
  #genj-studio .zp-page .zp-editor-guide{padding-block:4px}
  #genj-studio .zp-page .zp-editor-tools{max-height:24dvh}
 }
+
+/* Keep the mask canvas usable while the surrounding controls remain scrollable. */
+#genj-studio .zp-page.zp-editor-open[data-editor-stage=mask]{overflow-y:auto}
+#genj-studio .zp-page.zp-editor-open[data-editor-stage=mask]>.zf-viewer{min-height:320px}

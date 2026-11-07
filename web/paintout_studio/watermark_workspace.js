@@ -531,7 +531,7 @@ export class WatermarkWorkspace{
     this.loras?.setBusy(busy);
     this.validationError=error;this.availability=availability;this.renderColourStatus(c);this.$('block-control').hidden=!targeted||(!inpaint&&((c.targetedMethod??'automatic')!=='guided'));this.$('mask-block').value=String(this.state.maskBlockSize??32);this.$('mask-block').disabled=busy;
 
-    const composer=this.page.querySelector('.zf-composer');composer.hidden=false;this.page.classList.toggle('zp-navigation-only',!this.state.source||!!this.editor&&this.editor.stage!=='render');this.$('title').textContent='Review and render';this.$('workflow-label').textContent='Watermark removal';this.$('pipeline').value=paintoutColourPipeline(this.state);this.$('pipeline').disabled=busy;this.$('shot-summary').textContent=this.sourceInfo?`${name(this.state.source)} · ${this.sourceInfo.width} × ${this.sourceInfo.height} · ${this.fps()} fps · frames ${c.startFrame}–${c.startFrame+c.frameCount-1}`:'';
+    const composer=this.page.querySelector('.zf-composer');composer.hidden=false;this.page.classList.toggle('zp-navigation-only',!this.state.source||!!this.editor&&this.editor.stage!=='render');this.$('title').textContent='Review and render';this.$('workflow-label').textContent='Watermark removal';this.$('pipeline').value=paintoutColourPipeline(this.state);this.$('pipeline').disabled=busy;this.$('shot-summary').textContent=this.sourceInfo?`${name(this.state.source)} · ${this.sourceInfo.width} × ${this.sourceInfo.height} · ${Number(this.fps().toFixed(3))} fps · frames ${c.startFrame}–${c.startFrame+c.frameCount-1}`:'';
 
     for(const b of this.page.querySelectorAll('[data-mode]')){b.setAttribute('aria-pressed',String(b.dataset.mode===this.state.mode));b.disabled=busy;}
 
