@@ -55,7 +55,7 @@ export class RippleWorkspace {
       <div class="zru-composer zc-prompt-card"><div class="zru-attachments"><button type="button" class="zc-attachment" data-source>Add video</button><input data-source-file type="file" accept="video/*,.mov,.mkv,.mxf,.avi" hidden/><span data-source-meta></span><button type="button" class="zru-clear-source" data-clear-source aria-label="Remove source video" title="Remove source video" hidden>×</button></div>
         <label class="zru-prompt-label" for="zru-prompt">Describe your edit</label><textarea id="zru-prompt" data-prompt rows="2" maxlength="12000" placeholder="Describe the change to carry through the video"></textarea>
         <div class="zc-prompt-bottom"><div class="zru-tools zc-prompt-tools"><label class="zc-tool zru-model"><span class="zru-model-icon" aria-hidden="true">◇</span><span class="zc-sr-only">Ripple model</span><select data-engine aria-label="Ripple model"><option value="h3">H3 · Ripple</option><option value="ltx">LTX 2.5 · Ripple</option></select></label><label class="zc-tool zru-size"><span class="zc-sr-only">Processing resolution</span><select data-scale aria-label="Processing resolution"><option value="1">Full resolution</option><option value="0.75">75% resolution</option><option value="0.5">50% resolution</option><option value="0.25">25% resolution</option></select></label><span data-processing-size class="zru-size-label"></span><details data-model-downloads class="zc-tool-popup gs-model-help" hidden></details></div><div class="zru-actions"><a data-download download hidden>Save video</a><button type="button" class="gs-primary" data-generate>Generate video</button></div></div>
-        <p data-status class="zru-status" role="status" aria-live="polite"></p>
+        <p data-status class="zru-status" role="status" aria-live="polite">Ripple edits the whole frame. Surrounding details may also change.</p>
       </div>`;
     this.root.append(this.page);this.video=this.$('video');this.framePreview=this.$('frame-preview');
     const colour=doc.createElement('label');colour.className='zru-source-colour';colour.hidden=true;colour.innerHTML='<span>Untagged SDR</span><select data-source-colour aria-label="Source colour for untagged video"><option value="rec709_oetf">Assume Rec.709</option><option value="srgb_display">sRGB</option><option value="rec709_gamma24">Rec.709 · gamma 2.4</option></select>';this.$('source-meta').after(colour);this.sourceColourControl=colour;
@@ -75,7 +75,9 @@ export class RippleWorkspace {
     this.$('generate').onclick=()=>void this.generate();this.$('cancel').onclick=()=>void this.cancel();
     this.$('view-result').onclick=()=>{if(!this.result?.file)return;if(this.video.dataset.kind==='result')this.viewAnchor(false);else{this.viewingEdit=false;this.showResult(this.result);this.render();}};
     this.video.addEventListener('error',()=>{if(this.source&&this.video.dataset.kind==='source'){this.video.hidden=true;this.framePreview.hidden=false;this.showFramePreview();this.message('Playback is unavailable for this format. The selected frame remains available for editing.');}});
-    this.video.addEventListener('timeupdate',()=>{if(!this.source||this.video.dataset.kind!=='source'||this.video.paused)return;this.state.playhead=clamp(Math.floor(this.video.currentTime*this.fps()),0,this.source.frames-1);if(this.selected()&&this.selected().frame!==this.state.playhead){this.selectedId=null;this.render();}else this.updatePlayhead();});
+    this.video.addEventListener('loadedmetadata',()=>this.applySourceSeek());
+    this.video.addEventListener('timeupdate',()=>this.syncSourcePlayhead());
+    for(const event of ['seeked','pause'])this.video.addEventListener(event,()=>this.syncSourcePlayhead(true));
     this.trimmer=new ClipTrimmer(this.$('trimmer'),{onSeek:seconds=>this.seek(Math.floor(seconds*this.fps())),onCommit:range=>this.setTrim(range)});
     this.timeline=new RippleTimeline(this.$('visual-timeline'),this);
     this.$('full-clip').onclick=()=>this.fullClip();
@@ -90,7 +92,7 @@ export class RippleWorkspace {
   busy(){return !!(this.job||this.pendingSubmission||this.submitting||this.importing||this.exporting||this.picking);}
   anchors(){return this.state.anchors;}
   selected(){return this.anchors().find(anchor=>String(anchor.id)===String(this.selectedId))||null;}
-  message(text){this.$('status').textContent=text||'';}
+  message(text){this.$('status').textContent=text||'Ripple edits the whole frame. Surrounding details may also change.';}
   save(){try{localStorage.setItem(STATE_KEY,JSON.stringify({...this.state,selectedId:this.selectedId,job:this.job,pendingSubmission:this.pendingSubmission,result:this.result,sourcePath:this.source?.path||this.state.sourcePath||''}));return true;}catch{return false;}}
   async uploadSource(file){
     if(this.busy())return;const revision=++this.revision;this.picking=true;this.uploadController=new AbortController();this.setProgress({title:'Loading video',detail:'Preparing your source footage'});this.render();this.message('');
@@ -118,18 +120,30 @@ export class RippleWorkspace {
     catch(error){if(revision===this.revision)this.message('Choose the source video again to restore its preview.');}
   }
   showFramePreview(file=this.source?.path,frame=this.state.playhead,space=this.colourSpace()){if(!file)return;const url=this.url('/zura/paintout/frame-preview?'+new URLSearchParams({file,frame,space,size:1280}));this.framePreview.style.backgroundImage=`url(${JSON.stringify(url)})`;}
-  viewAnchor(showEdit){const anchor=this.selected();if(showEdit&&anchor?.file){this.showFramePreview(anchor.file,0,anchor.colour_space||'srgb_display');this.viewingEdit=true;this.video.pause();this.video.hidden=true;this.framePreview.hidden=false;}else{this.viewingEdit=false;this.framePreview.hidden=true;if(this.source){this.video.dataset.kind='source';this.video.src=this.url(this.source.media_url||this.source.thumbnail_url);this.video.hidden=false;this.video.load();try{this.video.currentTime=this.state.playhead/this.fps();}catch{}}}this.render();}
-  seek(frame){if(!this.source)return;this.state.playhead=clamp(frameNumber(frame),0,this.source.frames-1);const selectionChanged=!!this.selected()&&this.selected().frame!==this.state.playhead;if(selectionChanged)this.selectedId=null;if(this.viewingEdit||this.video.dataset.kind==='result')this.viewAnchor(false);if(this.video.dataset.kind==='source'){try{this.video.currentTime=this.state.playhead/this.fps();}catch{/* Wait for metadata. */}}if(!this.framePreview.hidden)this.showFramePreview();if(selectionChanged)this.render();else this.updatePlayhead();this.save();}
+  viewAnchor(showEdit){const anchor=this.selected();if(showEdit&&anchor?.file){this.showFramePreview(anchor.file,0,anchor.colour_space||'srgb_display');this.viewingEdit=true;this.video.pause();this.video.hidden=true;this.framePreview.hidden=false;}else{this.viewingEdit=false;this.framePreview.hidden=true;if(this.source){this.video.dataset.kind='source';this.video.src=this.url(this.source.media_url||this.source.thumbnail_url);this.video.hidden=false;this.video.load();this.pendingSourceFrame=this.state.playhead;this.applySourceSeek();}}this.render();}
+  applySourceSeek(){
+    if(!this.source||this.video.dataset.kind!=='source'||this.pendingSourceFrame==null||this.video.readyState<1)return;
+    // Seek inside the frame, avoiding a timestamp rounded just before its boundary.
+    try{this.video.currentTime=(this.pendingSourceFrame+.5)/this.fps();this.pendingSourceFrame=null;}catch{/* Retry when source metadata arrives. */}
+  }
+  syncSourcePlayhead(persist=false,allowSeeking=false){
+    if(!this.source||this.video.dataset.kind!=='source'||this.viewingEdit||this.video.hidden||this.video.readyState<1||this.pendingSourceFrame!=null||this.video.seeking&&!allowSeeking||!Number.isFinite(this.video.currentTime))return;
+    const frame=clamp(Math.floor(this.video.currentTime*this.fps()+1e-6),0,this.source.frames-1);
+    this.state.playhead=frame;
+    if(this.selected()&&this.selected().frame!==frame){this.selectedId=null;this.render();}else this.updatePlayhead();
+    if(persist)this.save();
+  }
+  seek(frame){if(!this.source)return;this.state.playhead=clamp(frameNumber(frame),0,this.source.frames-1);const selectionChanged=!!this.selected()&&this.selected().frame!==this.state.playhead;if(selectionChanged)this.selectedId=null;if(this.viewingEdit||this.video.dataset.kind==='result')this.viewAnchor(false);if(this.video.dataset.kind==='source'){this.pendingSourceFrame=this.state.playhead;this.applySourceSeek();}if(!this.framePreview.hidden)this.showFramePreview();if(selectionChanged)this.render();else this.updatePlayhead();this.save();}
   updatePlayhead(){this.timeline?.setPlayhead(this.state.playhead);this.$('frame').value=String(this.state.playhead);this.trimmer?.setPlayhead(this.state.playhead/this.fps());}
+  addAtPlayhead(){if(this.busy())return;this.syncSourcePlayhead(true,true);this.addAnchor(this.state.playhead);}
   addAnchor(frame){
     if(!this.source||this.busy())return;frame=clamp(frameNumber(frame),0,this.source.frames-1);
-    const moved=this.state.engine==='ltx'&&frame!==this.state.startFrame;
-    if(moved)frame=this.state.startFrame;
-    if(frame<this.state.startFrame||frame>=this.state.startFrame+this.state.frameCount){this.message('Choose a frame inside the selected clip.');return;}
-    let anchor=this.anchors().find(a=>a.frame===frame&&a.enabled!==false)||this.anchors().find(a=>a.frame===frame);if(!anchor){if(this.state.engine==='h3'&&this.anchors().filter(a=>a.enabled!==false&&a.frame>=this.state.startFrame&&a.frame<this.state.startFrame+this.state.frameCount).length>=16){this.message('H3 Ripple supports up to 16 keyframes in a clip.');return;}anchor={id:nextId(),frame,file:'',colour_space:'srgb_display',enabled:true};this.anchors().push(anchor);this.anchors().sort((a,b)=>a.frame-b.frame);}
-    this.selectAnchor(anchor.id);if(moved)this.message(`LTX uses the first selected frame. Keyframe ${frame} is ready to edit.`);
+    if(this.state.engine==='ltx'&&frame!==this.state.startFrame){this.message(`LTX can only use frame ${this.state.startFrame}, the clip's first frame. Use H3 for keyframes elsewhere, or change the trim start.`);return;}
+    const outside=frame<this.state.startFrame||frame>=this.state.startFrame+this.state.frameCount;
+    let anchor=this.anchors().find(a=>a.frame===frame&&a.enabled!==false)||this.anchors().find(a=>a.frame===frame);if(!anchor){if(!outside&&this.state.engine==='h3'&&this.anchors().filter(a=>a.enabled!==false&&a.frame>=this.state.startFrame&&a.frame<this.state.startFrame+this.state.frameCount).length>=16){this.message('H3 Ripple supports up to 16 keyframes in a clip.');return;}anchor={id:nextId(),frame,file:'',colour_space:'srgb_display',enabled:true};this.anchors().push(anchor);this.anchors().sort((a,b)=>a.frame-b.frame);}
+    this.selectAnchor(anchor.id);if(outside)this.message(`Keyframe ${frame} added outside the trim. Extend the In/Out range to include it in the video.`);
   }
-  selectAnchor(id){if(this.busy())return;const anchor=this.anchors().find(a=>String(a.id)===String(id));if(!anchor)return;if(anchor.legacyVariant){for(const variant of this.anchors())if(variant.legacyVariant&&Number(variant.frame)===Number(anchor.frame))variant.enabled=variant===anchor;}this.selectedId=anchor.id;if(this.viewingEdit)this.viewAnchor(false);this.seek(anchor.frame);this.message('');this.save();this.render();}
+  selectAnchor(id){if(this.busy())return;const anchor=this.anchors().find(a=>String(a.id)===String(id));if(!anchor)return;this.video.pause();if(anchor.legacyVariant){for(const variant of this.anchors())if(variant.legacyVariant&&Number(variant.frame)===Number(anchor.frame))variant.enabled=variant===anchor;}this.selectedId=anchor.id;if(this.viewingEdit)this.viewAnchor(false);this.seek(anchor.frame);this.message('');this.save();this.render();}
   removeAnchor(){if(this.busy())return;const anchor=this.selected();if(!anchor)return;if(this.viewingEdit)this.viewAnchor(false);this.state.anchors=this.anchors().filter(a=>a!==anchor);if(anchor.legacyVariant&&anchor.enabled!==false){const other=this.anchors().find(a=>a.legacyVariant&&Number(a.frame)===Number(anchor.frame));if(other)other.enabled=true;}this.selectedId=null;this.save();this.render();}
   setTrim(range){if(!this.source||this.busy())return;const fps=this.fps(),total=this.source.frames,start=clamp(Math.round(range.start*fps),0,total-1),end=clamp(Math.round((range.start+range.duration)*fps),start+1,total);this.state.startFrame=start;this.state.frameCount=end-start;this.seek(start);this.save();this.render();}
   fullClip(){if(!this.source||this.busy())return;this.state.startFrame=0;this.state.frameCount=this.source.frames;this.seek(0);this.save();this.render();}
@@ -189,7 +203,7 @@ export class RippleWorkspace {
     if(this.sourceColourControl){this.sourceColourControl.hidden=!has||!!this.source.resolved_colour;this.$('source-colour').value=this.state.sourceColour==='auto'?'rec709_oetf':this.state.sourceColour;this.$('source-colour').disabled=busy;}
     this.$('frame-total').textContent=has?`of ${frames-1}`:'';this.updatePlayhead();
     this.$('trim-label').textContent=has?`${(this.state.frameCount/this.fps()).toFixed(2).replace(/\.?0+$/,'')}s`:'';
-    this.$('anchor-editor').hidden=!anchor;this.$('anchor-label').textContent=anchor?`Frame ${anchor.frame}`:'';this.$('anchor-status').textContent=anchor?(this.state.engine==='ltx'&&anchor.frame!==start?`Saved for H3 · LTX uses frame ${start}`:anchor.file?'Edited image ready':'Add an edited image'):'';this.$('compare').hidden=!anchor?.file;this.$('compare').textContent=this.viewingEdit?'View original':'View edit';
+    this.$('anchor-editor').hidden=!anchor;this.$('anchor-label').textContent=anchor?`Frame ${anchor.frame}`:'';this.$('anchor-status').textContent=anchor?(this.state.engine==='ltx'&&anchor.frame!==start?`Saved for H3 · LTX uses frame ${start}`:anchor.frame<start||anchor.frame>=end?'Outside trim · extend In/Out to use':anchor.file?'Edited image ready':'Add an edited image'):'';this.$('compare').hidden=!anchor?.file;this.$('compare').textContent=this.viewingEdit?'View original':'View edit';
     this.timeline.update({startFrame:start,frameCount:this.state.frameCount||1,totalFrames:frames||1,fps:this.fps(),playhead:this.state.playhead,anchors:this.anchors().map(a=>({...a,status:a.file?'accepted':'draft'})),selected:this.anchors().indexOf(anchor),stage:'clean',busy,thumbnail:a=>a.file?this.thumbnail(a.file,0,a.colour_space||'srgb_display'):this.thumbnail(this.source?.path,a.frame)});
     for(const name of ['source','clear-source','engine','scale','frame','scrub','add-on-track','edit','export','import','compare','full-clip'])this.$(name).disabled=busy||(!has&&!['source','engine','scale'].includes(name));
     this.$('generate').disabled=busy||!has;this.$('cancel').disabled=!this.job&&!this.pendingSubmission&&!this.uploadController;this.$('download').hidden=!this.result?.file;this.$('view-result').hidden=!this.result?.file;this.$('view-result').textContent=this.video.dataset.kind==='result'?'View source':'View result';

@@ -44,8 +44,8 @@ assert.equal(ui.selected(),original,'Switching models keeps the selected keyfram
 assert.match(ui.$('anchor-status').textContent,/Saved for H3/);
 assert.equal(ui.config().anchors.length,0,'LTX does not send a non-first H3 keyframe');
 ui.seek(20);ui.timeline.addFrame.click();
-const first=ui.selected();assert.equal(first.frame,0,'Add keyframe moves to the first selected LTX frame');
-assert.match(ui.$('status').textContent,/first selected frame/);
+const first=ui.selected();assert.equal(first.frame,0,'Edit first frame opens the explicitly named LTX frame');
+assert.equal(ui.timeline.addFrame.querySelector('span').textContent,'Edit first frame · 0');
 await ui.importAnchorFile(first,new File(['png'],'edit.png',{type:'image/png'}));
 assert.equal(ui.config().anchors.length,1);assert.equal(ui.config().anchors[0].id,first.id);
 ui.$('engine').value='h3';ui.$('engine').onchange();

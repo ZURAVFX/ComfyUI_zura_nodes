@@ -20,7 +20,7 @@ export const composerIcons={
   takes:svg('<rect x="3" y="7" width="18" height="14" rx="2"/><path d="M7 3h10m-8 9 6 3-6 3z"/>'),
   download:svg('<path d="M12 3v12m-4-4 4 4 4-4M4 17v4h16v-4"/>'),
 };
-export const VIDEO_WORKFLOWS=[['swap','Character replacement'],['ripple','Ripple editing'],['viewport','Viewport to final'],['camera','Change camera angle'],['relight','Relight'],['paintout','Paintout / clean plate'],['watermark','Watermark removal'],['inpaint','Inpaint · preview'],['outpaint','Frame extension · preview'],['hdr','Convert to HDR'],['frames','First & last frame'],['references','Reference to video']];
+export const VIDEO_WORKFLOWS=[['swap','Character replacement'],['ripple','Ripple editing'],['viewport','Viewport to final'],['camera','Change camera angle'],['relight','Relight'],['paintout','Paintout / clean plate'],['watermark','Watermark removal'],['outpaint','Frame extension · preview'],['hdr','Convert to HDR'],['frames','First & last frame'],['references','Reference to video']];
 
 /** A compact surface over the existing controls, never a second configuration. */
 export class VideoComposer {
@@ -103,8 +103,7 @@ export class VideoComposer {
     this.studio.navigationStep=null;
     if(value==='camera'){this.workspace.show('panorama');return;}
     if(value==='hdr'){this.workspace.openHDR();return;}
-    if(value==='objects'||value==='ripple'){this.workspace.show('ripple');return;}
-    if(value==='inpaint'){this.workspace.show('paintout');this.workspace.paintout.setMode('inpaint');this.syncWorkflow();return;}
+    if(['objects','ripple','inpaint'].includes(value)){this.workspace.show('ripple');return;}
     if(value==='paintout'&&['inpaint','ripple'].includes(this.workspace.paintout?.state.mode)){this.workspace.show('paintout');this.workspace.paintout.setMode('targeted');this.syncWorkflow();return;}
     if(['frames','references','paintout','watermark','outpaint'].includes(value)){this.workspace.show(value);return;}
     if(!VIDEO_WORKFLOWS.some(([id])=>id===value))return;
@@ -136,7 +135,6 @@ export class VideoComposer {
     const independent=['frames','references','paintout','watermark','outpaint','ripple','panorama','hdr'].includes(this.workspace.mode),select=this.task.querySelector('select');
     select.value=independent?this.workspace.mode:this.studio.config.workflow_mode==='motion'?'swap':this.studio.config.workflow_mode;
     if(this.workspace.mode==='panorama')select.value='camera';
-    if(this.workspace.mode==='paintout'&&this.workspace.paintout?.state.mode==='inpaint')select.value='inpaint';
     if(this.workspace.mode==='paintout'&&this.workspace.paintout?.state.mode==='ripple')select.value='ripple';
     select.disabled=!independent&&(this.studio.busy||this.studio.project?.phase==='working');
     for(const option of select.querySelectorAll('option')){

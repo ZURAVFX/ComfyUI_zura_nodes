@@ -11,6 +11,7 @@ export class RippleTimeline extends PaintoutTimeline {
       onTrim:(start,end,commit)=>{if(commit)workspace.setTrim({start:start/workspace.fps(),duration:(end-start+1)/workspace.fps()});},
     });
     this.workspace=workspace;this.root.classList.add('zru-visual-timeline');
+    this.addFrame.onclick=()=>{if(this.state.busy)return;if(workspace.state.engine==='ltx')workspace.addAnchor(workspace.state.startFrame);else workspace.addAtPlayhead();};
     this.root.setAttribute('aria-label','Ripple source timeline');
     this.addFrame.dataset.addOnTrack='';this.range.dataset.scrub='';
     this.film=host.ownerDocument.createElement('div');this.film.className='zru-film';this.film.setAttribute('aria-hidden','true');this.ruler.prepend(this.film);
@@ -24,15 +25,24 @@ export class RippleTimeline extends PaintoutTimeline {
     this.render();
   }
   setPlayhead(frame){
-    this.state.playhead=frame;this.range.value=String(frame);this.updateReadout();this.updatePlayheadLine();
+    this.state.playhead=frame;this.range.value=String(frame);this.updateReadout();this.updatePlayheadLine();this.updateAddAction();
+  }
+  onKeydown(event){
+    if(!event.defaultPrevented&&this.state.stage==='clean'&&event.key.toLowerCase()==='k'&&!event.ctrlKey&&!event.metaKey&&!this.state.busy&&!event.target.closest('input,textarea,select,[contenteditable="true"]')){event.preventDefault();this.workspace.addAtPlayhead();return;}
+    super.onKeydown(event);
+  }
+  updateAddAction(){
+    const first=this.workspace?.state.engine==='ltx',frame=first?this.workspace.state.startFrame:this.state.playhead;
+    this.addFrame.querySelector('span').textContent=first?`Edit first frame · ${frame}`:'Add keyframe';
+    this.addFrame.title=first?`LTX uses only the first frame of the selected clip: source frame ${frame}`:`Add an edited keyframe at source frame ${frame} (K)`;
   }
   render(){
     super.render();
     this.title.textContent='Edit timeline';this.cleanLabel.textContent='Edited frames';
-    this.addFrame.querySelector('span').textContent='Add keyframe';this.addFrame.title='Add an edited keyframe at the playhead (K)';
-    this.help.textContent=this.workspace?.state.engine==='ltx'?'LTX uses the first selected frame · Other keyframes are kept':'Double-click footage or click above it to add a keyframe · K';
+    this.updateAddAction();
+    this.help.textContent=this.workspace?.state.engine==='ltx'?'LTX edits the clip’s first frame only · Use H3 for other keyframes':'Double-click footage or click above it to add a keyframe · K';
     this.cleanLane.setAttribute('aria-label','Edited keyframes. Click an empty position to add one.');
-    this.cleanLane.setAttribute('aria-description',`${this.state.anchors.length} edited keyframes. Press K to add one at the playhead.`);
+    this.cleanLane.setAttribute('aria-description',`${this.state.anchors.length} edited keyframes. ${this.workspace?.state.engine==='ltx'?`LTX uses only source frame ${this.state.startFrame}. Choose Edit first frame to edit it.`:'Press K to add one at the playhead.'}`);
     const visible=this.state.anchors.filter(a=>Number(a.frame)>=this.visibleStart()&&Number(a.frame)<this.visibleEnd());
     this.root.classList.toggle('has-keyframes',visible.length>0);
     [...this.cards.children].forEach((card,index)=>{
@@ -42,7 +52,8 @@ export class RippleTimeline extends PaintoutTimeline {
       if(ltxUnused){card.classList.add('is-outside-trim');card.title=`Kept for H3. LTX uses frame ${this.state.startFrame}.`;}
       const alternate=anchor?.legacyVariant&&anchor.enabled===false;
       pick.setAttribute('aria-label',`Edit keyframe at source frame ${frame}${ltxUnused?', kept for H3':alternate?', alternate edit, select to use':''}`);remove.setAttribute('aria-label',`Remove keyframe at source frame ${frame}`);remove.title=`Remove keyframe ${frame}`;
-      card.querySelector('small').textContent=ltxUnused?'Kept for H3':alternate?'Alternate':anchor?.file?'Edited':'Original';
+      const outside=Number(anchor?.frame)<this.state.startFrame||Number(anchor?.frame)>=this.state.startFrame+this.state.frameCount;
+      card.querySelector('small').textContent=ltxUnused?'Kept for H3':outside?'Outside trim':alternate?'Alternate':anchor?.file?'Edited':'Original';
     });
     const w=this.workspace;if(!w?.source||!this.film)return;
     const start=this.visibleStart(),end=this.visibleEnd(),key=JSON.stringify([w.source.path,w.colourSpace(),start,end]);

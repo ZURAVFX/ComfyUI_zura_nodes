@@ -8,6 +8,12 @@ keyframes. **Edit image** opens Studio's ordinary image editor with that
 original video frame as Image 1. Choose a local model or a browser sign-in model,
 then return with **Use edited frame**. The image and video stages share the prompt.
 
+Ripple is the main workflow for propagating image edits through video. The old
+**Inpaint · preview** entry now opens Ripple instead of its separate mask-tracking
+wizard. Existing masked-Inpaint project data and backend support are retained.
+Ripple propagates edits through the whole frame: surrounding details may also
+change, and it does not guarantee preservation outside a painted mask.
+
 Alternatively, **Save frame** exports the full-resolution original for an external
 editor. **Import edit** attaches the finished image to that timeline frame.
 Imported edits must match the source dimensions. Re-editing always starts from
@@ -17,8 +23,14 @@ the original footage rather than a previous generated image.
 - **LTX 2.5 Ripple:** one edited image at the first frame of the selected clip.
   Trim the clip to choose a different starting frame. The timeline and its edits
   are shared when switching models. Other keyframes remain available for H3;
-  LTX uses only the frame at the start of the current trim. Adding a keyframe
-  while LTX is selected takes you to that frame.
+  LTX uses only the frame at the start of the current trim. Its **Edit first
+  frame** button names that source frame explicitly. Requests at other frames
+  explain the limitation without silently moving the keyframe.
+
+The native video controls and timeline share the same source-frame playhead,
+including scrubbing while paused. **Add keyframe** and **K** capture that frame
+and pause playback. H3 keyframes added outside the trim remain on the timeline,
+marked **Outside trim**; extend In/Out to include them in a generation.
 
 If a project saved under an earlier version has different H3 and LTX edits at
 the same frame, both remain on the timeline. Select a card to choose which edit
