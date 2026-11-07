@@ -31,7 +31,7 @@ Use your own ComfyUI host and port if they differ.
 
 ## Current release
 
-**1.3.50** brings consistent Image and Video layouts, protected preview space, clearer setup controls and dropdowns that stay inside the window. It fixes Klein editing and cleared-image persistence, improves Ripple's shared prompt, mask and resolution controls, and adds **Qwen Image 2.1** and **FLUX.2 dev** as image-edit previews. See the [UI audit](docs/UI_COHESION_AUDIT_2026-11-05.md) and [release notes](CHANGELOG.md).
+**1.3.51** adds a shared H3/LTX [Ripple timeline](docs/RIPPLE_STUDIO.md), visible [painted image edits](docs/IMAGE_EDIT_AREA.md), P-H3 Image editing and crop-based [subtitle removal](docs/SUBTITLE_REMOVAL.md). Ripple keeps edited frames when changing engines and opens a large preview when clicking an edited thumbnail. Browser sign-in respects your system's default supported browser. See the [release notes](CHANGELOG.md) for validation and remaining limits.
 
 The previous update adds complete camera-angle model setup, including MoGe 3, and checks gated-model access before large downloads. Choose a mode to see its missing files and extension guidance. Restart ComfyUI and refresh Studio after updating. See the [model setup notes](docs/STUDIO_1348_VALIDATION.md).
 

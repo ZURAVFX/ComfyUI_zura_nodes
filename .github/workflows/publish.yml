@@ -177,6 +177,25 @@ jobs:
           python -m unittest discover -s tests -p 'test_ripple.py'
           node tests/test_ripple_recipes.mjs
           node tests/test_ripple_workspace.mjs
+          python -m unittest discover -s tests -p 'test_ripple_source_route.py'
+          python -m unittest discover -s tests -p 'test_ripple_studio.py'
+          node tests/test_ripple_image_handoff.mjs
+          node tests/test_ripple_jobs.mjs
+          node tests/test_ripple_navigation.mjs
+          node tests/test_ripple_playhead.mjs
+          node tests/test_ripple_preview.mjs
+          node tests/test_ripple_shared_anchors.mjs
+          node tests/test_ripple_studio_recipes.mjs
+          node tests/test_ripple_studio_ui.mjs
+          python -m unittest discover -s tests -p 'test_studio_image_edit_area.py'
+          node tests/test_studio_image_area.mjs
+          node tests/test_studio_image_area_graph.mjs
+          python -m unittest discover -s tests -p 'test_subtitle_crop.py'
+          node tests/test_subtitle_recipes.mjs
+          python -m unittest discover -s tests -p 'test_attention_fallback.py'
+          python -m unittest discover -s tests -p 'test_studio_attention.py'
+          python -m unittest discover -s tests -p 'test_custom_loras.py'
+          node tests/test_studio_attention.mjs
           python -m unittest discover -s tests -p 'test_outpaint_studio.py'
           python -m unittest discover -s tests -p 'test_outpaint_chunks.py'
           python -m unittest discover -s tests -p 'test_outpaint_delivery.py'

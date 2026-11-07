@@ -1,6 +1,14 @@
 # Release notes
 
-## Unreleased - Default sign-in browser
+## 1.3.51 - 7 November 2026
+
+- Add a dedicated Ripple editing timeline with H3 and LTX, thumbnail keyframes, shared image/video prompts, external image editing and source-matched resolution, frame rate, frame count and audio delivery.
+- Preserve edited frames and trim settings when switching Ripple engines. LTX uses one selected edited image as a whole-clip visual reference; H3 supports timed anchors. Adding a keyframe uses the current playhead. Edited thumbnails open a large preview with keyboard dismissal and reduced-motion support.
+- Expose **Paint edit area** beside the main image and references in Image editing and Ripple. Native crop-and-stitch processing restores the edit at the original image dimensions and preserves pixels outside the painted selection. Smart Image Crop and Stitch is required for painted edits.
+- Integrate P-H3 Image editing with its dedicated image adapter and complete model package. Add full BF16 Klein test options and their shared dependencies. Generation quality and memory use vary by model and still need separate shot testing.
+- Add LTX 2.5 crop-based subtitle repair with Zarxrax as the visually approved default and JoyFox as an alternative. Keep source dimensions, timing and audio; short SDR tests completed, with broader shot coverage still outstanding.
+- Protect Paintout preview space, fix stale image/model/download responses, and make optional attention acceleration fall back cleanly where unsupported. The old Inpaint picker entry opens Ripple; existing masked-Inpaint data and backend support remain available.
+- Package and documentation checks, CPU regressions, frontend tests and isolated browser interaction checks cover this update. No new AI quality generations were run for the final Ripple UI fixes. Non-start LTX visual references still need render-quality comparison; they are not guaranteed timed anchors.
 
 - Start ChatGPT and Gemini sign-in with the system's default supported browser, including Firefox, rather than a fixed Chrome-first order. Preserve explicitly selected browsers for reconnection.
 - Read Windows HTTP/HTTPS associations, macOS web handlers and Linux desktop browser settings without opening a browser or reading account data. Keep installed-browser fallbacks when detection is unavailable.
