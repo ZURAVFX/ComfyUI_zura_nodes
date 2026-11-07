@@ -31,6 +31,7 @@ jobs:
           python -m unittest discover -s tests -p 'test_template_catalogue.py'
           python -m unittest discover -s tests -p 'test_longcat_release.py'
           python -m unittest discover -s tests -p 'test_voice_design_release.py'
+          python -m unittest discover -s tests -p 'test_browser_defaults.py'
 
   frontend:
     runs-on: ubuntu-24.04

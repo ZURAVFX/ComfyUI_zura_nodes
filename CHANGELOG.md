@@ -1,5 +1,10 @@
 # Release notes
 
+## Unreleased - Default sign-in browser
+
+- Start ChatGPT and Gemini sign-in with the system's default supported browser, including Firefox, rather than a fixed Chrome-first order. Preserve explicitly selected browsers for reconnection.
+- Read Windows HTTP/HTTPS associations, macOS web handlers and Linux desktop browser settings without opening a browser or reading account data. Keep installed-browser fallbacks when detection is unavailable.
+
 ## 1.3.50 - 5 November 2026
 
 - Unify Image and Video layouts, workspace controls and Start over placement. Keep previews usable during setup and generation, with progress below the image.
