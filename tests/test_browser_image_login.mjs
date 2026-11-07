@@ -10,11 +10,12 @@ const sourcePath = fs.existsSync(path.join(directory, 'browser_login.js'))
 const source = fs.readFileSync(sourcePath, 'utf8').replace(/^import .*;\r?\n/gm, '');
 let extension;
 const calls = [];
+let statusReply = { state: 'connected', message: 'Live session accepted', browser: 'chrome', browsers: [{id:'chrome',name:'Chrome'},{id:'safari',name:'Safari'}] };
 const app = { registerExtension(value) { extension = value; } };
 const api = { async fetchApi(url, options) {
   calls.push({ url, options });
   return { ok: true, async json() { return url.includes('_status')
-    ? { state: 'connected', message: 'Live session accepted', browser: 'chrome', browsers: [{id:'chrome',name:'Chrome'},{id:'safari',name:'Safari'}] } : { ok: true }; } };
+    ? statusReply : { ok: true }; } };
 } };
 const oldInterval = globalThis.setInterval;
 const oldClear = globalThis.clearInterval;
@@ -49,8 +50,17 @@ try {
     assert.equal(calls.findLast(c => c.options?.method === 'POST').url, '/zura/browser_image_login');
     assert.equal(JSON.parse(calls.findLast(c => c.options?.method === 'POST').options.body).browser, 'safari');
     node.onRemoved();
+    statusReply = {state:'disconnected', browser:'', browsers:[{id:'firefox',name:'Firefox'},{id:'chrome',name:'Chrome'}]};
+    const fresh = new Node();
+    fresh.onNodeCreated();
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(fresh.widgets.find(w => w.type === 'combo').value, 'Firefox', 'A new connection uses the system-default browser returned first by the host');
+    await fresh.widgets[0].callback();
+    assert.equal(JSON.parse(calls.findLast(c => c.options?.method === 'POST').options.body).browser, 'firefox');
+    fresh.onRemoved();
+    statusReply = { state: 'connected', message: 'Live session accepted', browser: 'chrome', browsers: [{id:'chrome',name:'Chrome'},{id:'safari',name:'Safari'}] };
   }
-  assert.equal(cleared, 2);
+  assert.equal(cleared, 4);
   console.log('Both login buttons: top position, connection action, workflow values and timer cleanup passed.');
 } finally {
   globalThis.setInterval = oldInterval;

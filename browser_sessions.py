@@ -6,6 +6,7 @@ import configparser
 import contextlib
 import json
 import os
+import plistlib
 from pathlib import Path
 import shutil
 import sqlite3
@@ -56,9 +57,60 @@ def browser_executable(browser):
     return next((path for path in candidates if path.is_file()), None)
 
 
+def _browser_id(identifier):
+    """Translate OS browser registrations without inspecting browser profiles."""
+    identifier = str(identifier).lower()
+    prefixes = {
+        'firefox': ('firefox', 'org.mozilla.firefox', 'userapp-firefox', 'snap.firefox'),
+        'chrome': ('chromehtml', 'google-chrome', 'com.google.chrome', 'chrome.desktop'),
+        'edge': ('msedge', 'microsoft-edge', 'com.microsoft.edgemac'),
+        'safari': ('com.apple.safari',),
+        'brave': ('brave', 'com.brave.browser'),
+        'vivaldi': ('vivaldi', 'com.vivaldi.vivaldi'),
+        'chromium': ('chromium', 'org.chromium.chromium'),
+        'opera': ('opera', 'com.operasoftware.opera'),
+    }
+    return next((browser for browser, names in prefixes.items() if identifier.startswith(names)), None)
+
+
+def default_browser():
+    """Read the default web handler on the ComfyUI host, without opening it."""
+    try:
+        if sys.platform == 'win32':
+            import winreg
+            for scheme in ('https', 'http'):
+                try:
+                    key = rf'Software\Microsoft\Windows\Shell\Associations\UrlAssociations\{scheme}\UserChoice'
+                    with winreg.OpenKey(winreg.HKEY_CURRENT_USER, key) as handle:
+                        identifier = winreg.QueryValueEx(handle, 'ProgId')[0]
+                    # An unsupported HTTPS handler must not be replaced with the HTTP default.
+                    return _browser_id(identifier)
+                except OSError:
+                    continue
+        elif sys.platform == 'darwin':
+            result = subprocess.run(
+                ['/usr/bin/defaults', 'export', 'com.apple.LaunchServices/com.apple.launchservices.secure', '-'],
+                capture_output=True, check=True, timeout=2)
+            handlers = plistlib.loads(result.stdout).get('LSHandlers', [])
+            for scheme in ('https', 'http'):
+                for handler in handlers:
+                    if handler.get('LSHandlerURLScheme') == scheme and handler.get('LSHandlerRoleAll'):
+                        return _browser_id(handler['LSHandlerRoleAll'])
+        else:
+            result = subprocess.run(['xdg-settings', 'get', 'default-web-browser'],
+                                    capture_output=True, text=True, check=True, timeout=2)
+            return _browser_id(result.stdout.strip())
+    except (OSError, subprocess.SubprocessError, ValueError, plistlib.InvalidFileException):
+        pass
+    return None
+
+
 def available_browsers():
     order = ['safari', 'chrome', 'edge', 'firefox', 'brave', 'vivaldi', 'chromium', 'opera'] if sys.platform == 'darwin' else LABELS
-    return [{'id': browser, 'name': LABELS[browser]} for browser in order if browser_executable(browser)]
+    choices = [{'id': browser, 'name': LABELS[browser]} for browser in order if browser_executable(browser)]
+    preferred = default_browser()
+    # Stable sorting preserves the fallback order if the OS handler is unsupported or missing.
+    return sorted(choices, key=lambda choice: choice['id'] != preferred)
 
 
 def filter_cookies(provider, rows):

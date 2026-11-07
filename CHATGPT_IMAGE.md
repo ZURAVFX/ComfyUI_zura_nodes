@@ -8,6 +8,8 @@ No extension, WebDriver, Codex login, Codex allowance or paid developer API key 
 
 Supported browser connections:
 
+The initial selection follows the operating system's default browser on the computer running ComfyUI, including Firefox. An explicit browser choice is retained for reconnecting that provider. If the default is unsupported or unavailable, choose another installed browser from the selector.
+
 - **Chrome, Microsoft Edge, Brave, Vivaldi, Chromium and Opera**, when installed: Zura opens a dedicated sign-in window in that browser. Sign in once there, even if your everyday browser window is already signed in. The separate profile avoids the browser protections that prevent reading an everyday Chrome or Edge session. Zura does not disable those protections.
 - **Safari on macOS**: uses your existing normal Safari session. If macOS blocks access, the UI explains how to allow Full Disk Access for the app that starts ComfyUI, or you can choose another browser. Private browsing is not supported.
 - **Firefox on Windows, macOS and Linux**: uses the default profile outside private windows and containers.
