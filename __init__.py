@@ -225,6 +225,16 @@ from .artist_studio.outpaint_studio import NODE_CLASS_MAPPINGS as OUTPAINT_STUDI
 NODE_CLASS_MAPPINGS.update(OUTPAINT_STUDIO_NODES)
 NODE_DISPLAY_NAME_MAPPINGS.update(OUTPAINT_STUDIO_NAMES)
 
+# Source-space mask preparation for the optional native crop-and-stitch path.
+from .artist_studio.image_edit_area import NODE_CLASS_MAPPINGS as IMAGE_EDIT_AREA_NODES, NODE_DISPLAY_NAME_MAPPINGS as IMAGE_EDIT_AREA_NAMES
+NODE_CLASS_MAPPINGS.update(IMAGE_EDIT_AREA_NODES)
+NODE_DISPLAY_NAME_MAPPINGS.update(IMAGE_EDIT_AREA_NAMES)
+
+# Crop delivery adapters; subtitle sampling uses the native two-stage LTX graph.
+from .paintout.subtitle_crop import NODE_CLASS_MAPPINGS as SUBTITLE_CROP_NODES, NODE_DISPLAY_NAME_MAPPINGS as SUBTITLE_CROP_NAMES
+NODE_CLASS_MAPPINGS.update(SUBTITLE_CROP_NODES)
+NODE_DISPLAY_NAME_MAPPINGS.update(SUBTITLE_CROP_NAMES)
+
 # Explicit developer node only. Approved Studio routes stay unchanged until
 # native Animate 2 spatial conditioning has passed visual comparison.
 from .wan_animate2_mask import NODE_CLASS_MAPPINGS as ANIMATE2_MASK_NODES, NODE_DISPLAY_NAME_MAPPINGS as ANIMATE2_MASK_NAMES

@@ -492,7 +492,7 @@ export class PaintoutEditor{
     this.subjectChoices.hidden=clean||this.stage==='render'||!this.maskChoices||this.maskChoices.source!==this.w.state.source||this.maskChoices.frame!==this.w.playhead;
     for(const button of this.subjectChoices.querySelectorAll('button'))button.disabled=busy;
     this.maskSummary.hidden=this.stage!=='render'||this.w.state.mode==='full';
-    this.maskSummary.querySelector('span').textContent=!hasRemovalMask?'Go to Mask and mark the object you want to remove.':count<needed?`Your mask covers ${count} of ${needed} frames. Go back to Mask and track the missing sections.`:`Mask ready - ${needed} frames`;
+    this.maskSummary.querySelector('span').textContent=this.w.state.removalMethod==='subtitles'?(hasRemovalMask?`Crop area ready · ${needed} frames`:'Paint the area containing the subtitles.') :!hasRemovalMask?'Go to Mask and mark the object you want to remove.':count<needed?`Your mask covers ${count} of ${needed} frames. Go back to Mask and track the missing sections.`:`Mask ready - ${needed} frames`;
     this.maskSummary.querySelector('button').disabled=busy;
     this.tools.querySelector('.zp-editor-segment-actions').hidden=!hasRemovalMask;
     this.tools.querySelector('.zp-editor-segments').hidden=true;this.tools.querySelector('.zp-editor-segment-actions').hidden=true;
@@ -595,6 +595,10 @@ export class PaintoutEditor{
     }
     if(this.stage==='mask'){title=segment?'Paint the watermark':'Review watermark layers';help=segment?'Paint the watermark and save the layer. Then drag its bar ends to choose when it appears.':'Select a layer to review its mask, or add another layer. Drag bar ends to change timing.';}
     else if(this.stage==='render'&&!w.result){title='Ready to remove the watermark';help='Choose a repair method, then generate your result.';}
+    if(w.state.removalMethod==='subtitles'&&this.stage==='mask'){
+      title='Paint the area containing subtitles';help='Paint around the subtitles, then save the layer. The full surrounding crop is processed and blended back into the original shot.';
+      this.guideHelp.hidden=false;
+    }else this.guideHelp.hidden=true;
     this.guideTitle.textContent=title;this.guideHelp.textContent=help;this.guideTitle.title=help;this.guideTitle.setAttribute('aria-description',help);
   }
   morph(authoritative){

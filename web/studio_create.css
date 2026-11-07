@@ -1,3 +1,4 @@
+@import './studio_image_area.css';
 /* Zura Studio workspace. Layout lives here; native control components live in
    studio_components.css. One shell, one token set, one composer per workspace. */
 #genj-studio[data-workspace]{

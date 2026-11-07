@@ -402,7 +402,7 @@ class ZuraPaintoutCrop:
         'plate_path':string(''), 'mask_path':string(''),
         'colour_space':(COLOUR_SPACES,),
         'start_frame':integer(0),'frame_count':integer(81,1,993),'sequence_fps':floating(25,1,120),
-        'context_pixels':integer(128,32,2048),'max_crop_side':integer(768,128,2048),
+        'context_pixels':integer(128,32,2048),'max_crop_side':integer(768,128,4096),
         'repair_grow':integer(16,0,256),'feather_pixels':integer(0,0,256)},'optional':{'processing_mode':(PROCESSING_MODES,), 'framing_mode':(['Plate resolution (stretch to next grid)','Smart crop (experimental)','Full frame (original method)','Full frame (fit, no crop)','Source resolution (pad, no resize)','Full frame (stretch to working size)'],), 'render_width':integer(1152,64,4096), 'render_height':integer(640,64,4096), 'processing_scale':('FLOAT',{'default':1.0,'min':0.25,'max':1.0,'step':0.25})}}
     RETURN_TYPES=('IMAGE','MASK','ZURA_PLATE','INT','INT','INT','FLOAT','STRING')
     RETURN_NAMES=('crop_frames','crop_mask','plate','width','height','padded_frames','fps','crop_report')
@@ -462,6 +462,14 @@ class ZuraPaintoutCrop:
             pw=max(64,math.ceil(rw/64)*64);ph=max(64,math.ceil(rh/64)*64)
         else:scale=max(rw/w,rh/h)
         padded=math.ceil((frame_count-1)/8)*8+1
+        if framing_mode=='Smart crop (experimental)' and max_crop_side>2048:
+            # Source-frame lists, concatenation, temporal tail and subsequent
+            # two-stage padding coexist temporarily; do not start decoding if
+            # the requested crop would consume the system's remaining RAM.
+            from .subtitle_crop import ensure_subtitle_memory
+            full_h,full_w=math.ceil(ph/128)*128,math.ceil(pw/128)*128
+            estimate=padded*full_h*full_w*16*4 + W*H*12*2
+            ensure_subtitle_memory(estimate)
         resampler=('comfy_lanczos' if processing_mode=='SDR (sRGB)' else 'float32_bicubic_antialias') if framing_mode!='Smart crop (experimental)' else 'bilinear'
         c=dict(source=d,mask=m,space=colour_space,processing=processing_mode,start=start_frame,count=frame_count,fps=d.get('fps',sequence_fps),fps_rational=d.get('fps_rational',str(Fraction(str(sequence_fps)))),rect=[x0,y0,w,h],resized=[rh,rw],padded=[ph,pw],grow=repair_grow,feather=feather_pixels,framing_mode=framing_mode,resampler=resampler)
         ims=[];ms=[];progress=frame_progress(frame_count)
@@ -672,6 +680,20 @@ def composite_crop(original,generated,mask,grow,feather,match,fit_override=None,
     result[active]=original[active]*(1-alpha[active,None])+adjusted[active]*alpha[active,None]
     return result,dict(gain=gain.tolist(),offset=offset.tolist())
 
+def composite_subtitle_crop(original,generated,rect,source_size,feather):
+    """Blend a whole processed crop, fading only at edges inside the source."""
+    x,y,w,h=rect; source_width,source_height=source_size
+    if original.shape!=generated.shape or original.shape[:2]!=(h,w):
+        raise ValueError('The processed subtitle crop does not match its source.')
+    distance=np.full((h,w),np.inf,dtype=np.float32)
+    if x>0:distance=np.minimum(distance,np.arange(1,w+1,dtype=np.float32)[None,:])
+    if x+w<source_width:distance=np.minimum(distance,np.arange(w,0,-1,dtype=np.float32)[None,:])
+    if y>0:distance=np.minimum(distance,np.arange(1,h+1,dtype=np.float32)[:,None])
+    if y+h<source_height:distance=np.minimum(distance,np.arange(h,0,-1,dtype=np.float32)[:,None])
+    alpha=np.clip(distance/max(1,int(feather)),0,1) if feather else np.ones((h,w),dtype=np.float32)
+    alpha=alpha*alpha*(3-2*alpha)
+    return original*(1-alpha[...,None])+generated*alpha[...,None],alpha>0
+
 def save_exr(path,a,space,half):
     # Delegate to the installed LTX EXR writer without its VAE-decode clamping.
     # The unclamped writer preserves negative plate values outside the repair.
@@ -717,7 +739,7 @@ class ZuraPaintoutUncrop:
         from .media import Delivery
         delivery=Delivery(target,plate,export_format,motion_preview)
         metrics=[]; shared_fit=None
-        if match_context:
+        if match_context and not plate.get('subtitle_full_crop'):
             # One robust correction for the whole selected shot, avoiding framewise grade pumping.
             fits=[]
             fit_frames=set(np.linspace(0,plate['count']-1,min(12,plate['count']),dtype=int).tolist())
@@ -735,14 +757,19 @@ class ZuraPaintoutUncrop:
             generated=resize(unworking(raw,plate['space'],plate.get('processing','HDR (ACEScct)')),h,w)[0].numpy()
             src=to_linear(torch.from_numpy(a[y:y+h,x:x+w].copy()),plate['space']).numpy()
             protected=protection_mask(plate['mask'],plate['start']+i)[y:y+h,x:x+w]
-            result,fit=composite_crop(src,generated,m[y:y+h,x:x+w],plate['grow'],plate['feather'],False,shared_fit,protection=protected)
+            if plate.get('subtitle_full_crop'):
+                result,support=composite_subtitle_crop(src,generated,plate['rect'],(a.shape[1],a.shape[0]),plate.get('subtitle_feather',16))
+                fit=dict(gain=[1,1,1],offset=[0,0,0])
+            else:
+                result,fit=composite_crop(src,generated,m[y:y+h,x:x+w],plate['grow'],plate['feather'],False,shared_fit,protection=protected)
             encoded=from_linear(torch.from_numpy(result),plate['space']).numpy()
             # Keep original encoded values outside the matte, including negatives and HDR highlights.
-            matte=maximum_filter(m[y:y+h,x:x+w]>.001,size=2*plate['grow']+1)
-            support=distance_transform_edt(~matte)<plate['feather'] if plate['feather'] else matte
-            support|=matte
-            support[protected>.001]=False
-            if not matte.any():support[:]=False
+            if not plate.get('subtitle_full_crop'):
+                matte=maximum_filter(m[y:y+h,x:x+w]>.001,size=2*plate['grow']+1)
+                support=distance_transform_edt(~matte)<plate['feather'] if plate['feather'] else matte
+                support|=matte
+                support[protected>.001]=False
+                if not matte.any():support[:]=False
             region=a[y:y+h,x:x+w].copy();region[support]=encoded[support]
             a[y:y+h,x:x+w]=region
             linear=to_linear(torch.from_numpy(a),plate['space'])

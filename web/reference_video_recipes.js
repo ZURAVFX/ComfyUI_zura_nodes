@@ -1,3 +1,4 @@
+import {applyAvailableAttention} from './studio_attention.js';
 import {VIDEO_CANVAS_LIMITS} from './studio_resolution.js';
 // Native MiniMax H3 Ref2Video recipe. References are ingredients for identity,
 // appearance, scene, motion cues and audio. A selected picture can also anchor
@@ -251,7 +252,7 @@ function normaliseConfig(c={}){
   };
 }
 
-export function buildReferenceVideoGraph(config={}){
+export function buildReferenceVideoGraph(config={},info){
   const c=normaliseConfig(config),caps=REFERENCE_VIDEO_CAPABILITIES;
   const graph={};
   const node=(id,class_type,inputs,nodeTitle)=>{
@@ -358,7 +359,7 @@ export function buildReferenceVideoGraph(config={}){
   const decodedAudio=followedAudio||node('decode_audio','VAEDecodeAudio',{samples,vae:audioVae},'Decode H3 audio');
   const video=node('video','CreateVideo',{images:decoded,audio:decodedAudio,fps:caps.fps,bit_depth:8,color_space:'sRGB',codec:'none'},'Assemble video with audio');
   node('save','SaveVideo',{video,filename_prefix:fast?'zura/reference/fasth3_draft':'zura/reference/h3',format:'mp4','format.codec':'h264','format.codec.encoding':'auto'},'Save reference video');
-  return graph;
+  return applyAvailableAttention(graph,info);
 }
 
 function options(info,node,key){
@@ -374,7 +375,7 @@ export function referenceVideoAvailability(info={},config={}){
   const fast=speedup==='progressive';
   const requiredNodes=[
     'UNETLoader','CLIPLoader','VAELoader',
-    'ModelAttentionBackend','MiniMaxH3SigmaShift','MiniMaxH3ReferenceToVideo',
+    'MiniMaxH3SigmaShift','MiniMaxH3ReferenceToVideo',
     'BasicScheduler','KSamplerSelect','VAEDecode','CreateVideo','SaveVideo',
   ];
   if(fast)requiredNodes.push('SelfLiftH3Sampler','BlockSparseAttention','ConditioningZeroOut');
@@ -404,9 +405,6 @@ export function referenceVideoAvailability(info={},config={}){
   }
   if(info.CLIPLoader&&!options(info,'CLIPLoader','type').includes('minimax')){
     missing.push('MiniMax H3 text encoder type');
-  }
-  if(info.ModelAttentionBackend&&!options(info,'ModelAttentionBackend','attention').includes('comfy kitchen attention')){
-    missing.push('Comfy Kitchen attention');
   }
   if(model==='viggle'&&speedup==='turbo'){
     missing.push('A verified turbo adapter for the Viggle checkpoint');

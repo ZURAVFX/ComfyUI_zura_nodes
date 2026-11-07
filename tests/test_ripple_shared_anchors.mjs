@@ -1,0 +1,53 @@
+import assert from 'node:assert/strict';
+import {parseHTML} from '../../ui-check/node_modules/linkedom/esm/index.js';
+import {RippleWorkspace} from '../web/studio_ripple.js';
+
+const {document,window}=parseHTML('<html><head></head><body><main id="genj-studio"></main></body></html>');
+for(const method of ['pause','play','load'])window.HTMLElement.prototype[method]=()=>{};
+Object.defineProperty(window.HTMLSelectElement.prototype,'value',{configurable:true,get(){return this.querySelector('option[selected]')?.value||this.querySelector('option')?.value||'';},set(value){for(const option of this.querySelectorAll('option')){if(option.value===String(value))option.setAttribute('selected','');else option.removeAttribute('selected');}}});
+const memory=new Map();globalThis.document=document;globalThis.window=window;globalThis.localStorage={getItem:key=>memory.get(key)||null,setItem:(key,value)=>memory.set(key,value),removeItem:key=>memory.delete(key)};
+const info={path:'C:/shots/source.mp4',kind:'video',width:1920,height:1080,frames:120,fps:30,resolved_colour:'srgb_display',media_url:'/source'};
+const saved={engine:'ltx',startFrame:0,frameCount:120,playhead:0,sourcePath:info.path,selectedId:'ltx-0',anchors:{
+  h3:[{id:'h3-0',frame:0,file:'h3-0.png',enabled:true},{id:'h3-7',frame:7,file:'h3-7.png',enabled:true}],
+  ltx:[{id:'ltx-0',frame:0,file:'ltx-0.png',enabled:true},{id:'ltx-20',frame:20,file:'ltx-20.png',enabled:true}],
+}};
+memory.set('zura-ripple-workspace-v1',JSON.stringify(saved));
+const owner={root:document.querySelector('main'),app:{},api:{apiURL:path=>path},fetch:async(path)=>path.startsWith('/zura/paintout/info')?info:{}};
+const ui=new RippleWorkspace(owner);await ui.restoreSource();
+assert.equal(ui.page.querySelector('.zru-viewer').nextElementSibling,ui.$('timeline'),'Timeline immediately follows the video preview');
+assert.equal(ui.$('timeline').firstElementChild,ui.$('visual-timeline'),'Filmstrip appears before trim and keyframe controls');
+assert.equal(ui.anchors().length,4,'Both legacy lists are migrated without dropping their different edits');
+assert.equal(ui.selected().id,'ltx-0');
+assert.match(ui.timeline.cards.querySelector('[data-keyframe="7"]').parentElement.textContent,/Kept for H3/);
+assert.deepEqual(ui.config().anchors.map(a=>a.file),['ltx-0.png'],'LTX uses only the enabled first-frame variant');
+assert.equal(ui.anchors().find(a=>a.id==='h3-0').enabled,false,'Same-frame legacy edits remain as selectable alternatives');
+ui.$('engine').value='h3';ui.$('engine').onchange();
+assert.deepEqual(ui.config().anchors.map(a=>a.file),['ltx-0.png','h3-7.png','ltx-20.png']);
+ui.selectAnchor('h3-0');
+assert.equal(ui.anchors().find(a=>a.id==='ltx-0').enabled,false,'Selecting an alternate activates it without deleting the other edit');
+assert.deepEqual(ui.config().anchors.map(a=>a.file),['h3-0.png','h3-7.png','ltx-20.png']);
+ui.$('engine').value='ltx';ui.$('engine').onchange();assert.deepEqual(ui.config().anchors.map(a=>a.file),['h3-0.png']);
+ui.seek(45);ui.timeline.addFrame.click();assert.equal(ui.selected().id,'h3-0','LTX Add keyframe works away from the clip start and reuses the first-frame edit');
+const k=new window.Event('keydown',{bubbles:true,cancelable:true});Object.defineProperty(k,'key',{value:'k'});ui.seek(45);ui.timeline.root.dispatchEvent(k);
+assert.equal(ui.selected().id,'h3-0','The keyboard shortcut also selects the first LTX frame');
+ui.timeline.ruler.getBoundingClientRect=()=>({left:0,width:119});
+const doubleClick=x=>{const e=new window.Event('dblclick',{bubbles:true,cancelable:true});Object.defineProperty(e,'clientX',{value:x});ui.timeline.ruler.dispatchEvent(e);};
+doubleClick(60);assert.equal(ui.selected().id,'h3-0','LTX double-click uses its first selected frame');
+ui.$('engine').value='h3';ui.$('engine').onchange();doubleClick(60);
+assert.equal(ui.selected().frame,60,'Double-clicking the filmstrip creates the clicked H3 keyframe');
+doubleClick(60);assert.equal(ui.anchors().filter(a=>a.frame===60).length,1,'Repeated double-click does not duplicate a frame');
+const trimDoubleClick=new window.Event('dblclick',{bubbles:true,cancelable:true});Object.defineProperty(trimDoubleClick,'clientX',{value:80});ui.timeline.trimHandles.in.dispatchEvent(trimDoubleClick);
+assert.equal(ui.anchors().some(a=>a.frame===80),false,'Double-clicking a trim handle does not create a keyframe');
+ui.save();const restored=new RippleWorkspace(owner);await restored.restoreSource();
+assert.equal(restored.anchors().length,5,'Shared keyframes and same-frame alternatives survive reload');
+assert.equal(restored.anchors().find(a=>a.id==='h3-0').enabled,true);
+assert.equal(restored.anchors().find(a=>a.id==='ltx-0').file,'ltx-0.png');
+assert.equal(restored.selected().frame,60);
+restored.dispose();ui.dispose();
+memory.set('zura-ripple-workspace-v1',JSON.stringify({...saved,engine:'h3',playhead:4,selectedId:'shared',anchors:{h3:[{id:'shared',frame:4,file:'same.png',status:'review',enabled:true}],ltx:[{id:'shared',frame:4,file:'same.png',status:'accepted',enabled:true}]}}));
+const collision=new RippleWorkspace(owner);await collision.restoreSource();
+assert.equal(collision.anchors().length,2,'Legacy records with different status survive even when IDs and files coincide');
+assert.equal(new Set(collision.anchors().map(a=>a.id)).size,2,'Colliding legacy IDs are made unique');
+assert.equal(collision.selected().status,'review','The selected current-model record keeps its original ID');
+collision.dispose();
+console.log('Shared Ripple anchors migrate, retain alternatives, switch models and respond to timeline shortcuts.');

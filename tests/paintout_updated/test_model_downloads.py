@@ -331,9 +331,13 @@ class ModelDownloadTests(unittest.TestCase):
                 for item in recipe['files']:
                     downloads._safe_item(item)
             names = {item['filename'] for recipe in downloads.CATALOG.values() for item in recipe['files']}
-            self.assertEqual(len(names), 15)
             self.assertTrue(downloads.CATALOG['ripple']['files'], 'The released Ripple option needs its model package')
-            self.assertFalse(any('upscal' in name or 'refine' in name for name in names))
+            for key,adapter in [('subtitles','ltx2.3-ic-subtitles-remove-general.safetensors'),('subtitles_zarxrax','ltx23_removetext_v1.safetensors')]:
+                files={item['filename'] for item in downloads.CATALOG[key]['files']}
+                self.assertIn(adapter,files)
+                self.assertIn('ltx-2.5-22b-distilled-transformer-comfy-int8-convrot.safetensors',files)
+                self.assertIn('ltx-2.5-latent-spatial-upscaler-x2-bf16-1.0.safetensors',files)
+                self.assertFalse(any('2.3' in name and ('transformer' in name or '-dev' in name) for name in files))
             hdr = {item['filename'] for item in downloads.CATALOG['targeted_hdr']['files']}
             self.assertIn('ltx-2.5-video-vae-bf16.safetensors', hdr)
             self.assertNotIn('ltx-2.5-video-vae-conv-bf16.safetensors', hdr)

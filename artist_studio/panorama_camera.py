@@ -170,6 +170,9 @@ def build_graph(source, selection, state, stage, *, warp=None, look=None, prompt
     video = n('video', 'CreateVideo', images=images, audio=audio, fps=24.)
     n('save', 'SaveVideo', 'Save finished camera take', video=video, filename_prefix='genj/panorama/take',
       format='mp4', **{'format.codec': 'h264', 'format.codec.encoding': 'auto'})
+    if __package__:
+        from .attention import adapt_attention
+        return adapt_attention(g)
     return g
 
 

@@ -1,3 +1,4 @@
+import {applyAvailableAttention} from './studio_attention.js';
 import {resolutionSize,VIDEO_CANVAS_LIMITS,megapixelMaximum} from './studio_resolution.js';
 // The artist-approved H3 FL2VA recipe. Endpoints are native keyframes, not
 // ingredients. Keep the supplied sampler, Turbo adapter and Kitchen backend.
@@ -30,7 +31,7 @@ export function frameVideoDimensions(c){
   if(width*height>VIDEO_CANVAS_LIMITS.maxPixels)throw new Error('Choose a canvas up to 8.39 MP. This is the Studio canvas limit, not a model limit.');
   return {width,height};
 }
-export function buildFrameVideoGraph(c){
+export function buildFrameVideoGraph(c,info){
   if(!c.first?.file)throw new Error('Add a first frame to begin. The last frame is optional.');
   if(!String(c.prompt||'').trim())throw new Error('Describe the video you want to generate.');
   const {width,height}=frameVideoDimensions(c),frames=Number(c.frames),steps=Number(c.steps??8),seed=Number(c.seed??42);
@@ -63,7 +64,7 @@ export function buildFrameVideoGraph(c){
   node('decode','VAEDecode',{samples:ref('sample'),vae:ref('video_vae')});node('decode_audio','VAEDecodeAudio',{samples:ref('sample'),vae:ref('audio_vae')});
   node('video','CreateVideo',{images:ref('decode'),audio:ref('decode_audio'),fps:24,bit_depth:8,color_space:'sRGB',codec:'none'});
   node('save','SaveVideo',{video:ref('video'),filename_prefix:'zura/first_last/result',format:'mp4','format.codec':'h264','format.codec.encoding':'auto'});
-  return g;
+  return applyAvailableAttention(g,info);
 }
 export function frameVideoAvailability(info){
   const options=(node,key)=>{const field=info[node]?.input?.required?.[key];return field?.[0]==='COMBO'?field[1]?.options||[]:Array.isArray(field?.[0])?field[0]:[];};
@@ -71,7 +72,6 @@ export function frameVideoAvailability(info){
   const missing=[];
   for(const [node,[key,file]] of Object.entries(names))if(!options(node,key).includes(file))missing.push(file);
   for(const file of [FRAME_VIDEO_MODELS.videoVae,FRAME_VIDEO_MODELS.audioVae])if(!options('VAELoader','vae_name').includes(file))missing.push(file);
-  for(const node of ['ModelAttentionBackend','MiniMaxH3ImageToVideo','MiniMaxH3AddGuide','LoadAudio','LoadImage','ImageScale','BasicGuider','BasicScheduler','KSamplerSelect','RandomNoise','SamplerCustomAdvanced','VAEDecode','VAEDecodeAudio','CreateVideo','SaveVideo'])if(!info[node])missing.push(node);
-  if(info.ModelAttentionBackend&&!options('ModelAttentionBackend','attention').includes('comfy kitchen attention'))missing.push('Comfy Kitchen attention');
+  for(const node of ['MiniMaxH3ImageToVideo','MiniMaxH3AddGuide','LoadAudio','LoadImage','ImageScale','BasicGuider','BasicScheduler','KSamplerSelect','RandomNoise','SamplerCustomAdvanced','VAEDecode','VAEDecodeAudio','CreateVideo','SaveVideo'])if(!info[node])missing.push(node);
   return {ready:!missing.length,missing};
 }

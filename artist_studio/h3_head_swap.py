@@ -157,6 +157,9 @@ def build_graph(request: HeadSwapRequest):
     finished = node("hold_output", "GenjHoldToModelLength", images=finished, stride=17, remainder=5)
     video = node("video", "CreateVideo", images=finished, audio=audio, fps=24.)
     node("export", "GenjRestoreSoundtrack", video=video, clip_details=["select", 1], target_frames=["hold_output", 1], take_name=request.take_name)
+    if __package__:
+        from .attention import adapt_attention
+        return adapt_attention(graph)
     return graph
 
 

@@ -49,10 +49,11 @@ export class OutpaintFirstFrame {
     try{
       const key=this.key(),asset=await w.fetch('/zura/studio/outpaint/first-frame',w.config());
       if(key!==this.key())throw Error('The canvas changed. Prepare the guide again.');
+      await o.imageArea?.flush();if(key!==this.key())throw Error('The canvas changed. Prepare the guide again.');
       this.previous={config:o.config(),selectedFile:o.items[o.selectedImage]?.file||null};this.request={key,id:crypto.randomUUID(),width:asset.width,height:asset.height};
       o.outpaintGuide=this;o.show('image');if(!o.models.length)await o.loadModels();
       await o.setImageOperation('edit',{useCanvas:false});
-      o.editMainMissing=false;const parts=asset.file.split('/');o.references=[{...asset,filename:parts.pop(),subfolder:parts.join('/')}];
+      o.imageArea?.reset();o.editMainMissing=false;const parts=asset.file.split('/');o.references=[{...asset,filename:parts.pop(),subfolder:parts.join('/')}];
       o.$('shape').value='square';o.$('width').value=asset.width;o.$('height').value=asset.height;
       o.$('prompt').value=`Fill only the black empty areas of Image 1 with a natural continuation of the surrounding scene. Keep every existing visible part of the original footage unchanged, including the subject, camera, perspective, lighting and placement. Do not add borders or reframe the image. Keep exactly ${asset.width} × ${asset.height} pixels and the same proportions. ${w.$('prompt').value}`;
       o.save();o.render();o.renderGallery();this.syncImageUI();
@@ -85,6 +86,7 @@ export class OutpaintFirstFrame {
   async leave(accepted=false,check=()=>{}){
     const o=this.owner;if((this.importing&&!accepted)||o.job||o.pendingSubmission||o.submitting||o.uploading)return;
     if(this.previous){const c=this.previous.config;await o.setImageOperation(c.operation,{useCanvas:false});check();o.references=c.references;o.editMainMissing=!!c.editMainMissing;o.imageLoras=c.loras||[];for(const id of ['model','shape','width','height','seed','prompt'])o.$(id).value=c[id];o.$('random').checked=c.random;const selected=this.previous.selectedFile;o.selectedImage=selected?o.items.findIndex(item=>item.file?.filename===selected.filename&&(item.file?.subfolder||'')===(selected.subfolder||'')&&(item.file?.type||'output')===(selected.type||'output')):-1;o.draft=c;}
+    if(this.previous)o.imageArea?.restore(this.previous.config.edit_area||null);
     this.request=null;this.previous=null;o.outpaintGuide=null;if(this.banner)this.banner.hidden=true;o.save();o.render();o.renderGallery();o.show('outpaint');
   }
 }

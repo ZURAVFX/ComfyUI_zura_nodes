@@ -118,7 +118,7 @@ export class FrameVideoWorkspace{
   }
   $(id){return this.page.querySelector('#zf-'+id);}
   recipe(){const cap=endpointRecipe(this.$('engine').value);return cap.id==='ltx'&&hasHDREndpoint(this.assets)?{...cap,dimensionStep:64,minDimension:512,maxDimension:2048,maxPixels:2048**2,hint:'Native HDR · INT8 · two sampling passes · full float32 VAE'}:cap;}
-  build(c=this.config()){if(hasHDREndpoint(c)){this.nativeHDR.validate(c);return {};}return endpointRecipe(c.engine).build(c);}
+  build(c=this.config()){if(hasHDREndpoint(c)){this.nativeHDR.validate(c);return {};}return endpointRecipe(c.engine).build(c,this.modelInfo);}
   async buildGraph(c){return hasHDREndpoint(c)?this.nativeHDR.graph(c):this.patchLoras(this.build(c),c);}
   setLengths(preferred){const cap=this.recipe(),values=endpointLengths(cap.id);this.$('length').innerHTML=values.map(n=>`<option value="${n}">${(n/cap.fps).toFixed(2)}s</option>`).join('');this.$('length').value=values.includes(Number(preferred))?preferred:cap.defaultFrames;}
   selectAvailability(){if(hasHDREndpoint(this.assets)){const info=this.nativeHDR.info;this.availability={ready:!!(info?.enabled&&info.ready),missing:[...(info?.files||[]).filter(f=>!f.ready).map(f=>f.filename),...(info?.missingNodes||[])]};this.modelDownloads?.setContext(info);return;}const config=this.config();if(this.modelInfo)this.availability=this.recipe().availability(this.modelInfo,config);let missing=this.availability?.missing;if(config.engine==='ltx'&&config.hdrOutput!=='sdr'&&this.hdrSetup){missing=[...new Set([...(missing||[]),...(this.hdrSetup.files||[]).filter(file=>!file.ready).map(file=>file.filename),...(this.hdrSetup.missingNodes||[])])];}this.modelDownloads?.setMissingContext(`${this.recipe().id}_first_last`,missing);}

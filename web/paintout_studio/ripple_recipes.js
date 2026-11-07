@@ -1,3 +1,4 @@
+import {applyAvailableAttention} from '../studio_attention.js';
 // Approved first-frame object experiment. No video mask or timed-anchor promise.
 import {PAINTOUT_MODELS} from './paintout_recipes.js';
 export const RIPPLE_LORA='LTX25_Ripple_v11.safetensors';
@@ -5,7 +6,7 @@ export const RIPPLE_PROMPT='Use the reference video for motion, timing, camera m
 const base=s=>String(s).replaceAll('\\','/').split('/').pop();
 const choices=(info,node,key)=>{const f=info?.[node]?.input?.required?.[key]||info?.[node]?.input?.optional?.[key];return Array.isArray(f?.[0])?f[0]:f?.[1]?.options||[];};
 const file=(info,node,key,name)=>choices(info,node,key).find(s=>base(s)===name)||name;
-const NODES=['ZuraPaintoutFullFrame','ZuraPaintoutAnchors','ZuraPaintoutTake','ZuraRippleGuide','ZuraPaintoutUncrop','UNETLoader','LoraLoaderModelOnly','ModelAttentionBackend','CLIPLoader','CLIPTextEncode','VAELoader','LTXVConditioning','EmptyLTXVLatentVideo','LTXAddVideoICLoRAGuide','LTXVEmptyLatentAudio','LTXVConcatAVLatent','CFGGuider','RandomNoise','KSamplerSelect','BasicScheduler','SamplerCustomAdvanced','LTXVSeparateAVLatent','LTXVCropGuides','VAEDecode','ImageFromBatch'];
+const NODES=['ZuraPaintoutFullFrame','ZuraPaintoutAnchors','ZuraPaintoutTake','ZuraRippleGuide','ZuraPaintoutUncrop','UNETLoader','LoraLoaderModelOnly','CLIPLoader','CLIPTextEncode','VAELoader','LTXVConditioning','EmptyLTXVLatentVideo','LTXAddVideoICLoRAGuide','LTXVEmptyLatentAudio','LTXVConcatAVLatent','CFGGuider','RandomNoise','KSamplerSelect','BasicScheduler','SamplerCustomAdvanced','LTXVSeparateAVLatent','LTXVCropGuides','VAEDecode','ImageFromBatch'];
 const FILES=[['UNETLoader','unet_name',PAINTOUT_MODELS.model],['CLIPLoader','clip_name',PAINTOUT_MODELS.text],['VAELoader','vae_name',PAINTOUT_MODELS.videoVae],['VAELoader','vae_name',PAINTOUT_MODELS.audioVae],['LoraLoaderModelOnly','lora_name',RIPPLE_LORA]];
 
 export function rippleValidation(c){
@@ -60,5 +61,5 @@ export function buildRippleGraph(c,info){
   n('decode','VAEDecode',{samples:r('crop_guides',2),vae:r('video_vae')},'Decoding the replacement video');
   n('align','ImageFromBatch',{image:r('decode'),batch_index:1,length:r('take',4)},'Aligning every frame with the original audio');
   n('save','ZuraPaintoutUncrop',{decoded_crop:r('align'),plate:r('source',2),output_name:c.savePrefix||'ZURA STUDIO/object replacement',precision:'float32',match_context:false,export_format:'SDR video',motion_preview:true},'Saving the full selected clip and original audio');
-  return g;
+  return applyAvailableAttention(g,info);
 }

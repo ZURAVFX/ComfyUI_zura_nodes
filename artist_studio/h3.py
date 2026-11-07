@@ -630,6 +630,9 @@ def build_h3_viewport_graph(project):
          clip_details=["h3_viewport_clip", 1], target_frames=["h3_hold_output", 1],
          take_name="studio_" + project["id"][:8] + ("_h3_base" if enhanced_delivery else "_h3_viewport"),
          **({"output_subfolder": "studio_intermediate"} if enhanced_delivery else {}))
+    if __package__:
+        from .attention import adapt_attention
+        return adapt_attention(graph)
     return graph
 
 
@@ -1113,6 +1116,9 @@ def build_h3_graph(project, use_cache=True, preserve_background=True):
             graph["h3_sample"]["inputs"]["latent_image"] = ["h3_cached", 1]
         graph = reachable_graph(graph, ["h3_export"])
     from .speech import add_finish
+    if __package__:
+        from .attention import adapt_attention
+        return adapt_attention(add_finish(graph, project, native_speech=True))
     return add_finish(graph, project, native_speech=True)
 
 

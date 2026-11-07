@@ -6,6 +6,7 @@ export const NODE_PACKS=[
   {name:'ComfyUI',url:'https://github.com/Comfy-Org/ComfyUI',nodes:['LTXVImgToVideoInplace','LTXVAddGuide','UNETLoader','CLIPLoader','CLIPTextEncode','VAELoader','LoadImage','ImageScale','ImageFromBatch','GrowMask','InvertMask','ReferenceMultiLatent','CheckpointLoaderSimple','SAM3_Detect','SAM3_VideoTrack','ModelAttentionBackend','LTXVConditioning','EmptyLTXVLatentVideo','LTXVEmptyLatentAudio','LTXVConcatAVLatent','LTXVSeparateAVLatent','LTXVCropGuides','LTXVAudioVAELoader','LTXVAudioVAEEncode','LTXVAudioVAEDecode','LTXVLatentUpsampler','KSampler','KSamplerSelect','RandomNoise','CFGGuider','BasicGuider','SamplerCustomAdvanced','VAEDecode','VAEDecodeTiled','LoadAudio','CreateVideo','SaveVideo','MiniMaxH3ImageToVideo','MiniMaxH3ReferenceToVideo','MiniMaxH3AddGuide','EmptyMiniMaxH3LatentAV','MiniMaxH3SigmaShift'],note:'Update ComfyUI and restart it to load these built-in nodes.'},
   {name:'ComfyUI-SelfLift',url:'https://github.com/facok/comfyui-SelfLift',nodes:['SelfLiftH3Sampler']},
   {name:'ComfyUI-WepeNerd',url:'https://github.com/WepeNerd/ComfyUI-WepeNerd',nodes:['WN_RippleApply'],note:'Install ComfyUI-WepeNerd, then restart ComfyUI to enable H3 Ripple.'},
+  {name:'Smart Image Crop and Stitch',url:'https://github.com/HallettVisual/ComfyUI-Smart-Image-Crop-and-Stitch',nodes:['SmartImageCrop','SmartImageStitcher'],note:'Install Smart Image Crop and Stitch with ComfyUI Manager, then restart ComfyUI to use painted image edit areas.'},
   {name:'H3 character swap runtime',url:'https://github.com/akatz-labs/h3-character-swap-tool/tree/0670e4fdf95adf2262caa4b81afed2a9c4ae4b7b/worker_nodes/h3_character_swap',nodes:['H3CharacterSwapPrepareVideo','H3CharacterSwapSelectSubject','H3CharacterSwapRecoverMasks','H3CharacterSwapExpandMask','H3CharacterSwapModels','H3CharacterSwapSettings','H3CharacterSwapShot','H3CharacterSwapWindowPlan','H3CharacterSwapController','H3CharacterSwapAssemble'],note:'This runtime also needs the OpenJutsu compatibility patch before installation. Use the pinned source; do not install an arbitrary newer checkout.',patch:'https://github.com/Comfy-Org/comfy-openjutsu/blob/70ec62df0eda7c58697ea3ac2050588513651583/build/h3_character_swap.patch'},
   {name:'ComfyUI-KJNodes',url:'https://github.com/kijai/ComfyUI-KJNodes',nodes:['PathchSageAttentionKJ','ImageResizeKJv2','BlockifyMask']},
   {name:'ComfyUI-Easy-Use',url:'https://github.com/yolain/ComfyUI-Easy-Use',nodes:['easy int']},
@@ -36,7 +37,7 @@ NODE_PACKS.find(pack=>pack.name==='ComfyUI').nodes.push(
 
 // Zura owns these namespaces. Missing classes normally indicate that an older
 // installation is loaded, so direct users to update the host pack.
-const ownedNode=name=>/^(Genj|ZuraPaintout|ZuraWatermark|ZuraHDR|ZuraLTX|ZuraOutpaint|ZuraPanorama|ZuraH3|ZuraRipple)/.test(name);
+const ownedNode=name=>/^(Genj|ZuraPaintout|ZuraWatermark|ZuraHDR|ZuraLTX|ZuraOutpaint|ZuraPanorama|ZuraH3|ZuraRipple|ZuraImageEdit)/.test(name);
 export function groupMissingNodes(nodes){
   const missing=[...new Set((Array.isArray(nodes)?nodes:[]).filter(name=>typeof name==='string'&&name.trim()&&!/\.(safetensors|onnx|pt|pth|ckpt|bin)$/i.test(name)))];
   const unknown=new Set(missing),packs=[];

@@ -1,4 +1,6 @@
 import {ImageEditInputs} from './studio_image_edit_inputs.js';
+import {ImageEditArea} from './studio_image_area.js';
+import {IMAGE_AREA_NODE_TYPES,smartCropCapabilities} from './studio_image_area_graph.js';
 import {StudioModelDownloads} from './studio_model_download.js';
 import {ModelAccess,importModelFile} from './studio_model_access.js';
 import {resolutionSize,editableDimension} from './studio_resolution.js';
@@ -178,6 +180,7 @@ export class CreativeWorkspace {
       if(globalThis.customElements?.get("wa-tooltip"))control.removeAttribute("title");
     }
     this.editInputs.mountControls();
+    this.imageArea=new ImageEditArea(this);this.imageArea.restore(this.draft.edit_area||null);
     const imageModelPanel=document.createElement('details');imageModelPanel.className='gs-model-help';this.$('setup').before(imageModelPanel);
     this.imageModelSetup=new StudioModelDownloads(imageModelPanel,(path,body)=>this.fetch('/zura/studio'+path,body),()=>this.loadModels());
     this.imageModelSetup.mountQuick(this.root.querySelector('.zc-image-composer'));
@@ -290,13 +293,18 @@ export class CreativeWorkspace {
     picker.disabled=!!this.job||!!this.pendingSubmission||this.submitting;list.querySelectorAll('input,button').forEach(control=>control.disabled=!!this.job||!!this.pendingSubmission||this.submitting);
   }
   async imageGraph(config){
+    if(config.edit_area?.enabled){
+      const capabilities=this.imageAreaCapabilities;
+      if(!capabilities?.available)throw Error('Set up Smart Image Crop and Stitch, then refresh models to use a painted edit area. Whole-image editing is still available.');
+      config={...config,smart_crop_schema:capabilities.schema};
+    }
     if(IMAGE_MODELS.find(model=>model.id===config.model)?.provider)return buildImageGraph({...config,loras:[]});
     if(!config.loras?.length)return buildImageGraph(config);
     const result=await this.fetch('/zura/studio/image-loras/validate',{model:config.model,loras:config.loras});
     if(!Array.isArray(result.loras)||result.loras.length!==config.loras.length)throw new Error('Could not validate the selected image LoRAs.');
     return buildImageGraph({...config,loras:result.loras});
   }
-  config(){return {...(this.rippleImage?.request||this.rippleImage?.stored?{ripple_guide:(this.rippleImage.request||this.rippleImage.stored).id}:{}),...(this.outpaintGuide?.request?{outpaint_guide:this.outpaintGuide.request.id}:{}),operation:this.imageOperation,editMainMissing:!!this.editMainMissing,autoCanvasSuppressed:!!this.autoCanvasSuppressed,model:this.$("model").value||(this.imageOperation==='edit'?'qwen2511':'flux2'),prompt:this.$("prompt").value,shape:this.$("shape").value,references:this.references.map(r=>({...r})),loras:IMAGE_MODELS.find(model=>model.id===this.$('model').value)?.provider?[]:this.imageLoras.map(l=>({...l})),width:Number(this.$("width").value),height:Number(this.$("height").value),seed:Number(this.$("seed").value),random:this.$("random").checked};}
+  config(){return {...(this.rippleImage?.request||this.rippleImage?.stored?{ripple_guide:(this.rippleImage.request||this.rippleImage.stored).id}:{}),...(this.outpaintGuide?.request?{outpaint_guide:this.outpaintGuide.request.id}:{}),edit_area:this.imageArea?.config()||null,operation:this.imageOperation,editMainMissing:!!this.editMainMissing,autoCanvasSuppressed:!!this.autoCanvasSuppressed,model:this.$("model").value||(this.imageOperation==='edit'?'qwen2511':'flux2'),prompt:this.$("prompt").value,shape:this.$("shape").value,references:this.references.map(r=>({...r})),loras:IMAGE_MODELS.find(model=>model.id===this.$('model').value)?.provider?[]:this.imageLoras.map(l=>({...l})),width:Number(this.$("width").value),height:Number(this.$("height").value),seed:Number(this.$("seed").value),random:this.$("random").checked};}
   async setImageOperation(operation,{useCanvas=true}={}){
     if(this.job||this.pendingSubmission||this.submitting||this.uploading)return;
     this.imageOperation=operation;
@@ -339,6 +347,7 @@ export class CreativeWorkspace {
   message(text){this.$("message").textContent=text||"";this.$("message").hidden=!text;}
   open(){
     this.modelDownloadClosed=false;
+    this.imageArea?.open();
     this.videoComposer?.ltxOutput?.open();
     this.disposePopovers=installPopoverDismissal(this.root);
     this.show(this.mode||'video');
@@ -422,13 +431,14 @@ export class CreativeWorkspace {
     if(this.job||this.pendingSubmission)this.startPolling();
     if(mode==='image'||mode==='ripple')void this.rippleImage?.resume();
     this.rippleImage?.syncImageUI();
+    this.imageArea?.sync();
   }
   async loadModels(){
     if(this.loading)return;this.loading=true;
     try{
-      const types=[...new Set(IMAGE_MODELS.flatMap(m=>Object.values(buildImageGraph({model:m.id,prompt:"check",references:m.minReferences?[{file:"availability-check.png"}]:[]})).map(n=>n.class_type)).concat("ReferenceMultiLatent","LoadImage"))];
+      const types=[...new Set(IMAGE_MODELS.flatMap(m=>Object.values(buildImageGraph({model:m.id,prompt:"check",references:m.minReferences?[{file:"availability-check.png"}]:[]})).map(n=>n.class_type)).concat("ReferenceMultiLatent","LoadImage",IMAGE_AREA_NODE_TYPES))];
       const parts=await Promise.all(types.map(t=>this.fetch("/object_info/"+t).catch(error=>{if(error.status===404)return {};throw error;})));
-      this.models=imageAvailability(Object.assign({},...parts));
+      const nodeInfo=Object.assign({},...parts);this.imageAreaCapabilities=smartCropCapabilities(nodeInfo);this.models=imageAvailability(nodeInfo);
       let available=[],activeDownload=null;try{const catalogue=await this.fetch('/zura/studio/model-downloads');available=catalogue.models||[];activeDownload=catalogue.active||null;}catch{}
       const map={flux2:'flux2_klein_9b',flux2bf16:'flux2_klein_9b_bf16',flux3:'flux3_klein',flux3bf16:'flux3_klein_bf16',flux3edit:'flux3_klein',flux3editbf16:'flux3_klein_bf16',zimage:'zimage_turbo',klein9b:'flux2_klein_9b',klein9bbf16:'flux2_klein_9b_bf16',qwen2511:'qwen2511',qwen21edit:'qwen21',flux2devedit:'flux2_dev',ph3edit:'ph3_image_edit'};
       // The catalogue pins a download version, not every valid local conversion.
@@ -517,7 +527,15 @@ export class CreativeWorkspace {
     this.styleControls();
     if(this.$('image-lora-settings').open)this.renderImageLoras();
     const c=this.config(),m=this.models.find(m=>m.id===c.model),busy=!!this.job||!!this.pendingSubmission||this.submitting||this.uploading;
-    if(m&&!m.provider){this.imageModelSetup?.setMissingContext('image',m.ready?[]:m.missing);if(this.mode==='image')this.studio.modelDownloads?.setMissingContext('image',m.ready?[]:m.missing,m.name);}else{this.imageModelSetup?.setContext(null);if(this.mode==='image')this.studio.modelDownloads?.setContext({route:'image',files:[],missingNodes:[],label:m?.name||'Image generation'});}
+    const areaMissing=c.edit_area?.enabled?(this.imageAreaCapabilities?.missing||[]):[];
+    const imageMissing=[...new Set([...(m&&!m.provider&&!m.ready?m.missing:[]),...areaMissing])];
+    if(m&&(!m.provider||areaMissing.length)){
+      this.imageModelSetup?.setMissingContext('image',imageMissing,m.name);
+      if(this.mode==='image')this.studio.modelDownloads?.setMissingContext('image',imageMissing,m.name);
+    }else{
+      this.imageModelSetup?.setContext(null);
+      if(this.mode==='image')this.studio.modelDownloads?.setContext({route:'image',files:[],missingNodes:[],label:m?.name||'Image generation'});
+    }
     this.browserConnection.sync(m);
     this.$('image-lora-settings').hidden=!!m?.provider;
     this.$('seed').closest('.zc-advanced').hidden=!!m?.provider;
@@ -556,6 +574,7 @@ export class CreativeWorkspace {
     for(const b of this.root.querySelectorAll("[data-shape]")){b.setAttribute("aria-pressed",String(auto?b.dataset.shape==='auto':b.dataset.shape!=='auto'&&!!size&&IMAGE_SIZES[b.dataset.shape].every((v,i)=>v===size[i])));b.disabled=busy;}
     this.imageComparison?.update(this.items[this.selectedImage||0],this.references);
     this.editInputs?.sync();
+    this.imageArea?.sync();
   }
   renderGallery(){
     this.outpaintGuide?.syncImageUI();
@@ -569,6 +588,7 @@ export class CreativeWorkspace {
     this.$('image-history').innerHTML=this.items.map((item,i)=>`<button type="button" data-view-image="${i}" aria-pressed="${i===this.selectedImage}"><img src="${escape(this.api.apiURL(view(item.file)))}" alt="" loading="lazy"/><span>${escape(item.prompt)}</span></button>`).join('')||'<p>No saved images yet.</p>';
     this.imageComparison?.update(this.items[this.selectedImage],this.references);
     this.editInputs?.sync();
+    this.imageArea?.sync();
   }
   async pasteReferences(event){
     if(this.mode==='frames')return this.frames.paste(event);
@@ -614,7 +634,22 @@ export class CreativeWorkspace {
     if(['width','height'].some(k=>this.$(k).commitDimension?.()===false)){this.message('Enter a whole number for width and height.');return;}
     if(this.job||this.pendingSubmission||this.submitting||this.uploading)return;
     this.submitting=true;const attempt={};this.submitAttempt=attempt;this.message("");this.render();
-    try{const c=this.config(),model=this.models.find(m=>m.id===c.model);if(c.operation==='edit'&&(c.editMainMissing||!c.references.length))throw Error('Add the main image you want to edit first.');if(c.shape==='auto'&&c.references[0]&&!c.references[0].width&&!model?.provider){const ref=c.references[0],response=await this.api.fetchApi('/view?'+new URLSearchParams({filename:ref.filename,subfolder:ref.subfolder||'',type:'input'}));if(!response.ok)throw Error('Could not read Image 1 dimensions. Re-upload it and try again.');Object.assign(ref,await referenceDimensions(await response.blob()));Object.assign(this.references[0],ref);}if(!model?.ready)throw new Error("Set up this model first, then refresh models.");if(!this.browserConnection.connected(model))throw new Error('Sign in to your browser account beside the prompt first.');if(c.random)c.seed=crypto.getRandomValues(new Uint32Array(1))[0];const graph=await this.imageGraph(c);this.$("bar").removeAttribute("value");await submitOwnedGraph(this,graph,c,'auto',{zura_image:true});}
+    try{
+      const c=this.config(),model=this.models.find(m=>m.id===c.model);
+      if(c.operation==='edit'&&(c.editMainMissing||!c.references.length))throw Error('Add the main image you want to edit first.');
+      if(c.shape==='auto'&&c.references[0]&&!c.references[0].width&&!model?.provider){
+        const ref=c.references[0],response=await this.api.fetchApi('/view?'+new URLSearchParams({filename:ref.filename,subfolder:ref.subfolder||'',type:'input'}));
+        if(!response.ok)throw Error('Could not read Image 1 dimensions. Re-upload it and try again.');
+        Object.assign(ref,await referenceDimensions(await response.blob()));Object.assign(this.references[0],ref);
+      }
+      if(!model?.ready)throw Error('Set up this model first, then refresh models.');
+      if(!this.browserConnection.connected(model))throw Error('Sign in to your browser account beside the prompt first.');
+      c.edit_area=await this.imageArea?.prepare()||null;
+      if(this.submitAttempt!==attempt)throw Error('The image edit changed. Please try again.');
+      if(c.random)c.seed=crypto.getRandomValues(new Uint32Array(1))[0];
+      const graph=await this.imageGraph(c);this.$('bar').removeAttribute('value');
+      await submitOwnedGraph(this,graph,c,'auto',{zura_image:true});
+    }
     catch(e){this.message(e.message);}finally{if(this.submitAttempt===attempt){this.submitting=false;this.submitAttempt=null;this.render();}}
   }
   startPolling(){if(this.timer)return;this.timer=setInterval(()=>this.poll(),1500);this.poll();}
@@ -632,7 +667,7 @@ export class CreativeWorkspace {
   }
   async cancel(){await cancelOwnedJob(this);}
   stopPolling(){clearInterval(this.timer);this.timer=null;}
-  close(){for(const access of this.imageModelAccess?.values()||[])access.dispose();this.imageModelSetup?.close();this.modelDownloadClosed=true;this.browserConnection?.close();this.videoComposer?.browserConnection?.close();this.videoComposer?.ltxOutput?.close();this.save();this.stopPolling();this.imageZoom?.stopDraw();this.frames?.close();this.referencesVideo?.close();this.outpaint?.close();this.ripple?.close();this.rippleImage?.dispose();this.panorama?.close();if(this.paintout?.owner===this)this.paintout.close();if(this.watermark?.owner===this)this.watermark.close();this.disposePopovers?.();}
+  close(){for(const access of this.imageModelAccess?.values()||[])access.dispose();this.imageModelSetup?.close();this.modelDownloadClosed=true;this.browserConnection?.close();this.videoComposer?.browserConnection?.close();this.videoComposer?.ltxOutput?.close();void this.imageArea?.close();this.save();this.stopPolling();this.imageZoom?.stopDraw();this.frames?.close();this.referencesVideo?.close();this.outpaint?.close();this.ripple?.close();this.rippleImage?.dispose();this.panorama?.close();if(this.paintout?.owner===this)this.paintout.close();if(this.watermark?.owner===this)this.watermark.close();this.disposePopovers?.();}
   async graph(){
     try{const graph=await this.imageGraph(this.job?.config||this.config());if(typeof this.app.loadApiJson!=="function")throw new Error("Update ComfyUI to open this image graph.");const original=(this.app.rootGraph||this.app.graph)?.serialize?.();if(!original)throw new Error("Your current graph could not be backed up.");try{await this.app.loadApiJson(graph,"Zura Image · "+Date.now()+".json");}catch(e){await this.app.loadGraphData(original);throw e;}this.studio.close();}catch(e){this.message(e.message);}
   }

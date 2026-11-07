@@ -24,10 +24,21 @@ class AttentionSettingsTests(unittest.TestCase):
             studio.clean_config({"h3_attention": "unknown"})
 
     def test_availability_requires_complete_optional_stack(self):
+        class Kitchen:
+            @classmethod
+            def INPUT_TYPES(cls):
+                return {"required": {"attention": (["pytorch attention", "comfy kitchen attention"],)}}
+
+        class TorchOnly:
+            @classmethod
+            def INPUT_TYPES(cls):
+                return {"required": {"attention": (["pytorch attention"],)}}
+
         self.assertEqual(studio.h3_attention_capabilities({}),
                          {"native": True, "kitchen": False, "sage_sol": False})
+        self.assertFalse(studio.h3_attention_capabilities({"ModelAttentionBackend": TorchOnly})["kitchen"])
         for name in ("PathchSageAttentionKJ", "SolAttnPatch"):
             self.assertFalse(studio.h3_attention_capabilities({name: object()})["sage_sol"])
-        self.assertEqual(studio.h3_attention_capabilities({name: object() for name in
-                         ("ModelAttentionBackend", "PathchSageAttentionKJ", "SolAttnPatch")}),
+        self.assertEqual(studio.h3_attention_capabilities({
+                         "ModelAttentionBackend": Kitchen, "PathchSageAttentionKJ": object(), "SolAttnPatch": object()}),
                          {"native": True, "kitchen": True, "sage_sol": True})

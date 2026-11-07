@@ -54,12 +54,14 @@ export class RippleImageHandoff {
       const blob=await response.blob();check();
       const form=new FormData();form.append('image',blob,`ripple_frame_${anchor.frame}.png`);form.append('subfolder','zura_images/ripple');form.append('type','input');
       const upload=await o.api.fetchApi('/upload/image',{method:'POST',body:form});check();const image=await upload.json();check();if(!upload.ok||!image.name)throw Error(image.error||'Could not prepare the frame for editing.');
+      await o.imageArea?.flush();check();
       const previous={config:o.config(),selectedFile:o.items[o.selectedImage]?.file||null};
       this.request={id:crypto.randomUUID(),workspace,anchor,key,width:workspace.source.width,height:workspace.source.height,previous};
       if(!this.persist(this.request)){this.clear();throw Error('Browser storage is unavailable. Free storage before editing a tracked keyframe.');}
       const request=this.request;o.show('image');if(!o.models.length)await o.loadModels();this.check(request);
       await o.setImageOperation('edit',{useCanvas:false});this.check(request);
       o.editMainMissing=false;o.autoCanvasSuppressed=true;
+      o.imageArea?.reset();
       o.references=[{file:(image.subfolder?image.subfolder+'/':'')+image.name,filename:image.name,subfolder:image.subfolder||'',name:`Source frame ${anchor.frame}`,width:request.width,height:request.height}];
       o.$('shape').value='auto';o.$('width').value=request.width;o.$('height').value=request.height;
       o.$('prompt').value=workspace.$('prompt').value;o.selectedImage=-1;
@@ -106,6 +108,7 @@ export class RippleImageHandoff {
     const o=this.owner,c=request.previous.config;
     await o.setImageOperation(c.operation,{useCanvas:false});if(this.request!==request&&this.stored!==request)return;
     o.references=(c.references||[]).map(r=>({...r}));o.imageLoras=c.loras||[];o.editMainMissing=!!c.editMainMissing;o.autoCanvasSuppressed=!!c.autoCanvasSuppressed;
+    o.imageArea?.restore(c.edit_area||null);
     for(const id of ['model','shape','width','height','seed','prompt'])o.$(id).value=c[id]??'';o.$('random').checked=c.random;
     const previous=request.previous.selectedFile;
     o.selectedImage=previous?o.items.findIndex(item=>item.file?.filename===previous.filename&&(item.file?.subfolder||'')===(previous.subfolder||'')&&(item.file?.type||'output')===(previous.type||'output')):-1;

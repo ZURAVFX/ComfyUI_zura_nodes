@@ -131,4 +131,7 @@ def build_native_endpoint_graph(*, first, last=None, width, height, frames, prom
               'zura_hdr_archive': 'Package ACEScg EXR frames', 'save_preview': 'Save SDR viewing preview'}
     for key, title in titles.items():
         if key in g: g[key]['_meta'] = {'title': title}
+    if __package__:
+        from .attention import adapt_attention
+        return adapt_attention(g)
     return g

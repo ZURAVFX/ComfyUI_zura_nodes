@@ -110,4 +110,17 @@ function fixture({clearStorage=true}={}){
   const f=fixture(),write=localStorage.setItem;localStorage.setItem=()=>{throw Error('quota');};
   try{await f.handoff.edit(f.workspace,f.anchor);assert.equal(f.owner.mode,'ripple');assert.equal(f.handoff.request,null);assert.match(f.workspace.status,/storage/i);}finally{localStorage.setItem=write;}
 }
-console.log('Ripple image handoff preserves original frames, exact raster, shared prompts, refresh/reopen recovery and stale-result ownership.');
+// A local painted selection is flushed and saved before the temporary video
+// frame replaces Image 1, then restored on return without leaking onto that frame.
+{
+  const f=fixture(),originalConfig=f.owner.config;
+  const area={enabled:true,source_key:'old-ref.png',mask:{file:'masks/previous.png'},context:64,feather:16};
+  let current=area,flushed=0,resets=0,restored;
+  f.owner.config=()=>({...originalConfig(),edit_area:current});
+  f.owner.imageArea={async flush(){flushed++;},reset(){resets++;current=null;},restore(value){restored=value;current=value;}};
+  await f.handoff.edit(f.workspace,f.anchor);
+  assert.equal(flushed,1);assert.equal(resets,1);assert.equal(current,null);
+  assert.deepEqual(f.handoff.request.previous.config.edit_area,area);
+  await f.handoff.leave();assert.deepEqual(restored,area);
+}
+console.log('Ripple image handoff preserves original frames, exact raster, shared prompts, refresh/reopen recovery, edit-area isolation and stale-result ownership.');

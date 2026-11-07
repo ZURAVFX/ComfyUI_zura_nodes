@@ -307,6 +307,31 @@ CATALOG['targeted_auto'] = {
     'license_url': 'https://huggingface.co/Lightricks/LTX-2.5',
 }
 
+# Two-stage subtitle repair reuses the installed LTX 2.5 components; the
+# community IC-LoRA is small and its 2.3 filename is not a base checkpoint.
+_subtitle_base = [dict(item) for item in CATALOG['targeted']['files'] if item['folder'] != 'loras']
+_subtitle_upscaler = {'folder': 'latent_upscale_models',
+    'filename': 'ltx-2.5-latent-spatial-upscaler-x2-bf16-1.0.safetensors',
+    'repo': 'Lightricks/LTX-2.5', 'revision': '49b093a39c19169a8a81721dcc541e07e945232f',
+    'remote_path': 'latent_upscale_models/ltx-2.5-latent-spatial-upscaler-x2-bf16-1.0.safetensors',
+    'size_bytes': 995778752, 'sha256': 'eb5a71fe4068ee87ccdb1c3aa635e547ca76bd2d30ae20ae889f2c325c0677e8',
+    'gated': True, 'model_card': 'https://huggingface.co/Lightricks/LTX-2.5'}
+for _key, _name, _repo, _revision, _file, _size, _sha in (
+    ('subtitles', 'Subtitle removal · JoyFox', 'joyfox/LTX2.3-ICEdit-Insight',
+     '4e81eeb7b3d5addf773668b7c3911f0a30ee891d', 'ltx2.3-ic-subtitles-remove-general.safetensors',
+     327287384, 'b3d73d7bf737dcfeba6bfa310105532f8f34aa23a3f9e01cb9f873341b8ef88f'),
+    ('subtitles_zarxrax', 'Subtitle removal · Zarxrax', 'Zarxrax/removetext',
+     '0a750771f8542339ee74cb1f530213a4e49eb583', 'ltx23_removetext_v1.safetensors',
+     327287352, 'cf2e6860da6f514efb4fdc65af7e077fa6b002b920cd3e924d9b685e8c22e786'),
+):
+    CATALOG[_key] = {'name': _name, 'files': [dict(item) for item in _subtitle_base] + [dict(_subtitle_upscaler),
+        {'folder': 'loras', 'filename': _file, 'repo': _repo, 'revision': _revision,
+         'remote_path': _file, 'size_bytes': _size, 'sha256': _sha, 'gated': False,
+         'model_card': 'https://huggingface.co/'+_repo}],
+        'note': 'LTX 2.5 with a community subtitle adapter. No LTX 2.3 base model is needed.',
+        'license_url': 'https://huggingface.co/Lightricks/LTX-2.5'}
+del _subtitle_base, _subtitle_upscaler, _key, _name, _repo, _revision, _file, _size, _sha
+
 
 # Inpainting shares the LTX 2.5 base and encoders with repair, but uses the
 # official in/outpainting adapter instead of the removal-only Remova adapter.
@@ -362,7 +387,7 @@ def _safe_item(item):
     filename = item.get('filename', '')
     if not isinstance(filename, str) or not filename or Path(filename).name != filename or '/' in filename or '\\' in filename or filename in ('.', '..'):
         raise ValueError('Invalid model catalogue filename.')
-    if item.get('folder') not in {'diffusion_models', 'text_encoders', 'vae', 'loras', 'checkpoints', 'embeddings'}:
+    if item.get('folder') not in {'diffusion_models', 'text_encoders', 'vae', 'loras', 'checkpoints', 'embeddings', 'latent_upscale_models'}:
         raise ValueError('Invalid model catalogue category.')
     if not re.fullmatch(r'[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+', item.get('repo', '')) or not re.fullmatch(r'[0-9a-f]{40}', item.get('revision', '')):
         raise ValueError('Invalid pinned model repository.')

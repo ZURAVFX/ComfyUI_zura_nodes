@@ -1,3 +1,4 @@
+import {applyAvailableAttention} from './studio_attention.js';
 import {VIDEO_CANVAS_LIMITS} from './studio_resolution.js';
 // LTX 2.5 native endpoint conditioning, based on Lightricks' distilled recipe.
 // INT8 + convrot checkpoints are intended for ComfyUI. No cross-family LoRA.
@@ -25,7 +26,7 @@ export const LTX_FRAME_VIDEO_CAPABILITIES=Object.freeze({
     'LatentUpscaleModelLoader','LTXVLatentUpsampler','ImagePadForOutpaint','ImageCrop'],
 });
 const ref=(id,index=0)=>[id,index];
-export function buildLtxFrameVideoGraph(c){
+export function buildLtxFrameVideoGraph(c,info){
   if(!c.first?.file)throw new Error('Add a first frame. The last frame is optional.');
   if(!String(c.prompt||'').trim())throw new Error('Describe the video you want to generate.');
   const width=Number(c.width),height=Number(c.height),frames=Number(c.frames),steps=Number(c.steps??8),seed=Number(c.seed??42);
@@ -144,7 +145,7 @@ export function buildLtxFrameVideoGraph(c){
   if(!c.audioEnabled)node('decode_audio','LTXVAudioVAEDecode',{samples:ref(separated[0],1),audio_vae:ref('audio_vae')},'Decode generated soundtrack');
   node('video','CreateVideo',{images:videoImages,audio:ref(c.audioEnabled?'trim_audio':'decode_audio'),fps:24,bit_depth:8,color_space:'sRGB',codec:'none'});
   node('save','SaveVideo',{video:ref('video'),filename_prefix:'zura/first_last/ltx/result',format:'mp4','format.codec':'h264','format.codec.encoding':'auto'},'Save LTX video');
-  return g;
+  return applyAvailableAttention(g,info);
 }
 export const LTX_FRAME_VIDEO_FAST_NODES=Object.freeze(['LatentUpscaleModelLoader','LTXVLatentUpsampler','ImagePadForOutpaint','ImageCrop']);
 export const LTX_FRAME_VIDEO_TWO_STAGE_NODES=LTX_FRAME_VIDEO_FAST_NODES;
@@ -152,13 +153,12 @@ export function ltxFrameVideoAvailability(info={},config={}){
   const options=(node,key)=>{const field=info[node]?.input?.required?.[key];return field?.[0]==='COMBO'?field[1]?.options||[]:Array.isArray(field?.[0])?field[0]:[];};
   const missing=[];
   const stageMode=config.fast===true||config.twoStage===true,optionalNodes=new Set(LTX_FRAME_VIDEO_FAST_NODES);
-  for(const node of LTX_FRAME_VIDEO_CAPABILITIES.nodeTypes)if((stageMode||!optionalNodes.has(node))&&!info[node])missing.push(node);
+  for(const node of LTX_FRAME_VIDEO_CAPABILITIES.nodeTypes)if(node!=='ModelAttentionBackend'&&(stageMode||!optionalNodes.has(node))&&!info[node])missing.push(node);
   for(const [node,key,file] of [['UNETLoader','unet_name',LTX_FRAME_VIDEO_MODELS.model],['CLIPLoader','clip_name',LTX_FRAME_VIDEO_MODELS.text],['VAELoader','vae_name',LTX_FRAME_VIDEO_MODELS.videoVae],['VAELoader','vae_name',LTX_FRAME_VIDEO_MODELS.audioVae]])if(!options(node,key).includes(file))missing.push(file);
   if(stageMode){
     for(const node of LTX_FRAME_VIDEO_FAST_NODES)if(!info[node])missing.push(node);
     if(info.LatentUpscaleModelLoader&&!options('LatentUpscaleModelLoader','model_name').includes(LTX_FRAME_VIDEO_MODELS.latentUpscaler))missing.push(LTX_FRAME_VIDEO_MODELS.latentUpscaler);
   }
-  if(info.ModelAttentionBackend&&!options('ModelAttentionBackend','attention').includes('comfy kitchen attention'))missing.push('Comfy Kitchen attention');
   if(info.KSamplerSelect&&!options('KSamplerSelect','sampler_name').includes('euler_ancestral'))missing.push('Euler ancestral sampler');
   if(config.twoStage===true&&info.KSamplerSelect&&!options('KSamplerSelect','sampler_name').includes('euler'))missing.push('Euler refinement sampler');
   return {ready:missing.length===0,missing:[...new Set(missing)]};

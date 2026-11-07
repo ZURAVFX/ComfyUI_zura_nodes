@@ -1,0 +1,30 @@
+import assert from 'node:assert/strict';
+import {buildSubtitleGraph,subtitleValidation,subtitleAvailability,SUBTITLE_MODELS} from '../web/paintout_studio/subtitle_recipes.js';
+import {PAINTOUT_MODELS} from '../web/paintout_studio/watermark_recipes.js';
+import {buildWatermarkWorkspaceGraph} from '../web/paintout_studio/watermark_workspace.js';
+
+const config={source:'C:/shot.mp4',maskProject:'project',maskRevision:2,maskCoverage:Array.from({length:27},(_,i)=>i+4),startFrame:4,frameCount:27,sequenceFps:30000/1001,sourceColour:'srgb_display',processingSpace:'SDR (sRGB)',colourPipeline:'sdr_sdr',width:1920,height:1088,sourceWidth:1920,sourceHeight:1080,processingScale:.75,maskBlockSize:0,outputMode:'SDR video',seed:42,savePrefix:'ZURA STUDIO/subtitles',exrPrecision:'float32'};
+assert.equal(subtitleValidation(config),'');
+const graph=buildSubtitleGraph(config);
+assert.equal(graph.model.inputs.unet_name,PAINTOUT_MODELS.model);
+assert.equal(graph.lora.inputs.lora_name,SUBTITLE_MODELS.zarxrax.file);assert.equal(graph.lora.inputs.strength_model,1.5);
+assert.equal(graph.source.class_type,'ZuraPaintoutEditorCrop');assert.equal(graph.source.inputs.max_crop_side,4096);
+assert.equal(graph.source.inputs.processing_scale,.75);assert.equal(graph.prepare.class_type,'ZuraSubtitlePrepareCrop');
+assert.deepEqual(graph.guide.inputs.image,['prepare',1]);assert.deepEqual(graph.guide2.inputs.image,['take',0]);
+assert.ok(!Object.values(graph).some(node=>node.class_type==='LTXVInpaintPreprocess'),'The paint selects only the crop; the entire crop goes to the model');
+assert.equal(graph.sample.class_type,'SamplerCustomAdvanced');assert.equal(graph.sample2.class_type,'SamplerCustomAdvanced');
+assert.equal(graph.upscale_model.inputs.model_name,SUBTITLE_MODELS.upscaler);
+assert.deepEqual(graph.save.inputs.plate,['prepare',0]);assert.equal(graph.save.inputs.match_context,false);
+assert.equal(graph.audio_source.class_type,'ZuraSubtitleSourceAudio');assert.equal(graph.audio_ref.class_type,'LTXVSetAudioRefTokens');
+for(const entry of Object.values(graph))for(const value of Object.values(entry.inputs))if(Array.isArray(value))assert.ok(graph[value[0]],`Missing node ${value[0]}`);
+assert.match(graph.positive.inputs.text,/^removetext /);
+const alternate=buildSubtitleGraph({...config,subtitleVariant:'joyfox'});
+assert.equal(alternate.lora.inputs.lora_name,SUBTITLE_MODELS.joyfox.file);assert.equal(alternate.lora.inputs.strength_model,1.2);assert.doesNotMatch(alternate.positive.inputs.text,/^removetext /);
+for(const repair of [false,true]){const selected=buildWatermarkWorkspaceGraph({...config,removalMethod:'subtitles'},undefined,{repair});assert.equal(selected.lora.inputs.lora_name,SUBTITLE_MODELS.zarxrax.file);assert.equal(selected.guide.class_type,'LTXAddVideoICLoRAGuide');assert.ok(!selected.inpaint_preprocess);}
+assert.match(subtitleValidation({...config,maskProject:null,maskRevision:null}),/mask/i);
+assert.match(subtitleValidation({...config,colourPipeline:'hdr_hdr',processingSpace:'HDR (ACEScct)',sourceColour:'hlg_rec2020',outputMode:'HLG video'}),/SDR/);
+const info={ZuraPaintoutCrop:{input:{required:{}}}};for(const entry of Object.values(graph))info[entry.class_type]??={input:{required:{}}};
+for(const [type,key,files] of [['UNETLoader','unet_name',[PAINTOUT_MODELS.model]],['CLIPLoader','clip_name',[PAINTOUT_MODELS.text]],['VAELoader','vae_name',[PAINTOUT_MODELS.videoVae,PAINTOUT_MODELS.audioVae]],['LTXICLoRALoaderModelOnly','lora_name',[SUBTITLE_MODELS.joyfox.file,SUBTITLE_MODELS.zarxrax.file]],['LatentUpscaleModelLoader','model_name',[SUBTITLE_MODELS.upscaler]]])info[type].input.required[key]=[files];
+assert.equal(subtitleAvailability(info,{source:'',mask:'',removalMethod:'subtitles'}).ready,true);
+delete info.ZuraSubtitlePrepareCrop;assert.ok(subtitleAvailability(info).missing.includes('ZuraSubtitlePrepareCrop'));
+console.log('Subtitle crop workflow, 2.5 assets, both adapters, original audio guidance and dependency validation pass.');

@@ -1,3 +1,4 @@
+import {applyAvailableAttention} from './studio_attention.js';
 import {VIDEO_CANVAS_LIMITS} from './studio_resolution.js';
 // Native Wan 2.2 I2V endpoint recipe: matched high/low models and Lightx2v
 // adapters, four Euler/simple steps split 2 + 2, CFG 1 and shift 5.
@@ -28,7 +29,7 @@ export function wanFrameVideoDimensions(c){
   if(width*height>cap.maxPixels)throw new Error('Choose a canvas up to 8.39 MP. This is the Studio canvas limit, not a model limit.');
   return {width,height};
 }
-export function buildWanFrameVideoGraph(c){
+export function buildWanFrameVideoGraph(c,info){
   if(!c.first?.file)throw new Error('Add a first frame to begin. The last frame is optional.');
   if(!String(c.prompt||'').trim())throw new Error('Describe the video you want to generate.');
   if(c.audioEnabled)throw new Error('Wan 2.2 does not use audio references. Switch Audio reference off or choose H3 or LTX.');
@@ -68,18 +69,17 @@ export function buildWanFrameVideoGraph(c){
   else node('decode','VAEDecode',decodeInputs,'Decode Wan video');
   node('video','CreateVideo',{images:ref('decode'),fps:cap.fps,bit_depth:8,color_space:'sRGB',codec:'none'},'Assemble silent video');
   node('save','SaveVideo',{video:ref('video'),filename_prefix:'zura/first_last/wan',format:'mp4','format.codec':'h264','format.codec.encoding':'auto'},'Save Wan video');
-  return g;
+  return applyAvailableAttention(g,info);
 }
 export function wanFrameVideoAvailability(info,c={}){
   const options=(node,key)=>{const field=info[node]?.input?.required?.[key];return field?.[0]==='COMBO'?field[1]?.options||[]:Array.isArray(field?.[0])?field[0]:[];};
   const missing=[];
-  for(const node of [...WAN_FRAME_VIDEO_CAPABILITIES.nodeTypes,...(c.lowMemoryDecode?['VAEDecodeTiled']:[])])if(!info[node])missing.push(node);
+  for(const node of [...WAN_FRAME_VIDEO_CAPABILITIES.nodeTypes,...(c.lowMemoryDecode?['VAEDecodeTiled']:[])])if(node!=='ModelAttentionBackend'&&!info[node])missing.push(node);
   for(const [node,key,files] of [
     ['UNETLoader','unet_name',[WAN_FRAME_VIDEO_MODELS.high,WAN_FRAME_VIDEO_MODELS.low]],
     ['CLIPLoader','clip_name',[WAN_FRAME_VIDEO_MODELS.text]],['VAELoader','vae_name',[WAN_FRAME_VIDEO_MODELS.vae]],
     ['LoraLoaderModelOnly','lora_name',[WAN_FRAME_VIDEO_MODELS.highLora,WAN_FRAME_VIDEO_MODELS.lowLora]],
   ])for(const file of files)if(!options(node,key).includes(file))missing.push(file);
-  if(info.ModelAttentionBackend&&!options('ModelAttentionBackend','attention').includes(c.attention||WAN_FRAME_VIDEO_CAPABILITIES.attention))missing.push('Comfy Kitchen attention');
   if(info.UNETLoader&&c.fastFp8!==false&&!options('UNETLoader','weight_dtype').includes('fp8_e4m3fn_fast'))missing.push('Fast FP8 model loading');
   return {ready:!missing.length,missing:[...new Set(missing)]};
 }

@@ -71,8 +71,9 @@ def canonical(value):
 
 def h3_attention_capabilities(node_mappings):
     """Optional sampling patches never determine baseline H3 readiness."""
+    from .attention import available_attention
     return {"native": True,
-            "kitchen": "ModelAttentionBackend" in node_mappings,
+            "kitchen": available_attention(node_mappings) == "comfy kitchen attention",
             "sage_sol": all(name in node_mappings for name in
                             ("PathchSageAttentionKJ", "SolAttnPatch"))}
 

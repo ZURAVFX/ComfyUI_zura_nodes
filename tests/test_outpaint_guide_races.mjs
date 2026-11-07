@@ -62,9 +62,13 @@ const blob=new Blob(['input'],{type:'image/png'});
 // The selected pre-existing image follows its file identity when a new guide is prepended.
 {
   const guide=makeGuide(),old={filename:'old.png',subfolder:'images',type:'output'};
-  const c={operation:'edit',references:[],loras:[],model:'m',shape:'auto',width:640,height:640,seed:1,prompt:'',random:false};
+  const area={enabled:true,source_key:'images/main.png',mask:{file:'masks/selection.png'}};
+  let restored;
+  owner.imageArea={restore:value=>{restored=value;}};
+  const c={operation:'edit',references:[],loras:[],model:'m',shape:'auto',width:640,height:640,seed:1,prompt:'',random:false,edit_area:area};
   guide.request={id:'request'};guide.previous={config:c,selectedFile:old};owner.items=[{file:{filename:'new-guide.png'}},{file:old}];
   await guide.leave();assert.equal(owner.selectedImage,1);assert.equal(owner.mode,'outpaint');
+  assert.deepEqual(restored,area,'Returning from a guide restores the original image selection');
   guide.previous={config:c,selectedFile:old};owner.items=[{file:{filename:'new-guide.png'}}];
   await guide.leave();assert.equal(owner.selectedImage,-1,'A removed previous image must not select an unrelated result');
 }

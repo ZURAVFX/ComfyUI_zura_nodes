@@ -1,4 +1,5 @@
 // Local recipes and the existing Zura browser-account image nodes.
+import {applyImageEditArea} from './studio_image_area_graph.js';
 export const IMAGE_MODELS = [
   {id:"flux2",maxReferences:4,name:"FLUX.2 Klein 9B",hint:"Detailed images with optional visual references",model:"flux-2-klein-9b-fp8.safetensors",text:"qwen_3_8b_fp4mixed.safetensors",vae:"flux2-vae.safetensors",type:"flux2",steps:4,latent:"EmptyFlux2LatentImage",url:"https://huggingface.co/black-forest-labs/FLUX.2-klein-9B"},
   {id:"flux2bf16",maxReferences:4,name:"FLUX.2 Klein 9B · BF16 test",hint:"Full-precision diffusion weights for comparison. Shares the installed FP4 text encoder and VAE with the FP8 option; slower and may offload on 16 GB GPUs.",model:"flux-2-klein-9b.safetensors",text:"qwen_3_8b_fp4mixed.safetensors",vae:"flux2-vae.safetensors",type:"flux2",steps:4,latent:"EmptyFlux2LatentImage",url:"https://huggingface.co/black-forest-labs/FLUX.2-klein-9B"},
@@ -25,7 +26,7 @@ export function imageDimensions({model,shape="square",width,height,references=[]
   const step=IMAGE_MODELS.find(m=>m.id===model)?.sizeStep||16;
   return size.map(v=>Math.round(v/step)*step);
 }
-export function buildImageGraph({model="flux3",prompt,shape="square",seed=42,width,height,references=[],loras=[]}={}){
+function buildImageGraphBase({model="flux3",prompt,shape="square",seed=42,width,height,references=[],loras=[]}={}){
   const recipe=IMAGE_MODELS.find(m=>m.id===model);
   if(!recipe || !IMAGE_SIZES[shape])throw new Error("Choose an available model and image shape.");
   if(typeof prompt!=="string" || !prompt.trim())throw new Error("Describe the image you want to create.");
@@ -133,6 +134,14 @@ export function buildImageGraph({model="flux3",prompt,shape="square",seed=42,wid
   const image=node("decode","VAEDecode","Decode image",{samples,vae});
   node("save","SaveImage","Save to Zura images",{images:image,filename_prefix:"zura_images/"+model});
   return graph;
+}
+export function buildImageGraph(config={}){
+  const graph=buildImageGraphBase(config);
+  if(!config.edit_area?.enabled)return graph;
+  const model=config.model||'flux3',shape=config.shape||'square';
+  const recipe=IMAGE_MODELS.find(item=>item.id===model);
+  const [width,height]=imageDimensions({...config,model,shape});
+  return applyImageEditArea(graph,{...config,recipe,shape,width,height,references:config.references||[]});
 }
 export function imageAvailability(info){
   const files=(type,key)=>{const field=info[type]?.input?.required?.[key];return field?.[0]==="COMBO"?field[1]?.options||[]:Array.isArray(field?.[0])?field[0]:[];};

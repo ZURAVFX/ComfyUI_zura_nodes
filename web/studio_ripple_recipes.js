@@ -1,3 +1,4 @@
+import {applyAvailableAttention} from './studio_attention.js';
 // Dedicated Ripple workspace recipes. Keep the artist's source timeline intact;
 // model padding and full-resolution delivery happen inside the native nodes.
 import {buildRippleGraph, rippleAvailability, rippleValidation} from './paintout_studio/ripple_recipes.js';
@@ -12,7 +13,7 @@ export const H3_RIPPLE_FILES = Object.freeze({
 export const RIPPLE_STUDIO_PACKAGES=Object.freeze({h3:'h3_ripple',ltx:'ltx_ripple'});
 export const H3_RIPPLE_PROMPT='Edit propagation: each edited frame shows exactly how that moment of the video should look after the edit. Apply the same changes to every frame of the clip, before, between and after the edited frames, so the edit stays consistent through the whole video. Keep the guide video\'s motion, timing, camera movement, composition and all unedited content unchanged.';
 
-const H3_NODES=['ZuraPaintoutFullFrame','ZuraPaintoutAnchors','ZuraRippleH3Guide','ZuraPaintoutUncrop','UNETLoader','LoraLoaderModelOnly','ModelAttentionBackend','CLIPLoader','VAELoader','WN_RippleApply','RandomNoise','KSamplerSelect','BasicScheduler','BasicGuider','SamplerCustomAdvanced','VAEDecode'];
+const H3_NODES=['ZuraPaintoutFullFrame','ZuraPaintoutAnchors','ZuraRippleH3Guide','ZuraPaintoutUncrop','UNETLoader','LoraLoaderModelOnly','CLIPLoader','VAELoader','WN_RippleApply','RandomNoise','KSamplerSelect','BasicScheduler','BasicGuider','SamplerCustomAdvanced','VAEDecode'];
 const H3_FILES=[['UNETLoader','unet_name',H3_RIPPLE_FILES.model],['LoraLoaderModelOnly','lora_name',H3_RIPPLE_FILES.flex],['LoraLoaderModelOnly','lora_name',H3_RIPPLE_FILES.ripple],['CLIPLoader','clip_name',H3_RIPPLE_FILES.text],['VAELoader','vae_name',H3_RIPPLE_FILES.vae]];
 const basename=value=>String(value).replaceAll('\\','/').split('/').pop().toLowerCase();
 const choices=(info,node,key)=>{const f=info?.[node]?.input?.required?.[key]||info?.[node]?.input?.optional?.[key];return Array.isArray(f?.[0])?f[0]:f?.[0]==='COMBO'?f[1]?.options||[]:[];};
@@ -90,5 +91,5 @@ export function buildRippleStudioGraph(c,info={}){
   n('sample','SamplerCustomAdvanced',{noise:r('noise'),guider:r('guider'),sampler:r('sampler'),sigmas:r('sigmas'),latent_image:r('apply',1)},'Propagating edits through the clip');
   n('decode','VAEDecode',{samples:r('sample'),vae:r('video_vae')},'Decoding the video');
   n('save','ZuraPaintoutUncrop',{decoded_crop:r('decode'),plate:r('source',2),output_name:c.savePrefix||'ZURA STUDIO/ripple',precision:'float32',match_context:false,export_format:'SDR video',motion_preview:true},'Restoring source size, frame rate and audio');
-  return graph;
+  return applyAvailableAttention(graph,info);
 }

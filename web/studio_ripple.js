@@ -8,17 +8,38 @@ const clamp=(value,min,max)=>Math.max(min,Math.min(max,value));
 const frameNumber=value=>Number.isFinite(Number(value))?Math.round(Number(value)):0;
 const formatRate=rate=>Number(Number(rate||0).toFixed(3)).toString();
 const nextId=()=>globalThis.crypto?.randomUUID?.()||`${Date.now()}-${Math.random().toString(36).slice(2)}`;
-const initial=()=>({engine:'h3',scale:1,startFrame:0,frameCount:0,playhead:0,prompt:'',sourceColour:'auto',anchors:{h3:[],ltx:[]},project:null});
+const initial=()=>({engine:'h3',scale:1,startFrame:0,frameCount:0,playhead:0,prompt:'',sourceColour:'auto',anchors:[],project:null});
 function readState(){try{const saved=JSON.parse(localStorage.getItem(STATE_KEY));return saved&&typeof saved==='object'?saved:{};}catch{return {};}}
+
+/** Merge earlier per-model keyframes without losing different edits on one frame. */
+function sharedAnchors(saved,engine){
+  if(Array.isArray(saved))return saved;
+  const groups=saved&&typeof saved==='object'?saved:{},other=engine==='ltx'?'h3':'ltx';
+  const result=[],ids=new Set();
+  for(const name of [engine,other])for(const value of Array.isArray(groups[name])?groups[name]:[]){
+    if(!value||typeof value!=='object')continue;
+    const same=result.find(a=>JSON.stringify(a)===JSON.stringify(value));
+    if(same)continue;
+    const anchor={...value};if(!anchor.id||ids.has(String(anchor.id)))anchor.id=nextId();
+    ids.add(String(anchor.id));result.push(anchor);
+  }
+  // Old model lists could each contain a different edit for the same frame.
+  // Keep both cards and use one at a time; selecting the other switches it on.
+  for(const anchor of result){
+    const variants=result.filter(other=>Number(other.frame)===Number(anchor.frame));
+    if(variants.length>1){anchor.legacyVariant=true;anchor.enabled=variants.find(a=>a.enabled!==false)===anchor;}
+  }
+  return result.sort((a,b)=>Number(a.frame)-Number(b.frame));
+}
 
 /** Dedicated timeline for edited frames. Inference stays in the supplied native graph. */
 export class RippleWorkspace {
   constructor(owner){
     this.owner=owner;this.api=owner.api;this.root=owner.root;this.app=owner.app;this.closed=true;
-    const saved=readState();this.state={...initial(),...saved,anchors:{h3:[],ltx:[],...(saved.anchors||{})}};
+    const saved=readState();this.state={...initial(),...saved};
     if(!['h3','ltx'].includes(this.state.engine))this.state.engine='h3';
     if(![1,.75,.5,.25].includes(Number(this.state.scale)))this.state.scale=1;
-    for(const engine of ['h3','ltx'])if(!Array.isArray(this.state.anchors[engine]))this.state.anchors[engine]=[];
+    this.state.anchors=sharedAnchors(saved.anchors,this.state.engine);
     this.source=null;this.sourceInfo=null;this.selectedId=saved.selectedId||null;this.job=saved.job||null;this.pendingSubmission=saved.pendingSubmission||null;this.result=saved.result||null;
     this.revision=0;this.submitting=false;this.importing=false;this.exporting=false;this.picking=false;this.modelInfo=null;this.availability=null;
     const doc=this.root.ownerDocument;
@@ -26,12 +47,12 @@ export class RippleWorkspace {
     this.page=doc.createElement('section');this.page.className='zru-page';this.page.hidden=true;
     this.page.innerHTML=`<header class="zru-heading"><div><h2>Ripple edit</h2></div><button type="button" data-view-result hidden>View result</button></header>
       <div class="zru-viewer" aria-label="Video preview"><video data-video controls playsinline preload="metadata" hidden></video><div data-frame-preview role="img" aria-label="Selected source frame" hidden></div><div data-empty class="zru-empty"><strong>Edit a video with Ripple</strong><span>Add a clip, then place edited frames along its timeline.</span></div></div>
-      <div data-progress class="zru-progress" role="status" aria-live="polite" hidden><div><strong data-progress-title>Preparing</strong><button type="button" data-cancel>Cancel run</button></div><progress data-bar max="100" aria-label="Ripple generation progress"></progress><span data-progress-detail></span></div>
-      <div class="zru-composer zc-prompt-card"><div class="zru-attachments"><button type="button" class="zc-attachment" data-source>Add video</button><input data-source-file type="file" accept="video/*,.mov,.mkv,.mxf,.avi" hidden/><span data-source-meta></span><button type="button" class="zru-clear-source" data-clear-source aria-label="Remove source video" title="Remove source video" hidden>×</button></div>
-        <div data-timeline class="zru-timeline" hidden><div class="zru-time-row"><label for="zru-frame">Frame</label><input id="zru-frame" data-frame type="text" inputmode="numeric" aria-label="Current source frame"/><span data-frame-total></span><details class="zc-tool-popup zru-trim"><summary>Trim clip <span data-trim-label></span></summary><div class="zc-tool-panel"><div data-trimmer></div><button type="button" data-full-clip>Use full clip</button></div></details></div>
-          <div data-visual-timeline></div>
+      <div data-timeline class="zru-timeline" hidden><div data-visual-timeline></div>
+          <div class="zru-time-row"><label for="zru-frame">Frame</label><input id="zru-frame" data-frame type="text" inputmode="numeric" aria-label="Current source frame"/><span data-frame-total></span><details class="zc-tool-popup zru-trim"><summary>Trim clip <span data-trim-label></span></summary><div class="zc-tool-panel"><div data-trimmer></div><button type="button" data-full-clip>Use full clip</button></div></details></div>
           <div data-anchor-editor class="zru-anchor-editor" hidden><div class="zru-anchor-name"><strong data-anchor-label></strong><span data-anchor-status></span></div><div class="zru-anchor-actions"><button type="button" data-edit>Edit image</button><button type="button" data-export>Save frame</button><button type="button" data-import>Import edit</button><button type="button" data-compare hidden>View edit</button><input data-import-file type="file" accept="image/png,image/tiff,.tif,.tiff,.exr" hidden/></div></div>
         </div>
+      <div data-progress class="zru-progress" role="status" aria-live="polite" hidden><div><strong data-progress-title>Preparing</strong><button type="button" data-cancel>Cancel run</button></div><progress data-bar max="100" aria-label="Ripple generation progress"></progress><span data-progress-detail></span></div>
+      <div class="zru-composer zc-prompt-card"><div class="zru-attachments"><button type="button" class="zc-attachment" data-source>Add video</button><input data-source-file type="file" accept="video/*,.mov,.mkv,.mxf,.avi" hidden/><span data-source-meta></span><button type="button" class="zru-clear-source" data-clear-source aria-label="Remove source video" title="Remove source video" hidden>×</button></div>
         <label class="zru-prompt-label" for="zru-prompt">Describe your edit</label><textarea id="zru-prompt" data-prompt rows="2" maxlength="12000" placeholder="Describe the change to carry through the video"></textarea>
         <div class="zc-prompt-bottom"><div class="zru-tools zc-prompt-tools"><label class="zc-tool zru-model"><span class="zru-model-icon" aria-hidden="true">◇</span><span class="zc-sr-only">Ripple model</span><select data-engine aria-label="Ripple model"><option value="h3">H3 · Ripple</option><option value="ltx">LTX 2.5 · Ripple</option></select></label><label class="zc-tool zru-size"><span class="zc-sr-only">Processing resolution</span><select data-scale aria-label="Processing resolution"><option value="1">Full resolution</option><option value="0.75">75% resolution</option><option value="0.5">50% resolution</option><option value="0.25">25% resolution</option></select></label><span data-processing-size class="zru-size-label"></span><details data-model-downloads class="zc-tool-popup gs-model-help" hidden></details></div><div class="zru-actions"><a data-download download hidden>Save video</a><button type="button" class="gs-primary" data-generate>Generate video</button></div></div>
         <p data-status class="zru-status" role="status" aria-live="polite"></p>
@@ -42,7 +63,7 @@ export class RippleWorkspace {
     this.$('prompt').value=this.state.prompt||'';this.$('engine').value=this.state.engine;this.$('scale').value=String(this.state.scale);
     this.modelDownloads=new StudioModelDownloads(this.$('model-downloads'),(path,body)=>this.fetch('/zura/studio'+path,body),()=>this.checkModels());this.modelDownloads.mountQuick(this.page.querySelector('.zru-composer'));
     this.$('source').onclick=()=>this.$('source-file').click();this.$('source-file').onchange=e=>{const file=e.target.files?.[0];e.target.value='';if(file)void this.uploadSource(file);};this.$('clear-source').onclick=()=>this.reset();
-    this.$('engine').onchange=()=>{if(this.busy())return;this.owner.rippleImage?.invalidate(this);if(this.viewingEdit)this.viewAnchor(false);this.state.engine=this.$('engine').value;this.selectedId=null;this.save();this.checkModels();this.render();};
+    this.$('engine').onchange=()=>{if(this.busy())return;this.owner.rippleImage?.invalidate(this);if(this.viewingEdit)this.viewAnchor(false);this.state.engine=this.$('engine').value;this.save();this.checkModels();this.render();};
     this.$('scale').onchange=()=>{if(this.busy())return;this.state.scale=Number(this.$('scale').value);this.save();this.render();};
     this.$('prompt').oninput=()=>{this.state.prompt=this.$('prompt').value;this.save();};
     this.$('frame').onfocus=e=>e.target.select();this.$('frame').onchange=e=>{const raw=e.target.value.trim(),n=Number(raw);if(!raw||!Number.isInteger(n)){this.message('Enter a whole frame number.');this.render();return;}this.seek(n);};
@@ -67,7 +88,7 @@ export class RippleWorkspace {
   colourSpace(){return this.state.sourceColour&&this.state.sourceColour!=='auto'?this.state.sourceColour:this.source?.resolved_colour||'rec709_oetf';}
   thumbnail(file,frame=0,space=this.colourSpace(),size=240){return this.url('/zura/paintout/frame-preview?'+new URLSearchParams({file,frame,space,size}));}
   busy(){return !!(this.job||this.pendingSubmission||this.submitting||this.importing||this.exporting||this.picking);}
-  anchors(){return this.state.anchors[this.state.engine];}
+  anchors(){return this.state.anchors;}
   selected(){return this.anchors().find(anchor=>String(anchor.id)===String(this.selectedId))||null;}
   message(text){this.$('status').textContent=text||'';}
   save(){try{localStorage.setItem(STATE_KEY,JSON.stringify({...this.state,selectedId:this.selectedId,job:this.job,pendingSubmission:this.pendingSubmission,result:this.result,sourcePath:this.source?.path||this.state.sourcePath||''}));return true;}catch{return false;}}
@@ -102,13 +123,14 @@ export class RippleWorkspace {
   updatePlayhead(){this.timeline?.setPlayhead(this.state.playhead);this.$('frame').value=String(this.state.playhead);this.trimmer?.setPlayhead(this.state.playhead/this.fps());}
   addAnchor(frame){
     if(!this.source||this.busy())return;frame=clamp(frameNumber(frame),0,this.source.frames-1);
-    if(this.state.engine==='ltx'&&frame!==this.state.startFrame){this.seek(frame);this.message('LTX uses the first selected frame. Trim the clip to choose a different starting frame.');return;}
+    const moved=this.state.engine==='ltx'&&frame!==this.state.startFrame;
+    if(moved)frame=this.state.startFrame;
     if(frame<this.state.startFrame||frame>=this.state.startFrame+this.state.frameCount){this.message('Choose a frame inside the selected clip.');return;}
-    let anchor=this.anchors().find(a=>a.frame===frame);if(!anchor){if(this.state.engine==='h3'&&this.anchors().filter(a=>a.frame>=this.state.startFrame&&a.frame<this.state.startFrame+this.state.frameCount).length>=16){this.message('H3 Ripple supports up to 16 keyframes in a clip.');return;}anchor={id:nextId(),frame,file:'',colour_space:'srgb_display',enabled:true};this.anchors().push(anchor);this.anchors().sort((a,b)=>a.frame-b.frame);}
-    this.selectedId=anchor.id;if(this.viewingEdit)this.viewAnchor(false);this.seek(frame);this.message('');this.save();this.render();
+    let anchor=this.anchors().find(a=>a.frame===frame&&a.enabled!==false)||this.anchors().find(a=>a.frame===frame);if(!anchor){if(this.state.engine==='h3'&&this.anchors().filter(a=>a.enabled!==false&&a.frame>=this.state.startFrame&&a.frame<this.state.startFrame+this.state.frameCount).length>=16){this.message('H3 Ripple supports up to 16 keyframes in a clip.');return;}anchor={id:nextId(),frame,file:'',colour_space:'srgb_display',enabled:true};this.anchors().push(anchor);this.anchors().sort((a,b)=>a.frame-b.frame);}
+    this.selectAnchor(anchor.id);if(moved)this.message(`LTX uses the first selected frame. Keyframe ${frame} is ready to edit.`);
   }
-  selectAnchor(id){if(this.busy())return;const anchor=this.anchors().find(a=>String(a.id)===String(id));if(!anchor)return;this.selectedId=anchor.id;if(this.viewingEdit)this.viewAnchor(false);this.seek(anchor.frame);this.message('');this.save();this.render();}
-  removeAnchor(){if(this.busy())return;const anchor=this.selected();if(!anchor)return;if(this.viewingEdit)this.viewAnchor(false);this.state.anchors[this.state.engine]=this.anchors().filter(a=>a!==anchor);this.selectedId=null;this.save();this.render();}
+  selectAnchor(id){if(this.busy())return;const anchor=this.anchors().find(a=>String(a.id)===String(id));if(!anchor)return;if(anchor.legacyVariant){for(const variant of this.anchors())if(variant.legacyVariant&&Number(variant.frame)===Number(anchor.frame))variant.enabled=variant===anchor;}this.selectedId=anchor.id;if(this.viewingEdit)this.viewAnchor(false);this.seek(anchor.frame);this.message('');this.save();this.render();}
+  removeAnchor(){if(this.busy())return;const anchor=this.selected();if(!anchor)return;if(this.viewingEdit)this.viewAnchor(false);this.state.anchors=this.anchors().filter(a=>a!==anchor);if(anchor.legacyVariant&&anchor.enabled!==false){const other=this.anchors().find(a=>a.legacyVariant&&Number(a.frame)===Number(anchor.frame));if(other)other.enabled=true;}this.selectedId=null;this.save();this.render();}
   setTrim(range){if(!this.source||this.busy())return;const fps=this.fps(),total=this.source.frames,start=clamp(Math.round(range.start*fps),0,total-1),end=clamp(Math.round((range.start+range.duration)*fps),start+1,total);this.state.startFrame=start;this.state.frameCount=end-start;this.seek(start);this.save();this.render();}
   fullClip(){if(!this.source||this.busy())return;this.state.startFrame=0;this.state.frameCount=this.source.frames;this.seek(0);this.save();this.render();}
   async prepareAnchor(anchor){
@@ -167,7 +189,7 @@ export class RippleWorkspace {
     if(this.sourceColourControl){this.sourceColourControl.hidden=!has||!!this.source.resolved_colour;this.$('source-colour').value=this.state.sourceColour==='auto'?'rec709_oetf':this.state.sourceColour;this.$('source-colour').disabled=busy;}
     this.$('frame-total').textContent=has?`of ${frames-1}`:'';this.updatePlayhead();
     this.$('trim-label').textContent=has?`${(this.state.frameCount/this.fps()).toFixed(2).replace(/\.?0+$/,'')}s`:'';
-    this.$('anchor-editor').hidden=!anchor;this.$('anchor-label').textContent=anchor?`Frame ${anchor.frame}`:'';this.$('anchor-status').textContent=anchor?(anchor.file?'Edited image ready':'Add an edited image'):'';this.$('compare').hidden=!anchor?.file;this.$('compare').textContent=this.viewingEdit?'View original':'View edit';
+    this.$('anchor-editor').hidden=!anchor;this.$('anchor-label').textContent=anchor?`Frame ${anchor.frame}`:'';this.$('anchor-status').textContent=anchor?(this.state.engine==='ltx'&&anchor.frame!==start?`Saved for H3 · LTX uses frame ${start}`:anchor.file?'Edited image ready':'Add an edited image'):'';this.$('compare').hidden=!anchor?.file;this.$('compare').textContent=this.viewingEdit?'View original':'View edit';
     this.timeline.update({startFrame:start,frameCount:this.state.frameCount||1,totalFrames:frames||1,fps:this.fps(),playhead:this.state.playhead,anchors:this.anchors().map(a=>({...a,status:a.file?'accepted':'draft'})),selected:this.anchors().indexOf(anchor),stage:'clean',busy,thumbnail:a=>a.file?this.thumbnail(a.file,0,a.colour_space||'srgb_display'):this.thumbnail(this.source?.path,a.frame)});
     for(const name of ['source','clear-source','engine','scale','frame','scrub','add-on-track','edit','export','import','compare','full-clip'])this.$(name).disabled=busy||(!has&&!['source','engine','scale'].includes(name));
     this.$('generate').disabled=busy||!has;this.$('cancel').disabled=!this.job&&!this.pendingSubmission&&!this.uploadController;this.$('download').hidden=!this.result?.file;this.$('view-result').hidden=!this.result?.file;this.$('view-result').textContent=this.video.dataset.kind==='result'?'View source':'View result';

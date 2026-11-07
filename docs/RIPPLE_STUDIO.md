@@ -1,6 +1,6 @@
 # Ripple editing
 
-Choose **Video → Ripple editing**, add footage and click above its filmstrip to
+Choose **Video → Ripple editing**, add footage and double-click its filmstrip or click above it to
 add an edited keyframe. The timeline reuses Paintout's thumbnail cards: each card
 shows its original frame until an edited image is attached. Click a card to edit
 it, drag the In/Out handles to trim, and zoom the timeline to separate nearby
@@ -15,8 +15,14 @@ the original footage rather than a previous generated image.
 
 - **H3 Ripple:** up to 16 edited frames anywhere inside the selected clip.
 - **LTX 2.5 Ripple:** one edited image at the first frame of the selected clip.
-  Trim the clip to choose a different starting frame. Each model keeps its own
-  keyframes when switching, so switching models does not erase edits.
+  Trim the clip to choose a different starting frame. The timeline and its edits
+  are shared when switching models. Other keyframes remain available for H3;
+  LTX uses only the frame at the start of the current trim. Adding a keyframe
+  while LTX is selected takes you to that frame.
+
+If a project saved under an earlier version has different H3 and LTX edits at
+the same frame, both remain on the timeline. Select a card to choose which edit
+is active for that frame.
 
 Full, 75%, 50% and 25% processing sizes affect only the AI working raster.
 Dimensions round up independently to the model grid: 32 pixels for H3, 64 for

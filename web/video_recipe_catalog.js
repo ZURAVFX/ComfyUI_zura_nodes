@@ -8,7 +8,7 @@ const h3={id:'h3',label:'MiniMax H3',fps:24,dimensionStep:32,...VIDEO_CANVAS_LIM
   supportsAudioReference:true,generatesAudio:true,precision:'INT8',
   nodeTypes:['UNETLoader','CLIPLoader','VAELoader','LoraLoaderModelOnly','ModelAttentionBackend','MiniMaxH3ImageToVideo','MiniMaxH3AddGuide','LoadAudio','LoadImage','ImageScale','BasicGuider','BasicScheduler','KSamplerSelect','RandomNoise','SamplerCustomAdvanced','VAEDecode','VAEDecodeAudio','CreateVideo','SaveVideo']};
 export const ENDPOINT_RECIPES=[
-  {...h3,build:buildFrameVideoGraph,availability:frameVideoAvailability,hint:'INT8 · Turbo 8-step · Kitchen attention'},
+  {...h3,build:buildFrameVideoGraph,availability:frameVideoAvailability,hint:'INT8 · Turbo 8-step'},
   {...WAN_FRAME_VIDEO_CAPABILITIES,build:buildWanFrameVideoGraph,availability:wanFrameVideoAvailability,hint:'FP8 · Lightx2v 4-step · Silent video'},
   {...LTX_FRAME_VIDEO_CAPABILITIES,build:buildLtxFrameVideoGraph,availability:ltxFrameVideoAvailability,hint:'INT8 · Distilled 8-step · Native audio'},
 ];
