@@ -1,0 +1,17 @@
+/* Edited anchor inspection stays separate from the video playhead and editor. */
+#genj-studio .zru-anchor-preview{box-sizing:border-box;position:fixed;inset:0;width:min(1280px,calc(100vw - 48px));height:min(960px,calc(100dvh - 48px));max-width:none;max-height:none;margin:auto;padding:0;overflow:hidden;border:0;border-radius:12px;background:var(--zc-canvas,#111);color:var(--zc-text,#eee);box-shadow:0 24px 90px var(--gs-overlay-shadow,rgba(0,0,0,.55))}
+#genj-studio .zru-anchor-preview:not([open]){display:none}
+#genj-studio .zru-anchor-preview[open]{display:grid;grid-template-rows:auto minmax(0,1fr);animation:zru-preview-enter 260ms both}
+#genj-studio .zru-anchor-preview::backdrop{background:var(--gs-modal-backdrop,rgba(0,0,0,.73))}
+#genj-studio .zru-anchor-preview__header{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:12px 16px;border-bottom:1px solid var(--gs-line,#343434)}
+#genj-studio .zru-anchor-preview__header strong{font:inherit;font-size:14px;font-weight:600;line-height:24px}
+#genj-studio .zru-anchor-preview__header button{display:grid;place-items:center;width:44px;height:44px;padding:0;border:1px solid var(--zc-control-line,#383838);border-radius:7px;background:transparent;color:inherit;font:24px/1 sans-serif;cursor:pointer}
+#genj-studio .zru-anchor-preview__header button:hover{background:var(--zc-control,#303030)}
+#genj-studio .zru-anchor-preview__header button:focus-visible{outline:2px solid var(--gs-accent,#caff00);outline-offset:3px}
+#genj-studio .zru-anchor-preview__stage{display:grid;place-items:center;min-width:0;min-height:0;padding:12px;overflow:hidden}
+#genj-studio .zru-anchor-preview__stage img{grid-area:1/1;display:block;width:100%;height:100%;min-width:0;min-height:0;object-fit:contain}
+#genj-studio .zru-anchor-preview__stage p{grid-area:1/1;max-width:36em;margin:0;padding:24px;color:var(--gs-muted,#aaa);font:inherit;font-size:14px;line-height:1.5;text-align:center}
+#genj-studio .zru-anchor-preview [hidden]{display:none!important}
+@keyframes zru-preview-enter{0%{opacity:0;transform:scale(.94)}72%{opacity:1;transform:scale(1.012)}100%{opacity:1;transform:scale(1)}}
+@media(max-width:600px){#genj-studio .zru-anchor-preview{width:calc(100vw - 16px);height:calc(100dvh - 16px);border-radius:9px}#genj-studio .zru-anchor-preview__header{padding:8px 12px}}
+@media(prefers-reduced-motion:reduce){#genj-studio .zru-anchor-preview[open]{animation:none}}

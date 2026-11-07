@@ -1,5 +1,6 @@
 /* Optional edit selection; keep Studio's preview and quiet composer intact. */
-#genj-studio .zc-image-tools>.zia-open[aria-pressed=true]{border-color:var(--gs-accent);color:var(--gs-accent)}
+#genj-studio .zia-open[aria-pressed=true]{border-color:var(--gs-accent);color:var(--gs-accent)}
+#genj-studio .zc-edit-main>.zia-open{flex:0 0 auto;white-space:nowrap}
 #genj-studio[data-workspace=image] .zc-image-scroll:has(>.zia-editor:not([hidden])){display:flex;flex-direction:column;flex:1 0 auto;min-height:calc(var(--zs-preview-min,256px) + 48px);overflow:visible}
 #genj-studio[data-workspace=image] .zc-image-scroll:has(>.zia-editor:not([hidden]))>.zc-image-heading{flex:none}
 #genj-studio .zia-editor{grid-row:2;grid-column:1;flex:1 0 auto;min-width:0;min-height:0;display:grid;grid-template-rows:minmax(var(--zs-preview-min,256px),1fr) auto auto;overflow:visible;background:var(--zc-canvas,#101013)}

@@ -59,6 +59,21 @@ for(const graph of [h3,g])for(const [id,node] of Object.entries(graph))for(const
 assert.equal(g.align.inputs.batch_index,1,'LTX still discards the prepended edited guide');
 assert.deepEqual(g.save.inputs.plate,['source',2]);
 assert.equal(JSON.parse(g.anchors.inputs.anchors)[0].colour_space,'srgb_display');
+const selectedReference={...ltx,startFrame:11,frameCount:34,anchors:[{id:'edit-18',frame:18,file:'edited-18.png',colour_space:'srgb_display'}]};
+const originalReference=structuredClone(selectedReference);
+assert.equal(rippleStudioValidation(selectedReference),'','LTX accepts one visual reference from inside the selected clip');
+const referenceGraph=buildRippleStudioGraph(selectedReference,info);
+assert.deepEqual(selectedReference,originalReference,'Building the guide must not rewrite the saved anchor or trim');
+assert.equal(referenceGraph.source.inputs.start_frame,11);
+assert.equal(referenceGraph.source.inputs.frame_count,34);
+assert.equal(referenceGraph.source.inputs.sequence_fps,30000/1001);
+assert.equal(referenceGraph.source.inputs.render_width,1984);
+assert.equal(referenceGraph.source.inputs.render_height,1088);
+assert.deepEqual(JSON.parse(referenceGraph.anchors.inputs.anchors).map(a=>[a.frame,a.file]),[[11,'edited-18.png']],'Only the internal prepended reference slot maps to the selected source start');
+assert.equal(referenceGraph.anchors._meta.source_reference_frame,18);
+assert.match(referenceGraph.anchors._meta.title,/source frame 18/);
+assert.equal(referenceGraph.align.inputs.batch_index,1,'Non-start references keep the same leading-guide removal');
+assert.deepEqual(referenceGraph.save.inputs.plate,['source',2],'Saving still restores the original selected source range');
 const cinema=buildRippleStudioGraph({...ltx,width:4096,height:2176},info);
 assert.equal(cinema.source.inputs.render_width,4096,'The dedicated workspace allows cinema 4K on a supported grid');
 assert.equal(cinema.source.inputs.render_height,2176);
@@ -67,7 +82,8 @@ for(const change of [
   {anchors:[{frame:10,file:'one.png'},{frame:10,file:'two.png'}]},
   {anchors:[{frame:20,file:''}]},{width:1953},{frameCount:994},{sequenceFps:0},
 ])assert.notEqual(rippleStudioValidation({...c,...change}),'');
-assert.match(rippleStudioValidation({...ltx,anchors:[{frame:11,file:'late.png'}]}),/start of the selected clip/);
-assert.match(rippleStudioValidation({...ltx,anchors:[...ltx.anchors,{frame:15,file:'another.png'}]}),/one edited frame/);
+assert.equal(rippleStudioValidation({...ltx,anchors:[{frame:11,file:'late.png'}]}),'');
+assert.match(rippleStudioValidation({...ltx,anchors:[...ltx.anchors,{frame:15,file:'another.png'}]}),/one visual reference/);
+assert.match(rippleStudioValidation({...selectedReference,anchors:[{frame:10,file:'outside.png'}]}),/inside the selected clip/);
 assert.match(rippleStudioValidation({...c,anchors:Array.from({length:17},(_,i)=>({frame:10+i,file:`${i}.png`}))}),/up to 16/);
-console.log('Ripple Studio recipes preserve source timing and extent, support ordered H3 anchors, and retain LTX first-frame guidance.');
+console.log('Ripple Studio recipes preserve source timing and extent, support ordered H3 anchors, and map one LTX visual reference without changing its saved identity.');

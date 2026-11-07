@@ -1,6 +1,6 @@
 # Painted image edits
 
-In **Image → Edit image**, add the main image, choose **Edit area**, and paint the part to change. Use the usual prompt and image model, including browser sign-in models. Extra reference images remain separate guides.
+In **Image → Edit image**, add the main image, choose **Paint edit area** beside **Main image** and **References**, and paint the part to change. The same control is available when editing a Ripple keyframe. Use the usual prompt and image model, including browser sign-in models. Extra reference images remain separate guides.
 
 The model receives a crop around the selection. **Blend → Surrounding context** controls how much of the surrounding scene it sees; **Edge softness** blends inward from the painted boundary. The saved result retains the original full-frame dimensions and original pixels outside the selection. **Whole image** returns to ordinary editing.
 

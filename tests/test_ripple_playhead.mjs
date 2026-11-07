@@ -38,11 +38,11 @@ ui.video.dataset.kind='source';ui.video.readyState=0;ui.seek(50);ui.video.curren
 ui.video.readyState=1;event('loadedmetadata');assert.equal(ui.video.currentTime,50.5/30,'Seek inside the requested frame after metadata so decoding cannot land one frame early');event('seeked');assert.equal(ui.state.playhead,50);
 ui.video.currentTime=51/30;event('seeked');assert.equal(ui.state.playhead,51,'A later native scrub can override the completed programmatic seek');
 ui.$('engine').value='ltx';ui.$('engine').onchange();
-assert.equal(ui.timeline.addFrame.querySelector('span').textContent,'Edit first frame · 18');
-const before=ui.anchors().length;ui.addAnchor(50);assert.equal(ui.anchors().length,before);assert.equal(ui.state.playhead,51);assert.match(ui.$('status').textContent,/LTX can only use frame 18/);
-ui.timeline.addFrame.click();assert.equal(ui.selected().frame,18,'Only the explicitly labelled first-frame action targets the trim start');
+assert.equal(ui.timeline.addFrame.querySelector('span').textContent,'Add keyframe');
+const before=ui.anchors().length;ui.addAnchor(50);assert.equal(ui.anchors().length,before);assert.equal(ui.state.playhead,50);assert.equal(ui.config().anchors[0].frame,50,'LTX retains the chosen source-frame identity as its visual reference');
+ui.video.currentTime=51.5/30;ui.timeline.addFrame.click();assert.equal(ui.selected().frame,51,'LTX Add also uses the actual playhead');
 ui.setSource({...info,fps:30000/1001});ui.video.currentTime=50/(30000/1001);event('pause');ui.timeline.addFrame.click();
-assert.equal(ui.state.playhead,0,'LTX explicitly edits frame0 even at fractional source rates');
+assert.equal(ui.state.playhead,50,'LTX also keeps the playhead frame at fractional source rates');
 ui.$('engine').value='h3';ui.$('engine').onchange();ui.seek(50);ui.video.currentTime=Math.floor(1e6*ui.video.currentTime)/1e6;event('pause');ui.timeline.addFrame.click();
 assert.equal(ui.selected().frame,50,'Seeking inside a frame prevents microsecond-rounded fractional-rate timestamps landing on frame49');
 ui.dispose();console.log('Ripple Add uses the displayed source frame across paused scrubs, playback, metadata loading and model limits.');

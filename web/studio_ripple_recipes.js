@@ -49,7 +49,7 @@ export function rippleStudioValidation(c={}){
   if(!['SDR video'].includes(c.outputMode||'SDR video'))return 'Choose SDR video for Ripple.';
   const anchors=anchorsOf(c);
   if(!anchors.length)return 'Add an edited frame on the timeline.';
-  if(c.engine==='ltx'&&(anchors.length!==1||Number(anchors[0].frame)!==c.startFrame))return 'LTX Ripple uses one edited frame at the start of the selected clip.';
+  if(c.engine==='ltx'&&anchors.length!==1)return 'LTX Ripple uses one visual reference. Select one edited frame.';
   if(c.engine==='h3'&&anchors.length>16)return 'H3 Ripple supports up to 16 edited frames.';
   if(anchors.some(a=>typeof a.file!=='string'||!a.file.trim()))return 'Add an image for every edited frame.';
   if(anchors.some(a=>!Number.isInteger(Number(a.frame))||Number(a.frame)<c.startFrame||Number(a.frame)>=c.startFrame+c.frameCount))return 'Place every edited frame inside the selected clip.';
@@ -63,14 +63,19 @@ export function buildRippleStudioGraph(c,info={}){
   const error=rippleStudioValidation(c);if(error)throw Error(error);
   const anchors=anchorsOf(c).sort((a,b)=>Number(a.frame)-Number(b.frame));
   if(c.engine==='ltx'){
-    // This published LoRA is first-frame-only. The existing author-approved
-    // path prepends that edit, holds the tail and discards the added lead.
-    const ltx={...c,savePrefix:c.savePrefix||'ZURA STUDIO/ripple',seed:c.seed??42,allowLargeWorkingRaster:true,anchors:anchors.map(a=>({...a,rippleReviewedFile:a.file}))};
+    // LTX receives one prepended visual reference, not a timed mid-clip anchor.
+    // Map only its internal guide slot to the clip start: keep the artist's
+    // source-frame identity and full selected range untouched in the config.
+    // The approved prepend/hold-tail/drop-leading-frame recipe stays intact.
+    const referenceFrame=Number(anchors[0].frame);
+    const ltx={...c,savePrefix:c.savePrefix||'ZURA STUDIO/ripple',seed:c.seed??42,allowLargeWorkingRaster:true,anchors:anchors.map(a=>({...a,frame:c.startFrame,rippleReviewedFile:a.file}))};
     const oldError=rippleValidation(ltx);if(oldError)throw Error(oldError);
     const graph=buildRippleGraph(ltx,info);
     graph.source.inputs.framing_mode='Full frame (stretch to working size)';
     graph.source.inputs.render_width=c.width;graph.source.inputs.render_height=c.height;
-    graph.anchors.inputs.anchors=JSON.stringify(anchors.map(a=>({file:a.file,frame:Number(a.frame),strength:1,enabled:true,colour_space:a.colour_space||'srgb_display'})));
+    graph.anchors.inputs.anchors=JSON.stringify(ltx.anchors.map(a=>({file:a.file,frame:a.frame,strength:1,enabled:true,colour_space:a.colour_space||'srgb_display'})));
+    graph.anchors._meta={...graph.anchors._meta,title:`Loading visual reference from source frame ${referenceFrame}`,source_reference_frame:referenceFrame};
+    graph.ripple_guide._meta={...graph.ripple_guide._meta,title:'Preparing the whole-clip visual reference'};
     return graph;
   }
   const graph={},r=(id,slot=0)=>[id,slot],n=(id,class_type,inputs,title)=>{graph[id]={class_type,inputs,_meta:{title}};return r(id);};

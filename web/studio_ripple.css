@@ -1,4 +1,5 @@
 @import url('./paintout_studio/paintout_editor.css');
+@import url('./studio_ripple_preview.css');
 /* Ripple keeps Studio's existing charcoal surfaces, lime selection and media-first layout.
    Craft guidance: Unslop by Damir Sokolovsky (@heydamir), CC BY 4.0. */
 .zru-page{box-sizing:border-box;display:flex;flex-direction:column;gap:12px;width:100%;max-width:1200px;margin:0 auto;padding:16px 0 32px;color:var(--zc-text,#eee)}

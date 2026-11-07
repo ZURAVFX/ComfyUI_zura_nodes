@@ -25,7 +25,7 @@ export class ImageEditArea {
     this.owner=owner;this.state=accepted(owner.draft?.edit_area);this.editing=false;this.dirty=false;this.preparing=false;this.closed=false;
     this.revision=0;this.viewerEpoch=0;this.upload=null;this.load=null;this.brushSize=96;
     const doc=owner.root.ownerDocument;
-    this.button=doc.createElement('button');this.button.type='button';this.button.className='zia-open';this.button.textContent='Edit area';
+    this.button=doc.createElement('button');this.button.type='button';this.button.className='zia-open zc-attachment';this.button.textContent='Paint edit area';
     this.button.setAttribute('aria-pressed','false');this.button.title='Optionally paint the part of the main image to edit';
     owner.root.querySelector('.zc-image-tools').prepend(this.button);this.button.addEventListener('click',()=>this.openEditor());
     this.host=doc.createElement('section');this.host.className='zia-editor';this.host.hidden=true;this.host.setAttribute('aria-label','Image edit area');
@@ -77,13 +77,18 @@ export class ImageEditArea {
   }
   disposeViewer(){this.viewerEpoch++;this.viewer?.dispose();this.viewer=null;this.load=null;this.loading.hidden=false;}
   sync(){
-    const o=this.owner,source=this.source(),key=imageAreaSourceKey(source),edit=o.imageOperation==='edit',visible=o.mode==='image'&&edit&&!!source&&!this.closed;
+    const o=this.owner,source=this.source(),key=imageAreaSourceKey(source),edit=o.imageOperation==='edit',visible=o.mode==='image'&&edit&&!this.closed;
+    // Input rendering may rebuild this group. Keep one entry point beside the
+    // main image and its references rather than losing it with the old nodes.
+    const controls=o.$('reference-list')?.querySelector('.zc-edit-main')||o.root.querySelector('.zc-image-tools');
+    if(controls&&this.button.parentElement!==controls)controls.append(this.button);
     if(key!==this.state.source_key){
       clearTimeout(this.saveTimer);this.revision++;this.disposeViewer();this.state=empty(key);this.editing=false;this.dirty=false;this.error='';
     }
-    this.button.hidden=!visible;this.button.disabled=!visible||this.busy();this.button.setAttribute('aria-pressed',String(visible&&this.state.enabled));
-    this.button.textContent=this.state.enabled?'Edit area · on':'Edit area';
-    const show=visible&&this.editing;this.host.hidden=!show;
+    this.button.hidden=!visible;this.button.disabled=!visible||!source||this.busy();this.button.setAttribute('aria-pressed',String(visible&&!!source&&this.state.enabled));
+    this.button.textContent=this.state.enabled?'Paint edit area · on':'Paint edit area';
+    this.button.title=source?'Optionally paint the part of the main image to edit':'Add a main image first';
+    const show=visible&&!!source&&this.editing;this.host.hidden=!show;
     if(show){
       // A single large canvas replaces the source/result view while painting.
       o.editInputs.source.hidden=true;o.$('gallery').hidden=true;o.$('image-empty').hidden=true;if(o.imageComparison?.host)o.imageComparison.host.hidden=true;

@@ -19,13 +19,20 @@ editor. **Import edit** attaches the finished image to that timeline frame.
 Imported edits must match the source dimensions. Re-editing always starts from
 the original footage rather than a previous generated image.
 
+Click an edited thumbnail to open a large image preview. Close it with **×**,
+**Escape**, or the backdrop; focus returns to its timeline card. The subtle
+opening animation respects reduced-motion settings. Within **Edit image**,
+**Paint edit area** beside the main image optionally limits the image edit to
+a brushed selection.
+
 - **H3 Ripple:** up to 16 edited frames anywhere inside the selected clip.
-- **LTX 2.5 Ripple:** one edited image at the first frame of the selected clip.
-  Trim the clip to choose a different starting frame. The timeline and its edits
-  are shared when switching models. Other keyframes remain available for H3;
-  LTX uses only the frame at the start of the current trim. Its **Edit first
-  frame** button names that source frame explicitly. Requests at other frames
-  explain the limitation without silently moving the keyframe.
+- **LTX 2.5 Ripple:** one selected edited image acts as a visual reference for
+  the whole clip. Select an edited frame to use it; the trim and its source-frame
+  identity stay unchanged. Other edits remain available for H3. Unlike H3, this
+  does not pin an edit to its exact timeline time. Internally the reference is
+  prepended to the source guide, and its extra decoded lead is removed before
+  delivery. The publisher's first-frame example remains the quality baseline;
+  references from other points need shot-specific render review.
 
 The native video controls and timeline share the same source-frame playhead,
 including scrubbing while paused. **Add keyframe** and **K** capture that frame
