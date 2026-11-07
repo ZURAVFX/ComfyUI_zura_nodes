@@ -389,7 +389,7 @@ def crop_work(a,c,space,is_mask=False):
     else:t=(t>.001).float()
     if c.get('framing_mode')=='Source resolution (pad, no resize)':
         pass  # Keep source pixels exact; only the model-grid padding below is added.
-    elif c.get('framing_mode') in ('Full frame (original method)','Full frame (fit, no crop)','Plate resolution (stretch to next grid)'):
+    elif c.get('framing_mode') in ('Full frame (original method)','Full frame (fit, no crop)','Plate resolution (stretch to next grid)','Full frame (stretch to working size)'):
         t=resize_fullframe(t,rh,rw,c.get('resampler','float32_bicubic_antialias'),is_mask)
     else:t=resize(t,rh,rw,'area' if is_mask else 'bilinear')
     if is_mask:t=(t>0).float()
@@ -403,7 +403,7 @@ class ZuraPaintoutCrop:
         'colour_space':(COLOUR_SPACES,),
         'start_frame':integer(0),'frame_count':integer(81,1,993),'sequence_fps':floating(25,1,120),
         'context_pixels':integer(128,32,2048),'max_crop_side':integer(768,128,2048),
-        'repair_grow':integer(16,0,256),'feather_pixels':integer(0,0,256)},'optional':{'processing_mode':(PROCESSING_MODES,), 'framing_mode':(['Plate resolution (stretch to next grid)','Smart crop (experimental)','Full frame (original method)','Full frame (fit, no crop)','Source resolution (pad, no resize)'],), 'render_width':integer(1152,64,4096), 'render_height':integer(640,64,4096), 'processing_scale':('FLOAT',{'default':1.0,'min':0.25,'max':1.0,'step':0.25})}}
+        'repair_grow':integer(16,0,256),'feather_pixels':integer(0,0,256)},'optional':{'processing_mode':(PROCESSING_MODES,), 'framing_mode':(['Plate resolution (stretch to next grid)','Smart crop (experimental)','Full frame (original method)','Full frame (fit, no crop)','Source resolution (pad, no resize)','Full frame (stretch to working size)'],), 'render_width':integer(1152,64,4096), 'render_height':integer(640,64,4096), 'processing_scale':('FLOAT',{'default':1.0,'min':0.25,'max':1.0,'step':0.25})}}
     RETURN_TYPES=('IMAGE','MASK','ZURA_PLATE','INT','INT','INT','FLOAT','STRING')
     RETURN_NAMES=('crop_frames','crop_mask','plate','width','height','padded_frames','fps','crop_report')
     FUNCTION='prepare'; CATEGORY=CATEGORY
@@ -420,8 +420,9 @@ class ZuraPaintoutCrop:
         if d['kind']=='video' and m['kind']=='video' and abs(d['fps']-m['fps'])>.001:raise ValueError('Mask/plate fps mismatch')
         if d['count'] and start_frame+frame_count>d['count']:raise ValueError('Requested plate frame range is too long')
         W,H=d['width'],d['height']
-        if render_width%64 or render_height%64:raise ValueError('Render width and height must be multiples of 64')
-        if framing_mode not in ('Plate resolution (stretch to next grid)','Smart crop (experimental)','Full frame (original method)','Full frame (fit, no crop)','Source resolution (pad, no resize)'):raise ValueError('Unknown framing mode')
+        grid=32 if framing_mode=='Full frame (stretch to working size)' else 64
+        if render_width%grid or render_height%grid:raise ValueError(f'Render width and height must be multiples of {grid}')
+        if framing_mode not in ('Plate resolution (stretch to next grid)','Smart crop (experimental)','Full frame (original method)','Full frame (fit, no crop)','Source resolution (pad, no resize)','Full frame (stretch to working size)'):raise ValueError('Unknown framing mode')
         if framing_mode=='Plate resolution (stretch to next grid)':
             render_width,render_height=plate_processing_size(W,H)
             if max(render_width,render_height)>4096:raise ValueError('This plate exceeds the current 4096-pixel processing limit. No smaller proxy will be substituted.')

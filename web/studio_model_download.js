@@ -2,7 +2,7 @@ import {groupMissingNodes} from './studio_node_setup.js';
 import {ModelStorage} from './studio_model_storage.js';
 import {ModelAccess,importModelFile} from './studio_model_access.js';
 // Model packages are allowlisted by the backend. Fetching the list never starts a download.
-const PACKAGE_IDS=['panorama_geometry','openjutsu_h3','sam31','fasth3_draft','h3_reference_core','wan_animate_2','wan21_relight','wan22_animate_core','wan22_pose','wan22_style','wan22_first_last','h3_birefnet','h3_head_acceleration','h3_head_adapters','h3_taomate','h3_dmd_ref2va','h3_int8_vae','h3_control','h3_crossview','h3_first_last','ltx25_core','ltx25_full_vae','ltx25_refine','ltx25_sdr_hdr','ltx25_text_encoder','ltx25_text_int8','ltx25_clean_plate','ltx25_outpaint','ltx25_in_outpaint','ltx_control','flux2_klein_start','flux2_klein_9b','flux2_klein_9b_bf16','flux3_klein','flux3_klein_bf16','zimage_turbo','qwen2511','qwen21','flux2_dev','ph3_image_edit'];
+const PACKAGE_IDS=['panorama_geometry','openjutsu_h3','sam31','fasth3_draft','h3_reference_core','wan_animate_2','wan21_relight','wan22_animate_core','wan22_pose','wan22_style','wan22_first_last','h3_birefnet','h3_head_acceleration','h3_head_adapters','h3_taomate','h3_dmd_ref2va','h3_int8_vae','h3_control','h3_crossview','h3_first_last','h3_ripple','ltx_ripple','ltx25_core','ltx25_full_vae','ltx25_refine','ltx25_sdr_hdr','ltx25_text_encoder','ltx25_text_int8','ltx25_clean_plate','ltx25_outpaint','ltx25_in_outpaint','ltx_control','flux2_klein_start','flux2_klein_9b','flux2_klein_9b_bf16','flux3_klein','flux3_klein_bf16','zimage_turbo','qwen2511','qwen21','flux2_dev','ph3_image_edit'];
 const ROUTE_NAMES={panorama:'Change camera angle',openjutsu:'OpenJutsu character replacement',wan2:'Wan Animate 2',wan:'Wan 2.2 character replacement',wan21_relight:'Wan 2.1 relight',h3_camera:'H3 camera angle',h3_head_swap:'H3 head swap',h3_viewport:'H3 viewport to final',h3:'MiniMax H3',local:'LTX 2.5',local_scene:'LTX 2.5 whole scene',h3_first_last:'H3 first & last frame',ltx_first_last:'LTX first & last frame',wan_first_last:'Wan first & last frame',h3_reference:'H3 reference video',ltx_outpaint_hdr_long:'LTX long HDR frame extension',ltx_outpaint_hdr:'LTX HDR frame extension',ltx_outpaint_expand:'LTX frame extension',ltx_outpaint_black:'LTX black-area fill',ltx_outpaint_long:'LTX long frame extension',paintout_targeted:'Targeted paintout',paintout_full:'Full-scene clean plate',hdr_sdr:'SDR to HDR',hdr_native:'HDR to HDR',ltx_hdr_endpoints:'LTX native HDR first and last frame'};
 
 const MANUAL_SOURCES={
@@ -16,6 +16,8 @@ const gb=n=>`${(Number(n||0)/1e9).toFixed(2)} GB`;
 const fileKey=file=>`${file.folder||''}/${file.filename||''}`.replaceAll('\\','/').toLowerCase();
 ROUTE_NAMES.image='Image generation';
 ROUTE_NAMES.ltx_performance_hdr='LTX performance + HDR delivery';
+ROUTE_NAMES.h3_ripple='H3 Ripple';
+ROUTE_NAMES.ltx_ripple='LTX Ripple';
 
 export class StudioModelDownloads {
   constructor(panel, request, onInstalled) {
@@ -23,6 +25,7 @@ export class StudioModelDownloads {
     const floating=panel.classList.contains('zc-tool-popup');panel.classList.add('gs-model-downloads');
     panel.innerHTML=`<summary>${floating?'Models':'Download models'}</summary><div class="gs-advanced-body${floating?' zc-tool-panel':''}"><label>Model package <select data-model-package aria-label="Model package"></select></label><div data-model-files></div><div data-model-actions></div><p data-model-progress role="status" aria-live="polite"></p></div>`;
     this.select=panel.querySelector('[data-model-package]');this.files=panel.querySelector('[data-model-files]');this.actions=panel.querySelector('[data-model-actions]');this.progress=panel.querySelector('[data-model-progress]');
+    panel.addEventListener('keydown',event=>{if(event.key==='Escape'&&panel.open){panel.open=false;panel.querySelector('summary')?.focus();event.preventDefault();event.stopPropagation();}});
     this.select.onchange=()=>{if(!this.job){this.startIntent=null;this.retryRequest=null;this.accessFailure=null;}this.render();};panel.ontoggle=()=>{if(panel.open && !this.packages.length)this.load();};
     this.storage=new ModelStorage(panel.querySelector('.gs-advanced-body'),request,async()=>{await this.load();await this.onInstalled?.();});
     this.access=new ModelAccess(panel.querySelector('.gs-advanced-body'),request,()=>this.retryRequest?this.start(this.retryRequest):undefined);this.token=this.access.$('token');
@@ -46,19 +49,19 @@ export class StudioModelDownloads {
     const next=context&&Array.isArray(context.files)&&Array.isArray(context.missingNodes)?context:null;
     const changed=next?.route!==this.context?.route||JSON.stringify((next?.files||[]).map(fileKey))!==JSON.stringify((this.context?.files||[]).map(fileKey));
     if(changed&&!this.job){this.startIntent=null;this.retryRequest=null;this.accessFailure=null;this.progress.textContent='';}
-    this.context=next;
+    const previousRoute=this.context?.route;this.context=next;
     if(next&&!this.packages.length&&!this.loadingCatalogue)void this.load();
-    if(changed&&next&&this.packages.length&&!this.job)this.select.value='__workflow__';
+    if(next?.route!==previousRoute&&next&&this.packages.length&&!this.job)this.select.value='__workflow__';
     if(this.packages.length && this.select.value==='__workflow__')this.render();
     this.renderQuick();
   }
-  setMissingContext(route,missing){
-    this.missingContext=Array.isArray(missing)?{route,missing}:null;
+  setMissingContext(route,missing,label){
+    this.missingContext=Array.isArray(missing)?{route,missing,label}:null;
     this.applyMissingContext();
   }
   applyMissingContext(){
     if(!this.missingContext){this.setContext(null);return;}
-    const {route,missing}=this.missingContext,files=[],missingNodes=[];
+    const {route,missing,label}=this.missingContext,files=[],missingNodes=[];
     for(const name of missing){
       if(typeof name!=='string')continue;
       if(/\.(safetensors|onnx|pt|pth|ckpt|bin)$/i.test(name)){
@@ -66,7 +69,7 @@ export class StudioModelDownloads {
         files.push({folder:match?.folder||'',filename:match?.filename||name,ready:false});
       }else missingNodes.push(name);
     }
-    this.setContext({route,files,missingNodes},true);
+    this.setContext({route,files,missingNodes,label},true);
   }
   link(label,url){const link=this.el('a',label);link.href=url;link.target='_blank';link.rel='noopener noreferrer';return link;}
   workflowPlan(){
@@ -130,7 +133,7 @@ export class StudioModelDownloads {
   renderWorkflow(){
     if(!this.context){this.files.append(this.el('p','Choose a workflow to see its setup.'));return;}
     const {route,files,missingNodes}=this.context;
-    this.files.append(this.el('strong',ROUTE_NAMES[route]||'Current workflow'));
+    this.files.append(this.el('strong',this.context.label||ROUTE_NAMES[route]||'Current workflow'));
     const missing=files.filter(file=>file&&file.ready===false),keys=new Set(missing.map(fileKey));
     const candidates=this.packages.filter(pack=>!pack.error&&Array.isArray(pack.files));
     const remaining=new Set(keys),packs=[];

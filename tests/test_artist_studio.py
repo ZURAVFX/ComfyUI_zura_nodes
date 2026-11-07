@@ -57,6 +57,26 @@ class SharedEngineTests(unittest.TestCase):
         info = studio.paintout_hdr_asset_info('/p3.mov', 'auto', describe, lambda details, space:'pq_display_p3', media)
         self.assertEqual(info['colour_space'], 'auto')
 
+    def test_ripple_uploaded_source_accepts_verified_sdr_without_weakening_hdr_handoff(self):
+        asset = {'asset_kind': 'video'}
+        store = types.SimpleNamespace(load=lambda identity: asset)
+        seen = []
+        def probe(path):
+            seen.append(path)
+            return {'path': path, 'resolved_colour': 'srgb_display', 'frames': 85, 'fps': 30}
+        info = studio.ripple_uploaded_source_info(store, 'one', lambda entry: '/verified/sdr.mp4', probe)
+        self.assertEqual(info['frames'], 85)
+        self.assertEqual(info['resolved_colour'], 'srgb_display')
+        self.assertEqual(seen, ['/verified/sdr.mp4'])
+        asset['asset_kind'] = 'image'
+        with self.assertRaisesRegex(ValueError, 'uploaded video'):
+            studio.ripple_uploaded_source_info(store, 'one', lambda entry: '/bad.png', probe)
+        self.assertEqual(seen, ['/verified/sdr.mp4'])
+        asset['asset_kind'] = 'video'
+        with self.assertRaisesRegex(ValueError, 'changed'):
+            studio.ripple_uploaded_source_info(store, 'one', lambda entry: (_ for _ in ()).throw(ValueError('changed')), probe)
+        self.assertEqual(seen, ['/verified/sdr.mp4'])
+
     def test_opening_resolution_accepts_larger_images_with_pixel_budget(self):
         config = studio.clean_config({'opening_width': 2304, 'opening_height': 1280})
         self.assertEqual((config['opening_width'], config['opening_height']), (2304, 1280))

@@ -20,6 +20,13 @@ let refreshed=false;const component=new StudioModelDownloads(document.querySelec
 await component.load();
 assert.deepEqual([...component.select.querySelectorAll('option')].map(o=>o.value),['__workflow__','wan_animate_2',...availablePackages],'the rejected LTX viewport package remains hidden');
 assert.equal(paths.length,1,'Listing must not start a download');
+component.setMissingContext('image',['first.safetensors'],'First image model');
+component.select.value='wan_animate_2';component.select.onchange();
+component.setMissingContext('image',['second.safetensors'],'Second image model');
+assert.equal(component.select.value,'wan_animate_2','A readiness change must not interrupt manual package inspection');
+component.select.value='__workflow__';component.render();assert.match(component.files.textContent,/Second image model/);
+component.setContext(null);component.select.value='wan_animate_2';component.render();
+
 assert.match(component.files.textContent,/1.00 GB to download/);
 assert.match(component.files.textContent,/Separate nodes required/);
 assert.equal(component.files.querySelector('a').href,'https://huggingface.co/Comfy-Org/Wan-Animate-2');

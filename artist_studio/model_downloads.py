@@ -290,6 +290,33 @@ CATALOG["ph3_image_edit"] = dict(
         _file("vae", "p-h3-image_vae_int8_convrot.safetensors", "PrunaAI/P-H3-Image-Comfy", "44a0fb73f299da1bb715bdb5ff59ce3fd3c6f543", "vae/p-h3-image_vae_int8_convrot.safetensors", 3146996440, "583e0d43354b6b833aa9a0815a5fac831b1ef6d0c19a7eaa0616980a3dab5ffe"),
     ])
 
+# Complete Ripple packages are kept in the main Studio installer so a newly
+# installed user can set up either engine from the active workspace in one go.
+# File entries are shared with existing packages for consistent reuse.
+CATALOG["h3_ripple"] = dict(
+    name="H3 Ripple · video edits", gated=False,
+    license_url="https://huggingface.co/WepeNerd/H3_Ripple",
+    note="H3 video model, text encoder, video VAE and Ripple adapters. The separate ComfyUI-WepeNerd extension is also required. Review the MiniMax H3 and Ripple licences.",
+    files=[
+        CATALOG["h3_first_last"]["files"][0],
+        CATALOG["openjutsu_h3"]["files"][1],
+        CATALOG["openjutsu_h3"]["files"][2],
+        _file("loras", "pika_h3_flex_fl2va_v1_bf16.safetensors", "Comfy-Org/MiniMax-H3", "54472221d27c695fca9621b0c3ed52f06c4af707", "loras/pika_h3_flex_fl2va_v1_bf16.safetensors", 1956172304, "cc5453aeecd6189468409003fe4cf1b57e52ff3a830a0a154b87decbe07358b7"),
+        _file("loras", "minimax_H3_Ripple-v1.safetensors", "WepeNerd/H3_Ripple", "101969829e55a3510dcd496dfa638bc2de04138a", "minimax_H3_Ripple-v1.safetensors", 298280360, "557eee935073acf8e507f228c1763bfe7379b1aae03bb3da0770a20a62fc6232"),
+    ])
+
+CATALOG["ltx_ripple"] = dict(
+    name="LTX 2.5 Ripple · video edits", gated=True,
+    license_url="https://huggingface.co/Lightricks/LTX-2.5",
+    note="LTX 2.5, its Gemma encoder and VAEs, plus the first-frame Ripple adapter. Accept the LTX model terms on Hugging Face; review the Ripple adapter licence separately.",
+    files=[
+        CATALOG["ltx25_core"]["files"][0],
+        CATALOG["ltx25_text_int8"]["files"][0],
+        CATALOG["ltx25_core"]["files"][1],
+        CATALOG["ltx25_core"]["files"][2],
+        {**_file("loras", "LTX25_Ripple_v11.safetensors", "WepeNerd/LTX-Ripple", "76abac5ede8a3415b9d1cd803843a38ecb351600", "LTX25_Ripple_v11.safetensors", 654443392, "bde543610144e5bba78782fb0ac18daa663fc087c2212244b8116deb1925ee2a"), "gated": False},
+    ])
+
 
 def inspect(model_id, locations, filenames=None):
     """Return required files and exact remaining bytes, including shared files."""
@@ -316,7 +343,7 @@ def inspect(model_id, locations, filenames=None):
         incomplete = bool(existing and existing.stat().st_size != item['size_bytes'])
         from urllib.parse import quote
         browser_url = ('https://huggingface.co/' + item['repo'] + '/resolve/' + item['revision'] + '/' + quote(item['remote_path'], safe='/') + '?download=true') if all(item.get(key) for key in ('repo', 'revision', 'remote_path')) else None
-        files.append({**item, 'gated': recipe['gated'], 'model_card': 'https://huggingface.co/' + item['repo'] if item.get('repo') else None, 'browser_url': browser_url,
+        files.append({**item, 'gated': item.get('gated', recipe['gated']), 'model_card': 'https://huggingface.co/' + item['repo'] if item.get('repo') else None, 'browser_url': browser_url,
                       'installed': bool(existing) and not incomplete, 'incomplete': incomplete,
                       'destination': str(existing or (Path(roots[0]) / relative))})
     return dict(id=model_id, name=recipe['name'], gated=recipe['gated'], note=recipe.get('note', ''),

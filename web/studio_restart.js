@@ -17,6 +17,7 @@ function workspaceFor(creative){
     case 'paintout': return creative.paintout;
     case 'watermark': return creative.watermark;
     case 'outpaint': return creative.outpaint;
+    case 'ripple': return creative.ripple;
     case 'hdr': return creative.studio?.hdrTool;
     case 'panorama': return creative.panorama;
     default: return creative?.studio;
@@ -40,7 +41,7 @@ export function studioWorkspaceBusy(creative){
     workspace?.job||workspace?.pendingSubmission||workspace?.submitting||workspace?.uploading||
     workspace?.hdrOutput?.busy||invokeBusy(workspace)
   );
-  if(mode==='paintout'||mode==='watermark')return !!(workspace?.job||workspace?.submitting||workspace?.picking||workspace?.exporting||invokeBusy(workspace));
+  if(mode==='paintout'||mode==='watermark'||mode==='ripple')return !!(workspace?.job||workspace?.pendingSubmission||workspace?.submitting||workspace?.uploading||workspace?.picking||workspace?.exporting||invokeBusy(workspace));
   if(mode==='outpaint')return !!(
     workspace?.job||workspace?.submitting||workspace?.hdrSubmitting||
     workspace?.layers?.busy||workspace?.hdrDelivery?.busy||invokeBusy(workspace)
@@ -230,6 +231,12 @@ export async function resetStudioWorkspace(creative){
     return result===true;
   }
   if(mode==='outpaint')return resetOutpaintWorkspace(creative);
+  if(mode==='ripple'){
+    if(typeof creative?.ripple?.reset!=='function')return false;
+    const result=await creative.ripple.reset();
+    if(result!==false)creative.show?.('ripple');
+    return result!==false;
+  }
   if(mode==='hdr'){
     const tool=creative?.studio?.hdrTool;
     if(typeof tool?.reset!=='function')return false;
@@ -288,6 +295,7 @@ function modeLabel(mode){
     paintout:'Paintout',
     watermark:'Watermark removal',
     outpaint:'Frame extension',
+    ripple:'Ripple editing',
     hdr:'HDR',
     panorama:'Camera angle',
   })[mode]||'this workspace';
@@ -344,7 +352,7 @@ export function installStudioRestartNavigation(studio,options={}){
     if(mode==='image')return creative.root.querySelector('.zc-image-heading');
     if(mode==='video')return creative.root.querySelector('.gs-preview-heading');
     const page=workspace?.page||workspace?.root;
-    return page?.querySelector('.zf-heading,.zpc-heading,header');
+    return page?.querySelector('.zf-heading,.zpc-heading,.zru-heading,header');
   };
 
   const wrap=document.createElement('div');

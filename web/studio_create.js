@@ -11,6 +11,9 @@ import {installPopoverDismissal} from "./studio_popovers.js";
 import {PreviewZoom} from "./studio_preview_zoom.js";
 import {OutpaintWorkspace} from "./studio_outpaint.js";
 import {PanoramaCameraWorkspace} from './studio_panorama.js';
+import {RippleWorkspace} from './studio_ripple.js';
+import {installRippleJobs} from './studio_ripple_jobs.js';
+import {RippleImageHandoff} from './studio_ripple_image.js';
 import {groupMissingNodes} from './studio_node_setup.js';
 import {preferredHDRFile} from './studio_native_hdr_performance.js';
 import {installOwnedExecuting} from './studio_progress.js';
@@ -164,7 +167,7 @@ export class CreativeWorkspace {
       this.editMainMissing=false;this.references=(item.references||[]).map(ref=>({...ref}));this.$("prompt").value=item.prompt;this.$("model").value=item.model;this.$("shape").value=item.shape;
       const size=imageDimensions(item);this.$("width").value=size[0];this.$("height").value=size[1];this.$("seed").value=item.seed;this.$("random").checked=false;this.save();this.render();
     };
-    this.root.querySelector("#gs-exit").onclick=()=>this.mode==="image"?this.graph():this.mode==="frames"?this.frames.graph():this.mode==="references"?this.referencesVideo.graph():this.mode==="paintout"?this.paintout.graph():this.mode==="watermark"?this.watermark.graph():this.mode==="outpaint"?this.outpaint.graph():studio.graphView();
+    this.root.querySelector("#gs-exit").onclick=()=>this.mode==="image"?this.graph():this.mode==="frames"?this.frames.graph():this.mode==="references"?this.referencesVideo.graph():this.mode==="paintout"?this.paintout.graph():this.mode==="watermark"?this.watermark.graph():this.mode==="outpaint"?this.outpaint.graph():this.mode==="ripple"?this.ripple.graph():studio.graphView();
     this.api.addEventListener?.("progress",event=>{const d=event.detail;if(!this.job||this.job.cancelPending||d?.prompt_id!==this.job.id||!Number.isFinite(d.value)||!(d.max>0))return;const node=d.node||this.job.currentNode||"sample",sampling=node==="sample",names={text:"Loading text encoder",prompt:"Reading your prompt",model:"Loading image model",sample:"Generating image",decode:"Decoding image",save:"Saving image",browser_image:"Generating with your browser account"};this.$("bar").value=Math.max(0,Math.min(100,100*d.value/d.max));this.$("progress-title").textContent=`${names[node]||"Processing image"} · ${sampling?"Step":"Progress"} ${d.value} of ${d.max}`;this.$("progress-detail").textContent=this.elapsed();});
     installOwnedExecuting(this.api,event=>{const d=event.detail;if(!this.job||this.job.cancelPending||d?.prompt_id!==this.job.id||!d.node)return;this.job.currentNode=d.node;const names={text:"Loading text encoder",prompt:"Reading your prompt",model:"Loading image model",sample:"Generating image",decode:"Decoding image",save:"Saving image",browser_image:"Generating with your browser account"};this.$("bar").removeAttribute("value");this.$("progress-title").textContent=names[d.node]||"Preparing image";});
     for(const [id,hint] of [["zc-swap-size","Swap image width and height"],["zc-clear-history","Hide previous images from this workspace. Saved files stay on disk."],["zc-add-references","Upload reference images, or paste an image with Ctrl+V."],["zc-settings-toggle","Choose a model, exact dimensions and seed."],["gs-exit","Open the editable ComfyUI graph with your current media."]]){
@@ -178,6 +181,7 @@ export class CreativeWorkspace {
     const imageModelPanel=document.createElement('details');imageModelPanel.className='gs-model-help';this.$('setup').before(imageModelPanel);
     this.imageModelSetup=new StudioModelDownloads(imageModelPanel,(path,body)=>this.fetch('/zura/studio'+path,body),()=>this.loadModels());
     this.imageModelSetup.mountQuick(this.root.querySelector('.zc-image-composer'));
+    this.rippleImage??=new RippleImageHandoff(this);
     this.show("video");this.renderGallery();this.render();
   }
   buildVideoInspector(settings){
@@ -292,7 +296,7 @@ export class CreativeWorkspace {
     if(!Array.isArray(result.loras)||result.loras.length!==config.loras.length)throw new Error('Could not validate the selected image LoRAs.');
     return buildImageGraph({...config,loras:result.loras});
   }
-  config(){return {...(this.outpaintGuide?.request?{outpaint_guide:this.outpaintGuide.request.id}:{}),operation:this.imageOperation,editMainMissing:!!this.editMainMissing,autoCanvasSuppressed:!!this.autoCanvasSuppressed,model:this.$("model").value||(this.imageOperation==='edit'?'qwen2511':'flux2'),prompt:this.$("prompt").value,shape:this.$("shape").value,references:this.references.map(r=>({...r})),loras:IMAGE_MODELS.find(model=>model.id===this.$('model').value)?.provider?[]:this.imageLoras.map(l=>({...l})),width:Number(this.$("width").value),height:Number(this.$("height").value),seed:Number(this.$("seed").value),random:this.$("random").checked};}
+  config(){return {...(this.rippleImage?.request||this.rippleImage?.stored?{ripple_guide:(this.rippleImage.request||this.rippleImage.stored).id}:{}),...(this.outpaintGuide?.request?{outpaint_guide:this.outpaintGuide.request.id}:{}),operation:this.imageOperation,editMainMissing:!!this.editMainMissing,autoCanvasSuppressed:!!this.autoCanvasSuppressed,model:this.$("model").value||(this.imageOperation==='edit'?'qwen2511':'flux2'),prompt:this.$("prompt").value,shape:this.$("shape").value,references:this.references.map(r=>({...r})),loras:IMAGE_MODELS.find(model=>model.id===this.$('model').value)?.provider?[]:this.imageLoras.map(l=>({...l})),width:Number(this.$("width").value),height:Number(this.$("height").value),seed:Number(this.$("seed").value),random:this.$("random").checked};}
   async setImageOperation(operation,{useCanvas=true}={}){
     if(this.job||this.pendingSubmission||this.submitting||this.uploading)return;
     this.imageOperation=operation;
@@ -377,6 +381,12 @@ export class CreativeWorkspace {
     else if(!ref){tool.$('source-kind').value='own';tool.updateMode();}
     this.show('hdr');
   }
+  ensureRippleWorkspace(){
+    if(!this.ripple){this.ripple=new RippleWorkspace(this);installRippleJobs(this.ripple);}
+    this.rippleImage??=new RippleImageHandoff(this);
+    this.editRippleFrame=(workspace,anchor)=>this.rippleImage.edit(workspace,anchor);
+    return this.ripple;
+  }
   show(mode){
     this.mode=mode;this.root.dataset.workspace=mode;
     const globalModels=this.studio.$('model-downloads');if(globalModels){globalModels.hidden=!['video','image'].includes(mode);globalModels.open=false;}
@@ -388,25 +398,30 @@ export class CreativeWorkspace {
     if(mode==='paintout')this.paintout=getPaintoutWorkspace(this);
     if(mode==='watermark')this.watermark=getWatermarkWorkspace(this);
     if(mode==='outpaint')this.outpaint??=new OutpaintWorkspace(this);
+    if(mode==='ripple')this.ensureRippleWorkspace();
     if(mode==='panorama')this.panorama??=new PanoramaCameraWorkspace(this);
     this.videoComposer?.mountWorkflow(mode);
     // Set real visibility as well as the CSS state, so another page cannot
     // cover navigation when the workspace changes or styles are still loading.
-    const pages={'.zc-home':'home','.zc-image-page':'image','.zf-page:not(.zr-page):not(.zp-page):not(.zh-page)':'frames','.zr-page':'references','.zp-page:not(.zwm-page)':'paintout','.zwm-page':'watermark','.zh-page':'hdr','.zo-page':'outpaint','.zpc-page':'panorama','.gs-workspace':'video','.gs-steps':'video'};
+    const pages={'.zc-home':'home','.zc-image-page':'image','.zf-page:not(.zr-page):not(.zp-page):not(.zh-page)':'frames','.zr-page':'references','.zp-page:not(.zwm-page)':'paintout','.zwm-page':'watermark','.zh-page':'hdr','.zo-page':'outpaint','.zru-page':'ripple','.zpc-page':'panorama','.gs-workspace':'video','.gs-steps':'video'};
     for(const child of this.root.children)for(const [selector,space] of Object.entries(pages))if(child.matches(selector))child.hidden=mode!==space;
-    for(const b of this.root.querySelectorAll('.zc-nav [data-space]'))b.setAttribute('aria-current',b.dataset.space===(['frames','references','paintout','watermark','outpaint','panorama','hdr'].includes(mode)?'video':mode)?'page':'false');
+    for(const b of this.root.querySelectorAll('.zc-nav [data-space]'))b.setAttribute('aria-current',b.dataset.space===(['frames','references','paintout','watermark','outpaint','ripple','panorama','hdr'].includes(mode)?'video':mode)?'page':'false');
     this.root.querySelectorAll('video,audio').forEach(m=>m.pause());
     this.root.querySelector('#zc-open-hdr').setAttribute('aria-current',mode==='hdr'?'page':'false');
     if(mode==='hdr')this.studio.hdrTool?.activate();else this.studio.hdrTool?.deactivate();
-    if(mode==='video')this.videoComposer?.sync();
+    if(mode==='video'){this.videoComposer?.sync();if(this.studio.modelDownloads?.context?.route==='image')this.studio.modelDownloads.setContext(null);this.studio.updateModelStatus();}
+    if(mode==='image')this.render();
     if(mode==='image'&&!this.models.length)this.loadModels();
     if(mode==='frames')this.frames.open();
     if(mode==='references')this.referencesVideo.open();
     if(mode==='paintout')this.paintout.open();
     if(mode==='watermark')this.watermark.open();
     if(mode==='outpaint')this.outpaint.open();
+    if(mode==='ripple')this.ripple.open();
     if(mode==='panorama')this.panorama.open();
     if(this.job||this.pendingSubmission)this.startPolling();
+    if(mode==='image'||mode==='ripple')void this.rippleImage?.resume();
+    this.rippleImage?.syncImageUI();
   }
   async loadModels(){
     if(this.loading)return;this.loading=true;
@@ -502,7 +517,7 @@ export class CreativeWorkspace {
     this.styleControls();
     if(this.$('image-lora-settings').open)this.renderImageLoras();
     const c=this.config(),m=this.models.find(m=>m.id===c.model),busy=!!this.job||!!this.pendingSubmission||this.submitting||this.uploading;
-    if(m&&!m.provider){this.imageModelSetup?.setMissingContext('image',m.ready?[]:m.missing);if(this.mode==='image')this.studio.modelDownloads?.setMissingContext('image',m.ready?[]:m.missing);}else this.imageModelSetup?.setContext(null);
+    if(m&&!m.provider){this.imageModelSetup?.setMissingContext('image',m.ready?[]:m.missing);if(this.mode==='image')this.studio.modelDownloads?.setMissingContext('image',m.ready?[]:m.missing,m.name);}else{this.imageModelSetup?.setContext(null);if(this.mode==='image')this.studio.modelDownloads?.setContext({route:'image',files:[],missingNodes:[],label:m?.name||'Image generation'});}
     this.browserConnection.sync(m);
     this.$('image-lora-settings').hidden=!!m?.provider;
     this.$('seed').closest('.zc-advanced').hidden=!!m?.provider;
@@ -544,6 +559,7 @@ export class CreativeWorkspace {
   }
   renderGallery(){
     this.outpaintGuide?.syncImageUI();
+    this.rippleImage?.syncImageUI();
     this.imageZoom?.dispose();this.imageZoom=null;
     this.selectedImage=Math.max(-1,Math.min(this.selectedImage??0,Math.max(0,this.items.length-1)));
     this.$("image-empty").hidden=!!this.items[this.selectedImage];
@@ -616,7 +632,7 @@ export class CreativeWorkspace {
   }
   async cancel(){await cancelOwnedJob(this);}
   stopPolling(){clearInterval(this.timer);this.timer=null;}
-  close(){for(const access of this.imageModelAccess?.values()||[])access.dispose();this.imageModelSetup?.close();this.modelDownloadClosed=true;this.browserConnection?.close();this.videoComposer?.browserConnection?.close();this.videoComposer?.ltxOutput?.close();this.save();this.stopPolling();this.imageZoom?.stopDraw();this.frames?.close();this.referencesVideo?.close();this.outpaint?.close();this.panorama?.close();if(this.paintout?.owner===this)this.paintout.close();if(this.watermark?.owner===this)this.watermark.close();this.disposePopovers?.();}
+  close(){for(const access of this.imageModelAccess?.values()||[])access.dispose();this.imageModelSetup?.close();this.modelDownloadClosed=true;this.browserConnection?.close();this.videoComposer?.browserConnection?.close();this.videoComposer?.ltxOutput?.close();this.save();this.stopPolling();this.imageZoom?.stopDraw();this.frames?.close();this.referencesVideo?.close();this.outpaint?.close();this.ripple?.close();this.rippleImage?.dispose();this.panorama?.close();if(this.paintout?.owner===this)this.paintout.close();if(this.watermark?.owner===this)this.watermark.close();this.disposePopovers?.();}
   async graph(){
     try{const graph=await this.imageGraph(this.job?.config||this.config());if(typeof this.app.loadApiJson!=="function")throw new Error("Update ComfyUI to open this image graph.");const original=(this.app.rootGraph||this.app.graph)?.serialize?.();if(!original)throw new Error("Your current graph could not be backed up.");try{await this.app.loadApiJson(graph,"Zura Image · "+Date.now()+".json");}catch(e){await this.app.loadGraphData(original);throw e;}this.studio.close();}catch(e){this.message(e.message);}
   }

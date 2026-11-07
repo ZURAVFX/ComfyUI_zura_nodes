@@ -36,6 +36,13 @@ ui.$('audio-direction').value='audio:zura_references/voice.wav';ui.$('audio-dire
 assert.equal(ui.config().audioDriver,'audio:zura_references/voice.wav');
 ui.render();assert.equal(ui.$('audio-direction').value,ui.config().audioDriver);
 assert.match(ui.$('note').textContent,/Describe the video/,'Existing input validation still takes priority');
+assert.match(ui.$('note').textContent,/Picture 2 sets the first frame/,'Validation must not hide the selected first frame');
+assert.match(ui.$('note').textContent,/Following <Audio 1>/,'Validation must not hide the chosen audio direction');
+ui.$('prompt').value='Animate the scene';ui.availability={ready:false,missing:['a model']};ui.render();
+assert.match(ui.$('note').textContent,/required H3 reference models/,'Missing-model guidance remains visible');
+assert.match(ui.$('note').textContent,/Picture 2 sets the first frame/,'Missing-model guidance must not replace the first-frame choice');
+assert.match(ui.$('note').textContent,/Following <Audio 1>/,'Missing-model guidance must not replace the audio choice');
+ui.$('prompt').value='';ui.render();
 assert.match(ui.$('assets').textContent,/<Picture 1>/);assert.match(ui.$('assets').textContent,/<Picture 2>/);assert.match(ui.$('assets').textContent,/<Video 1>/);assert.match(ui.$('assets').textContent,/<Audio 1>/);
 assert.match(ui.$('ref-timing').textContent,/first 3 seconds/);
 const duration=ui.$('ref-timing').querySelector('[data-ref-field="duration"][data-kind="videos"]');duration.value=4;duration.dispatchEvent(new window.Event('change',{bubbles:true}));assert.equal(ui.config().videos[0].duration,4);

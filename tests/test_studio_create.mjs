@@ -197,9 +197,25 @@ studio.source=null;studio.config=originalConfig;studio.syncForm();studio.render(
 
 studio.source={id:'private-source',name:'keep.mp4'};studio.references=[{id:'reference'}];
 ui.show('image');await ui.loadModels();
+
 // First show starts loading. Wait for that bounded set of mocked requests.
 for(let i=0;i<10&&ui.loading;i++)await Promise.resolve();
 assert.equal(ui.models.length,IMAGE_MODELS.length);
+{
+  const global=studio.modelDownloads={setMissingContext(route,missing,label){this.context={route,missing,label};},setContext(context){this.context=context;}};
+  ui.render();
+  assert.equal(global.context.route,'image','Global Models follows the Image workspace');
+  assert.equal(global.context.label,ui.models.find(m=>m.id===ui.$('model').value).name);
+  const previousModel=ui.$('model').value;const alternate=ui.models.find(m=>!m.edit&&!m.provider&&m.id!==previousModel);ui.$('model').value=alternate.id;ui.render();
+  assert.equal(global.context.label,alternate.name,'Global Models follows the selected image model');
+  ui.$('model').value=previousModel;ui.render();
+  studio.updateModelStatus();
+  assert.equal(global.context.route,'image','Video readiness refresh cannot overwrite image context');
+  ui.show('video');assert.notEqual(global.context?.route,'image','Returning to Video clears the image context until video readiness is known');
+  ui.show('image');assert.equal(global.context.route,'image','Returning to Image restores the selected image context');
+  studio.modelDownloads=undefined;
+}
+
 const originalFetch=ui.fetch;
 {
   // Refresh must use the task and model the artist chose while the catalogue was loading.

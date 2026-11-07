@@ -14,7 +14,7 @@ export function rippleValidation(c){
   if(c.colourPipeline&&c.colourPipeline!=='sdr_sdr'||c.processingSpace&&c.processingSpace!=='SDR (sRGB)')return 'Ripple object replacement currently supports SDR footage only.';
   if(!Number.isInteger(c.startFrame)||c.startFrame<0||!Number.isInteger(c.frameCount)||c.frameCount<1||c.frameCount>985)return 'Choose a valid clip range of 1 to 985 source frames (including the model’s held tail).';
   if(!Number.isFinite(c.sequenceFps)||c.sequenceFps<1||c.sequenceFps>120)return 'Choose a valid source frame rate.';
-  if(![c.width||1152,c.height||640].every(n=>Number.isInteger(n)&&n>=64&&n<=4096&&n%64===0)||(c.width||1152)*(c.height||640)>8_388_608)return 'Choose processing dimensions on the 64-pixel grid, up to 4096 pixels per side and 8.39 MP.';
+  if(![c.width||1152,c.height||640].every(n=>Number.isInteger(n)&&n>=64&&n<=4096&&n%64===0)||(!c.allowLargeWorkingRaster&&(c.width||1152)*(c.height||640)>8_388_608))return c.allowLargeWorkingRaster?'Choose processing dimensions on the 64-pixel grid, up to 4096 pixels per side.':'Choose processing dimensions on the 64-pixel grid, up to 4096 pixels per side and 8.39 MP.';
   const anchors=(c.anchors||[]).filter(a=>a.enabled!==false);
   if(anchors.length!==1||!anchors[0].file||Number(anchors[0].frame)!==c.startFrame)return 'Create or import a replacement image for the first selected frame.';
   if(anchors[0].rippleReviewedFile!==anchors[0].file)return 'Review the first-frame replacement image, then click Use this first frame.';

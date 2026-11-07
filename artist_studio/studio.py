@@ -416,6 +416,12 @@ def paintout_asset_path(store, identity, validate=check_asset):
     return validate(asset)
 
 
+def ripple_uploaded_source_info(store, identity, validate, describe_media):
+    """Describe a verified Studio-uploaded clip without imposing HDR input."""
+    path = paintout_asset_path(store, identity, validate)
+    return describe_media(str(path))
+
+
 def paintout_hdr_asset_info(path, colour_space, describe, selected_space, describe_media):
     if colour_space not in ('auto', 'hlg_rec2020', 'pq_rec2020'):
         raise ValueError('Choose HLG, PQ, or source colour detection for HDR video.')
@@ -2909,6 +2915,18 @@ def register():
             raise ValueError('Choose a valid HDR source colour.')
         path = await asyncio.to_thread(paintout_asset_path, studio.store, request.match_info["identity"], check_asset)
         info = await asyncio.to_thread(paintout_hdr_asset_info, path, body.get('colour_space', 'auto'), describe, selected_space, describe_media)
+        return web.json_response(info)
+
+    @routes.post("/zura/studio/assets/{identity}/ripple")
+    @routes.post("/genj/studio/assets/{identity}/ripple")
+    @response
+    async def ripple_uploaded_source(request):
+        # Resolve only a verified Studio upload. The existing Paintout handoff
+        # deliberately requires HDR and continues to enforce that contract.
+        from ..paintout.browser import describe_media
+        from ..media_source import require_same_origin
+        require_same_origin(request)
+        info = await asyncio.to_thread(ripple_uploaded_source_info, studio.store, request.match_info["identity"], check_asset, describe_media)
         return web.json_response(info)
 
     @routes.post('/zura/studio/hdr/output/paintout')

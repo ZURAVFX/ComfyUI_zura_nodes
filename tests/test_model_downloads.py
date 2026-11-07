@@ -22,6 +22,25 @@ class Response:
 
 
 class ModelDownloadTest(unittest.TestCase):
+    def test_ripple_packages_match_native_graph_files_and_keep_per_repo_access(self):
+        import json
+        import subprocess
+        root = Path(__file__).resolve().parents[1]
+        script = "import {H3_RIPPLE_FILES} from './web/studio_ripple_recipes.js'; import {PAINTOUT_MODELS} from './web/paintout_studio/paintout_recipes.js'; import {RIPPLE_LORA} from './web/paintout_studio/ripple_recipes.js'; console.log(JSON.stringify({h3:H3_RIPPLE_FILES,ltx:PAINTOUT_MODELS,lora:RIPPLE_LORA}));"
+        recipe = json.loads(subprocess.check_output(['node', '--input-type=module', '-e', script], cwd=root, text=True))
+        h3 = downloads.CATALOG['h3_ripple']
+        self.assertEqual({f['filename'] for f in h3['files']}, set(recipe['h3'].values()))
+        ltx = downloads.CATALOG['ltx_ripple']
+        self.assertEqual({f['filename'] for f in ltx['files']}, {recipe['ltx'][key] for key in ('model','text','videoVae','audioVae')} | {recipe['lora']})
+        for package in (h3,ltx):
+            self.assertTrue(all(len(f['revision'])==40 and len(f['sha256'])==64 and f['size_bytes']>0 for f in package['files']))
+        with tempfile.TemporaryDirectory() as tmp:
+            locations = {key: [str(Path(tmp)/key)] for key in ('vae','text_encoders','diffusion_models','loras')}
+            result = downloads.inspect('ltx_ripple', locations)
+            self.assertEqual(result['remaining_bytes'], sum(f['size_bytes'] for f in ltx['files']))
+            self.assertFalse(next(f for f in result['files'] if f['filename']==recipe['lora'])['gated'])
+            self.assertTrue(all(f['gated'] for f in result['files'] if f['filename']!=recipe['lora']))
+
     def test_wan_endpoint_package_matches_every_native_recipe_file(self):
         import json
         import subprocess

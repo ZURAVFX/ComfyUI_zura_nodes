@@ -1712,7 +1712,7 @@ class ArtistStudio {
     const missingNodeField={openjutsu:"missing_openjutsu_nodes",wan2:"missing_wan2_nodes",h3_head_swap:"missing_h3_head_swap_nodes",local:"missing_ltx_nodes",local_scene:"missing_ltx_scene_nodes",local_viewport:"missing_ltx_viewport_nodes",h3:"missing_h3_nodes",h3_viewport:"missing_h3_viewport_nodes",wan:"missing_wan_nodes"}[route];
     const videoNodes=wan21Relight?(wan21Status.missing_nodes||[]):((camera?cameraStatus?.missing_nodes:null)||(this.headSwap()?this.modelStatus.h3_head_swap?.missing_nodes:null)||this.modelStatus[missingNodeField]||[]);
     const missingNodes=[...new Set([...(includeOpening?(openingStatus?.missing_nodes||this.modelStatus.missing_design_nodes||[]):[]),...videoNodes,...(engine==="wan2" && this.config.edit_area==="mask"?this.modelStatus.wan2?.missing_mask_nodes||[]:[])])];
-    this.modelDownloads?.setContext({route:wan21Relight?"wan21_relight":route,files,missingNodes});
+    if(!this.creative || this.creative.mode==='video')this.modelDownloads?.setContext({route:wan21Relight?"wan21_relight":route,files,missingNodes});
     this.$("model-checklist").innerHTML=engine==="seedance"?'<p class="gs-note">Uses the paid provider. Check credits and cost before rendering.</p>':files.map(item=>`<p class="gs-note">${item.ready?"Ready":"Missing"}: <code>${escape(item.path||`models/${item.folder}/${item.filename}`)}</code>${!item.ready&&item.url?` · <a href="${escape(item.url)}" target="_blank" rel="noopener noreferrer">Download</a>`:""}</p>`).join("")+(missingNodes.length?`<p class="gs-note">Missing nodes: ${missingNodes.map(escape).join(", ")}. Install the matching packs listed in the setup guide, then restart ComfyUI.</p>`:"<p class=\"gs-note\">Required native node checks passed. Optional speech or enhancement has its own setup.</p>");
   }
   async poll() {
@@ -1762,7 +1762,7 @@ let registeredStudio;
 export async function openZuraStudio(workspace){
   if(!registeredStudio)return;
   if(!registeredStudio.container.isConnected)await registeredStudio.open();
-  if(['home','image','video','frames','references','paintout','watermark','outpaint'].includes(workspace))registeredStudio.creative?.show(workspace);
+  if(['home','image','video','frames','references','paintout','watermark','outpaint','ripple'].includes(workspace))registeredStudio.creative?.show(workspace);
   return registeredStudio;
 }
 
@@ -1783,7 +1783,7 @@ app.registerExtension({
     installArtistLinkRendering(app);
     const css=document.createElement("link");css.rel="stylesheet";css.href=new URL("./studio.css",import.meta.url).href;document.head.appendChild(css);
     for(const path of ["./vendor/studio-components.css","./studio_components.css"]){const link=document.createElement("link");link.rel="stylesheet";link.href=new URL(path,import.meta.url).href;document.head.appendChild(link);}
-    for(const path of ["./studio_create.css","./studio_composer.css","./studio_panorama.css","./studio_outpaint.css","./paintout_studio/studio_paintout.css","./paintout_studio/paintout_integrated.css","./studio_polish.css"]){const link=document.createElement("link");link.rel="stylesheet";link.href=new URL(path,import.meta.url).href;document.head.appendChild(link);}
+    for(const path of ["./studio_create.css","./studio_composer.css","./studio_panorama.css","./studio_outpaint.css","./studio_ripple.css","./paintout_studio/studio_paintout.css","./paintout_studio/paintout_integrated.css","./studio_polish.css"]){const link=document.createElement("link");link.rel="stylesheet";link.href=new URL(path,import.meta.url).href;document.head.appendChild(link);}
     import("./vendor/studio-components.js").then(()=>{
       document.getElementById("genj-studio")?.classList.add("zc-components-ready");
       for(const tip of document.querySelectorAll("#genj-studio wa-tooltip")){document.getElementById(tip.getAttribute("for"))?.removeAttribute("title");}

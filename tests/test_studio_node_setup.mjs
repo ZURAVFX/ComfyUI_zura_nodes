@@ -12,6 +12,10 @@ assert.equal(result.packs.find(p=>p.name==='ComfyUI-LTXVideo').missing.length,2)
 assert.ok(result.packs.find(p=>p.name==='ComfyUI').note.includes('built-in'));
 assert.ok(result.packs.every(p=>p.url.startsWith('https://github.com/')));
 assert.deepEqual(groupMissingNodes(null),{packs:[],unknown:[]});
+const ripple=groupMissingNodes(['WN_RippleApply','ZuraRippleH3Guide']);
+assert.deepEqual(ripple.unknown,[]);
+assert.equal(ripple.packs.find(pack=>pack.missing.includes('WN_RippleApply')).url,'https://github.com/WepeNerd/ComfyUI-WepeNerd');
+assert.equal(ripple.packs.find(pack=>pack.missing.includes('ZuraRippleH3Guide')).name,'Zura Nodes');
 const ph3Nodes=['PH3ImageConditioning','LoraLoaderBypassModelOnly','TextGenerate','GetImageSize','ResizeAndPadImage','BatchImagesNode'];
 const ph3=groupMissingNodes(ph3Nodes);
 assert.deepEqual(ph3.unknown,[],'P-H3 prerequisites need actionable update guidance');
