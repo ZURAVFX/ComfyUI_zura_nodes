@@ -117,7 +117,7 @@ export class CreativeWorkspace {
     for(const button of imageTabs.querySelectorAll('button'))button.onclick=()=>{imageTabs.open=false;this.setImageOperation(button.dataset.imageOperation);};
     const imageHistory=document.createElement('details');imageHistory.className='zc-image-takes';imageHistory.innerHTML='<summary>History</summary><div id="zc-image-history"></div>';
     page.querySelector('.zc-image-tools').prepend(imageHistory);
-    imageHistory.addEventListener('click',event=>{const button=event.target.closest('[data-view-image]');if(button){this.selectedImage=Number(button.dataset.viewImage);this.autoCanvasSuppressed=false;this.save();this.renderGallery();imageHistory.open=false;}});
+    imageHistory.addEventListener('click',event=>{const button=event.target.closest('[data-view-image]');if(button){this.activateImageResult(Number(button.dataset.viewImage));imageHistory.open=false;}});
     const imageStatus=document.createElement('div');imageStatus.className='zc-image-status';imageStatus.append(this.$('progress'),this.$('message'));page.querySelector('.zc-image-scroll').after(imageStatus);
     for(const button of this.root.querySelectorAll("[data-space]"))button.onclick=()=>this.show(button.dataset.space);
     this.root.querySelector('#zc-open-hdr').onclick=()=>this.openHDR();
@@ -565,6 +565,7 @@ export class CreativeWorkspace {
     this.$("model-hint").textContent=m?.hint||"Checking local model files.";
     const sizeStep=m?.sizeStep||16;
     this.$("size").textContent=error || (auto?(m?.provider?"Auto · No size instruction is sent. The website chooses the final size.":this.references.length?`Auto · Uses Image 1 dimensions, aligned to ${sizeStep} px.`:"Auto · 1024 × 1024 when no reference is supplied.") : size.join(" × ")+" px · "+(size[0]*size[1]/1e6).toFixed(2)+" MP"+(m?.provider?" requested · The website determines the final size.":m?.id==='ph3edit'?" · 4–8 MP recommended; larger sizes need more memory.":size[0]*size[1]>1048576?" · Above the tested 1 MP size; needs more memory.":` · Multiples of ${sizeStep}`));
+    if(!error&&auto&&c.edit_area?.enabled)this.$('size').textContent='Auto · Processes the selected crop at 1 MP or its larger native size. Final image keeps the source dimensions.';
     for(const id of ["width","height"])this.$(id).setAttribute("aria-invalid",String(!!error));
     this.$('image-megapixels').disabled=busy;this.$('image-mp-label').textContent=size?`${(size[0]*size[1]/1e6).toFixed(2)} MP`:'';
     if(this.$('image-megapixels')!==document.activeElement&&size)this.$('image-megapixels').value=Math.min(8.5,size[0]*size[1]/1e6);
@@ -575,6 +576,14 @@ export class CreativeWorkspace {
     this.imageComparison?.update(this.items[this.selectedImage||0],this.references);
     this.editInputs?.sync();
     this.imageArea?.sync();
+  }
+  activateImageResult(index=0){
+    if(!this.items[index]?.file?.filename)return;
+    this.selectedImage=index;this.autoCanvasSuppressed=false;
+    if(this.imageArea)this.imageArea.editing=false;
+    if(this.editInputs)this.editInputs.showSource=false;
+    if(this.imageComparison)this.imageComparison.active=false;
+    this.save();this.renderGallery();this.render();
   }
   renderGallery(){
     this.outpaintGuide?.syncImageUI();
@@ -661,7 +670,7 @@ export class CreativeWorkspace {
         const files=entry.status.status_str==='error'?[]:entry.outputs?.save?.images||[];
         const messages=entry.status.messages||[],start=messages.find(m=>m[0]==="execution_start")?.[1]?.timestamp,end=messages.find(m=>m[0]==="execution_success")?.[1]?.timestamp;
         for(const file of files)this.items.unshift({...job.config,file,seconds:start&&end?(end-start)/1000:null});this.items=this.items.slice(0,30);if(files.length){this.selectedImage=0;this.autoCanvasSuppressed=false;}
-        const error=messages.find(m=>m[0]==="execution_error")?.[1];this.message(files.length?(job.cancelPending?"Image finished before cancellation. Your image is saved.":""):error?.exception_message||(job.cancelPending?"Run cancelled. Your previous images are safe.":"Generation stopped. Your previous images are safe."));this.job=null;if(files.length&&this.imageArea?.editing)this.imageArea.finishEditor({render:false});this.stopPolling();this.save();this.renderGallery();this.render();
+        const error=messages.find(m=>m[0]==="execution_error")?.[1];this.message(files.length?(job.cancelPending?"Image finished before cancellation. Your image is saved.":""):error?.exception_message||(job.cancelPending?"Run cancelled. Your previous images are safe.":"Generation stopped. Your previous images are safe."));this.job=null;this.stopPolling();if(files.length)this.activateImageResult(0);else{this.save();this.renderGallery();this.render();}
       }else{const queue=await this.fetch("/queue");if(this.job!==job)return;const running=queue.queue_running.some(r=>r[1]===job.id),pending=queue.queue_pending.some(r=>r[1]===job.id);if(!running&&!pending){const again=await this.fetch("/history/"+encodeURIComponent(job.id));if(this.job!==job)return;if(again[job.id])return;this.job=null;this.stopPolling();this.save();this.message(job.cancelPending?"Run cancelled. Your previous images are safe.":"This run is no longer in ComfyUI's queue. You can generate again.");this.render();}else if(job.cancelPending){this.$('progress-title').textContent='Cancelling…';this.$('progress-detail').textContent='Waiting for ComfyUI to stop this run.';}else this.$("progress-detail").textContent=running?this.elapsed():"Waiting for other ComfyUI jobs";}
     }catch(e){this.connectionLost=true;this.message("Connection interrupted. Reconnecting to your image run…");}finally{this.polling=false;}
   }

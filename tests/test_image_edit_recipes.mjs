@@ -18,7 +18,7 @@ for(const model of ['qwen2511','klein9b','flux3edit']){
   assert.ok(!Object.values(graph).some(n=>/API|Partner/.test(n.class_type)));
   if(model==='qwen2511'){
     assert.equal(graph.lightning.inputs.strength_model,1);
-    assert.equal(graph.sample.inputs.steps,4);assert.equal(graph.sample.inputs.cfg,4);
+    assert.equal(graph.sample.inputs.steps,4);assert.equal(graph.sample.inputs.cfg,1,'Qwen Lightning uses its distilled CFG rather than the full-step recipe');
     assert.equal(graph.sampling.inputs.shift,3.1);assert.equal(graph.cfg_norm.inputs.strength,1);
     assert.equal(graph.prompt.inputs.prompt,'Make the wall blue');assert.equal(graph.negative.inputs.prompt,'');
     assert.deepEqual(graph.prompt.inputs.image1,['source_size',0]);assert.deepEqual(graph.size.inputs.pixels,['source_size',0]);

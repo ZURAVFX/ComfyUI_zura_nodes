@@ -105,7 +105,9 @@ function buildImageGraphBase({model="flux3",prompt,shape="square",seed=42,width,
     const positive=node("positive_references","FluxKontextMultiReferenceLatentMethod","Qwen reference method",{conditioning:pos,reference_latents_method:"index_timestep_zero"});
     const negative=node("negative_references","FluxKontextMultiReferenceLatentMethod","Qwen negative reference method",{conditioning:neg,reference_latents_method:"index_timestep_zero"});
     const latent=node("size","VAEEncode","Encode source image",{pixels:images.image1,vae});
-    const samples=node("sample","KSampler","Edit image",{model:unet,positive,negative,latent_image:latent,seed,steps:4,cfg:4,sampler_name:"euler",scheduler:"simple",denoise:1});
+    // ComfyUI's official Qwen 2511 blueprint specifies CFG 1 for the
+    // four-step Lightning adapter; CFG 4 belongs to the full-step recipe.
+    const samples=node("sample","KSampler","Edit image",{model:unet,positive,negative,latent_image:latent,seed,steps:4,cfg:1,sampler_name:"euler",scheduler:"simple",denoise:1});
     const image=node("decode","VAEDecode","Decode edit",{samples,vae});
     node("save","SaveImage","Save to Zura images",{images:image,filename_prefix:"zura_images/"+model});return graph;
   }

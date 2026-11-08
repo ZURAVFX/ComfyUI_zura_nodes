@@ -99,7 +99,7 @@ class ZuraImageEditResolution:
     def INPUT_TYPES(cls):
         return {"required": {
             "image": ("IMAGE",),
-            "megapixels": ("FLOAT", {"default": 1.0, "min": 0.01, "max": 16.0}),
+            "megapixels": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 16.0}),
             "resolution_steps": ("INT", {"default": 16, "min": 8, "max": 256}),
         }}
 
@@ -111,8 +111,8 @@ class ZuraImageEditResolution:
     def clamp(self, image, megapixels, resolution_steps):
         if image.ndim != 4 or min(image.shape[1:3]) < 1:
             raise ValueError("The edit crop has no image pixels.")
-        if not math.isfinite(megapixels) or not 0.01 <= megapixels <= 16:
-            raise ValueError("Choose an edit processing size between 0.01 and 16 MP.")
+        if not math.isfinite(megapixels) or not (megapixels == 0 or 0.01 <= megapixels <= 16):
+            raise ValueError("Choose Auto or an edit processing size between 0.01 and 16 MP.")
         h, w = image.shape[1:3]
         aspect = max(w / h, h / w)
         # Keep both axes inside model limits. The smart-crop node has already
@@ -122,7 +122,10 @@ class ZuraImageEditResolution:
         max_pixels = 8192 * 8192 / aspect
         if min_pixels > max_pixels:
             raise ValueError("The selected area is too narrow for this image model. Paint a wider area.")
-        pixels = min(max(megapixels * 1024 * 1024, min_pixels), max_pixels, 16 * 1024 * 1024)
+        # Auto gives small painted crops enough inference detail while keeping
+        # larger native crops. The stitcher restores the source dimensions.
+        target_pixels = max(h * w, 1024 * 1024) if megapixels == 0 else megapixels * 1024 * 1024
+        pixels = min(max(target_pixels, min_pixels), max_pixels, 16 * 1024 * 1024)
         return (pixels / (1024 * 1024),)
 
 

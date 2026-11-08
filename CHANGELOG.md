@@ -1,5 +1,13 @@
 # Release notes
 
+## 1.3.53 - 8 November 2026
+
+- Show completed image edits and images selected from History by clearing the source-view and comparison state as well as closing the paint overlay. Keep the painted selection for further edits.
+- Process small painted crops at approximately 1 MP in Auto, while retaining larger native crops within model limits. Restore the final image to the original source dimensions.
+- Use CFG 1 for Qwen Image Edit 2511's four-step Lightning recipe, matching ComfyUI's supplied blueprint.
+- Show the number of additional reference images beside the paint control.
+- Cover result activation, source preservation, Auto crop sizing and Ripple handoff with regression tests. Local Flux 3 and Qwen shot tests confirmed rendering and compositing; replacement quality remains prompt- and model-dependent. Prompts are sent unchanged.
+
 ## 1.3.52 - 8 November 2026
 
 - Fix OpenJutsu setup when the finished starting image is supplied as the character image and no separate reference list is present.

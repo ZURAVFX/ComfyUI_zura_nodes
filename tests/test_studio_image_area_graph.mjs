@@ -49,8 +49,9 @@ for(const model of IMAGE_MODELS.filter(item=>item.edit)){
       assert.deepEqual(graph.browser_image.inputs.reference_2,['reference_2',0]);
     }
     const auto=buildImageGraph({...config,shape:'auto',edit_area:selected,smart_crop_schema:schema});
-    assert.equal(auto.zura_area_working.class_type,'ImageScale');
-    assert.deepEqual(auto.zura_area_working.inputs.width,['zura_area_auto_size',0]);
+    assert.equal(auto.zura_area_working.class_type,'ImageScaleToTotalPixels');
+    assert.equal(auto.zura_area_target.inputs.megapixels,0,'Auto resolves native crop area with a quality floor');
+    assert.deepEqual(auto.zura_area_working.inputs.megapixels,['zura_area_target',0]);
   }
 }
 assert.throws(()=>buildImageGraph({model:'klein9b',prompt:'Edit',references:refs,edit_area:{...selected,source_key:'other.png'}}),/different main image/);

@@ -58,14 +58,10 @@ export function applyImageEditArea(graph,{edit_area,smart_crop_schema,recipe,sha
   const crop={image:['reference_1',0],mask:['zura_area_mask',0],resolution_mode:'Automatic',max_resolution:8192,min_resolution:256,manual_width:1024,manual_height:1024,mask_grow_pixels:schema.contextPadding?0:context,patch_mask_holes:false,no_mask_mode:'Bypass',force_divisibility:step};
   if(schema.contextPadding)crop.context_padding=context;
   graph.zura_area_crop=node('SmartImageCrop','Crop selected area with context',crop);
-  // Auto retains crop dimensions. A requested size supplies an approximate MP
-  // target without imposing the full plate's aspect ratio on the selection.
-  if(shape==='auto')graph.zura_area_working=node('ImageScale','Use crop dimensions',{image:['zura_area_crop',0],upscale_method:'lanczos',width:['zura_area_auto_size',0],height:['zura_area_auto_size',1],crop:'disabled'});
-  else{
-    graph.zura_area_target=node('ZuraImageEditResolution','Keep the crop within model size limits',{image:['zura_area_crop',0],megapixels:Math.max(.01,megapixels),resolution_steps:step});
-    graph.zura_area_working=node('ImageScaleToTotalPixels','Set edit processing size',{image:['zura_area_crop',0],upscale_method:'lanczos',megapixels:['zura_area_target',0],resolution_steps:step});
-  }
-  if(shape==='auto')graph.zura_area_auto_size=node('GetImageSize','Crop dimensions',{image:['zura_area_crop',0]});
+  // Auto preserves larger native crops and gives small crops a 1 MP quality
+  // floor. Explicit sizes remain approximate MP targets at the crop's aspect.
+  graph.zura_area_target=node('ZuraImageEditResolution','Keep the crop within model size limits',{image:['zura_area_crop',0],megapixels:shape==='auto'?0:Math.max(.01,megapixels),resolution_steps:step});
+  graph.zura_area_working=node('ImageScaleToTotalPixels','Set edit processing size',{image:['zura_area_crop',0],upscale_method:'lanczos',megapixels:['zura_area_target',0],resolution_steps:step});
   graph.zura_area_size=node('GetImageSize','Edit processing dimensions',{image:['zura_area_working',0]});
   graph.zura_area_result=node('ZuraImageEditCropResult','Check edited crop',{image:generated,reference:['zura_area_working',0]});
   const stitch={original_image:['reference_1',0],processed_image:['zura_area_result',0],stitcher_info:['zura_area_crop',2],feather_pixels:0,blend_mode:'Mask Feather',resize_full_image_output:'Restore Original Size',enable_color_match:false,color_match_amount:0,mask:['zura_area_crop',1]};

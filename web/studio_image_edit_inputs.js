@@ -70,6 +70,7 @@ export class ImageEditInputs {
       picker.querySelector('[data-reference-status]').textContent=o.$('reference-hint').textContent;
       picker.querySelector('[data-clear-images]').disabled=busy||!o.references.length;
       picker.querySelector('summary').setAttribute('aria-label',`${refs.children.length} edit reference images`);
+      picker.querySelector('summary span').textContent=refs.children.length?`References · ${refs.children.length}`:'References';
       if(!main)o.$('generate').disabled=true;
     }else{
       this.addHome.prepend(this.addReferences);this.addReferences.innerHTML=this.addLabel;this.addReferences.classList.add('zc-attachment');

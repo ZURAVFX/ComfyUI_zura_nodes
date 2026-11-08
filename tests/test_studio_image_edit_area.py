@@ -60,6 +60,15 @@ class ImageEditAreaTests(unittest.TestCase):
         self.assertEqual(actual, 2)
         self.assertAlmostEqual(node.clamp(crop, 16, 16)[0], 2)
 
+    def test_auto_raises_small_crop_and_retains_larger_native_crop(self):
+        node = area.ZuraImageEditResolution()
+        self.assertEqual(node.clamp(torch.zeros((1, 656, 400, 3)), 0, 16)[0], 1)
+        self.assertEqual(node.clamp(torch.zeros((1, 1024, 2048, 3)), 0, 16)[0], 2)
+        self.assertEqual(node.clamp(torch.zeros((1, 656, 400, 3)), .5, 16)[0], .5)
+        for invalid in [-1, .001, 17, float('nan')]:
+            with self.assertRaises(ValueError):
+                node.clamp(self.source, invalid, 16)
+
 
 if __name__ == '__main__':
     unittest.main()
