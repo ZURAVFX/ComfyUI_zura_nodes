@@ -1,9 +1,24 @@
 import {cameraOnlyControls} from './studio_panorama_controls.js';
 
+export function installSourcePreview(root,source){
+  if(!source?.url)return()=>{};
+  const main=root.querySelector('.pano-studio-main');if(!main)return()=>{};
+  const panel=document.createElement('aside');panel.className='zc-camera-source';panel.setAttribute('aria-label','Original video reference');
+  panel.innerHTML='<strong>Original video</strong><video muted playsinline preload="metadata" aria-label="Original footage"></video><label><input type="checkbox" checked/>Follow camera timeline</label><p></p>';
+  panel.querySelector('p').textContent=source.stillScene?'The 3D view uses a still scene. This video remains the performance reference for the final render.':'Compare the source performance with the camera view.';
+  const video=panel.querySelector('video'),follow=panel.querySelector('input'),start=Math.max(0,Number(source.start)||0),duration=Math.max(1/24,Number(source.duration)||2),fps=Number(source.fps)||24;
+  follow.checked=true;video.muted=true;video.src=source.url;main.append(panel);main.classList.add('zc-camera-with-source');
+  const sync=()=>{if(!follow.checked)return;const frame=Number(root.querySelector('.pano-studio-tl-frame')?.textContent?.split('/')[0]?.trim())||0;const playing=!!root.querySelector('[data-tl="play"][aria-label="Pause"]');const time=start+Math.max(0,Math.min(duration-1/fps,frame/fps));if(Math.abs(video.currentTime-time)>(playing ? .15 : .015))try{video.currentTime=time;}catch{}if(playing){const promise=video.play?.();promise?.catch?.(()=>{});}else video.pause?.();};
+  video.onloadedmetadata=sync;follow.onchange=()=>{video.controls=!follow.checked;if(follow.checked)sync();};
+  video.ontimeupdate=()=>{if(!follow.checked&&video.currentTime>=start+duration){video.pause?.();video.currentTime=start;}};
+  const observer=new MutationObserver(sync);observer.observe(root,{childList:true,subtree:true,characterData:true,attributes:true,attributeFilter:['aria-label']});sync();
+  return()=>{observer.disconnect();video.pause?.();video.removeAttribute('src');video.load?.();panel.remove();main.classList.remove('zc-camera-with-source');};
+}
+
 /** Open the installed Panorama editor on an isolated native graph.
  * The artist's Graph view is never replaced. Only Apply returns native state.
  */
-export async function openPanoramaEditor({app,state,geometryKey,output,onApply,onCancel,onError}){
+export async function openPanoramaEditor({app,state,geometryKey,output,source,onApply,onCancel,onError}){
   const create=app.createNode?.bind(app)||globalThis.LiteGraph?.createNode?.bind(globalThis.LiteGraph);
   if(!create)throw new Error('Update ComfyUI to open the Panorama camera editor.');
   const graph=new app.graph.constructor();
@@ -30,10 +45,10 @@ export async function openPanoramaEditor({app,state,geometryKey,output,onApply,o
   const controls=document.createElement('div');controls.className='zc-panorama-actions';
   controls.setAttribute('role','group');controls.setAttribute('aria-label','Camera changes');
   controls.innerHTML='<span>Review the camera move, then apply.</span><button type="button" data-cancel>Cancel</button><button type="button" class="zc-panorama-apply" data-apply>Apply camera</button>';
-  let handle,disposeCamera,done=false,applying=false;
+  let handle,disposeCamera,disposeSource,done=false,applying=false;
   const previousCallback=widget.callback;
   const cleanup=()=>{
-    if(done)return;done=true;observer.disconnect();disposeCamera?.();controls.remove();widget.callback=previousCallback;
+    if(done)return;done=true;observer.disconnect();disposeSource?.();disposeCamera?.();controls.remove();widget.callback=previousCallback;
     if(outputs instanceof Map)outputs.delete(node.id);else delete outputs[node.id];
     graph.clear();document.body.classList.remove('zura-camera-editor-open');
   };
@@ -53,7 +68,7 @@ export async function openPanoramaEditor({app,state,geometryKey,output,onApply,o
     document.body.classList.add('zura-camera-editor-open');
     handle=await button.callback();
     if(!handle?.close)throw new Error('Panorama did not open its camera editor. Enable its new editor and retry.');
-    disposeCamera=cameraOnlyControls(handle,document.querySelector('.pano-studio-backdrop'));
+    const root=document.querySelector('.pano-studio-backdrop');disposeCamera=cameraOnlyControls(handle,root);disposeSource=installSourcePreview(root,source);
     document.body.append(controls);observer.observe(document.body,{childList:true,subtree:true});
     controls.querySelector('[data-apply]').focus({preventScroll:true});
     return {cancel};

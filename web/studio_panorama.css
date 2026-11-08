@@ -56,3 +56,22 @@
 .zc-camera-navigation>summary:focus-visible{outline:2px solid #caff00;outline-offset:3px}
 @media(max-width:900px){.zc-camera-toolbar{flex-wrap:wrap;padding:12px}.zc-camera-toolbar>div{flex-basis:100%}.zc-camera-toolbar [data-camera-status]{max-width:none}}
 @media(max-width:760px){#genj-studio .zpc-page{width:calc(100% - 24px)}#genj-studio .zpc-heading [data-steps],.zc-panorama-actions span{display:none}#genj-studio .zpc-composer{padding:16px}#genj-studio .zpc-page .zc-prompt-bottom{flex-wrap:wrap}}
+
+.zc-camera-only .pano-studio-main.zc-camera-with-source{display:grid;grid-template-columns:minmax(0,1fr) clamp(180px,22vw,280px);grid-template-rows:auto minmax(0,1fr);gap:12px}
+.zc-camera-with-source>.zc-camera-toolbar{grid-column:1/-1;grid-row:1}
+.zc-camera-with-source>.pano-studio-stage{grid-column:1;grid-row:2;min-height:220px}
+.zc-camera-source{grid-column:2;grid-row:2;display:flex;flex-direction:column;align-self:start;min-width:0;gap:12px;padding:12px;border:1px solid #383838;border-radius:8px;background:#202020;color:#eee;font:13px/1.5 Manrope,system-ui,sans-serif}
+.zc-camera-source strong{font-weight:500}
+.zc-camera-source video{display:block;width:100%;height:clamp(120px,24vh,260px);object-fit:contain;background:#090909;border-radius:6px}
+.zc-camera-source label{display:flex;align-items:center;gap:8px;font-size:12px;cursor:pointer}
+.zc-camera-source input{accent-color:#caff00}
+.zc-camera-source p{margin:0;color:#ababab;font-size:12px}
+@media(max-width:800px){.zc-camera-only .pano-studio-main.zc-camera-with-source{grid-template-columns:minmax(0,1fr) 160px;gap:8px}.zc-camera-source{padding:8px;gap:8px}.zc-camera-source p{display:none}.zc-camera-source video{height:140px}}
+@media(max-width:540px){.zc-camera-only .pano-studio-main.zc-camera-with-source{grid-template-columns:minmax(0,1fr) 120px}.zc-camera-source video{height:100px}.zc-camera-source label{font-size:11px}}
+
+#genj-studio .zpc-resolution>.zc-tool-panel{width:300px;display:grid;gap:12px}
+#genj-studio .zpc-resolution .zc-tool-panel>label{display:grid;gap:6px;font-size:12px}
+#genj-studio .zpc-resolution input[type=range]{width:100%}
+#genj-studio .zpc-resolution output{color:var(--gs-muted);font-variant-numeric:tabular-nums}
+#genj-studio .zpc-resolution small{color:var(--gs-muted);font-size:11px;line-height:1.5}
+#genj-studio .zpc-resolution [data-dimensions] input{width:100%;min-width:0;box-sizing:border-box}

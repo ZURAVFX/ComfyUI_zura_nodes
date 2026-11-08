@@ -6,7 +6,7 @@
 - Add the native LTX 2.5 and MiniMax H3 Director workspace with image, direction and sound tracks. Drag clips to move them, drag either edge to change duration, retain timelines across engines and reopening, and cancel a drag with Escape.
 - Use the first/last-frame audio conditioning methods in Director, freeze supplied LTX audio during sampling and save the original timeline soundtrack. Read uploaded audio duration instead of imposing a two-second clip. Verify source trimming and non-zero timeline offsets in short LTX and H3 renders.
 - Add Match image 1 and aspect-preserving megapixel scaling to first/last-frame video, with model-grid processing and requested output-size restoration.
-- Add optional Stable scene geometry to Change camera angle, locking the first selected frame's geometry while retaining moving video textures and original performance/audio references. Keep per-frame geometry as the default. Moving occlusions and the new option's final quality still need artist comparison.
+- Add optional Stable scene geometry to Change camera angle, holding both MoGe geometry and the first selected image still, with a separate timeline-following source-video pane and original moving performance/audio references for generation. Add source-aspect, megapixel and custom resolution controls up to an 8.39 MP software budget. Larger camera renders still need GPU qualification. Keep per-frame geometry as the default. Moving occlusions and the new option's final quality still need artist comparison.
 - Check navigation, saved state, cancellation, native graphs, accessible controls and responsive layouts. Director smoke renders verify execution and soundtrack placement, not generation quality.
 
 ## 1.3.55 - 8 November 2026

@@ -60,7 +60,7 @@ class PanoramaCameraTests(unittest.TestCase):
         self.assertNotEqual(self.selection(start=2)['key'], p['key'])
         self.assertNotEqual(self.selection(width=1280, height=720)['key'], p['key'])
 
-    def test_stable_scene_geometry_is_locked_and_every_trimmed_frame_is_texture(self):
+    def test_still_scene_geometry_and_texture_are_locked_across_camera_timeline(self):
         p = self.selection(duration=1, geometry_mode='stable_scene')
         graph = camera.build_graph(self.source, p, None, 'geometry')
         self.assertEqual(graph['geometry_first_frame']['inputs'],
@@ -79,7 +79,9 @@ class PanoramaCameraTests(unittest.TestCase):
         textures = torch.arange(4 * 2 * 3 * 3, dtype=torch.float32).reshape(4, 2, 3, 3)
         stable = camera.stabilise_geometry(geometry, textures)
         self.assertEqual(stable['image'].shape, (4, 2, 3, 3))
-        torch.testing.assert_close(stable['image'], textures[..., :3])
+        torch.testing.assert_close(stable['image'], textures[:1, ..., :3].expand_as(stable['image']))
+        self.assertEqual(stable['image'].stride(0), 0)
+        self.assertEqual(stable['image'].untyped_storage().nbytes(), textures[:1].numel()*textures.element_size())
         for key in ('points', 'depth', 'intrinsics', 'mask'):
             self.assertEqual(stable[key].shape[0], 4)
             self.assertTrue(torch.equal(stable[key], stable[key][:1].expand_as(stable[key])))
@@ -123,7 +125,7 @@ class PanoramaCameraTests(unittest.TestCase):
             self.assertEqual(result[field].shape[0], 4)
             self.assertEqual(loaded[field].shape[0], 4)
             self.assertTrue(torch.equal(result[field], loaded[field]))
-        self.assertTrue(torch.equal(loaded['image'], textures[..., :3]))
+        self.assertTrue(torch.equal(loaded['image'], textures[:1, ..., :3].expand_as(loaded['image'])))
         self.assertEqual(loaded['image'].device.type, 'cpu')
 
     def test_non24fps_duration_rounds_up_then_trims(self):
@@ -146,8 +148,16 @@ class PanoramaCameraTests(unittest.TestCase):
         with self.assertRaises(ValueError): camera.camera_state(state, p)
 
     def test_interval_and_grid_rejected_before_inference(self):
-        for config in [{'duration': 6}, {'start': 9}, {'width': 1919}, {'width': 3840, 'height': 2160}]:
+        for config in [{'duration': 6}, {'start': 9}, {'width': 1919}, {'width': 4096, 'height': 4096}]:
             with self.assertRaises(ValueError): self.selection(**config)
+
+    def test_4k_canvas_uses_model_padding_and_restores_requested_output(self):
+        p = self.selection(width=3840, height=2160, geometry_mode='stable_scene')
+        self.assertEqual(p['render_height'], 2176)
+        self.assertEqual(p['scene_texture'], 'still-v2')
+        graph = camera.build_graph(self.source, p, None, 'render', warp='warp.mp4')
+        self.assertEqual(graph['crop']['inputs']['width'], 3840)
+        self.assertEqual(graph['crop']['inputs']['height'], 2160)
 
     def test_all_links_resolve(self):
         for stage in ['geometry', 'warp', 'render']:

@@ -50,3 +50,16 @@ assert.deepEqual(
 configured.state.geometryMode=undefined;
 assert.equal(configured.config().geometry_mode,'per_frame','Legacy saved state must keep per-frame geometry');
 console.log('Panorama Windows output handoff, geometry mode contract and restored history pass.');
+
+configured.state={source:{width:1920,height:1080,duration:2},sourceSize:true};
+let preset='source';configured.$=name=>({size:{value:preset},width:{value:'1001'},height:{value:'563'}}[name]);
+assert.deepEqual([configured.config().width,configured.config().height],[1920,1080]);
+configured.state.sourceSize=false;configured.state.megapixels=.5;
+let d=configured.dimensions();assert.ok(Math.abs(d.width/d.height-16/9)<.025);assert.ok(d.width*d.height<550000);
+configured.state.megapixels=1.5;assert.ok(configured.dimensions().width>d.width);
+preset='square';d=configured.dimensions();assert.equal(d.width,d.height);
+preset='custom';assert.deepEqual(configured.dimensions(),{width:1000,height:560});
+console.log('Camera source-aspect, exact source size, megapixel scaling and custom-grid controls pass.');
+
+preset='source';configured.state={source:{width:3840,height:2160,duration:2},sourceSize:true};
+assert.deepEqual([configured.config().width,configured.config().height],[3840,2160]);

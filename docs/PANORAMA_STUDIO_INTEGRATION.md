@@ -14,11 +14,11 @@ Geometry is cached in `output/genj/panorama/geometry`. Camera changes reuse that
 
 **Moving subjects · per frame** remains the default. MoGe reconstructs each selected source frame independently, preserving changing body shapes and occlusions. Independent depth estimates can introduce temporal flicker.
 
-**Stable scene · locked** reconstructs only the first frame of the selected interval and keeps that depth, intrinsics and mesh fixed. Every selected video frame still supplies its own moving texture, and H3 still receives the original video performance and audio. Camera keyframes work in the same editor. Switching geometry options invalidates the previous prepared geometry and camera preview.
+**Still scene · MoGe** reconstructs only the first frame of the selected interval and keeps that depth, intrinsics and mesh fixed. The source image is held still across the camera timeline. A separate source-video pane follows the camera playhead and can be played independently. H3 still receives the original moving video performance and audio. Camera keyframes work in the same editor. Switching geometry options invalidates the previous prepared geometry and camera preview.
 
-Locked geometry is intended for static scenes and small source-camera moves. Moving people or objects can slide across the fixed surface or expose its old silhouette. It removes repeated geometry estimation, but does not guarantee a flicker-free final render. It is an alternative guide, not a temporally reconstructed 3D video or Gaussian splat.
+Locked geometry is intended for static scenes and small source-camera moves. Motion is reconstructed by H3 from the original performance reference; the 3D planning scene itself is a still. Large camera moves can expose missing surfaces or disocclusions. It removes repeated geometry estimation, but does not guarantee a flicker-free final render. It is an alternative guide, not a temporally reconstructed 3D video or Gaussian splat.
 
-The locked geometry option is installed locally. CPU tests cover the selected first frame, full moving texture batch, shared tensor storage, cache round trip and unchanged H3 performance/audio paths. A rendered comparison against per-frame geometry remains required before judging the new option's quality.
+The locked geometry option is installed locally. CPU tests cover the selected first frame, repeated still texture, shared tensor storage, cache round trip and unchanged H3 performance/audio paths. A rendered comparison against per-frame geometry remains required before judging the new option's quality.
 
 ## Approved recipe retained
 
@@ -28,7 +28,7 @@ H3 receives a 32-pixel-aligned raster and an end-frame hold to its supported fra
 
 ## Validation and remaining checks
 
-- Eleven native Python camera tests passed, covering guide ancestry, exact frame count, padding, audio paths, soft look guidance, locked geometry and camera/cache state.
+- Twelve native Python camera tests passed, covering guide ancestry, exact frame count, padding, audio paths, soft look guidance, locked geometry and camera/cache state.
 - Native handoff and editor DOM tests passed, covering Apply, Cancel and closing the popout; the artist graph is isolated.
 - Shared workspace and navigation tests passed, covering the persistent workflow selector and first camera action.
 - Isolated headless Playwright checks exercised 20 camera states at 1280 x 720, 1440 x 900, 1920 x 1080 and 768 x 1024. The preview stayed at least 220 px tall, all controls remained visible, and there were no JavaScript errors or horizontal overflow.
@@ -36,4 +36,4 @@ H3 receives a 32-pixel-aligned raster and an end-frame hold to its supported fra
 - Thirty native node schemas were checked against the running installation. Required models exist in the normal installation; the isolated CPU probe does not inherit every external model path.
 - An interactive check of the native camera popout and a GPU-rendered comparison of locked versus per-frame geometry remain outstanding. The supplied approved result is quality evidence for the existing recipe, not a fresh end-to-end Studio render.
 
-Silent sources, longer than five seconds and outputs above 1080p remain outside this preview. Private handover footage and generated media are not included in the package.
+Source aspect ratio, megapixel scaling and custom dimensions now use the shared resolution pattern, with an 8.39 MP software budget including H3 padding. The supplied approved recipe is 1080p; larger canvases passed graph/padding tests but do not yet have new GPU quality or memory qualification. Silent sources and clips longer than five seconds remain outside this preview. Private handover footage and generated media are not included in the package.

@@ -37,7 +37,7 @@ def geometry_mode(config):
 
 
 def stabilise_geometry(geometry, texture_images):
-    """Use one frame's 3D geometry with every frame of its original texture."""
+    """Hold one reconstructed scene and its still texture across the camera timeline."""
     if not isinstance(geometry, dict):
         raise ValueError('MoGe did not return frame geometry.')
     if len(texture_images.shape) != 4 or texture_images.shape[0] < 1 or texture_images.shape[-1] < 3:
@@ -59,7 +59,7 @@ def stabilise_geometry(geometry, texture_images):
         # the same first-frame mesh at the current source timeline frame.
         base = value.detach().cpu()
         result[key] = base.expand(frames, *base.shape[1:])
-    result['image'] = texture_images[..., :3].detach().cpu()
+    result['image'] = texture_images[:1, ..., :3].detach().cpu().clone().expand(frames, height, width, 3)
     return result
 
 
@@ -75,15 +75,17 @@ def plan(source, config):
         raise ValueError('Panorama camera preview supports 0.21 to 5 seconds.')
     if not source.get('has_audio'):
         raise ValueError('The approved camera recipe needs original audio. Silent-source support is not verified yet.')
-    if not (256 <= width <= 3840 and 256 <= height <= 3840 and width % 8 == 0 and height % 8 == 0):
-        raise ValueError('Use dimensions from 256 to 3840, in multiples of 8.')
-    if width * height > 1920 * 1088:
-        raise ValueError('This camera preview is verified up to 1080p. Choose a smaller output.')
+    if not (256 <= width <= 4096 and 256 <= height <= 4096 and width % 8 == 0 and height % 8 == 0):
+        raise ValueError('Use dimensions from 256 to 4096, in multiples of 8.')
+    if math.ceil(width / 32) * 32 * math.ceil(height / 32) * 32 > 8_388_608:
+        raise ValueError('Choose a camera canvas up to 8.39 MP, including the model grid padding.')
     mode = geometry_mode(config)
     geometry = {'recipe': RECIPE_VERSION, 'source': source['sha'], 'start': start,
                 'duration': seconds, 'frames': frames, 'fps': 24, 'width': width, 'height': height,
                 'model': MODELS['geometry'][1], 'level': 8 if max(width, height) > 1280 else 7,
                 'refine': 3, 'batch': 1, 'projection': True, 'mask': True, 'geometry_mode': mode}
+    if mode == 'stable_scene':
+        geometry['scene_texture'] = 'still-v2'
     identity = geometry if mode == 'stable_scene' else {k: v for k, v in geometry.items() if k != 'geometry_mode'}
     return {**geometry, 'key': digest(identity), 'padded': 5 + 17 * max(0, math.ceil((frames - 5) / 17)),
             'render_width': math.ceil(width / 32) * 32, 'render_height': math.ceil(height / 32) * 32}
