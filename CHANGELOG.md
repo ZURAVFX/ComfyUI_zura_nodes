@@ -1,5 +1,14 @@
 # Release notes
 
+## 1.3.56 - 8 November 2026
+
+- Move the main mode picker beside Image / Video for a consistent position across workspaces and stages. Add grouped visual choices, descriptions, search, keyboard navigation and a matching image-mode picker. Keep browser selection and account sign-in together.
+- Add the native LTX 2.5 and MiniMax H3 Director workspace with image, direction and sound tracks. Drag clips to move them, drag either edge to change duration, retain timelines across engines and reopening, and cancel a drag with Escape.
+- Use the first/last-frame audio conditioning methods in Director, freeze supplied LTX audio during sampling and save the original timeline soundtrack. Read uploaded audio duration instead of imposing a two-second clip. Verify source trimming and non-zero timeline offsets in short LTX and H3 renders.
+- Add Match image 1 and aspect-preserving megapixel scaling to first/last-frame video, with model-grid processing and requested output-size restoration.
+- Add optional Stable scene geometry to Change camera angle, locking the first selected frame's geometry while retaining moving video textures and original performance/audio references. Keep per-frame geometry as the default. Moving occlusions and the new option's final quality still need artist comparison.
+- Check navigation, saved state, cancellation, native graphs, accessible controls and responsive layouts. Director smoke renders verify execution and soundtrack placement, not generation quality.
+
 ## 1.3.55 - 8 November 2026
 
 - Keep Paintout's painted selection after generating a clean frame. **Try again** creates an independent alternative from the same base plate with a new seed; it does not stack failed attempts. Choose a saved result, or use **Paint another area** to build another repair on the chosen image.

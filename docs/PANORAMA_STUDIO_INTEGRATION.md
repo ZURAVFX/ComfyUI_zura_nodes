@@ -1,6 +1,6 @@
 # Panorama camera integration
 
-Local development, updated 8 November 2026. Not a public release.
+Included in Zura Studio 1.3.56, 8 November 2026.
 
 ## Artist flow
 

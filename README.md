@@ -32,7 +32,7 @@ Use your own ComfyUI host and port if they differ.
 
 ## Current release
 
-**1.3.55** fixes Paintout clean-frame retries: keep the painted area, try another seed, choose a saved result or paint another area. It also corrects Paintout's separate Flux 3 recipe and restores old drafts to the removal workflow. Recent releases add [automatic alpha extraction](docs/LTX_ALPHA.md), a shared H3/LTX [Ripple timeline](docs/RIPPLE_STUDIO.md), visible [painted image edits](docs/IMAGE_EDIT_AREA.md), P-H3 Image editing and crop-based [subtitle removal](docs/SUBTITLE_REMOVAL.md). See the [release notes](CHANGELOG.md) for validation and remaining limits.
+**1.3.56** adds a shared visual mode picker, compact browser sign-in controls and the native LTX/H3 [Director timeline](docs/DIRECTOR_STUDIO.md), including clip dragging, resizing and preserved source audio. First/last-frame video can match image 1 dimensions or scale its aspect ratio with the megapixel slider. Camera editing gains optional [locked scene geometry](docs/PANORAMA_STUDIO_INTEGRATION.md). Existing Paintout retries, [alpha extraction](docs/LTX_ALPHA.md), [Ripple editing](docs/RIPPLE_STUDIO.md) and [painted image edits](docs/IMAGE_EDIT_AREA.md) remain included. See the [release notes](CHANGELOG.md) for validation and remaining limits.
 
 The previous update adds complete camera-angle model setup, including MoGe 3, and checks gated-model access before large downloads. Choose a mode to see its missing files and extension guidance. Restart ComfyUI and refresh Studio after updating. See the [model setup notes](docs/STUDIO_1348_VALIDATION.md).
 
