@@ -3,7 +3,7 @@ export class BrowserImageConnection {
   constructor(owner,host){
     this.owner=owner;this.host=host;this.states={};this.choices={};this.requests={};this.closed=false;
     host.className='zc-browser-connection';host.hidden=true;
-    host.innerHTML='<div><strong>Browser sign-in · No API credits</strong><small role="status" aria-live="polite"></small><span>Uses your website account allowance. References are uploaded to the provider.</span></div><label class="zc-browser-choice">Browser<select aria-label="Browser for website sign-in"></select></label><button type="button" class="gs-quiet"></button>';
+    host.innerHTML='<div class="zc-browser-info"><strong>Browser sign-in · No API credits</strong><small role="status" aria-live="polite"></small><span>Uses your website account allowance. References are uploaded to the provider.</span></div><div class="zc-browser-controls"><label class="zc-browser-choice">Browser<select aria-label="Browser for website sign-in"></select></label><button type="button" class="gs-quiet"></button></div>';
     this.button=host.querySelector('button');this.note=host.querySelector('small');
     this.select=host.querySelector('select');
     this.select.onchange=()=>{this.choices[this.provider]=this.select.value;this.owner.render();};

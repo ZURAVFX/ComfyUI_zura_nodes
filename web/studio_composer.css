@@ -350,3 +350,45 @@
 
 /* Workflow setup remains available from the missing-model card. */
 #genj-studio .gs-model-downloads.zc-tool-popup:not(.zc-global-models):not([open]){display:none}
+
+/* Shared workspace navigation. Craft direction: Unslop, Damir Sokolovsky, CC BY 4.0. */
+#genj-studio .zc-mode-host{display:flex;align-items:center;flex:0 1 260px;min-width:120px}
+#genj-studio .zc-mode-host .zc-mode-switcher{width:100%;max-width:260px;margin:0}
+#genj-studio .zc-mode-host .zc-mode-switcher>summary{display:flex;align-items:center;gap:10px;height:40px;padding:4px 10px;border:1px solid var(--gs-line);border-radius:8px;background:var(--gs-panel);color:var(--zc-text);list-style:none;cursor:pointer}
+#genj-studio .zc-mode-host .zc-mode-switcher>summary::-webkit-details-marker{display:none}
+#genj-studio .zc-mode-current-copy{display:flex;flex:1;flex-direction:column;min-width:0;line-height:16px;text-align:left}
+#genj-studio .zc-mode-current-copy>small{font-size:11px;color:var(--gs-muted);font-weight:400}
+#genj-studio .zc-mode-current-copy>[data-workflow-label],#genj-studio .zc-mode-current-copy>[data-image-operation-label]{display:block!important;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px;font-weight:550}
+#genj-studio .zc-mode-host summary>svg,#genj-studio .zc-mode-current-icon{display:flex;flex:none;width:20px;height:20px;align-items:center;justify-content:center;color:var(--gs-muted)}
+#genj-studio .zc-mode-host summary>svg:last-child{width:14px;height:14px}
+#genj-studio .zc-mode-host summary:hover{background:var(--zc-hover)}
+#genj-studio .zc-mode-switcher[open]>summary{border-color:var(--gs-muted);border-radius:8px;padding:4px 10px}
+#genj-studio .zc-mode-host .zc-mode-switcher .zc-mode-menu{width:800px;max-width:calc(100vw - 24px);padding:12px;gap:12px;bottom:auto;border-radius:12px;box-shadow:0 16px 48px #0004}
+#genj-studio .zc-mode-search{display:flex;align-items:center;justify-content:space-between;gap:16px;padding-bottom:12px;border-bottom:1px solid var(--gs-line)}
+#genj-studio .zc-mode-search label{display:flex;align-items:center;gap:8px;flex:1;min-width:0;padding:0 10px;border:1px solid var(--gs-line);border-radius:8px;background:var(--gs-input)}
+#genj-studio .zc-mode-search svg{flex:none;color:var(--gs-muted)}
+#genj-studio .zc-mode-search input{width:100%;height:36px;min-height:0;padding:0;border:0;background:transparent;color:var(--zc-text);font:inherit;font-size:13px;outline:none}
+#genj-studio .zc-mode-search label:focus-within{outline:2px solid var(--gs-focus);outline-offset:2px}
+#genj-studio .zc-mode-search>span{color:var(--gs-muted);font-size:12px}
+#genj-studio .zc-mode-groups{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+#genj-studio .zc-mode-group{min-width:0}
+#genj-studio .zc-mode-group h3{font-size:12px;font-weight:500;color:var(--gs-muted);margin:4px 8px 8px;line-height:20px}
+#genj-studio .zc-mode-group button{display:flex;align-items:flex-start;gap:10px;width:100%;min-height:68px;padding:10px 8px;margin:2px 0;border:1px solid transparent;border-radius:8px;background:transparent;color:var(--zc-text);text-align:left;font:inherit;cursor:pointer}
+#genj-studio .zc-mode-group button:hover:not(:disabled),#genj-studio .zc-mode-group button:focus-visible{background:var(--zc-hover)}
+#genj-studio .zc-mode-group button[aria-checked=true]{background:var(--gs-selected);border-color:var(--gs-line)}
+#genj-studio .zc-mode-icon{display:flex;align-items:center;justify-content:center;flex:none;width:24px;height:24px;margin-top:2px;color:var(--gs-muted)}
+#genj-studio .zc-mode-copy{display:grid;flex:1;gap:4px;min-width:0}
+#genj-studio .zc-mode-copy strong{font-size:13px;line-height:18px;font-weight:550}
+#genj-studio .zc-mode-copy small{font-size:11px;line-height:16px;font-weight:400;color:var(--gs-muted)}
+#genj-studio .zc-mode-check{display:none;width:14px;flex:none;color:var(--zc-text);margin-top:4px}
+#genj-studio .zc-mode-check svg{width:14px;height:14px}
+#genj-studio .zc-mode-group [aria-checked=true] .zc-mode-check{display:flex}
+#genj-studio .zc-mode-no-results{padding:24px;text-align:center;font-size:13px;color:var(--gs-muted)}
+#genj-studio .zc-mode-host .zc-image-operation>.zc-workflow-menu{width:340px;bottom:auto;border-radius:12px}
+#genj-studio .zc-image-operation>.zc-workflow-menu>button{justify-content:flex-start;gap:12px;min-height:68px}
+#genj-studio .zc-image-operation .zc-mode-copy small{background:none!important;width:auto!important;height:auto!important;border-radius:0!important}
+@media(max-width:1000px){#genj-studio .zc-mode-host{flex-basis:220px}#genj-studio .gs-top{gap:10px!important}#genj-studio .gs-top .gs-status{display:none}}
+@media(max-width:760px){#genj-studio .gs-brand strong{display:none}#genj-studio .gs-top .zc-nav button{padding-inline:10px}#genj-studio .zc-mode-host{flex:1 1 160px}#genj-studio .gs-top-actions{gap:4px!important}#genj-studio .gs-top-actions #gs-exit{font-size:0;padding:4px}#genj-studio .gs-top-actions #gs-exit svg{font-size:14px}#genj-studio .zc-mode-search>span{display:none}}
+@media(max-width:600px){#genj-studio .zc-mode-groups{grid-template-columns:1fr}#genj-studio .zc-mode-group{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:2px 8px}#genj-studio .zc-mode-group h3{grid-column:1/-1}#genj-studio .zc-mode-current-copy>small{display:none}#genj-studio .zc-mode-host .zc-mode-switcher>summary{gap:6px}#genj-studio .zc-mode-current-icon{display:none}}
+@media(prefers-reduced-motion:no-preference){#genj-studio .zc-mode-switcher[open]>.zc-tool-panel{animation:zc-mode-open 120ms ease-out}}
+@keyframes zc-mode-open{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:translateY(0)}}

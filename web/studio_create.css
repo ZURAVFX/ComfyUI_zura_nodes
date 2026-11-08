@@ -421,3 +421,12 @@
 #genj-studio .zc-image-source figure>img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain}
 #genj-studio .zc-image-source[hidden]{display:none}
 @media(max-width:600px){#genj-studio .zc-edit-main{padding-right:12px}#genj-studio .zc-reference-list.zc-edit-inputs{gap:12px}}
+
+/* Browser choice and account connection form one compact action group. */
+#genj-studio .zc-browser-connection{justify-content:flex-start;gap:20px;flex-wrap:wrap;align-items:center;padding:12px 0}
+#genj-studio .zc-browser-connection>.zc-browser-info{flex:0 1 auto;max-width:480px;gap:4px}
+#genj-studio .zc-browser-connection>.zc-browser-controls{display:flex;align-items:flex-end;gap:8px;flex:0 0 auto;min-width:0}
+#genj-studio .zc-browser-controls .zc-browser-choice{display:grid;gap:4px;font-size:11px;color:var(--gs-muted)}
+#genj-studio .zc-browser-controls select{width:140px;min-height:36px;font-size:13px}
+#genj-studio .zc-browser-controls button{min-height:36px;padding:8px 12px;border:1px solid var(--gs-line);border-radius:8px;white-space:nowrap}
+@media(max-width:700px){#genj-studio .zc-browser-connection{gap:12px}#genj-studio .zc-browser-connection>.zc-browser-info{max-width:100%}}

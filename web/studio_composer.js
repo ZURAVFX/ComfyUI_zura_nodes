@@ -22,18 +22,42 @@ export const composerIcons={
 };
 export const VIDEO_WORKFLOWS=[['swap','Character replacement'],['ripple','Ripple editing'],['viewport','Viewport to final'],['camera','Change camera angle'],['relight','Relight'],['paintout','Paintout / clean plate'],['watermark','Watermark removal'],['alpha','Extract alpha'],['outpaint','Frame extension · preview'],['hdr','Convert to HDR'],['director','Director'],['frames','First & last frame'],['references','Reference to video']];
 
+// Navigation describes the artist's task; model choices stay with generation controls.
+const MODE_DETAILS={
+ swap:['Edit footage','<circle cx="8" cy="7" r="3"/><path d="M2 20v-3a6 6 0 0 1 12 0v3m2-14h6m-3-3 3 3-3 3m3 5h-6m3-3-3 3 3 3"/>','Replace a performer while keeping their motion'],
+ ripple:['Edit footage','<path d="M3 5h18v14H3zM8 5v14m8-14v14m-8-7h8"/><circle cx="12" cy="12" r="2"/>','Edit keyframes and carry the changes through video'],
+ viewport:['Create a shot','<path d="m12 3 9 5v9l-9 5-9-5V8zM3 8l9 5 9-5m-9 5v9"/>','Turn your 3D blockout into a finished shot'],
+ camera:['Edit footage','<rect x="3" y="7" width="13" height="12" rx="2"/><path d="m16 11 5-3v10l-5-3M6 3h12m-9-2-3 2 3 2"/>','Reframe footage with an animated 3D camera'],
+ relight:['Edit footage','<circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M2 12h2m16 0h2M5 5l1 1m12 12 1 1M5 19l1-1M18 6l1-1"/>','Change the lighting using an edited frame'],
+ paintout:['Edit footage','<path d="m4 15 9-11 7 6-9 11H7zM9 9l7 6M4 21h17"/>','Remove objects with masks and clean frames'],
+ watermark:['Finish footage','<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M6 15h12M8 12l8-5m-7 0 7 5"/>','Remove subtitles, logos or other overlays'],
+ alpha:['Finish footage','<path d="M3 3h18v18H3zM3 9h18M3 15h18M9 3v18M15 3v18"/>','Generate transparency for compositing'],
+ outpaint:['Edit footage','<rect x="7" y="7" width="10" height="10" rx="1"/><path d="M3 8V3h5m8 0h5v5m0 8v5h-5M8 21H3v-5"/>','Expand the scene beyond the original frame'],
+ hdr:['Finish footage','<path d="M3 5h18v14H3zM12 5v14"/><path d="m7 9-2 3 2 3m10-6 2 3-2 3"/>','Convert SDR footage to HDR'],
+ director:['Create a shot','<path d="M3 5h18v4H3zM3 13h7v6H3zm11 0h7v6h-7M7 3l2 6m6-6 2 6"/>','Direct images, motion and audio on a timeline'],
+ frames:['Create a shot','<rect x="2" y="5" width="7" height="14" rx="1"/><rect x="15" y="5" width="7" height="14" rx="1"/><path d="M10 12h4m-2-2 2 2-2 2"/>','Animate between a starting and ending image'],
+ references:['Create a shot','<rect x="3" y="3" width="12" height="12" rx="2"/><path d="M9 15v6h12V9h-6m-2 7 4 2-4 2z"/>','Generate a shot guided by images, video or audio'],
+};
+const modeEscape=value=>String(value).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const modeMenu=()=>`<div class="zc-mode-search"><label>${svg('<circle cx="10" cy="10" r="6"/><path d="m15 15 6 6"/>')}<input type="search" placeholder="Find a video mode" aria-label="Find a video mode"/></label><span>Choose what you want to do</span></div><div class="zc-mode-groups" role="menu" aria-label="Video modes">${['Create a shot','Edit footage','Finish footage'].map(group=>`<section class="zc-mode-group" role="group" aria-label="${group}"><h3>${group}</h3>${VIDEO_WORKFLOWS.filter(([id])=>MODE_DETAILS[id][0]===group).map(([id,label])=>`<button type="button" role="menuitemradio" aria-checked="false" data-workflow="${id}" data-search="${modeEscape(label+' '+MODE_DETAILS[id][2]).toLowerCase()}"><span class="zc-mode-icon">${svg(MODE_DETAILS[id][1])}</span><span class="zc-mode-copy"><strong>${modeEscape(label)}</strong><small>${MODE_DETAILS[id][2]}</small></span><span class="zc-mode-check" aria-hidden="true">${svg('<path d="m5 12 4 4L19 6"/>')}</span></button>`).join('')}</section>`).join('')}</div><p class="zc-mode-no-results" hidden>No matching modes</p>`;
+
 /** A compact surface over the existing controls, never a second configuration. */
 export class VideoComposer {
   constructor(studio,workspace){
     this.studio=studio;this.workspace=workspace;this.root=studio.container;
     const composer=this.root.querySelector('.gs-composer');composer.classList.add('zc-prompt-card');
     const task=document.createElement('details');task.className='zc-task-control zc-tool-popup';
-    task.innerHTML=`<summary aria-label="Video workflow" aria-haspopup="menu"><span data-workflow-label></span>${composerIcons.chevron}</summary><select id="zc-video-task" aria-label="Video workflow" hidden aria-hidden="true" tabindex="-1">${VIDEO_WORKFLOWS.map(([id,label])=>`<option value="${id}">${label}</option>`).join('')}</select><div class="zc-tool-panel zc-workflow-menu" role="menu" aria-label="Video workflow">${VIDEO_WORKFLOWS.map(([id,label])=>`<button type="button" role="menuitemradio" aria-checked="false" data-workflow="${id}">${label}<span aria-hidden="true"></span></button>`).join('')}</div>`;
+    task.classList.add('zc-mode-switcher');
+    task.innerHTML=`<summary aria-label="Video workflow" aria-haspopup="dialog"><span class="zc-mode-current-icon"></span><span class="zc-mode-current-copy"><small>Video mode</small><span data-workflow-label></span></span>${composerIcons.chevron}</summary><select id="zc-video-task" aria-label="Video workflow" hidden aria-hidden="true" tabindex="-1">${VIDEO_WORKFLOWS.map(([id,label])=>`<option value="${id}">${label}</option>`).join('')}</select><div class="zc-tool-panel zc-workflow-menu zc-mode-menu" role="dialog" aria-label="Choose a video mode">${modeMenu()}</div>`;
+    const header=this.root.querySelector('.gs-top'),host=document.createElement('div');host.className='zc-mode-host';header.querySelector('.zc-nav').after(host);this.modeHost=host;host.append(task);
+    task.querySelector('input[type=search]').oninput=event=>{const query=event.target.value.trim().toLowerCase();let count=0;for(const button of task.querySelectorAll('[data-workflow]')){button.hidden=!!query&&!button.dataset.search.includes(query);if(!button.hidden)count++;}for(const group of task.querySelectorAll('.zc-mode-group'))group.hidden=![...group.querySelectorAll('button')].some(button=>!button.hidden);task.querySelector('.zc-mode-no-results').hidden=!!count;};
+    task.addEventListener('toggle',()=>{if(task.open){const search=task.querySelector('input[type=search]');search.value='';search.oninput({target:search});search.focus({preventScroll:true});}});
+
     this.task=task;
     this.root.querySelector('.gs-workflow-choice').hidden=true;
     task.querySelector('select').onchange=e=>this.selectWorkflow(e.target.value);
     task.addEventListener('click',e=>{if(task.querySelector('select').disabled){e.preventDefault();return;}const option=e.target.closest('[data-workflow]');if(!option||option.disabled)return;task.open=false;this.selectWorkflow(option.dataset.workflow);task.querySelector('summary').focus({preventScroll:true});});
-    task.addEventListener('keydown',e=>{if(!['ArrowDown','ArrowUp','Home','End','Escape'].includes(e.key))return;if(e.key==='Escape'){task.open=false;task.querySelector('summary').focus({preventScroll:true});e.preventDefault();return;}e.preventDefault();task.open=true;const items=[...task.querySelectorAll('[data-workflow]')].filter(b=>!b.disabled),index=items.indexOf(this.root.ownerDocument.activeElement);const next=e.key==='Home'?0:e.key==='End'?items.length-1:index<0?(e.key==='ArrowUp'?items.length-1:0):(index+(e.key==='ArrowUp'?-1:1)+items.length)%items.length;items[next]?.focus({preventScroll:true});});
+    task.addEventListener('keydown',e=>{if(!['ArrowDown','ArrowUp','Home','End','Escape'].includes(e.key)||e.target.matches('input')&&!['ArrowDown','ArrowUp','Escape'].includes(e.key))return;if(e.key==='Escape'){task.open=false;task.querySelector('summary').focus({preventScroll:true});e.preventDefault();return;}e.preventDefault();task.open=true;const items=[...task.querySelectorAll('[data-workflow]')].filter(b=>!b.disabled&&!b.hidden),index=items.indexOf(this.root.ownerDocument.activeElement);const next=e.key==='Home'?0:e.key==='End'?items.length-1:index<0?(e.key==='ArrowUp'?items.length-1:0):(index+(e.key==='ArrowUp'?-1:1)+items.length)%items.length;items[next]?.focus({preventScroll:true});});
     const attachments=document.createElement('div');attachments.className='zc-composer-attachments';
     attachments.innerHTML=`<button type="button" id="zc-attach-source" class="zc-attachment">${composerIcons.video}<span>Source video</span></button><button type="button" id="zc-attach-refs" class="zc-attachment">${composerIcons.image}<span>References</span></button><button type="button" id="zc-attach-frame" class="zc-attachment">${composerIcons.image}<span>Finished frame</span></button>`;
     for(const [id,type,label] of [['source','source','source video'],['refs','character','references'],['frame','ready','finished frame']]){
@@ -61,7 +85,7 @@ export class VideoComposer {
     imageModel.addEventListener('click',e=>{if(studio.busy||studio.project?.phase==='working'){e.preventDefault();return;}const option=e.target.closest('[data-opening-model]');if(option&&!option.disabled){imageModel.open=false;studio.changeOpeningModel(option.dataset.openingModel);}const ready=e.target.closest('[data-use-finished-image]');if(ready&&!ready.disabled){imageModel.open=false;const input=this.root.querySelector('input[name="gs-look"][value="ready"]');if(input&&!input.disabled){input.checked=true;input.dispatchEvent(new this.root.ownerDocument.defaultView.Event('change',{bubbles:true}));studio.$('ready').click();}}});
     imageModel.addEventListener('keydown',e=>{if(!['ArrowDown','ArrowUp','Home','End'].includes(e.key)||studio.busy||studio.project?.phase==='working')return;e.preventDefault();imageModel.open=true;const items=[...imageModel.querySelectorAll('[role="menuitemradio"]')].filter(b=>!b.disabled&&!b.hidden),index=items.indexOf(this.root.ownerDocument.activeElement),next=e.key==='Home'?0:e.key==='End'?items.length-1:index<0?0:(index+(e.key==='ArrowUp'?-1:1)+items.length)%items.length;items[next]?.focus({preventScroll:true});});
     recipeTools.classList.add('zc-workflow-controls');
-    recipeTools.append(task,imageModel);this.imageModel=imageModel;this.model=model;
+    recipeTools.append(imageModel);this.imageModel=imageModel;this.model=model;
     this.openingLoras=new OpeningLoraControl(studio,tools);
     const outputTools=document.createElement('div');outputTools.className='zc-tool-group';outputTools.setAttribute('role','group');outputTools.setAttribute('aria-label','Video size and length');tools.append(outputTools);
     const nativeQuality=studio.$('quality-setting');
@@ -116,20 +140,12 @@ export class VideoComposer {
   }
   mountWorkflow(mode){
     if(mode!=='video')this.browserConnection?.close();else if(this.browserConnection)this.browserConnection.closed=false;
-    // Reuse the same control and handler in both composers. Its place in the
-    // tool row stays immediately after the model, including endpoint video.
-    const select=this.task.querySelector('select'),focused=this.root.ownerDocument.activeElement===select;
-    const model=mode==='director'?this.workspace.director.page.querySelector('.zdir-model'):mode==='frames'?this.workspace.frames.page.querySelector('.zf-model'):mode==='references'?this.workspace.referencesVideo.page.querySelector('.zf-model'):mode==='paintout'?this.workspace.paintout.page.querySelector('.zf-model'):mode==='watermark'?this.workspace.watermark.page.querySelector('.zf-model'):mode==='outpaint'?this.workspace.outpaint.page.querySelector('.zo-model'):mode==='ripple'?this.workspace.ripple.page.querySelector('.zru-model'):mode==='alpha'?this.workspace.alpha.page.querySelector('.zalpha-model'):mode==='panorama'?this.workspace.panorama.page.querySelector('.zpc-model'):mode==='hdr'?this.studio.hdrTool?.root?.querySelector('.zh-model'):this.model;
-    if(!model)return;
-    let group=model.parentElement;
-    if(!group.classList.contains('zc-tool-group')){
-      group=document.createElement('div');group.className='zc-tool-group';group.setAttribute('role','group');group.setAttribute('aria-label','Model and workflow');
-      model.before(group);group.append(model);
-    }
-    group.classList.add('zc-workflow-controls');
-    if(model.nextElementSibling!==this.task)model.after(this.task);
+    // One persistent navigation position for every video workspace and stage.
+    this.task.hidden=['image','home'].includes(mode);
+    if(this.workspace.imageTask){this.workspace.imageTask.hidden=mode!=='image';this.workspace.imageTask.open=false;}
+    this.task.open=false;
+
     this.syncWorkflow();
-    if(focused)select.focus({preventScroll:true});
   }
   syncWorkflow(){
     const independent=['director','frames','references','paintout','watermark','outpaint','ripple','alpha','panorama','hdr'].includes(this.workspace.mode),select=this.task.querySelector('select');
@@ -142,7 +158,7 @@ export class VideoComposer {
       option.disabled=!!input?.disabled;
       const item=this.task.querySelector(`[data-workflow="${option.value}"]`);item.disabled=select.disabled||option.disabled;item.setAttribute('aria-checked',String(option.value===select.value));
     }
-    const label=VIDEO_WORKFLOWS.find(([id])=>id===select.value)?.[1]||'Video workflow';this.task.querySelector('[data-workflow-label]').textContent=label;
+    const label=VIDEO_WORKFLOWS.find(([id])=>id===select.value)?.[1]||'Video workflow';this.task.querySelector('[data-workflow-label]').textContent=label;this.task.querySelector('.zc-mode-current-icon').innerHTML=svg(MODE_DETAILS[select.value]?.[1]||MODE_DETAILS.swap[1]);
     const trigger=this.task.querySelector('summary');trigger.setAttribute('aria-label','Video workflow: '+label);trigger.setAttribute('aria-disabled',String(select.disabled));
     if(select.disabled)this.task.open=false;
   }

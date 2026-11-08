@@ -23,7 +23,8 @@ export class ImageEditInputs {
     const o=this.owner,doc=o.root.ownerDocument,bottom=o.root.querySelector('.zc-composer-bottom');
     const tools=doc.createElement('div');tools.className='zi-output-tools zc-prompt-tools';
     const workflow=doc.createElement('div');workflow.className='zc-tool-group zc-workflow-controls';workflow.setAttribute('role','group');workflow.setAttribute('aria-label','Model and workflow');
-    workflow.append(bottom.querySelector('.zc-model-control'),o.imageTask);
+    workflow.append(bottom.querySelector('.zc-model-control'));
+    o.videoComposer.modeHost.append(o.imageTask);
     const output=doc.createElement('div');output.className='zc-tool-group';output.setAttribute('role','group');output.setAttribute('aria-label','Image size and settings');
     output.append(o.$('quick-settings').closest('details'),o.$('settings-toggle'));tools.append(workflow,output);bottom.prepend(tools);
     // Keep the existing action buttons and handlers, with a native fallback

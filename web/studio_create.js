@@ -113,9 +113,9 @@ export class CreativeWorkspace {
     const sizePanel=imageResolution.querySelector('.zc-tool-panel');sizePanel.prepend(page.querySelector('.zc-shapes'));sizePanel.append(page.querySelector('.zc-dimensions'),this.$('size'));
     this.$('image-megapixels').oninput=()=>{const ratio=this.imageSizeRatio||Number(this.$('width').value)/Number(this.$('height').value),size=resolutionSize(ratio,Number(this.$('image-megapixels').value),{step:IMAGE_MODELS.find(m=>m.id===this.$('model').value)?.sizeStep||16,min:256,max:8192,maxPixels:8.5e6});this.$('width').value=size.width;this.$('height').value=size.height;this.save();this.render();};
     this.imageOperation=this.draft.operation==="edit"?"edit":"create";
-    const imageTabs=document.createElement('details');imageTabs.className='zc-image-operation zc-task-control zc-tool-popup';imageTabs.setAttribute('aria-label','Image task');
-    imageTabs.innerHTML='<summary aria-label="Image mode"><span data-image-operation-label>Create image</span>'+composerIcons.chevron+'</summary><div class="zc-tool-panel zc-workflow-menu"><button type="button" data-image-operation="create">Create image</button><button type="button" data-image-operation="edit">Edit image</button></div>';
-    this.imageTask=imageTabs;page.querySelector('.zc-composer-bottom .zc-model-control').after(imageTabs);
+    const imageTabs=document.createElement('details');imageTabs.className='zc-image-operation zc-task-control zc-tool-popup zc-mode-switcher';imageTabs.setAttribute('aria-label','Image task');
+    imageTabs.innerHTML='<summary aria-label="Image mode" aria-haspopup="menu">'+composerIcons.image+'<span class="zc-mode-current-copy"><small>Image mode</small><span data-image-operation-label>Create image</span></span>'+composerIcons.chevron+'</summary><div class="zc-tool-panel zc-workflow-menu" role="menu" aria-label="Image modes"><button type="button" role="menuitemradio" data-image-operation="create">'+composerIcons.image+'<span class="zc-mode-copy"><strong>Create image</strong><small>Start with a prompt and optional references</small></span></button><button type="button" role="menuitemradio" data-image-operation="edit">'+composerIcons.settings+'<span class="zc-mode-copy"><strong>Edit image</strong><small>Change a source image or paint a local edit</small></span></button></div>';
+    this.imageTask=imageTabs;this.videoComposer.modeHost.append(imageTabs);imageTabs.hidden=true;
     for(const button of imageTabs.querySelectorAll('button'))button.onclick=()=>{imageTabs.open=false;this.setImageOperation(button.dataset.imageOperation);};
     const imageHistory=document.createElement('details');imageHistory.className='zc-image-takes';imageHistory.innerHTML='<summary>History</summary><div id="zc-image-history"></div>';
     page.querySelector('.zc-image-tools').prepend(imageHistory);
@@ -551,7 +551,7 @@ export class CreativeWorkspace {
     const resolutionPanel=this.$('image-megapixels').closest('.zc-tool-panel');
     resolutionPanel.querySelector('.zc-dimensions').hidden=auto;this.$('image-megapixels').parentElement.hidden=auto;
     this.$("generate").disabled=busy||!m?.ready||!this.browserConnection.connected(m)||!c.prompt.trim()||!!error||this.references.length<(m?.minReferences||0)||this.references.length>(m?.maxReferences||0)||!!this.references.length&&!m?.referenceReady;this.$("generate").firstChild.textContent=busy?"Generating… ":this.imageOperation==='edit'?"Apply edit ":"Generate image ";
-    for(const button of this.root.querySelectorAll('[data-image-operation]')){button.setAttribute('aria-pressed',String(button.dataset.imageOperation===this.imageOperation));button.disabled=busy;}
+    for(const button of this.root.querySelectorAll('[data-image-operation]')){button.setAttribute('aria-pressed',String(button.dataset.imageOperation===this.imageOperation));button.setAttribute('aria-checked',String(button.dataset.imageOperation===this.imageOperation));button.disabled=busy;}
     this.imageTask.querySelector('[data-image-operation-label]').textContent=this.imageOperation==='edit'?'Edit image':'Create image';
     this.imageTask.querySelector('summary').setAttribute('aria-disabled',String(busy));if(busy)this.imageTask.open=false;
     this.root.querySelector('.zc-image-empty h3').textContent=this.imageOperation==='edit'?'Edit your image':'Create your first image';

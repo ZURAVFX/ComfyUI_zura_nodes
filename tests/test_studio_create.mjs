@@ -88,7 +88,7 @@ assert.deepEqual([...ui.root.querySelectorAll('.zc-choices [data-space] strong')
 assert.ok(!ui.root.querySelector('.zc-choices button').classList.contains('zu-btn'),'Home choices keep their full-width list-row layout instead of DaisyUI compact-button sizing');
 assert.equal(ui.root.querySelectorAll('.zc-card-art').length,0,'Home uses direct Image and Video choices without placeholder cards');
 ui.show('video');studio.render();
-assert.ok(studio.container.querySelector('#zc-video-task').closest('.zc-prompt-tools'),'Workflow choice sits in the model tool row');assert.equal(studio.container.querySelector('#zc-video-task').closest('.zc-task-control').previousElementSibling,ui.videoComposer.model);
+assert.ok(studio.container.querySelector('#zc-video-task').closest('.gs-top .zc-mode-host'),'Workflow choice stays in workspace navigation');
 assert.equal(studio.container.querySelector('.gs-workflow-choice').hidden,true,'The cramped legacy mode grid has no second visible copy');
 for(const id of ['zc-attach-source','zc-attach-refs','zc-video-model','gs-resolution','gs-duration','gs-audio-mode'])assert.ok(studio.container.querySelector('#'+id).closest('.gs-composer'),id+' belongs to the compact composer');
 assert.equal(studio.container.querySelector('#zc-attach-source').closest('.zc-source-choice'),studio.container.querySelector('.zc-source-hdr').closest('.zc-source-choice'),'Source and HDR import are presented as one choice');
@@ -104,7 +104,7 @@ assert.equal(studio.container.querySelector('.zc-source-hdr').hidden,false,'LTX 
 studio.config.workflow_mode='relight';ui.videoComposer.sync();
 assert.equal(studio.container.querySelector('.zc-source-hdr').hidden,true,'Wan relight never advertises LTX HDR input');
 studio.config.engine=originalEngine;studio.config.workflow_mode=originalMode;ui.videoComposer.sync();
-assert.equal(ui.imageTask.previousElementSibling,ui.$('model').closest('.zc-model-control'),'Image mode uses the second toolbar slot too');
+assert.equal(ui.imageTask.parentElement,ui.videoComposer.modeHost,'Image mode shares the main navigation location');
 const workflowMenu=ui.videoComposer.task;
 assert.equal(workflowMenu.tagName,'DETAILS');
 assert.equal(workflowMenu.querySelector('select').hidden,true,'OS-native workflow dropdown is hidden behind the styled menu');
@@ -113,6 +113,13 @@ assert.ok(workflowMenu.querySelector('[data-workflow="director"]'),'Director sha
 assert.equal(workflowMenu.querySelector('[data-workflow="inpaint"]'),null,'Edited-frame work has one Ripple route, without a duplicate Inpaint preview');
 assert.ok(workflowMenu.querySelector('[data-workflow="outpaint"]'),'Frame extension is available as a preview workflow');
 assert.equal(workflowMenu.querySelector('[data-workflow="swap"]').getAttribute('aria-checked'),'true');
+assert.equal(workflowMenu.querySelectorAll('.zc-mode-group').length,3);
+for(const button of workflowMenu.querySelectorAll('[data-workflow]')){assert.ok(button.querySelector('svg'));assert.ok(button.querySelector('small').textContent.length>12);}
+const modeSearch=workflowMenu.querySelector('input[type=search]');modeSearch.value='lighting';modeSearch.oninput({target:modeSearch});
+assert.deepEqual([...workflowMenu.querySelectorAll('[data-workflow]')].filter(button=>!button.hidden).map(button=>button.dataset.workflow),['relight']);
+modeSearch.value='no such mode';modeSearch.oninput({target:modeSearch});assert.equal(workflowMenu.querySelector('.zc-mode-no-results').hidden,false);
+modeSearch.value='';modeSearch.oninput({target:modeSearch});assert.equal([...workflowMenu.querySelectorAll('[data-workflow]')].filter(button=>!button.hidden).length,13);
+
 const removedInputs=[],savedRemoveInput=studio.removeInput;studio.removeInput=type=>removedInputs.push(type);
 for(const id of ['source','refs','frame'])studio.container.querySelector('#zc-remove-'+id).onclick();
 assert.deepEqual(removedInputs,['source','character','ready'],'Each attachment has its own clear action, independent of the upload action');studio.removeInput=savedRemoveInput;
@@ -299,7 +306,7 @@ assert.match(ui.$('generate').textContent,/Apply edit/);assert.match(ui.$('refer
   assert.ok(ui.$('settings-toggle').closest('.zi-output-tools'));
   const workflowGroup=ui.$('model').closest('[aria-label="Model and workflow"]');
   assert.ok(workflowGroup);
-  assert.equal(workflowGroup.children[1],ui.imageTask,'Image mode follows the model in the same toolbar slot as Video');
+  assert.equal(ui.imageTask.parentElement,ui.videoComposer.modeHost,'Image and video mode choices share one header position');
   assert.ok(ui.$('quick-settings').closest('[aria-label="Image size and settings"]'),'Image output controls form a separate group');
   assert.equal(ui.root.querySelector('.zc-image-heading h2').textContent,'Edit image');
   assert.ok(ui.$('new').closest('.zi-image-actions'));
@@ -490,7 +497,7 @@ const navStudio=new context.Studio(),navUi=navStudio.creative;
 navStudio.source={id:'retained-video',name:'source.mp4'};navStudio.references=[{id:'retained-reference'}];
 const navRequests=calls.filter(c=>c.path==='/prompt').length;
 const task=navStudio.container.querySelector('#zc-video-task');task.value='frames';task.dispatchEvent(new window.Event('change'));
-assert.equal(navUi.mode,'frames');assert.equal(navUi.frames.page.hidden,false);assert.equal(navUi.frames.page.querySelector('#zc-video-task'),task,'The same selector remains in the frame composer');assert.equal(task.value,'frames');assert.ok(task.closest('.zc-task-control').previousElementSibling.classList.contains('zf-model'));assert.equal(navUi.frames.page.querySelector('#zf-back'),null);assert.equal(navStudio.container.querySelector('.gs-workspace').hidden,true);
+assert.equal(navUi.mode,'frames');assert.equal(navUi.frames.page.hidden,false);assert.equal(task.closest('.gs-top'),navStudio.container.querySelector('.gs-top'),'The same selector stays in workspace navigation');assert.equal(task.value,'frames');assert.equal(task.closest('.zc-mode-host'),navUi.videoComposer.modeHost);assert.equal(navUi.frames.page.querySelector('#zf-back'),null);assert.equal(navStudio.container.querySelector('.gs-workspace').hidden,true);
 const hdrRoot=document.createElement('section');hdrRoot.className='zf-page zh-page';hdrRoot.innerHTML='<button data-hdr="back">Back</button><button data-hdr="use-video"></button><select data-hdr="mode"><option value="sdr">SDR</option><option value="native">HDR</option></select><select data-hdr="source-kind"><option value="own">Choose another video</option><option value="upload">Source footage</option></select>';navStudio.container.append(hdrRoot);
 navStudio.hdrTool={root:hdrRoot,setOutput(ref){this.output=ref;},$(id){return hdrRoot.querySelector(`[data-hdr="${id}"]`);},updateMode(){},activate(){this.active=true;},deactivate(){this.active=false;},sourceChanged(){},close(){}};
 const ltxTake={type:'output',subfolder:'zura/first_last',filename:'ltx.mp4'},h3Take={type:'output',subfolder:'zura/first_last',filename:'h3.mp4'};navUi.frames.items=[{file:ltxTake,config:{engine:'ltx'}},{file:h3Take,config:{engine:'h3'}}];
@@ -536,7 +543,7 @@ for(const mode of ['home','image','video']){
   navUi.show('frames');navStudio.container.querySelector(`.zc-nav [data-space="${mode}"]`).click();assert.equal(navUi.mode,mode);assert.equal(navUi.frames.page.hidden,true,mode+' must hide the frame page');
 }
 navUi.show('frames');navStudio.render();assert.equal(task.value,'frames','Legacy repaints cannot reset the current workflow selection');task.value='camera';task.dispatchEvent(new window.Event('change'));
-assert.equal(navUi.mode,'panorama');assert.equal(navStudio.container.querySelectorAll('select[aria-label="Video workflow"]').length,1);assert.equal(task.closest('.zc-task-control').previousElementSibling,navUi.panorama.page.querySelector('.zpc-model'),'The selector stays beside the camera model');assert.equal(task.value,'camera');assert.equal(navUi.frames.page.hidden,true);task.value='swap';task.dispatchEvent(new window.Event('change'));assert.equal(navUi.mode,'video','The camera workspace has the same way back to character video');
+assert.equal(navUi.mode,'panorama');assert.equal(navStudio.container.querySelectorAll('select[aria-label="Video workflow"]').length,1);assert.equal(task.closest('.zc-mode-host'),navUi.videoComposer.modeHost);assert.equal(task.value,'camera');assert.equal(navUi.frames.page.hidden,true);task.value='swap';task.dispatchEvent(new window.Event('change'));assert.equal(navUi.mode,'video','The camera workspace has the same way back to character video');
 navUi.show('panorama');
 navUi.panorama.status={ready:true};navUi.panorama.state={source:{id:'fixture-source',name:'Camera source',duration:2},geometry:{ready:true},camera:'native-state'};navUi.panorama.render();
 assert.equal(navUi.panorama.$('generate').textContent,'Choose camera angle','Preparing geometry must not silently approve the neutral camera');
@@ -545,7 +552,7 @@ navUi.panorama.state={};navUi.panorama.render();navUi.show('video');
 navUi.show('frames');assert.equal(navUi.frames.assets.first.file,'retained-first.png');assert.equal(navUi.frames.$('prompt').value,'A slow camera move');
 task.value='references';task.dispatchEvent(new window.Event('change'));
 assert.equal(navUi.mode,'references');assert.equal(navUi.referencesVideo.page.hidden,false);assert.equal(navUi.frames.page.hidden,true);
-assert.equal(navUi.referencesVideo.page.querySelector('#zc-video-task'),task,'The same workflow selector remains next to the reference model');
+assert.equal(task.closest('.gs-top'),navStudio.container.querySelector('.gs-top'),'The same selector stays in workspace navigation');
 navUi.referencesVideo.assets.images=[{file:'ingredient.png',filename:'ingredient.png'}];navUi.referencesVideo.$('prompt').value='Use <Picture 1> in a quiet scene.';navUi.referencesVideo.save();
 assert.equal(navStudio.container.querySelectorAll('#zf-prompt').length,1);assert.equal(navStudio.container.querySelectorAll('#zr-prompt').length,1);
 task.value='frames';task.dispatchEvent(new window.Event('change'));assert.equal(navUi.mode,'frames');assert.equal(navUi.referencesVideo.page.hidden,true);
@@ -554,14 +561,14 @@ while(navStudio.busy)await new Promise(resolve=>setTimeout(resolve,1));
 task.value='swap';task.dispatchEvent(new window.Event('change'));assert.equal(navUi.mode,'video');assert.equal(navUi.referencesVideo.page.hidden,true);
 task.value='outpaint';task.dispatchEvent(new window.Event('change'));
 assert.equal(navUi.mode,'outpaint');assert.equal(navUi.outpaint.page.hidden,false);
-assert.equal(navUi.outpaint.page.querySelector('#zc-video-task'),task,'Frame extension retains the same workflow selector');
-assert.equal(task.closest('.zc-task-control').previousElementSibling,navUi.outpaint.page.querySelector('.zo-model'));
+assert.equal(task.closest('.gs-top'),navStudio.container.querySelector('.gs-top'),'The same selector stays in workspace navigation');
+assert.equal(task.closest('.zc-mode-host'),navUi.videoComposer.modeHost);
 while(navStudio.busy)await new Promise(resolve=>setTimeout(resolve,1));
 task.value='swap';task.dispatchEvent(new window.Event('change'));assert.equal(navUi.mode,'video');assert.equal(navUi.outpaint.page.hidden,true);
 task.value='paintout';task.dispatchEvent(new window.Event('change'));
 assert.equal(navUi.mode,'paintout');assert.equal(navUi.paintout.page.hidden,false);assert.equal(navUi.frames.page.hidden,true);assert.equal(navUi.referencesVideo.page.hidden,true);
-assert.equal(navUi.paintout.page.querySelector('#zc-video-task'),task,'Paintout retains the workflow menu beside its model');
-assert.equal(task.closest('.zc-task-control').previousElementSibling,navUi.paintout.page.querySelector('.zf-model'),'Paintout uses the same second toolbar slot');
+assert.equal(task.closest('.gs-top'),navStudio.container.querySelector('.gs-top'),'The same selector stays in workspace navigation');
+assert.equal(task.closest('.zc-mode-host'),navUi.videoComposer.modeHost);
 navUi.paintout.setMode('inpaint');navUi.videoComposer.syncWorkflow();
 assert.equal(task.value,'paintout','A restored legacy Inpaint draft keeps a valid Paintout selector');
 assert.match(navUi.paintout.$('prompt').value,/Add the object/,'Legacy masked drafts remain available without rewriting their conditioning');
@@ -645,7 +652,7 @@ let browserState='disconnected';
 ui.fetch=async(path,body)=>{if(path.startsWith('/zura/browser_image_')){browserRequests.push({path,body});if(path.endsWith('_login')){browserState='connected';return {ok:true};}return {state:browserState,message:browserState==='connected'?'Connected':'Connect your Firefox account'};}return oldImageFetch(path,body);};
 ui.show('image');await ui.setImageOperation('create',{useCanvas:false});ui.$('model').value='chatgpt';ui.$('prompt').value='A graphite drawing';ui.imageLoras=[{name:'local.safetensors',strength:1}];ui.render();
 await new Promise(resolve=>setImmediate(resolve));
-assert.equal(ui.browserConnection.host.hidden,false);assert.equal(ui.$('generate').disabled,true,'Connection is required');
+assert.equal(ui.browserConnection.host.hidden,false);assert.equal(ui.browserConnection.select.closest('.zc-browser-controls'),ui.browserConnection.button.closest('.zc-browser-controls'),'Browser and sign-in remain adjacent');assert.equal(ui.$('generate').disabled,true,'Connection is required');
 assert.equal(browserRequests.filter(r=>r.path.endsWith('_login')).length,0,'Selecting a provider never initiates account access');
 assert.equal(ui.$('image-lora-settings').hidden,true);assert.equal(ui.$('seed').closest('details').hidden,true);
 assert.deepEqual(ui.config().loras,[]);assert.match(ui.$('size').textContent,/website determines/);
@@ -713,10 +720,11 @@ console.log('Reference upload/limits, safe history clearing/undo, saved theme an
 navUi.panorama?.close();
 
 for(const [mode,modelSelector] of [['video','.zc-model-control'],['director','.zdir-model'],['frames','.zf-model'],['references','.zf-model'],['paintout','.zf-model'],['outpaint','.zo-model'],['alpha','.zalpha-model'],['panorama','.zpc-model']]){
- navUi.show(mode);const group=task.closest('.zc-workflow-controls');assert.ok(group,mode+' has a shared toolbar group');
- assert.equal(group.children[1],task.closest('.zc-task-control'),mode+' keeps the workflow in slot two');
- assert.ok(group.firstElementChild.matches(modelSelector),mode+' keeps the model in slot one');
+ navUi.show(mode);assert.equal(task.closest('.zc-mode-host'),navUi.videoComposer.modeHost,mode+' uses the persistent header');
+ assert.equal(task.closest('.zc-task-control').hidden,false);assert.equal(navUi.imageTask.hidden,true);
 }
+navUi.show('image');assert.equal(navUi.videoComposer.task.hidden,true);assert.equal(navUi.imageTask.hidden,false);
+
 navUi.panorama?.close();
 
 if(process.env.ZURA_NAV_PREVIEW){
@@ -729,7 +737,7 @@ if(process.env.ZURA_NAV_PREVIEW){
 
 navUi.show('watermark');
 assert.equal(navUi.mode,'watermark');
-assert.equal(navUi.watermark.page.querySelector('.zf-model').parentElement.children[1],navUi.videoComposer.task);
+assert.equal(task.closest('.zc-mode-host'),navUi.videoComposer.modeHost);
 assert.equal(navUi.paintout.page.hidden,true);
 const wm=navUi.watermark,ed=wm.editor;
 const watermarkRestart=installStudioRestartNavigation(navStudio);

@@ -281,3 +281,20 @@
 #genj-studio[data-workspace=panorama] .zpc-progress>span{grid-column:1;grid-row:2;line-height:16px}
 #genj-studio[data-workspace=panorama] .zpc-progress>progress{grid-column:1/-1;grid-row:3;height:4px}
 @media(max-height:760px){#genj-studio[data-workspace=panorama] .zpc-page{padding-block:12px}}
+
+/* Mode navigation keeps one stable location above the work, outside composers. */
+#genj-studio[data-workspace] .gs-top{flex-wrap:nowrap;justify-content:flex-start}
+#genj-studio[data-workspace] .gs-top .zc-mode-host{min-width:120px}
+@media(max-width:1000px){#genj-studio[data-workspace] .gs-top{gap:10px;padding-inline:16px}#genj-studio[data-workspace] .gs-brand>strong{display:none}}
+@media(max-width:900px){#genj-studio[data-workspace] .gs-top #gs-exit{font-size:0;padding:8px}#genj-studio[data-workspace] .gs-top #gs-exit svg{width:18px;height:18px}#genj-studio[data-workspace] .gs-top-actions{flex-wrap:nowrap}}
+@media(max-width:600px){
+ #genj-studio[data-workspace] .gs-top{display:grid;grid-template-columns:auto 1fr auto;height:auto;min-height:104px;padding:8px 12px;gap:8px}
+ #genj-studio[data-workspace] .gs-top .gs-brand{grid-column:1;grid-row:1}
+ #genj-studio[data-workspace] .gs-top .zc-nav{grid-column:2;grid-row:1;width:auto}
+ #genj-studio[data-workspace] .gs-top-actions{grid-column:3;grid-row:1;margin-left:0;gap:0!important}
+ #genj-studio[data-workspace] .gs-top .zc-mode-host{grid-column:1/-1;grid-row:2;max-width:none;width:100%}
+ #genj-studio[data-workspace] .zc-mode-host .zc-mode-switcher{max-width:none}
+ #genj-studio[data-workspace] .zc-mode-host .zc-mode-switcher>summary{height:36px;min-height:36px}
+ #genj-studio[data-workspace] .gs-top .zc-nav button{font-size:12px;padding:6px 8px}
+ #genj-studio[data-workspace] .gs-top-actions :is(button,summary){font-size:11px;padding:6px}
+}
