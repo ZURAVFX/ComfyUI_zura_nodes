@@ -11,10 +11,11 @@ export function installRelightEngines(owner){
 
 export async function selectRelightEngine(owner,engine){
   if(!['wan21','ltx','h3'].includes(engine)||owner.relightSwitchPending)return;
-  const studio=owner.studio,fromWan=owner.mode==='video'&&owner.studio.config.workflow_mode==='relight';if(studio.busy||studio.project?.phase==='working')return;
-  const w=owner.rippleWorkspaces?.get('relight');if(w?.busy())return;
+  const studio=owner.studio,fromWan=owner.mode==='video'&&owner.studio.config.workflow_mode==='relight';if((fromWan||engine==='wan21')&&(studio.busy||studio.project?.phase==='working')){if(fromWan)owner.show('video');return;}
+  const w=owner.rippleWorkspaces?.get('relight');if(w?.busy()){owner.ripple=w;owner.show('ripple');w.message('Finish or cancel the current Relight run before changing models.');return;}
   owner.relightSwitchPending=true;owner.videoComposer.sync?.();
   try{
+    if(w?.state.relightCleared&&w.state.clearedStudioAssetId&&studio.source?.id===w.state.clearedStudioAssetId&&studio.config.workflow_mode==='relight'){if(await studio.reset()===false)throw Error('Finish the current operation before clearing the Relight source.');Object.assign(studio.config,{workflow_mode:'relight',engine:'h3',relight_engine:'wan21',edit_area:'scene'});}
     if(engine==='wan21'){
       const source=w?.state.studioAsset;
       if(studio.config.workflow_mode!=='relight'){studio.readyAsset=null;studio.lookMode='build';studio.invalidateLook();}
@@ -32,14 +33,14 @@ export async function selectRelightEngine(owner,engine){
       Object.assign(studio.config,{workflow_mode:'relight',engine:'h3',relight_engine:'wan21',edit_area:'scene',h3_head_swap:false});studio.syncForm();owner.rememberRelightEngine('wan21');owner.show('video');studio.render();return;
     }
     const target=owner.ensureRippleWorkspace('relight');
-    const source=(fromWan||!target.state.sourcePath)?studio.source:null;
+    const source=(fromWan||!target.state.sourcePath&&!target.state.relightCleared)?studio.source:null;
     if(source?.id&&target.state.studioAsset?.id!==source.id){
       const info=await owner.fetch('/zura/studio/assets/'+encodeURIComponent(source.id)+'/ripple',{});if(studio.source?.id!==source.id||fromWan&&studio.config.workflow_mode!=='relight')throw Error('The source changed. Choose the relight model again.');target.setSource({...info,name:source.name||info.name,studioAsset:source});
     }else if(!target.source)await target.restoreSource();
     if(fromWan&&target.source&&source?.id===target.state.studioAsset?.id){
       const fps=target.fps(),start=Math.max(0,Math.min(target.source.frames-1,Math.round((studio.config.start||0)*fps))),duration=studio.config.length_mode==='original'?target.source.frames-start:Math.max(1,Math.round((studio.config.duration||target.source.frames/fps)*fps));
-      target.state.startFrame=start;target.state.frameCount=Math.min(duration,target.source.frames-start);target.state.playhead=start;
-      const prompt=studio.config.image_prompt||studio.config.prompt||'';if(prompt){target.state.prompt=prompt;target.$('prompt').value=prompt;}
+      target.state.startFrame=start;target.state.frameCount=Math.min(duration,target.source.frames-start);target.state.playhead=Math.max(start,Math.min(start+target.state.frameCount-1,target.state.playhead||start));
+      const prompt=studio.config.image_prompt||studio.config.prompt||'';target.state.prompt=prompt;target.$('prompt').value=prompt;
     }
     target.state.engine=engine;if(engine==='ltx'){const anchor=target.selected()?.file?target.selected():target.ltxReference();if(anchor)target.state.ltxReferenceId=anchor.id;}target.$('engine').value=engine;owner.rememberRelightEngine(engine);owner.show('ripple');
     const opening=studio.readyAsset,openingURL=opening?.url||studio.project?.opening_url||(opening?.filename?frameFile(opening):null),openingKey=opening?.id||studio.project?.opening_key;

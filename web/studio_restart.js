@@ -218,6 +218,7 @@ function resetOutpaintWorkspace(creative){
 export async function resetStudioWorkspace(creative){
   const mode=currentMode(creative);
   if(mode==='video'){
+    if(creative?.studio?.config?.workflow_mode==='relight'){const lighting=creative.rippleWorkspaces?.get('relight');if(lighting?.busy())return false;lighting?.reset();}
     return resetVideoWorkspace(creative?.studio);
   }
   if(mode==='image')return resetImageWorkspace(creative);

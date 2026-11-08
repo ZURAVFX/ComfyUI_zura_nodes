@@ -14,7 +14,7 @@ const owner={root:document.querySelector('main'),app:{},mode:'video',rippleWorks
  async fetch(path,body){calls.push(path);if(path.includes('/assets/'))return info;if(path==='/zura/paintout/editor/project')return{id:'project'};if(path.startsWith('/zura/paintout/info'))return info;if(path==='/zura/paintout/export-frame')return{url:'/lighting-export'};return{};},
  show(mode){this.mode=mode;for(const w of this.rippleWorkspaces.values())w.page.hidden=mode!=='ripple'||w!==this.ripple;},
  ensureRippleWorkspace(intent){intent=intent||this.ripple?.intent||'edit';if(!this.rippleWorkspaces.has(intent))this.rippleWorkspaces.set(intent,new RippleWorkspace(this,{intent}));this.ripple=this.rippleWorkspaces.get(intent);return this.ripple;},videoComposer:{syncWorkflow(){}},
- studio:{source:asset,readyAsset:{id:'light-1',url:'/lighting.png'},config:{workflow_mode:'relight',start:.5,duration:1.5,length_mode:'custom',image_prompt:'Warm afternoon light'},syncForm(){},render(){},invalidateLook(){this.project=null;},async upload(kind,file){assert.equal(kind,'ready');assert.ok(file instanceof File);this.readyAsset={id:'returned-light',url:'/returned.png'};}}};
+ studio:{async reset(){this.source=null;this.readyAsset=null;this.project=null;return true;},source:asset,readyAsset:{id:'light-1',url:'/lighting.png'},config:{workflow_mode:'relight',start:.5,duration:1.5,length_mode:'custom',image_prompt:'Warm afternoon light'},syncForm(){},render(){},invalidateLook(){this.project=null;},async upload(kind,file){assert.equal(kind,'ready');assert.ok(file instanceof File);this.readyAsset={id:'returned-light',url:'/returned.png'};}}};
 installRelightEngines(owner);
 const original=owner.ensureRippleWorkspace('edit');original.setSource(info);original.addAnchor(0);original.selected().file='C:/other.png';original.save();
 await owner.selectRelightEngine('ltx');const lighting=owner.ripple;
@@ -31,5 +31,5 @@ assert.equal(original.anchors()[0].file,'C:/other.png');assert.ok(memory.has('zu
 const ids=[...document.querySelectorAll('[id]')].map(e=>e.id);assert.equal(new Set(ids).size,ids.length,'Separate drafts keep unique labelled controls');
 const restored=new RippleWorkspace(owner,{intent:'relight'});assert.deepEqual(restored.anchors(),lighting.anchors());restored.dispose();
 assert.ok(!calls.includes('/prompt'),'Switching models never generates anything');
-lighting.state.engine='ltx';lighting.reset();assert.equal(lighting.state.engine,'ltx');assert.equal(original.anchors()[0].file,'C:/other.png');for(const w of owner.rippleWorkspaces.values())w.dispose();
+lighting.state.engine='ltx';lighting.reset();assert.equal(lighting.state.engine,'ltx');await owner.selectRelightEngine('wan21');assert.equal(owner.studio.source,null,'Cleared source cannot reappear on returning to Wan');await owner.selectRelightEngine('ltx');assert.equal(lighting.source,null);assert.equal(lighting.anchors().length,0);assert.equal(original.anchors()[0].file,'C:/other.png');for(const w of owner.rippleWorkspaces.values())w.dispose();
 console.log('Relight engine switching preserves source, FPS, trim, prompts and lighting frames; native Ripple graphs and independent drafts pass.');
