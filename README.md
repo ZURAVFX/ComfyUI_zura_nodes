@@ -32,7 +32,7 @@ Use your own ComfyUI host and port if they differ.
 
 ## Current release
 
-**1.3.56** adds a shared visual mode picker, compact browser sign-in controls and the native LTX/H3 [Director timeline](docs/DIRECTOR_STUDIO.md), including clip dragging, resizing and preserved source audio. First/last-frame video can match image 1 dimensions or scale its aspect ratio with the megapixel slider. Camera editing gains optional [locked scene geometry](docs/PANORAMA_STUDIO_INTEGRATION.md). Existing Paintout retries, [alpha extraction](docs/LTX_ALPHA.md), [Ripple editing](docs/RIPPLE_STUDIO.md) and [painted image edits](docs/IMAGE_EDIT_AREA.md) remain included. See the [release notes](CHANGELOG.md) for validation and remaining limits.
+**1.3.57** includes a shared visual mode picker, compact browser sign-in controls and the native LTX/H3 [Director timeline](docs/DIRECTOR_STUDIO.md), including clip dragging, resizing and preserved source audio. First/last-frame video can match image 1 dimensions or scale its aspect ratio with the megapixel slider. Camera editing gains optional [locked scene geometry](docs/PANORAMA_STUDIO_INTEGRATION.md). Existing Paintout retries, [alpha extraction](docs/LTX_ALPHA.md), [Ripple editing](docs/RIPPLE_STUDIO.md) and [painted image edits](docs/IMAGE_EDIT_AREA.md) remain included. See the [release notes](CHANGELOG.md) for validation and remaining limits.
 
 The previous update adds complete camera-angle model setup, including MoGe 3, and checks gated-model access before large downloads. Choose a mode to see its missing files and extension guidance. Restart ComfyUI and refresh Studio after updating. See the [model setup notes](docs/STUDIO_1348_VALIDATION.md).
 

@@ -1,5 +1,10 @@
 # Release notes
 
+## 1.3.57 - 8 November 2026
+
+- Complete Registry publication of the 1.3.56 UI, Director, source-dimensions and revised still-scene camera changes. Keep the camera tooltip explicit that moving objects are not reconstructed in 3D.
+- Pass all 178 local publish-workflow regression suites after the final camera changes.
+
 ## 1.3.56 - 8 November 2026
 
 - Move the main mode picker beside Image / Video for a consistent position across workspaces and stages. Add grouped visual choices, descriptions, search, keyboard navigation and a matching image-mode picker. Keep browser selection and account sign-in together.
