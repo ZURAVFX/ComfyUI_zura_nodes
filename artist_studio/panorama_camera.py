@@ -13,6 +13,7 @@ import re
 from pathlib import Path
 
 RECIPE_VERSION = 'panorama-crossview-v1'
+GEOMETRY_MODES = ('per_frame', 'stable_scene')
 MODELS = {
     'geometry': ('geometry_estimation', 'moge_3_vitg_fp16.safetensors'),
     'h3': ('diffusion_models', 'minimax_h3_ref2va_pruned_int8_convrot.safetensors'),
@@ -26,6 +27,40 @@ MODELS = {
 
 def digest(value):
     return hashlib.sha256(json.dumps(value, sort_keys=True, allow_nan=False).encode()).hexdigest()
+
+
+def geometry_mode(config):
+    value = config.get('geometry_mode', 'per_frame')
+    if value not in GEOMETRY_MODES:
+        raise ValueError('Choose moving-subject geometry or stable-scene geometry.')
+    return value
+
+
+def stabilise_geometry(geometry, texture_images):
+    """Use one frame's 3D geometry with every frame of its original texture."""
+    if not isinstance(geometry, dict):
+        raise ValueError('MoGe did not return frame geometry.')
+    if len(texture_images.shape) != 4 or texture_images.shape[0] < 1 or texture_images.shape[-1] < 3:
+        raise ValueError('Stable scene needs a complete IMAGE sequence.')
+    frames, height, width = map(int, texture_images.shape[:3])
+    points = geometry.get('points')
+    depth = geometry.get('depth')
+    if getattr(points, 'shape', None) is None or getattr(depth, 'shape', None) is None:
+        raise ValueError('MoGe did not return full frame geometry.')
+    if tuple(points.shape[:3]) != (1, height, width) or tuple(depth.shape[:3]) != (1, height, width):
+        raise ValueError('The source textures do not match the selected frame geometry.')
+    result = {}
+    for key, value in geometry.items():
+        if not hasattr(value, 'shape') or not hasattr(value, 'expand'):
+            continue
+        if len(value.shape) == 0 or int(value.shape[0]) != 1:
+            raise ValueError('Stable scene needs geometry from exactly one frame.')
+        # Expanding keeps one static storage for geometry while Panorama reads
+        # the same first-frame mesh at the current source timeline frame.
+        base = value.detach().cpu()
+        result[key] = base.expand(frames, *base.shape[1:])
+    result['image'] = texture_images[..., :3].detach().cpu()
+    return result
 
 
 def plan(source, config):
@@ -44,11 +79,13 @@ def plan(source, config):
         raise ValueError('Use dimensions from 256 to 3840, in multiples of 8.')
     if width * height > 1920 * 1088:
         raise ValueError('This camera preview is verified up to 1080p. Choose a smaller output.')
+    mode = geometry_mode(config)
     geometry = {'recipe': RECIPE_VERSION, 'source': source['sha'], 'start': start,
                 'duration': seconds, 'frames': frames, 'fps': 24, 'width': width, 'height': height,
                 'model': MODELS['geometry'][1], 'level': 8 if max(width, height) > 1280 else 7,
-                'refine': 3, 'batch': 1, 'projection': True, 'mask': True}
-    return {**geometry, 'key': digest(geometry), 'padded': 5 + 17 * max(0, math.ceil((frames - 5) / 17)),
+                'refine': 3, 'batch': 1, 'projection': True, 'mask': True, 'geometry_mode': mode}
+    identity = geometry if mode == 'stable_scene' else {k: v for k, v in geometry.items() if k != 'geometry_mode'}
+    return {**geometry, 'key': digest(identity), 'padded': 5 + 17 * max(0, math.ceil((frames - 5) / 17)),
             'render_width': math.ceil(width / 32) * 32, 'render_height': math.ceil(height / 32) * 32}
 
 
@@ -100,10 +137,19 @@ def build_graph(source, selection, state, stage, *, warp=None, look=None, prompt
             image = n('geometry_size', 'ImageScale', 'Prepare geometry raster', image=components,
                       width=p['width'], height=p['height'], upscale_method='lanczos', crop='disabled')
             model = n('moge', 'LoadMoGeModel', 'Load MoGe 3 geometry model', model_name=MODELS['geometry'][1])
+            source_geometry = image
+            if p['geometry_mode'] == 'stable_scene':
+                source_geometry = n('geometry_first_frame', 'ImageFromBatch', 'Lock geometry to the first selected frame',
+                                    image=image, batch_index=0, length=1)
             world = n('geometry', 'MoGeInference', 'Reconstruct every source frame', moge_model=model,
-                      image=image, resolution_level=p['level'], batch_size=1, fov_x_degrees=0,
+                      image=source_geometry, resolution_level=p['level'], batch_size=1, fov_x_degrees=0,
                       force_projection=True, apply_mask=True, refine_steps=3)
-            world = n('cache_geometry', 'ZuraPanoramaSaveGeometry', 'Cache geometry for camera edits', geometry=world, cache_key=p['key'])
+            saved = {'geometry': world, 'cache_key': p['key']}
+            if p['geometry_mode'] == 'stable_scene':
+                saved['texture_images'] = image
+            world = n('cache_geometry', 'ZuraPanoramaSaveGeometry',
+                      'Cache stable scene geometry' if p['geometry_mode'] == 'stable_scene' else 'Cache geometry for camera edits',
+                      **saved)
         else:
             world = n('cached_geometry', 'ZuraPanoramaLoadGeometry', 'Reuse prepared geometry', cache_key=p['key'])
         n('panorama', 'PanoramaStudio', 'Panorama camera editor', world=world,
@@ -188,14 +234,17 @@ def cache_path(key):
 class ZuraPanoramaSaveGeometry:
     @classmethod
     def INPUT_TYPES(cls):
-        return {'required': {'geometry': ('MOGE_GEOMETRY',), 'cache_key': ('STRING',)}}
+        return {'required': {'geometry': ('MOGE_GEOMETRY',), 'cache_key': ('STRING',)},
+                'optional': {'texture_images': ('IMAGE',)}}
     RETURN_TYPES = ('MOGE_GEOMETRY',)
     FUNCTION = 'save'
     CATEGORY = 'Zura/Camera'
 
-    def save(self, geometry, cache_key):
+    def save(self, geometry, cache_key, texture_images=None):
         import torch
         import uuid
+        if texture_images is not None:
+            geometry = stabilise_geometry(geometry, texture_images)
         data = {k: v.detach().cpu() for k, v in geometry.items() if isinstance(v, torch.Tensor)}
         if not {'image', 'points', 'depth'} <= data.keys():
             raise ValueError('MoGe did not return full frame geometry.')

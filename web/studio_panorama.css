@@ -15,6 +15,9 @@
 #genj-studio .zpc-page button:hover{background:var(--zc-hover)}
 #genj-studio .zpc-page button:disabled{opacity:.45;cursor:default}
 #genj-studio .zpc-page textarea{width:100%;min-height:64px;max-height:120px;resize:vertical;background:transparent;border:0;padding:4px 0;color:var(--zc-text);font:inherit;line-height:1.6;box-sizing:border-box}
+#genj-studio .zpc-geometry-mode{display:flex;align-items:center;gap:8px;min-width:0}
+#genj-studio .zpc-geometry-mode>span{font-size:12px;color:var(--gs-muted);white-space:nowrap}
+#genj-studio .zpc-geometry-mode select{max-width:210px}
 #genj-studio .zpc-page .zpc-primary{background:var(--gs-accent);color:var(--gs-ink);border:0;padding:12px 20px;font-weight:600;white-space:nowrap}
 #genj-studio .zpc-page [data-message]{font-size:12px;margin:0;color:var(--gs-muted)}
 #genj-studio .zpc-progress{position:absolute;bottom:0;left:0;right:0;background:var(--gs-panel);padding:14px 18px;display:flex;flex-direction:column;gap:8px}
