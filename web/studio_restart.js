@@ -13,6 +13,7 @@ function workspaceFor(creative){
   switch(currentMode(creative)){
     case 'image': return creative;
     case 'frames': return creative.frames;
+    case 'director': return creative.director;
     case 'references': return creative.referencesVideo;
     case 'paintout': return creative.paintout;
     case 'watermark': return creative.watermark;
@@ -38,7 +39,7 @@ export function studioWorkspaceBusy(creative){
     return !!studio?.busy||studio?.project?.phase==='working'||!!studio?.resetting;
   }
   if(mode==='image')return !!(workspace?.job||workspace?.pendingSubmission||workspace?.submitting||workspace?.uploading);
-  if(mode==='frames'||mode==='references')return !!(
+  if(mode==='frames'||mode==='references'||mode==='director')return !!(
     workspace?.job||workspace?.pendingSubmission||workspace?.submitting||workspace?.uploading||
     workspace?.hdrOutput?.busy||invokeBusy(workspace)
   );
@@ -221,6 +222,11 @@ export async function resetStudioWorkspace(creative){
   }
   if(mode==='image')return resetImageWorkspace(creative);
   if(mode==='frames')return resetFrameWorkspace(creative?.frames,creative);
+  if(mode==='director'){
+    const result=await creative?.director?.reset?.();
+    if(result!==false)creative?.show?.('director');
+    return result!==false;
+  }
   if(mode==='references')return resetReferenceWorkspace(creative?.referencesVideo,creative);
   if(mode==='paintout'){
     const result=await creative?.paintout?.reset?.();
@@ -299,6 +305,7 @@ function modeLabel(mode){
     video:'this video workspace',
     image:'this image workspace',
     frames:'First & last frame',
+    director:'Director',
     references:'Reference to video',
     paintout:'Paintout',
     watermark:'Watermark removal',
@@ -361,7 +368,7 @@ export function installStudioRestartNavigation(studio,options={}){
     if(mode==='image')return creative.root.querySelector('.zc-image-heading');
     if(mode==='video')return creative.root.querySelector('.gs-preview-heading');
     const page=workspace?.page||workspace?.root;
-    return page?.querySelector('.zf-heading,.zpc-heading,.zru-heading,header');
+    return page?.querySelector('.zf-heading,.zdir-heading,.zpc-heading,.zru-heading,header');
   };
 
   const wrap=document.createElement('div');

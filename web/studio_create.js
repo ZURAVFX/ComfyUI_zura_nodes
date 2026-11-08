@@ -7,6 +7,7 @@ import {resolutionSize,editableDimension} from './studio_resolution.js';
 import {IMAGE_MODELS,IMAGE_SIZES,buildImageGraph,imageAvailability,imageDimensions} from "./image_recipes.js";
 import {VideoComposer,composerIcons} from "./studio_composer.js";
 import {FrameVideoWorkspace} from "./studio_frames.js";
+import {DirectorWorkspace} from './studio_director.js';
 import {ReferenceVideoWorkspace} from "./studio_references.js";
 import {getPaintoutWorkspace,getWatermarkWorkspace} from "./paintout_studio/paintout_shared.js";
 import {installPopoverDismissal} from "./studio_popovers.js";
@@ -170,7 +171,7 @@ export class CreativeWorkspace {
       this.editMainMissing=false;this.references=(item.references||[]).map(ref=>({...ref}));this.$("prompt").value=item.prompt;this.$("model").value=item.model;this.$("shape").value=item.shape;
       const size=imageDimensions(item);this.$("width").value=size[0];this.$("height").value=size[1];this.$("seed").value=item.seed;this.$("random").checked=false;this.save();this.render();
     };
-    this.root.querySelector("#gs-exit").onclick=()=>this.mode==="image"?this.graph():this.mode==="frames"?this.frames.graph():this.mode==="references"?this.referencesVideo.graph():this.mode==="paintout"?this.paintout.graph():this.mode==="watermark"?this.watermark.graph():this.mode==="outpaint"?this.outpaint.graph():this.mode==="ripple"?this.ripple.graph():this.mode==="alpha"?this.alpha.graph():studio.graphView();
+    this.root.querySelector("#gs-exit").onclick=()=>this.mode==="image"?this.graph():this.mode==="director"?this.director.graph():this.mode==="frames"?this.frames.graph():this.mode==="references"?this.referencesVideo.graph():this.mode==="paintout"?this.paintout.graph():this.mode==="watermark"?this.watermark.graph():this.mode==="outpaint"?this.outpaint.graph():this.mode==="ripple"?this.ripple.graph():this.mode==="alpha"?this.alpha.graph():studio.graphView();
     this.api.addEventListener?.("progress",event=>{const d=event.detail;if(!this.job||this.job.cancelPending||d?.prompt_id!==this.job.id||!Number.isFinite(d.value)||!(d.max>0))return;const node=d.node||this.job.currentNode||"sample",sampling=node==="sample",names={text:"Loading text encoder",prompt:"Reading your prompt",model:"Loading image model",sample:"Generating image",decode:"Decoding image",save:"Saving image",browser_image:"Generating with your browser account"};this.$("bar").value=Math.max(0,Math.min(100,100*d.value/d.max));this.$("progress-title").textContent=`${names[node]||"Processing image"} · ${sampling?"Step":"Progress"} ${d.value} of ${d.max}`;this.$("progress-detail").textContent=this.elapsed();});
     installOwnedExecuting(this.api,event=>{const d=event.detail;if(!this.job||this.job.cancelPending||d?.prompt_id!==this.job.id||!d.node)return;this.job.currentNode=d.node;const names={text:"Loading text encoder",prompt:"Reading your prompt",model:"Loading image model",sample:"Generating image",decode:"Decoding image",save:"Saving image",browser_image:"Generating with your browser account"};this.$("bar").removeAttribute("value");this.$("progress-title").textContent=names[d.node]||"Preparing image";});
     for(const [id,hint] of [["zc-swap-size","Swap image width and height"],["zc-clear-history","Hide previous images from this workspace. Saved files stay on disk."],["zc-add-references","Upload reference images, or paste an image with Ctrl+V."],["zc-settings-toggle","Choose a model, exact dimensions and seed."],["gs-exit","Open the editable ComfyUI graph with your current media."]]){
@@ -404,6 +405,7 @@ export class CreativeWorkspace {
     const recipeStatus=this.root.querySelector('#gs-models');if(recipeStatus)recipeStatus.hidden=mode!=='video';
     if(mode==='image'){this.browserConnection?.open();this.imageModelSetup?.resume();}else this.browserConnection?.close();
     if(mode==='frames')this.frames??=new FrameVideoWorkspace(this);
+    if(mode==='director')this.director??=new DirectorWorkspace(this);
     if(mode==='references')this.referencesVideo??=new ReferenceVideoWorkspace(this);
     if(mode==='paintout')this.paintout=getPaintoutWorkspace(this);
     if(mode==='watermark')this.watermark=getWatermarkWorkspace(this);
@@ -414,9 +416,9 @@ export class CreativeWorkspace {
     this.videoComposer?.mountWorkflow(mode);
     // Set real visibility as well as the CSS state, so another page cannot
     // cover navigation when the workspace changes or styles are still loading.
-    const pages={'.zc-home':'home','.zc-image-page':'image','.zf-page:not(.zr-page):not(.zp-page):not(.zh-page)':'frames','.zr-page':'references','.zp-page:not(.zwm-page)':'paintout','.zwm-page':'watermark','.zh-page':'hdr','.zo-page':'outpaint','.zru-page':'ripple','.zalpha-page':'alpha','.zpc-page':'panorama','.gs-workspace':'video','.gs-steps':'video'};
+    const pages={'.zdir-page':'director','.zc-home':'home','.zc-image-page':'image','.zf-page:not(.zr-page):not(.zp-page):not(.zh-page)':'frames','.zr-page':'references','.zp-page:not(.zwm-page)':'paintout','.zwm-page':'watermark','.zh-page':'hdr','.zo-page':'outpaint','.zru-page':'ripple','.zalpha-page':'alpha','.zpc-page':'panorama','.gs-workspace':'video','.gs-steps':'video'};
     for(const child of this.root.children)for(const [selector,space] of Object.entries(pages))if(child.matches(selector))child.hidden=mode!==space;
-    for(const b of this.root.querySelectorAll('.zc-nav [data-space]'))b.setAttribute('aria-current',b.dataset.space===(['frames','references','paintout','watermark','outpaint','ripple','alpha','panorama','hdr'].includes(mode)?'video':mode)?'page':'false');
+    for(const b of this.root.querySelectorAll('.zc-nav [data-space]'))b.setAttribute('aria-current',b.dataset.space===(['director','frames','references','paintout','watermark','outpaint','ripple','alpha','panorama','hdr'].includes(mode)?'video':mode)?'page':'false');
     this.root.querySelectorAll('video,audio').forEach(m=>m.pause());
     this.root.querySelector('#zc-open-hdr').setAttribute('aria-current',mode==='hdr'?'page':'false');
     if(mode==='hdr')this.studio.hdrTool?.activate();else this.studio.hdrTool?.deactivate();
@@ -424,6 +426,7 @@ export class CreativeWorkspace {
     if(mode==='image')this.render();
     if(mode==='image'&&!this.models.length)this.loadModels();
     if(mode==='frames')this.frames.open();
+    if(mode==='director')this.director.open();
     if(mode==='references')this.referencesVideo.open();
     if(mode==='paintout')this.paintout.open();
     if(mode==='watermark')this.watermark.open();
@@ -604,6 +607,7 @@ export class CreativeWorkspace {
   }
   async pasteReferences(event){
     if(this.mode==='frames')return this.frames.paste(event);
+    if(this.mode==='director')return this.director.paste(event);
     if(this.mode==='references')return this.referencesVideo.paste(event);
     if(!["image","video"].includes(this.mode))return;
     const clipboard=event.clipboardData;
@@ -679,7 +683,7 @@ export class CreativeWorkspace {
   }
   async cancel(){await cancelOwnedJob(this);}
   stopPolling(){clearInterval(this.timer);this.timer=null;}
-  close(){for(const access of this.imageModelAccess?.values()||[])access.dispose();this.imageModelSetup?.close();this.modelDownloadClosed=true;this.browserConnection?.close();this.videoComposer?.browserConnection?.close();this.videoComposer?.ltxOutput?.close();void this.imageArea?.close();this.save();this.stopPolling();this.imageZoom?.stopDraw();this.frames?.close();this.referencesVideo?.close();this.outpaint?.close();this.ripple?.close();this.alpha?.close();this.rippleImage?.dispose();this.panorama?.close();if(this.paintout?.owner===this)this.paintout.close();if(this.watermark?.owner===this)this.watermark.close();this.disposePopovers?.();}
+  close(){for(const access of this.imageModelAccess?.values()||[])access.dispose();this.imageModelSetup?.close();this.modelDownloadClosed=true;this.browserConnection?.close();this.videoComposer?.browserConnection?.close();this.videoComposer?.ltxOutput?.close();void this.imageArea?.close();this.save();this.stopPolling();this.imageZoom?.stopDraw();this.frames?.close();this.director?.close();this.referencesVideo?.close();this.outpaint?.close();this.ripple?.close();this.alpha?.close();this.rippleImage?.dispose();this.panorama?.close();if(this.paintout?.owner===this)this.paintout.close();if(this.watermark?.owner===this)this.watermark.close();this.disposePopovers?.();}
   async graph(){
     try{const graph=await this.imageGraph(this.job?.config||this.config());if(typeof this.app.loadApiJson!=="function")throw new Error("Update ComfyUI to open this image graph.");const original=(this.app.rootGraph||this.app.graph)?.serialize?.();if(!original)throw new Error("Your current graph could not be backed up.");try{await this.app.loadApiJson(graph,"Zura Image · "+Date.now()+".json");}catch(e){await this.app.loadGraphData(original);throw e;}this.studio.close();}catch(e){this.message(e.message);}
   }

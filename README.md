@@ -56,6 +56,7 @@ Examples use placeholder media. Personal reference images, videos, voice recordi
 | --- | --- |
 | Install and select model files | [Installation](INSTALL_STUDIO.md) |
 | Use the guided interface and Graph view | [Zura Studio](ARTIST_STUDIO.md) |
+| Direct LTX or H3 with a shared timeline | [Director](docs/DIRECTOR_STUDIO.md) |
 | Use standalone nodes and Wan continuation | [Node and workflow guide](docs/NODE_GUIDE.md) |
 | Mask, remove objects and create clean plates | [Paintout](PAINTOUT.md) |
 | Replace words in audio or video | [Dialogue editing](DIALOGUE_EDITING.md) |

@@ -15,6 +15,8 @@ const MANUAL_SOURCES={
 const gb=n=>`${(Number(n||0)/1e9).toFixed(2)} GB`;
 const fileKey=file=>`${file.folder||''}/${file.filename||''}`.replaceAll('\\','/').toLowerCase();
 ROUTE_NAMES.image='Image generation';
+ROUTE_NAMES.ltx_director='LTX 2.5 · Director';
+ROUTE_NAMES.h3_director='MiniMax H3 · Director';
 ROUTE_NAMES.ltx_performance_hdr='LTX performance + HDR delivery';
 ROUTE_NAMES.h3_ripple='H3 Ripple';
 ROUTE_NAMES.ltx_ripple='LTX Ripple';

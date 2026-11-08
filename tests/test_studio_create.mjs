@@ -108,7 +108,8 @@ assert.equal(ui.imageTask.previousElementSibling,ui.$('model').closest('.zc-mode
 const workflowMenu=ui.videoComposer.task;
 assert.equal(workflowMenu.tagName,'DETAILS');
 assert.equal(workflowMenu.querySelector('select').hidden,true,'OS-native workflow dropdown is hidden behind the styled menu');
-assert.equal(workflowMenu.querySelectorAll('[role="menuitemradio"]').length,12);
+assert.equal(workflowMenu.querySelectorAll('[role="menuitemradio"]').length,13);
+assert.ok(workflowMenu.querySelector('[data-workflow="director"]'),'Director shares the persistent video workflow selector');
 assert.equal(workflowMenu.querySelector('[data-workflow="inpaint"]'),null,'Edited-frame work has one Ripple route, without a duplicate Inpaint preview');
 assert.ok(workflowMenu.querySelector('[data-workflow="outpaint"]'),'Frame extension is available as a preview workflow');
 assert.equal(workflowMenu.querySelector('[data-workflow="swap"]').getAttribute('aria-checked'),'true');
@@ -711,7 +712,7 @@ console.log('Reference upload/limits, safe history clearing/undo, saved theme an
 
 navUi.panorama?.close();
 
-for(const [mode,modelSelector] of [['video','.zc-model-control'],['frames','.zf-model'],['references','.zf-model'],['paintout','.zf-model'],['outpaint','.zo-model'],['alpha','.zalpha-model'],['panorama','.zpc-model']]){
+for(const [mode,modelSelector] of [['video','.zc-model-control'],['director','.zdir-model'],['frames','.zf-model'],['references','.zf-model'],['paintout','.zf-model'],['outpaint','.zo-model'],['alpha','.zalpha-model'],['panorama','.zpc-model']]){
  navUi.show(mode);const group=task.closest('.zc-workflow-controls');assert.ok(group,mode+' has a shared toolbar group');
  assert.equal(group.children[1],task.closest('.zc-task-control'),mode+' keeps the workflow in slot two');
  assert.ok(group.firstElementChild.matches(modelSelector),mode+' keeps the model in slot one');

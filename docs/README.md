@@ -10,6 +10,7 @@ Start with the [repository overview](../README.md), [installation guide](../INST
 - [Starting images](IMAGE_STUDIO.md), [image editing](IMAGE_EDIT.md) and [model choices](STARTING_IMAGE_MODELS.md)
 - [H3 camera](CAMERA_ANGLE.md), [reference video](H3_REFERENCE_VIDEO.md) and [speed options](../H3_SPEED.md)
 - [LTX frame video](LTX_FRAME_VIDEO.md), [Wan frame video](WAN_FRAME_VIDEO.md) and [Wan Animate 2](WAN_ANIMATE2.md)
+- [Director timeline](DIRECTOR_STUDIO.md) and [Panorama camera](PANORAMA_STUDIO_INTEGRATION.md)
 
 ## Validation and development
 

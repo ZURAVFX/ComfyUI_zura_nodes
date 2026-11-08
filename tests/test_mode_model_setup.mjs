@@ -5,7 +5,8 @@ import {StudioModelDownloads} from '../web/studio_model_download.js';
 import {groupMissingNodes} from '../web/studio_node_setup.js';
 
 const {document,window}=parseHTML('<html><body><div id="root"></div></body></html>');
-Object.assign(globalThis,{document,window,localStorage:{getItem(){return null;},setItem(){}},ResizeObserver:class{observe(){}disconnect(){}}});
+let stored=null;
+Object.assign(globalThis,{document,window,localStorage:{getItem(){return stored;},setItem(key,value){stored=value;}},ResizeObserver:class{observe(){}disconnect(){}}});
 Object.defineProperty(window.HTMLSelectElement.prototype,'value',{configurable:true,get(){return this.querySelector('option[selected]')?.value??this.querySelector('option')?.value??'';},set(value){for(const o of this.querySelectorAll('option'))o.toggleAttribute('selected',o.value===value);}});
 window.HTMLCanvasElement.prototype.getContext=()=>({setTransform(){},clearRect(){}});
 window.HTMLElement.prototype.getBoundingClientRect=()=>({width:960,height:540});
@@ -22,6 +23,14 @@ const fetch=async(path,body)=>{
 };
 const camera=new PanoramaCameraWorkspace({root:document.querySelector('#root'),api:{},app:{},studio:{},fetch});
 await camera.open();await camera.modelDownloads.load();
+assert.equal(camera.$('geometry-mode').value,'per_frame','Legacy camera state defaults to moving-subject geometry');
+assert.match(camera.$('geometry-mode').title,/first selected frame/);
+assert.match(camera.$('geometry-mode').title,/moving objects are not reconstructed in 3D/);
+camera.state.geometry={ready:true};camera.state.warp={filename:'old.mp4'};camera.state.cameraReviewed=true;
+camera.$('geometry-mode').value='stable_scene';camera.$('geometry-mode').onchange();
+assert.equal(camera.state.geometryMode,'stable_scene');
+assert.equal(camera.state.geometry,undefined);assert.equal(camera.state.warp,undefined);assert.equal(camera.state.cameraReviewed,undefined);
+assert.equal(JSON.parse(stored).state.geometryMode,'stable_scene','Geometry choice persists with the camera project');
 assert.equal(posts.length,0,'Selecting a mode only checks requirements');
 assert.equal(camera.modelDownloads.quick.hidden,false);
 assert.match(camera.modelDownloads.quick.textContent,/Change camera angle/);

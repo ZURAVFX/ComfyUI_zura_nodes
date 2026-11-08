@@ -143,6 +143,16 @@ assert.equal(await resetStudioWorkspace(framesCreative),true);
 assert.equal(frames.prompt.value,'');
 assert.equal(frames.task.value,'frames','Frame reset keeps the shared workflow selector');
 assert.equal(frames.saves(),1,'Frame reset persists the cleared draft');
+assert.equal(frames.workspace.sourceSize,true,'A new shot returns to image 1 dimensions');
+
+let directorResets=0;
+const directorCreative={mode:'director',director:{job:null,busy(){return !!this.job;},async reset(){directorResets++;return true;}},show(mode){shown=mode;}};
+assert.equal(studioWorkspaceBusy(directorCreative),false);
+directorCreative.director.job={id:'director-job'};
+assert.equal(studioWorkspaceBusy(directorCreative),true);
+directorCreative.director.job=null;
+assert.equal(await resetStudioWorkspace(directorCreative),true);
+assert.equal(directorResets,1);assert.equal(shown,'director');
 
 const references=workspaceResetFixture('references','zf-page zr-page');
 const referenceCreative={mode:'references',referencesVideo:references.workspace,show(mode){shown=mode;}};

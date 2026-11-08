@@ -12,6 +12,10 @@ assert.equal(result.packs.find(p=>p.name==='ComfyUI-LTXVideo').missing.length,2)
 assert.ok(result.packs.find(p=>p.name==='ComfyUI').note.includes('built-in'));
 assert.ok(result.packs.every(p=>p.url.startsWith('https://github.com/')));
 assert.deepEqual(groupMissingNodes(null),{packs:[],unknown:[]});
+const director=groupMissingNodes(['LTXDirector','LTXDirectorGuide','MiniMaxH3DirectorCS']);
+assert.deepEqual(director.unknown,[],'Director dependencies must have actionable installation links');
+assert.equal(director.packs.find(p=>p.missing.includes('LTXDirector')).url,'https://github.com/WhatDreamsCost/WhatDreamsCost-ComfyUI');
+assert.equal(director.packs.find(p=>p.missing.includes('MiniMaxH3DirectorCS')).url,'https://github.com/seesee75-commits/ComfyUI-MiniMaxH3-Director');
 const ripple=groupMissingNodes(['WN_RippleApply','ZuraRippleH3Guide']);
 assert.deepEqual(ripple.unknown,[]);
 assert.equal(ripple.packs.find(pack=>pack.missing.includes('WN_RippleApply')).url,'https://github.com/WepeNerd/ComfyUI-WepeNerd');
