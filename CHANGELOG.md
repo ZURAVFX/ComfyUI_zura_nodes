@@ -1,5 +1,13 @@
 # Release notes
 
+## 1.3.55 - 8 November 2026
+
+- Keep Paintout's painted selection after generating a clean frame. **Try again** creates an independent alternative from the same base plate with a new seed; it does not stack failed attempts. Choose a saved result, or use **Paint another area** to build another repair on the chosen image.
+- Save and restore each result's matching paint layers, selection and retry inputs, including after reopening the project. Recover selections cleared by older builds and reject empty selections before submitting a model job.
+- Keep direct Paintout entry on the removal recipe when reopening retired inpaint/Ripple drafts, preserving their footage, masks and guide frames. Keep clean frames at their original source frame IDs.
+- Bring Paintout's separate Flux 3 clean-frame graph in line with the official image-aware prompt expansion and alpha-16 sampling already used by Image and Ripple. Include the pinned prompt upsampler in Paintout's model downloads.
+- Verify repeated attempts, saved-result selection, layered repairs, import snapshots and draft recovery with controller tests, native graph validation and CPU frame/composite checks. Two 1920 × 1080 clean-frame inference tests completed successfully; generated colour and edge blending still need artist review.
+
 ## 1.3.54 - 8 November 2026
 
 - Add **Video > Extract alpha** using the official LTX 2.5 Alpha Gen adapter, empty prompts and a single eight-step stage. Include one-click model setup with the existing Hugging Face browser sign-in flow.

@@ -32,7 +32,7 @@ Use your own ComfyUI host and port if they differ.
 
 ## Current release
 
-**1.3.54** adds [automatic alpha extraction](docs/LTX_ALPHA.md), transparent ProRes 4444 and 16-bit matte delivery, and corrects Flux 3's prompt expansion and sampling recipe. The recent updates also add a shared H3/LTX [Ripple timeline](docs/RIPPLE_STUDIO.md), visible [painted image edits](docs/IMAGE_EDIT_AREA.md), P-H3 Image editing and crop-based [subtitle removal](docs/SUBTITLE_REMOVAL.md). Ripple keeps edited frames when changing engines and opens a large preview when clicking an edited thumbnail. Browser sign-in respects your system's default supported browser. See the [release notes](CHANGELOG.md) for validation and remaining limits.
+**1.3.55** fixes Paintout clean-frame retries: keep the painted area, try another seed, choose a saved result or paint another area. It also corrects Paintout's separate Flux 3 recipe and restores old drafts to the removal workflow. Recent releases add [automatic alpha extraction](docs/LTX_ALPHA.md), a shared H3/LTX [Ripple timeline](docs/RIPPLE_STUDIO.md), visible [painted image edits](docs/IMAGE_EDIT_AREA.md), P-H3 Image editing and crop-based [subtitle removal](docs/SUBTITLE_REMOVAL.md). See the [release notes](CHANGELOG.md) for validation and remaining limits.
 
 The previous update adds complete camera-angle model setup, including MoGe 3, and checks gated-model access before large downloads. Choose a mode to see its missing files and extension guidance. Restart ComfyUI and refresh Studio after updating. See the [model setup notes](docs/STUDIO_1348_VALIDATION.md).
 

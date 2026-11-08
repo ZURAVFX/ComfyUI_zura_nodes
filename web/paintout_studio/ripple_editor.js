@@ -38,7 +38,7 @@ export function syncRippleEditor(e){
   for(const button of e.viewerToolbar.querySelectorAll('[data-tool=brush],[data-tool=protect],[data-editor=undo],[data-editor-menu=mask]'))button.hidden=clean&&!e.rippleAdjustMask;
   e.objectReferenceTools.hidden=!clean;e.$('instruction').closest('label').firstChild.textContent='Replacement instruction';
   e.$('instruction').placeholder='e.g. Replace the microphone with the gold microphone in my reference';
-  e.$('clean').textContent=e.selected()?.file?'Add replacement edit':'Create replacement frame';
+  e.$('clean').textContent=e.selected()?.cleanAttempt?'Try again':e.selected()?.file?'Add replacement edit':'Create replacement frame';
   e.$('compare').textContent=e.showOriginal?'Show replacement':'Show original';
   e.$('frame-label').textContent=`First selected frame · ${frame}`;
   e.$('tool-help').textContent='Select or paint the object to replace. Include the space needed by the replacement. Erase any area that must stay unchanged in this first image.';

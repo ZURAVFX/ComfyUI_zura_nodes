@@ -1,12 +1,15 @@
+import {FLUX3_PROMPT_SYSTEMS} from '../flux3_prompt_upsampling.js';
+
 export const DEFAULT_FRAME_EDIT_PROMPT = 'Remove the foreground object';
 // Native FLUX 3 Image Klein distilled editing, with an explicit source-pixel composite.
 export const FRAME_EDIT_MODELS = {
   model: 'flux3-image-klein-int8-convrot.safetensors',
   text: 'qwen3vl_4b_int8_convrot.safetensors',
+  upsampler: 'qwen3.5_9b_flux3_prompt_upsampler_w4a8.safetensors',
   vae: 'flux2-vae.safetensors',
 };
 
-const requiredNodes = ['ZuraPaintoutFrameCrop', 'ZuraPaintoutFrameComposite', 'UNETLoader', 'CLIPLoader', 'VAELoader', 'CLIPTextEncode', 'ReferenceMultiLatent', 'KSampler', 'VAEDecode'];
+const requiredNodes = ['ZuraPaintoutFrameCrop', 'ZuraPaintoutFrameComposite', 'UNETLoader', 'CLIPLoader', 'VAELoader', 'CLIPTextEncode', 'ReferenceMultiLatent', 'KSampler', 'VAEDecode', 'TextGenerate', 'ModelSamplingFlux', 'ConditioningZeroOut', 'BatchImagesNode', 'ResizeAndPadImage'];
 const choices = (info, node, input) => {
   const field = info[node]?.input?.required?.[input] || info[node]?.input?.optional?.[input];
   return field?.[0] === 'COMBO' ? field[1]?.options || [] : Array.isArray(field?.[0]) ? field[0] : [];
@@ -28,6 +31,7 @@ export function frameEditAvailability(info = {}, config = {}) {
   const files = {
     model: matchFile(choices(info, 'UNETLoader', 'unet_name'), FRAME_EDIT_MODELS.model),
     text: matchFile(choices(info, 'CLIPLoader', 'clip_name'), FRAME_EDIT_MODELS.text),
+    upsampler: matchFile(choices(info, 'CLIPLoader', 'clip_name'), FRAME_EDIT_MODELS.upsampler),
     vae: matchFile(choices(info, 'VAELoader', 'vae_name'), FRAME_EDIT_MODELS.vae),
   };
   const missing = requiredNodes.filter(name => !info[name]);
@@ -45,6 +49,29 @@ export function frameEditAvailability(info = {}, config = {}) {
 
 const selectionInstruction = 'Reconstruct the filled area left by the removal, matching the surrounding scene, perspective, texture and lighting. Preserve other objects and scene details. Follow the artist instruction; do not remove unrelated subjects.';
 const backgroundInstruction = 'Reconstruct the flat gray filled area as a natural continuation of the empty background. Continue the existing surface texture, lines, perspective and lighting across it. The filled area must contain only empty ground and background. Do not add a vehicle or object. Keep the rest of the image unchanged.';
+
+// Match the released Flux 3 recipe used by Image and Ripple. Its visual prompt
+// stage sees the same source/reference images as diffusion, before masking the
+// generated pixels back into the original plate.
+function framePrompt(graph, instruction, images, seed, upsampler) {
+  const node=(id,class_type,inputs,title)=>{graph[id]={class_type,inputs,_meta:{title}};return [id,0];};
+  const batch={'images.image0':images[0]};
+  for(let index=1;index<images.length;index++)batch['images.image'+index]=node(
+    'frame_prompt_reference_'+index,'ResizeAndPadImage',{
+      image:images[index],target_width:['frame_crop',3],target_height:['frame_crop',4],
+      padding_color:'white',interpolation:'lanczos',
+    },'Keeping the complete appearance reference');
+  const image=node('frame_prompt_images','BatchImagesNode',batch,'Ordered frame and appearance references');
+  const clip=node('frame_prompt_encoder','CLIPLoader',{clip_name:upsampler,type:'flux3',device:'default'},'Loading Flux 3 image-aware prompt expansion');
+  const expanded=node('frame_expand_prompt','TextGenerate',{
+    clip,image,prompt:`Reference images follow in order (the first image, the second image, ...).\nUser request: ${instruction}\nOutput the caption.`,
+    system_prompt:FLUX3_PROMPT_SYSTEMS.i2i,max_length:3584,sampling_mode:'on',
+    'sampling_mode.temperature':1,'sampling_mode.top_k':1,'sampling_mode.top_p':.95,
+    'sampling_mode.min_p':0,'sampling_mode.repetition_penalty':1,'sampling_mode.seed':seed,
+    'sampling_mode.presence_penalty':0,thinking:false,use_default_template:true,mtp:'off',
+  },'Understanding the painted frame edit');
+  graph.frame_positive.inputs.text=expanded;
+}
 
 export function buildFrameEditGraph(config, info) {
   const available = frameEditAvailability(info, config);
@@ -78,13 +105,14 @@ export function buildFrameEditGraph(config, info) {
   // The artist's subject goes to SAM. FLUX synthesises replacement background;
   // only the detected subject support is composited, protecting other objects.
   node('frame_positive', 'CLIPTextEncode', {clip: ref('frame_text'), text: target?backgroundInstruction:'Artist instruction: '+String(config.prompt || DEFAULT_FRAME_EDIT_PROMPT).trim()+'\n\n'+selectionInstruction}, 'Encoding the clean-frame instruction');
-  node('frame_negative', 'CLIPTextEncode', {clip: ref('frame_text'), text: ''}, 'Preparing frame conditioning');
+  node('frame_negative', 'ConditioningZeroOut', {conditioning: ref('frame_positive')}, 'Preparing distilled guidance');
+  node('frame_sampling', 'ModelSamplingFlux', {model:ref('frame_model'),max_shift:Math.log(16),base_shift:Math.log(16),width:ref('frame_crop',3),height:ref('frame_crop',4)}, 'Flux 3 alpha-16 sampling');
   node('frame_reference', 'ReferenceMultiLatent', {
     positive: ref('frame_positive'), negative: ref('frame_negative'), vae: ref('frame_vae'),
     resolution: 'keep resolution', 'images.image0': ref('frame_crop', namedInstruction&&!target?0:6),
   }, namedInstruction&&!target?'Encoding the original image for the removal instruction':'Encoding the background reconstruction reference');
   node('frame_sample', 'KSampler', {
-    model: ref('frame_model'), positive: ref('frame_reference'), negative: ref('frame_reference', 1),
+    model: ref('frame_sampling'), positive: ref('frame_reference'), negative: ref('frame_reference', 1),
     latent_image: ref('frame_reference', 2), seed, steps: 16, cfg: 1,
     sampler_name: 'euler', scheduler: 'simple', denoise: 1,
   }, 'Cleaning the frame with FLUX 3');
@@ -92,6 +120,7 @@ export function buildFrameEditGraph(config, info) {
   node('frame_save', 'ZuraPaintoutFrameComposite', {
     patch: ref(target?'frame_target':'frame_crop', target?1:2), image: ref('frame_decode'), match_context: config.match_context !== false,
   }, 'Blending only the painted region');
+  framePrompt(graph,graph.frame_positive.inputs.text,[graph.frame_reference.inputs['images.image0']],seed,files.upsampler);
   return graph;
 }
 
@@ -104,7 +133,7 @@ export function buildInpaintFrameGraph(config, info) {
   if(references.some(file=>typeof file!=='string'||!file||file.startsWith('/')||file.includes('..')||file.includes('\\')))throw Error('Upload the object references again.');
   if(references.length&&!info.LoadImage)throw Error('LoadImage is required for object references.');
   const graph=buildFrameEditGraph({...config,named_target:false},info);
-  graph.frame_positive.inputs.text='Edit the first image only within the selected region. '+String(config.prompt||'Add the object shown in the reference image.').trim()+' Preserve the surrounding scene, perspective and lighting. Do not duplicate the object unless requested.';
+  const instruction='Edit the first image only within the selected region. '+String(config.prompt||'Add the object shown in the reference image.').trim()+' Preserve the surrounding scene, perspective and lighting. Do not duplicate the object unless requested.';
   graph.frame_positive._meta.title='Encoding the object instruction';
   graph.frame_reference.inputs['images.image0']=['frame_crop',0];
   graph.frame_reference._meta.title='Encoding the source frame and object references';
@@ -113,6 +142,7 @@ export function buildInpaintFrameGraph(config, info) {
     graph[id]={class_type:'LoadImage',inputs:{image:file},_meta:{title:'Loading object reference '+(index+1)}};
     graph.frame_reference.inputs['images.image'+(index+1)]=[id,0];
   });
+  framePrompt(graph,instruction,[graph.frame_reference.inputs['images.image0'],...references.map((_,index)=>['object_reference_'+index,0])],Number(config.seed??42),frameEditAvailability(info,config).files.upsampler);
   graph.frame_sample._meta.title='Creating the reference frame with FLUX 3';
   graph.frame_decode._meta.title='Decoding the reference frame';
   return graph;

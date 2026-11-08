@@ -60,6 +60,10 @@ jobs:
           node tests/test_paintout_picker.mjs
           node tests/test_paintout_recipes.mjs
           node tests/test_paintout_ui.mjs
+          node tests/test_paintout_frame_retries.mjs
+          node tests/paintout_updated/test_editor_graphs.mjs
+          node tests/paintout_updated/test_inpaint_recipes.mjs
+          python -m unittest discover -s tests/paintout_updated -p 'test_model_downloads.py'
           node tests/test_audio_editor_connections.mjs
           node tests/test_dialogue_timing_connections.mjs
           node tests/test_dialogue_transcript.mjs

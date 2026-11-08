@@ -40,7 +40,41 @@
 #genj-studio .zp-page .zp-frame-actions[hidden]{display:none!important}
 #genj-studio .zp-page .zp-editor-clean-actions .zp-editor-description{display:flex;flex-direction:column;align-items:stretch;flex:none;max-width:none;min-width:0!important;gap:4px;font-size:12px;color:var(--gs-muted)}
 #genj-studio .zp-page .zp-editor-description textarea{width:100%;min-width:0;box-sizing:border-box;flex:none;min-height:64px;height:clamp(64px,10dvh,104px);resize:none;padding:8px 0;border:0;background:transparent;color:var(--zc-text);font-family:inherit;font-size:15px;line-height:24px}
-#genj-studio .zp-page .zp-frame-actions{display:flex;align-items:center;gap:12px;margin-left:auto;flex:none}
+#genj-studio .zp-page .zp-frame-actions{display:flex;align-items:center;flex-wrap:wrap;justify-content:flex-end;gap:8px;margin-left:auto;flex:0 1 auto;min-width:0}
+#genj-studio .zp-page .zp-frame-actions [data-editor=version-control]{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--gs-muted)}
+#genj-studio .zp-page .zp-frame-actions [data-editor=version-control] select{max-width:180px;min-width:100px}
+/* Keep the brush strip compact instead of spending three rows above the image. */
+#genj-studio .zp-page .zp-editor-viewer-toolbar{justify-content:flex-start;gap:6px;padding:6px 8px}
+#genj-studio .zp-page .zp-editor-viewer-toolbar .zp-editor-mask-sizing{flex:0 1 auto;width:auto;padding:0;gap:12px;margin-left:auto}
+#genj-studio .zp-page .zp-editor-viewer-toolbar .zp-editor-mask-sizing>label{white-space:nowrap}
+#genj-studio .zp-page .zp-editor-viewer-toolbar .zp-editor-mask-sizing input[type=range]{width:104px;max-width:18vw}
+#genj-studio .zp-page .zp-editor-viewer-toolbar .zp-editor-compare{margin-left:auto}
+/* The picture retains its usable height and the edit action stays at hand. */
+#genj-studio[data-workspace] .zp-page.zp-editor-open[data-editor-stage=clean]>.zf-viewer{flex:1 0 calc(var(--zs-preview-min,280px) + 56px);min-height:calc(var(--zs-preview-min,280px) + 56px)}
+#genj-studio .zp-page .zp-editor-viewer-toolbar button{padding:6px 8px;min-height:36px;font-size:12px}
+@media(min-width:1000px){
+ #genj-studio[data-workspace] .zp-page.zp-editor-open[data-editor-stage=clean]{display:grid;grid-template-columns:minmax(0,1fr) 288px;grid-template-rows:auto auto minmax(164px,1fr) minmax(112px,.55fr) auto;gap:8px 12px;overflow:hidden}
+ #genj-studio[data-workspace] .zp-page[data-editor-stage=clean]>.zf-heading{grid-column:1/-1;grid-row:1}
+ #genj-studio[data-workspace] .zp-page[data-editor-stage=clean]>.zp-editor-stages{grid-column:1/-1;grid-row:2;display:flex;align-items:center;flex-wrap:nowrap;gap:4px}
+ #genj-studio[data-workspace] .zp-page[data-editor-stage=clean] .zp-editor-stages>button{min-height:36px;padding:6px 10px}
+ #genj-studio[data-workspace] .zp-page[data-editor-stage=clean] .zp-editor-guide{display:flex;flex-direction:row;flex:1;align-items:center;gap:8px;padding:0;margin-left:12px;min-width:0}
+ #genj-studio[data-workspace] .zp-page[data-editor-stage=clean] .zp-editor-guide>strong{font-size:12px}
+ #genj-studio[data-workspace] .zp-page[data-editor-stage=clean] .zp-editor-guide-actions{display:flex;grid-row:auto;margin-left:auto}
+ #genj-studio[data-workspace] .zp-page.zp-editor-open[data-editor-stage=clean]>.zf-viewer{grid-column:1;grid-row:3/5;width:100%;min-height:0;height:100%;margin:0}
+ #genj-studio[data-workspace] .zp-page[data-editor-stage=clean]>.zp-editor-timeline-host{grid-column:2;grid-row:3;min-height:0;max-height:100%;overflow:auto;margin:0;width:100%}
+ #genj-studio[data-workspace] .zp-page[data-editor-stage=clean] .zp-editor-timeline__header{flex-wrap:wrap;gap:4px;padding:8px}
+ #genj-studio[data-workspace] .zp-page[data-editor-stage=clean] .zp-editor-timeline__header>strong{flex:1 1 80px}
+ #genj-studio[data-workspace] .zp-page[data-editor-stage=clean]>.zp-editor-tools{grid-column:2;grid-row:4;min-height:0;max-height:100%;overflow:auto;margin:0;width:100%;padding:8px 10px}
+ #genj-studio[data-workspace] .zp-page[data-editor-stage=clean] .zp-editor-paint-layers{padding-top:0}
+ #genj-studio[data-workspace] .zp-page[data-editor-stage=clean] .zp-editor-paint-layers ol{overflow:visible;max-height:none}
+ #genj-studio[data-workspace] .zp-page[data-editor-stage=clean] .zp-editor-layer-adjustments{display:grid;grid-template-columns:minmax(0,1fr);gap:6px}
+ #genj-studio[data-workspace] .zp-page[data-editor-stage=clean]>.zf-composer{grid-column:1/-1;grid-row:5;min-height:0;max-height:none;overflow:visible;margin:0;padding:10px 14px;gap:6px}
+ #genj-studio[data-workspace] .zp-page[data-editor-stage=clean] .zp-editor-clean-actions{gap:4px}
+ #genj-studio[data-workspace] .zp-page[data-editor-stage=clean] .zp-editor-clean-actions>[data-editor=frame-label]{display:none}
+ #genj-studio[data-workspace] .zp-page[data-editor-stage=clean] .zp-editor-description textarea{height:48px;min-height:48px;line-height:22px;padding-block:4px}
+ #genj-studio[data-workspace] .zp-page[data-editor-stage=clean] .zc-prompt-tools{flex:0 1 auto;width:auto}
+ #genj-studio[data-workspace] .zp-page[data-editor-stage=clean] .zc-prompt-bottom{display:flex;gap:8px}
+}
 #genj-studio .zp-page.zp-frame-editing>.zf-composer .zp-frame-actions{display:flex!important}
 #genj-studio .zp-page .zp-editor-object-references{display:flex;align-items:center;gap:12px;min-width:0;flex-wrap:wrap}
 #genj-studio .zp-page .zp-editor-object-references>div{display:flex;flex-wrap:wrap;gap:8px;min-width:0}

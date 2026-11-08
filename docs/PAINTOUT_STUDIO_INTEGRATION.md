@@ -6,6 +6,7 @@ The updated contest editor is available through **Video → Paintout / clean pla
 
 - Studio owns the header, theme, workflow navigation, icons, live sample preview, comparison viewer and native graph layout.
 - Paintout keeps its Trim clip → Mask → Clean frames → Render flow, mask tracks, frame-number anchors, paint layers, saved projects, model setup and SDR/HDR pipelines.
+- After generating a clean frame, **Try again** keeps the same painted area and base image while using another seed. Select a saved **Result**, or choose **Paint another area** to add a repair on top of the chosen result. Each saved result restores its own layers and mask. Clean guides can be added at any source frame.
 - The workflow selector stays visible at every stage. Changing workspace and closing/reopening Studio retain the Paintout controller and draft.
 - Studio custom LoRAs, targeted cancellation and submission recovery are retained. A lost response does not automatically submit a duplicate run.
 - The canvas fills the available space. The Render stage hides the redundant editing timeline; Trim clip remains available above it. Narrow screens contain overflow inside the tool areas.

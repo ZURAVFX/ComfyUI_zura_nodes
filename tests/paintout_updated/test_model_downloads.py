@@ -348,6 +348,26 @@ class ModelDownloadTests(unittest.TestCase):
                 self.assertIn('ltx-2.5-22b-distilled-transformer-comfy-int8-convrot.safetensors', inpaint)
             self.assertIn('ltx-2.5-video-vae-bf16.safetensors', {item['filename'] for item in downloads.CATALOG['inpaint_hdr']['files']})
 
+    def test_clean_frame_package_includes_pinned_shared_prompt_upsampler(self):
+        studio_spec = importlib.util.spec_from_file_location('studio_downloads_catalogue_test', SOURCE.parents[1] / 'artist_studio/model_downloads.py')
+        studio = importlib.util.module_from_spec(studio_spec)
+        studio_spec.loader.exec_module(studio)
+        clean = self.catalog.temp_original['clean']
+        name = 'qwen3.5_9b_flux3_prompt_upsampler_w4a8.safetensors'
+        expected = next(item for item in studio.CATALOG['flux3_klein']['files'] if item['filename'] == name)
+        actual = next(item for item in clean['files'] if item['filename'] == name)
+        for key, value in expected.items():
+            self.assertEqual(actual[key], value, key)
+        self.assertTrue(actual['gated'])
+        self.assertEqual(actual['model_card'], clean['license_url'])
+        with patch.object(downloads, 'CATALOG', {'clean': clean}):
+            locations = {item['folder']: [str(self.root)] for item in clean['files']}
+            manager = downloads.DownloadManager(locations, fetch=lambda *_a, **_k: self.fail('Unexpected network'))
+            package = manager.catalogue()['models'][0]
+        upsampler = next(item for item in package['files'] if item['filename'] == name)
+        self.assertFalse(upsampler['installed'])
+        self.assertEqual(package['remaining_bytes'], sum(item['size_bytes'] for item in clean['files']))
+
     def test_catalogue_is_offline_and_disk_preflight_prevents_network(self):
         manager = self.manager(lambda *_a, **_k: self.fail('Unexpected network'))
         self.assertGreater(manager.catalogue()['models'][0]['remaining_bytes'], 0)

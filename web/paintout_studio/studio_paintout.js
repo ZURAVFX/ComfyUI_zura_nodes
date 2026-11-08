@@ -60,7 +60,10 @@ export class PaintoutWorkspace{
     this.storageKey=workspaceOptions.storageKey||KEY;this.ripple=workspaceOptions.mode==='ripple';
     let saved={};try{saved=JSON.parse(localStorage.getItem(this.storageKey))||{};}catch{}
 
-    this.state=paintoutDraft(saved.draft);
+    this.paintoutOnly=!!workspaceOptions.paintoutOnly;
+    // Paintout's direct shortcut must not reopen a retired object-inpaint recipe.
+    // Keep all source, mask and clean-frame assets when migrating the old draft.
+    this.state=paintoutDraft(saved.draft,{paintoutOnly:this.paintoutOnly});
     this.ripple=this.state.mode==='ripple'||this.ripple;
     if(this.ripple)this.state.mode='ripple';
 
