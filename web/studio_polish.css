@@ -273,3 +273,10 @@
 
 #genj-studio[data-workspace] .gs-model-quick>.zura-model-storage:not([open]){flex:0 0 auto;width:auto}
 #genj-studio[data-workspace] .gs-model-quick>.zura-model-storage:not([open])>summary{padding:8px;min-height:36px;box-sizing:border-box}
+#genj-studio[data-workspace=panorama] .zpc-page{--zs-preview-min:clamp(220px,30dvh,360px);gap:8px}
+#genj-studio[data-workspace=panorama] .zpc-page>.zpc-progress{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 12px;padding:8px 12px}
+#genj-studio[data-workspace=panorama] .zpc-progress>div{display:contents}
+#genj-studio[data-workspace=panorama] .zpc-progress strong{grid-column:1;grid-row:1;line-height:18px}
+#genj-studio[data-workspace=panorama] .zpc-progress button{grid-column:2;grid-row:1/3;align-self:center;height:32px;min-height:32px;padding:4px 12px}
+#genj-studio[data-workspace=panorama] .zpc-progress>span{grid-column:1;grid-row:2;line-height:16px}
+#genj-studio[data-workspace=panorama] .zpc-progress>progress{grid-column:1/-1;grid-row:3;height:4px}
