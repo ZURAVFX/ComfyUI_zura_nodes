@@ -10,6 +10,16 @@ A finished look image is optional. **Create look image** sends the warped openin
 
 Geometry is cached in `output/genj/panorama/geometry`. Camera changes reuse that geometry; changing the source interval or output raster invalidates it. Graph view exports native nodes without replacing the artist graph while the camera popout is open.
 
+## Geometry options
+
+**Moving subjects · per frame** remains the default. MoGe reconstructs each selected source frame independently, preserving changing body shapes and occlusions. Independent depth estimates can introduce temporal flicker.
+
+**Stable scene · locked** reconstructs only the first frame of the selected interval and keeps that depth, intrinsics and mesh fixed. Every selected video frame still supplies its own moving texture, and H3 still receives the original video performance and audio. Camera keyframes work in the same editor. Switching geometry options invalidates the previous prepared geometry and camera preview.
+
+Locked geometry is intended for static scenes and small source-camera moves. Moving people or objects can slide across the fixed surface or expose its old silhouette. It removes repeated geometry estimation, but does not guarantee a flicker-free final render. It is an alternative guide, not a temporally reconstructed 3D video or Gaussian splat.
+
+CPU tests cover the selected first frame, full moving texture batch, shared tensor storage, cache round trip and unchanged H3 performance/audio paths. A rendered comparison against per-frame geometry remains required before judging the new option's quality.
+
 ## Approved recipe retained
 
 The latest supplied GPT-look 1080p, two-second result supersedes the older pending wording in the handover. Native Panorama 2.0.2 supplies the editor and warp; MoGe 3 supplies per-frame geometry. The H3 path retains INT8 Ref2VA, DMD turbo at 1, CrossView Warp at 0.8, Kitchen attention, res_multistep/simple at eight steps, original reference audio and a full-video guide. The look image is a soft guide, not a hard first-frame lock.
