@@ -20,3 +20,5 @@ The initial LTX path uses the distilled eight-step schedule. H3 uses FL2VA and i
 ## Functional validation, 8 November 2026
 
 Both graphs passed live node, enum and connection checks, then completed native inference using an image anchor, a timed direction cue and an audio clip. H3 saved 22 frames and LTX saved 25 frames, both at 512 × 288, 24 fps, with audio. File metadata was checked with ffprobe. These short synthetic-room tests verify timeline execution, decoding and saving rather than shot quality.
+
+The installed WhatDreamsCost extension matches upstream 2.0.5. H3 Director was backed up and updated from 0.2.2 to 1.0.1, then the H3 test was repeated successfully after restarting ComfyUI. The integration uses its compatible legacy `MiniMaxH3DirectorCS` node; the updated node's inputs were checked against the running server.

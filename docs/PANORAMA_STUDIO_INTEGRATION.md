@@ -1,6 +1,6 @@
 # Panorama camera integration
 
-Local development, 31 October 2026. Not a public release.
+Local development, updated 8 November 2026. Not a public release.
 
 ## Artist flow
 
@@ -18,7 +18,7 @@ Geometry is cached in `output/genj/panorama/geometry`. Camera changes reuse that
 
 Locked geometry is intended for static scenes and small source-camera moves. Moving people or objects can slide across the fixed surface or expose its old silhouette. It removes repeated geometry estimation, but does not guarantee a flicker-free final render. It is an alternative guide, not a temporally reconstructed 3D video or Gaussian splat.
 
-CPU tests cover the selected first frame, full moving texture batch, shared tensor storage, cache round trip and unchanged H3 performance/audio paths. A rendered comparison against per-frame geometry remains required before judging the new option's quality.
+The locked geometry option is installed locally. CPU tests cover the selected first frame, full moving texture batch, shared tensor storage, cache round trip and unchanged H3 performance/audio paths. A rendered comparison against per-frame geometry remains required before judging the new option's quality.
 
 ## Approved recipe retained
 
@@ -28,11 +28,12 @@ H3 receives a 32-pixel-aligned raster and an end-frame hold to its supported fra
 
 ## Validation and remaining checks
 
-- Eight CPU graph tests cover guide ancestry, exact frame count, padding, audio paths, soft look guidance and camera/cache state.
-- DOM tests cover native Apply, Cancel and closing the popout; the artist graph is isolated.
-- Shared workspace tests cover the persistent workflow selector and first camera action.
+- Eleven native Python camera tests passed, covering guide ancestry, exact frame count, padding, audio paths, soft look guidance, locked geometry and camera/cache state.
+- Native handoff and editor DOM tests passed, covering Apply, Cancel and closing the popout; the artist graph is isolated.
+- Shared workspace and navigation tests passed, covering the persistent workflow selector and first camera action.
+- Isolated headless Playwright checks exercised 20 camera states at 1280 x 720, 1440 x 900, 1920 x 1080 and 768 x 1024. The preview stayed at least 220 px tall, all controls remained visible, and there were no JavaScript errors or horizontal overflow.
 - An isolated CPU-only ComfyUI instance loaded the cache nodes and routes, accepted a Studio video upload and built a 24-frame geometry graph without queuing inference.
 - Thirty native node schemas were checked against the running installation. Required models exist in the normal installation; the isolated CPU probe does not inherit every external model path.
-- No new GPU render or visual native-popout check was performed in this integration session. Browser visual testing remains unavailable. The supplied approved result is quality evidence for the recipe, not a fresh end-to-end Studio render.
+- An interactive check of the native camera popout and a GPU-rendered comparison of locked versus per-frame geometry remain outstanding. The supplied approved result is quality evidence for the existing recipe, not a fresh end-to-end Studio render.
 
 Silent sources, longer than five seconds and outputs above 1080p remain outside this preview. Private handover footage and generated media are not included in the package.
