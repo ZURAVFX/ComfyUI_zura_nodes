@@ -12,7 +12,7 @@ export class RippleTimeline extends PaintoutTimeline {
     });
     this.workspace=workspace;this.root.classList.add('zru-visual-timeline');
     this.addFrame.onclick=()=>{if(!this.state.busy)workspace.addAtPlayhead();};
-    this.root.setAttribute('aria-label','Ripple source timeline');
+    this.root.setAttribute('aria-label',workspace.intent==='relight'?'Relight source timeline':'Ripple source timeline');
     this.addFrame.dataset.addOnTrack='';this.range.dataset.scrub='';
     this.film=host.ownerDocument.createElement('div');this.film.className='zru-film';this.film.setAttribute('aria-hidden','true');this.ruler.prepend(this.film);
     this.ruler.addEventListener('dblclick',event=>{
@@ -37,7 +37,7 @@ export class RippleTimeline extends PaintoutTimeline {
   }
   render(){
     super.render();
-    this.title.textContent='Edit timeline';this.cleanLabel.textContent='Edited frames';
+    this.title.textContent=this.workspace?.intent==='relight'?'Lighting timeline':'Edit timeline';this.cleanLabel.textContent=this.workspace?.intent==='relight'?'Lighting frames':'Edited frames';
     this.updateAddAction();
     this.help.textContent=this.workspace?.state.engine==='ltx'?'One visual reference for the whole clip · Select an edited frame to use it':'Double-click footage or click above it to add a keyframe · K';
     this.cleanLane.setAttribute('aria-label','Edited keyframes. Click an empty position to add one.');

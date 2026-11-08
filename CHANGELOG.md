@@ -1,5 +1,13 @@
 # Release notes
 
+## 1.3.58 - 8 November 2026
+
+- Add LTX 2.5 and MiniMax H3 to Relight alongside the existing Wan 2.1 workflow. Keep the workspace and image return path labelled Relight.
+- Use edited lighting frames on a visual timeline for LTX/H3. LTX uses one selected visual lighting reference; H3 supports multiple timed frames. Preserve all lighting frames when switching models.
+- Carry source footage, trim, prompt and the reviewed lighting image between Wan and the timeline models. Retain source dimensions, frame rate, selected frame count and audio through the existing delivery nodes.
+- Save Relight separately from ordinary video edits. Reuse the shared model installer and browser image editors, and retain the selected engine when starting a new Relight shot.
+- Verify routing, separate drafts, image return, frame preservation, native graph builders and owned-job handling with controller and graph tests. This integration reuses the proven renderers; a new Relight GPU quality comparison remains outstanding.
+
 ## 1.3.57 - 8 November 2026
 
 - Complete Registry publication of the 1.3.56 UI, Director, source-dimensions and revised still-scene camera changes. Keep the camera tooltip explicit that moving objects are not reconstructed in 3D.

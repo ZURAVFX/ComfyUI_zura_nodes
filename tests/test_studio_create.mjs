@@ -795,3 +795,18 @@ ed.flushManual=flush;ed.persist=persist;
 watermarkRestart.dispose();
 wm.close();
 console.log('PASS separate Watermark navigation, static mask actions, optional LTX reference and ProPainter migration');
+
+// Relight uses the same header mode and a separate edited-lighting-frame draft.
+const relightRoutingStudio=new context.Studio(),relightRouting=relightRoutingStudio.creative;
+await relightRouting.selectRelightEngine('ltx');
+assert.equal(relightRouting.mode,'ripple');assert.equal(relightRouting.ripple.intent,'relight');
+assert.equal(relightRouting.videoComposer.task.querySelector('select').value,'relight');
+const lightingWorkspace=relightRouting.ripple,plainWorkspace=relightRouting.ensureRippleWorkspace('edit');
+relightRouting.show('ripple');assert.equal(lightingWorkspace.page.hidden,true);assert.equal(plainWorkspace.page.hidden,false);
+await relightRouting.selectRelightEngine('h3');assert.equal(relightRouting.ripple,lightingWorkspace);assert.equal(plainWorkspace.page.hidden,true);assert.equal(lightingWorkspace.page.hidden,false);
+assert.equal(relightRouting.videoComposer.task.querySelector('select').value,'relight');
+await relightRouting.selectRelightEngine('wan21');assert.equal(relightRouting.mode,'video');assert.equal(relightRoutingStudio.config.workflow_mode,'relight');
+const relightChoices=[...relightRoutingStudio.container.querySelector('#zc-video-model').querySelectorAll('option')].map(o=>o.value);
+assert.ok(relightChoices.includes('wan21')&&relightChoices.includes('relight-h3')&&relightChoices.includes('relight-ltx'));
+relightRouting.close();for(const workspace of relightRouting.rippleWorkspaces.values())workspace.dispose();
+console.log('Shared Relight navigation and Wan / LTX / H3 model choices preserve independent mode drafts.');

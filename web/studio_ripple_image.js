@@ -14,7 +14,7 @@ export class RippleImageHandoff {
   key(workspace,anchor){return JSON.stringify([workspace.source?.path,workspace.revision,workspace.state.engine,anchor.id,anchor.frame]);}
   current(request){const w=request?.workspace;return !!w&&this.key(w,request.anchor)===request.key&&w.anchors().includes(request.anchor);}
   persist(request){
-    const w=request.workspace,value={version:1,id:request.id,source:w.source.path,engine:w.state.engine,anchorId:String(request.anchor.id),frame:request.anchor.frame,width:request.width,height:request.height,previous:request.previous};
+    const w=request.workspace,value={version:1,intent:w.intent||'edit',id:request.id,source:w.source.path,engine:w.state.engine,anchorId:String(request.anchor.id),frame:request.anchor.frame,width:request.width,height:request.height,previous:request.previous};
     try{localStorage.setItem(HANDOFF_KEY,JSON.stringify(value));this.stored=value;return true;}catch{return false;}
   }
   clear(){this.request=null;this.stored=null;++this.revision;try{localStorage.removeItem(HANDOFF_KEY);}catch{}if(this.banner)this.banner.hidden=true;}
@@ -22,7 +22,7 @@ export class RippleImageHandoff {
   async resume(){
     if(this.request){if(!this.current(this.request))this.clear();this.syncImageUI();return;}
     if(!this.stored||this.restoring)return this.restoring;
-    const saved=this.stored,revision=this.revision,w=this.owner.ensureRippleWorkspace?.()||this.owner.ripple;
+    const saved=this.stored,revision=this.revision,w=this.owner.ensureRippleWorkspace?.(saved.intent||'edit')||this.owner.ripple;
     if(!w)return;
     this.restoring=(async()=>{
       await w.restoreSource?.();
@@ -79,7 +79,7 @@ export class RippleImageHandoff {
       o.root.querySelector('.zc-image-heading').after(this.banner);
       this.banner.querySelector('[data-ripple-return]').onclick=()=>this.leave();this.banner.querySelector('[data-ripple-use]').onclick=()=>this.useResult();
     }
-    this.banner.hidden=o.mode!=='image';this.banner.querySelector('[data-ripple-image-title]').textContent=`Edit frame ${request.anchor?.frame??request.frame}`;
+    const label=(request.workspace?.intent||request.intent)==='relight'?'Relight':'Ripple';this.banner.querySelector('[data-ripple-return]').textContent='Back to '+label;this.banner.querySelector('span').textContent=label==='Relight'?'Adjust the lighting, then return to Relight. Painting an area is optional.':'Paint an area to target a local edit, then return to Ripple.';this.banner.hidden=o.mode!=='image';this.banner.querySelector('[data-ripple-image-title]').textContent=`Edit frame ${request.anchor?.frame??request.frame}`;
     const item=o.items[o.selectedImage],busy=this.importing||this.imageBusy();
     this.banner.querySelector('[data-ripple-return]').disabled=busy;
     this.banner.querySelector('[data-ripple-use]').disabled=busy||!this.request||!this.current(this.request)||item?.ripple_guide!==request.id;
@@ -113,7 +113,7 @@ export class RippleImageHandoff {
     const previous=request.previous.selectedFile;
     o.selectedImage=previous?o.items.findIndex(item=>item.file?.filename===previous.filename&&(item.file?.subfolder||'')===(previous.subfolder||'')&&(item.file?.type||'output')===(previous.type||'output')):-1;
     this.clear();
-    o.save();o.render();o.renderGallery();o.show('ripple');
+    o.save();o.render();o.renderGallery();o.ensureRippleWorkspace?.(request.workspace?.intent||request.intent||'edit');o.show('ripple');
   }
   // Closing Studio is reversible: keep the current hand-off so a completed
   // image can still return when Studio reopens, but invalidate preparation.

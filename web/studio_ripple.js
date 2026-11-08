@@ -10,7 +10,7 @@ const frameNumber=value=>Number.isFinite(Number(value))?Math.round(Number(value)
 const formatRate=rate=>Number(Number(rate||0).toFixed(3)).toString();
 const nextId=()=>globalThis.crypto?.randomUUID?.()||`${Date.now()}-${Math.random().toString(36).slice(2)}`;
 const initial=()=>({engine:'h3',scale:1,startFrame:0,frameCount:0,playhead:0,prompt:'',sourceColour:'auto',anchors:[],ltxReferenceId:null,project:null});
-function readState(){try{const saved=JSON.parse(localStorage.getItem(STATE_KEY));return saved&&typeof saved==='object'?saved:{};}catch{return {};}}
+function readState(key=STATE_KEY){try{const saved=JSON.parse(localStorage.getItem(key));return saved&&typeof saved==='object'?saved:{};}catch{return {};}}
 
 /** Merge earlier per-model keyframes without losing different edits on one frame. */
 function sharedAnchors(saved,engine){
@@ -35,9 +35,9 @@ function sharedAnchors(saved,engine){
 
 /** Dedicated timeline for edited frames. Inference stays in the supplied native graph. */
 export class RippleWorkspace {
-  constructor(owner){
-    this.owner=owner;this.api=owner.api;this.root=owner.root;this.app=owner.app;this.closed=true;
-    const saved=readState();this.state={...initial(),...saved};
+  constructor(owner,{intent="edit"}={}){
+    this.intent=intent==='relight'?'relight':'edit';this.storageKey=this.intent==='relight'?'zura-relight-workspace-v1':STATE_KEY;this.owner=owner;this.api=owner.api;this.root=owner.root;this.app=owner.app;this.closed=true;
+    const saved=readState(this.storageKey);this.state={...initial(),...saved};
     if(!['h3','ltx'].includes(this.state.engine))this.state.engine='h3';
     if(![1,.75,.5,.25].includes(Number(this.state.scale)))this.state.scale=1;
     this.state.anchors=sharedAnchors(saved.anchors,this.state.engine);
@@ -58,13 +58,14 @@ export class RippleWorkspace {
         <div class="zc-prompt-bottom"><div class="zru-tools zc-prompt-tools"><label class="zc-tool zru-model"><span class="zru-model-icon" aria-hidden="true">◇</span><span class="zc-sr-only">Ripple model</span><select data-engine aria-label="Ripple model"><option value="h3">H3 · Ripple</option><option value="ltx">LTX 2.5 · Ripple</option></select></label><label class="zc-tool zru-size"><span class="zc-sr-only">Processing resolution</span><select data-scale aria-label="Processing resolution"><option value="1">Full resolution</option><option value="0.75">75% resolution</option><option value="0.5">50% resolution</option><option value="0.25">25% resolution</option></select></label><span data-processing-size class="zru-size-label"></span><details data-model-downloads class="zc-tool-popup gs-model-help" hidden></details></div><div class="zru-actions"><a data-download download hidden>Save video</a><button type="button" class="gs-primary" data-generate>Generate video</button></div></div>
         <p data-status class="zru-status" role="status" aria-live="polite">Ripple edits the whole frame. Surrounding details may also change.</p>
       </div>`;
+    if(this.intent==='relight'){this.page.classList.add('zru-relight');this.page.innerHTML=this.page.innerHTML.replaceAll('id="zru-frame"','id="zru-relight-frame"').replaceAll('for="zru-frame"','for="zru-relight-frame"').replaceAll('id="zru-prompt"','id="zru-relight-prompt"').replaceAll('for="zru-prompt"','for="zru-relight-prompt"').replaceAll('Ripple model','Relight model').replaceAll('H3 · Ripple','MiniMax H3').replaceAll('LTX 2.5 · Ripple','LTX 2.5').replaceAll('Ripple generation progress','Relight generation progress').replaceAll('Ripple edits the whole frame. Surrounding details may also change.','Edit a lighting frame, then apply its lighting throughout the shot.');this.page.querySelector('h2').textContent='Relight';this.page.querySelector('.zru-empty strong').textContent='Relight a video';this.page.querySelector('.zru-empty span').textContent='Add a video, then edit a lighting frame on the timeline.';this.page.querySelector('.zru-prompt-label').textContent='Describe the lighting';this.page.querySelector('textarea').placeholder='Describe the lighting to apply throughout the shot';const wan=doc.createElement('option');wan.value='wan21';wan.textContent='Wan 2.1';this.page.querySelector('[data-engine]').prepend(wan);}
     this.root.append(this.page);this.video=this.$('video');this.framePreview=this.$('frame-preview');
     const colour=doc.createElement('label');colour.className='zru-source-colour';colour.hidden=true;colour.innerHTML='<span>Untagged SDR</span><select data-source-colour aria-label="Source colour for untagged video"><option value="rec709_oetf">Assume Rec.709</option><option value="srgb_display">sRGB</option><option value="rec709_gamma24">Rec.709 · gamma 2.4</option></select>';this.$('source-meta').after(colour);this.sourceColourControl=colour;
     this.$('source-colour').onchange=()=>{if(this.busy())return;this.owner.rippleImage?.invalidate(this);this.state.sourceColour=this.$('source-colour').value;++this.revision;this.save();this.render();};
     this.$('prompt').value=this.state.prompt||'';this.$('engine').value=this.state.engine;this.$('scale').value=String(this.state.scale);
     this.modelDownloads=new StudioModelDownloads(this.$('model-downloads'),(path,body)=>this.fetch('/zura/studio'+path,body),()=>this.checkModels());this.modelDownloads.mountQuick(this.page.querySelector('.zru-composer'));
     this.$('source').onclick=()=>this.$('source-file').click();this.$('source-file').onchange=e=>{const file=e.target.files?.[0];e.target.value='';if(file)void this.uploadSource(file);};this.$('clear-source').onclick=()=>this.reset();
-    this.$('engine').onchange=()=>{if(this.busy())return;this.owner.rippleImage?.invalidate(this);if(this.viewingEdit)this.viewAnchor(false);this.state.engine=this.$('engine').value;if(this.state.engine==='ltx'){const reference=this.selected()?.file?this.selected():this.ltxReference();this.state.ltxReferenceId=reference?.id||null;this.message(reference?`LTX uses frame ${reference.frame} as one visual reference for the whole clip. H3 supports timed keyframes.`:'LTX uses one edited image as a visual reference for the whole clip.');}else this.message('');this.save();this.checkModels();this.render();};
+    this.$('engine').onchange=()=>{if(this.busy())return;if(this.intent==='relight'&&this.$('engine').value==='wan21'){void this.owner.selectRelightEngine('wan21');return;}this.owner.rippleImage?.invalidate(this);if(this.viewingEdit)this.viewAnchor(false);this.state.engine=this.$('engine').value;if(this.intent==='relight')this.owner.rememberRelightEngine?.(this.state.engine);if(this.state.engine==='ltx'){const reference=this.selected()?.file?this.selected():this.ltxReference();this.state.ltxReferenceId=reference?.id||null;this.message(reference?`LTX uses frame ${reference.frame} as one visual reference for the whole clip. H3 supports timed keyframes.`:'LTX uses one edited image as a visual reference for the whole clip.');}else this.message('');this.save();this.checkModels();this.render();};
     this.$('scale').onchange=()=>{if(this.busy())return;this.state.scale=Number(this.$('scale').value);this.save();this.render();};
     this.$('prompt').oninput=()=>{this.state.prompt=this.$('prompt').value;this.save();};
     this.$('frame').onfocus=e=>e.target.select();this.$('frame').onchange=e=>{const raw=e.target.value.trim(),n=Number(raw);if(!raw||!Number.isInteger(n)){this.message('Enter a whole frame number.');this.render();return;}this.seek(n);};
@@ -98,11 +99,11 @@ export class RippleWorkspace {
     return enabled.find(a=>a.id===this.state.ltxReferenceId)||enabled.find(a=>a.file&&inside(a))||enabled.find(inside)||enabled.find(a=>a.file)||enabled[0]||null;
   }
   selected(){return this.anchors().find(anchor=>String(anchor.id)===String(this.selectedId))||null;}
-  message(text){this.$('status').textContent=text||'Ripple edits the whole frame. Surrounding details may also change.';}
-  save(){try{localStorage.setItem(STATE_KEY,JSON.stringify({...this.state,selectedId:this.selectedId,job:this.job,pendingSubmission:this.pendingSubmission,result:this.result,sourcePath:this.source?.path||this.state.sourcePath||''}));return true;}catch{return false;}}
+  message(text){const message=text||(this.intent==='relight'?'Edit a lighting frame, then apply the lighting throughout the clip. Surrounding details may also change.':'Ripple edits the whole frame. Surrounding details may also change.');this.$('status').textContent=this.intent==='relight'?message.replaceAll('Ripple','Relight').replaceAll('ripple','relight'):message;}
+  save(){try{localStorage.setItem(this.storageKey,JSON.stringify({...this.state,selectedId:this.selectedId,job:this.job,pendingSubmission:this.pendingSubmission,result:this.result,sourcePath:this.source?.path||this.state.sourcePath||''}));return true;}catch{return false;}}
   async uploadSource(file){
     if(this.busy())return;const revision=++this.revision;this.picking=true;this.uploadController=new AbortController();this.setProgress({title:'Loading video',detail:'Preparing your source footage'});this.render();this.message('');
-    try{const body=new FormData();body.append('file',file,file.name);const response=await this.api.fetchApi('/zura/studio/upload?kind=video',{method:'POST',body,signal:this.uploadController.signal,timeoutMs:null});const asset=await response.json();if(!response.ok)throw Error(asset.error||'Could not upload this video.');if(!asset.id)throw Error('The uploaded video could not be identified.');if(revision!==this.revision)return;const info=await this.fetch('/zura/studio/assets/'+encodeURIComponent(asset.id)+'/ripple',{});if(revision!==this.revision)return;this.setSource({...info,name:asset.name||file.name||info.name});}
+    try{const body=new FormData();body.append('file',file,file.name);const response=await this.api.fetchApi('/zura/studio/upload?kind=video',{method:'POST',body,signal:this.uploadController.signal,timeoutMs:null});const asset=await response.json();if(!response.ok)throw Error(asset.error||'Could not upload this video.');if(!asset.id)throw Error('The uploaded video could not be identified.');if(revision!==this.revision)return;const info=await this.fetch('/zura/studio/assets/'+encodeURIComponent(asset.id)+'/ripple',{});if(revision!==this.revision)return;this.setSource({...info,name:asset.name||file.name||info.name,studioAsset:asset});}
     catch(error){if(revision===this.revision)this.message(error.message||'Could not open this video.');}
     finally{if(revision===this.revision){this.picking=false;this.uploadController=null;this.clearProgress();this.render();}}
   }
@@ -115,7 +116,7 @@ export class RippleWorkspace {
   setSource(info){
     if(!info?.path||info.kind!=='video'||!Number.isInteger(info.frames)||info.frames<1||!(info.width>0&&info.height>0))throw Error('Choose a supported video clip.');
     this.owner.rippleImage?.invalidate(this);
-    ++this.revision;this.source=this.sourceInfo=info;this.state={...initial(),engine:this.state.engine,scale:this.state.scale,prompt:this.state.prompt,sourcePath:info.path,sourceName:info.name||'',frameCount:info.frames};
+    ++this.revision;this.source=this.sourceInfo=info;this.state={...initial(),engine:this.state.engine,scale:this.state.scale,prompt:this.state.prompt,sourcePath:info.path,sourceName:info.name||'',studioAsset:info.studioAsset||null,frameCount:info.frames};
     this.state.sourceColour=info.resolved_colour||'rec709_oetf';this.selectedId=null;this.result=null;this.job=null;this.pendingSubmission=null;this.picking=false;this.projectPromise=null;this.viewingEdit=false;this.uploadController=null;this.clearProgress();
     this.video.dataset.kind='source';this.video.src=this.url(info.media_url||info.thumbnail_url);this.video.hidden=false;this.framePreview.hidden=true;this.video.load();this.$('empty').hidden=true;this.seek(0);this.message(['hlg_rec2020','pq_rec2020','pq_display_p3','acescg','acescct','linear_rec709'].includes(info.resolved_colour)?'Ripple currently supports SDR footage.':'');this.save();this.render();
   }
@@ -188,7 +189,7 @@ export class RippleWorkspace {
     const start=this.state.startFrame,end=start+this.state.frameCount;
     const references=this.state.engine==='ltx'?[this.ltxReference()].filter(Boolean):this.anchors().filter(a=>a.enabled!==false&&a.frame>=start&&a.frame<end);
     const anchors=references.map(a=>({...a}));
-    return {engine:this.state.engine,source:source?.path||'',startFrame:start,frameCount:this.state.frameCount,sequenceFps:this.fps(),width:size.width,height:size.height,resolutionMode:'plate',anchors,prompt:this.$('prompt').value,seed:42,outputMode:'SDR video',sourceColour:this.colourSpace(),detectedSourceColour:source?.resolved_colour||''};
+    return {...(this.intent==='relight'?{intent:'relight',savePrefix:'ZURA STUDIO/relight'}:{}),engine:this.state.engine,source:source?.path||'',startFrame:start,frameCount:this.state.frameCount,sequenceFps:this.fps(),width:size.width,height:size.height,resolutionMode:'plate',anchors,prompt:this.$('prompt').value,seed:42,outputMode:'SDR video',sourceColour:this.colourSpace(),detectedSourceColour:source?.resolved_colour||''};
   }
   async generate(){
     if(this.busy())return;const config=this.config(),error=rippleStudioValidation(config);if(error){this.message(error);return;}
@@ -196,7 +197,7 @@ export class RippleWorkspace {
     try{await this.onGenerate(config);}catch(error){this.message(error.message||'Could not start the Ripple run.');this.render();}
   }
   async cancel(){if(this.picking&&this.uploadController){this.uploadController.abort();this.uploadController=null;this.picking=false;++this.revision;this.clearProgress();this.message('Video upload cancelled.');this.render();return;}if((this.job||this.pendingSubmission)&&typeof this.onCancel==='function')await this.onCancel(this.job);}
-  setProgress({title='Generating video',detail='',value=null}={}){this.$('progress').hidden=false;this.$('progress-title').textContent=title;this.$('progress-detail').textContent=detail;if(Number.isFinite(value))this.$('bar').value=clamp(value,0,100);else this.$('bar').removeAttribute('value');}
+  setProgress({title='Generating video',detail='',value=null}={}){this.$('progress').hidden=false;this.$('progress-title').textContent=this.intent==='relight'?title.replaceAll('Ripple','Relight'):title;this.$('progress-detail').textContent=this.intent==='relight'?detail.replaceAll('Ripple','Relight'):detail;if(Number.isFinite(value))this.$('bar').value=clamp(value,0,100);else this.$('bar').removeAttribute('value');}
   clearProgress(){this.$('progress').hidden=true;this.$('bar').removeAttribute('value');}
   setResult(result){
     this.result=result;this.job=null;this.clearProgress();const file=result?.file;if(!file){this.message('The run completed without a playable video. Check the output folder.');this.render();return;}
@@ -219,7 +220,7 @@ export class RippleWorkspace {
     this.$('generate').disabled=busy||!has;this.$('cancel').disabled=!this.job&&!this.pendingSubmission&&!this.uploadController;this.$('download').hidden=!this.result?.file;this.$('view-result').hidden=!this.result?.file;this.$('view-result').textContent=this.video.dataset.kind==='result'?'View source':'View result';
     if(has){const size=rippleStudioProcessingSize(this.source.width,this.source.height,Number(this.state.scale),this.state.engine);this.$('processing-size').textContent=`${size.width} × ${size.height} processing · ${this.source.width} × ${this.source.height} output`;this.trimmer.update({url:this.url(this.source.media_url||''),duration:frames/this.fps(),fps:this.fps()},{workflow_mode:'relight',length_mode:'custom',start:start/this.fps(),duration:this.state.frameCount/this.fps()},{disabled:busy});this.trimmer.setPlayhead(this.state.playhead/this.fps());}else{this.$('processing-size').textContent='';this.trimmer.update(null,{});}
   }
-  reset(){if(this.busy())return false;this.anchorPreview.close();this.owner.rippleImage?.invalidate(this);++this.revision;this.trimmer.close();this.video.pause();this.video.removeAttribute('src');this.video.load();this.video.hidden=true;this.framePreview.hidden=true;this.framePreview.style.backgroundImage='';this.source=this.sourceInfo=null;this.state=initial();this.selectedId=null;this.result=null;this.job=null;this.pendingSubmission=null;this.projectPromise=null;this.viewingEdit=false;this.$('prompt').value='';this.$('engine').value='h3';this.$('scale').value='1';this.$('download').hidden=true;this.clearProgress();this.message('');this.save();this.render();return true;}
+  reset(){if(this.busy())return false;this.anchorPreview.close();this.owner.rippleImage?.invalidate(this);++this.revision;this.trimmer.close();this.video.pause();this.video.removeAttribute('src');this.video.load();this.video.hidden=true;this.framePreview.hidden=true;this.framePreview.style.backgroundImage='';this.source=this.sourceInfo=null;this.state=this.intent==='relight'?{...initial(),engine:this.state.engine}:initial();this.selectedId=null;this.result=null;this.job=null;this.pendingSubmission=null;this.projectPromise=null;this.viewingEdit=false;this.$('prompt').value='';this.$('engine').value=this.state.engine;this.$('scale').value='1';this.$('download').hidden=true;this.clearProgress();this.message('');this.save();this.render();return true;}
   open(){this.closed=false;this.page.hidden=false;void this.restoreSource();void this.checkModels();if(this.job||this.pendingSubmission)void this.onResume?.();this.render();}
   graph(){if(typeof this.onGraph==='function')return this.onGraph(this.config());this.message('The editable graph is not available until the Ripple setup is ready.');}
   close(){this.anchorPreview.close();this.closed=true;this.page.hidden=true;this.video.pause();this.trimmer.close();}

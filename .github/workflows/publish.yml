@@ -193,6 +193,7 @@ jobs:
           node tests/test_ripple_image_handoff.mjs
           node tests/test_ripple_jobs.mjs
           node tests/test_ripple_navigation.mjs
+          node tests/test_relight_engines.mjs
           node tests/test_ripple_playhead.mjs
           node tests/test_ripple_preview.mjs
           node tests/test_ripple_shared_anchors.mjs

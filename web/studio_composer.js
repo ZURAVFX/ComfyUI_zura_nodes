@@ -104,6 +104,7 @@ export class VideoComposer {
     settings.onclick=()=>{workspace.selectPanel('settings');this.openControls();};tools.append(settings);this.settings=settings;
     const action=document.createElement('div');action.className='zc-prompt-submit';action.append(studio.$('primary'));bottom.append(action);composer.append(bottom,studio.$('action-note'));
     this.root.querySelector('#zc-video-model').onchange=e=>{
+      if(e.target.value.startsWith('relight-')){void workspace.selectRelightEngine(e.target.value.slice(8));return;}
       const input=this.root.querySelector(`input[name="gs-engine"][value="${e.target.value}"]`);
       if(input&&!input.disabled){for(const radio of this.root.querySelectorAll('input[name="gs-engine"]'))radio.checked=radio===input;input.dispatchEvent(new this.root.ownerDocument.defaultView.Event('change',{bubbles:true}));}
     };
@@ -127,7 +128,8 @@ export class VideoComposer {
     this.studio.navigationStep=null;
     if(value==='camera'){this.workspace.show('panorama');return;}
     if(value==='hdr'){this.workspace.openHDR();return;}
-    if(['objects','ripple','inpaint'].includes(value)){this.workspace.show('ripple');return;}
+    if(value==='relight'&&this.workspace.selectRelightEngine){void this.workspace.selectRelightEngine(this.workspace.relightEngine||'wan21');return;}
+    if(['objects','ripple','inpaint'].includes(value)){this.workspace.ensureRippleWorkspace?.('edit');this.workspace.show('ripple');return;}
     if(value==='paintout'&&['inpaint','ripple'].includes(this.workspace.paintout?.state.mode)){this.workspace.show('paintout');this.workspace.paintout.setMode('targeted');this.syncWorkflow();return;}
     if(['director','frames','references','paintout','watermark','outpaint','alpha'].includes(value)){this.workspace.show(value);return;}
     if(!VIDEO_WORKFLOWS.some(([id])=>id===value))return;
@@ -150,7 +152,7 @@ export class VideoComposer {
   syncWorkflow(){
     const independent=['director','frames','references','paintout','watermark','outpaint','ripple','alpha','panorama','hdr'].includes(this.workspace.mode),select=this.task.querySelector('select');
     select.value=independent?this.workspace.mode:this.studio.config.workflow_mode==='motion'?'swap':this.studio.config.workflow_mode;
-    if(this.workspace.mode==='panorama')select.value='camera';
+    if(this.workspace.mode==='panorama')select.value='camera';if(this.workspace.mode==='ripple'&&this.workspace.ripple?.intent==='relight')select.value='relight';
     if(this.workspace.mode==='paintout'&&this.workspace.paintout?.state.mode==='ripple')select.value='ripple';
     select.disabled=!independent&&(this.studio.busy||this.studio.project?.phase==='working');
     for(const option of select.querySelectorAll('option')){
@@ -201,9 +203,9 @@ export class VideoComposer {
     this.hdrChoice.hidden=!canUseLtxHDR;this.hdrChoiceSeparator.hidden=!canUseLtxHDR;
     this.composer.dataset.stage=stage;
     const select=this.root.querySelector('#zc-video-model'),radios=Array.from(this.root.querySelectorAll('input[name="gs-engine"]')).filter(r=>!r.closest('label').hidden);
-    const key=radios.map(r=>r.value+':'+r.disabled).join('|');
-    if(select.dataset.choices!==key){select.replaceChildren();for(const radio of radios){const option=document.createElement('option');option.value=radio.value;option.textContent={local:'LTX 2.5',h3:'MiniMax H3',wan:'Wan 2.2',wan2:'Wan Animate 2',wan21:'Wan 2.1',seedance:'Seedance'}[radio.value];option.disabled=radio.disabled;select.append(option);}select.dataset.choices=key;}
-    select.value=s.config.workflow_mode==='relight'&&s.config.relight_engine==='wan21'?'wan21':s.config.engine;select.disabled=working;
+    const key=radios.map(r=>r.value+':'+r.disabled).join('|')+':'+s.config.workflow_mode;
+    if(select.dataset.choices!==key){select.replaceChildren();for(const radio of radios){const option=document.createElement('option');option.value=radio.value;option.textContent={local:'LTX 2.5',h3:'MiniMax H3',wan:'Wan 2.2',wan2:'Wan Animate 2',wan21:'Wan 2.1',seedance:'Seedance'}[radio.value];option.disabled=radio.disabled;select.append(option);}if(s.config.workflow_mode==='relight')for(const [value,label]of [['relight-ltx','LTX 2.5'],['relight-h3','MiniMax H3']]){const option=document.createElement('option');option.value=value;option.textContent=label;select.append(option);}select.dataset.choices=key;}
+    select.value=s.config.workflow_mode==='relight'&&s.config.relight_engine==='wan21'?'wan21':s.config.engine;select.disabled=working||!!this.workspace.relightSwitchPending;
     // Choosing a video engine can return the shot to its starting-image step.
     // Keep that engine selector mounted so the artist can always switch back.
     this.model.hidden=false;this.model.title='Video model · available throughout this workflow';this.imageModel.hidden=stage==='video';

@@ -388,7 +388,7 @@ export function installStudioRestartNavigation(studio,options={}){
   };
   const showConfirmation=(error='')=>{
     const mode=currentMode(creative);
-    confirmation.querySelector('p').textContent=error||`${modeLabel(mode)} has an active run. Nothing has been cleared.`;
+    confirmation.querySelector('p').textContent=error||`${mode==='ripple'&&creative.ripple?.intent==='relight'?'Relight':modeLabel(mode)} has an active run. Nothing has been cleared.`;
     cancelReset.textContent=error?'Try cancellation again':'Cancel run and start over';
     confirmation.hidden=false;
     button.setAttribute('aria-expanded','true');
@@ -403,7 +403,7 @@ export function installStudioRestartNavigation(studio,options={}){
     if(operationMode&&operationMode!==mode)closeConfirmation();
     button.disabled=working;
     button.textContent=working?'Starting over…':RESTART_LABEL;
-    button.title=studioWorkspaceBusy(creative)?`${modeLabel(mode)} has an active run. Start over will ask before cancelling it.`:`Clear ${modeLabel(mode)} inputs and return to its first step. Saved files and other workspaces stay intact.`;
+    button.title=studioWorkspaceBusy(creative)?`${mode==='ripple'&&creative.ripple?.intent==='relight'?'Relight':modeLabel(mode)} has an active run. Start over will ask before cancelling it.`:`Clear ${mode==='ripple'&&creative.ripple?.intent==='relight'?'Relight':modeLabel(mode)} inputs and return to its first step. Saved files and other workspaces stay intact.`;
   };
 
   const resetWhenIdle=async mode=>{

@@ -124,3 +124,11 @@ function fixture({clearStorage=true}={}){
   await f.handoff.leave();assert.deepEqual(restored,area);
 }
 console.log('Ripple image handoff preserves original frames, exact raster, shared prompts, refresh/reopen recovery, edit-area isolation and stale-result ownership.');
+
+// Relight's return path survives reopening without becoming the ordinary edit draft.
+{
+ const f=fixture();f.workspace.intent='relight';await f.handoff.edit(f.workspace,f.anchor);
+ assert.equal(f.handoff.stored.intent,'relight');
+ let restoredIntent;f.owner.ensureRippleWorkspace=intent=>{restoredIntent=intent;return f.workspace;};
+ await f.handoff.leave();assert.equal(restoredIntent,'relight');assert.equal(f.owner.mode,'ripple');
+}

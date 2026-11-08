@@ -1,3 +1,4 @@
+import {installRelightEngines} from './studio_relight.js';
 import {ImageEditInputs} from './studio_image_edit_inputs.js';
 import {ImageEditArea} from './studio_image_area.js';
 import {IMAGE_AREA_NODE_TYPES,smartCropCapabilities} from './studio_image_area_graph.js';
@@ -186,7 +187,7 @@ export class CreativeWorkspace {
     const imageModelPanel=document.createElement('details');imageModelPanel.className='gs-model-help';this.$('setup').before(imageModelPanel);
     this.imageModelSetup=new StudioModelDownloads(imageModelPanel,(path,body)=>this.fetch('/zura/studio'+path,body),()=>this.loadModels());
     this.imageModelSetup.mountQuick(this.root.querySelector('.zc-image-composer'));
-    this.rippleImage??=new RippleImageHandoff(this);
+    this.rippleImage??=new RippleImageHandoff(this);installRelightEngines(this);
     this.show("video");this.renderGallery();this.render();
   }
   buildVideoInspector(settings){
@@ -392,8 +393,10 @@ export class CreativeWorkspace {
     else if(!ref){tool.$('source-kind').value='own';tool.updateMode();}
     this.show('hdr');
   }
-  ensureRippleWorkspace(){
-    if(!this.ripple){this.ripple=new RippleWorkspace(this);installRippleJobs(this.ripple);}
+  ensureRippleWorkspace(intent){
+    intent=intent||this.ripple?.intent||'edit';intent=intent==='relight'?'relight':'edit';this.rippleWorkspaces??=new Map();if(this.ripple&&!this.rippleWorkspaces.has(this.ripple.intent||'edit'))this.rippleWorkspaces.set(this.ripple.intent||'edit',this.ripple);
+    if(!this.rippleWorkspaces.has(intent)){const workspace=new RippleWorkspace(this,{intent});installRippleJobs(workspace);this.rippleWorkspaces.set(intent,workspace);}
+    this.ripple=this.rippleWorkspaces.get(intent);
     this.rippleImage??=new RippleImageHandoff(this);
     this.editRippleFrame=(workspace,anchor)=>this.rippleImage.edit(workspace,anchor);
     return this.ripple;
@@ -417,7 +420,7 @@ export class CreativeWorkspace {
     // Set real visibility as well as the CSS state, so another page cannot
     // cover navigation when the workspace changes or styles are still loading.
     const pages={'.zdir-page':'director','.zc-home':'home','.zc-image-page':'image','.zf-page:not(.zr-page):not(.zp-page):not(.zh-page)':'frames','.zr-page':'references','.zp-page:not(.zwm-page)':'paintout','.zwm-page':'watermark','.zh-page':'hdr','.zo-page':'outpaint','.zru-page':'ripple','.zalpha-page':'alpha','.zpc-page':'panorama','.gs-workspace':'video','.gs-steps':'video'};
-    for(const child of this.root.children)for(const [selector,space] of Object.entries(pages))if(child.matches(selector))child.hidden=mode!==space;
+    for(const child of this.root.children)for(const [selector,space] of Object.entries(pages))if(child.matches(selector))child.hidden=mode!==space||(space==='ripple'&&child!==this.ripple?.page);
     for(const b of this.root.querySelectorAll('.zc-nav [data-space]'))b.setAttribute('aria-current',b.dataset.space===(['director','frames','references','paintout','watermark','outpaint','ripple','alpha','panorama','hdr'].includes(mode)?'video':mode)?'page':'false');
     this.root.querySelectorAll('video,audio').forEach(m=>m.pause());
     this.root.querySelector('#zc-open-hdr').setAttribute('aria-current',mode==='hdr'?'page':'false');
@@ -683,7 +686,7 @@ export class CreativeWorkspace {
   }
   async cancel(){await cancelOwnedJob(this);}
   stopPolling(){clearInterval(this.timer);this.timer=null;}
-  close(){for(const access of this.imageModelAccess?.values()||[])access.dispose();this.imageModelSetup?.close();this.modelDownloadClosed=true;this.browserConnection?.close();this.videoComposer?.browserConnection?.close();this.videoComposer?.ltxOutput?.close();void this.imageArea?.close();this.save();this.stopPolling();this.imageZoom?.stopDraw();this.frames?.close();this.director?.close();this.referencesVideo?.close();this.outpaint?.close();this.ripple?.close();this.alpha?.close();this.rippleImage?.dispose();this.panorama?.close();if(this.paintout?.owner===this)this.paintout.close();if(this.watermark?.owner===this)this.watermark.close();this.disposePopovers?.();}
+  close(){for(const access of this.imageModelAccess?.values()||[])access.dispose();this.imageModelSetup?.close();this.modelDownloadClosed=true;this.browserConnection?.close();this.videoComposer?.browserConnection?.close();this.videoComposer?.ltxOutput?.close();void this.imageArea?.close();this.save();this.stopPolling();this.imageZoom?.stopDraw();this.frames?.close();this.director?.close();this.referencesVideo?.close();this.outpaint?.close();for(const workspace of new Set([this.ripple,...(this.rippleWorkspaces?.values()||[])]))workspace?.close();this.alpha?.close();this.rippleImage?.dispose();this.panorama?.close();if(this.paintout?.owner===this)this.paintout.close();if(this.watermark?.owner===this)this.watermark.close();this.disposePopovers?.();}
   async graph(){
     try{const graph=await this.imageGraph(this.job?.config||this.config());if(typeof this.app.loadApiJson!=="function")throw new Error("Update ComfyUI to open this image graph.");const original=(this.app.rootGraph||this.app.graph)?.serialize?.();if(!original)throw new Error("Your current graph could not be backed up.");try{await this.app.loadApiJson(graph,"Zura Image · "+Date.now()+".json");}catch(e){await this.app.loadGraphData(original);throw e;}this.studio.close();}catch(e){this.message(e.message);}
   }
