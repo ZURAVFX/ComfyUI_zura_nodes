@@ -99,7 +99,7 @@ export class FrameVideoWorkspace{
       if(preset){const size=endpointPresetSize(this.$('engine').value,preset.id,this.$('megapixels').value,this.recipe());this.$('width').value=size.width;this.$('height').value=size.height;this.dimensionNotice='';}
       this.normaliseDimensions();this.applySourceSize();this.save();this.render();
     };
-    this.$('size-preset').onchange=()=>{this.sourceSize=true;applySize();};this.$('megapixels').onchange=()=>{this.sourceSize=false;applySize();};
+    this.$('size-preset').onchange=applySize;this.$('megapixels').onchange=()=>{this.sourceSize=false;applySize();};
     megapixelSlider(this.$('megapixels'),{max:megapixelMaximum(this.recipe()),value:initialMegapixels});
     this.$('source-size').onclick=()=>{this.$('size-preset').value='source';this.sourceSize=true;applySize();};
     this.applySourceSize();
