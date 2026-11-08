@@ -13,7 +13,7 @@ const display={filename:'proxy.png',subfolder:'genj_studio/hdr',type:'input'};
 const request=async(path,body)=>{
   calls.push({path,body});
   if(path.includes('/readiness'))return {...setup,enabled};
-  if(path.endsWith('/preview'))return {id:body.asset_id,asset_kind:'hdr_endpoint',colour_space:'auto',preview:display,width:512,height:512};
+  if(path.endsWith('/preview'))return {id:body.asset_id,asset_kind:'hdr_endpoint',colour_space:'auto',preview:display,width:1920,height:1080};
   if(path.endsWith('/graph'))return {graph:{first:{class_type:'ZuraHDRLoadNativeSource',inputs:{manifest:'verified-original-EXR'}}}};
   return {};
 };
@@ -21,12 +21,16 @@ const api={apiURL:p=>p,addEventListener(){},fetchApi:async(path,options)=>{calls
 const endpoints=new LTXHDREndpoints(api,request);await endpoints.refresh();
 const first=await endpoints.upload(new File(['exr'],'first.exr'));
 assert.equal(first.id,'original-hdr');assert.equal(first.file,'genj_studio/hdr/proxy.png');assert.equal(first.asset_kind,'hdr_endpoint');
+assert.deepEqual([first.width,first.height],[1920,1080],'Reduced display proxy does not replace original EXR dimensions');
 const config={engine:'ltx',first,last:null,width:512,height:512,frames:9,prompt:'A subtle movement.',seed:42,hdrOutput:'hlg_and_exr'};
 assert.doesNotThrow(()=>endpoints.validate(config));
-for(const [overrides,error] of [[{engine:'h3'},/LTX/],[{last:{file:'SDR.png'}},/EXR last/],[{hdrOutput:'sdr'},/HDR output/],[{width:520},/multiples of 64/],[{frames:161},/memory budget/],[{audioEnabled:true},/audio reference/]])assert.throws(()=>endpoints.validate({...config,...overrides}),error);
+for(const [overrides,error] of [[{engine:'h3'},/LTX/],[{last:{file:'SDR.png'}},/EXR last/],[{hdrOutput:'sdr'},/HDR output/],[{width:520},/multiples of 64/],[{frames:161},/memory budget/],[{audioEnabled:true},/audio reference/],[{outputWidth:512},/Output dimensions/],[{outputWidth:511,outputHeight:512},/even/],[{outputWidth:514,outputHeight:512},/exceed/]])assert.throws(()=>endpoints.validate({...config,...overrides}),error);
 const graph=await endpoints.graph(config);assert.equal(graph.first.class_type,'ZuraHDRLoadNativeSource');
 const body=calls.find(c=>c.path.endsWith('/graph')).body;
-assert.equal(body.first_id,'original-hdr');assert.equal(JSON.stringify(body).includes('proxy.png'),false,'The SDR display proxy cannot become generation input');
+assert.equal(body.first_id,'original-hdr');assert.equal(body.output_width,undefined);assert.equal(body.output_height,undefined);assert.equal(JSON.stringify(body).includes('proxy.png'),false,'The SDR display proxy cannot become generation input');
+await endpoints.graph({...config,outputWidth:512,outputHeight:512});
+const exactBody=calls.filter(c=>c.path.endsWith('/graph')).at(-1).body;
+assert.equal(exactBody.output_width,512);assert.equal(exactBody.output_height,512);
 enabled=false;await endpoints.refresh();await assert.rejects(endpoints.upload(new File(['exr'],'other.exr')),/not enabled/);enabled=true;
 
 const preview={filename:'native-preview.mp4',subfolder:'genj/hdr',type:'output'},master={...preview,filename:'native.mp4'},archive={...preview,filename:'native.zip'};
@@ -34,10 +38,11 @@ const owner={api,root:document.querySelector('main'),app:{},studio:{},fetch:asyn
 const ui=new FrameVideoWorkspace(owner);ui.nativeHDR.info=setup;ui.assets={first};ui.$('engine').value='ltx';ui.$('output').value='hlg_and_exr';ui.$('width').value='512';ui.$('height').value='512';ui.$('prompt').value=config.prompt;ui.selectAvailability();ui.render();
 assert.equal(ui.recipe().dimensionStep,64);assert.match(ui.$('first').accept,/exr/);assert.equal(ui.$('output').querySelector('[value=sdr]').disabled,true);
 assert.equal(ui.page.querySelector('[data-frame=first] img').getAttribute('src').includes('proxy.png'),true);
-ui.job={id:'native-job',config};await ui.poll();
+ui.job={id:'native-job',config:{...config,nativeHDR:true}};await ui.poll();
 assert.equal(ui.job,null);assert.equal(ui.hdrOutput.busy,false,'Native HDR output never queues an SDR-to-HDR pass');
 assert.equal(ui.items.length,1);assert.equal(ui.items[0].nativeHDR,true);assert.equal(ui.selectedResult.filename,preview.filename);
+const restored=new FrameVideoWorkspace(owner);assert.equal(restored.items[0].nativeHDR,true,'Native HDR history metadata survives restore');restored.close();
 assert.equal(ui.$('hdr-downloads').querySelectorAll('a').length,2);assert.match(ui.$('message').textContent,/Native HDR generation complete/);
 ui.$('engine').value='h3';ui.render();assert.equal(ui.$('generate').disabled,true);assert.match(ui.$('note').textContent,/EXR endpoints need LTX/);
 ui.close();
-console.log('PASS native EXR references, display proxy isolation, model limits, mixed-input errors and direct HDR result delivery.');
+console.log('PASS native EXR references, exact delivery sizing, display proxy isolation, model limits, mixed-input errors, history restore and direct HDR result delivery.');

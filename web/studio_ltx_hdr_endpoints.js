@@ -1,4 +1,5 @@
 // Native HDR assets retain their uploaded EXR identity. The PNG is display-only.
+import {frameOutputSize} from './frame_source_resolution.js';
 export const isHDREndpoint=asset=>asset?.asset_kind==='hdr_endpoint';
 export const hasHDREndpoint=config=>isHDREndpoint(config.first)||isHDREndpoint(config.last);
 export class LTXHDREndpoints{
@@ -17,6 +18,7 @@ export class LTXHDREndpoints{
     if(!String(c.prompt||'').trim())throw new Error('Describe the video you want to generate.');
     if(![c.width,c.height].every(n=>Number.isInteger(n)&&n>=512&&n<=2048&&n%64===0))throw new Error('Native HDR uses 512–2048 pixels per side, in multiples of 64.');
     if(!Number.isInteger(c.frames)||c.frames<9||c.frames>361||(c.frames-1)%8)throw new Error('LTX needs 8n + 1 frames, from 9 to 361.');
+    frameOutputSize(c,2048);
     const budget=this.info.limits?.maxPixelFrames||40000000;
     if(c.width*c.height*c.frames>budget){const limit=Math.min(361,1+8*Math.floor((Math.floor(budget/(c.width*c.height))-1)/8));throw new Error(`This HDR selection exceeds the software memory budget. At this size choose up to ${limit} frames (${(limit/24).toFixed(2)}s), or reduce resolution.`);}
     if(c.audioEnabled&&!c.audio?.file)throw new Error('Add an audio reference, or switch Audio reference off.');
@@ -34,10 +36,11 @@ export class LTXHDREndpoints{
   async graph(c){
     await this.refresh(c.hdrOutput);this.validate(c);
     if(!this.info.ready)throw new Error('Native HDR setup is incomplete: '+[...(this.info.files||[]).filter(f=>!f.ready).map(f=>f.filename),...(this.info.missingNodes||[])].join(', '));
+    const delivery=c.outputWidth===undefined&&c.outputHeight===undefined?{}:{output_width:c.outputWidth,output_height:c.outputHeight};
     const result=await this.request('/zura/studio/ltx/hdr-endpoints/graph',{
       first_id:c.first.id,last_id:c.last?.id,first_colour:c.first.colour_space,last_colour:c.last?.colour_space,
       width:c.width,height:c.height,frames:c.frames,prompt:c.prompt,seed:c.seed,output:c.hdrOutput,
-      audio_enabled:c.audioEnabled,audio_file:c.audio?.file,audio_start:c.audioStart||0,custom_loras:c.custom_loras||[]});
+      audio_enabled:c.audioEnabled,audio_file:c.audio?.file,audio_start:c.audioStart||0,custom_loras:c.custom_loras||[],...delivery});
     return result.graph;
   }
 }

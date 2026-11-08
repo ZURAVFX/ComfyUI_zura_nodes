@@ -109,6 +109,7 @@ function resetFrameWorkspace(workspace,creative){
   workspace.stopPolling?.();
   workspace.nativeSamplePreview?.clear?.();
   workspace.assets={};
+  workspace.sourceSize=true;
   workspace.job=null;
   workspace.pendingSubmission=null;
   workspace.submitting=false;

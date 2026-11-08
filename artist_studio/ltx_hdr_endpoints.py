@@ -32,9 +32,18 @@ def endpoint_source(asset):
 
 def build_native_endpoint_graph(*, first, last=None, width, height, frames, prompt,
                                 seed=42, output='hlg_and_exr', prefix, audio_file=None,
-                                audio_start=0.):
+                                audio_start=0., output_width=None, output_height=None):
     if any(type(v) is not int or not 512 <= v <= 2048 or v % 64 for v in (width, height)):
         raise ValueError('Native HDR endpoints need 512–2048 pixels per side on a 64-pixel grid.')
+    if (output_width is None) != (output_height is None):
+        raise ValueError('Delivery width and height must be provided together.')
+    if output_width is not None and any(
+            type(v) is not int or not 2 <= v <= 2048 or v % 2
+            for v in (output_width, output_height)):
+        raise ValueError('Delivery dimensions must be even numbers from 2 to 2048 pixels.')
+    if output_width is not None and (
+            output_width > width or output_height > height):
+        raise ValueError('Delivery dimensions cannot exceed the processing canvas.')
     if type(frames) is not int or not 9 <= frames <= 361 or (frames-1) % 8:
         raise ValueError('Native HDR endpoints need 8n+1 frames, from 9 to 361.')
     if width * height * frames > MAX_PIXEL_FRAMES:
@@ -81,14 +90,29 @@ def build_native_endpoint_graph(*, first, last=None, width, height, frames, prom
         g['empty_audio'] = n('LTXVEmptyLatentAudio', audio_vae=['audio_vae', 0], frames_number=frames, frame_rate=24., batch_size=1)
         audio = ['empty_audio', 0]
     latent = ['empty_video', 0]
+    endpoint_inputs = {'first': ['first', 0]}
+    if last is not None:
+        endpoint_inputs['last'] = ['last', 0]
+    if output_width is not None:
+        # Keep the artist's exact canvas aspect through model conditioning.
+        # The unavoidable model-grid resize is stretched, never centre-cropped.
+        for endpoint, source in endpoint_inputs.items():
+            g['delivery_'+endpoint] = n(
+                'ImageScale', image=source, upscale_method='bilinear',
+                width=output_width, height=output_height, crop='center')
+            endpoint_inputs[endpoint] = ['delivery_'+endpoint, 0]
     for stage, w, h in ((1, width//2, height//2), (2, width, height)):
         suffix = str(stage)
         positive, negative = ['condition', 0], ['condition', 1]
-        g['fit_first'+suffix] = n('ImageScale', image=['first', 0], upscale_method='bilinear', width=w, height=h, crop='center')
+        g['fit_first'+suffix] = n(
+            'ImageScale', image=endpoint_inputs['first'], upscale_method='bilinear',
+            width=w, height=h, crop='disabled' if output_width is not None else 'center')
         g['anchor_first'+suffix] = n('LTXVImgToVideoInplace', vae=['vae', 0], image=['fit_first'+suffix, 0], latent=latent, strength=1., bypass=False)
         latent = ['anchor_first'+suffix, 0]
         if last is not None:
-            g['fit_last'+suffix] = n('ImageScale', image=['last', 0], upscale_method='bilinear', width=w, height=h, crop='center')
+            g['fit_last'+suffix] = n(
+                'ImageScale', image=endpoint_inputs['last'], upscale_method='bilinear',
+                width=w, height=h, crop='disabled' if output_width is not None else 'center')
             g['anchor_last'+suffix] = n('LTXVAddGuide', positive=positive, negative=negative, vae=['vae', 0], latent=latent,
                 image=['fit_last'+suffix, 0], frame_idx=frames-1, strength=1.)
             positive, negative, latent = ['anchor_last'+suffix, 0], ['anchor_last'+suffix, 1], ['anchor_last'+suffix, 2]
@@ -109,13 +133,19 @@ def build_native_endpoint_graph(*, first, last=None, width, height, frames, prom
         # the video. Preserve its contents and pad only that tail with silence.
         g['audio_duration'] = n('GenjPadAudioToFrames', audio=['decode_audio', 0], frames=frames, fps=24.)
         delivered_audio = ['audio_duration', 0]
-    g.update(ltx_hdr_delivery(['decode', 0], 24., output=output, prefix=prefix,
+    delivered_images = ['decode', 0]
+    if output_width is not None and (output_width != width or output_height != height):
+        g['restore_output'] = n(
+            'ImageScale', image=delivered_images, upscale_method='lanczos',
+            width=output_width, height=output_height, crop='disabled')
+        delivered_images = ['restore_output', 0]
+    g.update(ltx_hdr_delivery(delivered_images, 24., output=output, prefix=prefix,
         working_space='ltx25_acescct_qualified', audio=delivered_audio))
     if output in ('acescg_exr', 'hlg_and_exr'):
-        g['zura_hdr_archive'] = n('ZuraHDRPackageACEScct', images=['decode', 0], prefix=prefix)
+        g['zura_hdr_archive'] = n('ZuraHDRPackageACEScct', images=delivered_images, prefix=prefix)
         preview = ['zura_hdr_exr', 0]
     else:
-        g['tonemap'] = n('LTXVHDRDecodePostprocess', image=['decode', 0], transfer='acescct', save_exr=False,
+        g['tonemap'] = n('LTXVHDRDecodePostprocess', image=delivered_images, transfer='acescct', save_exr=False,
             exr_color_space='acescg', output_dir='genj/hdr/'+prefix, filename_prefix='frame', half_precision=True)
         preview = ['tonemap', 0]
     g['preview_video'] = n('CreateVideo', images=preview, audio=delivered_audio, fps=24.)
@@ -126,7 +156,7 @@ def build_native_endpoint_graph(*, first, last=None, width, height, frames, prom
               'sample1': 'Generate HDR video: pass 1 of 2',
               'upsample': 'Upscale HDR latent', 'sample2': 'Refine HDR video: pass 2 of 2',
               'decode': 'Decode HDR video', 'decode_audio': 'Decode soundtrack',
-              'audio_duration': 'Align soundtrack length',
+              'audio_duration': 'Align soundtrack length', 'restore_output': 'Restore original frame size',
               'zura_hdr_save_video': 'Save 10-bit HLG video',
               'zura_hdr_archive': 'Package ACEScg EXR frames', 'save_preview': 'Save SDR viewing preview'}
     for key, title in titles.items():

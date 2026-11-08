@@ -25,7 +25,7 @@ const owner={root:document.querySelector('#root'),studio:{close(){}},app:{},api:
   return {};
 }};
 const ui=new FrameVideoWorkspace(owner);await ui.loadModels();
-ui.assets={first:{file:'first.png',filename:'first.png'},last:{file:'last.png',filename:'last.png'},audio:{file:'voice.wav',filename:'voice.wav'}};
+ui.assets={first:{file:'first.png',filename:'first.png',width:1344,height:768},last:{file:'last.png',filename:'last.png',width:1344,height:768},audio:{file:'voice.wav',filename:'voice.wav'}};
 ui.$('prompt').value='The character turns towards the camera.';ui.$('random').checked=false;ui.$('audio-enabled').checked=true;ui.render();
 assert.equal(ui.$('generate').disabled,false);const assets=ui.assets;
 const change=id=>{ui.$('engine').value=id;ui.$('engine').dispatchEvent(new window.Event('change'));};

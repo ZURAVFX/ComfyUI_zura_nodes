@@ -1,5 +1,6 @@
 import {applyAvailableAttention} from './studio_attention.js';
 import {VIDEO_CANVAS_LIMITS} from './studio_resolution.js';
+import {frameOutputSize} from './frame_source_resolution.js';
 // LTX 2.5 native endpoint conditioning, based on Lightricks' distilled recipe.
 // INT8 + convrot checkpoints are intended for ComfyUI. No cross-family LoRA.
 export const LTX_FRAME_VIDEO_MODELS=Object.freeze({
@@ -29,7 +30,7 @@ const ref=(id,index=0)=>[id,index];
 export function buildLtxFrameVideoGraph(c,info){
   if(!c.first?.file)throw new Error('Add a first frame. The last frame is optional.');
   if(!String(c.prompt||'').trim())throw new Error('Describe the video you want to generate.');
-  const width=Number(c.width),height=Number(c.height),frames=Number(c.frames),steps=Number(c.steps??8),seed=Number(c.seed??42);
+  const width=Number(c.width),height=Number(c.height),output=frameOutputSize(c),frames=Number(c.frames),steps=Number(c.steps??8),seed=Number(c.seed??42);
   if(![width,height].every(n=>Number.isInteger(n)&&n>=256&&n<=VIDEO_CANVAS_LIMITS.maxDimension&&n%32===0))throw new Error('Use dimensions in 32-pixel increments, from 256 to 4096 pixels.');
   if(width*height>LTX_FRAME_VIDEO_CAPABILITIES.maxPixels)throw new Error('Choose a canvas up to 8.39 MP. This is the Studio canvas limit, not a model limit.');
   if(!Number.isInteger(frames)||frames<9||frames>LTX_FRAME_VIDEO_CAPABILITIES.maxFrames||(frames-1)%8!==0)throw new Error('LTX needs 8n + 1 frames, from 9 to 361 (about 15 seconds).');
@@ -59,7 +60,12 @@ export function buildLtxFrameVideoGraph(c,info){
   for(const [id,image,frame_idx] of [['first',c.first,0],['last',c.last,frames-1]]){
     if(!image?.file)continue;
     node(id,'LoadImage',{image:image.file},`Load ${id} frame`);
-    node(`fit_${id}`,'ImageScale',{image:ref(id),upscale_method:'lanczos',width,height,crop:'center'},`Fit ${id} frame without stretching`);
+    let endpointImage=ref(id);
+    if(output&&id==='last'){
+      node('source_last','ImageScale',{image:endpointImage,upscale_method:'lanczos',width:output.width,height:output.height,crop:'center'},'Crop the last frame to the source aspect');
+      endpointImage=ref('source_last');
+    }
+    node(`fit_${id}`,'ImageScale',{image:endpointImage,upscale_method:'lanczos',width,height,crop:output?'disabled':'center'},`Fit ${id} frame without stretching`);
     let finishImage=ref(`fit_${id}`);
     if(lowResolution&&(paddedWidth!==width||paddedHeight!==height)){
       node(`pad_${id}`,'ImagePadForOutpaint',{image:finishImage,left:0,top:0,right:paddedWidth-width,bottom:paddedHeight-height,feathering:0},`Pad ${id} frame for the model grid`);
@@ -141,6 +147,10 @@ export function buildLtxFrameVideoGraph(c,info){
   if(lowResolution&&(paddedWidth!==width||paddedHeight!==height)){
     node('crop_output','ImageCrop',{image:videoImages,width,height,x:0,y:0},'Restore requested output size');
     videoImages=ref('crop_output');
+  }
+  if(output&&(output.width!==width||output.height!==height)){
+    node('restore_output','ImageScale',{image:videoImages,upscale_method:'lanczos',width:output.width,height:output.height,crop:'disabled'},'Restore the source image size');
+    videoImages=ref('restore_output');
   }
   if(!c.audioEnabled)node('decode_audio','LTXVAudioVAEDecode',{samples:ref(separated[0],1),audio_vae:ref('audio_vae')},'Decode generated soundtrack');
   node('video','CreateVideo',{images:videoImages,audio:ref(c.audioEnabled?'trim_audio':'decode_audio'),fps:24,bit_depth:8,color_space:'sRGB',codec:'none'});

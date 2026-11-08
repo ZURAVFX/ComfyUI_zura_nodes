@@ -166,6 +166,8 @@ jobs:
           node tests/test_panorama_windows_handoff.mjs
           node tests/test_studio_restart_navigation.mjs
           node tests/test_frame_video.mjs
+          node tests/test_frame_source_resolution.mjs
+          node tests/test_frame_source_graphs.mjs
           node tests/test_endpoint_ui.mjs
           node tests/test_wan_frame_video_recipes.mjs
           node tests/test_ltx_frame_video_recipes.mjs

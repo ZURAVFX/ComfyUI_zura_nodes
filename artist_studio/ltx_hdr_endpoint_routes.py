@@ -100,7 +100,8 @@ def prepare_graph(store, check_asset, body):
     graph = build_native_endpoint_graph(first=first, last=last,
         width=body.get('width'), height=body.get('height'), frames=body.get('frames'),
         prompt=body.get('prompt'), seed=body.get('seed', 42), output=body.get('output', 'hlg_and_exr'),
-        prefix='endpoint_'+uuid.uuid4().hex, audio_file=audio, audio_start=body.get('audio_start', 0.))
+        prefix='endpoint_'+uuid.uuid4().hex, audio_file=audio, audio_start=body.get('audio_start', 0.),
+        output_width=body.get('output_width'), output_height=body.get('output_height'))
     from .custom_loras import apply_installed_ltx_loras
     return apply_installed_ltx_loras(graph, body.get('custom_loras', []))
 

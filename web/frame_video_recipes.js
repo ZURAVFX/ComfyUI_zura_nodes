@@ -1,5 +1,6 @@
 import {applyAvailableAttention} from './studio_attention.js';
 import {resolutionSize,VIDEO_CANVAS_LIMITS,megapixelMaximum} from './studio_resolution.js';
+import {frameOutputSize} from './frame_source_resolution.js';
 // The artist-approved H3 FL2VA recipe. Endpoints are native keyframes, not
 // ingredients. Keep the supplied sampler, Turbo adapter and Kitchen backend.
 export const FRAME_VIDEO_MODELS={
@@ -34,17 +35,22 @@ export function frameVideoDimensions(c){
 export function buildFrameVideoGraph(c,info){
   if(!c.first?.file)throw new Error('Add a first frame to begin. The last frame is optional.');
   if(!String(c.prompt||'').trim())throw new Error('Describe the video you want to generate.');
-  const {width,height}=frameVideoDimensions(c),frames=Number(c.frames),steps=Number(c.steps??8),seed=Number(c.seed??42);
+  const {width,height}=frameVideoDimensions(c),output=frameOutputSize(c),frames=Number(c.frames),steps=Number(c.steps??8),seed=Number(c.seed??42);
   if(!FRAME_LENGTHS.includes(frames))throw new Error('Choose a supported H3 clip length.');
   if(!Number.isInteger(steps)||steps<4||steps>40)throw new Error('Sampling steps must be between 4 and 40.');
   if(!Number.isSafeInteger(seed)||seed<0)throw new Error('Seed must be a positive whole number or zero.');
   if(c.audioEnabled&&!c.audio?.file)throw new Error('Add an audio reference, or switch Audio reference off.');
   const g={},node=(id,class_type,inputs)=>{g[id]={class_type,inputs};};
   node('first','LoadImage',{image:c.first.file});
-  node('fit_first','ImageScale',{image:ref('first'),upscale_method:'lanczos',width,height,crop:'center'});
+  node('fit_first','ImageScale',{image:ref('first'),upscale_method:'lanczos',width,height,crop:output?'disabled':'center'});
   if(c.last?.file){
     node('last','LoadImage',{image:c.last.file});
-    node('fit_last','ImageScale',{image:ref('last'),upscale_method:'lanczos',width,height,crop:'center'});
+    let lastImage=ref('last');
+    if(output){
+      node('source_last','ImageScale',{image:lastImage,upscale_method:'lanczos',width:output.width,height:output.height,crop:'center'});
+      lastImage=ref('source_last');
+    }
+    node('fit_last','ImageScale',{image:lastImage,upscale_method:'lanczos',width,height,crop:output?'disabled':'center'});
   }
   node('model','UNETLoader',{unet_name:FRAME_VIDEO_MODELS.model,weight_dtype:'default'});
   node('turbo','LoraLoaderModelOnly',{model:ref('model'),lora_name:FRAME_VIDEO_MODELS.lora,strength_model:1});
@@ -62,7 +68,12 @@ export function buildFrameVideoGraph(c,info){
   node('sampler','KSamplerSelect',{sampler_name:'res_multistep'});node('noise','RandomNoise',{noise_seed:seed});
   node('sample','SamplerCustomAdvanced',{noise:ref('noise'),guider:ref('guider'),sampler:ref('sampler'),sigmas:ref('scheduler'),latent_image:['endpoints',1]});
   node('decode','VAEDecode',{samples:ref('sample'),vae:ref('video_vae')});node('decode_audio','VAEDecodeAudio',{samples:ref('sample'),vae:ref('audio_vae')});
-  node('video','CreateVideo',{images:ref('decode'),audio:ref('decode_audio'),fps:24,bit_depth:8,color_space:'sRGB',codec:'none'});
+  let videoImages=ref('decode');
+  if(output&&(output.width!==width||output.height!==height)){
+    node('restore_output','ImageScale',{image:videoImages,upscale_method:'lanczos',width:output.width,height:output.height,crop:'disabled'});
+    videoImages=ref('restore_output');
+  }
+  node('video','CreateVideo',{images:videoImages,audio:ref('decode_audio'),fps:24,bit_depth:8,color_space:'sRGB',codec:'none'});
   node('save','SaveVideo',{video:ref('video'),filename_prefix:'zura/first_last/result',format:'mp4','format.codec':'h264','format.codec.encoding':'auto'});
   return applyAvailableAttention(g,info);
 }

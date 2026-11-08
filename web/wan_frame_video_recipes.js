@@ -1,5 +1,6 @@
 import {applyAvailableAttention} from './studio_attention.js';
 import {VIDEO_CANVAS_LIMITS} from './studio_resolution.js';
+import {frameOutputSize} from './frame_source_resolution.js';
 // Native Wan 2.2 I2V endpoint recipe: matched high/low models and Lightx2v
 // adapters, four Euler/simple steps split 2 + 2, CFG 1 and shift 5.
 // The supplied example's subject-specific rotation adapter is not a speedup.
@@ -33,7 +34,7 @@ export function buildWanFrameVideoGraph(c,info){
   if(!c.first?.file)throw new Error('Add a first frame to begin. The last frame is optional.');
   if(!String(c.prompt||'').trim())throw new Error('Describe the video you want to generate.');
   if(c.audioEnabled)throw new Error('Wan 2.2 does not use audio references. Switch Audio reference off or choose H3 or LTX.');
-  const {width,height}=wanFrameVideoDimensions(c),cap=WAN_FRAME_VIDEO_CAPABILITIES;
+  const {width,height}=wanFrameVideoDimensions(c),output=frameOutputSize(c),cap=WAN_FRAME_VIDEO_CAPABILITIES;
   const frames=Number(c.frames??cap.defaultFrames),steps=Number(c.steps??cap.defaultSteps),seed=Number(c.seed??42);
   if(!Number.isInteger(frames)||frames<cap.minFrames||frames>cap.maxFrames||(frames-1)%cap.frameStep!==0)throw new Error('Choose 9–361 frames in steps of 4 (4n + 1), up to about 15 seconds.');
   if(steps!==4)throw new Error('This Wan Lightx2v preset uses four sampling steps.');
@@ -43,7 +44,12 @@ export function buildWanFrameVideoGraph(c,info){
   const g={},node=(id,class_type,inputs,title)=>{g[id]={class_type,inputs,_meta:{title}};};
   for(const slot of ['first','last'])if(c[slot]?.file){
     node(slot,'LoadImage',{image:c[slot].file},slot==='first'?'First frame':'Last frame');
-    node('fit_'+slot,'ImageScale',{image:ref(slot),upscale_method:'lanczos',width,height,crop:'center'},'Fit '+slot+' frame without stretching');
+    let endpointImage=ref(slot);
+    if(output&&slot==='last'){
+      node('source_last','ImageScale',{image:endpointImage,upscale_method:'lanczos',width:output.width,height:output.height,crop:'center'},'Crop the last frame to the source aspect');
+      endpointImage=ref('source_last');
+    }
+    node('fit_'+slot,'ImageScale',{image:endpointImage,upscale_method:'lanczos',width,height,crop:output?'disabled':'center'},'Fit '+slot+' frame without stretching');
   }
   node('text','CLIPLoader',{clip_name:WAN_FRAME_VIDEO_MODELS.text,type:'wan',device:'default'},'Load Wan text encoder');
   node('positive','CLIPTextEncode',{clip:ref('text'),text:c.prompt},'Describe the video');
@@ -67,7 +73,12 @@ export function buildWanFrameVideoGraph(c,info){
   // back after OOM; explicit tiling is opt-in because it can alter joins.
   if(c.lowMemoryDecode)node('decode','VAEDecodeTiled',{...decodeInputs,tile_size:512,overlap:64,temporal_size:64,temporal_overlap:8},'Decode video in low-memory tiles');
   else node('decode','VAEDecode',decodeInputs,'Decode Wan video');
-  node('video','CreateVideo',{images:ref('decode'),fps:cap.fps,bit_depth:8,color_space:'sRGB',codec:'none'},'Assemble silent video');
+  let videoImages=ref('decode');
+  if(output&&(output.width!==width||output.height!==height)){
+    node('restore_output','ImageScale',{image:videoImages,upscale_method:'lanczos',width:output.width,height:output.height,crop:'disabled'},'Restore the source image size');
+    videoImages=ref('restore_output');
+  }
+  node('video','CreateVideo',{images:videoImages,fps:cap.fps,bit_depth:8,color_space:'sRGB',codec:'none'},'Assemble silent video');
   node('save','SaveVideo',{video:ref('video'),filename_prefix:'zura/first_last/wan',format:'mp4','format.codec':'h264','format.codec.encoding':'auto'},'Save Wan video');
   return applyAvailableAttention(g,info);
 }

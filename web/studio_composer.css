@@ -103,6 +103,7 @@
 #genj-studio .zf-heading button:hover,#genj-studio .zf-heading summary:hover{background:var(--zc-hover);color:var(--zc-text)}
 #genj-studio .zf-presets{display:block;margin-top:16px;font-size:12px;color:var(--zc-text)}
 #genj-studio .zf-presets select{display:block;margin-top:8px;padding:10px 12px;width:100%;min-height:40px;background:var(--gs-input);color:var(--zc-text);border:1px solid var(--gs-line);border-radius:6px}
+#genj-studio #zf-source-size{margin-top:12px;max-width:100%;white-space:normal;text-align:left;line-height:1.5}
 #genj-studio :is(#zf-takes,#zr-takes){position:absolute;z-index:15;right:16px;top:116px;max-height:50dvh;width:min(360px,calc(100vw - 32px));overflow:auto;padding:16px;background:var(--gs-panel);border:1px solid var(--gs-line);border-radius:12px}
 #genj-studio :is(#zf-takes,#zr-takes) button{display:block;width:100%;padding:12px;text-align:left;overflow-wrap:anywhere}
 #genj-studio .zf-viewer{position:relative;min-width:0;min-height:0;overflow:hidden;border:1px solid var(--gs-line);border-radius:12px;background:var(--zc-canvas)}
