@@ -43,6 +43,14 @@ for(const model of IMAGE_MODELS.filter(item=>item.edit)){
       if(['width','custom_width'].some(k=>entry.inputs[k]===value))assert.deepEqual(value,['zura_area_size',0],`${model.id}: ${id} width follows crop`);
       if(['height','custom_height'].some(k=>entry.inputs[k]===value))assert.deepEqual(value,['zura_area_size',1],`${model.id}: ${id} height follows crop`);
     }
+    if(model.type==='flux3'){
+      assert.deepEqual(graph.prompt_source_size.inputs.image,['zura_area_working',0],'Upsampler observes the actual painted source crop');
+      assert.deepEqual(graph.prompt_images.inputs['images.image0'],['zura_area_working',0]);
+      assert.deepEqual(graph.prompt_reference_2.inputs.image,['reference_2',0],'Appearance guide remains the full original reference');
+      assert.deepEqual(graph.references.inputs['images.image0'],['zura_area_working',0]);
+      assert.deepEqual(graph.references.inputs['images.image1'],['reference_2',0]);
+      assert.deepEqual(graph.prompt.inputs.text,['expand_prompt',0]);
+    }
     if(model.provider){
       assert.equal(graph.browser_image.inputs.size,'Custom');
       assert.deepEqual(graph.browser_image.inputs.reference_1,['zura_area_working',0]);

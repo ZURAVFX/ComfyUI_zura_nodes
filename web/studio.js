@@ -1763,7 +1763,7 @@ export async function openZuraStudio(workspace){
   if(!registeredStudio)return;
   if(!registeredStudio.container.isConnected)await registeredStudio.open();
   if(workspace==='inpaint')workspace='ripple';
-  if(['home','image','video','frames','references','paintout','watermark','outpaint','ripple'].includes(workspace))registeredStudio.creative?.show(workspace);
+  if(['home','image','video','frames','references','paintout','watermark','outpaint','ripple','alpha'].includes(workspace))registeredStudio.creative?.show(workspace);
   return registeredStudio;
 }
 
@@ -1784,7 +1784,7 @@ app.registerExtension({
     installArtistLinkRendering(app);
     const css=document.createElement("link");css.rel="stylesheet";css.href=new URL("./studio.css",import.meta.url).href;document.head.appendChild(css);
     for(const path of ["./vendor/studio-components.css","./studio_components.css"]){const link=document.createElement("link");link.rel="stylesheet";link.href=new URL(path,import.meta.url).href;document.head.appendChild(link);}
-    for(const path of ["./studio_create.css","./studio_composer.css","./studio_panorama.css","./studio_outpaint.css","./studio_ripple.css","./paintout_studio/studio_paintout.css","./paintout_studio/paintout_integrated.css","./studio_polish.css","./studio_image_area.css"]){const link=document.createElement("link");link.rel="stylesheet";link.href=new URL(path,import.meta.url).href;document.head.appendChild(link);}
+    for(const path of ["./studio_create.css","./studio_composer.css","./studio_panorama.css","./studio_outpaint.css","./studio_ripple.css","./studio_alpha.css","./paintout_studio/studio_paintout.css","./paintout_studio/paintout_integrated.css","./studio_polish.css","./studio_image_area.css"]){const link=document.createElement("link");link.rel="stylesheet";link.href=new URL(path,import.meta.url).href;document.head.appendChild(link);}
     import("./vendor/studio-components.js").then(()=>{
       document.getElementById("genj-studio")?.classList.add("zc-components-ready");
       for(const tip of document.querySelectorAll("#genj-studio wa-tooltip")){document.getElementById(tip.getAttribute("for"))?.removeAttribute("title");}

@@ -22,6 +22,42 @@ class Response:
 
 
 class ModelDownloadTest(unittest.TestCase):
+    def test_alpha_package_reuses_ltx_files_and_only_offers_missing_adapter(self):
+        package = downloads.CATALOG['ltx_alpha']
+        self.assertEqual(package['files'][:4], downloads.CATALOG['ltx_ripple']['files'][:4])
+        self.assertEqual(len(package['files']), 5)
+        adapter = package['files'][-1]
+        self.assertEqual(adapter['folder'], 'loras')
+        self.assertEqual(adapter['repo'], 'Lightricks/LTX-2.5-22b-IC-LoRA-Alpha-Gen')
+        self.assertEqual(adapter['filename'], 'ltx-2.5-22b-ic-lora-alpha-gen-0.9.safetensors')
+        self.assertEqual(adapter['remote_path'], adapter['filename'])
+        self.assertEqual(adapter['revision'], '4cc554f7f8dd858b50e80f1d37d70ce0103f5c94')
+        self.assertEqual(adapter['size_bytes'], 1308787472)
+        self.assertEqual(adapter['sha256'], 'd9e143f979e0756f0c83d772e6a8890f4c6b933db1f7d93fc06e25c179f3fd36')
+        self.assertTrue(package['gated'])
+        self.assertEqual(package['license_url'], 'https://huggingface.co/' + adapter['repo'])
+        self.assertFalse(any('Ripple' in f['filename'] or 'upscaler' in f['filename'] for f in package['files']))
+        # Use tiny fixtures for existing shared models, not multi-GB sparse files.
+        shared = [{**file, 'size_bytes': 1} for file in package['files'][:4]]
+        with tempfile.TemporaryDirectory() as tmp:
+            external, default = Path(tmp) / 'external', Path(tmp) / 'default'
+            locations = {folder: [str(external / folder), str(default / folder)]
+                         for folder in ('diffusion_models', 'text_encoders', 'vae', 'loras')}
+            for file in shared:
+                path = external / file['folder'] / file['filename']
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_bytes(b'x')
+            with patch.dict(downloads.CATALOG, {'ltx_alpha': {**package, 'files': [*shared, adapter]}}), \
+                 patch('requests.get', side_effect=AssertionError('Inspect must not download model bytes')):
+                result = downloads.inspect('ltx_alpha', locations)
+            self.assertTrue(all(file['installed'] for file in result['files'][:4]))
+            self.assertEqual(result['remaining_bytes'], adapter['size_bytes'])
+            missing = [file for file in result['files'] if not file['installed']]
+            self.assertEqual(len(missing), 1)
+            self.assertTrue(missing[0]['gated'])
+            self.assertEqual(missing[0]['model_card'], package['license_url'])
+            self.assertEqual(Path(missing[0]['destination']), external / 'loras' / adapter['filename'])
+
     def test_ripple_packages_match_native_graph_files_and_keep_per_repo_access(self):
         import json
         import subprocess
@@ -76,6 +112,8 @@ class ModelDownloadTest(unittest.TestCase):
             expected = {('diffusion_models', model['model']), ('text_encoders', model['text']), ('vae', model['vae'])}
             if model.get('lora'):
                 expected.add(('loras', model['lora']))
+            if model.get('upsampler'):
+                expected.add(('text_encoders', model['upsampler']))
             if model['id'] == 'ph3edit':
                 expected.add(('text_encoders', 'p-h3-image_prompt_upsampler_w4a8.safetensors'))
             self.assertEqual(files, expected, model['name'])

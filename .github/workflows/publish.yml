@@ -137,6 +137,9 @@ jobs:
           node tests/test_studio_create.mjs
           node tests/test_studio_accessibility.mjs
           node tests/test_image_edit_recipes.mjs
+          python -m unittest discover -s tests -p 'test_alpha_video.py'
+          node tests/test_studio_alpha_recipes.mjs
+          node tests/test_studio_alpha_ui.mjs
           node tests/test_ph3_image_recipes.mjs
           node tests/test_browser_image_login.mjs
           python -m unittest discover -s tests -p 'test_browser_sessions.py'

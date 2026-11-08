@@ -9,6 +9,7 @@ const paths=[];
 const pack={id:'wan_animate_2',name:'Wan Animate 2',note:'Separate nodes required.',remaining_bytes:1000000000,
   files:[{repo:'Comfy-Org/Wan-Animate-2',filename:'model.safetensors',size_bytes:1000000000,installed:false}]};
 const availablePackages=['sam31','fasth3_draft','h3_reference_core','wan21_relight','wan22_animate_core','wan22_pose','wan22_style','wan22_first_last','h3_birefnet','h3_head_acceleration','h3_head_adapters','h3_taomate','h3_dmd_ref2va','h3_first_last','ltx25_text_encoder','ltx25_text_int8','ltx25_clean_plate','ltx25_outpaint','ltx25_in_outpaint','ltx_control','h3_int8_vae','h3_control','h3_crossview','flux3_klein','qwen2511','qwen21'];
+availablePackages.push('ltx_alpha');
 const ltxPackages=[...availablePackages,'ltx25_layout'].map(id=>({...pack,id,name:id}));
 const request=async(path,body)=>{paths.push([path,body]);if(path==='/model-downloads' && !body)return {models:[pack,...ltxPackages]};if(path==='/model-downloads' && body)return {id:'job'};if(path==='/model-downloads/job'){pack.remaining_bytes=0;pack.files[0].installed=true;return {phase:'done',done_bytes:1000000000,total_bytes:1000000000};}throw Error(path);};
 const popup=document.createElement('details');popup.className='zc-tool-popup';document.body.append(popup);
@@ -167,4 +168,30 @@ assert.equal(reopened.job,null);assert.equal(reopened.closed,false);assert.equal
 assert.equal(reopened.progress.textContent,'Download complete.');
 reopened.packages=[];reopenPanel.open=true;await reopenPanel.ontoggle();
 assert.ok(reopened.packages.length,'Reopening still loads setup through its toggle handler');reopened.dispose();
-console.log('Video package sizes, source licences, explicit download, retained setup, single-poll recovery and completion refresh pass.');
+// Alpha shares installed LTX files; gated access only checks the missing adapter.
+const alphaRepo='Lightricks/LTX-2.5-22b-IC-LoRA-Alpha-Gen';
+const alphaFile={folder:'loras',filename:'ltx-2.5-22b-ic-lora-alpha-gen-0.9.safetensors',repo:alphaRepo,revision:'4cc554f7f8dd858b50e80f1d37d70ce0103f5c94',remote_path:'ltx-2.5-22b-ic-lora-alpha-gen-0.9.safetensors',size_bytes:1308787472,installed:false,gated:true};
+const alphaShared={folder:'diffusion_models',filename:'installed-ltx.safetensors',repo:'Lightricks/LTX-2.5',installed:true,gated:true,size_bytes:23000000000};
+const alphaPackage={id:'ltx_alpha',name:'LTX 2.5 · extract alpha',files:[alphaShared,alphaFile],remaining_bytes:alphaFile.size_bytes};
+const alphaCalls=[];let alphaAllowed=false;
+const alphaPanel=document.createElement('details');document.body.append(alphaPanel);
+const alphaDownloads=new StudioModelDownloads(alphaPanel,async(path,body)=>{
+  alphaCalls.push([path,body]);
+  if(path==='/model-downloads'&&!body)return {models:[alphaPackage]};
+  if(path==='/model-access'&&body?.action==='check_files')return {allowed:alphaAllowed,auth_required:!alphaAllowed,access_repos:[alphaRepo],access_reason:'terms'};
+  if(path==='/model-access')return {connected:true,browser_signin_available:true};
+  if(path==='/model-downloads'&&body)return {id:'alpha-install'};
+  if(path==='/model-downloads/alpha-install'){alphaFile.installed=true;alphaPackage.remaining_bytes=0;return {phase:'done',done_bytes:alphaFile.size_bytes,total_bytes:alphaFile.size_bytes};}
+  throw Error(path);
+});
+await alphaDownloads.load();alphaDownloads.setMissingContext('ltx_alpha',[alphaFile.filename]);alphaDownloads.mountQuick(document.body);alphaDownloads.renderQuick();
+assert.match(alphaDownloads.files.textContent,/Extract alpha/);
+assert.match(alphaDownloads.quick.querySelector('[data-quick-install]').textContent,/Install missing models · 1.31 GB/);
+await alphaDownloads.startWorkflow();
+assert.equal(alphaCalls.filter(([path,body])=>path==='/model-downloads'&&body).length,0,'Gated terms must be resolved before submitting a download');
+assert.ok([...alphaDownloads.access.root.querySelectorAll('a')].some(link=>link.href===`https://huggingface.co/${alphaRepo}`),'Terms open through shared browser access UI');
+assert.deepEqual(alphaCalls.find(([path,body])=>path==='/model-access'&&body?.action==='check_files')[1].files,[{repo:alphaRepo,revision:alphaFile.revision,remote_path:alphaFile.remote_path}]);
+alphaAllowed=true;await alphaDownloads.startWorkflow();
+assert.deepEqual(alphaCalls.find(([path,body])=>path==='/model-downloads'&&body)[1],{model_ids:['ltx_alpha'],file_keys:[`loras/${alphaFile.filename}`]});
+assert.equal(alphaDownloads.progress.textContent,'Download complete.');alphaDownloads.dispose();
+console.log('Video package sizes, source licences, explicit download, retained setup, gated Alpha access, single-poll recovery and completion refresh pass.');

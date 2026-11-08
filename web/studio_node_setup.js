@@ -37,7 +37,7 @@ NODE_PACKS.find(pack=>pack.name==='ComfyUI').nodes.push(
 
 // Zura owns these namespaces. Missing classes normally indicate that an older
 // installation is loaded, so direct users to update the host pack.
-const ownedNode=name=>/^(Genj|ZuraPaintout|ZuraWatermark|ZuraHDR|ZuraLTX|ZuraOutpaint|ZuraPanorama|ZuraH3|ZuraRipple|ZuraImageEdit)/.test(name);
+const ownedNode=name=>/^(Genj|ZuraPaintout|ZuraWatermark|ZuraHDR|ZuraLTX|ZuraOutpaint|ZuraPanorama|ZuraH3|ZuraRipple|ZuraImageEdit|ZuraAlpha)/.test(name);
 export function groupMissingNodes(nodes){
   const missing=[...new Set((Array.isArray(nodes)?nodes:[]).filter(name=>typeof name==='string'&&name.trim()&&!/\.(safetensors|onnx|pt|pth|ckpt|bin)$/i.test(name)))];
   const unknown=new Set(missing),packs=[];
@@ -52,3 +52,4 @@ export function groupMissingNodes(nodes){
 NODE_PACKS.find(pack=>pack.name==='ComfyUI').nodes.push('LoadMoGeModel','MoGeInference','LoadVideo','GetVideoComponents','ImageCrop','RepeatImageBatch','ImageBatch','BasicScheduler');
 NODE_PACKS.find(pack=>pack.name==='ComfyUI-VideoHelperSuite').nodes.push('VHS_LoadVideoPath');
 NODE_PACKS.find(pack=>pack.name==='ComfyUI ControlNet Aux').nodes.push('DepthAnythingV2Preprocessor');
+NODE_PACKS.find(pack=>pack.name==='ComfyUI').nodes.push('ImageToMask','JoinImageWithAlpha','SplitImageWithAlpha','SaveWEBM','ModelSamplingFlux');

@@ -4,7 +4,12 @@ The original-frame, mask and output-registration nodes remain shared. Model
 selection changes only its loaders, conditioning and supported sampler path.
 """
 import json
+import math
 from pathlib import Path
+
+# The browser Image workspace and native video starting-frame recipes share the
+# unchanged, pinned Black Forest Labs instructions and upstream licence notice.
+FLUX3_PROMPT_SYSTEMS = json.loads((Path(__file__).resolve().parent.parent / "web" / "flux3_prompt_upsampling.json").read_text(encoding="utf-8"))
 
 MODELS = {
     "chatgpt": {"id": "chatgpt", "name": "ChatGPT Image · browser sign-in", "provider": "chatgpt",
@@ -15,7 +20,8 @@ MODELS = {
         "id": "flux3", "name": "Flux 3 Klein", "max_references": 9,
         "files": (("diffusion_models", "flux3-image-klein-int8-convrot.safetensors"),
                   ("text_encoders", "qwen3vl_4b_int8_convrot.safetensors"),
-                  ("vae", "flux2-vae.safetensors")),
+                  ("vae", "flux2-vae.safetensors"),
+                  ("text_encoders", "qwen3.5_9b_flux3_prompt_upsampler_w4a8.safetensors")),
     },
     "ph3": {
         "id": "ph3", "name": "P-H3 Image", "max_references": 7,
@@ -251,13 +257,36 @@ def _apply_flux3(graph, references):
     model = node("92:107", "UNETLoader", unet_name=files[0][1], weight_dtype="default")
     clip = node("92:108", "CLIPLoader", clip_name=files[1][1], type="flux3", device="default")
     vae = node("92:110", "VAELoader", vae_name=files[2][1])
-    positive = node("92:109", "CLIPTextEncode", clip=clip, text=["127", 0])
-    negative = node("zura_flux3_negative", "ConditioningZeroOut", conditioning=positive)
     images = {"images.image0": ["92:111", 0]}
     for index, ref in enumerate(references, 1):
         if not isinstance(ref, dict) or not ref.get("file"):
             raise ValueError("Upload each appearance reference before generating the starting image.")
         images[f"images.image{index}"] = node(f"zura_flux3_reference_{index}", "LoadImage", image=ref["file"])
+    # Keep source-first image roles and complete donors in the official visual
+    # prompt expansion stage, just as in the standalone Image workspace.
+    upsampler = node("zura_flux3_upsampler", "CLIPLoader", clip_name=files[3][1], type="flux3", device="default")
+    source_size = node("zura_flux3_prompt_size", "GetImageSize", image=["92:111", 0])
+    prompt_images = {"images.image0": ["92:111", 0]}
+    for index in range(1, len(references) + 1):
+        prompt_images[f"images.image{index}"] = node(
+            f"zura_flux3_prompt_ref_{index}", "ResizeAndPadImage", image=images[f"images.image{index}"],
+            target_width=source_size, target_height=["zura_flux3_prompt_size", 1],
+            padding_color="white", interpolation="lanczos")
+    image_batch = node("zura_flux3_prompt_images", "BatchImagesNode", **prompt_images)
+    request = graph["127"]["inputs"]["value"].strip()
+    expanded = node("zura_flux3_prompt", "TextGenerate", clip=upsampler, image=image_batch,
+                    prompt=f"Reference images follow in order (the first image, the second image, ...).\nUser request: {request}\nOutput the caption.",
+                    system_prompt=FLUX3_PROMPT_SYSTEMS["i2i"], max_length=3584, sampling_mode="on",
+                    thinking=False, use_default_template=True, mtp="off", **{
+                        "sampling_mode.temperature": 1, "sampling_mode.top_k": 1,
+                        "sampling_mode.top_p": 0.95, "sampling_mode.min_p": 0,
+                        "sampling_mode.repetition_penalty": 1, "sampling_mode.presence_penalty": 0,
+                        "sampling_mode.seed": graph["92:106"]["inputs"]["noise_seed"],
+                    })
+    positive = node("92:109", "CLIPTextEncode", clip=clip, text=expanded)
+    negative = node("zura_flux3_negative", "ConditioningZeroOut", conditioning=positive)
+    model = node("zura_flux3_sampling", "ModelSamplingFlux", model=model,
+                 max_shift=math.log(16), base_shift=math.log(16), width=["92:114", 0], height=["92:114", 1])
     node("zura_flux3_references", "ReferenceMultiLatent", positive=positive, negative=negative,
          vae=vae, resolution="resize", **{"resolution.megapixels": min(1, 2 / (len(references) + 1)), **images})
     graph["92:103"]["inputs"] = {"model": model, "positive": ["zura_flux3_references", 0],

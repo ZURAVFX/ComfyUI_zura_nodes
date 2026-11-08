@@ -1,5 +1,13 @@
 # Release notes
 
+## 1.3.54 - 8 November 2026
+
+- Add **Video > Extract alpha** using the official LTX 2.5 Alpha Gen adapter, empty prompts and a single eight-step stage. Include one-click model setup with the existing Hugging Face browser sign-in flow.
+- Preserve source dimensions, rational frame rate, selected frame count and audio in transparent ProRes 4444 delivery. Also save a grayscale matte video, checkerboard preview and 16-bit PNG matte sequence. Processing scale presets reduce inference resolution without changing the delivered raster.
+- Keep alpha preview space available during processing, expose familiar trimming, share the workflow selector and Start over controls, and recover saved jobs and results after reopening Studio.
+- Correct Flux 3 image generation and editing to use the official image-aware prompt upsampler and alpha-16 sampling shift. Retain full, ordered appearance references and include the upsampler in model setup.
+- Verify alpha with CPU media tests, graph and UI regressions, measured responsive layouts and short live inference. A same-seed Flux 3 painted character test now applies the replacement and preserves the walking pose; blend quality still needs artist review. P-H3 continues to struggle with this pose-transfer example, including at 4 MP.
+
 ## 1.3.53 - 8 November 2026
 
 - Show completed image edits and images selected from History by clearing the source-view and comparison state as well as closing the paint overlay. Keep the painted selection for further edits.

@@ -68,7 +68,7 @@ NODE_DISPLAY_NAME_MAPPINGS.update(QWEN_DESIGN_NAMES)
 
 WEB_DIRECTORY = "./web"
 PACKAGE_ROOT = Path(__file__).resolve().parent
-__version__ = "1.3.53"
+__version__ = "1.3.54"
 
 
 def _register_routes():
@@ -229,6 +229,11 @@ NODE_DISPLAY_NAME_MAPPINGS.update(OUTPAINT_STUDIO_NAMES)
 from .artist_studio.image_edit_area import NODE_CLASS_MAPPINGS as IMAGE_EDIT_AREA_NODES, NODE_DISPLAY_NAME_MAPPINGS as IMAGE_EDIT_AREA_NAMES
 NODE_CLASS_MAPPINGS.update(IMAGE_EDIT_AREA_NODES)
 NODE_DISPLAY_NAME_MAPPINGS.update(IMAGE_EDIT_AREA_NAMES)
+
+# Alpha inference remains native LTX; these adapters preserve source timing and RGBA delivery.
+from .artist_studio.alpha_video import NODE_CLASS_MAPPINGS as ALPHA_VIDEO_NODES, NODE_DISPLAY_NAME_MAPPINGS as ALPHA_VIDEO_NAMES
+NODE_CLASS_MAPPINGS.update(ALPHA_VIDEO_NODES)
+NODE_DISPLAY_NAME_MAPPINGS.update(ALPHA_VIDEO_NAMES)
 
 # Crop delivery adapters; subtitle sampling uses the native two-stage LTX graph.
 from .paintout.subtitle_crop import NODE_CLASS_MAPPINGS as SUBTITLE_CROP_NODES, NODE_DISPLAY_NAME_MAPPINGS as SUBTITLE_CROP_NAMES

@@ -142,3 +142,7 @@ Guidance: https://github.com/heydamir/unslop, licensed under
 [Creative Commons Attribution 4.0](https://creativecommons.org/licenses/by/4.0/).
 The implementation retains Zura branding, the bundled Manrope typeface and
 existing workflow controls.
+
+## Flux 3 prompt upsampling instructions
+
+The unchanged text-to-image and image-editing prompt instructions in `web/flux3_prompt_upsampling.json` (shared by the browser and Python starting-frame recipes) are from [Black Forest Labs Flux 3](https://github.com/black-forest-labs/flux-3-image-klein/blob/bfc8889a4497f846416f253a3972a1941ac698b9/src/flux3/pup_prompts.json), copyright 2026 Black Forest Labs, Inc., licensed under Apache 2.0. The full licence is included in `licenses/flux3-prompts-LICENSE.txt`. Studio adapts the surrounding graph to its ordered source and reference images.

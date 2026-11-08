@@ -75,6 +75,7 @@ CATALOG = {
             _file("diffusion_models", "flux3-image-klein-int8-convrot.safetensors", FLUX3, "feef60b0aaf63a4773ace96636ebbcf43b881312", "diffusion_models/flux3-image-klein-int8-convrot.safetensors", 5827874779, "847d8933548afd93df4af2cac2498e70891bf28d9dae06d695f536992e168fe2"),
             _file("text_encoders", "qwen3vl_4b_int8_convrot.safetensors", FLUX3, "feef60b0aaf63a4773ace96636ebbcf43b881312", "text_encoders/qwen3vl_4b_int8_convrot.safetensors", 4858559240, "32de113cbf8282b02cbff0794b637b9d6676da09314a1db5a30bcea9bf4ee01c"),
             _file("vae", "flux2-vae.safetensors", SHARED, "1138ce884c8e977cdacacbe779784fec4426bb3f", "split_files/vae/flux2-vae.safetensors", 336211292, "868fe7b343cc8f3a19dbcfcafbc3d5f888802be3f89bd81b65b3621a066ce8f3"),
+            _file("text_encoders", "qwen3.5_9b_flux3_prompt_upsampler_w4a8.safetensors", FLUX3, "9d36114cf7a2e03a45c28f5cc4987d20ebfdb6c1", "text_encoders/qwen3.5_9b_flux3_prompt_upsampler_w4a8.safetensors", 6724090780, "e5d85a7421d197bf5a12474511936ecabce19a833252f16e9310a983194a4458"),
         ]),
     "flux3_klein_bf16": dict(name="FLUX.3 Image Klein · BF16 test weights", gated=True,
         license_url="https://huggingface.co/black-forest-labs/flux-3-image-klein-comfy",
@@ -315,6 +316,18 @@ CATALOG["ltx_ripple"] = dict(
         CATALOG["ltx25_core"]["files"][1],
         CATALOG["ltx25_core"]["files"][2],
         {**_file("loras", "LTX25_Ripple_v11.safetensors", "WepeNerd/LTX-Ripple", "76abac5ede8a3415b9d1cd803843a38ecb351600", "LTX25_Ripple_v11.safetensors", 654443392, "bde543610144e5bba78782fb0ac18daa663fc087c2212244b8116deb1925ee2a"), "gated": False},
+    ])
+
+CATALOG["ltx_alpha"] = dict(
+    name="LTX 2.5 · extract alpha", gated=True,
+    license_url="https://huggingface.co/Lightricks/LTX-2.5-22b-IC-LoRA-Alpha-Gen",
+    note="Complete files for Extract alpha. Accept the LTX 2.5 and Alpha Gen terms on Hugging Face. Existing shared LTX models are reused.",
+    files=[
+        CATALOG["ltx25_core"]["files"][0],
+        CATALOG["ltx25_text_int8"]["files"][0],
+        CATALOG["ltx25_core"]["files"][1],
+        CATALOG["ltx25_core"]["files"][2],
+        _file("loras", "ltx-2.5-22b-ic-lora-alpha-gen-0.9.safetensors", "Lightricks/LTX-2.5-22b-IC-LoRA-Alpha-Gen", "4cc554f7f8dd858b50e80f1d37d70ce0103f5c94", "ltx-2.5-22b-ic-lora-alpha-gen-0.9.safetensors", 1308787472, "d9e143f979e0756f0c83d772e6a8890f4c6b933db1f7d93fc06e25c179f3fd36"),
     ])
 
 

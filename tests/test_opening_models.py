@@ -2,6 +2,7 @@
 import copy
 import importlib.util
 import json
+import math
 from pathlib import Path
 import unittest
 
@@ -29,6 +30,26 @@ class OpeningModelTests(unittest.TestCase):
         self.assertEqual(graph["zura_flux3_references"]["inputs"]["images.image0"], ["92:111", 0])
         self.assertEqual(graph["zura_flux3_reference_1"]["inputs"]["image"], "character.png")
         self.assertEqual(graph["92:104"]["inputs"]["latent_image"], ["92:113", 0])
+        self.assertEqual(graph["zura_flux3_upsampler"]["inputs"]["clip_name"], "qwen3.5_9b_flux3_prompt_upsampler_w4a8.safetensors")
+        self.assertEqual(graph["92:109"]["inputs"]["text"], ["zura_flux3_prompt", 0])
+        prompt = graph["zura_flux3_prompt"]["inputs"]
+        self.assertEqual(prompt["system_prompt"], models.FLUX3_PROMPT_SYSTEMS["i2i"])
+        self.assertEqual(prompt["max_length"], 3584)
+        self.assertEqual(prompt["sampling_mode.seed"], 42)
+        self.assertEqual(prompt["mtp"], "off")
+        self.assertEqual(prompt["image"], ["zura_flux3_prompt_images", 0])
+        batch = graph["zura_flux3_prompt_images"]["inputs"]
+        self.assertEqual(batch["images.image0"], ["92:111", 0])
+        self.assertEqual(batch["images.image1"], ["zura_flux3_prompt_ref_1", 0])
+        donor = graph["zura_flux3_prompt_ref_1"]
+        self.assertEqual(donor["class_type"], "ResizeAndPadImage")
+        self.assertEqual(donor["inputs"]["image"], ["zura_flux3_reference_1", 0])
+        shift = graph["zura_flux3_sampling"]["inputs"]
+        self.assertEqual(shift["max_shift"], math.log(16))
+        self.assertEqual(shift["base_shift"], math.log(16))
+        self.assertEqual(graph["92:102"]["inputs"]["model"], ["zura_flux3_sampling", 0])
+        self.assertEqual(graph["92:103"]["inputs"]["model"], ["zura_flux3_sampling", 0])
+        self.assertEqual(graph["92:103"]["inputs"]["cfg"], 1)
 
     def test_qwen_uses_original_first_and_references_in_order(self):
         graph = models.apply_model(self.graph(), "qwen2511", [{"file": "one.png"}, {"file": "two.png"}])
@@ -117,6 +138,12 @@ class OpeningModelTests(unittest.TestCase):
         files = {pair for model in models.MODELS.values() for pair in model["files"]}
         status = models.readiness(kinds, lambda folder, name: "installed" if (folder, name) in files else None)
         self.assertTrue(all(m["ready"] for m in status.values()))
+        absent_upsampler = models.readiness(kinds, lambda folder, name: None if name == "qwen3.5_9b_flux3_prompt_upsampler_w4a8.safetensors" else "installed")
+        self.assertFalse(absent_upsampler["flux3"]["ready"])
+        self.assertTrue(absent_upsampler["ph3"]["ready"])
+        missing_expander = models.readiness({k: v for k, v in kinds.items() if k != "TextGenerate"}, lambda folder, name: "installed")
+        self.assertFalse(missing_expander["flux3"]["ready"])
+        self.assertIn("TextGenerate", missing_expander["flux3"]["missing_nodes"])
         kinds.pop("TextEncodeQwenImageEditPlus")
         status = models.readiness(kinds, lambda folder, name: "installed")
         self.assertTrue(status["klein9b"]["ready"])

@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import {IMAGE_MODELS,buildImageGraph,imageAvailability} from '../web/image_recipes.js';
+import {FLUX3_PROMPT_SYSTEMS} from '../web/flux3_prompt_upsampling.js';
 const refs=[{file:'edit/source.png'},{file:'edit/style.png'},{file:'edit/subject.png'}];
 const create=buildImageGraph({model:'flux2',prompt:'A natural portrait',width:1024,height:1024});
 assert.equal(create.model.inputs.unet_name,'flux-2-klein-9b-fp8.safetensors');
@@ -38,7 +39,7 @@ for(const model of ['qwen2511','klein9b','flux3edit']){
 for(const model of ['flux2','flux3','flux3edit','klein9b','qwen2511','zimage']){
   const graph=buildImageGraph({model,prompt:'Check',references:IMAGE_MODELS.find(m=>m.id===model).minReferences?[refs[0]]:[],loras:[{name:'face.safetensors',strength:.75}]});
   assert.deepEqual(graph.custom_image_lora_1.inputs.model,['model',0]);
-  const consumer=model==='qwen2511'?graph.lightning:model==='flux2'||model==='klein9b'?graph.guider:model==='zimage'?graph.sampling:graph.sample;
+  const consumer=model==='qwen2511'?graph.lightning:model==='flux2'||model==='klein9b'?graph.guider:model==='zimage'||model.startsWith('flux3')?graph.sampling:graph.sample;
   assert.deepEqual(consumer.inputs.model,['custom_image_lora_1',0]);
 }
 assert.throws(()=>buildImageGraph({model:'flux2',prompt:'Check',loras:[{name:'x',strength:3}]}),/strength/);
@@ -98,3 +99,39 @@ for (const model of ['qwen21edit','flux2devedit']) {
   assert.equal(imageAvailability(missingEncoder).find(m=>m.id===model).ready,false);
 }
 console.log('Qwen 2.1 and full FLUX.2 dev native edit recipes pass.');
+
+// Flux 3's released checkpoint expects its image-aware caption stage and alpha-16 shift.
+for(const model of ['flux3','flux3bf16','flux3edit','flux3editbf16']){
+  const g=buildImageGraph({model,prompt:'Replace the walking person with the reference character',references:refs,seed:17,width:1280,height:720});
+  assert.equal(g.prompt_encoder.inputs.clip_name,'qwen3.5_9b_flux3_prompt_upsampler_w4a8.safetensors');
+  assert.equal(g.prompt_encoder.inputs.type,'flux3');
+  assert.equal(g.expand_prompt.class_type,'TextGenerate');
+  assert.equal(g.expand_prompt.inputs.system_prompt,FLUX3_PROMPT_SYSTEMS.i2i);
+  assert.match(g.expand_prompt.inputs.prompt,/User request: Replace the walking person/);
+  assert.deepEqual(g.prompt.inputs.text,['expand_prompt',0]);
+  assert.deepEqual(g.expand_prompt.inputs.image,['prompt_images',0]);
+  assert.deepEqual(g.prompt_images.inputs['images.image0'],['reference_1',0]);
+  assert.deepEqual(g.prompt_images.inputs['images.image1'],['prompt_reference_2',0]);
+  assert.deepEqual(g.prompt_reference_2.inputs.image,['reference_2',0]);
+  assert.equal(g.prompt_reference_2.class_type,'ResizeAndPadImage','Tall character references must not be centre-cropped by image batching');
+  assert.deepEqual(g.references.inputs['images.image1'],['reference_2',0],'Diffusion retains original ordered references');
+  assert.equal(g.expand_prompt.inputs['sampling_mode.seed'],17);
+  assert.equal(g.expand_prompt.inputs.max_length,3584);
+  assert.equal(g.expand_prompt.inputs.mtp,'off');
+  assert.equal(g.sampling.inputs.max_shift,Math.log(16));
+  assert.equal(g.sampling.inputs.base_shift,Math.log(16));
+  assert.deepEqual(g.sample.inputs.model,['sampling',0]);
+  assert.equal(g.sample.inputs.cfg,1);assert.equal(g.sample.inputs.steps,16);
+}
+const textFlux3=buildImageGraph({model:'flux3',prompt:'A room'});
+assert.equal(textFlux3.expand_prompt.inputs.system_prompt,FLUX3_PROMPT_SYSTEMS.t2i);
+assert.equal(textFlux3.expand_prompt.inputs.prompt,'A room');
+assert.ok(!textFlux3.prompt_images);
+const noFlux3Upsampler=structuredClone(info);
+noFlux3Upsampler.CLIPLoader.input.required.clip_name=combo(IMAGE_MODELS.flatMap(m=>[m.text,m.id.startsWith('flux3')?null:m.upsampler].filter(Boolean)));
+for(const model of imageAvailability(noFlux3Upsampler).filter(m=>m.id.startsWith('flux3'))){
+  assert.equal(model.ready,false);assert.ok(model.missing.includes(model.upsampler));
+}
+const noPromptNode=structuredClone(info);delete noPromptNode.TextGenerate;
+assert.equal(imageAvailability(noPromptNode).find(m=>m.id==='flux3edit').ready,false);
+console.log('Flux 3 official prompt expansion, ordered full references, sampler shift and readiness checks pass.');

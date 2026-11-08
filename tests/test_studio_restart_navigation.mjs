@@ -170,6 +170,16 @@ assert.equal(newConstructed,1);
 assert.equal(outpaintCreative.outpaint.saved,true);
 for(const key of ['zura-outpaint-hdr-record','zura-outpaint-hdr-take','zura-outpaint-hdr-job','zura-outpaint-hdr-request'])assert.equal(storage.has(key),false);
 
+const alphaWorkspace={job:null,reset(){this.cleared=true;return true;},busy(){return !!this.job;}};
+const alphaCreative={mode:'alpha',alpha:alphaWorkspace,show(mode){shown=mode;}};
+alphaWorkspace.job={id:'alpha-job'};
+assert.equal(studioWorkspaceBusy(alphaCreative),true,'Alpha runs participate in shared cancel-before-reset navigation');
+alphaWorkspace.job=null;
+assert.equal(await resetStudioWorkspace(alphaCreative),true);
+assert.equal(alphaWorkspace.cleared,true);
+assert.equal(shown,'alpha');
+assert.equal(await resetStudioWorkspace({mode:'alpha',alpha:{reset:()=>false}}),false,'A refused reset never reports success');
+
 let hdrResetOptions=null;
 const hdrCreative={
   mode:'hdr',
@@ -225,7 +235,7 @@ studio.creative.studio=studio;
 const controller=installStudioRestartNavigation(studio);
 assert.equal(controller.button.closest('.gs-top-actions'),null,'Start over is not in the app header');
 assert.equal(controller.button.parentElement.parentElement,heading,'Start over is in the main preview heading');
-for(const [mode,selector] of [['image','zc-image-heading'],['frames','zf-heading'],['references','zf-heading'],['paintout','zf-heading'],['watermark','zf-heading'],['outpaint','header'],['panorama','zpc-heading'],['hdr','zf-heading']]){
+for(const [mode,selector] of [['image','zc-image-heading'],['frames','zf-heading'],['references','zf-heading'],['paintout','zf-heading'],['watermark','zf-heading'],['outpaint','header'],['alpha','header'],['panorama','zpc-heading'],['hdr','zf-heading']]){
  const page=document.createElement('section'),host=document.createElement(selector==='header'?'header':'div');host.className=selector;page.append(host);navRoot.append(page);
  const member=({references:'referencesVideo',hdr:'hdrTool'})[mode]||mode;
  if(mode==='hdr')studio.hdrTool={root:page};else studio.creative[member]={page};
