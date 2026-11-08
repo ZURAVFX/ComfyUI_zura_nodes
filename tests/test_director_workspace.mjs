@@ -12,7 +12,7 @@ Object.defineProperty(window.HTMLInputElement.prototype,'checked',{configurable:
 for(const method of ['pause','play','load'])window.HTMLElement.prototype[method]=()=>{};
 let storage={};const localStorage={getItem:key=>storage[key]||null,setItem:(key,value)=>storage[key]=value};
 Object.assign(globalThis,{window,document,localStorage,createImageBitmap:async()=>({width:1001,height:563,close(){}})});
-const info={};
+const info=Object.fromEntries(['TrimAudioDuration','MiniMaxH3AddGuide','LTXVAudioVAEEncode','SolidMask','SetLatentNoiseMask'].map(type=>[type,{input:{required:{}}}]));
 for(const engine of DIRECTOR_ENGINES)for(const node of Object.values(buildDirectorGraph({engine:engine.id,prompt:'Test',width:960,height:544,frames:engine.defaultFrames,steps:8,seed:0,clips:[]})))info[node.class_type]={input:{required:{}}};
 info.UNETLoader.input.required.unet_name=[[FRAME_VIDEO_MODELS.model,LTX_FRAME_VIDEO_MODELS.model]];
 info.CLIPLoader.input.required.clip_name=[[FRAME_VIDEO_MODELS.text,LTX_FRAME_VIDEO_MODELS.text]];
@@ -36,7 +36,36 @@ ui.$('source-size').click();const size=ui.config();assert.equal(size.outputWidth
 assert.equal(ui.$('megapixels').disabled,false,'Source dimensions still allow direct megapixel scaling');
 ui.$('megapixels').value=.4;ui.$('megapixels').oninput();assert.equal(ui.draft.sourceSize,false);assert.ok(ui.config().outputWidth<1002);
 ui.$('source-size').click();assert.equal(ui.config().outputWidth,1002,'The explicit source-size action restores exact dimensions');
-uploadName='voice.wav';await ui.upload('audio',new File(['audio'],'Voice over.wav',{type:'audio/wav'}));assert.equal(ui.clip().asset.name,'Voice over.wav');assert.equal(ui.clip().asset.file,'zura_director/voice.wav');
+ui.audioMetadata=async()=>({duration:1.25});uploadName='voice.wav';await ui.upload('audio',new File(['audio'],'Voice over.wav',{type:'audio/wav'}));assert.equal(ui.clip().asset.name,'Voice over.wav');assert.equal(ui.clip().asset.file,'zura_director/voice.wav');assert.equal(ui.clip().endFrame,42);assert.equal(ui.clip().audioDurationFrames,30);
+// Real gesture handlers: all tracks move/resize, frame-snap, persist and cancel.
+const originalClips=structuredClone(ui.draft.clips);
+const image=ui.draft.clips.find(c=>c.kind==='image');
+const sound=ui.draft.clips.find(c=>c.kind==='audio');
+const x=frame=>14+frame*932/ui.draft.frames;
+function pointer(target,frame,id=7){return{target,clientX:x(frame),pointerId:id,button:0,isPrimary:true,altKey:true,preventDefault(){}};}
+function dragClip(clip,edge,from,to,cancel=false){
+  const element=ui.page.querySelector(`[data-clip="${clip.id}"]`),target=edge==='move'?element:element.querySelector(`[data-edge="${edge}"]`);
+  ui.$('timeline-body').onpointerdown(pointer(target,from));
+  ui.$('timeline-body').onpointermove(pointer(ui.$('timeline-body'),to));
+  if(cancel)ui.$('timeline-body').onpointercancel();else {ui.$('timeline-body').onpointerup(pointer(ui.$('timeline-body'),to));ui.$('timeline-body').onclick(pointer(ui.$('timeline-body'),to));}
+}
+assert.equal(ui.$('clip-end').disabled,false);
+dragClip(image,'end',13,20);assert.equal(image.endFrame,20,'Images have editable durations');
+dragClip(image,'move',15,20);assert.deepEqual([image.startFrame,image.endFrame],[17,25]);
+dragClip(image,'start',17,19);assert.deepEqual([image.startFrame,image.endFrame],[19,25]);
+dragClip(image,'move',20,30,true);assert.deepEqual([image.startFrame,image.endFrame],[19,25],'Cancelled drag restores original interval');
+const blocker={...image,id:'blocking-image',startFrame:30,endFrame:35};ui.draft.clips.push(blocker);ui.render();
+dragClip(image,'end',25,40);assert.equal(image.endFrame,30,'Image resize stops at the next image');
+dragClip(image,'move',20,45);assert.equal(image.endFrame,30,'Move cannot overlap the adjacent image');
+ui.draft.clips=ui.draft.clips.filter(c=>c!==blocker);
+dragClip(direction,'move',25,0);assert.equal(direction.startFrame,0);assert.equal(direction.endFrame,8,'Moving preserves duration at timeline boundary');
+dragClip(direction,'end',8,14);assert.equal(direction.endFrame,14);
+dragClip(sound,'start',12,15);assert.equal(sound.startFrame,15);assert.equal(sound.trimStart,3,'Trimming the left edge advances the audio source offset');
+const soundLength=sound.endFrame-sound.startFrame;dragClip(sound,'move',20,100);assert.equal(sound.endFrame,ui.draft.frames);assert.equal(sound.endFrame-sound.startFrame,soundLength);
+ui.selectClip(image.id);ui.$('clip-end').value=27;ui.$('clip-end').onchange();assert.equal(image.endFrame,27,'Numeric image duration is no longer forced to one frame');
+const timelineGraph=buildDirectorGraph({...ui.config(),prompt:"Gesture test"},info);assert.ok(Object.values(timelineGraph).some(n=>n.inputs?.timeline_data?.includes('"length":8')),'Image duration reaches the native timeline');
+ui.save();const gestureReload=new DirectorWorkspace(owner);assert.deepEqual(gestureReload.draft.clips,ui.draft.clips);gestureReload.dispose();
+ui.draft.clips=originalClips;ui.render();
 const clips=structuredClone(ui.draft.clips),modelElement=ui.$('model');
 ui.$('engine').value='h3';ui.$('engine').onchange();assert.equal(ui.draft.engine,'h3');assert.deepEqual(ui.draft.clips,clips);assert.equal(ui.$('model'),modelElement);assert.equal(ui.draft.steps,8);assert.equal(ui.$('steps').disabled,true);
 ui.$('engine').value='ltx';ui.$('engine').onchange();assert.deepEqual(ui.draft.clips,clips);

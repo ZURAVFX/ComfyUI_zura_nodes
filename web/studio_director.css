@@ -250,3 +250,16 @@
 @media(max-height:680px),(max-width:820px){.zdir-page{height:auto;min-height:calc(100dvh - 52px);overflow:visible}.zdir-stage{min-height:200px}.zdir-composer-row{row-gap:8px}}
 
 .zdir-stage.is-empty{background:var(--zc-canvas)}
+
+/* Native Director gestures: move the body, trim either edge. */
+.zdir-page .zdir-track [data-clip]{min-width:24px;cursor:grab;touch-action:none;transform:none}
+.zdir-page .zdir-track [data-clip]:active,.zdir-timeline-body.is-dragging{cursor:grabbing}
+.zdir-page .zdir-anchor{height:46px;overflow:hidden}
+.zdir-page .zdir-anchor img{display:block;width:100%;height:100%;object-fit:cover;pointer-events:none}
+.zdir-page .zdir-anchor b{left:8px;right:8px;transform:none;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-align:center;pointer-events:none}
+.zdir-cue-label{pointer-events:none;padding:0 6px}
+.zdir-edge{position:absolute;top:0;bottom:0;width:8px;z-index:2;cursor:ew-resize;touch-action:none}
+.zdir-edge[data-edge="start"]{left:0;border-left:2px solid currentColor}
+.zdir-edge[data-edge="end"]{right:0;border-right:2px solid currentColor}
+.zdir-page .zdir-track [data-clip] .zdir-edge{color:var(--gs-muted);opacity:.7}
+.zdir-page .zdir-track [data-clip]:is(:hover,[aria-pressed="true"]) .zdir-edge{color:var(--gs-accent);opacity:1}

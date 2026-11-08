@@ -142,7 +142,7 @@ function timelineSegments(config,engine,frames,startFrame){
   });
   const timeline={
     mainTrackEnabled:true,audioTrackEnabled:audioSegments.length>0,motionTrackEnabled:false,
-    propHeight:90,globalPropHeight:70,showFilenames:true,overrideAudio:false,inpaint_audio:true,
+    propHeight:90,globalPropHeight:70,showFilenames:true,overrideAudio:false,inpaint_audio:false,
     global_prompt:String(config.globalPrompt??config.prompt??''),retake_global_prompt:'',
     retakeMode:false,retakeStart:24,retakeLength:48,retakePrompt:'',retakeStrength:1,retakeVideo:null,
     normalStartFrame:startFrame,normalDurationFrames:frames,segments,audioSegments,motionSegments:[],
@@ -201,16 +201,21 @@ function buildH3(c,info,engine){
     timeline_data:JSON.stringify(d.timeline),local_prompts:d.localPrompts,
     segment_lengths:d.segmentLengths,guide_strength:d.guideStrength,
     audio_vae:ref('audio_vae'),global_prompt:c.globalPrompt??c.prompt,
-    use_custom_audio:d.timeline.audioSegments.length>0,use_custom_motion:false,
-    inpaint_audio:true,frame_rate:d.fps,display_mode:'frames',
+    use_custom_audio:false,use_custom_motion:false,
+    inpaint_audio:false,frame_rate:d.fps,display_mode:'frames',
     custom_width:d.canvas.width,custom_height:d.canvas.height,resize_method:'stretch to fit',
     divisible_by:32,img_compression:0,override_audio:false,ref_image_size:'match',
     shift_video:12,shift_audio:3,
   },'H3 Director timeline');
-  addCommonSampling(g,node,ref('director'),ref('director',1),ref('director',2),d.steps,d.seed);
+  const hasAudio=d.timeline.audioSegments.length>0;
+  if(hasAudio){
+    node('trim_audio','TrimAudioDuration',{audio:ref('director',3),start_index:0,duration:d.frames/d.fps},'Match timeline soundtrack to video');
+    node('audio_guide','MiniMaxH3AddGuide',{positive:ref('director',1),latent:ref('director',2),audio_vae:ref('audio_vae'),audio:ref('trim_audio'),frame_idx:0},'Follow soundtrack using first/last-frame audio guidance');
+  }
+  addCommonSampling(g,node,ref('director'),hasAudio?ref('audio_guide'):ref('director',1),ref('director',2),d.steps,d.seed);
   node('decode','VAEDecode',{samples:ref('sample'),vae:ref('video_vae')},'Decode Director video');
-  node('decode_audio','VAEDecodeAudio',{samples:ref('sample'),vae:ref('audio_vae')},'Decode Director audio');
-  addOutputGraph(g,node,d.output,ref('decode'),d.canvas,d.fps,engine,ref('decode_audio'));
+  if(!hasAudio)node('decode_audio','VAEDecodeAudio',{samples:ref('sample'),vae:ref('audio_vae')},'Decode Director audio');
+  addOutputGraph(g,node,d.output,ref('decode'),d.canvas,d.fps,engine,ref(hasAudio?'trim_audio':'decode_audio'));
   return g;
 }
 
@@ -230,8 +235,8 @@ function buildLtx(c,info,engine){
     timeline_data:JSON.stringify(d.timeline),local_prompts:d.localPrompts,
     segment_lengths:d.segmentLengths,epsilon:.001,guide_strength:d.guideStrength,
     global_prompt:c.globalPrompt??c.prompt,
-    use_custom_audio:d.timeline.audioSegments.length>0,use_custom_motion:false,
-    inpaint_audio:true,frame_rate:d.fps,display_mode:'frames',
+    use_custom_audio:false,use_custom_motion:false,
+    inpaint_audio:false,frame_rate:d.fps,display_mode:'frames',
     custom_width:d.canvas.width,custom_height:d.canvas.height,resize_method:'stretch to fit',
     divisible_by:32,img_compression:0,override_audio:false,
   },'LTX Director timeline');
@@ -242,8 +247,15 @@ function buildLtx(c,info,engine){
     image_attention_strength:1,crop:'center',auto_snap_ic_grid:true,
     use_tiled_encode:false,tile_size:256,tile_overlap:64,retake_mode:false,
   },'Prepare LTX guide keyframes');
+  const hasAudio=d.timeline.audioSegments.length>0;
+  if(hasAudio){
+    node('trim_audio','TrimAudioDuration',{audio:ref('director',7),start_index:0,duration:d.frames/d.fps},'Match timeline soundtrack to video');
+    node('encode_audio','LTXVAudioVAEEncode',{audio:ref('trim_audio'),audio_vae:ref('audio_vae')},'Encode original timeline soundtrack');
+    node('freeze_audio_mask','SolidMask',{value:0,width:1024,height:1024});
+    node('freeze_audio','SetLatentNoiseMask',{samples:ref('encode_audio'),mask:ref('freeze_audio_mask')},'Preserve soundtrack using first/last-frame audio method');
+  }
   node('av_latent','LTXVConcatAVLatent',{
-    video_latent:ref('guide',2),audio_latent:ref('director',3),
+    video_latent:ref('guide',2),audio_latent:hasAudio?ref('freeze_audio'):ref('director',3),
   },'Combine Director video and audio latents');
   node('guider','CFGGuider',{
     model:ref('guide',3),positive:ref('guide',0),negative:ref('guide',1),cfg:1,
@@ -263,10 +275,10 @@ function buildLtx(c,info,engine){
     samples:ref('crop_guides',2),vae:ref('video_vae'),tile_size:512,overlap:64,
     temporal_size:128,temporal_overlap:32,
   },'Decode Director video');
-  node('decode_audio','LTXVAudioVAEDecode',{
+  if(!hasAudio)node('decode_audio','LTXVAudioVAEDecode',{
     samples:ref('separate',1),audio_vae:ref('audio_vae'),
   },'Decode Director audio');
-  addOutputGraph(g,node,d.output,ref('decode'),d.canvas,d.fps,engine,ref('decode_audio'));
+  addOutputGraph(g,node,d.output,ref('decode'),d.canvas,d.fps,engine,ref(hasAudio?'trim_audio':'decode_audio'));
   return g;
 }
 
@@ -314,7 +326,8 @@ const LTX_NODES=['UNETLoader','CLIPLoader','VAELoader','CLIPTextEncode','LTXDire
 
 export function directorAvailability(info={},c={}){
   const engine=engineFor(c.engine??'ltx'),required=engine.id==='h3'?H3_NODES:LTX_NODES;
-  const missingNodes=required.filter(node=>!info?.[node]),missingFiles=[];
+  const audioNodes=c.clips?.some(clip=>clip.kind==='audio')?['TrimAudioDuration',...(engine.id==='h3'?['MiniMaxH3AddGuide']:['LTXVAudioVAEEncode','SolidMask','SetLatentNoiseMask'])]:[];
+  const missingNodes=[...required,...audioNodes].filter(node=>!info?.[node]),missingFiles=[];
   const owner=wrongDirectorOwner(info,engine);
   if(engine.id==='h3'){
     for(const [node,key,file] of [

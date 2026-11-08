@@ -137,3 +137,19 @@ ltxReady.VAELoader.input.required.vae_name=[[LTX_FRAME_VIDEO_MODELS.videoVae,LTX
 assert.equal(directorAvailability(ltxReady,{engine:'ltx'}).ready,true);
 
 console.log('Director frame grids, exclusive clip ranges, native timeline payloads, attention patch routing, node pruning, reference validation and model availability pass.');
+
+for(const engine of ['ltx','h3']){
+ const graph=buildDirectorGraph({engine,prompt:'Follow the speech exactly.',width:512,height:288,frames:49,clips:[{kind:'audio',startFrame:8,endFrame:32,trimStart:12,asset:{file:'speech.wav'}}]});
+ assert.equal(graph.director.inputs.use_custom_audio,false,'Avoid a second approximate audio reference path');
+ assert.equal(graph.director.inputs.inpaint_audio,false);
+ assert.deepEqual(graph.video.inputs.audio,['trim_audio',0],'Mux original timeline audio rather than regenerated audio');
+ assert.equal(graph.trim_audio.inputs.duration,graph.director.inputs.duration_frames/24);
+ const timeline=JSON.parse(graph.director.inputs.timeline_data);assert.equal(timeline.audioSegments[0].start,8);assert.equal(timeline.audioSegments[0].trimStart,12);
+ if(engine==='ltx'){
+  assert.deepEqual(graph.trim_audio.inputs.audio,['director',7]);assert.equal(graph.freeze_audio_mask.inputs.value,0);assert.deepEqual(graph.av_latent.inputs.audio_latent,['freeze_audio',0]);
+ }else{
+  assert.deepEqual(graph.trim_audio.inputs.audio,['director',3]);assert.equal(graph.audio_guide.class_type,'MiniMaxH3AddGuide');assert.equal(graph.audio_guide.inputs.frame_idx,0);assert.deepEqual(graph.guider.inputs.conditioning,['audio_guide',0]);
+ }
+ assert.equal(graph.decode_audio,undefined);
+}
+console.log('Director uses endpoint audio conditioning and preserves the original timeline soundtrack.');
