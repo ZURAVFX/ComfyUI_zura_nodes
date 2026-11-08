@@ -78,7 +78,7 @@ function fixture({clearStorage=true}={}){
   const f=fixture();await f.handoff.edit(f.workspace,f.anchor);
   const {document}=parseHTML('<main><section><header class="zc-image-heading"></header></section></main>');
   f.owner.root=document.querySelector('main');f.handoff.syncImageUI=RippleImageHandoff.prototype.syncImageUI;
-  f.handoff.syncImageUI();assert.ok(f.handoff.banner?.isConnected);f.handoff.dispose();assert.equal(f.handoff.banner,null);assert.ok(f.handoff.request);
+  f.handoff.syncImageUI();assert.ok(f.handoff.banner?.isConnected);assert.match(f.handoff.banner.textContent,/Paint an area to target a local edit/);f.handoff.dispose();assert.equal(f.handoff.banner,null);assert.ok(f.handoff.request);
   await f.handoff.resume();assert.ok(f.handoff.banner?.isConnected);assert.equal(f.handoff.banner.hidden,false);
   assert.equal(f.handoff.banner.querySelector('[data-ripple-return]').disabled,false);
 }

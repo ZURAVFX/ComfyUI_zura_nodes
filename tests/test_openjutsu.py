@@ -96,6 +96,16 @@ class OpenJutsuTests(unittest.TestCase):
         self.assertTrue(g['803']['inputs']['use_anchor'])
         self.assertEqual(g['anchor_image']['inputs']['image'], 'uploaded.png')
 
+    def test_finished_starting_image_is_the_character_when_reference_list_is_empty(self):
+        p = self.project()
+        p['look_mode'] = 'ready'
+        p['references'] = []
+        p['character'] = {'file': 'finished.png'}
+        p['opening_input'] = {'file': 'finished.png'}
+        g = module.build_graph(p)
+        self.assertTrue(g['803']['inputs']['use_anchor'])
+        self.assertEqual(g['anchor_image']['inputs']['image'], 'finished.png')
+
     def test_dependency_diagnostic_identifies_optional_nodes(self):
         g = module.build_graph(self.project())
         r = module.readiness(g, {})

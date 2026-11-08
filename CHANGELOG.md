@@ -1,5 +1,12 @@
 # Release notes
 
+## 1.3.52 - 8 November 2026
+
+- Fix OpenJutsu setup when the finished starting image is supplied as the character image and no separate reference list is present.
+- Make Ripple's paint-area editor visible and clearly actionable, and keep it beside the main image before optional references.
+- Show the finished image after a painted edit completes, while keeping its paint mask available to reopen.
+- Verify the OpenJutsu fix with a live Studio render and add regression coverage for the UI fixes.
+
 ## 1.3.51 - 7 November 2026
 
 - Add a dedicated Ripple editing timeline with H3 and LTX, thumbnail keyframes, shared image/video prompts, external image editing and source-matched resolution, frame rate, frame count and audio delivery.

@@ -15,6 +15,7 @@ const accepted=value=>value&&typeof value==='object'?{
 const imageUrl=(owner,ref)=>owner.api.apiURL('/view?'+new URLSearchParams({filename:ref.filename,subfolder:ref.subfolder||'',type:'input'}));
 const maskUrl=(owner,mask)=>owner.api.apiURL('/view?'+new URLSearchParams({filename:mask.filename,subfolder:mask.subfolder||'',type:'input'}));
 const asBlob=canvas=>new Promise((resolve,reject)=>canvas.toBlob(blob=>blob?resolve(blob):reject(new Error('Could not save the painted selection.')),'image/png'));
+const brushIcon='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m3 21 3.5-.7L19 7.8a2.5 2.5 0 0 0-3.5-3.5L3.7 16.1 3 21Z"/><path d="m14 6 4 4"/></svg>';
 
 /**
  * Paintout's source-space brush at a bounded proxy resolution. Comfy uploads
@@ -25,8 +26,8 @@ export class ImageEditArea {
     this.owner=owner;this.state=accepted(owner.draft?.edit_area);this.editing=false;this.dirty=false;this.preparing=false;this.closed=false;
     this.revision=0;this.viewerEpoch=0;this.upload=null;this.load=null;this.brushSize=96;
     const doc=owner.root.ownerDocument;
-    this.button=doc.createElement('button');this.button.type='button';this.button.className='zia-open zc-attachment';this.button.textContent='Paint edit area';
-    this.button.setAttribute('aria-pressed','false');this.button.title='Optionally paint the part of the main image to edit';
+    this.button=doc.createElement('button');this.button.type='button';this.button.className='zia-open zc-attachment';this.button.innerHTML=`${brushIcon}<span>Paint area to edit</span>`;
+    this.button.setAttribute('aria-pressed','false');this.button.title='Optionally paint the part of the main image the model should change';this.button.setAttribute('aria-label','Paint area to edit');
     owner.root.querySelector('.zc-image-tools').prepend(this.button);this.button.addEventListener('click',()=>this.openEditor());
     this.host=doc.createElement('section');this.host.className='zia-editor';this.host.hidden=true;this.host.setAttribute('aria-label','Image edit area');
     this.host.innerHTML=`<div class="zia-stage"><div class="zia-viewer-host"></div><div class="zia-loading" role="status">Loading image…</div></div>
@@ -81,19 +82,28 @@ export class ImageEditArea {
     // Input rendering may rebuild this group. Keep one entry point beside the
     // main image and its references rather than losing it with the old nodes.
     const controls=o.$('reference-list')?.querySelector('.zc-edit-main')||o.root.querySelector('.zc-image-tools');
-    if(controls&&this.button.parentElement!==controls)controls.append(this.button);
+    if(controls){const references=controls.querySelector('.zi-references');if(references)controls.insertBefore(this.button,references);else if(this.button.parentElement!==controls)controls.append(this.button);}
     if(key!==this.state.source_key){
       clearTimeout(this.saveTimer);this.revision++;this.disposeViewer();this.state=empty(key);this.editing=false;this.dirty=false;this.error='';
     }
     this.button.hidden=!visible;this.button.disabled=!visible||!source||this.busy();this.button.setAttribute('aria-pressed',String(visible&&!!source&&this.state.enabled));
-    this.button.textContent=this.state.enabled?'Paint edit area · on':'Paint edit area';
-    this.button.title=source?'Optionally paint the part of the main image to edit':'Add a main image first';
+    const label=this.button.querySelector('span');if(label)label.textContent=this.editing?'Painting area…':this.state.mask?'Edit painted area':'Paint area to edit';
+    this.button.setAttribute('aria-label',label?.textContent||'Paint area to edit');
+    this.button.title=source?'Paint the part of the main image the model should change':'Add a main image first';
     const show=visible&&!!source&&this.editing;this.host.hidden=!show;
     if(show){
       // A single large canvas replaces the source/result view while painting.
       o.editInputs.source.hidden=true;o.$('gallery').hidden=true;o.$('image-empty').hidden=true;if(o.imageComparison?.host)o.imageComparison.host.hidden=true;
       if(o.imageComparison?.button)o.imageComparison.button.disabled=true;if(o.editInputs.toggle)o.editInputs.toggle.hidden=true;
       if(!this.viewer&&!this.load)void this.loadViewer(source,key);
+    }else if(o.mode==='image'&&edit){
+      // Restore the normal source/result canvas when painting ends. The paint
+      // canvas is only a temporary overlay and must not leave a finished edit
+      // hidden behind its stale `hidden` flags.
+      const item=o.items?.[o.selectedImage||0],showSource=!!o.editInputs?.showSource&&!!source,comparison=!!o.imageComparison?.active&&!!item?.file?.filename&&!!source?.filename;
+      if(o.editInputs?.source)o.editInputs.source.hidden=!showSource;
+      if(o.imageComparison){o.imageComparison.render?.();if(o.imageComparison.host)o.imageComparison.host.hidden=showSource||!comparison;}
+      o.$('gallery').hidden=showSource||comparison;o.$('image-empty').hidden=showSource||!!item;
     }
     this.refreshTools();
   }
@@ -114,10 +124,10 @@ export class ImageEditArea {
     if(this.owner.imageComparison)this.owner.imageComparison.active=false;
     this.owner.editInputs.showSource=true;this.owner.save();this.owner.render();
   }
-  finishEditor(){
+  finishEditor({render=true}={}){
     if(this.busy())return;
     if(!this.state.mask&&!this.dirty&&!this.viewer?.maskPresent)this.state.enabled=false;
-    this.editing=false;this.owner.save();this.owner.render();
+    this.editing=false;this.owner.save();if(render)this.owner.render();
   }
   useWholeImage(){
     if(this.busy())return;this.state.enabled=false;this.editing=false;this.owner.save();this.owner.render();

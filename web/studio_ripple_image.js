@@ -75,7 +75,7 @@ export class RippleImageHandoff {
     const o=this.owner,request=this.request||this.stored;if(!request){if(this.banner)this.banner.hidden=true;return;}
     if(!this.banner){
       this.banner=o.root.ownerDocument.createElement('div');this.banner.className='zo-guide-handoff zru-image-handoff';
-      this.banner.innerHTML='<div><strong data-ripple-image-title></strong><span>Edit the original frame, then return the result to Ripple</span></div><button type="button" data-ripple-return>Back to Ripple</button><button type="button" data-ripple-use>Use edited frame</button>';
+      this.banner.innerHTML='<div><strong data-ripple-image-title></strong><span>Paint an area to target a local edit, then return to Ripple.</span></div><button type="button" data-ripple-return>Back to Ripple</button><button type="button" data-ripple-use>Use edited frame</button>';
       o.root.querySelector('.zc-image-heading').after(this.banner);
       this.banner.querySelector('[data-ripple-return]').onclick=()=>this.leave();this.banner.querySelector('[data-ripple-use]').onclick=()=>this.useResult();
     }

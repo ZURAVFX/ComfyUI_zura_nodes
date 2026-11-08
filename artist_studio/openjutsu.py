@@ -45,7 +45,7 @@ def build_graph(project, check_asset=lambda asset: None):
     tier = c.get("openjutsu_resolution", "480")
     if str(tier) not in ("480", "768"):
         raise ValueError("Choose the OpenJutsu 480 or 768 tier.")
-    if len(project.get("references", [character])) != 1:
+    if len(project.get("references") or [character]) != 1:
         raise ValueError("OpenJutsu test accepts one character image. A reference sheet counts as one image.")
     check_asset(source)
     check_asset(character)

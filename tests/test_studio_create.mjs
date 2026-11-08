@@ -449,9 +449,11 @@ assert.deepEqual(calls.find(c=>c.path==='/interrupt').body,{prompt_id:'own-run'}
 assert.deepEqual(calls.find(c=>c.path==='/queue'&&c.body).body,{delete:['own-run']});
 assert.equal(ui.$('cancel').disabled,true);const cancelCount=calls.filter(c=>c.path==='/interrupt').length;await ui.cancel();assert.equal(calls.filter(c=>c.path==='/interrupt').length,cancelCount);apiEvents.get('progress')({detail:{prompt_id:'own-run',node:'sample',value:2,max:8}});apiEvents.get('executing')({detail:'decode'});assert.match(ui.$('progress-title').textContent,/Cancelling/,'Late image events do not replace cancellation');
 history={'own-run':{status:{completed:true,messages:[['execution_start',{timestamp:1000}],['execution_success',{timestamp:4000}]]},outputs:{save:{images:[{filename:'image.png',subfolder:'zura_images',type:'output'}]}}}};
+let closedPaintOverlay=0;ui.imageArea={editing:true,finishEditor(options){assert.deepEqual(options,{render:false});closedPaintOverlay++;this.editing=false;},prepare:async()=>null,config(){return null;},sync(){},close(){}};
 while(ui.polling)await new Promise(r=>setTimeout(r,1));
 await ui.poll();
 assert.equal(ui.job,null);assert.equal(ui.items.length,1);assert.equal(ui.items[0].seconds,3);assert.equal(ui.$('gallery').querySelectorAll('img').length,1);assert.equal(ui.timer,null);
+assert.equal(closedPaintOverlay,1,'A successful painted image run closes the paint overlay so its result is visible');
 reject=true;await ui.generate();assert.match(ui.$('message').textContent,/validation/);assert.equal(ui.job,null);assert.equal(ui.$('generate').disabled,false);
 const ids=[...studio.container.querySelectorAll('[id]')].map(n=>n.id);assert.equal(ids.length,new Set(ids).size);
 // Image review is an explicit, local step before motion and video generation.
