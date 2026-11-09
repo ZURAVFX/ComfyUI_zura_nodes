@@ -6,7 +6,7 @@ Wan keeps its existing reviewed lighting-frame and chained-video workflow. LTX a
 
 LTX uses one selected lighting image as a visual reference for the whole clip. H3 accepts several timed edited frames. Switching models keeps all the lighting frames; the selected LTX reference does not discard H3's other frames. Relight's draft is saved separately from the ordinary edited-frame workspace.
 
-Changing from Wan carries its current source, selected interval, lighting prompt and reviewed image into the timeline. Returning to Wan restores the source and selected lighting frame. Source video size, frame rate and selected frame count are restored by the existing native delivery nodes for LTX and H3. Source audio is retained. Processing scale can reduce model memory without changing the delivered raster.
+Changing from Wan carries its current source, selected interval, lighting prompt and reviewed image into the timeline. A smaller working lighting image is resized to the original plate dimensions without cropping before import. Returning to Wan restores the source and selected lighting frame. Source video size, frame rate and selected frame count are restored by the existing native delivery nodes for LTX and H3. Source audio is retained. Processing scale can reduce model memory without changing the delivered raster.
 
 Missing files use the existing model installer and browser-based gated access. The LTX/H3 path currently supports SDR sources. Relighting can still alter surrounding details; compare a generated shot before delivery.
 

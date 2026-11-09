@@ -1,5 +1,10 @@
 # Release notes
 
+## 1.3.60 - 9 November 2026
+
+- Restore a reviewed Wan lighting image to the original source dimensions before transferring it to LTX or H3 Relight. This accepts smaller working images without cropping or asking for another generation.
+- Include the shared Relight model selector, independent lighting drafts, recovered image-return fix and all preceding Studio updates.
+
 ## 1.3.59 - 9 November 2026
 
 - Keep the currently visible Relight or ordinary edit workspace active when recovering an earlier image-edit return after a refresh. Restore the pending image to its own saved draft without switching the visible mode.

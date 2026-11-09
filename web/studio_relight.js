@@ -2,6 +2,15 @@ const KEY='zura-relight-engine-v1';
 const read=()=>{try{return localStorage.getItem(KEY)||'wan21';}catch{return'wan21';}};
 const frameFile=file=>file&&('/view?'+new URLSearchParams({filename:file.filename,subfolder:file.subfolder||'',type:file.type||'output'}));
 
+/** Match the original plate, undoing a lighting model's smaller working raster. */
+export async function lightingFrameAtSourceSize(owner,blob,source){
+  const bitmap=await createImageBitmap(blob),canvas=owner.root.ownerDocument.createElement('canvas');
+  canvas.width=source.width;canvas.height=source.height;
+  try{canvas.getContext('2d').drawImage(bitmap,0,0,source.width,source.height);}finally{bitmap.close();}
+  const png=await new Promise((resolve,reject)=>canvas.toBlob(value=>value?resolve(value):reject(Error('Could not prepare the lighting frame.')),'image/png'));
+  return new File([png],'Lighting frame.png',{type:'image/png'});
+}
+
 /** Relight shares the proven edited-frame renderers without sharing its draft. */
 export function installRelightEngines(owner){
   owner.relightEngine=['wan21','ltx','h3'].includes(read())?read():'wan21';
@@ -47,7 +56,7 @@ export async function selectRelightEngine(owner,engine){
     if(fromWan&&target.source&&openingURL&&openingKey&&target.state.wanOpeningKey!==openingKey){
       target.addAnchor(target.state.startFrame);const anchor=target.selected();
       const response=await owner.api.fetchApi(openingURL);if(!response.ok)throw Error('Could not transfer the reviewed lighting image.');
-      await target.importAnchorFile(anchor,new File([await response.blob()],'Lighting frame.png',{type:'image/png'}));target.state.wanOpeningKey=openingKey;target.state.wanAnchorFile=anchor.file;
+      const image=await lightingFrameAtSourceSize(owner,await response.blob(),target.source);await target.importAnchorFile(anchor,image);target.state.wanOpeningKey=openingKey;target.state.wanAnchorFile=anchor.file;
     }
     target.save();target.render();owner.videoComposer.syncWorkflow();
   }catch(error){const target=owner.ripple?.intent==='relight'?owner.ripple:null;if(target&&owner.mode==='ripple')target.message(error.message);else studio.message?.(error.message,true);}
