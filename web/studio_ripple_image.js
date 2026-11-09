@@ -22,7 +22,9 @@ export class RippleImageHandoff {
   async resume(){
     if(this.request){if(!this.current(this.request))this.clear();this.syncImageUI();return;}
     if(!this.stored||this.restoring)return this.restoring;
-    const saved=this.stored,revision=this.revision,w=this.owner.ensureRippleWorkspace?.(saved.intent||'edit')||this.owner.ripple;
+    const saved=this.stored,revision=this.revision,active=this.owner.ripple,intent=saved.intent||'edit';
+    const w=this.owner.rippleWorkspaces?.get(intent)||this.owner.ensureRippleWorkspace?.(intent)||this.owner.ripple;
+    if(active&&this.owner.mode==='ripple')this.owner.ripple=active;
     if(!w)return;
     this.restoring=(async()=>{
       await w.restoreSource?.();

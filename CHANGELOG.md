@@ -1,5 +1,10 @@
 # Release notes
 
+## 1.3.59 - 9 November 2026
+
+- Keep the currently visible Relight or ordinary edit workspace active when recovering an earlier image-edit return after a refresh. Restore the pending image to its own saved draft without switching the visible mode.
+- Include the Wan 2.1, LTX 2.5 and MiniMax H3 Relight choices from 1.3.58, together with the preceding visual navigation, Director and still-scene camera updates.
+
 ## 1.3.58 - 8 November 2026
 
 - Add LTX 2.5 and MiniMax H3 to Relight alongside the existing Wan 2.1 workflow. Keep the workspace and image return path labelled Relight.

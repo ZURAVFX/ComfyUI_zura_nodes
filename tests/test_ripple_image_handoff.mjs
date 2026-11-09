@@ -132,3 +132,10 @@ console.log('Ripple image handoff preserves original frames, exact raster, share
  let restoredIntent;f.owner.ensureRippleWorkspace=intent=>{restoredIntent=intent;return f.workspace;};
  await f.handoff.leave();assert.equal(restoredIntent,'relight');assert.equal(f.owner.mode,'ripple');
 }
+
+// Recovering an older image return must not replace the currently visible Relight workspace.
+{
+ const f=fixture();await f.handoff.edit(f.workspace,f.anchor);f.handoff.request=null;
+ const visible={intent:'relight'};f.owner.mode='ripple';f.owner.ripple=visible;f.owner.rippleWorkspaces=new Map([['edit',f.workspace],['relight',visible]]);
+ await f.handoff.resume();assert.equal(f.owner.ripple,visible);assert.equal(f.handoff.request.workspace,f.workspace);
+}
