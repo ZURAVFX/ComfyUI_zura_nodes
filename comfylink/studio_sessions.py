@@ -696,7 +696,6 @@ class StudioSessions:
                 last = first
                 if count > 1:
                     last = generated / "last.png"
-                    Image.fromarray(encoded[-1], "RGBA").save(last)
                     import av
                     video = generated / "source.mkv"
                     rate = Fraction(manifest["frameRate"]["numerator"], manifest["frameRate"]["denominator"])

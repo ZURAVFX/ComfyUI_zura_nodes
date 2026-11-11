@@ -825,6 +825,65 @@ class StudioHTTPTest(unittest.IsolatedAsyncioTestCase):
         response = await self.client.post(PREFIX + '/sessions', data=b'{"broker":1,"broker":2}')
         self.assertEqual(response.status, 400)
 
+    async def test_real_multiframe_sdr_native_upload_keeps_frames_rate_and_endpoints(self):
+        import av
+        from fractions import Fraction
+        from PIL import Image
+        expected=[]
+        for index in range(3):
+            rgba=np.full((2,2,4),(32+index,64+index,128+index,255),dtype=np.uint8)
+            rgba[0,0]=(17+index,45+index,200-index,0)
+            rgba[0,1]=(80+index,90+index,100+index,128)
+            expected.append(rgba)
+        native_root=self.inputs/'native-video-upload';native_root.mkdir()
+        native_file=native_root/'reference.mkv'
+        inspected={}
+        async def native_upload(request):
+            self.assertEqual(request.query.get('kind'),'video')
+            part=await (await request.multipart()).next()
+            self.assertEqual(part.filename,'source.mkv')
+            with native_file.open('xb') as destination:
+                while chunk:=await part.read_chunk():destination.write(chunk)
+            with av.open(str(native_file)) as container:
+                stream=container.streams.video[0]
+                self.assertEqual(stream.codec_context.name,'ffv1')
+                self.assertEqual(stream.average_rate,Fraction(25,1))
+                decoded=list(container.decode(video=0))
+                self.assertEqual(len(decoded),len(expected))
+                for index,frame in enumerate(decoded):
+                    self.assertEqual(frame.to_ndarray(format='rgba').tobytes(),expected[index].tobytes())
+                    self.assertEqual(Fraction(frame.pts)*frame.time_base,Fraction(index,25))
+                inspected.update(path=str(native_file),kind='video',frames=len(decoded),fps=float(stream.average_rate),width=stream.width,height=stream.height)
+            return web.json_response({'id':'e'*32,'kind':'asset','asset_kind':'video','count':len(expected),
+                'file':native_file.relative_to(self.inputs).as_posix(),'duration':len(expected)/25,'width':2,'height':2})
+        async def native_info(request):
+            self.assertTrue(native_file.is_file())
+            return web.json_response(inspected)
+        app=web.Application()
+        app.router.add_post('/zura/studio/upload',native_upload)
+        app.router.add_post('/zura/studio/assets/'+'e'*32+'/ripple',native_info)
+        native=TestServer(app,host='127.0.0.1');await native.start_server()
+        try:
+            identity='f'*32
+            source=(frame.astype(np.float32)/np.float32(255) for frame in expected)
+            relative,manifest=float_io.write_transfer_frames(self.inputs,'ComfyLink/'+identity,source,
+                colour={'encoding':'unknown','sceneLinear':False},frame_rate={'numerator':25,'denominator':1},source_bit_depth=8,expected_count=len(expected))
+            session=types.SimpleNamespace(id=identity,origin=str(native.make_url('/')).rstrip('/'),closed=False,expires=time.time()+600)
+            self.service.sessions[identity]=session
+            with patch.object(float_io,'load_transfer',side_effect=AssertionError('whole batch forbidden')),patch.object(np,'stack',side_effect=AssertionError('whole batch forbidden')):
+                result=await self.service.native_import(session,self.inputs/Path(relative).parent,manifest)
+            self.assertEqual(result['studioAsset']['asset_kind'],'video')
+            self.assertEqual(result['studioAsset']['count'],3)
+            self.assertEqual(result['mediaInfo']['frames'],3)
+            self.assertEqual(result['mediaInfo']['fps'],25)
+            self.assertEqual((result['mediaInfo']['width'],result['mediaInfo']['height']),(2,2))
+            for key,index in (('first',0),('last',2)):
+                path=self.inputs/result['stills'][key]['file']
+                with Image.open(path) as still:
+                    self.assertEqual(still.mode,'RGBA')
+                    self.assertEqual(np.array(still).tobytes(),expected[index].tobytes())
+        finally:await native.close()
+
 
 if __name__ == '__main__':
     unittest.main()
