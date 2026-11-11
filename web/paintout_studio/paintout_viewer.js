@@ -17,7 +17,7 @@ export class PaintoutMaskViewer{
     this.pointerDown=event=>this.startPointer(event);this.pointerMove=event=>this.movePointer(event);this.pointerUp=event=>this.endPointer(event);
     this.root.addEventListener('pointerdown',this.pointerDown);this.root.addEventListener('pointermove',this.pointerMove);this.root.addEventListener('pointerup',this.pointerUp);this.root.addEventListener('pointercancel',this.pointerUp);
     this.root.addEventListener('wheel',event=>this.wheel(event),{passive:false});
-    this.root.addEventListener('keydown',event=>{if((event.ctrlKey||event.metaKey)&&event.key.toLowerCase()==='z'){event.preventDefault();this.undo();this.onCommit();}else if(event.key==='0'){event.preventDefault();this.fit();}else if(event.key==='Escape'){this.drag=null;this.draw();}});
+    this.root.addEventListener('keydown',event=>{if((event.ctrlKey||event.metaKey)&&event.key.toLowerCase()==='z'){event.preventDefault();this.undo();this.onCommit();}else if(event.key==='0'||event.key.toLowerCase()==='f'){event.preventDefault();event.stopPropagation();this.fit();}else if(event.key==='Escape'){this.drag=null;this.draw();}});
     this.root.addEventListener('contextmenu',event=>event.preventDefault());
     this.resizeObserver=new ResizeObserver(()=>this.resize());this.resizeObserver.observe(this.root);this.resize();
   }
@@ -72,7 +72,7 @@ export class PaintoutMaskViewer{
 
   movePointer(event){this.cursor=this.point(event);if(!this.drag){this.draw();return;}if(this.drag.kind==='pan'){this.pan.x=this.drag.pan.x+event.clientX-this.drag.x;this.pan.y=this.drag.pan.y+event.clientY-this.drag.y;this.draw();return;}const p=this.point(event);this.paint(this.drag.last,p);this.drag.last=p;this.changed('paint');}
   endPointer(event){if(this.drag){const painted=this.drag.kind==='paint';this.drag=null;this.draw();if(painted)this.onCommit();}if(this.root.hasPointerCapture(event.pointerId))this.root.releasePointerCapture(event.pointerId);}
-  wheel(event){if(!this.image)return;event.preventDefault();const rect=this.root.getBoundingClientRect(),p=this.point(event),old=this.transform();this.zoom=clamp(this.zoom*Math.exp(-event.deltaY*.0015),1,12);const next=this.transform();this.pan.x+=event.clientX-rect.left-(next.x+p.x*next.scale);this.pan.y+=event.clientY-rect.top-(next.y+p.y*next.scale);if(this.zoom===1)this.pan={x:0,y:0};this.draw();}
+  wheel(event){if(!this.image)return;event.preventDefault();const rect=this.root.getBoundingClientRect(),p=this.point(event),old=this.transform();this.zoom=clamp(this.zoom*Math.exp(-event.deltaY*.0015),.05,64);const next=this.transform();this.pan.x+=event.clientX-rect.left-(next.x+p.x*next.scale);this.pan.y+=event.clientY-rect.top-(next.y+p.y*next.scale);if(this.zoom===1)this.pan={x:0,y:0};this.draw();}
   buildOverlay(){
     const size=Math.min(640,Math.max(this.width,this.height)),scale=Math.min(1,size/Math.max(this.width,this.height)),w=Math.max(1,Math.round(this.width*scale)),h=Math.max(1,Math.round(this.height*scale));
     const key=`${this.maskVersion}:${w}:${h}:${this.grow}:${this.feather}`;if(this.overlayKey===key)return;this.overlayKey=key;

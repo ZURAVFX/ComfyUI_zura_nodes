@@ -1,3 +1,4 @@
+import {PlateSurface} from './studio_plate_surface.js';
 import {aeFrameConfig} from './studio_ae_frame_contract.js';
 import {workspaceStorage} from './studio_storage.js';
 import {rippleStudioProcessingSize,rippleStudioValidation} from './studio_ripple_recipes.js';
@@ -64,6 +65,18 @@ export class PlateWorkspace{
     editor.$('clean').onclick=event=>this.propagation()?this.editFrame():clean(event);
     editor.confirmClipTrim=async()=>{await confirm();if(this.propagation()&&w.state.clipTrimConfirmed&&!w.busy())await editor.setStage('clean');};
     const reset=w.resetSource.bind(w);w.resetSource=async()=>{if(this.inline){await this.owner.rippleImage.leave();if(this.inline)return false;}const success=await reset();if(success!==false){this.revision++;if(this.runner&&!this.runner.busy())this.runner.reset();}return success;};
+    for(const key of ['onSeek','onCreate','onSelect','onRemove']){
+      const callback=editor.timeline.callbacks[key];
+      editor.timeline.callbacks[key]=async(...args)=>{
+        if(this.timelineSwitch||w.busy()||this.owner.rippleImage?.importing)return;
+        this.timelineSwitch=true;
+        try{if(this.inline){await this.owner.rippleImage.leave();if(this.inline)return;}
+          await callback(...args);
+          if(this.propagation()&&['onCreate','onSelect'].includes(key)){await editor.frameChanged(true);if(!w.busy())await this.editFrame();}
+        }catch(error){w.message(error.message);}finally{this.timelineSwitch=false;}
+      };
+    }
+    this.surface=new PlateSurface(this);const message=w.message.bind(w);w.message=value=>{message(value);this.surface.sync();};
     this.syncControls();
   }
   sync(){if(this.active()){this.attach(this.owner.paintout);this.syncControls();}}
@@ -103,6 +116,7 @@ export class PlateWorkspace{
       if(w.state.plateEngine==='h3')e.guideHelp.textContent='Add edited frames at the moments you want to change.';
     }
     if(this.runner?.job||this.runner?.pendingSubmission||this.runner?.submitting)this.progress(this.lastProgress||{title:'Starting video edit',detail:'Preparing'});
+    this.surface?.sync();
   }
   config(){
     const w=this.primary,s=w?.sourceInfo;if(!w)return{};
@@ -171,13 +185,13 @@ export class PlateWorkspace{
       const doc=w.page.ownerDocument,host=doc.createElement('div');host.className='zplate-inline-image';w.page.querySelector('.zf-viewer').append(host);
       this.inline={host,moved:[]};o.imageArea.inline=true;
       const move=(node,target)=>{if(!node)return;const marker=doc.createComment('plate-image-home');node.before(marker);this.inline.moved.push({node,marker});target.append(node);};
-      move(o.rippleImage.banner,host);if(o.imageComparison?.button)move(o.imageComparison.button,o.rippleImage.banner);move(o.editInputs.source,host);move(o.$('gallery'),host);move(o.imageComparison?.host,host);move(o.imageArea.host,host);move(o.imageArea.tools,this.strip);
-      this.inline.composer=o.root.querySelector('.zc-image-composer');move(this.inline.composer,w.page);this.inline.composer.classList.add('zplate-inline-composer');
+      if(!this.surface)move(o.rippleImage.banner,host);if(o.imageComparison?.button)move(o.imageComparison.button,this.surface?.root.querySelector('.zpx-header')||o.rippleImage.banner);move(o.editInputs.source,host);move(o.$('gallery'),host);move(o.imageComparison?.host,host);move(o.imageArea.host,host);move(o.imageArea.tools,this.surface?.$('brushes')||this.strip);
+      this.inline.composer=o.root.querySelector('.zc-image-composer');if(!this.surface){move(this.inline.composer,w.page);this.inline.composer.classList.add('zplate-inline-composer');}else{move(o.$('progress'),this.surface.root.querySelector('.zpx-stage'));move(o.browserConnection?.host,this.surface.$('account'));move(o.root.querySelector('.zc-image-settings'),this.surface.$('image-settings-body'));}
       w.page.classList.add('is-editing-image');w.page.querySelector('.zf-composer').hidden=true;
     }
     w.page.hidden=false;o.root.querySelector('.zc-image-page').hidden=true;o.root.dataset.workspace='paintout';o.videoComposer.task.hidden=false;o.imageTask.hidden=true;
     for(const b of o.root.querySelectorAll('.zc-nav [data-space]'))b.setAttribute('aria-current',b.dataset.space==='video'?'page':'false');
-    o.videoComposer.syncWorkflow();
+    o.videoComposer.syncWorkflow();this.surface?.sync();
   }
   exitInlineImage(){
     if(!this.inline)return;this.owner.imageArea.inline=false;const {host,moved,composer}=this.inline;this.inline=null;

@@ -1,0 +1,57 @@
+/* Layout follows AInVFX Paint a Plate's canvas-first workbench; Zura tokens and controls. */
+#genj-studio[data-workspace] .zp-page.zplate-page.zplate-rebuilt:not([hidden]){display:block!important;overflow:hidden!important;padding:0!important;min-height:0}
+#genj-studio[data-workspace] .zp-page.zplate-page.zplate-rebuilt>.zplate-legacy{display:none!important}
+#genj-studio .zplate-surface{box-sizing:border-box;height:100%;min-height:0;display:grid;grid-template-columns:84px minmax(0,1fr) 280px;grid-template-rows:46px minmax(0,1fr);grid-template-areas:"header header header" "rail stage side";gap:0;background:var(--gs-bg);font-size:13px}
+#genj-studio .zpx-header{grid-area:header;display:flex;align-items:center;gap:8px;padding:6px 12px;border-bottom:1px solid var(--gs-line);background:var(--gs-panel)}
+#genj-studio .zpx-header>span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--gs-muted)}
+#genj-studio .zpx-rail{grid-area:rail;padding:8px;border-right:1px solid var(--gs-line);background:var(--gs-panel);overflow:auto}
+#genj-studio .zpx-rail .zplate-actions{display:flex;flex-direction:column;padding:0;margin:0;border:0;background:transparent;gap:8px;width:100%}
+#genj-studio .zpx-stage{grid-area:stage;display:flex;flex-direction:column;min-width:0;min-height:0}
+#genj-studio .zpx-prompt{display:flex;align-items:center;gap:8px;padding:10px 12px;flex:none;border-bottom:1px solid var(--gs-line)}
+#genj-studio .zpx-prompt textarea{flex:1;min-width:0;height:48px;min-height:48px!important;max-height:100px;resize:vertical;padding:8px;border:1px solid var(--gs-line);border-radius:6px;background:var(--gs-input);color:var(--zc-text);font:inherit}
+#genj-studio .zplate-surface button,#genj-studio .zplate-surface select{font:inherit;min-height:32px;border-radius:6px}
+#genj-studio .zpx-prompt button{flex:none;padding:8px 12px}
+#genj-studio .zpx-view{position:relative;flex:1;min-height:220px;overflow:hidden;background:var(--zc-canvas,#111)}
+#genj-studio .zpx-view>.zf-viewer{position:absolute!important;inset:0;width:100%!important;height:100%!important;min-height:0!important;margin:0!important;border:0;border-radius:0}
+#genj-studio .zpx-stage>[data-plate-timeline]{flex:none;max-height:190px;overflow:hidden}
+#genj-studio .zpx-stage .zp-editor-timeline-host{width:100%;max-width:none;margin:0;display:block!important}
+#genj-studio .zpx-side{grid-area:side;min-width:0;min-height:0;overflow:auto;padding:12px;border-left:1px solid var(--gs-line);background:var(--gs-panel)}
+#genj-studio .zpx-properties{display:grid;gap:12px;padding-bottom:16px;margin-bottom:12px;border-bottom:1px solid var(--gs-line)}
+#genj-studio .zpx-properties label{display:grid;gap:4px;color:var(--gs-muted)}
+#genj-studio .zpx-properties select{width:100%;padding:6px;color:var(--zc-text);background:var(--gs-input);border:1px solid var(--gs-line)}
+#genj-studio .zpx-side .zp-editor-tools{margin:0!important;padding:0!important;border:0!important;background:transparent!important;max-height:none!important}
+#genj-studio .zpx-status{padding:6px 12px;font-size:12px;color:var(--gs-muted);border-top:1px solid var(--gs-line)}
+#genj-studio .zpx-rail .zia-tools{display:flex;flex-direction:column;gap:4px;width:100%;flex:none;margin-top:12px}
+#genj-studio .zpx-rail .zia-tools button{min-height:28px;font-size:11px;padding:4px}
+#genj-studio .zpx-rail .zia-brush,#genj-studio .zpx-rail .zia-colour{display:flex;flex-direction:column;gap:4px;font-size:11px;padding:4px 0}
+#genj-studio .zpx-rail .zia-brush input{width:60px}
+@media(max-width:950px){#genj-studio .zplate-surface{grid-template-columns:72px minmax(0,1fr) 220px}}
+@media(max-width:700px){#genj-studio .zplate-surface{grid-template-columns:64px minmax(0,1fr);grid-template-areas:"header header" "rail stage"}#genj-studio .zpx-side{display:none}#genj-studio .zpx-prompt{flex-wrap:wrap}#genj-studio .zpx-prompt textarea{flex-basis:100%}}
+
+#genj-studio .zpx-stage>#zps-progress,#genj-studio .zpx-stage>#zc-progress{position:static;inset:auto;flex:none;margin:0;border-radius:0;padding:8px 12px;font-size:12px}
+#genj-studio .zpx-stage #zps-generation-steps,#genj-studio .zpx-stage .zps-generation-next,#genj-studio .zpx-stage .zps-generation-help{display:none}
+#genj-studio .zpx-side .zc-tool-popup>summary{padding:6px 0}
+#genj-studio .zpx-side [hidden]{display:none!important}
+
+#genj-studio[data-workspace] .zp-page.zplate-rebuilt>.zplate-surface{width:100%;max-width:none!important;margin:0!important;height:100%}
+
+#genj-studio .zpx-side [data-plate-image-settings]{padding:8px 0;margin-bottom:12px}
+#genj-studio .zpx-side [data-plate-image-settings] .zc-image-settings{display:flex!important;position:static!important;width:100%;padding:8px 0;max-height:none;overflow:visible;border:0}
+#genj-studio .zpx-side [data-plate-account]>div{display:flex;flex-direction:column;gap:8px}
+
+#genj-studio .zplate-surface{position:relative}
+#genj-studio .zplate-surface button{border:1px solid var(--gs-line);background:var(--gs-input);color:var(--zc-text);box-shadow:none;padding:5px 10px;cursor:pointer}
+#genj-studio .zplate-surface button:hover:not(:disabled){background:var(--zc-hover)}
+#genj-studio .zplate-surface button:disabled{opacity:.5;cursor:default}
+#genj-studio .zplate-surface button.gs-primary{background:var(--gs-accent);border-color:var(--gs-accent);color:var(--gs-ink)}
+#genj-studio .zpx-rail .zia-colour input[type=color]{width:48px;height:28px;min-height:28px;padding:2px;border:1px solid var(--gs-line)}
+#genj-studio [data-plate-side-toggle]{display:none}
+@media(max-width:700px){#genj-studio [data-plate-side-toggle]{display:block}#genj-studio .zplate-surface.is-side-open .zpx-side{display:block;position:absolute;right:0;top:46px;bottom:0;width:min(280px,85vw);z-index:10}#genj-studio .zpx-header [data-plate-sequence]{display:none}}
+
+#genj-studio .zpx-rail .zplate-actions button{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;padding:8px 2px;min-height:60px;font-size:12px}
+#genj-studio .zpx-rail .zplate-actions svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+
+#genj-studio [data-plate-reference-list]{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
+#genj-studio [data-plate-reference-list]>div{position:relative;width:56px;height:56px}
+#genj-studio [data-plate-reference-list] img{width:100%;height:100%;object-fit:cover;border-radius:4px}
+#genj-studio [data-plate-reference-list] button{position:absolute;right:-4px;top:-4px;min-height:20px;width:20px;height:20px;padding:0;border-radius:50%}

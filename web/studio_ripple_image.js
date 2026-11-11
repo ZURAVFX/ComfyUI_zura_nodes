@@ -65,7 +65,7 @@ export class RippleImageHandoff {
       await o.setImageOperation('edit',{useCanvas:false});this.check(request);
       o.editMainMissing=false;o.autoCanvasSuppressed=true;
       o.imageArea?.reset();
-      o.references=[{file:(image.subfolder?image.subfolder+'/':'')+image.name,filename:image.name,subfolder:image.subfolder||'',name:`Source frame ${anchor.frame}`,width:request.width,height:request.height}];
+      o.references=[{file:(image.subfolder?image.subfolder+'/':'')+image.name,filename:image.name,subfolder:image.subfolder||'',name:`Source frame ${anchor.frame}`,width:request.width,height:request.height},...(anchor.image_references||[]).map(ref=>({...ref}))];
       if(anchor.edit_area)o.imageArea?.restore({...anchor.edit_area,source_key:o.references[0].file});
       o.$('shape').value='auto';o.$('width').value=request.width;o.$('height').value=request.height;
       o.$('prompt').value=workspace.$('prompt').value;o.selectedImage=-1;
@@ -114,7 +114,7 @@ export class RippleImageHandoff {
     const o=this.owner,c=request.previous.config;
     if(this.request&&this.current(this.request)){
       try{await o.imageArea?.flush();}catch(error){o.message(error.message);return;}
-      request.anchor.edit_area=o.imageArea?.config?.();request.workspace.state.prompt=o.$('prompt').value;request.workspace.$('prompt').value=o.$('prompt').value;request.workspace.save();
+      request.anchor.image_references=o.references.slice(1).map(ref=>({...ref}));request.anchor.edit_area=o.imageArea?.config?.();request.workspace.state.prompt=o.$('prompt').value;request.workspace.$('prompt').value=o.$('prompt').value;request.workspace.save();
     }
     await o.setImageOperation(c.operation,{useCanvas:false});if(this.request!==request&&this.stored!==request)return;
     o.references=(c.references||[]).map(r=>({...r}));o.imageLoras=c.loras||[];o.editMainMissing=!!c.editMainMissing;o.autoCanvasSuppressed=!!c.autoCanvasSuppressed;

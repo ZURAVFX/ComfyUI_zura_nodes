@@ -15,6 +15,7 @@ export async function navigateStudioMode(creative,id){
   if(['home','video',...definitions.map(d=>d[0])].includes(id))return creative.show(id);
 }
 export function activeStudioMode(creative){
+  if(creative.mode==='image'&&creative.rippleImage?.request?.workspace?.platePrimary)return 'paintout';
   if(creative.mode==='panorama')return 'camera';
   if(creative.mode==='ripple'&&creative.ripple?.intent==='relight')return 'relight';
   return creative.mode==='video'?(creative.studio.config.workflow_mode==='motion'?'swap':creative.studio.config.workflow_mode||'swap'):creative.mode;

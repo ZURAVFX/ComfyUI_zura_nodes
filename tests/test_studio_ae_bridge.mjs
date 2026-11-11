@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import {memoryStorage,aeStudioStorage,workspaceStorage} from '../web/studio_storage.js';
-import {STUDIO_MODE_ADAPTERS,studioModeAdapter,navigateStudioMode} from '../web/studio_mode_adapters.js';
+import {STUDIO_MODE_ADAPTERS,studioModeAdapter,navigateStudioMode,activeStudioMode} from '../web/studio_mode_adapters.js';
 import {HDRSourceTool} from '../web/studio_hdr.js';
 import {consumeStudioFragment,StudioAEBridge} from '../web/studio_comfylink.js';
 const file=(filename='master.mov')=>({filename,subfolder:'finished',type:'output'});
@@ -43,3 +43,5 @@ const bridge2=new StudioAEBridge({container,creative:{...c,mode:'home'}},api,{id
 let offlineExit=false;const offline=new StudioAEBridge({container,creative:{...c,mode:'home'}},{fetchApi(){throw Error('offline');}},{id:'offline',capability:'d'.repeat(64)},()=>offlineExit=true);offline.leave();assert.equal(offlineExit,true);
 for(const name of ['studio.js','studio_create.js','studio_alpha.js','studio_director.js','studio_frames.js','studio_hdr.js','studio_hdr_long.js','studio_ltx_delivery.js','studio_main_ltx_delivery.js','studio_outpaint.js','studio_panorama.js','studio_references.js','studio_relight.js','studio_restart.js','studio_ripple.js','studio_ripple_image.js','paintout_studio/studio_paintout.js','paintout_studio/watermark_workspace.js'])assert.equal(/\blocalStorage\./.test(fs.readFileSync(new URL('../web/'+name,import.meta.url),'utf8')),false,name);
 console.log('Studio AE bridge: 14 adapters, selected masters, scoped requests, pending transfer, immediate exit, fragment consumption and isolated storage passed');
+
+assert.equal(activeStudioMode({mode:'image',rippleImage:{request:{workspace:{platePrimary:{}}}}}),'paintout','Editing a video keyframe must not expose an intermediate image as the AE final master');
