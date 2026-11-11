@@ -445,7 +445,7 @@ export class CreativeWorkspace {
     if(this.job||this.pendingSubmission)this.startPolling();
     if(mode==='image'||mode==='ripple')void this.rippleImage?.resume();
     this.rippleImage?.syncImageUI();
-    this.imageArea?.sync();this.hdri?.sync();
+    this.imageArea?.sync();this.hdri?.sync();if(this.plate?.inline)this.plate.surface?.sync();
     this.plate?.sync();this.studio.aeBridge?.modeChanged();
   }
   async loadModels(){
@@ -590,7 +590,7 @@ export class CreativeWorkspace {
     for(const b of this.root.querySelectorAll("[data-shape]")){b.setAttribute("aria-pressed",String(auto?b.dataset.shape==='auto':b.dataset.shape!=='auto'&&!!size&&IMAGE_SIZES[b.dataset.shape].every((v,i)=>v===size[i])));b.disabled=busy;}
     this.imageComparison?.update(this.items[this.selectedImage||0],this.references);
     this.editInputs?.sync();
-    this.imageArea?.sync();this.hdri?.sync();
+    this.imageArea?.sync();this.hdri?.sync();if(this.plate?.inline)this.plate.surface?.sync();
     this.studio.aeBridge?.modeChanged();
   }
   activateImageResult(index=0){
@@ -613,7 +613,7 @@ export class CreativeWorkspace {
     this.$('image-history').innerHTML=this.items.map((item,i)=>`<button type="button" data-view-image="${i}" aria-pressed="${i===this.selectedImage}"><img src="${escape(this.api.apiURL(view(item.file)))}" alt="" loading="lazy"/><span>${escape(item.prompt)}</span></button>`).join('')||'<p>No saved images yet.</p>';
     this.imageComparison?.update(this.items[this.selectedImage],this.references);
     this.editInputs?.sync();
-    this.imageArea?.sync();this.hdri?.sync();
+    this.imageArea?.sync();this.hdri?.sync();if(this.plate?.inline)this.plate.surface?.sync();
     this.studio.aeBridge?.modeChanged();
   }
   async pasteReferences(event){

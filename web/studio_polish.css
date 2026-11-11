@@ -298,3 +298,9 @@
  #genj-studio[data-workspace] .gs-top .zc-nav button{font-size:12px;padding:6px 8px}
  #genj-studio[data-workspace] .gs-top-actions :is(button,summary){font-size:11px;padding:6px}
 }
+
+/* HTML visibility is a state contract. Layout overrides must never reveal an
+   inactive workspace, stale result, closed panel or disabled-stage controls. */
+@layer zura_visibility {
+ #genj-studio [hidden]{display:none!important}
+}
