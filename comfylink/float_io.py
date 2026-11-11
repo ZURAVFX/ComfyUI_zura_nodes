@@ -36,7 +36,11 @@ import numpy as np
 MAX_DIMENSION = 16384
 MAX_PIXELS = 16 * 1024 * 1024
 MAX_FRAMES = 10000
-MAX_TRANSFER_BYTES = 1024 * 1024 * 1024
+MAX_TRANSFER_BYTES = 16 * 1024 * 1024 * 1024
+# Shot size is distinct from one frame/container and an in-memory batch.
+MAX_FRAME_FILE_BYTES = 1024 * 1024 * 1024
+LEGACY_BATCH_BYTES = 1024 * 1024 * 1024
+BATCH_MEMORY_HEADROOM = 2 * 1024 * 1024 * 1024
 MAX_MANIFEST_BYTES = 8 * 1024 * 1024
 _SHA = re.compile(r"[0-9a-f]{64}\Z")
 _FOLDER = re.compile(r"ComfyLink/[0-9a-f]{32}\Z")
@@ -58,7 +62,9 @@ def _rational(value, name, positive=False, signed=False):
 
 
 def validate_colour(colour):
-    if not isinstance(colour, dict) or not {"encoding", "sceneLinear"} <= set(colour) or set(colour) - {"encoding", "sceneLinear", "profileSha256"}:
+    identities = {"management", "profileDescription", "ocioConfig", "ocioConfigPath", "ocioWorkingSpace",
+                  "ocioConfigHandleSha256", "ocioWorkingSpaceHandleSha256"}
+    if not isinstance(colour, dict) or not {"encoding", "sceneLinear"} <= set(colour) or set(colour) - {"encoding", "sceneLinear", "profileSha256"} - identities:
         raise ValueError("Invalid colour declaration")
     encoding = colour["encoding"]
     if not isinstance(encoding, str) or encoding not in _ENCODINGS or type(colour["sceneLinear"]) is not bool:
@@ -71,6 +77,18 @@ def validate_colour(colour):
         raise ValueError("Invalid profileSha256")
     if encoding == "ae_project_icc" and "profileSha256" not in colour:
         raise ValueError("AE project ICC requires profileSha256 identity")
+    if "management" in colour and (not isinstance(colour["management"], str) or colour["management"] not in {"icc", "ocio"}):
+        raise ValueError("Invalid project colour-management identity")
+    for name in ("profileDescription", "ocioConfig", "ocioConfigPath", "ocioWorkingSpace"):
+        if name in colour and (not isinstance(colour[name], str) or len(colour[name].encode("utf-8")) > 32768 or "\0" in colour[name]):
+            raise ValueError("Invalid or oversized project colour identity")
+    ocio_fields = {"ocioConfig", "ocioConfigPath", "ocioWorkingSpace", "ocioConfigHandleSha256", "ocioWorkingSpaceHandleSha256"}
+    if colour.get("management") == "ocio":
+        if (encoding != "unknown" or not ocio_fields - {"ocioConfigPath"} <= set(colour) or not colour["ocioConfig"] or not colour["ocioWorkingSpace"]
+                or any(not isinstance(colour[name], str) or not _SHA.fullmatch(colour[name]) for name in ("ocioConfigHandleSha256", "ocioWorkingSpaceHandleSha256"))):
+            raise ValueError("OCIO identity must remain unknown and retain its actual bounded handles")
+    elif set(colour) & ocio_fields:
+        raise ValueError("OCIO fields require actual OCIO management identity")
     return copy.deepcopy(colour)
 
 
@@ -211,15 +229,29 @@ def _scoped_folder(root, relative):
     return base / relative
 
 
-def load_transfer(root, manifest_relative):
-    """Return (NHWC float32 RGBA, validated wire manifest) from scoped input."""
+def _transfer_folder(root, manifest_relative):
     if not isinstance(manifest_relative, str) or not manifest_relative.endswith("/manifest.json"):
         raise ValueError("Expected scoped relative manifest.json path")
-    folder = _scoped_folder(root, manifest_relative[:-len("/manifest.json")])
+    return _scoped_folder(root, manifest_relative[:-len("/manifest.json")])
+
+
+def read_manifest(root, manifest_relative):
+    """Read only bounded metadata, without allocating any image batch."""
+    folder = _transfer_folder(root, manifest_relative)
     with _locked_parents(folder):
         raw = _read_private(folder / "manifest.json", MAX_MANIFEST_BYTES)
-        m = validate_manifest(json.loads(raw.decode("utf-8"), object_pairs_hook=_json_pairs, parse_constant=lambda _: (_ for _ in ()).throw(ValueError("Nonfinite JSON"))))
-        result = []
+        return validate_manifest(json.loads(raw.decode("utf-8"), object_pairs_hook=_json_pairs, parse_constant=lambda _: (_ for _ in ()).throw(ValueError("Nonfinite JSON"))))
+
+
+def iter_transfer(root, manifest_relative):
+    """Yield verified frames individually; callers must not retain the batch.
+
+    Each frame keeps its actual finite float bits, hidden RGB and alpha. No
+    range, gamut, gamma or alpha conversion is performed beyond declared AE16.
+    """
+    folder = _transfer_folder(root, manifest_relative)
+    with _locked_parents(folder):
+        m = read_manifest(root, manifest_relative)
         dtype = "<f4" if m["sampleType"] == "float32" else "<u2"
         for frame in m["frames"]:
             payload = _read_private(folder / frame["filename"], frame["byteLength"], frame["byteLength"])
@@ -230,8 +262,72 @@ def load_transfer(root, manifest_relative):
                 rgba = rgba.astype(np.float32) / np.float32(32768)
             if not np.isfinite(rgba).all():
                 raise ValueError("Nonfinite frame samples")
-            result.append(rgba)
-        return np.stack(result), m
+            yield rgba
+
+
+def verify_transfer(root, manifest_relative):
+    """Verify the complete transfer in O(one frame) memory, returning metadata."""
+    manifest = read_manifest(root, manifest_relative)
+    count = 0
+    for frame in iter_transfer(root, manifest_relative):
+        count += 1
+    if count != len(manifest["frames"]):
+        raise ValueError("Transfer changed during validation")
+    if read_manifest(root, manifest_relative) != manifest:
+        raise ValueError("Transfer manifest changed during validation")
+    return manifest
+
+
+def available_memory_bytes():
+    """Observe currently available physical RAM, never installed RAM or swap."""
+    try:
+        import psutil
+        return int(psutil.virtual_memory().available)
+    except (ImportError, OSError, AttributeError):
+        if os.name == "nt":
+            import ctypes
+            class MemoryStatus(ctypes.Structure):
+                _fields_ = [("length", ctypes.c_ulong), ("load", ctypes.c_ulong)] + [
+                    (name, ctypes.c_ulonglong) for name in ("total", "available", "total_page", "available_page", "total_virtual", "available_virtual", "extended")]
+            status = MemoryStatus()
+            status.length = ctypes.sizeof(status)
+            if ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(status)):
+                return int(status.available)
+        try:
+            return int(os.sysconf("SC_AVPHYS_PAGES")) * int(os.sysconf("SC_PAGE_SIZE"))
+        except (AttributeError, OSError, ValueError):
+            raise ValueError("Could not verify available RAM for a large float batch") from None
+
+
+def check_batch_memory(decoded_bytes):
+    # Existing small workflows retain their behaviour. Larger explicit IMAGE
+    # batches need room for RGBA plus downstream RGB/alpha/mask copies, not
+    # merely the first allocation. Studio source intake never takes this path.
+    if decoded_bytes > LEGACY_BATCH_BYTES:
+        needed = decoded_bytes * 3 + BATCH_MEMORY_HEADROOM
+        available = available_memory_bytes()
+        if available < needed:
+            raise ValueError(f"Float batch needs {needed / 2**30:.1f} GiB currently available RAM; {available / 2**30:.1f} GiB is available. Use streamed Studio input.")
+
+
+def load_transfer(root, manifest_relative):
+    """Materialise an explicitly requested batch after memory admission.
+
+    Preallocation avoids retaining N byte buffers alongside np.stack's second
+    full batch. Stream-only validation/import should use verify/iter_transfer.
+    """
+    m = read_manifest(root, manifest_relative)
+    check_batch_memory(m["width"] * m["height"] * 16 * len(m["frames"]))
+    result = np.empty((len(m["frames"]), m["height"], m["width"], 4), dtype=np.float32)
+    count = 0
+    for index, rgba in enumerate(iter_transfer(root, manifest_relative)):
+        if index >= len(result) or rgba.shape != result[index].shape:
+            raise ValueError("Transfer changed during batch load")
+        result[index] = rgba
+        count += 1
+    if count != len(result) or read_manifest(root, manifest_relative) != m:
+        raise ValueError("Transfer changed during batch load")
+    return result, m
 
 
 def _exclusive_write(path, data):
@@ -272,8 +368,9 @@ def _rgba(value):
     n = array.shape[0] if array.ndim == 4 else 1
     if not 1 <= n <= MAX_FRAMES or not 1 <= w <= MAX_DIMENSION or not 1 <= h <= MAX_DIMENSION or w*h > MAX_PIXELS or n*w*h*16 > MAX_TRANSFER_BYTES:
         raise ValueError("Frame dimensions/count/bytes exceed limits")
-    if not np.isfinite(array).all():
-        raise ValueError("Nonfinite frame samples")
+    for frame in array if array.ndim == 4 else (array,):
+        if not np.isfinite(frame).all():
+            raise ValueError("Nonfinite frame samples")
     return array
 
 
@@ -286,7 +383,17 @@ def write_transfer(root, folder_relative, rgba_frames, *, colour, frame_rate, so
     rgba = _rgba(rgba_frames)
     if rgba.ndim == 3:
         rgba = rgba[None]
-    count, h, w, _ = rgba.shape
+    return write_transfer_frames(root, folder_relative, iter(rgba), colour=colour, frame_rate=frame_rate,
+        source_bit_depth=source_bit_depth, alpha_association=alpha_association, sample_type=sample_type,
+        source_start=source_start, exr_storage=exr_storage, expected_count=len(rgba))
+
+
+def write_transfer_frames(root, folder_relative, frames, *, colour, frame_rate, source_bit_depth=32,
+                          alpha_association="straight", sample_type="float32", source_start=None,
+                          exr_storage=None, expected_count=None):
+    """Publish a complete frame iterator atomically, without building a batch."""
+    if expected_count is not None:
+        _integer(expected_count, "expected frame count", 1, MAX_FRAMES)
     folder = _scoped_folder(root, folder_relative)
     parent = folder.parent
     if not parent.exists():
@@ -297,17 +404,12 @@ def write_transfer(root, folder_relative, rgba_frames, *, colour, frame_rate, so
                 pass
     rate = _rational(frame_rate, "frameRate", True)
     sample_bytes = 4 if sample_type == "float32" else 2
-    m = {"schemaVersion": 1, "sampleType": sample_type, "layout": "RGBA", "byteOrder": "little", "width": w, "height": h,
+    m = {"schemaVersion": 1, "sampleType": sample_type, "layout": "RGBA", "byteOrder": "little",
          "alphaAssociation": alpha_association, "sourceBitDepth": source_bit_depth, "colour": validate_colour(colour), "frameRate": copy.deepcopy(frame_rate), "frames": []}
     if source_start is not None:
         m["sourceStart"] = copy.deepcopy(source_start)
     if exr_storage not in {None, "float32", "half"}:
         raise ValueError("Invalid EXR storage")
-    for i in range(1, count + 1):
-        t = Fraction(i - 1, 1) / rate
-        m["frames"].append({"index": i - 1, "filename": f"{i:06d}.{'rgba32f' if sample_type == 'float32' else 'rgba16u'}", "byteLength": w*h*4*sample_bytes,
-                            "sha256": "0"*64, "time": {"numerator": t.numerator, "denominator": t.denominator}})
-    validate_manifest(m)
     with _locked_parents(parent):
         if folder.exists() or folder.is_symlink():
             raise FileExistsError("Transfer destination already exists")
@@ -315,7 +417,29 @@ def write_transfer(root, folder_relative, rgba_frames, *, colour, frame_rate, so
         temporary.mkdir(mode=0o700)
         try:
             with _locked_parents(temporary):
-                for frame, array in zip(m["frames"], rgba):
+                for index, array in enumerate(frames):
+                    array = _rgba(array)
+                    if array.ndim != 3 or index >= MAX_FRAMES:
+                        raise ValueError("Expected individual RGBA frames within frame limit")
+                    h, w, _ = array.shape
+                    if index == 0:
+                        m.update(width=w, height=h)
+                    if ((w, h) != (m["width"], m["height"]) or w*h*16*(index+1) > MAX_TRANSFER_BYTES
+                            or expected_count is not None and w*h*16*expected_count > MAX_TRANSFER_BYTES):
+                        raise ValueError("Changing dimensions or transfer byte limit exceeded")
+                    if w*h*16*(expected_count or index+1) > LEGACY_BATCH_BYTES:
+                        remaining = w*h*4*sample_bytes*((expected_count-index) if expected_count else 1)
+                        if exr_storage is not None:
+                            remaining += w*h*16*((expected_count-index) if expected_count else 1)
+                        if shutil.disk_usage(temporary).free < remaining + BATCH_MEMORY_HEADROOM:
+                            raise ValueError("Insufficient free disk for remaining float transfer and safety headroom")
+                    t = Fraction(index, 1) / rate
+                    frame = {"index": index, "filename": f"{index+1:06d}.{'rgba32f' if sample_type == 'float32' else 'rgba16u'}",
+                             "byteLength": w*h*4*sample_bytes, "sha256": "0"*64,
+                             "time": {"numerator": t.numerator, "denominator": t.denominator}}
+                    m["frames"].append(frame)
+                    if index == 0:
+                        validate_manifest(m)
                     if sample_type == "uint16_ae":
                         scaled = array.astype(np.float64) * 32768
                         if np.any(scaled < 0) or np.any(scaled > 65535):
@@ -327,6 +451,9 @@ def write_transfer(root, folder_relative, rgba_frames, *, colour, frame_rate, so
                     _exclusive_write(temporary / frame["filename"], payload)
                     if exr_storage is not None:
                         write_exr(temporary / (Path(frame["filename"]).stem + ".exr"), array, colour=m["colour"], storage=exr_storage, alpha_association=alpha_association)
+                validate_manifest(m)
+                if expected_count is not None and len(m["frames"]) != expected_count:
+                    raise ValueError("Frame iterator did not deliver its exact declared count")
                 _exclusive_write(temporary / "manifest.json", canonical_manifest_bytes(m))
             _publish_directory(temporary, folder)
         finally:
@@ -388,7 +515,7 @@ def write_exr(path, rgba, *, colour, storage="float32", alpha_association="strai
                     raise ValueError("Could not write EXR output: " + out.geterror())
             finally:
                 out.close()
-            sidecar["sha256"] = hashlib.sha256(_read_private(temporary, MAX_TRANSFER_BYTES)).hexdigest()
+            sidecar["sha256"] = hashlib.sha256(_read_private(temporary, MAX_FRAME_FILE_BYTES)).hexdigest()
             _exclusive_write(side_tmp, canonical_manifest_bytes(sidecar))
             os.link(temporary, path)  # exclusive destination, including POSIX
             temporary.unlink()
@@ -413,7 +540,7 @@ def read_exr(path):
     import OpenImageIO as oiio
     path = Path(path).absolute()
     with _locked_parents(path.parent):
-        encoded = _read_private(path, MAX_TRANSFER_BYTES)
+        encoded = _read_private(path, MAX_FRAME_FILE_BYTES)
         side = json.loads(_read_private(path.with_suffix(path.suffix + ".json"), MAX_MANIFEST_BYTES).decode(), object_pairs_hook=_json_pairs)
         if side.get("schemaVersion") != 1 or side.get("storage") not in {"float32", "half"} or side.get("layout") != "RGBA" or side.get("channelNames") != ["R", "G", "B", "A"] or side.get("nonfinitePolicy") != "reject":
             raise ValueError("Invalid EXR sidecar")
@@ -444,6 +571,6 @@ def read_exr(path):
             _rgba(rgba)
         finally:
             inp.close()
-        if hashlib.sha256(_read_private(path, MAX_TRANSFER_BYTES)).hexdigest() != side["sha256"]:
+        if hashlib.sha256(_read_private(path, MAX_FRAME_FILE_BYTES)).hexdigest() != side["sha256"]:
             raise ValueError("EXR changed during read")
         return rgba, side

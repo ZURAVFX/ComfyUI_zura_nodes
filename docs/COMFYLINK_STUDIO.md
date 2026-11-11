@@ -56,6 +56,42 @@ The separate AE client controls layer application and restoration. Its
 native import, layer-pair behaviour and licence implementation are outside
 this public package and need their own live qualification.
 
+## Whole-shot transfer and resources
+
+FLOAT RGBA transfers have a 16 GiB decoded payload limit. The existing
+16,777,216-pixel per-frame limit and the separate AE client's configured frame
+limit still apply. For example, 101 frames at 3840 × 2160 need
+13,403,750,400 raw bytes, about 12.48 GiB, before EXR caches and retained
+copies. Source intervals are not shortened or resized to fit this budget.
+
+Source validation and native FLOAT EXR caching read one frame at a time.
+Large source intake needs at least 8 GiB of currently available physical RAM
+for frame buffers and OS/AE headroom. Disk admission includes raw staging,
+the EXR cache, the native uploader's own copy and safety headroom. Retained
+originals and native import copies require further space on return. A resource
+check can refuse the transfer rather than fill the disk or reduce precision.
+
+An explicitly requested in-memory IMAGE batch is different from streamed
+intake. Larger batches need additional available RAM for RGB, alpha and mask
+copies. Model processing also has its own raster, frame, RAM and VRAM limits.
+A source fitting the transfer budget does not establish that a model can
+render the complete interval at that resolution.
+
+A local synthetic qualification used 101 unique 3840 × 2160 frames at 25 fps,
+including negative, over-one, signed-zero and hidden RGB samples. It wrote
+13.4 GB of raw FLOAT data, checked actual FLOAT EXRs and returned the same
+raw frame hashes. Peak process working set was 1.87 GiB; elapsed time was
+about 4 minutes 19 seconds. This did not run AE, a ComfyUI backend or a model.
+The explicit disk test is available in
+`tests/test_comfylink_large_shot.py`; ordinary test discovery does not run it.
+
+Actual OCIO configuration and working-space strings and SDK handle hashes are
+retained as bounded identity metadata when supplied. Their names do not turn
+an unknown encoding into ACEScg or another known space. Native AE return with
+an unverified OCIO input mapping remains unsupported. The separate client
+retains the first inspected colour identity and can stop before capturing the
+rest of a large shot. It does not change AE project colour settings.
+
 ## Local session boundary
 
 The public adapter runs on the existing ComfyUI server under

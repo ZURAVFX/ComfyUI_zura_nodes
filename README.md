@@ -32,7 +32,7 @@ Use your own ComfyUI host and port if they differ.
 
 ## Current release
 
-**1.3.61** adds an optional [ComfyLink After Effects session](docs/COMFYLINK_STUDIO.md), isolated Studio drafts, exact source-interval checks and high-depth transfer nodes. Studio's advanced output settings now offer **FLOAT (32-bit)** EXR storage alongside the normal **HALF (16-bit)** default. The [LTX colour bridge](docs/COMFYLINK.md#high-depth-nodes-and-colour) makes its colour and range conversion explicit. CPU checks cover transport, graphs and EXR readback; full live GPU and After Effects qualification remains outstanding. See the [release notes](CHANGELOG.md) for limits.
+**1.3.62** streams bounded ComfyLink whole-shot transfers up to 16 GiB without loading the full shot for validation or FLOAT EXR caching. A synthetic 4K, 101-frame FLOAT round trip is numerically qualified; live AE import, OCIO return mapping and model rendering remain separate checks. The optional [ComfyLink After Effects session](docs/COMFYLINK_STUDIO.md) retains its isolated drafts and exact source-interval checks. Normal Studio stays independent of the separate AE extension. See the [release notes](CHANGELOG.md) for limits.
 
 Zura Studio remains free to open and use normally, without a ComfyLink licence. The separate ComfyLink After Effects extension is optional and is not bundled here. Existing [Relight](docs/RELIGHT_MODELS.md), [Director](docs/DIRECTOR_STUDIO.md), [Paintout](PAINTOUT.md), [alpha extraction](docs/LTX_ALPHA.md), [Ripple editing](docs/RIPPLE_STUDIO.md) and [painted image edits](docs/IMAGE_EDIT_AREA.md) remain available.
 
