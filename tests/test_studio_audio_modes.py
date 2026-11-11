@@ -237,13 +237,15 @@ class AudioModeTests(unittest.TestCase):
     @unittest.skipUnless(shutil.which('node'), 'Node.js is needed for the frontend contract')
     def test_frontend_mode_selects_original_or_reference_for_every_engine(self):
         script = r'''
-const fs=require('fs'),vm=require('vm'),assert=require('assert');
+import fs from 'node:fs';import vm from 'node:vm';import assert from 'node:assert';
+import path from 'node:path';import {pathToFileURL} from 'node:url';
+const {runStudioVMInContext}=await import(pathToFileURL(path.join(path.dirname(process.argv[1]),'../tests/studio_vm_fixture.mjs')).href);
 let source=fs.readFileSync(process.argv[1],'utf8').split('\napp.registerExtension({')[0];
 source=source.replace(/^import .*;\r?\n/gm,'').replace(/^export /gm,'');
-let lengthSource=fs.readFileSync(require('path').join(require('path').dirname(process.argv[1]),'studio_length.js'),'utf8').replace(/export /g,'');
+let lengthSource=fs.readFileSync(path.join(path.dirname(process.argv[1]),'studio_length.js'),'utf8').replace(/export /g,'');
 const context={console,ContentDetection:class {},document:{createElement:()=>({setAttribute(){}})}};
 vm.createContext(context);vm.runInContext(lengthSource,context);
-vm.runInContext(source+'\nthis.Studio=ArtistStudio;',context);
+runStudioVMInContext(source+'\nthis.Studio=ArtistStudio;',context);
 const proto=context.Studio.prototype;
 for(const engine of ['local','h3','wan','seedance']){
  const ui=Object.create(proto),fields={};
@@ -262,7 +264,7 @@ const html=new context.Studio().container.innerHTML;
 assert(html.includes('Original audio + performance'));assert(html.includes('Reference audio + new performance'));assert(html.includes('Create a new facial performance'));
 console.log('Frontend original/reference/soundtrack contracts passed for four engines.');
 '''
-        result = subprocess.run([shutil.which('node'), '-e', script,
+        result = subprocess.run([shutil.which('node'), '--input-type=module', '-e', script,
             str(v2_bootstrap.ROOT / 'web/studio.js')], capture_output=True, text=True)
         self.assertEqual(result.returncode, 0, result.stderr)
 
