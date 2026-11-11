@@ -26,14 +26,25 @@ jobs:
         env:
           RELEASE_TAG: ${{ github.event.release.tag_name }}
         run: python tools/check_package.py
+      - name: Check Ubuntu mirror fallback
+        run: python -m unittest discover -s tests -p 'test_ci_ubuntu_mirror.py'
       - name: Install test dependencies
         run: |
           if ! command -v ffmpeg >/dev/null || ! command -v ffprobe >/dev/null; then
-            sudo timeout --kill-after=10s 120s apt-get \
+            if ! sudo timeout --kill-after=10s 120s apt-get \
               -o APT::Update::Error-Mode=any \
               -o Acquire::Retries=0 \
               -o Acquire::http::Timeout=15 \
-              -o Acquire::https::Timeout=15 update
+              -o Acquire::https::Timeout=15 update; then
+              # Ubuntu's primary hosts can share a DNS outage. The fallback
+              # retains the existing Ubuntu signature keyring and source fields.
+              sudo python tools/ci_ubuntu_mirror.py
+              sudo timeout --kill-after=10s 120s apt-get \
+                -o APT::Update::Error-Mode=any \
+                -o Acquire::Retries=0 \
+                -o Acquire::http::Timeout=15 \
+                -o Acquire::https::Timeout=15 update
+            fi
             sudo timeout --kill-after=10s 120s apt-get \
               -o Acquire::Retries=0 \
               -o Acquire::http::Timeout=15 \
