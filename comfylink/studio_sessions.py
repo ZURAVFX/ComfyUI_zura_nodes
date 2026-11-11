@@ -257,9 +257,21 @@ def _image_container(path, suffix):
 def _video_sdr_metadata(value, inherited=None):
     """Validate every decoded frame as well as its stream/container metadata."""
     _unmanaged_metadata(getattr(value, "metadata", {}))
-    for side in getattr(value, "side_data", ()):
+    side_data = getattr(value, "side_data", ())
+    for entry in side_data:
+        # PyAV 14/17 iterate SideData objects; PyAV 19 iterates Type keys.
+        # Resolve mapping keys to their payloads, never discard an entry.
+        side = entry
+        if getattr(side, "type", None) is None:
+            try:
+                side = side_data[entry]
+            except (KeyError, IndexError, TypeError, AttributeError):
+                raise ValueError("Video side metadata payload is unavailable") from None
+        side_type = getattr(side, "type", None)
+        if side_type is None:
+            raise ValueError("Video side metadata payload has no declared type")
         # x264's ordinary encoder identification SEI is unrelated to colour.
-        if getattr(side.type, "name", "") == "SEI_UNREGISTERED" and bytes(side)[16:].startswith(b"x264 - core "):
+        if getattr(side_type, "name", "") == "SEI_UNREGISTERED" and bytes(side)[16:].startswith(b"x264 - core "):
             continue
         raise ValueError("Video side metadata cannot be proven unmanaged SDR")
     fmt = getattr(value, "format", None)

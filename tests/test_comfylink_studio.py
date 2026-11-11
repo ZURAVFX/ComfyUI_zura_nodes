@@ -663,6 +663,31 @@ class StudioHTTPTest(unittest.IsolatedAsyncioTestCase):
             with self.assertRaises(ValueError):
                 _video_sdr_metadata(legacy_frame, unsafe)
 
+    async def test_side_data_objects_and_type_key_mappings_validate_every_payload(self):
+        import av
+        from av.sidedata.sidedata import Type
+        class Payload:
+            def __init__(self, kind, encoded):
+                self.type, self.encoded = kind, encoded
+            def __bytes__(self):
+                return self.encoded
+        fmt = av.VideoFrame(2, 2, 'yuv420p').format
+        safe = Payload(Type.SEI_UNREGISTERED, b'\0' * 16 + b'x264 - core 164 fixture')
+        for sides in ([safe], {Type.SEI_UNREGISTERED: safe}):
+            frame = types.SimpleNamespace(format=fmt, side_data=sides, color_trc=1, color_primaries=1, colorspace=1)
+            self.assertEqual(_video_sdr_metadata(frame), (1, 1, 1))
+        for kind in (Type.ICC_PROFILE, Type.MASTERING_DISPLAY_METADATA, Type.DYNAMIC_HDR_PLUS):
+            unsafe = Payload(kind, b'unsupported colour metadata')
+            for sides in ([safe, unsafe], {Type.SEI_UNREGISTERED: safe, kind: unsafe}):
+                frame = types.SimpleNamespace(format=fmt, side_data=sides, color_trc=1, color_primaries=1, colorspace=1)
+                with self.assertRaises(ValueError):
+                    _video_sdr_metadata(frame)
+        unknown_sei = Payload(Type.SEI_UNREGISTERED, b'\0' * 16 + b'not the approved encoder identification')
+        for sides in ([unknown_sei], {Type.SEI_UNREGISTERED: unknown_sei}, {Type.SEI_UNREGISTERED: Type.SEI_UNREGISTERED}):
+            frame = types.SimpleNamespace(format=fmt, side_data=sides, color_trc=1, color_primaries=1, colorspace=1)
+            with self.assertRaises(ValueError):
+                _video_sdr_metadata(frame)
+
     @unittest.skipUnless(importlib.util.find_spec('OpenImageIO'), 'OpenImageIO required for actual EXR fidelity')
     async def test_actual_float_and_half_exr_original_containers_retained_byte_for_byte(self):
         session, headers = await self.create()
