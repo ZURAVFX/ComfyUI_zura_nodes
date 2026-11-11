@@ -148,6 +148,143 @@ class StudioHTTPTest(unittest.IsolatedAsyncioTestCase):
     def route(self, session, suffix=""):
         return PREFIX + '/sessions/' + session['id'] + suffix
 
+    async def test_desktop_handoff_targets_one_unchanged_socket_and_waits_for_ack(self):
+        class Socket:
+            def __init__(self): self.closed = False; self.messages = []
+            async def send_json(self, value): self.messages.append(copy.deepcopy(value))
+        selected, unrelated = Socket(), Socket()
+        self.server.sockets = {'desktop-client': selected, 'unrelated-client': unrelated}
+        base = '/zura/comfylink/v1/studio/desktop'
+        response = await self.client.post(base + '/register', json={'clientId': 'desktop-client'})
+        self.assertEqual(response.status, 200)
+        request_id, challenge, nonce = 'd' * 32, 'e' * 64, 'f' * 32
+        response = await self.client.post(base + '/challenge', json={'requestId': request_id, 'challenge': challenge, 'broker': self.broker_url, 'token': self.token})
+        self.assertEqual(response.status, 200, await response.text())
+        self.assertEqual(len(selected.messages), 1); self.assertEqual(unrelated.messages, [])
+        self.assertEqual(selected.messages[0], {'type': 'comfylink-desktop-challenge', 'data': {'requestId': request_id, 'challenge': challenge}})
+        answer = {'requestId': request_id, 'challenge': challenge, 'clientId': 'desktop-client', 'windowNonce': nonce}
+        response = await self.client.post(base + '/respond', json=answer); self.assertEqual(response.status, 200)
+        response = await self.client.get(base + '/status/' + request_id, headers={TOKEN_HEADER: '0' * 64}); self.assertEqual(response.status, 403)
+        response = await self.client.get(base + '/status/' + request_id, headers={TOKEN_HEADER: self.token})
+        self.assertEqual((await response.json())['candidates'], [{'clientId': 'desktop-client', 'windowNonce': nonce}])
+        self.server.sockets['desktop-client'] = Socket()
+        response = await self.client.post(base + '/deliver', headers={TOKEN_HEADER: self.token}, json={'requestId': request_id, 'clientId': 'desktop-client', 'windowNonce': nonce})
+        self.assertEqual(response.status, 409); self.assertEqual(len(selected.messages), 1)
+        self.server.sockets['desktop-client'] = selected
+        response = await self.client.post(base + '/deliver', headers={TOKEN_HEADER: self.token}, json={'requestId': request_id, 'clientId': 'desktop-client', 'windowNonce': nonce})
+        self.assertEqual(response.status, 200)
+        self.assertEqual(selected.messages[-1]['data']['broker'], self.broker_url)
+        self.assertEqual(selected.messages[-1]['data']['token'], self.token)
+        self.assertEqual(unrelated.messages, [])
+        response = await self.client.post(base + '/deliver', headers={TOKEN_HEADER: self.token}, json={'requestId': request_id, 'clientId': 'desktop-client', 'windowNonce': nonce})
+        self.assertEqual(response.status, 409, 'handoff must be one-use')
+        response = await self.client.post(base + '/ack', json={**answer, 'accepted': True}); self.assertEqual(response.status, 200)
+        response = await self.client.get(base + '/status/' + request_id, headers={TOKEN_HEADER: self.token})
+        self.assertEqual((await response.json())['state'], 'accepted')
+        self.assertEqual(self.service.desktop.handoffs[request_id].token, '')
+
+    async def test_desktop_challenge_never_sends_token_to_candidates_or_accepts_bad_response(self):
+        class Socket:
+            closed = False
+            def __init__(self): self.messages = []
+            async def send_json(self, value): self.messages.append(copy.deepcopy(value))
+        first, second = Socket(), Socket(); self.server.sockets = {'first': first, 'second': second}
+        base = '/zura/comfylink/v1/studio/desktop'
+        for client in self.server.sockets:
+            response = await self.client.post(base + '/register', json={'clientId': client}); self.assertEqual(response.status, 200)
+        body = {'requestId': 'd' * 32, 'challenge': 'e' * 64, 'broker': self.broker_url, 'token': self.token}
+        response = await self.client.post(base + '/challenge', json=body); self.assertEqual(response.status, 200)
+        self.assertNotIn(self.token, json.dumps(first.messages + second.messages))
+        bad = {'requestId': body['requestId'], 'challenge': '0' * 64, 'clientId': 'first', 'windowNonce': 'f' * 32}
+        response = await self.client.post(base + '/respond', json=bad); self.assertEqual(response.status, 403)
+        response = await self.client.post(base + '/cancel', headers={TOKEN_HEADER: self.token}, json={'requestId': body['requestId']}); self.assertEqual(response.status, 200)
+        self.assertEqual(self.service.desktop.handoffs[body['requestId']].token, '')
+
+    async def test_float_display_preview_is_scoped_and_does_not_change_source(self):
+        from io import BytesIO
+        from PIL import Image
+        import PyOpenColorIO as ocio
+        self.manifest['colour'] = {'encoding': 'scene_linear_rec709', 'sceneLinear': True}
+        before = hashlib.sha256(self.source_bytes).hexdigest()
+        session, headers = await self.create()
+        response = await self.client.get(self.route(session, '/display-config'), headers=headers)
+        self.assertEqual(response.status, 200, await response.text())
+        settings = await response.json()
+        self.assertEqual((settings['display'], settings['view']), ('sRGB - Display', 'Un-tone-mapped'))
+        response = await self.client.get(self.route(session, '/display-frame?index=0'), headers=headers)
+        self.assertEqual(response.status, 200)
+        self.assertEqual(response.headers['Content-Type'], 'image/png')
+        rendered = np.array(Image.open(BytesIO(await response.read())))
+        rgb = self.payload[0, ..., :3].copy()
+        config = ocio.Config.CreateFromFile(settings['config'])
+        source = config.getColorSpace('lin_rec709_srgb').getName()
+        config.getProcessor(ocio.DisplayViewTransform(src=source, display=settings['display'], view=settings['view'])).getDefaultCPUProcessor().applyRGB(rgb)
+        expected = np.rint(np.clip(rgb, 0, 1) * 255).astype(np.uint8)
+        self.assertEqual(rendered[0, 0, :3].tolist(), expected[0, 0].tolist())
+        self.assertEqual(int(rendered[0, 0, 3]), 128)
+        self.assertEqual(hashlib.sha256(self.source_bytes).hexdigest(), before)
+        self.assertEqual(self.broker_calls.count('blob'), 1)
+        response = await self.client.get(self.route(session, '/display-frame?index=1'), headers=headers)
+        self.assertEqual(response.status, 422)
+        response = await self.client.get(self.route(session, '/display-frame?index=0'))
+        self.assertEqual(response.status, 403)
+
+    async def test_display_rejects_unmapped_32bit_source_and_untrusted_config(self):
+        session, headers = await self.create()
+        response = await self.client.get(self.route(session, '/display-config?config=file%3A%2F%2F%2Fsecret'), headers=headers)
+        self.assertEqual(response.status, 400)
+        response = await self.client.get(self.route(session, '/display-frame?index=0'), headers=headers)
+        self.assertEqual(response.status, 422)
+
+    async def test_display_accepts_only_the_hashed_ae_builtin_ocio_identity(self):
+        from comfylink import display_view
+        import PyOpenColorIO as ocio
+        root = self.root / 'Program Files' / 'Adobe' / 'Adobe After Effects 2026' / 'Support Files' / 'OpenColorIO-Configs' / 'fixture'
+        root.mkdir(parents=True)
+        config = ocio.Config.CreateRaw()
+        config.addColorSpace(ocio.ColorSpace(name='Output - sRGB', family='Output'))
+        config.addDisplayView('ACES', 'sRGB', 'Output - sRGB')
+        path = root / 'config.ocio'; path.write_text(config.serialize(), encoding='utf-8')
+        colour = {'encoding':'unknown','sceneLinear':False,'management':'ocio','ocioConfig':'fixture',
+            'ocioConfigPath':str(path),'ocioWorkingSpace':'Output - sRGB','ocioConfigHandleSha256':'a'*64,
+            'ocioWorkingSpaceHandleSha256':'b'*64,'ocioConfigFileSha256':hashlib.sha256(path.read_bytes()).hexdigest()}
+        self.manifest['colour'] = colour
+        session, headers = await self.create()
+        with patch.dict(os.environ, {'ProgramFiles': str(self.root / 'Program Files')}):
+            self.assertEqual(display_view._verified_ocio_source(colour), 'srgb8')
+            response = await self.client.get(self.route(session, '/display-frame?index=0'), headers=headers)
+            self.assertEqual(response.status, 200)
+            self.assertEqual(response.headers['X-ComfyLink-Preview-Note'], 'Preview uses the verified AE working space')
+            self.assertTrue((await response.read()).startswith(b'\x89PNG'))
+            colour['ocioConfigFileSha256'] = '0'*64
+            response = await self.client.get(self.route(session, '/display-frame?index=0'), headers=headers)
+            self.assertEqual(response.status, 422)
+
+    async def test_display_rejects_changed_frame_and_revoked_session(self):
+        import threading
+        from comfylink import display_view
+        self.manifest['colour'] = {'encoding': 'scene_linear_rec709', 'sceneLinear': True}
+        session, headers = await self.create()
+        original = self.source_bytes
+        self.source_bytes = original[:-1] + bytes([original[-1] ^ 1])
+        response = await self.client.get(self.route(session, '/display-frame?index=0'), headers=headers)
+        self.assertEqual(response.status, 422)
+        self.source_bytes = original
+        started, release = threading.Event(), threading.Event()
+        def delayed_render(*args):
+            started.set()
+            if not release.wait(5): raise RuntimeError('Preview fixture timed out')
+            return b'not delivered after revocation'
+        with patch.object(display_view, 'render', delayed_render):
+            pending = asyncio.create_task(self.client.get(self.route(session, '/display-frame?index=0'), headers=headers))
+            self.assertTrue(await asyncio.to_thread(started.wait, 3))
+            response = await self.client.post(self.route(session, '/leave'), headers=headers, json={})
+            self.assertEqual(response.status, 200)
+            release.set()
+            response = await pending
+            self.assertEqual(response.status, 410)
+            self.assertNotIn(b'not delivered', await response.read())
+
     async def test_desktop_registration_needs_no_environment_token_and_is_one_use(self):
         with patch.dict(os.environ, {}, clear=True):
             session, headers = await self.create()

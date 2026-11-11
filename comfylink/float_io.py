@@ -63,7 +63,7 @@ def _rational(value, name, positive=False, signed=False):
 
 def validate_colour(colour):
     identities = {"management", "profileDescription", "ocioConfig", "ocioConfigPath", "ocioWorkingSpace",
-                  "ocioConfigHandleSha256", "ocioWorkingSpaceHandleSha256"}
+                  "ocioConfigHandleSha256", "ocioWorkingSpaceHandleSha256", "ocioConfigFileSha256"}
     if not isinstance(colour, dict) or not {"encoding", "sceneLinear"} <= set(colour) or set(colour) - {"encoding", "sceneLinear", "profileSha256"} - identities:
         raise ValueError("Invalid colour declaration")
     encoding = colour["encoding"]
@@ -82,11 +82,13 @@ def validate_colour(colour):
     for name in ("profileDescription", "ocioConfig", "ocioConfigPath", "ocioWorkingSpace"):
         if name in colour and (not isinstance(colour[name], str) or len(colour[name].encode("utf-8")) > 32768 or "\0" in colour[name]):
             raise ValueError("Invalid or oversized project colour identity")
-    ocio_fields = {"ocioConfig", "ocioConfigPath", "ocioWorkingSpace", "ocioConfigHandleSha256", "ocioWorkingSpaceHandleSha256"}
+    ocio_fields = {"ocioConfig", "ocioConfigPath", "ocioWorkingSpace", "ocioConfigHandleSha256", "ocioWorkingSpaceHandleSha256", "ocioConfigFileSha256"}
     if colour.get("management") == "ocio":
-        if (encoding != "unknown" or not ocio_fields - {"ocioConfigPath"} <= set(colour) or not colour["ocioConfig"] or not colour["ocioWorkingSpace"]
+        if (encoding != "unknown" or not ocio_fields - {"ocioConfigPath", "ocioConfigFileSha256"} <= set(colour) or not colour["ocioConfig"] or not colour["ocioWorkingSpace"]
                 or any(not isinstance(colour[name], str) or not _SHA.fullmatch(colour[name]) for name in ("ocioConfigHandleSha256", "ocioWorkingSpaceHandleSha256"))):
             raise ValueError("OCIO identity must remain unknown and retain its actual bounded handles")
+        if "ocioConfigFileSha256" in colour and (not isinstance(colour["ocioConfigFileSha256"], str) or not _SHA.fullmatch(colour["ocioConfigFileSha256"])):
+            raise ValueError("Invalid OCIO configuration file fingerprint")
     elif set(colour) & ocio_fields:
         raise ValueError("OCIO fields require actual OCIO management identity")
     return copy.deepcopy(colour)

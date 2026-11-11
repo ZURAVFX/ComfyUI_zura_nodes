@@ -1,0 +1,25 @@
+import assert from 'node:assert/strict';
+import {installDesktopHandoff} from '../web/studio_desktop_handoff.js';
+
+const listeners=new Map(),calls=[],opened=[],released=[];
+const api={clientId:'desktop-client',addEventListener:(name,fn)=>listeners.set(name,fn),removeEventListener:name=>listeners.delete(name),
+  fetchApi:async(path,options)=>{calls.push({path,body:JSON.parse(options.body)});return {ok:true};}};
+const doc={title:'ComfyUI'},win={__comfyDesktop2:{}},random={getRandomValues(bytes){bytes.fill(0xab);return bytes;}};
+const fetcher=async(url,options)=>{released.push({url,options});return {ok:true};};
+const dispose=installDesktopHandoff(api,async credential=>{opened.push({...credential});return true;},{window:win,document:doc,crypto:random,fetch:fetcher});
+assert.equal(installDesktopHandoff(api,()=>{} ,{window:win,document:doc,crypto:random,fetch:fetcher}),dispose,'install only once');
+await new Promise(resolve=>setImmediate(resolve));assert.equal(calls[0].path.endsWith('/register'),true);
+const requestId='a'.repeat(32),challenge='b'.repeat(64),token='c'.repeat(64),nonce='ab'.repeat(16);
+listeners.get('comfylink-desktop-challenge')({detail:{requestId,challenge}});await new Promise(resolve=>setImmediate(resolve));
+assert.match(doc.title,new RegExp('ComfyLink '+nonce+'$'));
+assert.deepEqual(calls.at(-1).body,{requestId,challenge,clientId:'desktop-client',windowNonce:nonce});
+const detail={requestId,challenge,windowNonce:nonce,broker:'http://127.0.0.1:8199/studio-bridge/'+'d'.repeat(32),token};
+listeners.get('comfylink-desktop-handoff')({detail});await new Promise(resolve=>setImmediate(resolve));
+assert.equal(opened.length,1);assert.equal(opened[0].token,token);assert.equal(detail.token,undefined);
+assert.equal(calls.at(-1).path.endsWith('/ack'),true);assert.equal(calls.at(-1).body.accepted,true);assert.equal(doc.title,'ComfyUI');assert.equal(released.length,0);
+listeners.get('comfylink-desktop-challenge')({detail:{requestId,challenge}});await new Promise(resolve=>setImmediate(resolve));
+listeners.get('comfylink-desktop-finished')({detail:{requestId}});assert.equal(doc.title,'ComfyUI');
+listeners.get('comfylink-desktop-handoff')({detail:{...detail,token,broker:'http://127.0.0.1:8199/studio-bridge/'+'d'.repeat(32)}});await new Promise(resolve=>setImmediate(resolve));assert.equal(opened.length,1,'cancelled challenge cannot open late');
+dispose();assert.equal(listeners.size,0);
+assert.equal(installDesktopHandoff(api,()=>true,{window:{},document:doc,crypto:random,fetch:fetcher}),null,'normal browsers do not register as Desktop');
+console.log('Desktop handoff: targeted challenge, title proof, one-use credential, ack, cancellation and browser isolation passed');

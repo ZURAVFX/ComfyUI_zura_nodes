@@ -1,6 +1,7 @@
 import {sourceAEFrameContract,aeFrameLabel} from './studio_ae_frame_contract.js';
 import {aeStudioStorage} from './studio_storage.js';
 import {activeStudioMode,studioModeAdapter} from './studio_mode_adapters.js';
+import {AEFloatDisplay} from './studio_ae_display.js';
 const ROOT='/zura/comfylink/v1/studio/sessions';
 // Consume before the first asynchronous operation, including malformed fragments.
 export function consumeStudioFragment(location=globalThis.location,history=globalThis.history){
@@ -15,9 +16,9 @@ export function consumeStudioFragment(location=globalThis.location,history=globa
   }catch{return {error:'The After Effects session link is invalid. Open Studio again from After Effects'};}
 }
 let launch=consumeStudioFragment();
-export async function takeStudioLaunch(api){
-  if(!launch)return null;let credential=launch;launch=null;
+export async function createStudioSession(api,credential){
   const failed=message=>({id:globalThis.crypto.randomUUID(),error:message});
+  if(!credential||!/^http:\/\/127\.0\.0\.1:\d+\/studio-bridge\/[0-9a-f]{32}$/.test(credential.broker||'')||!/^[0-9a-f]{64}$/.test(credential.token||''))return failed('The After Effects session link is invalid. Open Studio again from After Effects');
   if(credential.error)return failed(credential.error);
   try{
     const response=await api.fetchApi(ROOT,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(credential)});
@@ -26,16 +27,22 @@ export async function takeStudioLaunch(api){
   }catch(error){return failed(error.message||'Could not connect to the After Effects session');}
   finally{credential=null;}
 }
+export async function takeStudioLaunch(api){
+  if(!launch)return null;const credential=launch;launch=null;
+  if(credential.error)return {id:globalThis.crypto.randomUUID(),error:credential.error};
+  return createStudioSession(api,credential);
+}
 export const studioLaunchStorage=session=>aeStudioStorage(session.id);
 export class StudioAEBridge {
   constructor(studio,api,session,onLeave){
     this.studio=studio;this.api=api;this.session=session;this.onLeave=onLeave;this.closed=false;this.revision=0;this.loaded=new Set();
     const doc=studio.container.ownerDocument;this.root=doc.createElement('section');this.root.className='zc-ae-session';this.root.setAttribute('aria-label','After Effects session');
-    this.root.innerHTML='<div class="zc-ae-context"><strong data-ae-label></strong><span data-ae-meta></span></div><span class="zc-ae-status" role="status" aria-live="polite"></span><div class="zc-ae-actions"><button type="button" data-ae-source>Load AE source</button><button type="button" data-ae-send>Send to AE</button><button type="button" data-ae-leave>Leave AE mode</button></div>';
+    this.root.innerHTML='<div class="zc-ae-context"><strong data-ae-label></strong><span data-ae-meta></span></div><span class="zc-ae-status" role="status" aria-live="polite"></span><div class="zc-ae-actions"><button type="button" data-ae-view>View source</button><button type="button" data-ae-source>Load AE source</button><button type="button" data-ae-send>Send to AE</button><button type="button" data-ae-leave>Leave AE mode</button></div>';
     studio.container.querySelector('.gs-top').after(this.root);studio.container.classList.add('zc-ae-mode');
     this.label=this.root.querySelector('[data-ae-label]');this.meta=this.root.querySelector('[data-ae-meta]');this.status=this.root.querySelector('[role=status]');this.send=this.root.querySelector('[data-ae-send]');this.sourceButton=this.root.querySelector('[data-ae-source]');
     this.label.textContent='After Effects session · '+(session.context?.target?.label||session.label||'Disconnected');
     this.root.querySelector('[data-ae-leave]').onclick=()=>this.leave();this.sourceButton.onclick=()=>void this.loadSource(true);this.send.onclick=()=>void this.sendResult();
+    this.display=new AEFloatDisplay(this);this.root.querySelector('[data-ae-view]').onclick=()=>void this.display.open();this.root.querySelector('[data-ae-view]').disabled=!!session.error;
     this.sourceButton.disabled=!!session.error;this.send.disabled=!!session.error;
     this.message(session.error||'Choose a Studio mode');this.updateMeta();
     if(!session.error)void this.loadSource();
@@ -77,7 +84,7 @@ export class StudioAEBridge {
     finally{this.sending=false;if(!this.closed)this.send.disabled=false;}
   }
   dispose(){
-    if(this.closed)return;const {id,capability}=this.session;this.closed=true;++this.revision;delete this.session.capability;this.source=null;this.root.remove();this.studio.container.classList.remove('zc-ae-mode');
+    if(this.closed)return;const {id,capability}=this.session;this.closed=true;++this.revision;this.display.close();delete this.session.capability;this.source=null;this.root.remove();this.studio.container.classList.remove('zc-ae-mode');
     // Local exit does not wait for a broker or network response.
     if(capability)try{void Promise.resolve(this.api.fetchApi(ROOT+'/'+encodeURIComponent(id)+'/leave',{method:'POST',headers:{'Content-Type':'application/json','X-ComfyLink-Studio-Session':capability},body:'{}'})).catch(()=>{});}catch{}
   }

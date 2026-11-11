@@ -1,5 +1,6 @@
 import {aeFrameConfig,assertAEFrameConfig} from './studio_ae_frame_contract.js';
-import {takeStudioLaunch,studioLaunchStorage,StudioAEBridge} from './studio_comfylink.js';
+import {takeStudioLaunch,createStudioSession,studioLaunchStorage,StudioAEBridge} from './studio_comfylink.js';
+import {installDesktopHandoff} from './studio_desktop_handoff.js';
 import {navigateStudioMode} from './studio_mode_adapters.js';
 import {normalStudioStorage} from './studio_storage.js';
 import { app } from "../../scripts/app.js";
@@ -1760,7 +1761,7 @@ class ArtistStudio {
     }catch(e){if(epoch===this.resetEpoch)this.message("Connection interrupted. Your job is saved. Reopen this view when ComfyUI reconnects.",true);}
     finally{if(epoch===this.resetEpoch)this.polling=false;}
   }
-  close(){this.aeBridge?.dispose();if(this.aeSession&&registeredStudio===this)registeredStudio=null;this.restartNavigation?.dispose();this.nativeSamplePreview?.dispose();this.nativeSamplePreview=null;this.previewZoom?.stopDraw();this.hdrTool?.deactivate?.();this.creative?.close();this.comparison?.hide();this.trimTimeline?.close();this.$("canvas").classList.remove("is-expanded");if(document.fullscreenElement===this.$("canvas"))document.exitFullscreen?.().catch(()=>{});this.container.querySelectorAll("video,audio").forEach(media=>media.pause());this.container.remove();document.documentElement.classList.remove("genj-open");clearInterval(this.timer);}
+  close(){this.aeBridge?.dispose();if(this.aeSession&&registeredStudio===this)registeredStudio=null;this.restartNavigation?.dispose();this.nativeSamplePreview?.dispose();this.nativeSamplePreview=null;this.previewZoom?.stopDraw();this.hdrTool?.deactivate?.();this.creative?.close();this.comparison?.hide();this.trimTimeline?.close();this.$("canvas").classList.remove("is-expanded");if(document.fullscreenElement===this.$("canvas"))document.exitFullscreen?.().catch(()=>{});this.container.querySelectorAll("video,audio").forEach(media=>media.pause());this.container.remove();document.documentElement.classList.remove("genj-open");clearInterval(this.timer);this.onClosed?.();}
 }
 
 let registeredStudio;
@@ -1769,6 +1770,29 @@ export async function openZuraStudio(workspace){
   if(!registeredStudio.container.isConnected)await registeredStudio.open();
   if(workspace)await navigateStudioMode(registeredStudio.creative,workspace);
   return registeredStudio;
+}
+
+async function openDesktopAESession(credential,{isCurrent=()=>true}={}){
+  const previous=registeredStudio;
+  if(previous?.aeSession&&previous.container.isConnected){previous.aeBridge?.message('Leave the current AE session before opening another');return false;}
+  const session=await createStudioSession(api,credential);if(session.error)return false;
+  if(!isCurrent()){try{await api.fetchApi('/zura/comfylink/v1/studio/sessions/'+encodeURIComponent(session.id)+'/leave',{method:'POST',headers:{'Content-Type':'application/json','X-ComfyLink-Studio-Session':session.capability},body:'{}'});}catch{}return false;}
+  const wasOpen=!!previous?.container.isConnected,parent=previous?.container.parentNode,next=previous?.container.nextSibling;
+  if(wasOpen){previous.container.querySelectorAll('video,audio').forEach(media=>media.pause());previous.container.remove();}
+  const studio=new ArtistStudio({aeSession:session,storage:studioLaunchStorage(session)});registeredStudio=studio;
+  studio.onClosed=()=>{
+    if(registeredStudio&&registeredStudio!==studio)return;
+    registeredStudio=previous||null;
+    if(wasOpen&&parent){parent.insertBefore(previous.container,next?.parentNode===parent?next:null);document.documentElement.classList.add('genj-open');}
+    else void openZuraStudio();
+  };
+  studio.creative.show('home');studio.aeBridge=new StudioAEBridge(studio,api,session,()=>studio.close());
+  studio.container.querySelector('.gs-zura-mark').src=new URL('./assets/zura-logo.png',import.meta.url).href;
+  try{
+    let immediateError=null;const opening=studio.open().catch(error=>{immediateError=error;studio.aeBridge?.message('Studio could not finish opening. Leave AE mode to return.');});
+    await Promise.resolve();if(immediateError||!studio.container.isConnected||!isCurrent())throw immediateError||Error('Desktop handoff ended');
+    void opening;return true;
+  }catch(error){studio.close();return false;}
 }
 
 app.registerExtension({
@@ -1794,6 +1818,7 @@ app.registerExtension({
       for(const tip of document.querySelectorAll("#genj-studio wa-tooltip")){document.getElementById(tip.getAttribute("for"))?.removeAttribute("title");}
     }).catch(error=>console.warn("Zura tooltips unavailable; native hints remain.",error));
     const aeSession=await takeStudioLaunch(api);
+    installDesktopHandoff(api,openDesktopAESession);
     const studio=new ArtistStudio(aeSession?{aeSession,storage:studioLaunchStorage(aeSession)}:{});
     registeredStudio=studio;
     if(aeSession)studio.creative.show('home');

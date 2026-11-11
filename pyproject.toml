@@ -15,6 +15,7 @@ dependencies = [
     "aiohttp>=3.11",
     "Pillow>=10.0",
     "OpenImageIO>=3.0",
+    "opencolorio>=2.4",
     "scipy>=1.11",
     "opencv-python>=4.8",
 ]

@@ -47,7 +47,8 @@ jobs:
       - name: Install CPU media test dependencies
         run: |
           python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
-          python -m pip install numpy scipy pillow aiohttp av OpenImageIO
+          python -m pip install numpy scipy pillow aiohttp av OpenImageIO opencolorio
+          npm install --prefix "$GITHUB_WORKSPACE/../ui-check" --ignore-scripts --no-audit --no-fund linkedom@0.18.13
       - name: Check local bridge, exact frames and real EXR precision
         run: |
           python -m unittest discover -s tests -p 'test_comfylink_adapter.py'
@@ -60,6 +61,9 @@ jobs:
           python -m unittest discover -s tests -p 'test_comfylink_studio_instance.py'
           python -m unittest discover -s tests -p 'test_hdr_exr_precision.py'
           node tests/test_studio_ae_bridge.mjs
+          node tests/test_studio_ae_display.mjs
+          node tests/test_studio_desktop_handoff.mjs
+          node tests/test_studio_desktop_restore.mjs
           node tests/test_studio_ae_frames.mjs
           node tests/test_studio_exr_precision.mjs
 

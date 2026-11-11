@@ -11,5 +11,6 @@ Pillow>=10.0
 
 # High-bit-depth paintout import, compositing and EXR delivery.
 OpenImageIO>=3.0
+opencolorio>=2.4
 scipy>=1.11
 opencv-python>=4.8

@@ -42,7 +42,7 @@ def register(server, package_version):
                                   "adapter_version": ADAPTER_VERSION,
                                   "zura_version": package_version,
                                   "pairing_configured": bool(token and instance_id and fingerprint),
-                                  "features": ["identity", "presets", "graph_preflight", "studio_sessions", "studio_source_float32", "studio_result_float32", "float_frames_v1"],
+                                  "features": ["identity", "presets", "graph_preflight", "studio_sessions", "studio_desktop_handoff", "studio_source_float32", "studio_result_float32", "float_frames_v1"],
                                   "studio": {"schemaVersion": 1, "instanceId": studio_instance_id, "prefix": PREFIX + "/studio",
                                              "sessionHeader": "X-ComfyLink-Studio-Session",
                                              "sourceFormats": ["rgba32f", "rgba16u"],

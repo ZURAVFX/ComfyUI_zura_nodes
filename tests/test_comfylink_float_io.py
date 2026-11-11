@@ -285,6 +285,22 @@ class FloatNodeTests(unittest.TestCase):
         self.assertEqual(output_metadata["manifest"]["colour"], COLOUR)
         self.assertEqual(len(result["ui"]["comfylink_exr"]), 2)
 
+    def test_float_invert_preserves_out_of_range_and_tiny_samples(self):
+        values = np.array([[-0.125, 4.0, 16.0], [2.0**-20, 0.25, 0.75]], dtype=np.float32).reshape(1, 1, 2, 3)
+        rgba = np.concatenate((values, np.ones((1, 1, 2, 1), dtype=np.float32)), axis=-1)
+        relative, _ = fio.write_transfer(self.root, "ComfyLink/" + "f"*32, rgba, colour=COLOUR,
+                                         frame_rate={"numerator":25,"denominator":1}, source_bit_depth=32,
+                                         alpha_association="straight")
+        rgb, _, metadata = self.nodes.ZuraComfyLinkLoadFloatFrames().load(relative)
+        self.assertEqual(rgb.numpy().tobytes(), values.tobytes())
+        # Comfy's ImageInvert performs 1.0 - image, without clipping.
+        inverted = 1.0 - rgb
+        result = self.nodes.ZuraComfyLinkSaveFloatFrames().save(inverted, metadata)
+        actual, _ = fio.load_transfer(self.root, result["result"][0])
+        np.testing.assert_array_equal(actual[..., :3], (np.float32(1) - values))
+        np.testing.assert_array_equal(actual[..., 3], np.ones((1, 1, 2), dtype=np.float32))
+        self.assertEqual(float(actual[0, 0, 0, 2]), -15.0)
+
     def test_saver_mask_and_optional_fps_are_explicit(self):
         relative, _ = self.write()
         rgb, mask, metadata = self.nodes.ZuraComfyLinkLoadFloatFrames().load(relative)

@@ -369,6 +369,7 @@ class Session:
     original_files: list = field(default_factory=list)
     download_capability: str = field(default="", repr=False)
     closed: bool = False
+    preview_lock: asyncio.Lock = field(default_factory=asyncio.Lock)
 
 
 class StudioSessions:
@@ -382,6 +383,7 @@ class StudioSessions:
         self._registration_lock = asyncio.Lock()
         self._revocations = set()
         self._source_reservations = {}
+        self._preview_slots = asyncio.Semaphore(2)
 
     def roots(self):
         if self.input_root is None or self.output_root is None:
@@ -638,6 +640,66 @@ class StudioSessions:
                 raise web.HTTPUnprocessableEntity(text="Source validation failed; the AE source is retained")
             self.active(session)
             return web.json_response(session.source)
+
+    async def display_config(self, request):
+        session = self.authorize(request)
+        self.active(session)
+        from . import display_view
+        try:
+            result = await asyncio.to_thread(display_view.describe, request.query.get("config", ""))
+            self.active(session)
+            return web.json_response(result, headers={"Cache-Control": "no-store"})
+        except (ValueError, ImportError):
+            raise web.HTTPBadRequest(text="This display configuration is unavailable")
+
+    async def display_frame(self, request):
+        """Preview one session-owned raw frame without changing its master."""
+        session = self.authorize(request)
+        if not session.context["capabilities"]["source"]:
+            raise web.HTTPForbidden(text="This session has no source authority")
+        index_text = request.query.get("index", "0")
+        if not re.fullmatch(r"0|[1-9][0-9]{0,4}", index_text):
+            raise web.HTTPBadRequest(text="Invalid preview frame")
+        index = int(index_text)
+        async with session.preview_lock, self._preview_slots:
+            self.active(session)
+            data = await self.broker_json(session, "/source")
+            try:
+                manifest = float_io.validate_manifest(data.get("manifest", data))
+                if index >= len(manifest["frames"]):
+                    raise ValueError("Preview frame is outside the source range")
+                expected = manifest["frames"][index]
+                descriptor = {key: expected[key] for key in ("filename", "byteLength", "sha256")}
+                if "files" in data and data["files"] != [{key: frame[key] for key in descriptor} for frame in manifest["frames"]]:
+                    raise ValueError("Source file list differs from manifest")
+                payload = bytearray()
+                digest = hashlib.sha256()
+                timeout = aiohttp.ClientTimeout(total=180, connect=3, sock_read=30)
+                async with aiohttp.ClientSession(trust_env=False, timeout=timeout) as client:
+                    async with client.get(session.broker + "/source/" + expected["filename"],
+                                          headers={TOKEN_HEADER: session.token}, allow_redirects=False) as response:
+                        if response.status != 200 or (response.content_length is not None and response.content_length != expected["byteLength"]):
+                            raise ValueError("Preview frame size changed")
+                        async for chunk in response.content.iter_chunked(1024 * 1024):
+                            self.active(session)
+                            payload.extend(chunk)
+                            if len(payload) > expected["byteLength"]:
+                                raise ValueError("Preview frame exceeds declared size")
+                            digest.update(chunk)
+                if len(payload) != expected["byteLength"] or digest.hexdigest() != expected["sha256"]:
+                    raise ValueError("Preview frame failed its integrity check")
+                from . import display_view
+                image = await asyncio.to_thread(display_view.render, payload, manifest,
+                    request.query.get("config", ""), request.query.get("display", ""), request.query.get("view", ""))
+                self.active(session)
+                headers = {"Cache-Control": "no-store", "X-Content-Type-Options": "nosniff"}
+                if manifest["sourceBitDepth"] == 8 and manifest["colour"]["encoding"] == "unknown":
+                    headers["X-ComfyLink-Preview-Note"] = "Untagged 8-bit preview assumes sRGB"
+                elif manifest["colour"].get("management") == "ocio":
+                    headers["X-ComfyLink-Preview-Note"] = "Preview uses the verified AE working space"
+                return web.Response(body=image, content_type="image/png", headers=headers)
+            except (ValueError, OSError, aiohttp.ClientError, asyncio.TimeoutError):
+                raise web.HTTPUnprocessableEntity(text="Display preview is unavailable for this source or colour space")
 
     async def native_import(self, session, folder, manifest):
         """Use Studio's existing upload API; never manufacture asset records.
@@ -1280,11 +1342,15 @@ def register(server, instance_id="", **options):
     server.routes.post(PREFIX + "/sessions")(service.create)
     server.routes.get(PREFIX + "/sessions/{id}")(service.get)
     server.routes.post(PREFIX + "/sessions/{id}/source")(service.source)
+    server.routes.get(PREFIX + "/sessions/{id}/display-config")(service.display_config)
+    server.routes.get(PREFIX + "/sessions/{id}/display-frame")(service.display_frame)
     server.routes.post(PREFIX + "/sessions/{id}/result")(service.result)
     server.routes.get(PREFIX + "/sessions/{id}/status")(service.status)
     server.routes.post(PREFIX + "/sessions/{id}/prepare-graph")(service.prepare_graph)
     server.routes.post(PREFIX + "/sessions/{id}/leave")(service.leave)
     server.routes.get(PREFIX + "/sessions/{id}/result-files/{index}")(service.result_file)
     server.routes.get(PREFIX + "/sessions/{id}/original-files/{index}")(service.original_file)
+    from . import studio_desktop
+    service.desktop = studio_desktop.register(server)
     server._zura_comfylink_studio_sessions = service
     return service

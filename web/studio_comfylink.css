@@ -15,4 +15,15 @@
 #genj-studio[data-theme=light] .zc-ae-session{background:#f4f4f5;color:#171717;border-color:#dedee0}
 #genj-studio[data-theme=light] .zc-ae-context>span,#genj-studio[data-theme=light] .zc-ae-status{color:#525252}
 #genj-studio[data-theme=light] .zc-ae-actions [data-ae-send]{background:#171717;color:#fafafa;border-color:#171717}
+.zc-display{box-sizing:border-box;width:min(960px,94vw);max-height:90vh;padding:20px;border:1px solid #505050;background:#202023;color:#ededed;font:13px/1.4 sans-serif}
+.zc-display::backdrop{background:rgba(0,0,0,.7)}
+.zc-display-head,.zc-display-controls,.zc-display-bottom{display:flex;align-items:center;gap:16px}
+.zc-display-head h2{font-size:16px;font-weight:500;flex:1;margin:0}
+.zc-display-controls{margin:16px 0;flex-wrap:wrap}.zc-display-controls label{display:flex;flex-direction:column;gap:4px;flex:1;min-width:180px}
+.zc-display select,.zc-display button{background:#303033;color:inherit;border:1px solid #5a5a5d;border-radius:4px;padding:6px;font:inherit}
+.zc-display-image{display:grid;place-items:center;background:#111;min-height:120px;max-height:60vh;overflow:auto}.zc-display-image img{display:block;max-width:100%;max-height:60vh;object-fit:contain}
+.zc-display-image img[hidden]{display:none}
+.zc-display-bottom{margin-top:12px}.zc-display-bottom label{display:flex;align-items:center;gap:8px;flex:1}.zc-display-bottom input{flex:1}.zc-display [role=status]{color:#b7b7bc}.zc-display p{color:#b7b7bc;margin:8px 0 0}
+.zc-display input[type=range]{accent-color:#ededed}.zc-display :focus-visible{outline:2px solid currentColor;outline-offset:2px}
 @media(max-width:900px){#genj-studio .zc-ae-session{flex-wrap:wrap;padding:8px 16px;gap:8px}#genj-studio .zc-ae-context{max-width:100%;flex:1}#genj-studio .zc-ae-status{flex-basis:100%;order:3}#genj-studio .zc-ae-actions{margin-left:auto}}
+@media(max-width:600px){#genj-studio .zc-ae-actions{width:100%;flex-wrap:wrap;justify-content:flex-start}.zc-display-controls label{min-width:0;flex-basis:100%}.zc-display-bottom{flex-wrap:wrap}.zc-display-bottom label{min-width:70%}}
