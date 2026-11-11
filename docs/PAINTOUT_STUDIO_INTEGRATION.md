@@ -1,6 +1,6 @@
 # Paintout inside Zura Studio
 
-The updated contest editor is available through **Video → Paintout / clean plate**. The Paintout shortcut, Comfy command and `?paintout=1` open that same workspace inside the main Studio shell.
+Paintout is available through **Zura Studio > Video > Paintout / clean plate**. As of 11 November 2026, the standalone contest app and its separate visible button/menu are retired. Old Paintout commands, launcher nodes and `?paintout=1` links remain compatibility routes into the same main Studio workspace. See [consolidation notes](PAINTOUT_CONSOLIDATION.md).
 
 ## Shared experience
 

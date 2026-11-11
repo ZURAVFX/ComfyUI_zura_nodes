@@ -1,3 +1,4 @@
+import {runStudioVMInContext} from './studio_vm_fixture.mjs';
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import vm from "node:vm";
@@ -5,7 +6,7 @@ import vm from "node:vm";
 const source=fs.readFileSync(new URL("../web/studio.js",import.meta.url),"utf8")
   .replace(/^import .*;\r?\n/gm,"").replace(/^export /gm,'').split("app.registerExtension({")[0];
 const context={api:{},document:{},crypto:{randomUUID:()=>"request-key"},FormData,Blob,URLSearchParams,AbortController,setInterval,clearInterval,setTimeout,clearTimeout};
-vm.createContext(context);vm.runInContext(source+"\nthis.Studio=ArtistStudio;",context);
+vm.createContext(context);runStudioVMInContext(source+"\nthis.Studio=ArtistStudio;",context);
 
 function makeStudio(fetchApi=async()=>({ok:true,json:async()=>({phase:"error"})})){
   const removed=[],fields=new Map();
@@ -15,7 +16,7 @@ function makeStudio(fetchApi=async()=>({ok:true,json:async()=>({phase:"error"})}
   context.api={clientId:"client",fetchApi};
   context.localStorage={removeItem:key=>removed.push(key)};
   const ui=Object.create(context.Studio.prototype);
-  Object.assign(ui,{project:null,source:{id:"src",name:"source.mp4"},character:{id:"char"},audio:{id:"audio"},pendingReference:true,
+  Object.assign(ui,{storage:context.localStorage,project:null,source:{id:"src",name:"source.mp4"},character:{id:"char"},audio:{id:"audio"},pendingReference:true,
     voiceJob:{id:"voice-job"},voiceSample:{id:"private-sample"},config:{start:12,finished_frame_number:8,mask_points:[{x:.2,y:.3}]},preview:"source",lastVideo:"old-video",
     references:[{id:"ref"}],readyAsset:{id:"ready"},lookMode:"ready",referenceFingerprint:"old-ref",resultFingerprint:"old-results",reviewPreviewKey:"old-review",
     pointFrameStart:9,voicePolling:true,polling:true,busy:false,resetEpoch:0,resetting:false,activeDialog:null,modelStatus:{ready:true},

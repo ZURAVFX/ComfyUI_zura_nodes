@@ -17,7 +17,7 @@ assert.equal(ui.$('fast-control').hidden,true,'Only LTX exposes this option');
 ui.$('engine').value='ltx';ui.$('engine').dispatchEvent(new window.Event('change'));
 assert.equal(ui.$('fast-control').hidden,false);assert.equal(ui.$('fast').checked,false);
 assert.match(ui.$('fast-control').title,/smaller size.*upscales.*fine detail/);
-ui.assets.first={file:'first.png'};ui.$('prompt').value='A bird flies';ui.$('fast').checked=true;ui.$('fast').dispatchEvent(new window.Event('change'));
+ui.assets.first={file:'first.png',width:1344,height:768};ui.$('prompt').value='A bird flies';ui.$('fast').checked=true;ui.$('fast').dispatchEvent(new window.Event('change'));
 assert.equal(ui.config().fast,true);assert.equal(ui.availability.ready,true);assert.ok(ui.build().upscale);
 ui.save();const restored=new FrameVideoWorkspace({...owner,root:document.createElement('section')});
 assert.equal(restored.$('fast').checked,true,'The user preference survives reopening');restored.close();

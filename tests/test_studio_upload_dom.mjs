@@ -1,3 +1,4 @@
+import {runStudioVMInContext} from './studio_vm_fixture.mjs';
 // Exercise the real Studio HTML and render lifecycle. A mocked render misses
 // removed DOM elements that can lock the UI before an upload even starts.
 // Uses the same external, test-only linkedom install as test_wan_graph.mjs.
@@ -38,7 +39,7 @@ const api={apiURL:path=>path,fetchApi:async(path,options)=>{
 }};
 const savedStorage=new Map();
 const context={document,window,Event:window.Event,api,ContentDetection,clipLength,recoverClipLength,stageProgress,ClipTrimmer,FormData,URLSearchParams,AbortController,setTimeout,clearTimeout,setInterval:()=>1,clearInterval(){},crypto:globalThis.crypto,localStorage:{getItem:key=>savedStorage.get(key)||null,removeItem:key=>savedStorage.delete(key),setItem:(key,value)=>savedStorage.set(key,String(value))}};
-vm.createContext(context);vm.runInContext(source+'\nthis.Studio=ArtistStudio;',context);
+vm.createContext(context);runStudioVMInContext(source+'\nthis.Studio=ArtistStudio;',context);
 const ui=new context.Studio(),checklist=ui.$('model-checklist');
 ui.config.engine='wan';ui.config.h3_character_method='control';
 await ui.open();

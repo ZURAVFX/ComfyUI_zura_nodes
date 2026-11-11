@@ -23,22 +23,24 @@ Install **Zura Nodes**, published by **ZURAVFX**, through ComfyUI Manager when a
 
 Follow the [installation and model guide](INSTALL_STUDIO.md) to install Python requirements into ComfyUI's environment and download the models for your chosen task. Restart ComfyUI and refresh the browser.
 
-Click the visible **Zura Studio** or **Paintout Studio** button at the bottom-right of the graph. Both also remain available through the **Zura** menu and command search. Optional **Open Zura Studio** and **Open Paintout Studio** launcher nodes provide shortcuts inside a workflow. On the default local address:
+Click **Zura Studio** at the bottom-right of the graph, or open it through the **Zura** menu, command search or the optional **Open Zura Studio** node. For paintout, choose **Video > Paintout / clean plate** inside Studio. On the default local address:
 
 - [Zura Studio](http://127.0.0.1:8188/?zura=1)
-- [Paintout Studio](http://127.0.0.1:8188/?paintout=1)
+- [Paintout inside Zura Studio](http://127.0.0.1:8188/?zura=1&workspace=paintout)
 
 Use your own ComfyUI host and port if they differ.
 
 ## Current release
 
-**1.3.60** includes [LTX and H3 Relight options](docs/RELIGHT_MODELS.md) alongside Wan 2.1, with shared lighting frames and a separate Relight draft. It also includes a shared visual mode picker, compact browser sign-in controls and the native LTX/H3 [Director timeline](docs/DIRECTOR_STUDIO.md), including clip dragging, resizing and preserved source audio. First/last-frame video can match image 1 dimensions or scale its aspect ratio with the megapixel slider. Camera editing gains optional [locked scene geometry](docs/PANORAMA_STUDIO_INTEGRATION.md). Existing Paintout retries, [alpha extraction](docs/LTX_ALPHA.md), [Ripple editing](docs/RIPPLE_STUDIO.md) and [painted image edits](docs/IMAGE_EDIT_AREA.md) remain included. See the [release notes](CHANGELOG.md) for validation and remaining limits.
+**1.3.61** adds an optional [ComfyLink After Effects session](docs/COMFYLINK_STUDIO.md), isolated Studio drafts, exact source-interval checks and high-depth transfer nodes. Studio's advanced output settings now offer **FLOAT (32-bit)** EXR storage alongside the normal **HALF (16-bit)** default. The [LTX colour bridge](docs/COMFYLINK.md#high-depth-nodes-and-colour) makes its colour and range conversion explicit. CPU checks cover transport, graphs and EXR readback; full live GPU and After Effects qualification remains outstanding. See the [release notes](CHANGELOG.md) for limits.
+
+Zura Studio remains free to open and use normally, without a ComfyLink licence. The separate ComfyLink After Effects extension is optional and is not bundled here. Existing [Relight](docs/RELIGHT_MODELS.md), [Director](docs/DIRECTOR_STUDIO.md), [Paintout](PAINTOUT.md), [alpha extraction](docs/LTX_ALPHA.md), [Ripple editing](docs/RIPPLE_STUDIO.md) and [painted image edits](docs/IMAGE_EDIT_AREA.md) remain available.
 
 The previous update adds complete camera-angle model setup, including MoGe 3, and checks gated-model access before large downloads. Choose a mode to see its missing files and extension guidance. Restart ComfyUI and refresh Studio after updating. See the [model setup notes](docs/STUDIO_1348_VALIDATION.md).
 
 The [GitHub release](https://github.com/ZURAVFX/ComfyUI_zura_nodes/releases/latest) is available separately. Registry submission does not mean approval or immediate availability through Manager.
 
-Paintout is integrated into **Studio > Video > Paintout / clean plate**. Its separate Paintout Studio entry opens the same working page and controller. Disable an earlier standalone Zura Paintout installation before using this integration to avoid duplicate nodes and routes.
+Paintout lives in **Studio > Video > Paintout / clean plate**. The standalone contest application is retired; its masks, layered clean-frame repairs, saved projects, model setup and SDR/HDR routes are already integrated. Existing Paintout links, commands and saved launcher nodes still open the integrated workspace. Disable an earlier standalone Zura Paintout installation to avoid duplicate nodes and routes. See the [consolidation notes](docs/PAINTOUT_CONSOLIDATION.md).
 
 Read the [testing notes](PAINTOUT_STUDIO_TESTING.md), [model setup](docs/paintout-studio/MODEL_DOWNLOADS.md) and [manual checks](docs/paintout-studio/MANUAL_TESTING.md). Representative shot quality and a fresh-machine installation still need feedback. Version changes are recorded in the [changelog](CHANGELOG.md).
 
@@ -56,6 +58,7 @@ Examples use placeholder media. Personal reference images, videos, voice recordi
 | --- | --- |
 | Install and select model files | [Installation](INSTALL_STUDIO.md) |
 | Use the guided interface and Graph view | [Zura Studio](ARTIST_STUDIO.md) |
+| Use an optional After Effects session | [ComfyLink Studio](docs/COMFYLINK_STUDIO.md) |
 | Direct LTX or H3 with a shared timeline | [Director](docs/DIRECTOR_STUDIO.md) |
 | Use standalone nodes and Wan continuation | [Node and workflow guide](docs/NODE_GUIDE.md) |
 | Mask, remove objects and create clean plates | [Paintout](PAINTOUT.md) |
@@ -73,4 +76,4 @@ See [contributing and checks](CONTRIBUTING.md) for the repository layout and loc
 
 ## Licence
 
-Original Zura code is **AGPL-3.0-only**. See [LICENSE](LICENSE), [third-party notices](THIRD_PARTY_NOTICES.md) and the bundled licences for upstream components. Model weights retain their own licences.
+Original Zura code is **AGPL-3.0-only**. The ComfyLink adapter includes MIT-licensed files with their original notices; see [the adapter guide](docs/COMFYLINK.md) and [MIT licence](comfylink/MIT-LICENSE.txt). See [LICENSE](LICENSE), [third-party notices](THIRD_PARTY_NOTICES.md) and the bundled licences for upstream components. Model weights retain their own licences.

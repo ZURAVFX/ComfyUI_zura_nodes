@@ -1,15 +1,16 @@
+import {runStudioVMInContext} from './studio_vm_fixture.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
 const code=fs.readFileSync(new URL('../web/studio.js',import.meta.url),'utf8').replace(/^import .*;\r?\n/gm,'').replace(/^export /gm,'').split('app.registerExtension({')[0];
 let restored;
 const context={api:{fetchApi:async()=>({ok:true,json:async()=>restored})},localStorage:{setItem(){},removeItem(){}}};
-vm.createContext(context);vm.runInContext(code+'\nthis.Studio=ArtistStudio;',context);
+vm.createContext(context);runStudioVMInContext(code+'\nthis.Studio=ArtistStudio;',context);
 const ui=Object.create(context.Studio.prototype),fields={};
 for(const [id,value] of Object.entries({prompt:'A candlelit room',image_prompt:'',scope:'person',length_mode:'custom',mask_method:'points',mask_prompt:'',subject_mode:'people',finished_frame_position:'first',finished_frame_number:1,start:0,duration:2,performer:-1,margin:20,seed:42,audio_start:0,'audio-mode':'reference',resolution:'1280',quality:'fast',h3_steps:8,h3_attention:'native'}))fields[id]={value};
 for(const id of ['pitch','remove_text','lip_sync','refine_lips','preserve_people'])fields[id]={checked:true};
 let mode='motion',engine='h3';
-Object.assign(ui,{$:id=>fields[id],container:{querySelector:selector=>({value:selector.includes('gs-workflow')?mode:engine})},config:{workflow_mode:'motion',engine:'h3',edit_area:'scene'},lookMode:'ready',references:[{id:'scene-reference'}],readyAsset:{id:'finished-frame'},audio:{id:'soundtrack'},source:{id:'source'},resetEpoch:0,busy:false,perform:fn=>fn(0),render(){}});
+Object.assign(ui,{storage:context.localStorage,$:id=>fields[id],container:{querySelector:selector=>({value:selector.includes('gs-workflow')?mode:engine})},config:{workflow_mode:'motion',engine:'h3',edit_area:'scene'},lookMode:'ready',references:[{id:'scene-reference'}],readyAsset:{id:'finished-frame'},audio:{id:'soundtrack'},source:{id:'source'},resetEpoch:0,busy:false,perform:fn=>fn(0),render(){}});
 const c=ui.readConfig();assert.equal(c.preserve_people,true);assert.equal(c.edit_area,'mask','Motion mode must not turn the protected-background mask into whole-scene conditioning');
 assert.equal(c.audio_id,'soundtrack','Custom soundtracks remain available');assert.equal(c.lip_sync,false);assert.equal(c.refine_lips,false);
 ui.config=c;ui.syncPreservedPeople();assert.equal(ui.lookMode,'build','Finished frames cannot bypass people-protecting look generation');

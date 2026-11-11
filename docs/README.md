@@ -11,6 +11,7 @@ Start with the [repository overview](../README.md), [installation guide](../INST
 - [H3 camera](CAMERA_ANGLE.md), [reference video](H3_REFERENCE_VIDEO.md) and [speed options](../H3_SPEED.md)
 - [LTX frame video](LTX_FRAME_VIDEO.md), [Wan frame video](WAN_FRAME_VIDEO.md) and [Wan Animate 2](WAN_ANIMATE2.md)
 - [Director timeline](DIRECTOR_STUDIO.md) and [Panorama camera](PANORAMA_STUDIO_INTEGRATION.md)
+- [Optional ComfyLink Studio session](COMFYLINK_STUDIO.md) and [adapter protocol/high-depth nodes](COMFYLINK.md)
 
 ## Validation and development
 

@@ -18,7 +18,7 @@ STAGE2 = '0.909375, 0.725, 0.421875, 0.0'
 def build_native_exr_graph(*, source, frame_count, fps, width, height, prefix,
                            prompt='The same scene, preserve the motion and HDR lighting.',
                            stage2_prompt='Natural lighting, fine detail, clean edges.',
-                           source_colour='acescg', seed=42, output='hlg_and_exr',
+                           source_colour='acescg', seed=42, output='hlg_and_exr', exr_storage='half',
                            model='ltx-2.5-22b-distilled-transformer-comfy-int8-convrot.safetensors',
                            video_vae='ltx-2.5-video-vae-bf16.safetensors',
                            text_encoder='gemma4-12b-with-proj-ltx-2.5-nvfp4.safetensors',
@@ -59,13 +59,13 @@ def build_native_exr_graph(*, source, frame_count, fps, width, height, prefix,
         'sample2':n('LTXVTiledFusionSampler',model=['lora',0],positive=['guide2',0],negative=['guide2',1],latents=['guide2',2],sigmas=['sigmas2',0],sampler=['sampler',0],vae=['vae',0],seed=seed,cfg=1.,tile_width=1024,tile_height=576,overlap_frac=.5,blend_var=.05,grid_cycle=1,tile_frames=frame_count,canvas_device='auto'),
         'decode':n('VAEDecodeTiled',samples=['sample2',0],vae=['vae',0],tile_size=512,overlap=64,temporal_size=128,temporal_overlap=32),
     }
-    g.update(ltx_hdr_delivery(['decode',0],fps,output=output,prefix=prefix,working_space='ltx25_acescct_qualified'))
+    g.update(ltx_hdr_delivery(['decode',0],fps,output=output,prefix=prefix,working_space='ltx25_acescct_qualified',exr_storage=exr_storage))
     return g
 
 
 def build_native_video_graph(*, source, start_frame, frame_count, fps, width, height,
                              prefix, colour_space='auto', has_audio=False, output='hlg_and_exr',
-                             sequence_manifest='', manifest_sha='', temporal_window=0):
+                             sequence_manifest='', manifest_sha='', temporal_window=0, exr_storage='half'):
     """Bounded HDR-video post-pass, padded for LTX then cropped to source raster.
 
     This preserves frame count and source soundtrack; the model may alter scene
@@ -93,7 +93,7 @@ def build_native_video_graph(*, source, start_frame, frame_count, fps, width, he
         raise ValueError('This padded range is too large; choose fewer frames.')
     # Keep the public graph's validation unchanged. The internal temporal test
     # constructs a valid short graph then expands its *single* latent canvas.
-    g=build_native_exr_graph(source=source,frame_count=min(padded,121),fps=fps,width=pw,height=ph,prefix=prefix,output=output)
+    g=build_native_exr_graph(source=source,frame_count=min(padded,121),fps=fps,width=pw,height=ph,prefix=prefix,output=output,exr_storage=exr_storage)
     if temporal_window:
         g['empty']['inputs']['length']=padded
         for name in ('guide1','guide2','sample1','sample2'):
@@ -118,9 +118,9 @@ def build_native_video_graph(*, source, start_frame, frame_count, fps, width, he
         g['native_audio']=n('ZuraHDRLoadAudioRange',source=source,start_frame=start_frame,frame_count=frame_count,fps=float(fps))
         audio=['native_audio',0]
     g.update(ltx_hdr_delivery(['trim_raster',0],fps,output=output,prefix=prefix,
-                              working_space='ltx25_acescct_qualified',audio=audio))
+                              working_space='ltx25_acescct_qualified',audio=audio,exr_storage=exr_storage))
     if output in ('acescg_exr','hlg_and_exr'):
-        g['zura_hdr_archive']=n('ZuraHDRPackageACEScct',images=['trim_raster',0],prefix=prefix)
+        g['zura_hdr_archive']=n('ZuraHDRPackageACEScct',images=['trim_raster',0],prefix=prefix, **({'exr_storage':exr_storage} if exr_storage != 'half' else {}))
         preview=['zura_hdr_exr',0]
     else:
         g['zura_hdr_preview_tonemap']=n('LTXVHDRDecodePostprocess',image=['trim_raster',0],transfer='acescct',save_exr=False,

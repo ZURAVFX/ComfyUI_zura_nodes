@@ -1,3 +1,4 @@
+import {workspaceStorage} from './studio_storage.js';
 import {frameSourceResolution} from './frame_source_resolution.js';
 import {resolutionSize} from './studio_resolution.js';
 import {tidyArtistGraph} from './artist_graph.js';
@@ -19,9 +20,9 @@ const sourceView=asset=>{
 
 /** A camera workspace in the existing shell, using native Panorama UI and H3. */
 export class PanoramaCameraWorkspace{
-  constructor(owner){
+  constructor(owner){this.storage=workspaceStorage(owner);
     this.owner=owner;this.app=owner.app;this.api=owner.api;this.studio=owner.studio;
-    let saved={};try{saved=JSON.parse(localStorage.getItem(KEY))||{};}catch{}
+    let saved={};try{saved=JSON.parse(this.storage.getItem(KEY))||{};}catch{}
     this.state=saved.state||{};this.state.geometryMode='temporal_scene';if(this.state.cameraRecipe!=='temporal-scene-ltx25-v1'){for(const key of ['geometry','camera','cameraReviewed','warp','selection','guidePreview','opening','look','result'])delete this.state[key];}this.state.cameraRecipe='temporal-scene-ltx25-v1';this.job=saved.job||null;this.pendingSubmission=saved.pendingSubmission||null;
     this.page=document.createElement('section');this.page.className='zpc-page';
     this.page.innerHTML=`<header class="zpc-heading"><div><strong>Change camera angle</strong><span data-steps>1 Source · 2 Camera · 3 Preview · 4 Render</span></div><button type="button" data-new>New shot</button></header>
@@ -80,7 +81,7 @@ export class PanoramaCameraWorkspace{
     return resolutionSize(({landscape:16/9,portrait:9/16,square:1})[preset]||16/9,Number(this.state.megapixels)||1,CAMERA_SIZE);
   }
   config(){const size=this.dimensions();return {start:0,duration:Math.min(2,this.state.source?.duration||2),...this.state.config,width:size.width,height:size.height,two_stage:!!this.$('two-stage')?.checked,geometry_mode:'temporal_scene'};}
-  save(){try{localStorage.setItem(KEY,JSON.stringify({state:this.state,job:this.job,pendingSubmission:this.pendingSubmission}));return true;}catch{this.message('Browser storage is full. Clear old Studio history before starting a run.');return false;}}
+  save(){try{this.storage.setItem(KEY,JSON.stringify({state:this.state,job:this.job,pendingSubmission:this.pendingSubmission}));return true;}catch{this.message('Browser storage is full. Clear old Studio history before starting a run.');return false;}}
   setGeometryMode(){this.state.geometryMode='temporal_scene';}
   invalidate(){if(this.busy())return;this.state.size=this.$('size').value;this.state.megapixels=Number(this.$('megapixels').value)||this.state.megapixels||1;this.state.width=this.$('width').value;this.state.height=this.$('height').value;delete this.state.geometry;delete this.state.camera;delete this.state.cameraReviewed;delete this.state.warp;delete this.state.result;delete this.state.selection;delete this.state.look;delete this.state.opening;delete this.state.sourceOpening;delete this.state.guidePreview;this.save();this.render();if(this.state.source)this.showMedia('source');}
   async open(){this.modelDownloads.resume();this.render();if(this.job||this.pendingSubmission)this.startPolling();await this.refreshSetup();}

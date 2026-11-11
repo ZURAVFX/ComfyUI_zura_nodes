@@ -1,3 +1,4 @@
+import {workspaceStorage} from './studio_storage.js';
 import {ClipTrimmer} from './studio_trim.js';
 import {StudioModelDownloads} from './studio_model_download.js';
 import {rippleStudioProcessingSize, rippleStudioValidation} from './studio_ripple_recipes.js';
@@ -10,7 +11,7 @@ const frameNumber=value=>Number.isFinite(Number(value))?Math.round(Number(value)
 const formatRate=rate=>Number(Number(rate||0).toFixed(3)).toString();
 const nextId=()=>globalThis.crypto?.randomUUID?.()||`${Date.now()}-${Math.random().toString(36).slice(2)}`;
 const initial=()=>({engine:'h3',scale:1,startFrame:0,frameCount:0,playhead:0,prompt:'',sourceColour:'auto',anchors:[],ltxReferenceId:null,project:null});
-function readState(key=STATE_KEY){try{const saved=JSON.parse(localStorage.getItem(key));return saved&&typeof saved==='object'?saved:{};}catch{return {};}}
+function readState(storage,key=STATE_KEY){try{const saved=JSON.parse(storage.getItem(key));return saved&&typeof saved==='object'?saved:{};}catch{return {};}}
 
 /** Merge earlier per-model keyframes without losing different edits on one frame. */
 function sharedAnchors(saved,engine){
@@ -35,9 +36,9 @@ function sharedAnchors(saved,engine){
 
 /** Dedicated timeline for edited frames. Inference stays in the supplied native graph. */
 export class RippleWorkspace {
-  constructor(owner,{intent="edit"}={}){
+  constructor(owner,{intent="edit"}={}){this.storage=workspaceStorage(owner);
     this.intent=intent==='relight'?'relight':'edit';this.storageKey=this.intent==='relight'?'zura-relight-workspace-v1':STATE_KEY;this.owner=owner;this.api=owner.api;this.root=owner.root;this.app=owner.app;this.closed=true;
-    const saved=readState(this.storageKey);this.state={...initial(),...saved};
+    const saved=readState(this.storage,this.storageKey);this.state={...initial(),...saved};
     if(!['h3','ltx'].includes(this.state.engine))this.state.engine='h3';
     if(![1,.75,.5,.25].includes(Number(this.state.scale)))this.state.scale=1;
     this.state.anchors=sharedAnchors(saved.anchors,this.state.engine);
@@ -100,7 +101,7 @@ export class RippleWorkspace {
   }
   selected(){return this.anchors().find(anchor=>String(anchor.id)===String(this.selectedId))||null;}
   message(text){const message=text||(this.intent==='relight'?'Edit a lighting frame, then apply the lighting throughout the clip. Surrounding details may also change.':'Ripple edits the whole frame. Surrounding details may also change.');this.$('status').textContent=this.intent==='relight'?message.replaceAll('Ripple','Relight').replaceAll('ripple','relight'):message;}
-  save(){try{localStorage.setItem(this.storageKey,JSON.stringify({...this.state,selectedId:this.selectedId,job:this.job,pendingSubmission:this.pendingSubmission,result:this.result,sourcePath:this.source?.path||this.state.sourcePath||''}));return true;}catch{return false;}}
+  save(){try{this.storage.setItem(this.storageKey,JSON.stringify({...this.state,selectedId:this.selectedId,job:this.job,pendingSubmission:this.pendingSubmission,result:this.result,sourcePath:this.source?.path||this.state.sourcePath||''}));return true;}catch{return false;}}
   async uploadSource(file){
     if(this.busy())return;const revision=++this.revision;this.picking=true;this.uploadController=new AbortController();this.setProgress({title:'Loading video',detail:'Preparing your source footage'});this.render();this.message('');
     try{const body=new FormData();body.append('file',file,file.name);const response=await this.api.fetchApi('/zura/studio/upload?kind=video',{method:'POST',body,signal:this.uploadController.signal,timeoutMs:null});const asset=await response.json();if(!response.ok)throw Error(asset.error||'Could not upload this video.');if(!asset.id)throw Error('The uploaded video could not be identified.');if(revision!==this.revision)return;const info=await this.fetch('/zura/studio/assets/'+encodeURIComponent(asset.id)+'/ripple',{});if(revision!==this.revision)return;this.setSource({...info,name:asset.name||file.name||info.name,studioAsset:asset});}

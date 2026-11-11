@@ -40,13 +40,20 @@ def build_asset_graph(asset, body, check_asset):
     else:
         fps=info['fps']
         with av.open(str(path)) as stream:has_audio=bool(stream.streams.audio)
+    contract=body.get('ae_frame_contract')
+    if contract is not None:
+        from ..comfylink.frame_contract import validate_interval
+        contract=validate_interval(contract,frames=count,fps=fps,width=info['width'],height=info['height'])
     prefix='native_'+uuid.uuid4().hex
     graph=build_native_video_graph(source=str(path),start_frame=start,frame_count=count,fps=fps,
         width=info['width'],height=info['height'],prefix=prefix,colour_space=colour,has_audio=has_audio,
         output=body.get('output','hlg_and_exr'), sequence_manifest=str(manifest) if sequence else '',
-        manifest_sha=asset.get('sha','') if sequence else '')
+        manifest_sha=asset.get('sha','') if sequence else '', exr_storage=body.get('exr_storage','half'))
+    if contract is not None:
+        from ..comfylink.frame_contract import prepare_frame_contract_graph
+        graph=prepare_frame_contract_graph(graph,contract,'hdr')
     return graph,{'prefix':prefix,'width':info['width'],'height':info['height'],'frames':count,
-                  'fps':fps,'has_audio':has_audio,'output':body.get('output','hlg_and_exr')}
+                  'fps':fps,'has_audio':has_audio,'output':body.get('output','hlg_and_exr'),'exr_storage':body.get('exr_storage','half')}
 
 
 def register(studio,routes,response,check_asset):

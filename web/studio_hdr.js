@@ -1,3 +1,6 @@
+import {aeFrameContract,aeFrameRate,aeFrameRequest,prepareAEFrameGraph} from './studio_ae_frame_contract.js';
+import {selectedEXRStorage,normaliseEXRStorage} from './studio_exr_precision.js';
+import {normalStudioStorage} from './studio_storage.js';
 import {installOwnedExecuting} from './studio_progress.js';
 import {LTXLoras} from './studio_ltx_loras.js';
 import {StudioModelDownloads} from './studio_model_download.js';
@@ -15,7 +18,7 @@ const sourceFrameRate=(info,asset)=>{
 const fpsLabel=fps=>Number.isInteger(fps)?String(fps):fps.toFixed(3).replace(/\.?0+$/,'');
 // Bounded LTX HDR post-passes use explicitly selected source assets.
 export class HDRSourceTool {
-  constructor(host,api,getSource,{longAvailable=false}={}){
+  constructor(host,api,getSource,{longAvailable=false,storage=normalStudioStorage()}={}){this.storage=storage;
     this.api=api;this.getSource=getSource;this.job=null;this.busy=false;this.starting=false;this.timer=null;this.cancelling=false;this.fps=24;
     this.root=document.createElement('section');this.root.className='zf-page zh-page';this.root.hidden=true;this.active=false;
     this.root.innerHTML=`<div class="zf-heading"><h2>Convert to HDR</h2><div data-hdr="result" class="zh-downloads" hidden><a data-hdr="hlg" download hidden>Download HLG</a><a data-hdr="exr" download hidden>Download EXR</a></div></div>
@@ -36,7 +39,7 @@ export class HDRSourceTool {
     const model=this.$('model');model.classList.add('zc-tool');model.textContent='LTX 2.5';model.removeAttribute('aria-hidden');this.root.querySelector('.zh-footer').prepend(model);
     this.loras=new LTXLoras(this.root.querySelector('.zh-advanced-body'),path=>this.request(path),()=>this.busy);this.trimmer=this.createTrimmer();this.$('start-job').onclick=()=>this.start();this.$('cancel').onclick=()=>this.cancel();
     this.longAvailable=longAvailable;this.$('long-control').hidden=!longAvailable;
-    this.longClient=new HDRLongJobClient(api,job=>this.longUpdate(job));
+    this.longClient=new HDRLongJobClient(api,job=>this.longUpdate(job),'zura-hdr-long',this.storage);
     this.$('long').onchange=()=>this.updateMode();
     this.models=new StudioModelDownloads(this.$('models'),(path,body)=>this.request('/zura/studio'+path,body),()=>this.refreshModelSetup());
     this.$('models').querySelector('summary').textContent='HDR model packages';
@@ -57,10 +60,10 @@ export class HDRSourceTool {
     this.onProgress=event=>{const p=event.detail,active=this.longClient.busy?this.longPrompt:this.job;if(!p||!active||this.cancelling||this.longClient.cancelPending||p.prompt_id!==active||!(p.max>0)||!Number.isFinite(p.value))return;if(p.node&&p.node!==this.currentNode){this.currentNode=p.node;this.sampleClock=null;}const bar=this.$('progress'),sampling=['sample1','sample2','hdr_sample'].includes(this.currentNode);let remaining=null;if(sampling){if(!this.sampleClock)this.sampleClock={value:p.value,time:Date.now()};else if(p.value>this.sampleClock.value){const seconds=(Date.now()-this.sampleClock.time)/1000/(p.value-this.sampleClock.value)*(p.max-p.value);if(Number.isFinite(seconds)&&seconds>=0&&seconds<86400)remaining=Math.ceil(seconds);}}bar.hidden=false;bar.value=Math.max(0,Math.min(100,100*p.value/p.max));this.status([this.longSection,`${this.nodeLabel(this.currentNode)} · ${sampling?'step':'progress'} ${p.value} of ${p.max}`,remaining===null?'':`About ${remaining}s left in this pass`].filter(Boolean).join(' · '));};
     api.addEventListener?.('progress',this.onProgress);
     this.disposeExecuting=installOwnedExecuting(api,this.onExecuting);
-    try{this.job=localStorage.getItem('zura-hdr-active-job');}catch{}
+    try{this.job=this.storage.getItem('zura-hdr-active-job');this.activeEXRStorage=normaliseEXRStorage(this.storage.getItem('zura-hdr-active-exr-storage'));}catch{}
     if(this.job){this.busy=true;this.loras.setBusy(true);this.$('start-job').disabled=true;this.$('cancel').hidden=false;this.$('progress').hidden=false;this.$('progress').removeAttribute('value');this.status('Reconnecting to your HDR conversion…');this.poll();}
-    if(longAvailable&&!this.job){let active,pending;try{active=localStorage.getItem('zura-hdr-long-job');pending=localStorage.getItem('zura-hdr-long-request');}catch{}if(active||pending){if(active)this.longClient.reconnect(active);else this.longClient.reconnectRequest(pending);}}
-    if(!longAvailable&&!this.job){let saved;try{saved=localStorage.getItem('zura-hdr-long-job')||localStorage.getItem('zura-hdr-long-request');}catch{}if(saved)void this.refreshModelSetup();}
+    if(longAvailable&&!this.job){let active,pending;try{active=this.storage.getItem('zura-hdr-long-job');pending=this.storage.getItem('zura-hdr-long-request');}catch{}if(active||pending){if(active)this.longClient.reconnect(active);else this.longClient.reconnectRequest(pending);}}
+    if(!longAvailable&&!this.job){let saved;try{saved=this.storage.getItem('zura-hdr-long-job')||this.storage.getItem('zura-hdr-long-request');}catch{}if(saved)void this.refreshModelSetup();}
   }
   $(id){return this.root.querySelector(`[data-hdr="${id}"]`);}
   createTrimmer(){
@@ -173,7 +176,7 @@ export class HDRSourceTool {
   reset({keepSource=true}={}){
     if(this.busy||this.starting)return false;
     clearTimeout(this.timer);this.timer=null;this.job=null;this.rangeEditRevision=(this.rangeEditRevision||0)+1;this.sourceInfoRevision=(this.sourceInfoRevision||0)+1;
-    this.hlgResult=null;this.$('use-result').hidden=true;this.$('result').hidden=true;this.$('hlg').hidden=true;this.$('exr').hidden=true;
+    this.completedResult=null;this.hlgResult=null;this.$('use-result').hidden=true;this.$('result').hidden=true;this.$('hlg').hidden=true;this.$('exr').hidden=true;
     this.$('preview').pause?.();this.$('preview').removeAttribute('src');this.$('preview').hidden=true;this.$('progress').hidden=true;this.$('cancel').hidden=true;this.status('');
     this.$('advanced-summary').closest('details').open=false;this.$('models').open=false;this.$('output').value='hlg_and_exr';
     this.$('start').value='0';this.$('count').value='25';this.sourceModeManual=false;
@@ -193,11 +196,20 @@ export class HDRSourceTool {
     if(ref)this.$('source-kind').value='output';else if(this.$('source-kind').value==='output')this.$('source-kind').value=this.getSource()?.id?'upload':'own';this.updateMode();
   }
   setOwnAsset(asset){this.ownAsset=asset||null;if(asset){this.$('video-name').textContent=asset.name||'Source video';this.$('source-kind').value='own';}this.updateMode();}
+  setSequenceAsset(asset,{fps=24,colour}={}){
+    if(!asset?.id||!Number.isInteger(asset.count)||asset.count<1)throw Error('The native EXR sequence is not available');
+    const space={scene_linear_rec709:'linear_rec709',acescg:'acescg',acescct:'acescct'}[colour?.encoding];
+    if(!space)throw Error('The source colour space is not mapped for native HDR editing. The original float source is retained');
+    this.sequenceAsset=asset;this.$('mode').value='native';this.$('source-kind').value='sequence';
+    this.$('sequence-fps').value=String(fps);this.$('sequence-name').textContent=`${asset.count} frames · ${asset.width} × ${asset.height}`;
+    this.$('count').value=String(Math.min(asset.count,121));this.updateMode();this.$('colour').value=space;
+    this.updateRangeSummary();this.sourceChanged();this.status('EXR frames ready');
+  }
   setLongAvailable(available){
     if(this.longAvailable===available)return;
     this.longAvailable=available;this.$('long-control').hidden=!available;
     if(!available)this.$('long').checked=false;
-    if(available&&!this.job&&!this.longClient.busy){let active,pending;try{active=localStorage.getItem('zura-hdr-long-job');pending=localStorage.getItem('zura-hdr-long-request');}catch{}if(active||pending){if(active)this.longClient.reconnect(active);else this.longClient.reconnectRequest(pending);}}
+    if(available&&!this.job&&!this.longClient.busy){let active,pending;try{active=this.storage.getItem('zura-hdr-long-job');pending=this.storage.getItem('zura-hdr-long-request');}catch{}if(active||pending){if(active)this.longClient.reconnect(active);else this.longClient.reconnectRequest(pending);}}
     this.updateMode();
   }
   status(text){this.$('status').textContent=text;}
@@ -246,7 +258,7 @@ export class HDRSourceTool {
     let url=kind==='output'&&this.outputRef?this.url(this.outputRef):asset?.preview_url||asset?.url||'';
     if(kind!=='output'&&url.startsWith('/'))url=this.api.apiURL(url);
     if(!url&&asset?.file){const parts=asset.file.split('/');url=this.api.apiURL('/view?'+new URLSearchParams({filename:parts.pop(),subfolder:parts.join('/'),type:'input'}));}
-    const key=kind+':'+(url||asset?.id||'');if(key===this.sourcePreviewKey)return;this.sourcePreviewKey=key;this.sourcePreviewUrl=url;this.hlgResult=null;this.$('use-result').hidden=true;
+    const key=kind+':'+(url||asset?.id||'');if(key===this.sourcePreviewKey)return;this.sourcePreviewKey=key;this.sourcePreviewUrl=url;this.completedResult=null;this.hlgResult=null;this.$('use-result').hidden=true;
     const video=this.$('source-preview');video.pause?.();video.hidden=!url;if(url)video.src=url;else video.removeAttribute('src');
     this.$('preview').hidden=true;this.$('result').hidden=true;this.$('empty').hidden=!!url;
     if(kind==='sequence'&&asset)this.$('empty').querySelector('h3').textContent='EXR frames ready';
@@ -271,7 +283,7 @@ export class HDRSourceTool {
   async refreshModelSetup(){
     const revision=this.modelSetupRevision=(this.modelSetupRevision||0)+1;
     const kind=this.$('source-kind').value,asset=kind==='sequence'?this.sequenceAsset:kind==='upload'?this.getSource():kind==='own'?this.ownAsset:null;
-    const query=new URLSearchParams({mode:this.$('mode').value,output:this.$('output').value,long:this.longAvailable&&this.$('long').checked?'1':'0'});
+    const query=new URLSearchParams({mode:this.$('mode').value,output:this.$('output').value,exr_storage:selectedEXRStorage(this.outputSettings,this.$('output').value),long:this.longAvailable&&this.$('long').checked?'1':'0'});
     const dimensions=this.sourceInfo||asset;
     if(Number.isInteger(dimensions?.width)&&Number.isInteger(dimensions?.height)){query.set('width',dimensions.width);query.set('height',dimensions.height);}
     try{
@@ -314,6 +326,7 @@ export class HDRSourceTool {
   }
   async runStart(){
     if(this.busy)return;
+    try{const ae=aeFrameContract(this);if(ae){this.$('start').value='0';this.$('count').value=String(ae.frameCount);this.$('sequence-fps').value=String(aeFrameRate(ae));if(ae.frameCount>121&&this.longAvailable)this.$('long').checked=true;}}catch(error){this.status(error.message);return;}
     const asset=this.getSource(),sourceKind=this.$('source-kind').value;
     if(asset?.busy){this.status('Wait for the current Studio job to finish.');return;}
     if(sourceKind==='upload'&&!asset?.id){this.status('Add a source video first.');return;}
@@ -332,15 +345,16 @@ export class HDRSourceTool {
     if(needsAutomaticSections&&!this.longAvailable){this.status('This frame range needs section processing. Check model setup, then try again.');return;}
     const longer=needsAutomaticSections||this.longAvailable&&this.$('long').checked,limit=longer?10000:121;
     if(!Number.isInteger(start)||start<0||!Number.isInteger(count)||count<1||count>limit){this.status(`Choose a valid first frame and 1–${limit} frames.`);return;}
-      this.hlgResult=null;this.$('use-result').hidden=true;this.busy=true;this.updateRangeSummary();this.loras.setBusy(true);this.$('start-job').disabled=true;this.$('result').hidden=true;this.$('progress').hidden=false;this.$('progress').removeAttribute('value');this.status(needsAutomaticSections?'Checking source and section limit…':'Checking source and model…');
+      this.completedResult=null;this.hlgResult=null;this.$('use-result').hidden=true;this.busy=true;this.updateRangeSummary();this.loras.setBusy(true);this.$('start-job').disabled=true;this.$('result').hidden=true;this.$('progress').hidden=false;this.$('progress').removeAttribute('value');this.status(needsAutomaticSections?'Checking source and section limit…':'Checking source and model…');
     try{
+      this.activeEXRStorage=selectedEXRStorage(this.outputSettings,this.$('output').value);try{this.storage.setItem('zura-hdr-active-exr-storage',this.activeEXRStorage);}catch{}
       const actualKind=sourceKind==='own'?'upload':sourceKind,sourceId=sourceKind==='sequence'?this.sequenceAsset.id:sourceKind==='own'?this.ownAsset.id:asset?.id;
-      if(longer){await this.longClient.start({mode:this.$('mode').value,source_kind:actualKind,source_id:sourceId,output_ref:this.outputRef,project_id:asset?.projectId,start_frame:start,frame_count:count,sequence_fps:Number(this.$('sequence-fps').value),colour_space:this.$('colour').value,output:this.$('output').value,section_frames:this.$('mode').value==='native'?Number(this.$('sections').value):121,custom_loras:this.loras.value(),client_id:this.api.clientId||'zura-hdr'});return;}
+      if(longer){await this.longClient.start(aeFrameRequest(this,{mode:this.$('mode').value,source_kind:actualKind,source_id:sourceId,output_ref:this.outputRef,project_id:asset?.projectId,start_frame:start,frame_count:count,sequence_fps:Number(this.$('sequence-fps').value),colour_space:this.$('colour').value,output:this.$('output').value,exr_storage:selectedEXRStorage(this.outputSettings,this.$('output').value),section_frames:this.$('mode').value==='native'?Number(this.$('sections').value):121,custom_loras:this.loras.value(),client_id:this.api.clientId||'zura-hdr'}));return;}
       const route=this.$('mode').value==='native'?'/zura/studio/hdr/native-graph':'/zura/studio/hdr/graph';
-      const prepared=await this.request(route,{source_kind:actualKind,source_id:sourceId,output_ref:this.outputRef,project_id:asset?.projectId,start_frame:start,frame_count:count,sequence_fps:Number(this.$('sequence-fps').value),colour_space:this.$('colour').value,output:this.$('output').value,custom_loras:this.loras.value()});
-      const queued=await this.request('/prompt',{prompt:prepared.graph,client_id:this.api.clientId||'zura-hdr'});
+      const prepared=await this.request(route,aeFrameRequest(this,{source_kind:actualKind,source_id:sourceId,output_ref:this.outputRef,project_id:asset?.projectId,start_frame:start,frame_count:count,sequence_fps:Number(this.$('sequence-fps').value),colour_space:this.$('colour').value,output:this.$('output').value,exr_storage:selectedEXRStorage(this.outputSettings,this.$('output').value),custom_loras:this.loras.value()}));
+      const matched=await prepareAEFrameGraph(this,prepared.graph);const queued=await this.request('/prompt',{prompt:matched.graph,client_id:this.api.clientId||'zura-hdr',...(matched.config.ae_frame_contract?{extra_data:{ae_frame_contract:matched.config.ae_frame_contract}}:{})});
       if(!queued.prompt_id)throw new Error('ComfyUI did not accept the HDR conversion.');
-      this.job=queued.prompt_id;this.currentNode=null;try{localStorage.setItem('zura-hdr-active-job',this.job);}catch{}this.$('cancel').hidden=false;this.status('Queued · waiting for ComfyUI…');this.poll();
+      this.job=queued.prompt_id;this.currentNode=null;try{this.storage.setItem('zura-hdr-active-job',this.job);}catch{}this.$('cancel').hidden=false;this.status('Queued · waiting for ComfyUI…');this.poll();
     }catch(error){this.status(error.message);this.finish();}
   }
   url(file){return this.api.apiURL('/view?'+new URLSearchParams({filename:file.filename,subfolder:file.subfolder||'',type:file.type||'output'}));}
@@ -353,7 +367,7 @@ export class HDRSourceTool {
     if(state==='complete'){
       const files=job.result?.files||[],preview=job.result?.preview,hlg=files.find(f=>f.filename.endsWith('.mp4')),exr=files.find(f=>f.filename.endsWith('.zip'));
       if(!preview||(!hlg&&!exr)){this.status('HDR conversion finished without the requested files.');this.finish();return;}
-      this.showResult(preview);this.hlgResult=hlg||null;this.$('use-result').hidden=!hlg||!this.onUseResult;for(const [name,file] of [['hlg',hlg],['exr',exr]]){this.$(name).hidden=!file;if(file)this.$(name).href=this.url(file);}
+      this.completedResult={files:[hlg,exr].filter(Boolean),preview,exr_storage:normaliseEXRStorage(job.result?.exr_storage||job.exr_storage||this.activeEXRStorage)};this.showResult(preview);this.hlgResult=hlg||null;this.$('use-result').hidden=!hlg||!this.onUseResult;for(const [name,file] of [['hlg',hlg],['exr',exr]]){this.$(name).hidden=!file;if(file)this.$(name).href=this.url(file);}
       this.status('HDR conversion complete.');this.finish();return;
     }
     if(state==='cancelled'||state==='failed'||state==='unknown'){this.status(job.error|| (state==='cancelled'?'HDR conversion cancelled.':'HDR conversion failed.'));this.finish();return;}
@@ -382,11 +396,11 @@ export class HDRSourceTool {
       const outputs=item.outputs||{},preview=outputs.zura_hdr_save_preview?.images?.[0];
       const hlg=outputs.zura_hdr_save_video?.images?.[0],exr=outputs.zura_hdr_archive?.files?.[0];
       if(!preview || (!hlg&&!exr)){this.status('HDR conversion finished without the requested files.');this.finish();return;}
-      this.showResult(preview);this.hlgResult=hlg||null;this.$('use-result').hidden=!hlg||!this.onUseResult;for(const [name,file] of [['hlg',hlg],['exr',exr]]){this.$(name).hidden=!file;if(file)this.$(name).href=this.url(file);}
+      this.completedResult={files:[hlg,exr].filter(Boolean),preview,exr_storage:this.activeEXRStorage||'half'};this.showResult(preview);this.hlgResult=hlg||null;this.$('use-result').hidden=!hlg||!this.onUseResult;for(const [name,file] of [['hlg',hlg],['exr',exr]]){this.$(name).hidden=!file;if(file)this.$(name).href=this.url(file);}
       this.status('HDR conversion complete.');this.finish();
     }catch(error){if(!this.job)return;this.currentNode=null;this.$('progress').removeAttribute('value');this.status('Connection interrupted. Reconnecting to your HDR conversion…');this.timer=setTimeout(()=>this.poll(),2000);}
   }
   async cancel(){if(this.longClient.busy){await this.longClient.cancel();return;}if(!this.job||this.cancelling)return;this.cancelling=true;this.$('cancel').disabled=true;this.status('Cancelling HDR conversion…');try{await this.request('/queue',{delete:[this.job]});await this.request('/interrupt',{prompt_id:this.job});}catch(error){this.cancelling=false;this.$('cancel').disabled=false;this.status('Could not request cancellation. Try again.');}}
-  finish(){clearTimeout(this.timer);this.timer=null;this.job=null;this.longPrompt=null;this.longSection=null;this.cancelling=false;try{localStorage.removeItem('zura-hdr-active-job');}catch{}this.busy=false;this.updateRangeSummary();this.loras.setBusy(false);this.$('start-job').disabled=false;this.$('cancel').hidden=true;this.$('cancel').disabled=false;this.$('progress').hidden=true;}
+  finish(){clearTimeout(this.timer);this.timer=null;this.job=null;this.longPrompt=null;this.longSection=null;this.cancelling=false;try{this.storage.removeItem('zura-hdr-active-job');this.storage.removeItem('zura-hdr-active-exr-storage');}catch{}this.busy=false;this.updateRangeSummary();this.loras.setBusy(false);this.$('start-job').disabled=false;this.$('cancel').hidden=true;this.$('cancel').disabled=false;this.$('progress').hidden=true;}
   close(){clearTimeout(this.timer);this.longClient.close();this.modelSetupRevision=(this.modelSetupRevision||0)+1;this.models.dispose();this.trimmer?.close();this.root.ownerDocument.removeEventListener('keydown',this.onEscape);this.api.removeEventListener?.('progress',this.onProgress);this.disposeExecuting?.();this.$('preview').pause?.();this.root.remove();}
 }

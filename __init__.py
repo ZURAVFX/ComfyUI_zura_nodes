@@ -68,7 +68,7 @@ NODE_DISPLAY_NAME_MAPPINGS.update(QWEN_DESIGN_NAMES)
 
 WEB_DIRECTORY = "./web"
 PACKAGE_ROOT = Path(__file__).resolve().parent
-__version__ = "1.3.60"
+__version__ = "1.3.61"
 
 
 def _register_routes():
@@ -254,3 +254,26 @@ NODE_DISPLAY_NAME_MAPPINGS.update(GEMINI_IMAGE_NAMES)
 if getattr(PromptServer, 'instance', None) is not None:
     from .browser_image_routes import register as register_browser_image_routes
     register_browser_image_routes(PromptServer.instance.routes)
+# Keep the legacy batch loader when it is installed; do not register a competing ID.
+_legacy_comfylink = PACKAGE_ROOT.parent / "comfylink_ae" / "__init__.py"
+if not _legacy_comfylink.is_file():
+    from .comfylink.nodes import NODE_CLASS_MAPPINGS as COMFYLINK_NODES, NODE_DISPLAY_NAME_MAPPINGS as COMFYLINK_NAMES
+    for _name, _node in COMFYLINK_NODES.items():
+        NODE_CLASS_MAPPINGS.setdefault(_name, _node)
+    for _name, _label in COMFYLINK_NAMES.items():
+        NODE_DISPLAY_NAME_MAPPINGS.setdefault(_name, _label)
+
+# These distinct IDs coexist with the legacy eight-bit batch loader.
+from .comfylink.float_nodes import NODE_CLASS_MAPPINGS as COMFYLINK_FLOAT_NODES, NODE_DISPLAY_NAME_MAPPINGS as COMFYLINK_FLOAT_NAMES
+NODE_CLASS_MAPPINGS.update(COMFYLINK_FLOAT_NODES)
+NODE_DISPLAY_NAME_MAPPINGS.update(COMFYLINK_FLOAT_NAMES)
+from .comfylink.ltx_colour import NODE_CLASS_MAPPINGS as COMFYLINK_LTX_NODES, NODE_DISPLAY_NAME_MAPPINGS as COMFYLINK_LTX_NAMES
+NODE_CLASS_MAPPINGS.update(COMFYLINK_LTX_NODES)
+NODE_DISPLAY_NAME_MAPPINGS.update(COMFYLINK_LTX_NAMES)
+from .comfylink.frame_nodes import ZuraComfyLinkMatchFrames
+NODE_CLASS_MAPPINGS["ZuraComfyLinkMatchFrames"] = ZuraComfyLinkMatchFrames
+NODE_DISPLAY_NAME_MAPPINGS["ZuraComfyLinkMatchFrames"] = "Zura ComfyLink Match Frames"
+
+if getattr(PromptServer, "instance", None) is not None:
+    from .comfylink.routes import register as register_comfylink_routes
+    register_comfylink_routes(PromptServer.instance, __version__)

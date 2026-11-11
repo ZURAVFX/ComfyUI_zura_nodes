@@ -1,12 +1,14 @@
+import {normaliseEXRStorage} from './studio_exr_precision.js';
+import {normalStudioStorage} from './studio_storage.js';
 import {HDRLongJobClient} from './studio_hdr_long.js';
 
 // A generation's SDR master is retained. HDR is an explicit additional model
 // pass, shown in the same workspace rather than silently tagging SDR as HDR.
 export class LTXHDRDelivery {
-  constructor(api,{key,onUpdate,onComplete,onSetup=()=>{}}){
+  constructor(api,{key,onUpdate,onComplete,onSetup=()=>{},storage=normalStudioStorage()}){this.storage=storage;
     this.key=key;this.onUpdate=onUpdate;this.onComplete=onComplete;this.onSetup=onSetup;this.busy=false;
-    this.client=new HDRLongJobClient(api,job=>this.update(job),key);
-    try{this.take=JSON.parse(localStorage.getItem(key+'-take'))||null;}catch{}
+    this.client=new HDRLongJobClient(api,job=>this.update(job),key,this.storage);
+    try{this.take=JSON.parse(this.storage.getItem(key+'-take'))||null;}catch{}
   }
   async preflight(config){
     if(config.engine!=='ltx'||!config.hdrOutput||config.hdrOutput==='sdr')return;
@@ -21,16 +23,16 @@ export class LTXHDRDelivery {
   }
   async start(take){
     if(this.busy)return;
-    this.take=take;this.busy=true;this.cancelRequested=false;
-    try{localStorage.setItem(this.key+'-take',JSON.stringify(take));}catch{}
-    await this.client.start({mode:'sdr',source_kind:'output',output_ref:take.file,start_frame:0,
-      frame_count:take.config.frames,colour_space:'srgb_display',output:take.config.hdrOutput,
+    take={...take,config:{...take.config,exr_storage:normaliseEXRStorage(take.config.exr_storage)}};this.take=take;this.busy=true;this.cancelRequested=false;
+    try{this.storage.setItem(this.key+'-take',JSON.stringify(take));}catch{}
+    await this.client.start({...(take.config.ae_frame_contract?{ae_frame_contract:take.config.ae_frame_contract}:{}),mode:'sdr',source_kind:'output',output_ref:take.file,start_frame:0,
+      frame_count:take.config.frames,colour_space:'srgb_display',output:take.config.hdrOutput,exr_storage:take.config.exr_storage,
       section_frames:121,seed:take.config.seed,client_id:this.client.api.clientId||'zura-ltx-delivery'});
   }
   resume(){
     if(!this.take)return;
     if(this.client.busy){this.client.resume();return;}
-    let id,request;try{id=localStorage.getItem(this.key+'-job');request=localStorage.getItem(this.key+'-request');}catch{}
+    let id,request;try{id=this.storage.getItem(this.key+'-job');request=this.storage.getItem(this.key+'-request');}catch{}
     if(id||request){this.busy=true;if(id)this.client.reconnect(id);else this.client.reconnectRequest(request);}
   }
   update(job){
@@ -40,11 +42,11 @@ export class LTXHDRDelivery {
     this.busy=!terminal;
     if(job.state==='complete'){
       const files=job.result?.files||[],preview=job.result?.preview;
-      if(preview&&files.length)this.onComplete({...this.take,file:preview,hdrFiles:files});
+      if(preview&&files.length)this.onComplete({...this.take,file:preview,hdrFiles:files,exr_storage:normaliseEXRStorage(job.result?.exr_storage||job.exr_storage||this.take?.config?.exr_storage)});
       else job={...job,state:'failed',error:'HDR delivery finished without the requested files. Your SDR take is retained.'};
     }
     this.onUpdate(job);
-    if(terminal){this.take=null;this.cancelRequested=false;try{localStorage.removeItem(this.key+'-take');}catch{}}
+    if(terminal){this.take=null;this.cancelRequested=false;try{this.storage.removeItem(this.key+'-take');}catch{}}
   }
   cancel(){if(!this.client.id){this.cancelRequested=true;this.onUpdate({state:'cancelling'});return;}this.cancelRequested=false;return this.client.cancel();}
   close(){this.client.close();}

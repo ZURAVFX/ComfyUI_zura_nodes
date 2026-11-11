@@ -1,3 +1,4 @@
+import {workspaceStorage} from './studio_storage.js';
 import {installOwnedExecuting} from './studio_progress.js';
 import {submitOwnedGraph} from './studio_owned_jobs.js';
 import {megapixelSlider,editableDimension,VIDEO_CANVAS_LIMITS,megapixelMaximum} from './studio_resolution.js';
@@ -20,9 +21,9 @@ const mediaKind=file=>/^image\//.test(file.type)||/\.(png|jpe?g|webp)$/i.test(fi
 
 /** Independent ingredients UI, sharing the endpoint workspace's owned-job lifecycle. */
 export class ReferenceVideoWorkspace {
-  constructor(owner){
+  constructor(owner){this.storage=workspaceStorage(owner);
     this.owner=owner;this.api=owner.api;this.app=owner.app;this.studio=owner.studio;
-    let saved={};try{saved=JSON.parse(localStorage.getItem(KEY))||{};}catch{}
+    let saved={};try{saved=JSON.parse(this.storage.getItem(KEY))||{};}catch{}
     this.assets={images:[],videos:[],audios:[],...saved.assets};this.job=saved.job||null;this.pendingSubmission=saved.pendingSubmission||null;this.items=Array.isArray(saved.items)?saved.items.slice(0,12):[];
     if(this.job?.cancelPending)this.job.cancelRetryAvailable=true;
     const draft=saved.draft||{};this.audioDriver=draft.audioDriver||'';this.firstFrame=draft.firstFrame||'';this.page=document.createElement('section');this.page.className='zf-page zr-page';
@@ -74,7 +75,7 @@ export class ReferenceVideoWorkspace {
   recipe(){return {...CAP,label:'MiniMax H3 reference video'};}
   config(){return {images:this.assets.images.map(a=>({...a})),videos:this.assets.videos.map(a=>({...a})),audios:this.assets.audios.map(a=>({...a})),audioDriver:this.audioDriver,firstFrame:this.firstFrame,model:this.$('model').value,speedup:this.$('speedup').value,refImageSize:this.$('ref-size').value,prompt:this.$('prompt').value,width:Number(this.$('width').value),height:Number(this.$('height').value),frames:Number(this.$('length').value),steps:Number(this.$('steps').value),seed:Number(this.$('seed').value),random:this.$('random').checked,custom_loras:this.loras.value()};}
   build(c=this.config()){return buildReferenceVideoGraph(c,this.modelInfo);}
-  save(){const draft={audioDriver:this.audioDriver,firstFrame:this.firstFrame,custom_loras:this.loras.value()};for(const id of ['model','prompt','width','height','length','steps','seed','size-preset','megapixels','speedup','ref-size'])draft[id]=this.$(id).value;draft.random=this.$('random').checked;try{localStorage.setItem(KEY,JSON.stringify({assets:this.assets,draft,job:this.job,pendingSubmission:this.pendingSubmission,items:this.items}));return true;}catch{this.message('Browser storage is full. Outputs still save in ComfyUI/output.');return false;}}
+  save(){const draft={audioDriver:this.audioDriver,firstFrame:this.firstFrame,custom_loras:this.loras.value()};for(const id of ['model','prompt','width','height','length','steps','seed','size-preset','megapixels','speedup','ref-size'])draft[id]=this.$(id).value;draft.random=this.$('random').checked;try{this.storage.setItem(KEY,JSON.stringify({assets:this.assets,draft,job:this.job,pendingSubmission:this.pendingSubmission,items:this.items}));return true;}catch{this.message('Browser storage is full. Outputs still save in ComfyUI/output.');return false;}}
   normaliseDimensions(){for(const id of ['width','height']){const n=Number(this.$(id).value);if(Number.isFinite(n)&&n>=256&&n<=VIDEO_CANVAS_LIMITS.maxDimension)this.$(id).value=Math.round(n/32)*32;}}
   selectAvailability(){if(this.modelInfo)this.availability=referenceVideoAvailability(this.modelInfo,this.config());this.modelDownloads?.setMissingContext('h3_reference',this.availability?.missing);}
   async loadModels(){if(this.loading)return;this.loading=true;this.modelError='';this.render();try{this.modelInfo=await this.fetch('/object_info');this.selectAvailability();}catch(e){this.modelError='Could not check installed models. Refresh generation settings.';this.message(e.message);}finally{this.loading=false;this.render();}}

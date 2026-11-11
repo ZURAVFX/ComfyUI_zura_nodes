@@ -1,3 +1,4 @@
+import {workspaceStorage} from './studio_storage.js';
 import {cancelOwnedJob} from './studio_owned_jobs.js';
 
 const STYLE_URL=new URL('./studio_restart.css',import.meta.url);
@@ -207,7 +208,7 @@ function resetOutpaintWorkspace(creative){
     'zura-outpaint-hdr-job',
     'zura-outpaint-hdr-request',
   ]){
-    try{localStorage.removeItem(key);}catch{}
+    try{workspaceStorage(creative).removeItem(key);}catch{}
   }
   creative.outpaint=new Constructor(creative);
   creative.outpaint.save?.();

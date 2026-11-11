@@ -1,0 +1,103 @@
+{
+  "id": "zura-character-mask-video",
+  "name": "05 – Zura character mask (native video)",
+  "description": "Your supplied API workflow, unchanged: LoadVideo → TrendStudioV2MaskPerformer → mask → CreateVideo → SaveVideo. Requires your working TrendStudioV2MaskPerformer installation. Output is a mask video, not an automatic AE alpha matte.",
+  "mode": "video",
+  "workflow": {
+    "1": {
+      "inputs": {
+        "file": "placeholder.mp4",
+        "video-preview": ""
+      },
+      "class_type": "LoadVideo",
+      "_meta": {
+        "title": "AE_INPUT"
+      }
+    },
+    "2": {
+      "inputs": {
+        "filename_prefix": "video/ComfyUI",
+        "format": "auto",
+        "format.codec": "auto",
+        "codec": "auto",
+        "video": [
+          "6",
+          0
+        ]
+      },
+      "class_type": "SaveVideo",
+      "_meta": {
+        "title": "AE_OUTPUT"
+      }
+    },
+    "3": {
+      "inputs": {
+        "replacement_area": "Whole character",
+        "mask_expansion": 12,
+        "blockify_mask": true,
+        "block_size": 32,
+        "video": [
+          "1",
+          0
+        ]
+      },
+      "class_type": "TrendStudioV2MaskPerformer",
+      "_meta": {
+        "title": "Zura Mask"
+      }
+    },
+    "5": {
+      "inputs": {
+        "mask": [
+          "3",
+          2
+        ]
+      },
+      "class_type": "MaskToImage",
+      "_meta": {
+        "title": "Convert Mask to Image"
+      }
+    },
+    "6": {
+      "inputs": {
+        "fps": [
+          "7",
+          2
+        ],
+        "bit_depth": [
+          "7",
+          3
+        ],
+        "color_space": [
+          "7",
+          4
+        ],
+        "codec": "none",
+        "images": [
+          "5",
+          0
+        ],
+        "audio": [
+          "7",
+          1
+        ]
+      },
+      "class_type": "CreateVideo",
+      "_meta": {
+        "title": "Create Video"
+      }
+    },
+    "7": {
+      "inputs": {
+        "video": [
+          "1",
+          0
+        ]
+      },
+      "class_type": "GetVideoComponents",
+      "_meta": {
+        "title": "Get Video Components"
+      }
+    }
+  }
+}

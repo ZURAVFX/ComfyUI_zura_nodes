@@ -1,9 +1,11 @@
 import {WatermarkWorkspace} from './watermark_workspace.js';
 import {PaintoutWorkspace} from './studio_paintout.js';
-let workspace;
+import {workspaceStorage} from '../studio_storage.js';
+const paintouts=new WeakMap(),watermarks=new WeakMap();
 
 export function getPaintoutWorkspace(owner){
-  if(!workspace)workspace=new PaintoutWorkspace(owner,{paintoutOnly:true});
+  const store=workspaceStorage(owner);let workspace=paintouts.get(store);
+  if(!workspace){workspace=new PaintoutWorkspace(owner,{paintoutOnly:true});paintouts.set(store,workspace);}
   else if(workspace.owner!==owner){
     workspace.close();
     Object.assign(workspace,{owner,studio:owner.studio,api:owner.api,app:owner.app});
@@ -13,9 +15,9 @@ export function getPaintoutWorkspace(owner){
   return workspace;
 }
 
-let watermarkWorkspace;
 export function getWatermarkWorkspace(owner){
-  if(!watermarkWorkspace)watermarkWorkspace=new WatermarkWorkspace(owner);
+  const store=workspaceStorage(owner);let watermarkWorkspace=watermarks.get(store);
+  if(!watermarkWorkspace){watermarkWorkspace=new WatermarkWorkspace(owner);watermarks.set(store,watermarkWorkspace);}
   else if(watermarkWorkspace.owner!==owner){watermarkWorkspace.close();Object.assign(watermarkWorkspace,{owner,studio:owner.studio,api:owner.api,app:owner.app});}
   if(watermarkWorkspace.page.parentNode!==owner.root)owner.root.append(watermarkWorkspace.page);
   watermarkWorkspace.page.hidden=false;return watermarkWorkspace;

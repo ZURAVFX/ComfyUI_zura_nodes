@@ -262,15 +262,20 @@ class ZuraAlphaVideoOutput:
     @classmethod
     def INPUT_TYPES(cls):
         return {"required": {"images": ("IMAGE",), "info": ("ZURA_ALPHA_INFO",),
-                             "filename_prefix": ("STRING", {"default": "ZURA STUDIO/alpha"})}}
+                             "filename_prefix": ("STRING", {"default": "ZURA STUDIO/alpha"})},
+                "optional": {"ae_frame_contract": ("STRING", {"default": ""})}}
 
     RETURN_TYPES = ()
     FUNCTION = "save"
     OUTPUT_NODE = True
     CATEGORY = CATEGORY
 
-    def save(self, images, info, filename_prefix="ZURA STUDIO/alpha"):
+    def save(self, images, info, filename_prefix="ZURA STUDIO/alpha", ae_frame_contract=""):
         source = _validate_info(info, images)
+        if ae_frame_contract:
+            from ..comfylink.frame_contract import validate_interval
+            validate_interval(json.loads(ae_frame_contract), frames=info['frame_count'],
+                fps=Fraction(info['fps_rational']), width=info['width'], height=info['height'])
         output, target = _target_folder(filename_prefix)
         rate = Fraction(info["fps_rational"])
         if not 0 < rate <= 1000:

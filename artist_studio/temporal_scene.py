@@ -402,14 +402,17 @@ class ZuraCameraLoadScene:
 class ZuraCameraPadFrames:
     @classmethod
     def INPUT_TYPES(cls):
-        return {'required': {'image': ('IMAGE',), 'frames': ('INT', {'default': 17, 'min': 1, 'max': 1000})}}
+        return {'required': {'image': ('IMAGE',), 'frames': ('INT', {'default': 17, 'min': 1, 'max': 1000})},
+                'optional': {'required_source_frames': ('INT', {'default': 0, 'min': 0, 'max': 1000})}}
     RETURN_TYPES = ('IMAGE',)
     FUNCTION = 'pad'
     CATEGORY = 'Zura/Camera'
 
-    def pad(self, image, frames):
+    def pad(self, image, frames, required_source_frames=0):
         if image.ndim != 4 or len(image) < 1:
             raise ValueError('The selected video contains no readable frames.')
+        if len(image) < required_source_frames:
+            raise ValueError('The prepared source is shorter than the requested interval. Reload the original source; only model-grid padding may hold frames.')
         if len(image) >= frames:
             return (image[:frames],)
         return (torch.cat([image, image[-1:].expand(frames-len(image), -1, -1, -1)]),)

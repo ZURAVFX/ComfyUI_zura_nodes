@@ -196,7 +196,7 @@ def build_sdr_first_stage(source, *, start_frame, frame_count, width, height,
 def build_sdr_first_hdr_composite(source, intermediate, *, start_frame, frame_count, width, height,
                                   left=0, top=0, right=0, bottom=0, colour_space='auto',
                                   prefix='sdr_first_composite', seed=42, feather=16, source_fps=24., has_audio=False,
-                                  start_seconds=None, mode='expand', black_threshold=2/255):
+                                  start_seconds=None, mode='expand', black_threshold=2/255, exr_storage='half'):
     """Internal two-stage test, not yet a Studio route or a quality claim."""
     if colour_space not in ('auto', 'hlg_rec2020', 'pq_rec2020'):
         raise ValueError('Choose a supported HDR video colour space.')
@@ -217,7 +217,7 @@ def build_sdr_first_hdr_composite(source, intermediate, *, start_frame, frame_co
         colour_space=colour_space, prefix='genj/hdr_outpaint/composite_setup')
     from .hdr_studio import build_hdr_graph
     graph = build_hdr_graph(source=intermediate, start_frame=0, frame_count=frame_count, fps=24.,
-        colour_space='srgb_display', output='hlg_and_exr', prefix=prefix, has_audio=False, seed=seed)
+        colour_space='srgb_display', output='hlg_and_exr', prefix=prefix, has_audio=False, seed=seed, exr_storage=exr_storage)
     graph['native_original'] = {'class_type': 'ZuraHDRSelectNativeTimeline', 'inputs': {
         'source': source, 'start_seconds': selected_start, 'frame_count': frame_count,
         'output_fps': 24., 'colour_space': colour_space, 'sequence_fps': 24.}}
@@ -372,7 +372,7 @@ def crop_black_hdr_composite(graph, width, height):
 
 def build_reviewed_sdr_first_composite(source, selection, intermediate, *, review_key,
                                        colour_space='auto', has_audio=False, seed=42,
-                                       prefix='sdr_first_reviewed', check_asset=lambda asset: None):
+                                       prefix='sdr_first_reviewed', check_asset=lambda asset: None, exr_storage='half'):
     """Build the HDR delivery pass for the same approved bounded selection."""
     expected, path = _reviewed_sdr_first_selection(source, selection, review_key, colour_space, check_asset)
     if type(has_audio) is not bool:
@@ -381,7 +381,7 @@ def build_reviewed_sdr_first_composite(source, selection, intermediate, *, revie
         frame_count=expected['padded_frames'], width=expected['padded_width'], height=expected['padded_height'],
         left=expected['left'], top=expected['top'], right=expected['right'], bottom=expected['bottom'],
         colour_space=colour_space, has_audio=False, seed=seed, prefix=prefix,
-        mode=expected['mode'], black_threshold=expected['black_threshold'])
+        mode=expected['mode'], black_threshold=expected['black_threshold'], exr_storage=exr_storage)
     graph['native_original']['inputs']['frame_count'] = expected['frames']
     graph['hdr_input_hold'] = {'class_type': 'ZuraHDRTemporalHold', 'inputs': {'images': ['native_original', 0]}}
     graph['native_canvas']['inputs']['images'] = ['hdr_input_hold', 0]

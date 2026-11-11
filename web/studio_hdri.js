@@ -1,3 +1,4 @@
+import {workspaceStorage} from './studio_storage.js';
 import {openPanoramaEditor} from './studio_panorama_editor.js';
 import {StudioModelDownloads} from './studio_model_download.js';
 
@@ -16,8 +17,8 @@ export function environmentGeneration(config){
 /** Environment tools share the ordinary image canvas, providers and history. */
 export class HDRIBuilder{
   constructor(owner){
-    this.owner=owner;owner.imageIntent=owner.draft.image_intent||'standard';
-    try{this.state=JSON.parse(localStorage.getItem(KEY))||{};}catch{this.state={};}
+    this.owner=owner;this.storage=workspaceStorage(owner);owner.imageIntent=owner.draft.image_intent||'standard';
+    try{this.state=JSON.parse(this.storage.getItem(KEY))||{};}catch{this.state={};}
     this.state={yaw:0,exposure:0,view_exposure:0,lights:[],color_space:'auto',export_space:'linear_rec709',...this.state};
     this.serial=0;this.loading=false;this.previewing=false;this.placing=false;
     const doc=owner.root.ownerDocument;this.root=doc.createElement('section');this.root.className='zhe-controls';this.root.hidden=true;
@@ -41,10 +42,11 @@ export class HDRIBuilder{
   light(){return this.state.lights.find(light=>light.id===this.selected)||this.state.lights[0];}
   message(text=''){this.$('status').textContent=text;}
   source(){const o=this.owner,item=o.items[o.selectedImage];if(item?.hdri_source_id)return{source_id:item.hdri_source_id,color_space:this.state.color_space};if(item?.file)return{file:item.file,color_space:'srgb_display'};const ref=o.references[0];return ref?{file:{...ref,type:'input'},color_space:'srgb_display'}:null;}
-  save(){try{localStorage.setItem(KEY,JSON.stringify(this.state));}catch{this.message('Could not save the environment controls.');}}
+  save(){try{this.storage.setItem(KEY,JSON.stringify(this.state));}catch{this.message('Could not save the environment controls.');}}
   changed(){this.save();this.serial++;clearTimeout(this.debounce);this.debounce=setTimeout(()=>void this.preview(),160);}
   sync(){
     const o=this.owner,active=this.active();this.root.hidden=!active;if(!active){this.placing=false;return;}
+    if(o.studio.aeBridge&&!o.studio.aeBridge.closed){this.root.hidden=true;o.imageIntent='standard';o.message('Leave the AE session to build a panorama or HDRI. This operation changes the source raster.');return;}
     o.imageTask.querySelector('[data-image-operation-label]').textContent='Panorama / HDRI';
     for(const button of o.imageTask.querySelectorAll('[data-image-operation]')){const chosen=button.dataset.imageOperation==='hdri';button.setAttribute('aria-pressed',String(chosen));button.setAttribute('aria-checked',String(chosen));}
     const shapes=o.root.querySelector('.zc-shapes');if(shapes)shapes.hidden=true;o.imageSizeRatio=2;

@@ -675,14 +675,15 @@ class GenjRestoreSoundtrack:
                              "output_width": ("INT", {"default": 0, "min": 0, "max": 16384}),
                              "output_height": ("INT", {"default": 0, "min": 0, "max": 16384}),
                              "target_frames": ("INT", {"default": 0, "min": 0}),
-                             "model_stride": ([0, 4, 8],)}}
+                             "model_stride": ([0, 4, 8],),
+                             "ae_frame_contract": ("STRING", {"default": ""})}}
 
     RETURN_TYPES = ("VIDEO",)
     FUNCTION = "restore"
     CATEGORY = CATEGORY
     OUTPUT_NODE = True
 
-    def restore(self, video, clip_details, take_name, output_subfolder="final", output_width=0, output_height=0, target_frames=0, model_stride=0):
+    def restore(self, video, clip_details, take_name, output_subfolder="final", output_width=0, output_height=0, target_frames=0, model_stride=0, ae_frame_contract=""):
         if not re.fullmatch(r"[A-Za-z0-9_-]{1,80}", take_name):
             raise ValueError("Take name can contain letters, numbers, underscores and hyphens.")
         if output_subfolder not in ("final", "studio_intermediate"):
@@ -699,6 +700,15 @@ class GenjRestoreSoundtrack:
         with av.open(str(generated)) as c:
             vs = c.streams.video[0]
             duration = float(vs.duration * vs.time_base) if vs.duration else float(c.duration / av.time_base)
+            if ae_frame_contract:
+                from ..comfylink.frame_contract import validate_interval, normalise_frame_contract
+                contract=normalise_frame_contract(json.loads(ae_frame_contract))
+                validate_interval(contract,frames=clip_details['frames'],fps=fps,
+                    width=output_width or vs.width,height=output_height or vs.height)
+                generated_count=sum(1 for _ in c.decode(video=0))
+                if generated_count < contract['frameCount']:
+                    raise ValueError('The generated clip is shorter than the AE source. Missing frames cannot be repeated.')
+                target_frames,model_stride=contract['frameCount'],0
         original_frames = clip_details["frames"]
         if type(target_frames) is not int or target_frames < 0 or (target_frames and not original_frames <= target_frames <= original_frames + 16):
             raise ValueError("The padded output must retain the selected clip and add at most sixteen held frames.")

@@ -1,3 +1,7 @@
+import {aeFrameConfig,assertAEFrameConfig} from './studio_ae_frame_contract.js';
+import {takeStudioLaunch,studioLaunchStorage,StudioAEBridge} from './studio_comfylink.js';
+import {navigateStudioMode} from './studio_mode_adapters.js';
+import {normalStudioStorage} from './studio_storage.js';
 import { app } from "../../scripts/app.js";
 import { api } from "../../scripts/api.js";
 import { tidyArtistGraph, trimStageSignals, installArtistLinkRendering } from "./artist_graph.js";
@@ -67,7 +71,8 @@ async function tidyWanStage(app, graph, stage) {
 }
 
 class ArtistStudio {
-  constructor() {
+  constructor({storage=normalStudioStorage(),aeSession=null}={}) {
+    this.storage=storage;this.aeSession=aeSession;
     this.project = null; this.source = null; this.character = null; this.audio = null; this.busy = false;
     this.references=[];this.readyAsset=null;this.lookMode="build";this.hdrSourceLook=false;
     this.config = {...defaults}; this.preview = "mask"; this.lastVideo = null; this.resetEpoch=0;this.resetting=false;
@@ -204,7 +209,7 @@ class ArtistStudio {
       </main></div>`;
     if(this.container.querySelector){
       if(typeof StudioModelDownloads!=="undefined")this.modelDownloads=new StudioModelDownloads(this.$("model-downloads"),request,async()=>{this.modelStatus=await request("/status");this.syncForm();this.render();});
-      if(typeof HDRSourceTool!=="undefined")this.hdrTool=new HDRSourceTool(this.container,api,()=>({id:this.source?.id,file:this.source?.file,url:this.source?.url,preview_url:this.source?.preview_url,width:this.source?.width,height:this.source?.height,projectId:this.project?.id,busy:this.busy||this.project?.phase==='working'}));
+      if(typeof HDRSourceTool!=="undefined")this.hdrTool=new HDRSourceTool(this.container,api,()=>({id:this.source?.id,file:this.source?.file,url:this.source?.url,preview_url:this.source?.preview_url,width:this.source?.width,height:this.source?.height,projectId:this.project?.id,busy:this.busy||this.project?.phase==='working'}),{storage:this.storage});
       const clip=this.container.querySelector(".gs-clip-length");
       this.$("trim-controls").appendChild(clip);
       this.$("trim-precision").querySelector(".gs-two").append(this.$("trim-start"),this.$("duration-setting"));
@@ -241,7 +246,7 @@ class ArtistStudio {
     const target=this.comparisonTarget(url);if(!target)return;
     const p=this.project;
     if(!this.comparison){this.comparison=new ShotComparison(this.$("comparison"));this.comparison.onClose=()=>{this.compareActive=false;this.render();};}
-    this.compareActive=true;this.compareProject=p.id;this.compareResult=target.result;this.compareKind=target.kind;this.$("player").pause();
+    this.selectedTake=p.results?.find(result=>result.url===target.result)||null;this.compareActive=true;this.compareProject=p.id;this.compareResult=target.result;this.compareKind=target.kind;this.$("player").pause();
     this.comparison.show(target.source,target.result,target.offset,target);this.render();
   }
   $(id) { return this.container.querySelector("#gs-" + id); }
@@ -364,11 +369,11 @@ class ArtistStudio {
       (this.$("camera_prompt").value.trim()!==(saved.camera_prompt||"").trim() ||
        this.$("camera_preset").value!==(saved.camera_preset||"Left three-quarter"));
   }
-  configBody(config){return {config,reference_roles:this.referenceRoles()};}
+  configBody(config){assertAEFrameConfig(this,config);return {config:{...aeFrameConfig(this,config),exr_storage:this.creative?.outputSettings?.exrStorage(config.ltx_output)||"half"},reference_roles:this.referenceRoles()};}
   requestOpeningLoraConfig(id,config){return request(`/projects/${id}/config`,this.configBody(config));}
-  projectBody(){const generatedOnly=this.config.preserve_people,sourceHDR=this.hdrSourceLook&&!!this.source?.native_hdr_video;return {source:this.source.id,character:sourceHDR?undefined:this.character?.id,look_mode:sourceHDR?"source_hdr":generatedOnly?"build":this.lookMode,
-    references:sourceHDR?[]:this.references.map(a=>a.id),reference_roles:sourceHDR?[]:this.references.map(a=>a.role||"auto"),starting_image:sourceHDR||generatedOnly?undefined:this.readyAsset?.id,config:this.config};}
-  invalidateLook(){this.character=this.references[0] || this.readyAsset;this.project=null;localStorage.removeItem("genj-studio-project");}
+  projectBody(){assertAEFrameConfig(this,this.config);const generatedOnly=this.config.preserve_people,sourceHDR=this.hdrSourceLook&&!!this.source?.native_hdr_video;return {source:this.source.id,character:sourceHDR?undefined:this.character?.id,look_mode:sourceHDR?"source_hdr":generatedOnly?"build":this.lookMode,
+    references:sourceHDR?[]:this.references.map(a=>a.id),reference_roles:sourceHDR?[]:this.references.map(a=>a.role||"auto"),starting_image:sourceHDR||generatedOnly?undefined:this.readyAsset?.id,config:{...aeFrameConfig(this,this.config),exr_storage:this.creative?.outputSettings?.exrStorage(this.config.ltx_output)||"half"}};}
+  invalidateLook(){this.character=this.references[0] || this.readyAsset;this.project=null;this.storage.removeItem("genj-studio-project");}
   removeInput(type){
     if(this.busy || this.project?.phase==="working")return;
     if(type==="source"){
@@ -509,7 +514,7 @@ class ArtistStudio {
         reference_id:this.voiceSample?.id,seed:this.readConfig().seed%4294967296});
       if(epoch!==this.resetEpoch)return;
       this.voiceJob=job;
-      localStorage.setItem("zura-studio-voice-job",this.voiceJob.id);
+      this.storage.setItem("zura-studio-voice-job",this.voiceJob.id);
       this.$("voice-note").textContent="Creating speech in ComfyUI. The track will be selected automatically.";
     });
     this.$("redesign").onclick=()=>this.perform(async(epoch)=>{
@@ -748,7 +753,7 @@ class ArtistStudio {
         if(this.config.preserve_people)throw new Error("A finished frame is unavailable while preserving the original people.");
         this.readyAsset=asset;this.lookMode="ready";this.invalidateLook();this.syncForm();
       }else{
-        this[type]=asset;this.project=null;localStorage.removeItem("genj-studio-project");this.lastVideo=null;
+        this[type]=asset;this.project=null;this.storage.removeItem("genj-studio-project");this.lastVideo=null;
       }
       if(type==="source"){this.hdrSourceLook=false;this.trimSeeking=false;this.trimSeekTime=null;this.promptStage=null;this.config.duration=Math.min(2,asset.duration);this.config.start=0;this.config.mask_points=[];this.pointFrameStart=0;this.syncForm();}
       }
@@ -776,7 +781,7 @@ class ArtistStudio {
     }
     this.project=updated;
     if(action==='create_look'&&this.lookMode==='ready'&&updated.opening_input&&updated.opening_needs_preparation){
-      localStorage.setItem('zura-studio-approved-frame',this.frameReviewKey());
+      this.storage.setItem('zura-studio-approved-frame',this.frameReviewKey());
       this.promptStage='video';this.preview='look';
       this.creative?.selectPanel?.('settings');
     }
@@ -790,7 +795,7 @@ class ArtistStudio {
       this.config=this.readConfig();
       if(!this.project){
         const created=await request("/projects",this.projectBody());if(epoch!==this.resetEpoch)return;this.project=created;
-        localStorage.setItem("genj-studio-project",this.project.id);
+        this.storage.setItem("genj-studio-project",this.project.id);
       }else if(this.project.phase!=="working"){
         const id=this.project.id,updated=await request(`/projects/${id}/config`,this.configBody(this.config));if(epoch!==this.resetEpoch)return;if(this.project?.id!==id)return;this.project=updated;
       }
@@ -819,7 +824,7 @@ class ArtistStudio {
       const stage=this.composerStage();
       if(stage==="image")return this.$("redesign").click();
       if(stage==="review"){
-        localStorage.setItem("zura-studio-approved-frame",this.frameReviewKey());
+        this.storage.setItem("zura-studio-approved-frame",this.frameReviewKey());
         this.promptStage="video";this.preview="look";this.trimSeeking=false;this.render();this.creative?.selectPanel?.("settings");
         this.$("prompt").focus({preventScroll:true});return;
       }
@@ -851,7 +856,7 @@ class ArtistStudio {
       }
       if(!this.project){
         const created=await request("/projects",this.projectBody());if(epoch!==this.resetEpoch)return;this.project=created;
-        localStorage.setItem("genj-studio-project",this.project.id);
+        this.storage.setItem("genj-studio-project",this.project.id);
       } else {
         const id=this.project.id,updated=await request(`/projects/${id}/config`,this.configBody(this.config));if(epoch!==this.resetEpoch||this.project?.id!==id)return;this.project=updated;
       }
@@ -1149,7 +1154,7 @@ class ArtistStudio {
     this.$("voice-script").value="";this.$("voice-transcript").value="";this.$("voice-mode").value="Clone a voice";
     this.$("voice-clone-fields").hidden=false;this.$("voice-sample-name").textContent="One clear speaker. A video with audio works too.";
     this.$("voice-note").textContent="Uses local Zura LongCat. Your sample and words stay on this computer.";
-    for(const key of ["genj-studio-project","zura-studio-voice-job"]){try{localStorage.removeItem(key);}catch{}}
+    for(const key of ["genj-studio-project","zura-studio-voice-job"]){try{this.storage.removeItem(key);}catch{}}
     this.syncForm();this.resetting=false;this.busy=false;this.message("");this.render();
     this.container.querySelector('[data-step="0"]')?.click();
     return true;
@@ -1173,7 +1178,7 @@ class ArtistStudio {
         this.config.delivery_mode=this.config.resolution===1920&&this.config.delivery_mode==="enhanced1080"?"enhanced1080":"native";
       }else this.config.delivery_mode="native";
       if(this.project.config.quality==null)this.config.quality=this.project.config.h3_preset?.endsWith("_quality")?"detailed":"fast";
-      localStorage.setItem("genj-studio-project",id);
+      this.storage.setItem("genj-studio-project",id);
       this.syncForm();this.lastVideo=null;this.render();
     });
   }
@@ -1194,7 +1199,7 @@ class ArtistStudio {
   }
   frameAccepted(){
     const p=this.project,key=this.frameReviewKey();
-    return !!key && (localStorage.getItem("zura-studio-approved-frame")===key ||
+    return !!key && (this.storage.getItem("zura-studio-approved-frame")===key ||
       !!p.opening_key && p.opening_approval===p.opening_key || ["done","draft"].includes(p.phase));
   }
   composerStage(){
@@ -1625,7 +1630,7 @@ class ArtistStudio {
     const results=p?.results || [];this.$("results").hidden=!results.length;
     const fingerprint=JSON.stringify(results);
     if(this.resultFingerprint!==fingerprint){
-      this.resultFingerprint=fingerprint;
+      this.resultFingerprint=fingerprint;this.selectedTake=null;
       this.$("takes").innerHTML=results.slice().reverse().map((item,i)=>{
         const label=item.label || ({wan2:"Wan Animate 2",wan:"Wan 2.2",h3:"MiniMax H3",h3_enhance:"Enhanced H3",draft:"Seedance draft",final:"Seedance final",background:"LTX · original background",restyle:"LTX · scene restyle"})[item.stage] || "Take";
         const raster=item.output_raster?.width&&item.output_raster?.height?`${item.output_raster.width} × ${item.output_raster.height}`:item.resolution?`${item.resolution}px`:"";
@@ -1672,7 +1677,7 @@ class ArtistStudio {
     try{
       this.modelStatus=await request("/status");this.syncForm();this.render();
     }catch(e){this.message(e.message,true);}
-    const saved=localStorage.getItem("genj-studio-project");
+    const saved=this.storage.getItem("genj-studio-project");
     if(saved && !this.project)await this.loadProject(saved);
     await this.loadLibrary();
     clearInterval(this.timer);this.timer=setInterval(()=>this.poll(),2000);
@@ -1730,7 +1735,7 @@ class ArtistStudio {
       finally{this.previewPolling=false;}
     }
     if(this.container.isConnected&&!this.busy&&!this.voicePolling){
-      const identity=this.voiceJob?.id||localStorage.getItem("zura-studio-voice-job");
+      const identity=this.voiceJob?.id||this.storage.getItem("zura-studio-voice-job");
       if(identity){
         const epoch=this.resetEpoch;this.voicePolling=true;
         try{
@@ -1738,10 +1743,10 @@ class ArtistStudio {
           if(job.state==="complete"&&this.project?.phase!=="working"){
             const config=this.referenceAudioConfig(job.audio);
             if(this.project){const id=this.project.id,updated=await request(`/projects/${id}/config`,this.configBody(config));if(epoch!==this.resetEpoch||this.project?.id!==id)return;this.project=updated;}
-            this.audio=job.audio;this.pendingReference=false;this.config=config;this.voiceJob=null;localStorage.removeItem("zura-studio-voice-job");
+            this.audio=job.audio;this.pendingReference=false;this.config=config;this.voiceJob=null;this.storage.removeItem("zura-studio-voice-job");
             this.$("voice-note").textContent="Voice ready. It is selected as your reference audio.";this.syncForm();this.render();
           }else if(job.state==="error"){
-            this.voiceJob=null;localStorage.removeItem("zura-studio-voice-job");this.message(job.error,true);this.render();
+            this.voiceJob=null;this.storage.removeItem("zura-studio-voice-job");this.message(job.error,true);this.render();
           }
         }catch(e){if(epoch===this.resetEpoch)this.message(e.message,true);}finally{if(epoch===this.resetEpoch)this.voicePolling=false;}
       }
@@ -1755,15 +1760,14 @@ class ArtistStudio {
     }catch(e){if(epoch===this.resetEpoch)this.message("Connection interrupted. Your job is saved. Reopen this view when ComfyUI reconnects.",true);}
     finally{if(epoch===this.resetEpoch)this.polling=false;}
   }
-  close(){this.restartNavigation?.dispose();this.nativeSamplePreview?.dispose();this.nativeSamplePreview=null;this.previewZoom?.stopDraw();this.hdrTool?.deactivate?.();this.creative?.close();this.comparison?.hide();this.trimTimeline?.close();this.$("canvas").classList.remove("is-expanded");if(document.fullscreenElement===this.$("canvas"))document.exitFullscreen?.().catch(()=>{});this.container.querySelectorAll("video,audio").forEach(media=>media.pause());this.container.remove();document.documentElement.classList.remove("genj-open");clearInterval(this.timer);}
+  close(){this.aeBridge?.dispose();if(this.aeSession&&registeredStudio===this)registeredStudio=null;this.restartNavigation?.dispose();this.nativeSamplePreview?.dispose();this.nativeSamplePreview=null;this.previewZoom?.stopDraw();this.hdrTool?.deactivate?.();this.creative?.close();this.comparison?.hide();this.trimTimeline?.close();this.$("canvas").classList.remove("is-expanded");if(document.fullscreenElement===this.$("canvas"))document.exitFullscreen?.().catch(()=>{});this.container.querySelectorAll("video,audio").forEach(media=>media.pause());this.container.remove();document.documentElement.classList.remove("genj-open");clearInterval(this.timer);}
 }
 
 let registeredStudio;
 export async function openZuraStudio(workspace){
-  if(!registeredStudio)return;
+  if(!registeredStudio){registeredStudio=new ArtistStudio();registeredStudio.container.querySelector(".gs-zura-mark").src=new URL("./assets/zura-logo.png",import.meta.url).href;}
   if(!registeredStudio.container.isConnected)await registeredStudio.open();
-  if(workspace==='inpaint')workspace='ripple';
-  if(['home','image','video','director','frames','references','paintout','watermark','outpaint','ripple','alpha'].includes(workspace))registeredStudio.creative?.show(workspace);
+  if(workspace)await navigateStudioMode(registeredStudio.creative,workspace);
   return registeredStudio;
 }
 
@@ -1784,16 +1788,19 @@ app.registerExtension({
     installArtistLinkRendering(app);
     const css=document.createElement("link");css.rel="stylesheet";css.href=new URL("./studio.css",import.meta.url).href;document.head.appendChild(css);
     for(const path of ["./vendor/studio-components.css","./studio_components.css"]){const link=document.createElement("link");link.rel="stylesheet";link.href=new URL(path,import.meta.url).href;document.head.appendChild(link);}
-    for(const path of ["./studio_create.css","./studio_composer.css","./studio_panorama.css","./studio_outpaint.css","./studio_ripple.css","./studio_alpha.css","./studio_director.css","./paintout_studio/studio_paintout.css","./paintout_studio/paintout_integrated.css","./studio_polish.css","./studio_image_area.css"]){const link=document.createElement("link");link.rel="stylesheet";link.href=new URL(path,import.meta.url).href;document.head.appendChild(link);}
+    for(const path of ["./studio_create.css","./studio_composer.css","./studio_panorama.css","./studio_outpaint.css","./studio_ripple.css","./studio_alpha.css","./studio_director.css","./paintout_studio/studio_paintout.css","./paintout_studio/paintout_integrated.css","./studio_polish.css","./studio_image_area.css","./studio_comfylink.css"]){const link=document.createElement("link");link.rel="stylesheet";link.href=new URL(path,import.meta.url).href;document.head.appendChild(link);}
     import("./vendor/studio-components.js").then(()=>{
       document.getElementById("genj-studio")?.classList.add("zc-components-ready");
       for(const tip of document.querySelectorAll("#genj-studio wa-tooltip")){document.getElementById(tip.getAttribute("for"))?.removeAttribute("title");}
     }).catch(error=>console.warn("Zura tooltips unavailable; native hints remain.",error));
-    const studio=new ArtistStudio();
+    const aeSession=await takeStudioLaunch(api);
+    const studio=new ArtistStudio(aeSession?{aeSession,storage:studioLaunchStorage(aeSession)}:{});
     registeredStudio=studio;
+    if(aeSession)studio.creative.show('home');
+    if(aeSession)studio.aeBridge=new StudioAEBridge(studio,api,aeSession,()=>{studio.close();void openZuraStudio();});
     studio.container.querySelector(".gs-zura-mark").src=new URL("./assets/zura-logo.png",import.meta.url).href;
     const studioQuery=new URLSearchParams(location.search);
     attachWanGraphControls(app,{request,tidy:tidyWanStage});
-    if(studioQuery.get("zura")==="1" || studioQuery.get("genj")==="1" || studioQuery.get("paintout")==="1")await openZuraStudio(studioQuery.get("paintout")==="1"?'paintout':studioQuery.get("workspace")||undefined);
+    if(aeSession || studioQuery.get("zura")==="1" || studioQuery.get("genj")==="1" || studioQuery.get("paintout")==="1")await openZuraStudio(studioQuery.get("paintout")==="1"?'paintout':studioQuery.get("workspace")||undefined);
   },
 });

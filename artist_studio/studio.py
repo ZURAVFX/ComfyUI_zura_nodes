@@ -42,7 +42,7 @@ STAGES = {
 STAGES.update({"ltx25_" + phase: "LTX 2.5 " + phase for phase in
                ("text", "motion", "stage1", "upscale", "refine", "decode", "cleanup")})
 DEFAULTS = {"engine": "local", "background": "keep", "scope": "person", "prompt": "", "image_prompt": "",
-            "custom_loras": [], "opening_loras": [], "ltx_output": "sdr",
+            "custom_loras": [], "opening_loras": [], "ltx_output": "sdr", "exr_storage": "half",
             "h3_character_method": "control", "openjutsu_resolution": "480",
             "openjutsu_background": "keep", "openjutsu_direct": False,
             "opening_model": "klein9b",
@@ -102,6 +102,15 @@ def design_readiness(node_mappings, get_full_path, model="klein9b"):
 
 def clean_config(value):
     c = {**DEFAULTS, **{k: v for k, v in value.items() if k in DEFAULTS}}
+    if value.get('ae_frame_contract') is not None:
+        from ..comfylink.frame_contract import normalise_frame_contract, contract_rate
+        contract = normalise_frame_contract(value['ae_frame_contract'])
+        # These reviewed-source recipes actually decode at 24 fps. A display
+        # label cannot turn them into an NTSC-preserving source pipeline.
+        if contract_rate(contract) != 24:
+            raise ValueError('This native Studio project route requires 24 fps. Use a source-cadence mode for this AE clip.')
+        c.update(ae_frame_contract=contract, start=0.0,
+                 duration=contract['frameCount'] / 24, length_mode='custom', pitch=False)
     # Copy list-valued preferences: one shot must never mutate another shot's adapters.
     for key in ("custom_loras", "opening_loras"):
         adapters = c.get(key)
@@ -132,6 +141,7 @@ def clean_config(value):
     for key, options in [("engine", ("local", "h3", "wan", "wan2", "seedance")), ("background", ("keep", "restyle")),
                          ("quality", ("fast", "detailed")),
                          ("ltx_output", ("sdr", "hlg_video", "hlg_and_exr", "acescg_exr")),
+                         ("exr_storage", ("half", "float32")),
                          ("length_mode", ("custom", "original")),
                          ("workflow_mode", ("motion", "swap", "viewport", "relight", "camera")),
                          ("subject_mode", ("auto", "people", "objects")),
@@ -492,6 +502,8 @@ def prep_key(project):
     from .opening_subject import directed_source_subject
     from .opening_edit import replacement_target, target_position
     settings = {"source": project["source"]["sha"], **{k: project["config"][k] for k in PREP_KEYS}}
+    if project['config'].get('ae_frame_contract') is not None:
+        settings['ae_frame_contract'] = project['config']['ae_frame_contract']
     from .ltx_hdr_performance import marker as hdr_video_marker
     hdr_source = hdr_video_marker(project["source"])
     if hdr_source is not None:
@@ -735,7 +747,7 @@ def ltx25_native_plan(project):
     if hdr_endpoint:
         from .ltx25_hdr_plan import build_native_hdr_plan
         return build_native_hdr_plan(_viewport_project(project), hdr_endpoint=hdr_endpoint,
-            hdr_source=hdr_source, output=project["config"].get("ltx_output", "sdr"), **arguments)
+            hdr_source=hdr_source, output=project["config"].get("ltx_output", "sdr"), exr_storage=project['config'].get('exr_storage','half'), **arguments)
     return build_plan(_viewport_project(project), **arguments)
 
 
@@ -797,6 +809,20 @@ def apply_opening_loras(project, graph, *, camera=False):
 
 
 def build_graph(project, stage, use_cache=True, run_id=None):
+    graph = _build_native_graph(project, stage, use_cache=use_cache, run_id=run_id)
+    contract = project.get('config', {}).get('ae_frame_contract')
+    intermediate_h3=(stage=='h3' and project.get('config',{}).get('delivery_mode')=='enhanced1080')
+    # Preparation, authored reference stills and latent cache phases do not
+    # deliver the generated clip. Their native source roles stay unchanged.
+    if contract is not None and not intermediate_h3 and stage in ('background', 'restyle', 'draft', 'final', 'h3', 'h3_enhance', 'wan', 'wan2', 'wan21_relight'):
+        from ..comfylink.frame_contract import prepare_frame_contract_graph
+        if any(node.get('class_type') in ('CreateVideo', 'ZuraPaintoutUncrop', 'GenjRestoreSoundtrack') for node in graph.values()):
+            mode = project['config'].get('workflow_mode', 'swap')
+            graph = prepare_frame_contract_graph(graph, contract, 'viewport' if mode == 'motion' else mode)
+    return graph
+
+
+def _build_native_graph(project, stage, use_cache=True, run_id=None):
     from .opening_subject import directed_source_subject
     from .opening_edit import replacement_target, target_position
     if (project.get("config", {}).get("custom_loras") and
@@ -1816,7 +1842,7 @@ class Studio:
                 "resolution": action["resolution"], "duration": actual["frames"] / actual["fps"],
                 "quality": action["quality"], "audio_mode": plan["scenario"],
                 "generation_audio": plan.get("generation_audio"), "delivery_audio": plan.get("delivery_audio"),
-                "hdr_output": p["config"].get("ltx_output", "sdr"), "seed": p["config"].get("seed", 42),
+                "hdr_output": p["config"].get("ltx_output", "sdr"), "exr_storage": p['config'].get('exr_storage','half'), "seed": p["config"].get("seed", 42),
                 "output_raster": actual, "sha256": sha(path)})
             run["next_phase"] = None
             p["phase"] = "done"
@@ -1949,21 +1975,22 @@ class Studio:
                 return p
 
         expected = int(action.get("expected_frames") or 0)
+        expected_jobs=int(action.get('expected_batch_frames') or expected)
         completed = len(family)
-        if completed > expected:
+        if completed > expected_jobs:
             action["state"] = "failed"
             p["phase"] = "error"
             p["error"] = "The Enhanced 1080p continuation family returned more jobs than expected. No result was recorded."
             self.store.save(p)
             return p
-        if active_running or active_pending or completed < expected:
+        if active_running or active_pending or completed < expected_jobs:
             if active_running:
                 action["state"] = "running"
                 action.pop("absent_since", None)
             elif active_pending:
                 action["state"] = "queued"
                 action.pop("absent_since", None)
-            elif completed < expected:
+            elif completed < expected_jobs:
                 action["state"] = "interrupted"
                 action.setdefault("absent_since", time.time())
                 if time.time() - action["absent_since"] > 90:
@@ -2533,6 +2560,12 @@ class Studio:
             action["filename_prefix"] = f"genj/studio_h3_enhance/{p['id']}/{prompt_id}"
             action["take_name"] = f"studio_{p['id'][:8]}_h3_enhanced_{prompt_id}"
             action["studio_action_tag"] = prompt_id
+        contract=p.get('config',{}).get('ae_frame_contract')
+        if contract is not None and stage in ('h3','h3_enhance','wan21_relight'):
+            if not (stage=='h3' and p['config'].get('delivery_mode')=='enhanced1080'):
+                if stage=='h3_enhance':
+                    action['expected_batch_frames']=action.get('expected_frames')
+                action['expected_frames']=contract['frameCount']
         if next_stage:
             action["next_stage"] = next_stage
         if stage.startswith("ltx25_"):

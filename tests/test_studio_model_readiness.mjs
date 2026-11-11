@@ -1,3 +1,4 @@
+import {runStudioVMInContext} from './studio_vm_fixture.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
@@ -5,7 +6,7 @@ import vm from 'node:vm';
 const code=fs.readFileSync(new URL('../web/studio.js',import.meta.url),'utf8')
   .replace(/^import .*;\r?\n/gm,'').replace(/^export /gm,'').split('app.registerExtension({')[0];
 const context={};vm.createContext(context);
-vm.runInContext(code+'\nthis.Studio=ArtistStudio;',context);
+runStudioVMInContext(code+'\nthis.Studio=ArtistStudio;',context);
 function check(config,status){
   const fields=Object.fromEntries(['models','model-checklist'].map(name=>[name,{classList:{toggle(){}}}]));
   const ui=Object.create(context.Studio.prototype);

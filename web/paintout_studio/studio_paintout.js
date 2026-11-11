@@ -1,3 +1,5 @@
+import {prepareAEFrameGraph} from '../studio_ae_frame_contract.js';
+import {workspaceStorage} from '../studio_storage.js';
 import {megapixelSlider,resolutionSize} from '../studio_resolution.js';
 import {installOwnedExecuting} from './studio_progress.js';
 import {LTXLoras} from '../studio_ltx_loras.js';
@@ -53,12 +55,12 @@ export async function findPaintoutSubmission(fetch, requestId){
 
 export class PaintoutWorkspace{
 
-  constructor(owner,workspaceOptions={}){
+  constructor(owner,workspaceOptions={}){this.storage=workspaceStorage(owner);
 
     this.owner=owner;this.api=owner.api;this.app=owner.app;this.studio=owner.studio;
 
     this.storageKey=workspaceOptions.storageKey||KEY;this.ripple=workspaceOptions.mode==='ripple';
-    let saved={};try{saved=JSON.parse(localStorage.getItem(this.storageKey))||{};}catch{}
+    let saved={};try{saved=JSON.parse(this.storage.getItem(this.storageKey))||{};}catch{}
 
     this.paintoutOnly=!!workspaceOptions.paintoutOnly;
     // Paintout's direct shortcut must not reopen a retired object-inpaint recipe.
@@ -285,7 +287,7 @@ export class PaintoutWorkspace{
 
   applySize(){const mode=this.state.resolutionMode;if(mode==='default'){this.state.width=1152;this.state.height=640;}else if(mode==='source-proportions'&&this.sourceInfo)Object.assign(this.state,resolutionSize(this.sourceInfo.width/this.sourceInfo.height,this.state.megapixels,{step:64,min:64,max:4096,maxPixels:8_388_608}));else if(PAINTOUT_SIZE_PRESETS.some(p=>p[0]===mode))Object.assign(this.state,this.ripple?resolutionSize(paintoutPresetSize(mode,1).width/paintoutPresetSize(mode,1).height,this.state.megapixels,{step:64,min:64,max:4096,maxPixels:8_388_608}):paintoutPresetSize(mode,this.state.megapixels));this.$('width').value=this.state.width;this.$('height').value=this.state.height;}
 
-  save(){this.editor?.saveSoon();try{localStorage.setItem(this.storageKey,JSON.stringify({draft:this.state,prompts:this.prompts,sourceInfo:this.sourceInfo,maskInfo:this.maskInfo,job:this.job,pendingHDR:this.pendingHDR,cleanupPrompt:this.cleanupPrompt,items:this.items,result:this.result}));}catch{this.message('Browser storage is full. Your output files remain on disk.');}}
+  save(){this.editor?.saveSoon();try{this.storage.setItem(this.storageKey,JSON.stringify({draft:this.state,prompts:this.prompts,sourceInfo:this.sourceInfo,maskInfo:this.maskInfo,job:this.job,pendingHDR:this.pendingHDR,cleanupPrompt:this.cleanupPrompt,items:this.items,result:this.result}));}catch{this.message('Browser storage is full. Your output files remain on disk.');}}
 
   changed(){this.message('');this.save();this.render();this.owner.videoComposer?.syncWorkflow();}
 
@@ -621,9 +623,10 @@ export class PaintoutWorkspace{
   updateGenerationGuide(){updateGenerationSteps(this.$('generation-steps'),this.job||{phase:paintoutColourPipeline(this.config())==='sdr_hdr'?'repair':'complete'});}
 
   async submitGraph(graph){
+    graph=(await prepareAEFrameGraph(this,graph,this.config())).graph;
     const requestId=crypto.randomUUID();
     try{
-      const response=await this.fetch('/prompt',{prompt:graph,client_id:this.api.clientId,extra_data:{zura_paintout:true,zura_paintout_request:requestId,preview_method:'auto'}});
+      const response=await this.fetch('/prompt',{prompt:graph,client_id:this.api.clientId,extra_data:{...(this.config().ae_frame_contract?{ae_frame_contract:this.config().ae_frame_contract}:{}),zura_paintout:true,zura_paintout_request:requestId,preview_method:'auto'}});
       if(response.prompt_id)return response;
     }catch(error){
       if(error.status>=400&&error.status<500)throw error;

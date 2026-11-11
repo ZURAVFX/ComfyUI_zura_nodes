@@ -42,7 +42,14 @@ def export_exr_zip(staged, output_root, prefix, *, half_precision=True, progress
                     # Negative linear AP1 components are valid wide-gamut
                     # values, including the toe of ACEScct. Preserve them in
                     # the scene-linear EXR instead of clipping the gamut.
-                    linear=decode_ct(frame.float()).clamp(max=1e4).cpu().numpy()
+                    linear=decode_ct(frame.float())
+                    # Retain the legacy half path exactly; FLOAT is explicit and
+                    # must reject invalid samples rather than clipping transport.
+                    if half_precision:
+                        linear=linear.clamp(max=1e4)
+                    if not linear.isfinite().all():
+                        raise ValueError('The EXR output contains non-finite samples.')
+                    linear=linear.cpu().numpy()
                     save_exr(path,np.ascontiguousarray(linear),'acescg',half_precision)
                     out.write(path,arcname=name)
                     path.unlink()

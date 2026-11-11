@@ -64,6 +64,13 @@ def stabilise_geometry(geometry, texture_images):
 
 
 def plan(source, config):
+    contract=config.get('ae_frame_contract')
+    if contract is not None:
+        from ..comfylink.frame_contract import normalise_frame_contract, contract_rate
+        contract=normalise_frame_contract(contract)
+        if contract_rate(contract)!=24:
+            raise ValueError('The native camera recipe requires 24 fps and cannot preserve this AE source cadence.')
+        config={**config,'start':0,'duration':contract['frameCount']/24}
     start, seconds = float(config.get('start', 0)), float(config.get('duration', 2))
     width, height = int(config.get('width', 1920)), int(config.get('height', 1080))
     fps = float(source.get('fps') or 24)
@@ -86,6 +93,9 @@ def plan(source, config):
                 'start_frame': start_frame, 'duration': frames/fps, 'frames': frames, 'fps': fps,
                 'width': width, 'height': height, 'model': MODELS['geometry'][1],
                 'solve_resolution': 504, 'window': 12, 'overlap': 3, 'geometry_mode': 'temporal_scene'}
+    if contract is not None:
+        from ..comfylink.frame_contract import validate_interval
+        geometry['ae_frame_contract']=validate_interval(contract,frames=frames,fps=fps,width=width,height=height)
     return {**geometry, 'key': digest(geometry), 'padded': 8 * max(1, math.ceil((frames-1)/8)) + 1,
             'render_width': rw, 'render_height': rh, 'two_stage': two_stage}
 
@@ -131,11 +141,11 @@ def build_graph(source, selection, state, stage, *, warp=None, look=None, prompt
         return n(key, 'VHS_LoadVideo', video=file, force_rate=0, custom_width=width, custom_height=height,
                  frame_load_cap=p['frames'], skip_first_frames=start, select_every_nth=1, format='AnimateDiff')
     def pad(key, image):
-        return n(key, 'ZuraCameraPadFrames', image=image, frames=p['padded'])
+        return n(key, 'ZuraCameraPadFrames', image=image, frames=p['padded'], required_source_frames=p['frames'])
     if stage in ('geometry', 'warp'):
         if stage == 'geometry':
             images = load('source', source['file'], width=640, start=p['start_frame'])
-            images = n('source_frames','ZuraCameraPadFrames',image=images,frames=p['frames'])
+            images = n('source_frames','ZuraCameraPadFrames',image=images,frames=p['frames'],required_source_frames=p['frames'])
             images = n('solve_raster', 'ZuraCameraPrepareViews', 'Prepare calibrated DA3 patch raster', image=images, resolution=504)
             model = n('da3', 'LoadDA3Model', 'Load shared-view scene model', model_name=MODELS['geometry'][1], weight_dtype='fp32')
             previous, start, index = None, 0, 0

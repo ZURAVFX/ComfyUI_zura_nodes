@@ -1,0 +1,37 @@
+{
+  "id": "01-roundtrip",
+  "name": "01 - Round-trip test",
+  "description": "Returns the source unchanged through ComfyUI. No model downloads required.",
+  "mode": "frames",
+  "input": {
+    "node": "1",
+    "field": "image"
+  },
+  "output": {
+    "node": "3"
+  },
+  "workflow": {
+    "1": {
+      "class_type": "LoadImage",
+      "inputs": {
+        "image": "placeholder.png"
+      },
+      "_meta": {
+        "title": "AE_INPUT"
+      }
+    },
+    "3": {
+      "class_type": "SaveImage",
+      "inputs": {
+        "images": [
+          "1",
+          0
+        ],
+        "filename_prefix": "ComfyLink/test"
+      },
+      "_meta": {
+        "title": "AE_OUTPUT"
+      }
+    }
+  }
+}

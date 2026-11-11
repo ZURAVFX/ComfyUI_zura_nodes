@@ -1,0 +1,47 @@
+{
+  "id": "03-batch-invert",
+  "name": "03 - Batch invert (no model)",
+  "description": "One batch for the work area. Requires the ComfyLink node and one ComfyUI restart after setup. Not a temporal AI enhancement.",
+  "mode": "batch",
+  "input": {
+    "node": "1",
+    "field": "folder"
+  },
+  "output": {
+    "node": "3"
+  },
+  "workflow": {
+    "1": {
+      "class_type": "ComfyLinkLoadFrames",
+      "inputs": {
+        "folder": "ComfyLink/00000000000000000000000000000000",
+        "fps": 25.0
+      },
+      "_meta": {
+        "title": "AE_INPUT"
+      }
+    },
+    "3": {
+      "class_type": "SaveImage",
+      "inputs": {
+        "images": [
+          "2",
+          0
+        ],
+        "filename_prefix": "ComfyLink/test"
+      },
+      "_meta": {
+        "title": "AE_OUTPUT"
+      }
+    },
+    "2": {
+      "class_type": "ImageInvert",
+      "inputs": {
+        "image": [
+          "1",
+          0
+        ]
+      }
+    }
+  }
+}
