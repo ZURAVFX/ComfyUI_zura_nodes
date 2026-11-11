@@ -1,3 +1,10 @@
+## Unreleased: Paintout consolidation
+
+- Retired the separate Paintout Studio button and menu entry. Open Zura Studio, then Video > Paintout / clean plate.
+- Kept the newer integrated editor and shared Studio UI. Mask segments, clean-frame paint layers, blend/brightness, projects, model setup and SDR/HDR handling remain available.
+- Preserved old Paintout commands, links and saved launcher node IDs as shortcuts into Zura Studio; the old launcher node is deprecated for new workflows.
+- No model recipe, project storage or source media changes.
+
 # Release notes
 
 ## 1.3.60 - 9 November 2026

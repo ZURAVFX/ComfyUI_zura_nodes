@@ -23,10 +23,10 @@ Install **Zura Nodes**, published by **ZURAVFX**, through ComfyUI Manager when a
 
 Follow the [installation and model guide](INSTALL_STUDIO.md) to install Python requirements into ComfyUI's environment and download the models for your chosen task. Restart ComfyUI and refresh the browser.
 
-Click the visible **Zura Studio** or **Paintout Studio** button at the bottom-right of the graph. Both also remain available through the **Zura** menu and command search. Optional **Open Zura Studio** and **Open Paintout Studio** launcher nodes provide shortcuts inside a workflow. On the default local address:
+Click **Zura Studio** at the bottom-right of the graph, or open it through the **Zura** menu, command search or the optional **Open Zura Studio** node. For paintout, choose **Video > Paintout / clean plate** inside Studio. On the default local address:
 
 - [Zura Studio](http://127.0.0.1:8188/?zura=1)
-- [Paintout Studio](http://127.0.0.1:8188/?paintout=1)
+- [Paintout inside Zura Studio](http://127.0.0.1:8188/?zura=1&workspace=paintout)
 
 Use your own ComfyUI host and port if they differ.
 
@@ -38,7 +38,7 @@ The previous update adds complete camera-angle model setup, including MoGe 3, an
 
 The [GitHub release](https://github.com/ZURAVFX/ComfyUI_zura_nodes/releases/latest) is available separately. Registry submission does not mean approval or immediate availability through Manager.
 
-Paintout is integrated into **Studio > Video > Paintout / clean plate**. Its separate Paintout Studio entry opens the same working page and controller. Disable an earlier standalone Zura Paintout installation before using this integration to avoid duplicate nodes and routes.
+Paintout lives in **Studio > Video > Paintout / clean plate**. The standalone contest application is retired; its masks, layered clean-frame repairs, saved projects, model setup and SDR/HDR routes are already integrated. Existing Paintout links, commands and saved launcher nodes still open the integrated workspace. Disable an earlier standalone Zura Paintout installation to avoid duplicate nodes and routes. See the [consolidation notes](docs/PAINTOUT_CONSOLIDATION.md).
 
 Read the [testing notes](PAINTOUT_STUDIO_TESTING.md), [model setup](docs/paintout-studio/MODEL_DOWNLOADS.md) and [manual checks](docs/paintout-studio/MANUAL_TESTING.md). Representative shot quality and a fresh-machine installation still need feedback. Version changes are recorded in the [changelog](CHANGELOG.md).
 

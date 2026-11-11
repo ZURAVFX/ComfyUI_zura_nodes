@@ -55,7 +55,16 @@ const {document}=parseHTML('<html><head></head><body></body></html>');let extens
 const code=fs.readFileSync(new URL('../web/studio_launchers.js',import.meta.url),'utf8').replace(/^import .*;\r?\n/gm,'').replaceAll('import.meta.url',JSON.stringify(new URL('../web/studio_launchers.js',import.meta.url).href));
 vm.runInNewContext(code,{document,URL,console,app:{registerExtension:e=>extension=e},openZuraStudio:()=>opened.push('zura'),openPaintout:()=>opened.push('paintout')});
 extension.setup();extension.setup();assert.equal(document.querySelectorAll('#zura-studio-shortcuts').length,1,'Setup is idempotent');
-const buttons=[...document.querySelectorAll('#zura-studio-shortcuts button')];assert.deepEqual(buttons.map(b=>b.textContent),['Zura Studio','Paintout Studio']);
-for(const button of buttons)await button.onclick();assert.deepEqual(opened,['zura','paintout']);
+const buttons=[...document.querySelectorAll('#zura-studio-shortcuts button')];assert.deepEqual(buttons.map(b=>b.textContent),['Zura Studio'],'There is one Studio entry, not a second Paintout app');
+for(const button of buttons)await button.onclick();assert.deepEqual(opened,['zura']);
+assert.deepEqual(Array.from(extension.menuCommands[0].commands),['zura.studio.open']);
+assert.equal(extension.commands.filter(c=>c.id==='zura.paintout.open').length,1,'The legacy command remains available once');
+// Test command routing with real arguments instead of a second shell.
+const routed=[];const launchContext={document,URL,console,app:{registerExtension:e=>extension=e},openZuraStudio:mode=>routed.push(mode)};
+vm.runInNewContext(code,launchContext);
+extension.commands.find(c=>c.id==='zura.paintout.open').function();assert.deepEqual(routed,['paintout']);
+let widget;const nodeType=function(){};extension.beforeRegisterNodeDef(nodeType,{name:'ZuraPaintoutStudioLauncher'});
+nodeType.prototype.onNodeCreated.call({addWidget:(type,label,value,callback)=>{widget={type,label,callback,options:{}};return widget;},setSize(){}});
+assert.equal(widget.label,'Open Zura Studio');widget.callback();assert.deepEqual(routed,['paintout','paintout'],'Saved launcher nodes still open the integrated workspace');
 assert.equal(document.querySelectorAll('link[href$="studio_launchers.css"]').length,1);
 console.log('PASS: first footage/sequence import, cancellation, prior-project save and visible Studio shortcuts.');

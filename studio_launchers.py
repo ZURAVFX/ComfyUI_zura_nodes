@@ -15,8 +15,9 @@ class ZuraStudioLauncher:
 
 
 class ZuraPaintoutStudioLauncher(ZuraStudioLauncher):
-    DESCRIPTION = 'Open Paintout Studio using the button on this node. Local masks, clean frames and VFX paintout.'
+    DEPRECATED = True
+    DESCRIPTION = 'Legacy shortcut. Opens Video > Paintout / clean plate inside Zura Studio. Use Open Zura Studio in new workflows.'
 
 
 NODE_CLASS_MAPPINGS = {'ZuraStudioLauncher': ZuraStudioLauncher, 'ZuraPaintoutStudioLauncher': ZuraPaintoutStudioLauncher}
-NODE_DISPLAY_NAME_MAPPINGS = {'ZuraStudioLauncher': 'Open Zura Studio', 'ZuraPaintoutStudioLauncher': 'Open Paintout Studio'}
+NODE_DISPLAY_NAME_MAPPINGS = {'ZuraStudioLauncher': 'Open Zura Studio', 'ZuraPaintoutStudioLauncher': 'Open Zura Studio (legacy Paintout shortcut)'}

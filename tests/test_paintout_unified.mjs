@@ -16,8 +16,10 @@ await context.openZuraStudio({command:'zura.studio.open'});
 await context.openZuraStudio('unknown');assert.deepEqual(modes,['paintout'],'Command arguments cannot hide every workspace');
 studio.container.isConnected=false;await context.openZuraStudio('paintout');assert.equal(opens,2);
 
-let extension;const calls=[];
+let registrations=0;const calls=[];
 const paintoutEntry=fs.readFileSync(new URL('../web/paintout_studio/paintout_app.js',import.meta.url),'utf8').replace(/^import .*;\r?\n/gm,'').replace('export function','function');
-vm.runInNewContext(paintoutEntry,{app:{registerExtension:value=>extension=value},openZuraStudio:mode=>calls.push(mode)});
-extension.commands[0].function();assert.deepEqual(calls,['paintout'],'The Paintout command enters the main shell');
+const compatibility=vm.createContext({app:{registerExtension:()=>registrations++},openZuraStudio:mode=>calls.push(mode)});
+vm.runInContext(paintoutEntry,compatibility);compatibility.openPaintout();
+assert.deepEqual(calls,['paintout'],'Old imports enter the main shell');
+assert.equal(registrations,0,'The compatibility module does not register a second app or menu');
 console.log('PASS unified shell entry, retained active project, close/reopen and safe Comfy command arguments.');
