@@ -103,8 +103,11 @@ class OutputSettings:
         allowed = ('genj/final', 'genj/hdr', 'genj/hdr_outpaint', 'genj/outpaint',
                    'zura_images', 'paintout', 'zura_paintout', 'genj/frames', 'genj/references',
                    'genj/reference_video', 'genj/studio_images', 'zura/ltx25',
-                   'zura/first_last', 'zura/reference')
-        if subfolder == 'genj/panorama':
+                   'zura/first_last', 'zura/reference', 'zura/director', 'ZURA STUDIO/camera', 'ZURA STUDIO/hdri')
+        if subfolder=='ZURA STUDIO/hdri' and not name.startswith('environment_'):return None
+        if subfolder=='ZURA STUDIO':
+            if not name.startswith(('relight','ripple','plate')):return None
+        elif subfolder == 'genj/panorama':
             if not name.startswith('take'):
                 return None
         elif not any(subfolder == root or subfolder.startswith(root + '/') for root in allowed):
@@ -131,7 +134,7 @@ class OutputSettings:
                         continue
                     suffix = source.suffix.lower()
                     category = ('Videos' if suffix in ('.mp4', '.mov', '.webm', '.mkv') else
-                                'Images' if suffix in ('.png', '.jpg', '.jpeg', '.webp', '.tif', '.tiff') else
+                                'Images' if suffix in ('.png', '.jpg', '.jpeg', '.webp', '.tif', '.tiff', '.exr', '.hdr') else
                                 'Sequences' if suffix == '.zip' else None)
                     if category is None:
                         continue

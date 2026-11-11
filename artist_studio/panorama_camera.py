@@ -12,17 +12,18 @@ import math
 import re
 from pathlib import Path
 
-RECIPE_VERSION = 'panorama-crossview-v1'
-GEOMETRY_MODES = ('per_frame', 'stable_scene')
+RECIPE_VERSION = 'temporal-scene-ltx25-v1'
+GEOMETRY_MODES = ('temporal_scene',)
 MODELS = {
-    'geometry': ('geometry_estimation', 'moge_3_vitg_fp16.safetensors'),
-    'h3': ('diffusion_models', 'minimax_h3_ref2va_pruned_int8_convrot.safetensors'),
-    'turbo': ('loras', 'minimax_h3_dmd_ref2va_8step_turbo_pruned.safetensors'),
-    'crossview': ('loras', 'MiniMax-H3_Ref2VA-LoRA-CrossView-Warp_v1_3500.safetensors'),
-    'text': ('text_encoders', 'qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors'),
-    'video_vae': ('vae', 'minimax_h3_video_vae_int8_convrot.safetensors'),
-    'audio_vae': ('vae', 'minimax_h3_audio_vae_fp32.safetensors'),
+    'geometry': ('geometry_estimation', 'depth_anything_3_base.safetensors'),
+    'model': ('diffusion_models', 'ltx-2.5-22b-distilled-transformer-comfy-int8-convrot.safetensors'),
+    'crossview': ('loras', 'LTX2.3-22B_IC-LoRA-CrossView-Warp_v2_6000.safetensors'),
+    'text': ('text_encoders', 'gemma4-12b-with-proj-ltx-2.5-comfy-int8-convrot.safetensors'),
+    'video_vae': ('vae', 'ltx-2.5-video-vae-conv-bf16.safetensors'),
+    'audio_vae': ('vae', 'ltx-2.5-audio-vae-bf16.safetensors'),
+    'upscaler': ('latent_upscale_models', 'ltx-2.5-latent-spatial-upscaler-x2-bf16-1.0.safetensors'),
 }
+
 
 
 def digest(value):
@@ -30,10 +31,9 @@ def digest(value):
 
 
 def geometry_mode(config):
-    value = config.get('geometry_mode', 'per_frame')
-    if value not in GEOMETRY_MODES:
-        raise ValueError('Choose moving-subject geometry or stable-scene geometry.')
-    return value
+    # Old drafts migrate to the joint solve. Independent frame depth is no
+    # longer a camera-mode execution path.
+    return 'temporal_scene'
 
 
 def stabilise_geometry(geometry, texture_images):
@@ -66,29 +66,28 @@ def stabilise_geometry(geometry, texture_images):
 def plan(source, config):
     start, seconds = float(config.get('start', 0)), float(config.get('duration', 2))
     width, height = int(config.get('width', 1920)), int(config.get('height', 1080))
-    if not all(math.isfinite(v) for v in (start, seconds)) or start < 0 or seconds <= 0:
-        raise ValueError('Choose a valid source interval.')
+    fps = float(source.get('fps') or 24)
+    if not all(math.isfinite(v) for v in (start, seconds, fps)) or start < 0 or seconds <= 0 or not 1 <= fps <= 120:
+        raise ValueError('Choose a valid source interval and frame rate.')
     if start + seconds > float(source['duration']) + 1e-6:
         raise ValueError('Trim inside the source video.')
-    frames = math.ceil(seconds * 24 - 1e-6)
-    if not 5 <= frames <= 120:
-        raise ValueError('Panorama camera preview supports 0.21 to 5 seconds.')
-    if not source.get('has_audio'):
-        raise ValueError('The approved camera recipe needs original audio. Silent-source support is not verified yet.')
+    start_frame = round(start * fps)
+    frames = math.ceil(seconds * fps - 1e-6)
+    if not 2 <= frames <= 361 or seconds > 5:
+        raise ValueError('Choose a continuous camera shot of up to 5 seconds and 361 source frames.')
     if not (256 <= width <= 4096 and 256 <= height <= 4096 and width % 8 == 0 and height % 8 == 0):
         raise ValueError('Use dimensions from 256 to 4096, in multiples of 8.')
-    if math.ceil(width / 32) * 32 * math.ceil(height / 32) * 32 > 8_388_608:
-        raise ValueError('Choose a camera canvas up to 8.39 MP, including the model grid padding.')
-    mode = geometry_mode(config)
-    geometry = {'recipe': RECIPE_VERSION, 'source': source['sha'], 'start': start,
-                'duration': seconds, 'frames': frames, 'fps': 24, 'width': width, 'height': height,
-                'model': MODELS['geometry'][1], 'level': 8 if max(width, height) > 1280 else 7,
-                'refine': 3, 'batch': 1, 'projection': True, 'mask': True, 'geometry_mode': mode}
-    if mode == 'stable_scene':
-        geometry['scene_texture'] = 'still-v2'
-    identity = geometry if mode == 'stable_scene' else {k: v for k, v in geometry.items() if k != 'geometry_mode'}
-    return {**geometry, 'key': digest(identity), 'padded': 5 + 17 * max(0, math.ceil((frames - 5) / 17)),
-            'render_width': math.ceil(width / 32) * 32, 'render_height': math.ceil(height / 32) * 32}
+    two_stage = bool(config.get('two_stage', False))
+    grid = 128 if two_stage else 64
+    rw, rh = math.ceil(width / grid) * grid, math.ceil(height / grid) * grid
+    if rw * rh > 8_388_608:
+        raise ValueError('Choose a camera canvas up to 8.39 MP, including model padding.')
+    geometry = {'recipe': RECIPE_VERSION, 'source': source['sha'], 'start': start_frame/fps,
+                'start_frame': start_frame, 'duration': frames/fps, 'frames': frames, 'fps': fps,
+                'width': width, 'height': height, 'model': MODELS['geometry'][1],
+                'solve_resolution': 504, 'window': 12, 'overlap': 3, 'geometry_mode': 'temporal_scene'}
+    return {**geometry, 'key': digest(geometry), 'padded': 8 * max(1, math.ceil((frames-1)/8)) + 1,
+            'render_width': rw, 'render_height': rh, 'two_stage': two_stage}
 
 
 def camera_state(raw, selection):
@@ -103,7 +102,7 @@ def camera_state(raw, selection):
     # The native editor owns camera interpolation and coordinate conventions.
     # Only camera/timeline state crosses into a camera-reshoot project.
     state = {'version': 2, 'camera': state['camera'],
-             'timeline': {'fps': 24, 'length': selection['frames']}, 'stickers': []}
+             'timeline': {'fps': selection['fps'], 'length': selection['frames']}, 'stickers': []}
     state['camera']['aspect'] = selection['width'] / selection['height']
     def finite(value):
         if isinstance(value, (float, int)) and not math.isfinite(value):
@@ -121,103 +120,103 @@ def camera_state(raw, selection):
 
 def build_graph(source, selection, state, stage, *, warp=None, look=None, prompt='', seed=1052):
     if stage not in ('geometry', 'warp', 'render'):
-        raise ValueError('Choose geometry, camera preview or render.')
+        raise ValueError('Choose scene preparation, camera preview or render.')
     g = {}
     def n(key, kind, title=None, **inputs):
         g[key] = {'class_type': kind, 'inputs': inputs, '_meta': {'title': title or key.replace('_', ' ').capitalize()}}
         return [key, 0]
     p = selection
     state = camera_state(state, p)
-    if stage != 'warp':
-        src = n('source', 'LoadVideo', 'Load source footage', file=source['file'])
-        src = n('select', 'GenjSelectClip', 'Read selected interval at 24 fps', video=src,
-                start_seconds=p['start'], duration_seconds=p['duration'], long_edge=1920,
-                use_original_length=False, round_up=True)
-        components = n('components', 'GetVideoComponents', 'Read original performance and audio', video=src)
+    def load(key, file, width=0, height=0, start=0):
+        return n(key, 'VHS_LoadVideo', video=file, force_rate=0, custom_width=width, custom_height=height,
+                 frame_load_cap=p['frames'], skip_first_frames=start, select_every_nth=1, format='AnimateDiff')
+    def pad(key, image):
+        return n(key, 'ZuraCameraPadFrames', image=image, frames=p['padded'])
     if stage in ('geometry', 'warp'):
         if stage == 'geometry':
-            image = n('geometry_size', 'ImageScale', 'Prepare geometry raster', image=components,
-                      width=p['width'], height=p['height'], upscale_method='lanczos', crop='disabled')
-            model = n('moge', 'LoadMoGeModel', 'Load MoGe 3 geometry model', model_name=MODELS['geometry'][1])
-            source_geometry = image
-            if p['geometry_mode'] == 'stable_scene':
-                source_geometry = n('geometry_first_frame', 'ImageFromBatch', 'Lock geometry to the first selected frame',
-                                    image=image, batch_index=0, length=1)
-            world = n('geometry', 'MoGeInference', 'Reconstruct every source frame', moge_model=model,
-                      image=source_geometry, resolution_level=p['level'], batch_size=1, fov_x_degrees=0,
-                      force_projection=True, apply_mask=True, refine_steps=3)
-            saved = {'geometry': world, 'cache_key': p['key']}
-            if p['geometry_mode'] == 'stable_scene':
-                saved['texture_images'] = image
-            world = n('cache_geometry', 'ZuraPanoramaSaveGeometry',
-                      'Cache stable scene geometry' if p['geometry_mode'] == 'stable_scene' else 'Cache geometry for camera edits',
-                      **saved)
+            images = load('source', source['file'], width=640, start=p['start_frame'])
+            images = n('source_frames','ZuraCameraPadFrames',image=images,frames=p['frames'])
+            images = n('solve_raster', 'ZuraCameraPrepareViews', 'Prepare calibrated DA3 patch raster', image=images, resolution=504)
+            model = n('da3', 'LoadDA3Model', 'Load shared-view scene model', model_name=MODELS['geometry'][1], weight_dtype='fp32')
+            previous, start, index = None, 0, 0
+            while start < p['frames']:
+                end = min(p['frames'], start + p['window'])
+                chunk = n('views_'+str(index), 'ImageFromBatch', image=images, batch_index=start, length=end-start)
+                solved = n('solve_'+str(index), 'DA3Inference', 'Joint scene views '+str(index+1), da3_model=model, image=chunk,
+                           resolution=504, resize_method='upper_bound_resize', mode='multiview',
+                           **{'mode.ref_view_strategy': 'first', 'mode.pose_method': 'cam_dec'})
+                inputs = {'geometry': solved, 'start_frame': start, 'lock_camera': ['solve_raster',1]}
+                if previous is not None: inputs['previous'] = previous
+                previous = n('align_'+str(index), 'ZuraCameraAlignViews', 'Register overlapping source cameras', **inputs)
+                if end == p['frames']: break
+                start = end - p['overlap']; index += 1
+            world = n('scene', 'ZuraCameraBuildScene', 'Fuse persistent scenery and moving surfaces', capture=previous, cache_key=p['key'], state_json=state)
+            render_state = ['scene', 1]
         else:
-            world = n('cached_geometry', 'ZuraPanoramaLoadGeometry', 'Reuse prepared geometry', cache_key=p['key'])
-        n('panorama', 'PanoramaStudio', 'Panorama camera editor', world=world,
-          background_color='#ff00ff', background_range='360', megapixels=p['width'] * p['height'] / 1048576,
-          multiple=8, state_json=state)
-        n('save', 'SaveVideo', 'Save full camera warp preview', video=['panorama', 3],
-          filename_prefix='genj/panorama/warp_' + digest([p['key'], state])[:20], format='mp4',
-          **{'format.codec': 'h264', 'format.codec.encoding': 'auto'})
-        n('opening', 'SaveImage', 'Save new-angle opening', images=['panorama', 1],
-          filename_prefix='genj/panorama/opening_' + digest([p['key'], state])[:20])
+            world = n('cached_scene', 'ZuraCameraLoadScene', 'Reuse the shared scene', cache_key=p['key'])
+            render_state = state
+        n('panorama', 'PanoramaStudio', 'Camera view', world=world, background_color='#ff00ff', background_range='360',
+          megapixels=p['width']*p['height']/1048576, multiple=8, state_json=render_state)
+        n('save', 'SaveVideo', 'Save reviewed camera guide', video=['panorama', 3],
+          filename_prefix='genj/panorama/warp_'+digest([p['key'], state])[:20], format='mp4',
+          **{'format.codec':'h264','format.codec.encoding':'auto'})
+        n('opening', 'SaveImage', 'New camera opening', images=['panorama',1], filename_prefix='genj/panorama/opening_'+p['key'][:20])
         if stage == 'geometry':
-            original = n('source_opening', 'ImageFromBatch', image=components, batch_index=0, length=1)
-            n('source_opening_save', 'SaveImage', 'Save original identity reference', images=original,
-              filename_prefix='genj/panorama/source_' + p['key'][:20])
+            original = n('source_opening', 'ImageFromBatch', image=images, batch_index=0, length=1)
+            n('source_opening_save','SaveImage',images=original,filename_prefix='genj/panorama/source_'+p['key'][:20])
         return g
     if not warp:
         raise ValueError('Review a camera preview before rendering.')
     rw, rh = p['render_width'], p['render_height']
-    def size(key, image):
-        return n(key, 'ImageScale', image=image, width=rw, height=rh, upscale_method='lanczos', crop='disabled')
-    def pad(key, image):
-        if p['padded'] == p['frames']: return image
-        tail = n(key+'_last', 'ImageFromBatch', image=image, batch_index=p['frames']-1, length=1)
-        tail = n(key+'_hold', 'RepeatImageBatch', image=tail, amount=p['padded']-p['frames'])
-        return n(key, 'ImageBatch', image1=image, image2=tail)
-    performance = size('performance_size', components)
-    original = n('identity', 'ImageFromBatch', image=performance, batch_index=0, length=1)
-    performance = pad('performance_pad', performance)
-    warp_video = n('warp', 'LoadVideo', 'Load full reviewed camera warp', file=warp)
-    warped = n('warp_components', 'GetVideoComponents', video=warp_video)
-    warped = pad('warp_pad', size('warp_size', warped))
-    model = n('model', 'UNETLoader', 'Load H3 INT8', unet_name=MODELS['h3'][1], weight_dtype='default')
-    model = n('turbo', 'LoraLoaderModelOnly', 'H3 Turbo · 8 steps', model=model, lora_name=MODELS['turbo'][1], strength_model=1.)
-    model = n('shift', 'MiniMaxH3SigmaShift', model=model, shift_video=12., shift_audio=3.)
-    model = n('crossview', 'LoraLoaderModelOnly', 'CrossView Warp · 0.8', model=model, lora_name=MODELS['crossview'][1], strength_model=.8)
-    model = n('attention', 'ModelAttentionBackend', model=model, attention='comfy kitchen attention')
-    clip = n('text', 'CLIPLoader', clip_name=MODELS['text'][1], type='minimax', device='default')
-    vae = n('video_vae', 'VAELoader', vae_name=MODELS['video_vae'][1])
-    audio_vae = n('audio_vae', 'VAELoader', vae_name=MODELS['audio_vae'][1])
-    refs = {'ref_images.ref_image_0': original}
+    base_w, base_h = (rw//2, rh//2) if p['two_stage'] else (rw, rh)
+    source_images = load('source', source['file'], width=rw, start=p['start_frame'])
+    source_images = pad('source_pad', source_images)
+    warped = pad('warp_pad', load('warp', warp))
+    model = n('model','UNETLoader','LTX 2.5 distilled',unet_name=MODELS['model'][1],weight_dtype='default')
+    model = n('crossview','LoraLoaderModelOnly','Dual-reference camera adapter',model=model,lora_name=MODELS['crossview'][1],strength_model=1.)
+    model = n('attention','ModelAttentionBackend',model=model,attention='comfy kitchen attention')
+    text = n('text','CLIPLoader',clip_name=MODELS['text'][1],type='ltxv',device='default')
+    vae = n('video_vae','VAELoader',vae_name=MODELS['video_vae'][1])
+    audio_vae = n('audio_vae','VAELoader',vae_name=MODELS['audio_vae'][1])
+    positive = n('positive','CLIPTextEncode',clip=text,text='crossview'+('. '+str(prompt).strip() if str(prompt).strip() else ''))
+    negative = n('negative','CLIPTextEncode',clip=text,text='')
+    n('conditioning','LTXVConditioning',positive=positive,negative=negative,frame_rate=p['fps'])
+    positive, negative = ['conditioning',0], ['conditioning',1]
+    latent = n('empty_video','EmptyLTXVLatentVideo',width=base_w,height=base_h,length=p['padded'],batch_size=1)
+    def guide(key, pos, neg, lat, image, frame_idx=0):
+        n(key,'LTXAddVideoICLoRAGuide',positive=pos,negative=neg,vae=vae,latent=lat,image=image,
+          frame_idx=frame_idx,strength=1.,latent_downscale_factor=1.,crop='disabled',use_tiled_encode=True,tile_size=256,tile_overlap=64)
+        return [key,0],[key,1],[key,2]
+    # Training contract: warped view first, unwarped original second. Never
+    # substitute the rendered proxy for the source's appearance/performance.
+    positive, negative, latent = guide('warp_guide',positive,negative,latent,warped)
+    positive, negative, latent = guide('source_guide',positive,negative,latent,source_images)
     if look:
-        look_image = size('look_size', n('look', 'LoadImage', image=look))
-        refs = {'ref_images.ref_image_0': look_image, 'ref_images.ref_image_1': original}
-    audio = ['components', 1]
-    positive = n('references', 'MiniMaxH3ReferenceToVideo', clip=clip, vae=vae, audio_vae=audio_vae,
-        width=rw, height=rh, length=p['padded'], ref_image_size='match',
-        prompt='crossview. Reshoot the original performance from the camera view in the warped video guide. '
-        'Keep the same person, clothing, setting, gestures and spoken timing. Fill the magenta disocclusions naturally. '
-        + str(prompt).strip(), **refs, **{'ref_videos.ref_video_0': performance, 'ref_video_audios.ref_video_audio_0': audio})
-    latent = ['references', 1]
-    positive = n('warp_guide', 'MiniMaxH3AddGuide', 'Guide every frame with the new camera', positive=positive, latent=latent, vae=vae, image=warped, frame_idx=0)
-    if look:
-        positive = n('look_guide', 'MiniMaxH3AddGuide', 'Soft opening look guide', positive=positive, latent=latent, vae=vae, image=look_image, frame_idx=0)
-    positive = n('audio_guide', 'MiniMaxH3AddGuide', positive=positive, latent=latent, audio_vae=audio_vae, audio=audio, frame_idx=0)
-    latent = n('audio_lock', 'ZuraH3LockReferenceAudio', latent=latent, audio_vae=audio_vae, audio=audio)
-    guider = n('guider', 'BasicGuider', model=model, conditioning=positive)
-    noise = n('noise', 'RandomNoise', noise_seed=int(seed))
-    sigmas = n('sigmas', 'BasicScheduler', model=model, scheduler='simple', steps=8, denoise=1.)
-    sampler = n('sampler', 'KSamplerSelect', sampler_name='res_multistep')
-    sample = n('sample', 'SamplerCustomAdvanced', 'Render new camera · 8 steps', noise=noise, guider=guider, sampler=sampler, sigmas=sigmas, latent_image=latent)
-    images = n('decode', 'VAEDecode', 'Decode finished video', samples=sample, vae=vae)
-    images = n('trim', 'ImageFromBatch', 'Deliver exact selected frame count', image=images, batch_index=0, length=p['frames'])
-    images = n('crop', 'ImageCrop', image=images, width=p['width'], height=p['height'], x=(rw-p['width'])//2, y=(rh-p['height'])//2)
-    video = n('video', 'CreateVideo', images=images, audio=audio, fps=24.)
-    n('save', 'SaveVideo', 'Save finished camera take', video=video, filename_prefix='genj/panorama/take',
-      format='mp4', **{'format.codec': 'h264', 'format.codec.encoding': 'auto'})
+        image=n('look','LoadImage',image=look)
+        positive,negative,latent=guide('look_guide',positive,negative,latent,image,-1)
+    audio=n('empty_audio','LTXVEmptyLatentAudio',frames_number=p['padded'],frame_rate=p['fps'],batch_size=1,audio_vae=audio_vae)
+    def sample(key, pos, neg, lat, sound, sigmas):
+        av=n(key+'_av','LTXVConcatAVLatent',video_latent=lat,audio_latent=sound)
+        guider=n(key+'_guider','CFGGuider',model=model,positive=pos,negative=neg,cfg=1.)
+        n(key,'SamplerCustomAdvanced',noise=n(key+'_noise','RandomNoise',noise_seed=int(seed)),guider=guider,
+          sampler=n(key+'_sampler','KSamplerSelect',sampler_name='euler_ancestral'),
+          sigmas=n(key+'_sigmas','ManualSigmas',sigmas=sigmas),latent_image=av)
+        n(key+'_separate','LTXVSeparateAVLatent',av_latent=[key,0])
+        n(key+'_crop','LTXVCropGuides',positive=pos,negative=neg,latent=[key+'_separate',0])
+        return [key+'_crop',2],[key+'_separate',1]
+    latent,audio=sample('sample',positive,negative,latent,audio,'1.0,0.99375,0.9875,0.98125,0.975,0.909375,0.725,0.421875,0.0')
+    if p['two_stage']:
+        latent=n('upscale','LTXVLatentUpsampler',samples=latent,vae=vae,
+                 upscale_model=n('upscale_model','LatentUpscaleModelLoader',model_name=MODELS['upscaler'][1]))
+        positive,negative,latent=guide('refine_source', ['sample_crop',0], ['sample_crop',1],latent,source_images)
+        latent,audio=sample('refine',positive,negative,latent,audio,'0.909375,0.725,0.421875,0.0')
+    decoded=n('decode','VAEDecodeTiled',samples=latent,vae=vae,tile_size=512,overlap=64,temporal_size=64,temporal_overlap=8)
+    decoded=n('trim','ImageFromBatch',image=decoded,batch_index=0,length=p['frames'])
+    decoded=n('restore_output','ImageScale',image=decoded,width=p['width'],height=p['height'],upscale_method='lanczos',crop='disabled')
+    inputs={'images':decoded,'fps':p['fps']}
+    if source.get('has_audio'):inputs['audio']=['source',2]
+    video=n('video','CreateVideo',**inputs)
+    n('save','SaveVideo',video=video,filename_prefix='ZURA STUDIO/camera/take',format='mp4',**{'format.codec':'h264','format.codec.encoding':'auto'})
     if __package__:
         from .attention import adapt_attention
         return adapt_attention(g)

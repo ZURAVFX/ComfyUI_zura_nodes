@@ -1,170 +1,39 @@
 import importlib.util
 import json
 from pathlib import Path
-import sys
-import tempfile
 import unittest
-from unittest.mock import patch
-import torch
-
-spec = importlib.util.spec_from_file_location('panorama_camera_test', Path(__file__).resolve().parents[1]/'artist_studio/panorama_camera.py')
-camera = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(camera)
-
-
-class PanoramaCameraTests(unittest.TestCase):
-    source = {'sha': 'a'*64, 'duration': 10, 'has_audio': True, 'file': 'genj_studio/example/source.mp4'}
-
-    def selection(self, **config):
-        return camera.plan(self.source, {'start': 1.5, 'duration': 2, **config})
-
-    def graph(self, **kw):
-        p = self.selection()
-        return camera.build_graph(self.source, p, None, 'render', warp='warp.mp4 [output]', **kw)
-
-    def test_full_temporal_warp_reaches_native_addguide(self):
-        g = self.graph()
-        self.assertEqual(g['warp_guide']['inputs']['image'], ['warp_pad', 0])
-        self.assertEqual(g['warp_pad']['inputs']['image1'], ['warp_size', 0])
-        self.assertEqual(g['warp_size']['inputs']['image'], ['warp_components', 0])
-        self.assertEqual(g['warp_last']['inputs']['batch_index'] if 'warp_last' in g else g['warp_pad_last']['inputs']['batch_index'], 47)
-        self.assertEqual(g['references']['inputs']['ref_videos.ref_video_0'], ['performance_pad', 0])
-        self.assertEqual(g['references']['inputs']['length'], 56)
-        self.assertNotIn('ZuraH3LockStartFrame', {n['class_type'] for n in g.values()})
-
-    def test_approved_sampling_and_final_crop(self):
-        g = self.graph()
-        self.assertEqual(g['model']['inputs']['unet_name'], camera.MODELS['h3'][1])
-        self.assertEqual(g['turbo']['inputs']['strength_model'], 1)
-        self.assertEqual(g['crossview']['inputs']['strength_model'], .8)
-        self.assertEqual(g['sampler']['inputs']['sampler_name'], 'res_multistep')
-        self.assertEqual(g['sigmas']['inputs']['steps'], 8)
-        self.assertEqual(g['crop']['inputs'], {'image': ['trim', 0], 'width': 1920, 'height': 1080, 'x': 0, 'y': 4})
-        self.assertEqual(g['trim']['inputs']['length'], 48)
-        for node in ['audio_lock', 'audio_guide', 'video']:
-            self.assertEqual(g[node]['inputs']['audio'], ['components', 1])
-
-    def test_soft_look_adds_to_full_video_guide(self):
-        g = self.graph(look='look.png')
-        self.assertEqual(g['look_guide']['inputs']['positive'], ['warp_guide', 0])
-        self.assertEqual(g['audio_guide']['inputs']['positive'], ['look_guide', 0])
-        self.assertEqual(g['references']['inputs']['ref_images.ref_image_1'], ['identity', 0])
-
-    def test_camera_changes_do_not_invalidate_geometry(self):
-        p = self.selection()
-        state = json.loads(camera.camera_state(None, p))
-        state['camera']['rotation']['value']['yaw_deg'] = 22
-        graph = camera.build_graph(self.source, p, state, 'warp')
-        self.assertEqual(graph['cached_geometry']['inputs']['cache_key'], p['key'])
-        self.assertNotIn('MoGeInference', {n['class_type'] for n in graph.values()})
-        self.assertNotEqual(self.selection(start=2)['key'], p['key'])
-        self.assertNotEqual(self.selection(width=1280, height=720)['key'], p['key'])
-
-    def test_still_scene_geometry_and_texture_are_locked_across_camera_timeline(self):
-        p = self.selection(duration=1, geometry_mode='stable_scene')
-        graph = camera.build_graph(self.source, p, None, 'geometry')
-        self.assertEqual(graph['geometry_first_frame']['inputs'],
-                         {'image': ['geometry_size', 0], 'batch_index': 0, 'length': 1})
-        self.assertEqual(graph['geometry']['inputs']['image'], ['geometry_first_frame', 0])
-        self.assertEqual(graph['cache_geometry']['inputs']['texture_images'], ['geometry_size', 0])
-        self.assertEqual(graph['cache_geometry']['inputs']['cache_key'], p['key'])
-
-        geometry = {
-            'points': torch.arange(2 * 3 * 3, dtype=torch.float32).reshape(1, 2, 3, 3),
-            'depth': torch.arange(2 * 3, dtype=torch.float32).reshape(1, 2, 3),
-            'intrinsics': torch.eye(3).unsqueeze(0),
-            'mask': torch.ones(1, 2, 3, dtype=torch.bool),
-            'image': torch.zeros(1, 2, 3, 3),
-        }
-        textures = torch.arange(4 * 2 * 3 * 3, dtype=torch.float32).reshape(4, 2, 3, 3)
-        stable = camera.stabilise_geometry(geometry, textures)
-        self.assertEqual(stable['image'].shape, (4, 2, 3, 3))
-        torch.testing.assert_close(stable['image'], textures[:1, ..., :3].expand_as(stable['image']))
-        self.assertEqual(stable['image'].stride(0), 0)
-        self.assertEqual(stable['image'].untyped_storage().nbytes(), textures[:1].numel()*textures.element_size())
-        for key in ('points', 'depth', 'intrinsics', 'mask'):
-            self.assertEqual(stable[key].shape[0], 4)
-            self.assertTrue(torch.equal(stable[key], stable[key][:1].expand_as(stable[key])))
-            self.assertEqual(stable[key].stride(0), 0, 'Repeated geometry must keep a zero-stride batch')
-            self.assertEqual(stable[key].untyped_storage().nbytes(), geometry[key].untyped_storage().nbytes())
-            self.assertEqual(stable[key].device.type, 'cpu')
-        self.assertEqual(p['frames'], p['fps'] * p['duration'])
-        self.assertEqual(p['geometry_mode'], 'stable_scene')
-
-    def test_stable_scene_changes_geometry_key_and_keeps_full_performance_render(self):
-        moving = self.selection()
-        stable = self.selection(geometry_mode='stable_scene')
-        self.assertEqual(moving['geometry_mode'], 'per_frame')
-        self.assertNotEqual(stable['key'], moving['key'])
-        legacy = {key: value for key, value in moving.items()
-                  if key not in ('key', 'padded', 'render_width', 'render_height', 'geometry_mode')}
-        self.assertEqual(moving['key'], camera.digest(legacy), 'Legacy per-frame caches stay reusable')
-        graph = camera.build_graph(self.source, stable, None, 'render', warp='warp.mp4 [output]')
-        self.assertEqual(graph['references']['inputs']['ref_videos.ref_video_0'], ['performance_pad', 0])
-        self.assertEqual(graph['references']['inputs']['ref_video_audios.ref_video_audio_0'], ['components', 1])
-        self.assertEqual(graph['trim']['inputs']['length'], stable['frames'])
-        self.assertEqual(graph['video']['inputs']['fps'], 24.)
-
-    def test_stable_scene_cache_round_trip_keeps_static_geometry_metadata(self):
-        with tempfile.TemporaryDirectory() as directory:
-            folder_paths = type('FolderPaths', (), {'get_output_directory': staticmethod(lambda: directory)})()
-            geometry = {
-                'points': torch.ones(1, 2, 3, 3),
-                'depth': torch.ones(1, 2, 3),
-                'intrinsics': torch.eye(3).unsqueeze(0),
-                'mask': torch.ones(1, 2, 3, dtype=torch.bool),
-                'normal': torch.ones(1, 2, 3, 3),
-                'image': torch.zeros(1, 2, 3, 3),
-            }
-            textures = torch.arange(4 * 2 * 3 * 3, dtype=torch.float32).reshape(4, 2, 3, 3) / 100
-            key = 'b' * 64
-            with patch.dict(sys.modules, {'folder_paths': folder_paths}):
-                result, = camera.ZuraPanoramaSaveGeometry().save(geometry, key, textures)
-                loaded, = camera.ZuraPanoramaLoadGeometry().load(key)
-        for field in ('points', 'depth', 'intrinsics', 'mask', 'normal'):
-            self.assertEqual(result[field].shape[0], 4)
-            self.assertEqual(loaded[field].shape[0], 4)
-            self.assertTrue(torch.equal(result[field], loaded[field]))
-        self.assertTrue(torch.equal(loaded['image'], textures[:1, ..., :3].expand_as(loaded['image'])))
-        self.assertEqual(loaded['image'].device.type, 'cpu')
-
-    def test_non24fps_duration_rounds_up_then_trims(self):
-        p = self.selection(duration=2.01)
-        self.assertEqual(p['frames'], 49)
-        self.assertEqual(p['padded'], 56)
-        graph = camera.build_graph(self.source, p, None, 'render', warp='warp.mp4')
-        self.assertTrue(graph['select']['inputs']['round_up'])
-        self.assertEqual(graph['trim']['inputs']['length'], 49)
-        self.assertEqual(graph['warp_pad_hold']['inputs']['amount'], 7)
-
-    def test_native_camera_state_preserves_keyframes(self):
-        p = self.selection()
-        state = json.loads(camera.camera_state(None, p))
-        state['camera']['fov']['keyframes'] = [{'frame': 24, 'value': 75}]
-        result = json.loads(camera.camera_state(state, p))
-        self.assertEqual(result['camera']['fov']['keyframes'], state['camera']['fov']['keyframes'])
-        self.assertEqual(result['timeline'], {'fps': 24, 'length': 48})
-        state['camera']['fov']['value'] = float('nan')
-        with self.assertRaises(ValueError): camera.camera_state(state, p)
-
-    def test_interval_and_grid_rejected_before_inference(self):
-        for config in [{'duration': 6}, {'start': 9}, {'width': 1919}, {'width': 4096, 'height': 4096}]:
-            with self.assertRaises(ValueError): self.selection(**config)
-
-    def test_4k_canvas_uses_model_padding_and_restores_requested_output(self):
-        p = self.selection(width=3840, height=2160, geometry_mode='stable_scene')
-        self.assertEqual(p['render_height'], 2176)
-        self.assertEqual(p['scene_texture'], 'still-v2')
-        graph = camera.build_graph(self.source, p, None, 'render', warp='warp.mp4')
-        self.assertEqual(graph['crop']['inputs']['width'], 3840)
-        self.assertEqual(graph['crop']['inputs']['height'], 2160)
-
-    def test_all_links_resolve(self):
-        for stage in ['geometry', 'warp', 'render']:
-            g = camera.build_graph(self.source, self.selection(), None, stage, warp='warp.mp4')
-            for node in g.values():
-                for v in node['inputs'].values():
-                    if isinstance(v, list): self.assertIn(v[0], g)
-
-
-if __name__ == '__main__': unittest.main()
+spec=importlib.util.spec_from_file_location('camera_test',Path(__file__).resolve().parents[1]/'artist_studio/panorama_camera.py');camera=importlib.util.module_from_spec(spec);spec.loader.exec_module(camera)
+class CameraTests(unittest.TestCase):
+ source={'sha':'a'*64,'duration':10,'has_audio':True,'file':'source.mp4','fps':30}
+ def test_replaces_independent_depth_with_overlapping_joint_solves(self):
+  p=camera.plan(self.source,{'duration':2});g=camera.build_graph(self.source,p,None,'geometry')
+  kinds=[n['class_type']for n in g.values()];self.assertNotIn('MoGeInference',kinds);self.assertIn('DA3Inference',kinds)
+  self.assertEqual(g['da3']['inputs']['weight_dtype'],'fp32');self.assertEqual(g['solve_0']['inputs']['mode'],'multiview')
+  self.assertEqual(g['views_1']['inputs']['batch_index'],9);self.assertEqual(g['align_1']['inputs']['previous'],['align_0',0]);self.assertEqual(g['panorama']['inputs']['state_json'],['scene',1])
+ def test_ltx25_dual_guide_contract_and_exact_source_delivery(self):
+  p=camera.plan(self.source,{'duration':.5,'width':1136,'height':1760});g=camera.build_graph(self.source,p,None,'render',warp='warp.mp4')
+  self.assertEqual(p['frames'],15);self.assertEqual(p['padded'],17);self.assertTrue(g['model']['inputs']['unet_name'].startswith('ltx-2.5'))
+  self.assertFalse(any('MiniMax' in n['class_type'] for n in g.values()))
+  self.assertEqual(g['source_guide']['inputs']['positive'],['warp_guide',0]);self.assertEqual(g['source_guide']['inputs']['image'],['source_pad',0]);self.assertEqual(g['source_guide']['inputs']['latent_downscale_factor'],1.)
+  self.assertEqual(g['trim']['inputs']['length'],15);self.assertEqual(g['video']['inputs']['fps'],30);self.assertEqual(g['video']['inputs']['audio'],['source',2]);self.assertEqual(g['restore_output']['inputs']['crop'],'disabled')
+ def test_two_stage_uses_ltx25_upscaler_and_refine_schedule(self):
+  p=camera.plan(self.source,{'duration':1,'two_stage':True});g=camera.build_graph(self.source,p,None,'render',warp='warp.mp4')
+  self.assertIn('ltx-2.5',g['upscale_model']['inputs']['model_name']);self.assertEqual(g['refine_sigmas']['inputs']['sigmas'],'0.909375,0.725,0.421875,0.0')
+ def test_silent_nonhuman_shot_does_not_need_fake_audio(self):
+  src={**self.source,'has_audio':False};p=camera.plan(src,{'duration':1});g=camera.build_graph(src,p,None,'render',warp='warp.mp4');self.assertNotIn('audio',g['video']['inputs'])
+ def test_old_geometry_modes_migrate_without_reusing_old_caches(self):
+  a=camera.plan(self.source,{'duration':1,'geometry_mode':'stable_scene'});b=camera.plan(self.source,{'duration':1,'geometry_mode':'per_frame'});self.assertEqual(a['key'],b['key']);self.assertEqual(a['geometry_mode'],'temporal_scene')
+ def test_4k_padding_and_optional_image_reference(self):
+  p=camera.plan(self.source,{'duration':1,'width':3840,'height':2160});g=camera.build_graph(self.source,p,None,'render',warp='warp.mp4',look='look.png');self.assertEqual(p['render_height'],2176);self.assertEqual(g['look_guide']['inputs']['frame_idx'],-1)
+ def test_source_time_and_camera_timeline_share_rate(self):
+  p=camera.plan({**self.source,'fps':30000/1001},{'duration':1,'start':.5});state=json.loads(camera.camera_state(None,p));self.assertEqual(state['timeline']['fps'],30000/1001)
+ def test_all_links_resolve_and_reject_cuts_or_invalid_raster(self):
+  p=camera.plan(self.source,{'duration':1})
+  for stage in ['geometry','warp','render']:
+   graph=camera.build_graph(self.source,p,None,stage,warp='warp.mp4')
+   for n in graph.values():
+    for value in n['inputs'].values():
+     if isinstance(value,list):self.assertIn(value[0],graph)
+  for config in [{'duration':6},{'start':9,'duration':2},{'width':1919},{'width':4096,'height':4096}]:
+   with self.assertRaises(ValueError):camera.plan(self.source,config)
+if __name__=='__main__':unittest.main()

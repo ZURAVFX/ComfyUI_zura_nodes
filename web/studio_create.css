@@ -430,3 +430,17 @@
 #genj-studio .zc-browser-controls select{width:140px;min-height:36px;font-size:13px}
 #genj-studio .zc-browser-controls button{min-height:36px;padding:8px 12px;border:1px solid var(--gs-line);border-radius:8px;white-space:nowrap}
 @media(max-width:700px){#genj-studio .zc-browser-connection{gap:12px}#genj-studio .zc-browser-connection>.zc-browser-info{max-width:100%}}
+
+/* Environment tools use the existing image canvas and generation bar. */
+#genj-studio .zhe-controls{display:grid;gap:8px;margin-bottom:12px;padding-bottom:12px;border-bottom:1px solid var(--gs-line)}
+#genj-studio .zhe-main,#genj-studio .zhe-lights,#genj-studio .zhe-feedback{display:flex;align-items:center;flex-wrap:wrap;gap:8px}
+#genj-studio .zhe-controls label{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--gs-muted)}
+#genj-studio .zhe-controls input[type=number]{width:64px;min-height:32px;height:32px;padding:4px 6px;font:inherit}
+#genj-studio .zhe-controls input[type=color]{width:32px;height:32px;min-height:32px;padding:2px;border:1px solid var(--gs-line);background:var(--gs-input)}
+#genj-studio .zhe-controls :is(button,summary,select,a){min-height:32px;font-size:12px;border-radius:8px;padding:6px 10px}
+#genj-studio .zhe-feedback{font-size:11px;color:var(--gs-muted)}
+#genj-studio .zhe-feedback [data-hdri=status]{color:var(--zc-text)}
+#genj-studio .zhe-export>.zc-tool-panel{display:grid;gap:12px;width:300px}
+#genj-studio .zhe-export>.zc-tool-panel label{display:grid;gap:6px}
+#genj-studio .zhe-main [data-hdri=export]{margin-left:auto}
+.zc-hdri-editor .pano-studio-tabs [data-value=world],.zc-hdri-editor .pano-studio-timeline{display:none!important}

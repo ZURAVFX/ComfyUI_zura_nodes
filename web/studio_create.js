@@ -1,3 +1,4 @@
+import {HDRIBuilder,environmentGeneration} from './studio_hdri.js';
 import {installRelightEngines} from './studio_relight.js';
 import {ImageEditInputs} from './studio_image_edit_inputs.js';
 import {ImageEditArea} from './studio_image_area.js';
@@ -117,7 +118,8 @@ export class CreativeWorkspace {
     const imageTabs=document.createElement('details');imageTabs.className='zc-image-operation zc-task-control zc-tool-popup zc-mode-switcher';imageTabs.setAttribute('aria-label','Image task');
     imageTabs.innerHTML='<summary aria-label="Image mode" aria-haspopup="menu">'+composerIcons.image+'<span class="zc-mode-current-copy"><small>Image mode</small><span data-image-operation-label>Create image</span></span>'+composerIcons.chevron+'</summary><div class="zc-tool-panel zc-workflow-menu" role="menu" aria-label="Image modes"><button type="button" role="menuitemradio" data-image-operation="create">'+composerIcons.image+'<span class="zc-mode-copy"><strong>Create image</strong><small>Start with a prompt and optional references</small></span></button><button type="button" role="menuitemradio" data-image-operation="edit">'+composerIcons.settings+'<span class="zc-mode-copy"><strong>Edit image</strong><small>Change a source image or paint a local edit</small></span></button></div>';
     this.imageTask=imageTabs;this.videoComposer.modeHost.append(imageTabs);imageTabs.hidden=true;
-    for(const button of imageTabs.querySelectorAll('button'))button.onclick=()=>{imageTabs.open=false;this.setImageOperation(button.dataset.imageOperation);};
+    const environment=document.createElement('button');environment.type='button';environment.dataset.imageOperation='hdri';environment.setAttribute('role','menuitemradio');environment.innerHTML=composerIcons.view+'<span class="zc-mode-copy"><strong>Panorama / HDRI</strong><small>Build a 360° environment and export float lighting</small></span>';imageTabs.querySelector('.zc-workflow-menu').append(environment);
+    for(const button of imageTabs.querySelectorAll('button'))button.onclick=()=>{imageTabs.open=false;if(button.dataset.imageOperation==='hdri'){if(this.rippleImage?.request||this.outpaintGuide?.request){this.message('Return the current frame edit to its video first.');return;}this.imageIntent='hdri';this.show('image');this.save();this.render();}else{this.imageIntent='standard';const shapes=this.root.querySelector('.zc-shapes');if(shapes)shapes.hidden=false;this.setImageOperation(button.dataset.imageOperation);}};
     const imageHistory=document.createElement('details');imageHistory.className='zc-image-takes';imageHistory.innerHTML='<summary>History</summary><div id="zc-image-history"></div>';
     page.querySelector('.zc-image-tools').prepend(imageHistory);
     imageHistory.addEventListener('click',event=>{const button=event.target.closest('[data-view-image]');if(button){this.activateImageResult(Number(button.dataset.viewImage));imageHistory.open=false;}});
@@ -187,7 +189,7 @@ export class CreativeWorkspace {
     const imageModelPanel=document.createElement('details');imageModelPanel.className='gs-model-help';this.$('setup').before(imageModelPanel);
     this.imageModelSetup=new StudioModelDownloads(imageModelPanel,(path,body)=>this.fetch('/zura/studio'+path,body),()=>this.loadModels());
     this.imageModelSetup.mountQuick(this.root.querySelector('.zc-image-composer'));
-    this.rippleImage??=new RippleImageHandoff(this);installRelightEngines(this);
+    this.rippleImage??=new RippleImageHandoff(this);installRelightEngines(this);this.hdri=new HDRIBuilder(this);
     this.show("video");this.renderGallery();this.render();
   }
   buildVideoInspector(settings){
@@ -296,6 +298,7 @@ export class CreativeWorkspace {
     picker.disabled=!!this.job||!!this.pendingSubmission||this.submitting;list.querySelectorAll('input,button').forEach(control=>control.disabled=!!this.job||!!this.pendingSubmission||this.submitting);
   }
   async imageGraph(config){
+    if(config.image_intent==='hdri')config=await this.hdri.prepareConfig(config);
     if(config.edit_area?.enabled){
       const capabilities=this.imageAreaCapabilities;
       if(!capabilities?.available)throw Error('Set up Smart Image Crop and Stitch, then refresh models to use a painted edit area. Whole-image editing is still available.');
@@ -307,10 +310,10 @@ export class CreativeWorkspace {
     if(!Array.isArray(result.loras)||result.loras.length!==config.loras.length)throw new Error('Could not validate the selected image LoRAs.');
     return buildImageGraph({...config,loras:result.loras});
   }
-  config(){return {...(this.rippleImage?.request||this.rippleImage?.stored?{ripple_guide:(this.rippleImage.request||this.rippleImage.stored).id}:{}),...(this.outpaintGuide?.request?{outpaint_guide:this.outpaintGuide.request.id}:{}),edit_area:this.imageArea?.config()||null,operation:this.imageOperation,editMainMissing:!!this.editMainMissing,autoCanvasSuppressed:!!this.autoCanvasSuppressed,model:this.$("model").value||(this.imageOperation==='edit'?'qwen2511':'flux2'),prompt:this.$("prompt").value,shape:this.$("shape").value,references:this.references.map(r=>({...r})),loras:IMAGE_MODELS.find(model=>model.id===this.$('model').value)?.provider?[]:this.imageLoras.map(l=>({...l})),width:Number(this.$("width").value),height:Number(this.$("height").value),seed:Number(this.$("seed").value),random:this.$("random").checked};}
+  config(){const config={image_intent:this.imageIntent||'standard',...(this.rippleImage?.request||this.rippleImage?.stored?{ripple_guide:(this.rippleImage.request||this.rippleImage.stored).id}:{}),...(this.outpaintGuide?.request?{outpaint_guide:this.outpaintGuide.request.id}:{}),edit_area:this.imageArea?.config()||null,operation:this.imageOperation,editMainMissing:!!this.editMainMissing,autoCanvasSuppressed:!!this.autoCanvasSuppressed,model:this.$("model").value||(this.imageOperation==='edit'?'qwen2511':'flux2'),prompt:this.$("prompt").value,shape:this.$("shape").value,references:this.references.map(r=>({...r})),loras:IMAGE_MODELS.find(model=>model.id===this.$('model').value)?.provider?[]:this.imageLoras.map(l=>({...l})),width:Number(this.$("width").value),height:Number(this.$("height").value),seed:Number(this.$("seed").value),random:this.$("random").checked};return this.imageIntent==='hdri'?{...config,shape:'landscape',width:environmentGeneration(config).width,height:environmentGeneration(config).height}:config;}
   async setImageOperation(operation,{useCanvas=true}={}){
     if(this.job||this.pendingSubmission||this.submitting||this.uploading)return;
-    this.imageOperation=operation;
+    this.imageIntent='standard';this.imageOperation=operation;
     for(const option of this.$('model').querySelectorAll('option'))option.hidden=!!this.models.find(m=>m.id===option.value)?.edit!==(operation==='edit');
     if(!this.models.some(m=>m.id===this.$('model').value&&!!m.edit===(operation==='edit')))this.$('model').value=this.models.find(m=>m.ready&&!!m.edit===(operation==='edit'))?.id||this.models.find(m=>!!m.edit===(operation==='edit'))?.id||'';
     this.save();this.render();
@@ -440,7 +443,7 @@ export class CreativeWorkspace {
     if(this.job||this.pendingSubmission)this.startPolling();
     if(mode==='image'||mode==='ripple')void this.rippleImage?.resume();
     this.rippleImage?.syncImageUI();
-    this.imageArea?.sync();
+    this.imageArea?.sync();this.hdri?.sync();
   }
   async loadModels(){
     if(this.loading)return;this.loading=true;
@@ -584,7 +587,7 @@ export class CreativeWorkspace {
     for(const b of this.root.querySelectorAll("[data-shape]")){b.setAttribute("aria-pressed",String(auto?b.dataset.shape==='auto':b.dataset.shape!=='auto'&&!!size&&IMAGE_SIZES[b.dataset.shape].every((v,i)=>v===size[i])));b.disabled=busy;}
     this.imageComparison?.update(this.items[this.selectedImage||0],this.references);
     this.editInputs?.sync();
-    this.imageArea?.sync();
+    this.imageArea?.sync();this.hdri?.sync();
   }
   activateImageResult(index=0){
     if(!this.items[index]?.file?.filename)return;
@@ -606,7 +609,7 @@ export class CreativeWorkspace {
     this.$('image-history').innerHTML=this.items.map((item,i)=>`<button type="button" data-view-image="${i}" aria-pressed="${i===this.selectedImage}"><img src="${escape(this.api.apiURL(view(item.file)))}" alt="" loading="lazy"/><span>${escape(item.prompt)}</span></button>`).join('')||'<p>No saved images yet.</p>';
     this.imageComparison?.update(this.items[this.selectedImage],this.references);
     this.editInputs?.sync();
-    this.imageArea?.sync();
+    this.imageArea?.sync();this.hdri?.sync();
   }
   async pasteReferences(event){
     if(this.mode==='frames')return this.frames.paste(event);
@@ -686,7 +689,7 @@ export class CreativeWorkspace {
   }
   async cancel(){await cancelOwnedJob(this);}
   stopPolling(){clearInterval(this.timer);this.timer=null;}
-  close(){for(const access of this.imageModelAccess?.values()||[])access.dispose();this.imageModelSetup?.close();this.modelDownloadClosed=true;this.browserConnection?.close();this.videoComposer?.browserConnection?.close();this.videoComposer?.ltxOutput?.close();void this.imageArea?.close();this.save();this.stopPolling();this.imageZoom?.stopDraw();this.frames?.close();this.director?.close();this.referencesVideo?.close();this.outpaint?.close();for(const workspace of new Set([this.ripple,...(this.rippleWorkspaces?.values()||[])]))workspace?.close();this.alpha?.close();this.rippleImage?.dispose();this.panorama?.close();if(this.paintout?.owner===this)this.paintout.close();if(this.watermark?.owner===this)this.watermark.close();this.disposePopovers?.();}
+  close(){for(const access of this.imageModelAccess?.values()||[])access.dispose();this.imageModelSetup?.close();this.modelDownloadClosed=true;this.browserConnection?.close();this.videoComposer?.browserConnection?.close();this.videoComposer?.ltxOutput?.close();void this.imageArea?.close();this.save();this.stopPolling();this.imageZoom?.stopDraw();this.frames?.close();this.director?.close();this.referencesVideo?.close();this.outpaint?.close();for(const workspace of new Set([this.ripple,...(this.rippleWorkspaces?.values()||[])]))workspace?.close();this.alpha?.close();this.rippleImage?.dispose();this.panorama?.close();this.hdri?.close();if(this.paintout?.owner===this)this.paintout.close();if(this.watermark?.owner===this)this.watermark.close();this.disposePopovers?.();}
   async graph(){
     try{const graph=await this.imageGraph(this.job?.config||this.config());if(typeof this.app.loadApiJson!=="function")throw new Error("Update ComfyUI to open this image graph.");const original=(this.app.rootGraph||this.app.graph)?.serialize?.();if(!original)throw new Error("Your current graph could not be backed up.");try{await this.app.loadApiJson(graph,"Zura Image · "+Date.now()+".json");}catch(e){await this.app.loadGraphData(original);throw e;}this.studio.close();}catch(e){this.message(e.message);}
   }

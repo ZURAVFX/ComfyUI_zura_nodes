@@ -42,13 +42,13 @@ assert.equal(elements.result.poster,'','Do not retain source poster over a gener
 const configured=Object.create(PanoramaCameraWorkspace.prototype);
 configured.state={config:{start:.5,duration:1},geometryMode:'stable_scene',source:{duration:2}};
 configured.$=name=>({size:{value:'768,432'},width:{value:'768'},height:{value:'432'}}[name]);
-assert.equal(configured.config().geometry_mode,'stable_scene');
+assert.equal(configured.config().geometry_mode,'temporal_scene');
 assert.deepEqual(
   [configured.config().width,configured.config().height,configured.config().start,configured.config().duration],
   [768,432,.5,1]
 );
 configured.state.geometryMode=undefined;
-assert.equal(configured.config().geometry_mode,'per_frame','Legacy saved state must keep per-frame geometry');
+assert.equal(configured.config().geometry_mode,'temporal_scene','Legacy geometry choices migrate to the shared solve');
 console.log('Panorama Windows output handoff, geometry mode contract and restored history pass.');
 
 configured.state={source:{width:1920,height:1080,duration:2},sourceSize:true};

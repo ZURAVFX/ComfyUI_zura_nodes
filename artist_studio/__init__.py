@@ -800,6 +800,8 @@ NODE_DISPLAY_NAME_MAPPINGS.update(TRACKING_NAMES)
 
 # The artist interface uses native inference nodes through ComfyUI's queue.
 from .panorama_camera import ZuraPanoramaSaveGeometry, ZuraPanoramaLoadGeometry
+from .temporal_scene import ZuraCameraAlignViews, ZuraCameraPrepareViews, ZuraCameraBuildScene, ZuraCameraLoadScene, ZuraCameraPadFrames
+NODE_CLASS_MAPPINGS.update({cls.__name__: cls for cls in (ZuraCameraAlignViews, ZuraCameraPrepareViews, ZuraCameraBuildScene, ZuraCameraLoadScene, ZuraCameraPadFrames)})
 NODE_CLASS_MAPPINGS.update({cls.__name__: cls for cls in (ZuraPanoramaSaveGeometry, ZuraPanoramaLoadGeometry)})
 NODE_DISPLAY_NAME_MAPPINGS.update({
     'ZuraPanoramaSaveGeometry': 'Zura · Cache Panorama Geometry',

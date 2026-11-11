@@ -114,7 +114,7 @@ export class RippleImageHandoff {
     for(const id of ['model','shape','width','height','seed','prompt'])o.$(id).value=c[id]??'';o.$('random').checked=c.random;
     const previous=request.previous.selectedFile;
     o.selectedImage=previous?o.items.findIndex(item=>item.file?.filename===previous.filename&&(item.file?.subfolder||'')===(previous.subfolder||'')&&(item.file?.type||'output')===(previous.type||'output')):-1;
-    this.clear();
+    this.clear();o.imageIntent=c.image_intent||'standard';
     o.save();o.render();o.renderGallery();o.ensureRippleWorkspace?.(request.workspace?.intent||request.intent||'edit');o.show('ripple');
   }
   // Closing Studio is reversible: keep the current hand-off so a completed

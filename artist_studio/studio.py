@@ -2651,6 +2651,8 @@ def register():
     register_outpaint_jobs(studio, routes, response)
     from .panorama_routes import register as register_panorama
     register_panorama(studio, routes, response, check_asset)
+    from .hdri_routes import register as register_hdri
+    register_hdri(studio, routes, response, check_asset)
 
     @routes.get("/zura/studio/loras")
     @routes.get("/genj/studio/loras")

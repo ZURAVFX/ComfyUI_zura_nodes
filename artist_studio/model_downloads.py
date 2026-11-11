@@ -331,6 +331,18 @@ CATALOG["ltx_alpha"] = dict(
     ])
 
 
+CATALOG['ltx25_camera'] = dict(name='Camera angle · shared scene and LTX 2.5', gated=True,
+    license_url='https://huggingface.co/Lightricks/LTX-2.5',
+    note='Joint DA3 camera reconstruction and native LTX 2.5 rendering. CrossView v2 is a 2.3-trained adapter with matching 2.5 tensor dimensions; camera quality must be reviewed on your shots.',
+    files=[*CATALOG['ltx25_core']['files'], CATALOG['ltx25_text_int8']['files'][0],
+        {**_file('geometry_estimation','depth_anything_3_base.safetensors','Comfy-Org/Depth-Anything-3','657708b0ec5f218cbf14bff0bb2cb8c58ea3fe33','geometry_estimation/depth_anything_3_base.safetensors',541524124,'418c0d2ea857e2d1215fa51baa46833f499a62eb2400ec63d337aa20d326414f'),'gated':False},
+        {**_file('loras','LTX2.3-22B_IC-LoRA-CrossView-Warp_v2_6000.safetensors','Cseti/LTX2.3-22B_IC-LoRA-CrossView-Warp_v2','17a34a4664586131340d68f73c4aa3152ed27efc','LTX2.3-22B_IC-LoRA-CrossView-Warp_v2_6000.safetensors',327287384,'e9796a6e14a8f8fadf0eda6c0ccc6c300c02bd5457fe9a0d4b91ffec39badda3'),'gated':False}])
+
+CATALOG['panorama_hdri'] = dict(name='Panorama / HDRI · Klein 9B 360 adapter',gated=False,
+    license_url='https://huggingface.co/nomadoor/flux-2-klein-9B-360-erp-outpaint-lora',
+    note='Seamless SDR panorama generation with the matching FLUX.2 Klein 9B model. Real HDR sources and artist-added lights are preserved in float EXR export by the HDRI builder.',
+    files=[_file('loras','flux-2-klein-9B-360-erp-outpaint-lora_V1.safetensors','nomadoor/flux-2-klein-9B-360-erp-outpaint-lora','64b1a5d1e2dea2d9173a5ea46e09645672e2acfb','flux-2-klein-9B-360-erp-outpaint-lora_V1.safetensors',82867136,'204e8b96027f7f329a9327bad763bd2461f7bb0ed3e09e1c6d0a7b9f7ee1a148')])
+
 def inspect(model_id, locations, filenames=None):
     """Return required files and exact remaining bytes, including shared files."""
     if model_id not in CATALOG:

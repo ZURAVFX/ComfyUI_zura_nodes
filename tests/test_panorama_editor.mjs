@@ -11,7 +11,7 @@ class Graph{
 }
 const app={graph:new Graph(),nodeOutputs:{existing:{images:['retained']}},ui:{settings:{getSettingValue:()=>true}},
   createNode(type){
-    if(type==='ZuraPanoramaLoadGeometry')return {widgets:[{name:'cache_key'}],connect(){return {};}};
+    if(type==='ZuraCameraLoadScene')return {widgets:[{name:'cache_key'}],connect(){return {};}};
     native={id:'old',inputs:[{name:'world'}],widgets:[{name:'state_json'}]};
     native.widgets.push({name:'Open Studio Editor',callback:async()=>{
       const backdrop=document.createElement('div');backdrop.className='pano-studio-backdrop';document.body.append(backdrop);

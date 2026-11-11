@@ -38,7 +38,7 @@ class CameraSetupTests(unittest.TestCase):
             self.assertEqual(len(file['revision']), 40)
             self.assertEqual(len(file['sha256']), 64)
             self.assertGreater(file['size_bytes'], 0)
-        self.assertEqual(catalog[camera.MODELS['geometry']]['size_bytes'], 2501605198)
+        self.assertEqual(catalog[camera.MODELS['geometry']]['size_bytes'], 541524124)
 
     def test_fresh_machine_reports_files_and_the_complete_graph_nodes(self):
         def missing_category(*args):
@@ -48,11 +48,11 @@ class CameraSetupTests(unittest.TestCase):
         self.assertEqual(result['route'], 'panorama')
         self.assertEqual(len(result['files']), len(camera.MODELS))
         self.assertTrue(all(not file['ready'] for file in result['files']))
-        self.assertTrue({'LoadMoGeModel', 'PanoramaStudio', 'BasicScheduler', 'SaveVideo',
-                         'ZuraPanoramaLoadGeometry', 'ZuraH3LockReferenceAudio', 'LoadImage'} <= set(result['missingNodes']))
+        self.assertTrue({'LoadDA3Model', 'DA3Inference', 'PanoramaStudio', 'ManualSigmas', 'SaveVideo',
+                         'ZuraCameraLoadScene', 'ZuraCameraAlignViews', 'LTXAddVideoICLoRAGuide', 'LoadImage'} <= set(result['missingNodes']))
         nodes = dict.fromkeys(result['missingNodes'])
         self.assertTrue(self.readiness(nodes, lambda *args: '/fixture/model')['ready'])
-        nodes.pop('BasicScheduler')
+        nodes.pop('ManualSigmas')
         self.assertFalse(self.readiness(nodes, lambda *args: '/fixture/model')['ready'])
 
 
