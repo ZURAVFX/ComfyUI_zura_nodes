@@ -125,7 +125,10 @@ def register(studio, routes, response, check_asset):
         def work():
             import nodes
             if 'PanoramaStudio' not in nodes.NODE_CLASS_MAPPINGS:raise ValueError('Install Panorama Stickers through the model setup panel, then restart ComfyUI.')
-            path,space=source(body);linear,_=hdri.read_environment(path,space)
+            if body.get('file') or body.get('source_id'):
+                path,space=source(body);linear,_=hdri.read_environment(path,space)
+            else:
+                linear=np.zeros((128,256,3),np.float32);linear[...,1]=1.0
             proxy=hdri.preview_environment(linear)
             if max(proxy.shape[:2])>2048:
                 from PIL import Image
@@ -138,10 +141,17 @@ def register(studio, routes, response, check_asset):
             erp=linear.shape[1]==2*linear.shape[0]
             tensor=torch.from_numpy(np.ascontiguousarray(proxy))[None]
             result=nodes.NODE_CLASS_MAPPINGS['PanoramaStudio'].execute(background_color='#00ff00',background_range='360',
-                megapixels=2.,multiple=16,state_json=json.dumps(state),**({'background':tensor} if erp else {'sticker':tensor}))
+                megapixels=max(.125,min(8.,float(body.get('width',2048))*float(body.get('height',1024))/1_000_000)),multiple=16,state_json=json.dumps(state),**({'background':tensor} if erp else {'sticker':tensor}))
             image=result.result[1][0].detach().cpu().numpy()
-            file=preview_file(image,'composition_'+uuid.uuid4().hex[:12])
-            return {'file':file,'ui':result.ui,'state':json.dumps(state),'port': 'background' if erp else 'sticker',
+            identity=uuid.uuid4().hex[:12]
+            file=preview_file(image,'composition_'+identity)
+            # Keep the full native composition for export. The browser proxy is
+            # bounded and must never become the artist's final-resolution master.
+            from ..paintout.paintout import to_linear
+            full_path,full_reference=output_path('composition_'+identity+'.exr')
+            linear=to_linear(torch.from_numpy(np.ascontiguousarray(image)),'srgb_display').numpy()
+            hdri.write_environment(full_path,linear,'acescg')
+            return {'file':file,'composition_file':full_reference,'ui':result.ui,'state':json.dumps(state),'port': 'background' if erp else 'sticker',
                     'source_file':preview_file(proxy,'source_'+uuid.uuid4().hex[:12]),'width':int(image.shape[1]),'height':int(image.shape[0])}
         async with operation_lock:
             return web.json_response(await asyncio.to_thread(work))

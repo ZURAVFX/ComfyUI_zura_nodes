@@ -18,13 +18,13 @@ export class RippleImageHandoff {
     const w=request.workspace,value={version:1,intent:w.intent||'edit',id:request.id,source:w.source.path,engine:w.state.engine,anchorId:String(request.anchor.id),frame:request.anchor.frame,width:request.width,height:request.height,previous:request.previous};
     try{this.storage.setItem(HANDOFF_KEY,JSON.stringify(value));this.stored=value;return true;}catch{return false;}
   }
-  clear(){this.request=null;this.stored=null;++this.revision;try{this.storage.removeItem(HANDOFF_KEY);}catch{}if(this.banner)this.banner.hidden=true;}
+  clear(){this.owner.plate?.exitInlineImage();this.request=null;this.stored=null;++this.revision;try{this.storage.removeItem(HANDOFF_KEY);}catch{}if(this.banner)this.banner.hidden=true;}
   invalidate(workspace){if(this.request?.workspace===workspace||this.stored?.source===(workspace.source?.path||workspace.state.sourcePath))this.clear();}
   async resume(){
     if(this.request){if(!this.current(this.request))this.clear();this.syncImageUI();return;}
     if(!this.stored||this.restoring)return this.restoring;
     const saved=this.stored,revision=this.revision,active=this.owner.ripple,intent=saved.intent||'edit';
-    const w=this.owner.rippleWorkspaces?.get(intent)||this.owner.ensureRippleWorkspace?.(intent)||this.owner.ripple;
+    const w=intent==='plate'?this.owner.plate?.imageWorkspace():this.owner.rippleWorkspaces?.get(intent)||this.owner.ensureRippleWorkspace?.(intent)||this.owner.ripple;
     if(active&&this.owner.mode==='ripple')this.owner.ripple=active;
     if(!w)return;
     this.restoring=(async()=>{
@@ -50,7 +50,7 @@ export class RippleImageHandoff {
     if(this.request||this.stored){workspace.message('Return the current Ripple image edit first.');return;}
     const key=this.key(workspace,anchor),revision=++this.revision;
     workspace.exporting=true;workspace.render();workspace.message('Preparing the original frame…');
-    const check=()=>{if(revision!==this.revision||key!==this.key(workspace,anchor)||!workspace.anchors().includes(anchor)||o.mode!=='ripple')throw Error('The source, keyframe or workspace changed. Select the frame again.');};
+    const check=()=>{if(revision!==this.revision||key!==this.key(workspace,anchor)||!workspace.anchors().includes(anchor)||o.mode!==(workspace.platePrimary?'paintout':'ripple'))throw Error('The source, keyframe or workspace changed. Select the frame again.');};
     try{
       const exported=await workspace.prepareAnchor(anchor);check();
       const response=await o.api.fetchApi(exported.url);check();if(!response.ok)throw Error('Could not load the original frame.');
@@ -66,9 +66,10 @@ export class RippleImageHandoff {
       o.editMainMissing=false;o.autoCanvasSuppressed=true;
       o.imageArea?.reset();
       o.references=[{file:(image.subfolder?image.subfolder+'/':'')+image.name,filename:image.name,subfolder:image.subfolder||'',name:`Source frame ${anchor.frame}`,width:request.width,height:request.height}];
+      if(anchor.edit_area)o.imageArea?.restore({...anchor.edit_area,source_key:o.references[0].file});
       o.$('shape').value='auto';o.$('width').value=request.width;o.$('height').value=request.height;
       o.$('prompt').value=workspace.$('prompt').value;o.selectedImage=-1;
-      o.save();o.render();o.renderGallery();this.syncImageUI();workspace.message('');
+      o.save();o.render();o.renderGallery();this.syncImageUI();if(o.plate?.action==='paint'&&workspace.intent==='plate')o.imageArea?.openEditor('draw');workspace.message('');
     }catch(error){
       if(this.request&&this.request.workspace===workspace){if(o.mode==='image')await this.leave();else this.clear();}
       workspace.message(error.message||'Could not prepare this keyframe.');
@@ -82,16 +83,16 @@ export class RippleImageHandoff {
       o.root.querySelector('.zc-image-heading').after(this.banner);
       this.banner.querySelector('[data-ripple-return]').onclick=()=>this.leave();this.banner.querySelector('[data-ripple-use]').onclick=()=>this.useResult();
     }
-    const label=(request.workspace?.intent||request.intent)==='relight'?'Relight':'Ripple';this.banner.querySelector('[data-ripple-return]').textContent='Back to '+label;this.banner.querySelector('span').textContent=label==='Relight'?'Adjust the lighting, then return to Relight. Painting an area is optional.':'Paint an area to target a local edit, then return to Ripple.';this.banner.hidden=o.mode!=='image';this.banner.querySelector('[data-ripple-image-title]').textContent=`Edit frame ${request.anchor?.frame??request.frame}`;
+    const label=(request.workspace?.intent||request.intent)==='relight'?'Relight':this.owner.plate?'video edit':'Ripple';this.banner.querySelector('[data-ripple-return]').textContent='Back to '+label;this.banner.querySelector('span').textContent=label==='Relight'?'Adjust the lighting, then return to Relight. Painting an area is optional.':this.owner.plate?.action==='paint'?'Draw a guide, then describe how AI should refine it.':'Select an edit area or use the whole frame.';this.banner.hidden=o.mode!=='image';this.banner.querySelector('[data-ripple-image-title]').textContent=`Edit frame ${request.anchor?.frame??request.frame}`;
     const item=o.items[o.selectedImage],busy=this.importing||this.imageBusy();
     this.banner.querySelector('[data-ripple-return]').disabled=busy;
-    this.banner.querySelector('[data-ripple-use]').disabled=busy||!this.request||!this.current(this.request)||item?.ripple_guide!==request.id;
+    this.banner.querySelector('[data-ripple-use]').disabled=busy||!this.request||!this.current(this.request)||item?.ripple_guide!==request.id;this.owner.plate?.syncInlineImage(request);
   }
   async useResult(){
     await this.resume();
     const o=this.owner,request=this.request,item=o.items[o.selectedImage];
     if(!request||this.importing||this.imageBusy()||item?.ripple_guide!==request.id)return;
-    this.importing=true;this.syncImageUI();
+    this.importing=true;o.render();this.syncImageUI();
     try{
       this.check(request);const file=item.file;
       const response=await o.api.fetchApi('/view?'+new URLSearchParams({filename:file.filename,subfolder:file.subfolder||'',type:file.type||'output'}));this.check(request);
@@ -99,16 +100,22 @@ export class RippleImageHandoff {
       const bitmap=await createImageBitmap(blob),canvas=o.root.ownerDocument.createElement('canvas');canvas.width=request.width;canvas.height=request.height;
       try{this.check(request);canvas.getContext('2d').drawImage(bitmap,0,0,request.width,request.height);}finally{bitmap.close();}
       const exact=await new Promise((resolve,reject)=>canvas.toBlob(value=>value?resolve(value):reject(Error('Could not prepare the edited frame.')),'image/png'));this.check(request);
+      await o.imageArea?.flush();this.check(request);const editArea=o.imageArea?.config?.();
       await request.workspace.importAnchorFile(request.anchor,new File([exact],`ripple_frame_${request.anchor.frame}.png`,{type:'image/png'}),()=>this.check(request));this.check(request);
+      request.anchor.edit_area=editArea;
       const prompt=o.$('prompt').value;request.workspace.state.prompt=prompt;request.workspace.$('prompt').value=prompt;request.workspace.save();
-      await this.leave(true);request.workspace.message(`Edited frame ${request.anchor.frame} is ready.`);
+      await this.leave(true);request.workspace.message(request.workspace.platePrimary?'':`Edited frame ${request.anchor.frame} is ready.`);
     }catch(error){o.message(error.message||'Could not return the edited frame.');}
-    finally{this.importing=false;this.syncImageUI();}
+    finally{this.importing=false;o.render();this.syncImageUI();}
   }
   async leave(accepted=false){
     const request=this.request||this.stored;
     if(!request||(this.importing&&!accepted)||this.imageBusy())return;
     const o=this.owner,c=request.previous.config;
+    if(this.request&&this.current(this.request)){
+      try{await o.imageArea?.flush();}catch(error){o.message(error.message);return;}
+      request.anchor.edit_area=o.imageArea?.config?.();request.workspace.state.prompt=o.$('prompt').value;request.workspace.$('prompt').value=o.$('prompt').value;request.workspace.save();
+    }
     await o.setImageOperation(c.operation,{useCanvas:false});if(this.request!==request&&this.stored!==request)return;
     o.references=(c.references||[]).map(r=>({...r}));o.imageLoras=c.loras||[];o.editMainMissing=!!c.editMainMissing;o.autoCanvasSuppressed=!!c.autoCanvasSuppressed;
     o.imageArea?.restore(c.edit_area||null);
@@ -116,9 +123,9 @@ export class RippleImageHandoff {
     const previous=request.previous.selectedFile;
     o.selectedImage=previous?o.items.findIndex(item=>item.file?.filename===previous.filename&&(item.file?.subfolder||'')===(previous.subfolder||'')&&(item.file?.type||'output')===(previous.type||'output')):-1;
     this.clear();o.imageIntent=c.image_intent||'standard';
-    o.save();o.render();o.renderGallery();o.ensureRippleWorkspace?.(request.workspace?.intent||request.intent||'edit');o.show('ripple');
+    o.save();o.render();o.renderGallery();if(request.workspace?.platePrimary||request.intent==='plate'){o.show('paintout');}else{o.ensureRippleWorkspace?.(request.workspace?.intent||request.intent||'edit');o.show('ripple');}
   }
   // Closing Studio is reversible: keep the current hand-off so a completed
   // image can still return when Studio reopens, but invalidate preparation.
-  dispose(){++this.revision;this.banner?.remove();this.banner=null;}
+  dispose(){this.owner.plate?.exitInlineImage();++this.revision;this.banner?.remove();this.banner=null;}
 }

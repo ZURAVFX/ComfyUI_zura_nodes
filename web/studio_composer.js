@@ -20,12 +20,12 @@ export const composerIcons={
   takes:svg('<rect x="3" y="7" width="18" height="14" rx="2"/><path d="M7 3h10m-8 9 6 3-6 3z"/>'),
   download:svg('<path d="M12 3v12m-4-4 4 4 4-4M4 17v4h16v-4"/>'),
 };
-export const VIDEO_WORKFLOWS=[['swap','Character replacement'],['ripple','Ripple editing'],['viewport','Viewport to final'],['camera','Change camera angle'],['relight','Relight'],['paintout','Paintout / clean plate'],['watermark','Watermark removal'],['alpha','Extract alpha'],['outpaint','Frame extension · preview'],['hdr','Convert to HDR'],['director','Director'],['frames','First & last frame'],['references','Reference to video']];
+export const VIDEO_WORKFLOWS=[['swap','Character replacement'],['plate','Paint, remove & replace'],['viewport','Viewport to final'],['camera','Change camera angle'],['relight','Relight'],['watermark','Watermark removal'],['alpha','Extract alpha'],['outpaint','Frame extension · preview'],['hdr','Convert to HDR'],['director','Director'],['frames','First & last frame'],['references','Reference to video']];
 
 // Navigation describes the artist's task; model choices stay with generation controls.
 const MODE_DETAILS={
  swap:['Edit footage','<circle cx="8" cy="7" r="3"/><path d="M2 20v-3a6 6 0 0 1 12 0v3m2-14h6m-3-3 3 3-3 3m3 5h-6m3-3-3 3 3 3"/>','Replace a performer while keeping their motion'],
- ripple:['Edit footage','<path d="M3 5h18v14H3zM8 5v14m8-14v14m-8-7h8"/><circle cx="12" cy="12" r="2"/>','Edit keyframes and carry the changes through video'],
+ plate:['Edit footage','<path d="M3 5h18v14H3zM8 5v14m8-14v14m-8-7h8"/><circle cx="12" cy="12" r="2"/>','Paint, erase or replace using edited frames on a timeline'],
  viewport:['Create a shot','<path d="m12 3 9 5v9l-9 5-9-5V8zM3 8l9 5 9-5m-9 5v9"/>','Turn your 3D blockout into a finished shot'],
  camera:['Edit footage','<rect x="3" y="7" width="13" height="12" rx="2"/><path d="m16 11 5-3v10l-5-3M6 3h12m-9-2-3 2 3 2"/>','Reframe footage with an animated 3D camera'],
  relight:['Edit footage','<circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M2 12h2m16 0h2M5 5l1 1m12 12 1 1M5 19l1-1M18 6l1-1"/>','Change the lighting using an edited frame'],
@@ -126,6 +126,7 @@ export class VideoComposer {
   }
   selectWorkflow(value){
     this.studio.navigationStep=null;
+    if(value==='plate'){void this.workspace.plate.select();return;}
     if(value==='camera'){this.workspace.show('panorama');return;}
     if(value==='hdr'){this.workspace.openHDR();return;}
     if(value==='relight'&&this.workspace.selectRelightEngine){void this.workspace.selectRelightEngine(this.workspace.relightEngine||'wan21');return;}
@@ -154,6 +155,8 @@ export class VideoComposer {
     select.value=independent?this.workspace.mode:this.studio.config.workflow_mode==='motion'?'swap':this.studio.config.workflow_mode;
     if(this.workspace.mode==='panorama')select.value='camera';if(this.workspace.mode==='ripple'&&this.workspace.ripple?.intent==='relight')select.value='relight';
     if(this.workspace.mode==='paintout'&&this.workspace.paintout?.state.mode==='ripple')select.value='ripple';
+    if(this.workspace.mode==='paintout'||this.workspace.mode==='ripple'&&this.workspace.ripple?.intent!=='relight')select.value='plate';
+    if(this.workspace.rippleImage?.request?.workspace?.platePrimary&&this.workspace.mode==='image')select.value='plate';
     select.disabled=!independent&&(this.studio.busy||this.studio.project?.phase==='working');
     for(const option of select.querySelectorAll('option')){
       const input=this.root.querySelector(`input[name="gs-workflow"][value="${option.value}"]`);

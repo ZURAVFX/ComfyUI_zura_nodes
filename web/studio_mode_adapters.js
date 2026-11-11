@@ -3,6 +3,8 @@ import {sourceAEFrameContract,bindAEFrameWorkspace} from './studio_ae_frame_cont
 const definitions=[['swap','Character replacement','Video'],['ripple','Ripple editing','Video'],['viewport','Viewport to final','Video'],['camera','Change camera angle','Video'],['relight','Relight','Video'],['paintout','Paintout / clean plate','Video'],['watermark','Watermark removal','Video'],['alpha','Extract alpha','Video'],['outpaint','Frame extension','Video'],['hdr','Convert to HDR','Video'],['director','Director','Authored'],['frames','First & last frame','Endpoint'],['references','Reference to video','Reference'],['image','Image','Image']];
 const mainModes=new Set(['swap','viewport']);
 export async function navigateStudioMode(creative,id){
+  if(id==='plate')return creative.plate.select();
+  if(id==='paintout'&&creative.plate)return creative.plate.select('remove');
   if(id==='inpaint'||id==='objects')id='ripple';
   if(id==='panorama')id='camera';
   if(id==='camera')return creative.show('panorama');

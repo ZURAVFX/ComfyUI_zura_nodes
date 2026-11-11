@@ -347,3 +347,147 @@
 @media(max-width:700px){#genj-studio .is-ripple .zp-editor-guide{grid-template-columns:minmax(0,1fr)}#genj-studio .is-ripple .zp-editor-guide-actions{grid-column:1;grid-row:auto;justify-content:flex-start}}
 
 #genj-studio .is-ripple #zps-render-settings label:has(#zps-output){display:none}
+
+/* Shared Paintout canvas. Layers sit beside the image, never over its controls. */
+#genj-studio .zplate-canvas-shell{display:grid;grid-template-columns:minmax(0,1fr) 280px;align-items:stretch;gap:12px;min-width:0}
+#genj-studio .zplate-canvas-shell:has(>.zp-editor-paint-layers[hidden]){grid-template-columns:minmax(0,1fr)}
+#genj-studio .zplate-canvas-shell>.zp-editor-paint-layers{margin:0;padding:12px;border:1px solid var(--gs-line);border-radius:12px;background:var(--zc-composer);overflow:auto;max-height:60dvh;min-width:0;align-self:stretch}
+#genj-studio .zplate-canvas-shell>.zp-editor-paint-layers[hidden]{display:none!important}
+#genj-studio :is(.zplate-canvas-shell,.zplate-sidebar) .zp-editor-paint-layers ol{padding:0;list-style:none;display:grid;gap:8px}
+#genj-studio :is(.zplate-canvas-shell,.zplate-sidebar) .zp-editor-paint-layers li{display:grid;grid-template-columns:36px 40px minmax(0,1fr) 28px;gap:8px;padding:8px 0;border-top:1px solid var(--gs-line);align-items:start}
+#genj-studio :is(.zplate-canvas-shell,.zplate-sidebar) .zp-editor-paint-layers li>img{width:40px;height:40px;border-radius:4px;object-fit:cover}
+#genj-studio :is(.zplate-canvas-shell,.zplate-sidebar) .zp-editor-paint-layers li>div{min-width:0}
+#genj-studio :is(.zplate-canvas-shell,.zplate-sidebar) .zp-editor-paint-layers li>div>span{display:block;white-space:nowrap;text-overflow:ellipsis;overflow:hidden;max-width:100%;font-size:12px}
+#genj-studio :is(.zplate-canvas-shell,.zplate-sidebar) .zp-editor-layer-adjustments{display:grid;gap:8px;margin-top:8px}
+#genj-studio :is(.zplate-canvas-shell,.zplate-sidebar) .zp-editor-layer-adjustments label{display:grid;grid-template-columns:1fr;gap:4px;font-size:12px}
+#genj-studio :is(.zplate-canvas-shell,.zplate-sidebar) .zp-editor-layer-adjustments input{width:100%;min-width:0}
+#genj-studio .zp-editor-layer-opacity input{accent-color:var(--gs-accent)}
+#genj-studio .zp-layer-visibility{padding:4px;min-height:32px;background:transparent;border:0;color:var(--gs-muted);font:inherit;font-size:11px}
+#genj-studio .zp-editor-paint-layers .is-muted>img{opacity:.4}
+#genj-studio .zplate-page[data-plate-action=paint] .zp-editor-mask-intro,#genj-studio .zplate-page[data-plate-action=replace] .zp-editor-mask-intro{display:none}
+@media(max-width:1000px){#genj-studio .zplate-canvas-shell{grid-template-columns:minmax(0,1fr) 240px}}
+@media(max-width:760px){#genj-studio .zplate-canvas-shell{grid-template-columns:minmax(0,1fr)}#genj-studio .zplate-canvas-shell>.zp-editor-paint-layers{max-height:240px}}
+
+#genj-studio .zp-layer-menu{position:relative}#genj-studio .zp-layer-menu>summary{padding:4px;min-width:24px;min-height:28px;list-style:none;cursor:pointer;text-align:center}
+#genj-studio .zp-layer-menu>div{position:absolute;right:0;top:32px;z-index:30;display:grid;gap:4px;min-width:120px;padding:8px;background:var(--gs-panel);border:1px solid var(--gs-line);border-radius:8px}
+#genj-studio .zp-layer-menu>div button{width:100%;justify-content:start;padding:8px;text-align:left}
+
+/* The shared canvas uses one vertical workspace; the timeline stays underneath. */
+#genj-studio[data-workspace] .zp-page.zplate-page.zp-editor-open[data-editor-stage]{display:flex;flex-direction:column;overflow-y:auto;gap:12px;grid-template-columns:none;grid-template-rows:none}
+#genj-studio[data-workspace] .zp-page.zplate-page>*{grid-column:auto!important;grid-row:auto!important;box-sizing:border-box;width:min(var(--zc-video-width,1200px),100%);max-width:var(--zc-video-width,1200px);margin-inline:auto}
+#genj-studio[data-workspace] .zp-page.zplate-page>.zf-heading{order:0;flex:none}
+#genj-studio[data-workspace] .zp-page.zplate-page>.zp-editor-stages{order:1;flex:none}
+#genj-studio[data-workspace] .zp-page.zplate-page>.zplate-actions{order:2;flex:none;width:auto;align-self:flex-start;margin-left:max(0px,calc((100% - var(--zc-video-width,1200px))/2));margin-bottom:0}
+#genj-studio[data-workspace] .zp-page.zplate-page>.zplate-canvas-shell{order:3;flex:1 0 340px;min-height:340px;margin-block:0;overflow:hidden}
+#genj-studio[data-workspace] .zp-page.zplate-page .zplate-canvas-shell>.zf-viewer{position:relative;width:100%;height:100%;min-height:0;min-width:0;margin:0;overflow:hidden}
+#genj-studio[data-workspace] .zp-page.zplate-page>.zp-editor-timeline-host{order:5;max-height:none;overflow:visible;flex:none;display:block!important}
+#genj-studio[data-workspace] .zp-page.zplate-page>.zp-editor-tools{order:6;max-height:none;min-height:0;flex:none;overflow:visible;padding:12px}
+#genj-studio[data-workspace] .zp-page.zplate-page>.zp-editor-trim-tools{order:6;flex:none}
+#genj-studio[data-workspace] .zp-page.zplate-page>#zps-progress{order:4;flex:none}
+#genj-studio[data-workspace] .zp-page.zplate-page>.zf-composer{order:7;flex:none;margin-block:0;max-height:none;overflow:visible}
+#genj-studio[data-workspace] .zp-page.zplate-page[data-plate-action=paint]>.zf-composer>#zps-prompt,#genj-studio[data-workspace] .zp-page.zplate-page[data-plate-action=replace]>.zf-composer>#zps-prompt{display:block!important;height:72px;min-height:56px;max-height:120px}
+#genj-studio[data-workspace] .zp-page.zplate-page .zplate-canvas-shell>.zp-editor-paint-layers{max-height:100%;min-height:0}
+#genj-studio[data-workspace] .zp-page.zplate-page .zp-editor-timeline__clean-lane{min-height:88px;padding-top:12px}
+#genj-studio[data-workspace] .zp-page.zplate-page .zp-editor-timeline__cards{height:74px}
+@media(max-height:800px){#genj-studio[data-workspace] .zp-page.zplate-page>.zplate-canvas-shell{min-height:280px;flex-basis:280px}}
+
+#genj-studio[data-workspace] .zp-page.zplate-page[data-editor-stage]>.zp-editor-timeline-host,#genj-studio[data-workspace] .zp-page.zplate-page[data-editor-stage]>.zp-editor-tools,#genj-studio[data-workspace] .zp-page.zplate-page[data-editor-stage]>.zf-composer{margin-inline:auto!important;width:min(var(--zc-video-width,1200px),100%)}
+#genj-studio[data-workspace] .zp-page.zplate-page:is([data-plate-action=paint],[data-plate-action=replace])[data-editor-stage=clean]>.zp-editor-tools{display:none!important}
+#genj-studio .zplate-frame-toolbar{display:flex;align-items:center;gap:8px;flex:none;padding:8px 12px;border-bottom:1px solid var(--gs-line)}
+#genj-studio .zplate-frame-toolbar[hidden]{display:none!important}
+#genj-studio .zplate-frame-toolbar button{min-height:36px;padding:8px 16px;border:0;border-radius:8px;background:var(--gs-accent);color:var(--gs-ink);font:inherit;font-size:13px}
+#genj-studio .zplate-frame-toolbar button:disabled{background:var(--gs-input);color:var(--gs-muted)}
+#genj-studio :is(.zplate-canvas-shell,.zplate-sidebar) .zp-editor-paint-layers li{grid-template-rows:auto auto auto;align-items:center}
+#genj-studio :is(.zplate-canvas-shell,.zplate-sidebar) .zp-editor-paint-layers li>div{display:contents}
+#genj-studio :is(.zplate-canvas-shell,.zplate-sidebar) .zp-editor-paint-layers li>div>strong{grid-column:3;grid-row:1;font-size:12px}
+#genj-studio :is(.zplate-canvas-shell,.zplate-sidebar) .zp-editor-paint-layers li>div>span{grid-column:3;grid-row:2}
+#genj-studio :is(.zplate-canvas-shell,.zplate-sidebar) .zp-editor-paint-layers li>img{grid-column:2;grid-row:1/3}
+#genj-studio :is(.zplate-canvas-shell,.zplate-sidebar) .zp-editor-paint-layers li>.zp-layer-visibility{grid-column:1;grid-row:1/3}
+#genj-studio :is(.zplate-canvas-shell,.zplate-sidebar) .zp-editor-paint-layers li>.zp-layer-menu{grid-column:4;grid-row:1/3}
+#genj-studio :is(.zplate-canvas-shell,.zplate-sidebar) .zp-editor-paint-layers .zp-editor-layer-adjustments{grid-column:1/-1;grid-row:3;display:grid;gap:8px;margin-top:8px}
+#genj-studio :is(.zplate-canvas-shell,.zplate-sidebar) .zp-editor-layer-adjustments label{display:grid;grid-template-columns:68px minmax(0,1fr) 44px;align-items:center;gap:8px}
+#genj-studio :is(.zplate-canvas-shell,.zplate-sidebar) .zp-editor-layer-adjustments output{text-align:right;font-variant-numeric:tabular-nums}
+#genj-studio .zplate-page .zp-editor-timeline__header{padding:6px 12px;min-height:36px}
+#genj-studio .zplate-page .zp-editor-timeline__clean-lane{height:86px;min-height:86px;padding-top:12px}
+#genj-studio .zplate-page .zp-editor-timeline__cards{height:68px}
+#genj-studio .zplate-page .zp-editor-timeline__ruler{height:32px}
+#genj-studio .zplate-page .zp-editor-timeline__readout{padding-block:4px;font-size:11px}
+
+#genj-studio[data-workspace] .zp-page.zplate-page>.zplate-feedback{order:4;position:static;inset:auto;flex:none;margin-block:0;padding:8px 12px;border-radius:8px;background:var(--gs-panel);font-size:13px}
+
+#genj-studio .zplate-frame-toolbar button:not(.gs-primary){background:transparent;color:var(--zc-text);border:1px solid var(--gs-line)}
+
+/* Canvas-first workbench: operation rail, prompt, picture, edit stack and timeline.
+   Layout follows the Paint a Plate interaction model; Zura owns the timeline and recipes. */
+@media(min-width:900px){
+ #genj-studio[data-workspace] .zp-page.zplate-page[data-editor-stage]{display:grid!important;grid-template-columns:88px minmax(0,1fr) 288px!important;grid-template-rows:44px auto minmax(220px,1fr) auto!important;gap:12px;overflow:hidden;padding:12px 16px}
+ #genj-studio[data-workspace] .zp-page.zplate-page[data-editor-stage]>*{max-width:none;width:100%;margin:0!important;order:initial}
+ #genj-studio[data-workspace] .zp-page.zplate-page[data-editor-stage]>.zf-heading{grid-column:1/-1!important;grid-row:1!important;flex-wrap:nowrap;min-height:0}
+ #genj-studio[data-workspace] .zp-page.zplate-page[data-editor-stage]>.zplate-actions{grid-column:1!important;grid-row:2/5!important;display:flex;flex-direction:column;align-self:stretch;width:100%;gap:8px;padding:8px;border-radius:8px;background:var(--gs-panel)}
+ #genj-studio .zplate-actions button{width:100%;min-height:48px;padding:8px 4px;text-align:center}
+ #genj-studio[data-workspace] .zp-page.zplate-page[data-editor-stage]>.zf-composer{grid-column:2!important;grid-row:2!important;align-self:start;padding:12px 16px;border-radius:8px;display:flex;gap:8px;min-height:0}
+ #genj-studio[data-workspace] .zp-page.zplate-page[data-editor-stage]>.zplate-canvas-shell{grid-column:2!important;grid-row:3!important;min-height:0;height:100%;display:block;overflow:hidden}
+ #genj-studio[data-workspace] .zp-page.zplate-page[data-editor-stage]>.zplate-sidebar{grid-column:3!important;grid-row:2/5!important;min-height:0;overflow-y:auto;border:1px solid var(--gs-line);border-radius:8px;background:var(--gs-panel);padding:12px}
+ #genj-studio[data-workspace] .zp-page.zplate-page[data-editor-stage]>.zp-editor-timeline-host{grid-column:2!important;grid-row:4!important;width:100%;min-height:0;max-height:190px;overflow:hidden}
+ #genj-studio .zplate-sidebar .zp-editor-paint-layers{margin:0;padding:0;border:0;max-height:none}
+ #genj-studio .zplate-sidebar .zp-editor-tools{padding:0!important;border:0!important;max-height:none!important;overflow:visible!important;background:transparent!important}
+ #genj-studio .zplate-sidebar .zp-editor-mask-flow{display:flex;flex-direction:column;align-items:stretch;gap:12px}
+ #genj-studio .zplate-sidebar .zp-editor-selection-row{flex-wrap:wrap}
+ #genj-studio[data-workspace] .zp-page.zplate-page[data-editor-stage]>.zplate-feedback{position:absolute;bottom:200px;left:116px;right:320px;width:auto;z-index:4}
+ #genj-studio[data-workspace] .zp-page.zplate-page[data-editor-stage]>#zps-progress{position:absolute;bottom:200px;left:116px;right:320px;width:auto;z-index:4}
+ #genj-studio[data-workspace] .zp-page.zplate-page[data-editor-stage]>.zp-editor-trim-tools{position:absolute;right:324px;bottom:196px;width:auto;z-index:5}
+}
+#genj-studio .zplate-page>.zp-editor-stages{display:none!important}
+#genj-studio .zplate-page .zp-editor-guide-actions{display:none!important}
+#genj-studio .zplate-page .zp-editor-timeline__clean-lane{display:block!important}
+#genj-studio[data-workspace] .zp-page.zplate-page.zp-navigation-only>.zf-composer>#zps-prompt{display:block!important;height:56px;min-height:48px!important}
+#genj-studio[data-workspace] .zp-page.zplate-page.zp-navigation-only>.zf-composer>.zc-prompt-bottom{display:flex!important}
+#genj-studio[data-workspace] .zp-page.zplate-page.zp-navigation-only>.zf-composer .zc-prompt-tools>*:not([hidden]){display:inline-flex!important}
+#genj-studio[data-workspace] .zp-page.zplate-page.zp-navigation-only>.zf-composer .zc-prompt-bottom>#zps-generate{display:inline-flex!important}
+#genj-studio .zplate-sidebar:empty{display:none}
+
+#genj-studio[data-workspace] .zp-page.zplate-page.zp-navigation-only>.zf-composer .zc-prompt-bottom>.zf-actions{display:flex!important}
+
+#genj-studio[data-workspace] .zp-page.zplate-page.zp-navigation-only>.zf-composer .zc-prompt-bottom>.zc-prompt-submit{display:flex!important}
+
+#genj-studio .zplate-page .zf-composer .zc-prompt-bottom{display:grid!important;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:8px}
+#genj-studio .zplate-page .zf-composer .zc-prompt-tools{width:auto;min-width:0;flex-wrap:wrap}
+#genj-studio .zplate-page .zf-composer .zc-prompt-submit{width:auto;align-self:center;display:flex;gap:8px;padding:0}
+#genj-studio .zplate-page #zps-output-confirmation{display:none!important}
+#genj-studio .zplate-frame-toolbar .zp-frame-actions{margin-left:auto;display:flex;gap:8px}
+#genj-studio .zplate-frame-toolbar .zp-frame-actions>button{display:none!important}
+#genj-studio .zplate-frame-toolbar>.gs-primary{background:var(--gs-input);border:1px solid var(--gs-line);color:var(--zc-text)}
+
+#genj-studio .zplate-inline-image{position:absolute;inset:0;display:flex;flex-direction:column;min-height:0;background:var(--gs-bg);z-index:4}
+#genj-studio .zplate-inline-image>.zo-guide-handoff{flex:none;padding:8px 12px;margin:0;border:0;border-bottom:1px solid var(--gs-line);border-radius:0}
+#genj-studio .zplate-inline-image>.zia-editor{flex:1 1 0;min-height:0;display:flex;flex-direction:column}
+#genj-studio .zplate-inline-image .zia-stage{flex:1 1 0;min-height:0;height:auto}
+#genj-studio .zplate-inline-image .zia-toolbar{flex:none;padding:8px;gap:4px}
+#genj-studio .zplate-inline-image .zia-status{padding:0 12px 8px}
+#genj-studio .zplate-inline-image>.zc-gallery,#genj-studio .zplate-inline-image>.zi-source-preview{flex:1 1 0;min-height:0;height:100%;overflow:hidden}
+#genj-studio .zplate-inline-image :is(figure,a,img){max-height:100%;object-fit:contain}
+#genj-studio .zplate-page.is-editing-image>.zplate-sidebar{pointer-events:none;opacity:.6}
+#genj-studio .zplate-page.is-editing-image>.zp-editor-timeline-host{pointer-events:none}
+#genj-studio .zplate-inline-composer{grid-column:2!important;grid-row:2!important;max-height:none!important;min-width:0;margin:0!important;width:100%!important;padding:12px 16px!important}
+#genj-studio .zplate-inline-composer textarea{height:56px;min-height:48px!important}
+
+#genj-studio .zplate-page.is-editing-image>.zf-composer{display:none!important}
+
+#genj-studio[data-workspace] .zp-page.zplate-page>.zplate-inline-composer{grid-column:2!important;grid-row:2!important;width:100%!important;margin:0!important}
+
+#genj-studio[data-workspace] .zp-page.zplate-page.is-editing-image>.zf-composer{display:none!important}
+#genj-studio[data-workspace] .zp-page.zplate-page>.zplate-inline-composer textarea{height:48px;min-height:48px!important;max-height:88px;padding:4px 0}
+#genj-studio[data-workspace] .zp-page.zplate-page>.zplate-inline-composer{gap:8px;padding:12px!important}
+#genj-studio .zplate-page.is-editing-image .zia-open{display:none!important}
+#genj-studio .zplate-actions .zia-tools{display:flex;flex-direction:column;flex:none;align-items:stretch;gap:4px;width:100%;min-width:0;margin-top:12px;padding-top:8px;border-top:1px solid var(--gs-line)}
+#genj-studio .zplate-actions .zia-tools button{min-height:28px;padding:4px;font-size:11px;background:transparent;border:0;color:var(--zc-text)}
+#genj-studio .zplate-actions .zia-tools button[aria-pressed=true]{color:var(--gs-accent)}
+#genj-studio .zplate-actions .zia-brush{display:flex;flex-direction:column;gap:4px;padding:4px 0;font-size:11px}
+#genj-studio .zplate-actions .zia-brush input{width:60px;padding:0}
+#genj-studio .zplate-actions .zia-colour{display:flex;flex-direction:column;gap:4px;padding:4px 0;font-size:11px}
+#genj-studio .zplate-actions .zia-colour input{width:32px;height:28px;padding:0}
+#genj-studio .zplate-actions{overflow-y:auto}
+
+#genj-studio[data-workspace] .zplate-inline-composer #zc-prompt{height:48px!important;min-height:48px!important;max-height:120px;resize:vertical;flex:none}
+#genj-studio[data-workspace] .zp-page.zplate-page>.zplate-inline-composer{align-self:start!important;min-height:0!important}
+#genj-studio .zplate-inline-image .zia-status:empty{display:none}

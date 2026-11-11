@@ -1,3 +1,4 @@
+import {PlateWorkspace} from './studio_plate.js';
 import {HDRIBuilder,environmentGeneration} from './studio_hdri.js';
 import {workspaceStorage} from './studio_storage.js';
 import {installRelightEngines} from './studio_relight.js';
@@ -162,13 +163,13 @@ export class CreativeWorkspace {
     drop.ondragleave=()=>drop.classList.remove("is-dragging");
     drop.ondrop=e=>{e.preventDefault();e.stopPropagation();drop.classList.remove("is-dragging");this.uploadReferences(Array.from(e.dataTransfer?.files||[]));};
     this.root.onpaste=e=>this.pasteReferences(e);
-    this.$("reference-list").onclick=e=>{if(this.job||this.pendingSubmission||this.submitting||this.uploading)return;const remove=e.target.closest("[data-remove-ref]"),move=e.target.closest("[data-move-ref]");if(!remove&&!move)return;if(remove)this.removeImageReference(Number(remove.dataset.removeRef));if(move){const i=Number(move.dataset.moveRef);[this.references[i-1],this.references[i]]=[this.references[i],this.references[i-1]];}this.save();this.render();};
+    this.$("reference-list").onclick=e=>{if(this.job||this.pendingSubmission||this.submitting||this.uploading||this.rippleImage?.importing)return;const remove=e.target.closest("[data-remove-ref]"),move=e.target.closest("[data-move-ref]");if(!remove&&!move)return;if(remove)this.removeImageReference(Number(remove.dataset.removeRef));if(move){const i=Number(move.dataset.moveRef);[this.references[i-1],this.references[i]]=[this.references[i],this.references[i-1]];}this.save();this.render();};
     this.$("clear-references").onclick=()=>{this.references=[];this.editMainMissing=true;this.autoCanvasSuppressed=true;this.clearImageResult();};
     this.$("refresh").onclick=()=>this.loadModels();this.$("cancel").onclick=()=>this.cancel();
     this.$("new").onclick=()=>{this.$("prompt").value="";this.save();this.render();this.$("prompt").focus({preventScroll:true});};
     this.$("gallery").onclick=e=>{
       const save=e.target.closest("[data-save-image]");if(save){void this.outputSettings.saveImage(this.items[Number(save.dataset.saveImage)].file,save).then(path=>this.message("Saved to "+path)).catch(error=>this.message(error.message));return;}
-      if(this.job||this.pendingSubmission||this.submitting||this.uploading)return;
+      if(this.job||this.pendingSubmission||this.submitting||this.uploading||this.rippleImage?.importing)return;
       const button=e.target.closest("[data-reuse]");if(!button)return;
       const item=this.items[Number(button.dataset.reuse)];
       this.setImageOperation(IMAGE_MODELS.find(m=>m.id===item.model)?.edit?'edit':'create',{useCanvas:false});
@@ -190,7 +191,7 @@ export class CreativeWorkspace {
     const imageModelPanel=document.createElement('details');imageModelPanel.className='gs-model-help';this.$('setup').before(imageModelPanel);
     this.imageModelSetup=new StudioModelDownloads(imageModelPanel,(path,body)=>this.fetch('/zura/studio'+path,body),()=>this.loadModels());
     this.imageModelSetup.mountQuick(this.root.querySelector('.zc-image-composer'));
-    this.rippleImage??=new RippleImageHandoff(this);installRelightEngines(this);this.hdri=new HDRIBuilder(this);
+    this.rippleImage??=new RippleImageHandoff(this);installRelightEngines(this);this.hdri=new HDRIBuilder(this);this.plate=new PlateWorkspace(this);
     this.show("video");this.renderGallery();this.render();
   }
   buildVideoInspector(settings){
@@ -311,9 +312,9 @@ export class CreativeWorkspace {
     if(!Array.isArray(result.loras)||result.loras.length!==config.loras.length)throw new Error('Could not validate the selected image LoRAs.');
     return buildImageGraph({...config,loras:result.loras});
   }
-  config(){const config={image_intent:this.imageIntent||'standard',...(this.rippleImage?.request||this.rippleImage?.stored?{ripple_guide:(this.rippleImage.request||this.rippleImage.stored).id}:{}),...(this.outpaintGuide?.request?{outpaint_guide:this.outpaintGuide.request.id}:{}),edit_area:this.imageArea?.config()||null,operation:this.imageOperation,editMainMissing:!!this.editMainMissing,autoCanvasSuppressed:!!this.autoCanvasSuppressed,model:this.$("model").value||(this.imageOperation==='edit'?'qwen2511':'flux2'),prompt:this.$("prompt").value,shape:this.$("shape").value,references:this.references.map(r=>({...r})),loras:IMAGE_MODELS.find(model=>model.id===this.$('model').value)?.provider?[]:this.imageLoras.map(l=>({...l})),width:Number(this.$("width").value),height:Number(this.$("height").value),seed:Number(this.$("seed").value),random:this.$("random").checked};return this.imageIntent==='hdri'?{...config,shape:'landscape',width:environmentGeneration(config).width,height:environmentGeneration(config).height}:config;}
+  config(){const config={image_intent:this.imageIntent||'standard',...(this.rippleImage?.request||this.rippleImage?.stored?{ripple_guide:(this.rippleImage.request||this.rippleImage.stored).id}:{}),...(this.outpaintGuide?.request?{outpaint_guide:this.outpaintGuide.request.id}:{}),edit_area:this.imageArea?.config()||null,operation:this.imageOperation,editMainMissing:!!this.editMainMissing,autoCanvasSuppressed:!!this.autoCanvasSuppressed,model:this.$("model").value||(this.imageOperation==='edit'?'qwen2511':'flux2'),prompt:this.$("prompt").value,shape:this.$("shape").value,references:this.references.map(r=>({...r})),loras:IMAGE_MODELS.find(model=>model.id===this.$('model').value)?.provider?[]:this.imageLoras.map(l=>({...l})),width:Number(this.$("width").value),height:Number(this.$("height").value),seed:Number(this.$("seed").value),random:this.$("random").checked};return this.imageIntent==='hdri'?{...config,operation:'create',editMainMissing:false,edit_area:null,shape:'landscape',width:environmentGeneration(config).width,height:environmentGeneration(config).height}:config;}
   async setImageOperation(operation,{useCanvas=true}={}){
-    if(this.job||this.pendingSubmission||this.submitting||this.uploading)return;
+    if(this.job||this.pendingSubmission||this.submitting||this.uploading||this.rippleImage?.importing)return;
     this.imageIntent='standard';this.imageOperation=operation;
     for(const option of this.$('model').querySelectorAll('option'))option.hidden=!!this.models.find(m=>m.id===option.value)?.edit!==(operation==='edit');
     if(!this.models.some(m=>m.id===this.$('model').value&&!!m.edit===(operation==='edit')))this.$('model').value=this.models.find(m=>m.ready&&!!m.edit===(operation==='edit'))?.id||this.models.find(m=>!!m.edit===(operation==='edit'))?.id||'';
@@ -410,7 +411,7 @@ export class CreativeWorkspace {
     const globalModels=this.studio.$('model-downloads');if(globalModels){globalModels.hidden=!['video','image'].includes(mode);globalModels.open=false;}
     // Readiness for the main video recipe must not label unrelated workspaces.
     const recipeStatus=this.root.querySelector('#gs-models');if(recipeStatus)recipeStatus.hidden=mode!=='video';
-    if(mode==='image'){this.browserConnection?.open();this.imageModelSetup?.resume();}else this.browserConnection?.close();
+    if(mode==='image'){if(this.hdri)this.hdri.closed=false;this.browserConnection?.open();this.imageModelSetup?.resume();}else this.browserConnection?.close();
     if(mode==='frames')this.frames??=new FrameVideoWorkspace(this);
     if(mode==='director')this.director??=new DirectorWorkspace(this);
     if(mode==='references')this.referencesVideo??=new ReferenceVideoWorkspace(this);
@@ -445,7 +446,7 @@ export class CreativeWorkspace {
     if(mode==='image'||mode==='ripple')void this.rippleImage?.resume();
     this.rippleImage?.syncImageUI();
     this.imageArea?.sync();this.hdri?.sync();
-    this.studio.aeBridge?.modeChanged();
+    this.plate?.sync();this.studio.aeBridge?.modeChanged();
   }
   async loadModels(){
     if(this.loading)return;this.loading=true;
@@ -540,7 +541,7 @@ export class CreativeWorkspace {
   render(){
     this.styleControls();
     if(this.$('image-lora-settings').open)this.renderImageLoras();
-    const c=this.config(),m=this.models.find(m=>m.id===c.model),busy=!!this.job||!!this.pendingSubmission||this.submitting||this.uploading;
+    const c=this.config(),m=this.models.find(m=>m.id===c.model),busy=!!this.job||!!this.pendingSubmission||this.submitting||this.uploading||!!this.rippleImage?.importing;
     const areaMissing=c.edit_area?.enabled?(this.imageAreaCapabilities?.missing||[]):[];
     const imageMissing=[...new Set([...(m&&!m.provider&&!m.ready?m.missing:[]),...areaMissing])];
     if(m&&(!m.provider||areaMissing.length)){
@@ -558,7 +559,7 @@ export class CreativeWorkspace {
     let size,error;try{size=imageDimensions(c);}catch(e){error=e.message;}
     const resolutionPanel=this.$('image-megapixels').closest('.zc-tool-panel');
     resolutionPanel.querySelector('.zc-dimensions').hidden=auto;this.$('image-megapixels').parentElement.hidden=auto;
-    this.$("generate").disabled=busy||!m?.ready||!this.browserConnection.connected(m)||!c.prompt.trim()||!!error||this.references.length<(m?.minReferences||0)||this.references.length>(m?.maxReferences||0)||!!this.references.length&&!m?.referenceReady;this.$("generate").firstChild.textContent=busy?"Generating… ":this.imageOperation==='edit'?"Apply edit ":"Generate image ";
+    this.$("generate").disabled=busy||!m?.ready||!this.browserConnection.connected(m)||!c.prompt.trim()||!!error||(this.imageIntent!=='hdri'&&this.references.length<(m?.minReferences||0))||this.references.length>(m?.maxReferences||0)||!!this.references.length&&!m?.referenceReady;this.$("generate").firstChild.textContent=busy?"Generating… ":this.imageOperation==='edit'?"Apply edit ":"Generate image ";
     for(const button of this.root.querySelectorAll('[data-image-operation]')){button.setAttribute('aria-pressed',String(button.dataset.imageOperation===this.imageOperation));button.setAttribute('aria-checked',String(button.dataset.imageOperation===this.imageOperation));button.disabled=busy;}
     this.imageTask.querySelector('[data-image-operation-label]').textContent=this.imageOperation==='edit'?'Edit image':'Create image';
     this.imageTask.querySelector('summary').setAttribute('aria-disabled',String(busy));if(busy)this.imageTask.open=false;
@@ -658,7 +659,7 @@ export class CreativeWorkspace {
   }
   async generate(){
     if(['width','height'].some(k=>this.$(k).commitDimension?.()===false)){this.message('Enter a whole number for width and height.');return;}
-    if(this.job||this.pendingSubmission||this.submitting||this.uploading)return;
+    if(this.job||this.pendingSubmission||this.submitting||this.uploading||this.rippleImage?.importing)return;
     this.submitting=true;const attempt={};this.submitAttempt=attempt;this.message("");this.render();
     try{
       const c=this.config(),model=this.models.find(m=>m.id===c.model);

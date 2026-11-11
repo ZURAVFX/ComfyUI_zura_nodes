@@ -45,6 +45,12 @@ def validate_brightness_ev(value):
     return float(value)
 
 
+def validate_opacity(value):
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or not np.isfinite(value) or not 0 <= value <= 1:
+        raise ValueError('Layer opacity must be a number from 0 to 1.')
+    return float(value)
+
+
 def adjust_brightness(pixels, brightness_ev, linear=False):
     """An unclipped exposure change, in scene-linear or decoded sRGB light."""
     brightness_ev = validate_brightness_ev(brightness_ev)
@@ -86,14 +92,14 @@ def compose_pixels(original, layers, protection=None, linear=False):
     """Each cumulative candidate contributes only its own independent paint mask."""
     result = original.copy()
     for layer in layers:
-        if not isinstance(layer, (tuple, list)) or len(layer) not in (2, 3, 4):
+        if not isinstance(layer, (tuple, list)) or len(layer) not in (2, 3, 4, 5):
             raise ValueError('Each clean-frame layer needs pixels, a mask and optional blend and brightness controls.')
         pixels, mask = layer[:2]
-        brightness_ev = validate_brightness_ev(layer[3] if len(layer) == 4 else 0)
+        brightness_ev = validate_brightness_ev(layer[3] if len(layer) >= 4 else 0)
         blend_pixels = validate_blend_pixels(layer[2] if len(layer) >= 3 else 0)
         if pixels.shape != original.shape or mask.shape != original.shape[:2] or not np.isfinite(pixels).all() or not np.isfinite(mask).all() or np.any((mask < 0) | (mask > 1)):
             raise ValueError('Each layer and mask must match the finite original frame.')
-        alpha = inward_layer_alpha(mask, blend_pixels)
+        alpha = inward_layer_alpha(mask, blend_pixels) * validate_opacity(layer[4] if len(layer) >= 5 else 1)
         if protection is not None:
             if protection.shape != mask.shape or not np.isfinite(protection).all():
                 raise ValueError('The protection mask must match the frame.')
@@ -146,11 +152,14 @@ def compose_layers(body):
     def prepared_layers():
         for layer in layers:
             if not isinstance(layer, dict): raise ValueError('Each clean-frame layer needs a saved file and mask.')
+            if type(layer.get('enabled', True)) is not bool:raise ValueError('Layer visibility must be true or false.')
+            opacity=validate_opacity(layer.get('opacity', 1))
+            if not layer.get('enabled', True):continue
             blend_pixels = validate_blend_pixels(layer.get('blend_pixels', 0))
             brightness_ev = validate_brightness_ev(layer.get('brightness_ev', 0))
             pixels, colour = load_layer_image(layer['file'], layer.get('colour_space', 'srgb_display'), original.shape[:2])
             pixels = to_linear(torch.from_numpy(pixels.copy()).float(), colour).numpy() if hdr else working(torch.from_numpy(pixels.copy())[None].float(), colour, 'SDR (sRGB)')[0].numpy()
-            yield pixels, decode_mask(layer['mask'], description['width'], description['height']), blend_pixels, brightness_ev
+            yield pixels, decode_mask(layer['mask'], description['width'], description['height']), blend_pixels, brightness_ev, opacity
     result = compose_pixels(original, prepared_layers(), protection, linear=hdr)
     if source_identity(str(source), describe(str(source))) != before:
         raise ValueError('The source changed while composing. Reload the footage.')
@@ -162,7 +171,8 @@ def compose_layers(body):
     save_png16(png, preview)
     return dict(file=str(master), png_file=str(png), url=grant(png), master_url=grant(master), frame=frame, colour_space=colour, preview_colour_space='srgb_display', width=result.shape[1], height=result.shape[0],
                 blend_widths=[layer.get('blend_pixels', 0) for layer in layers],
-                brightness_values=[validate_brightness_ev(layer.get('brightness_ev', 0)) for layer in layers])
+                brightness_values=[validate_brightness_ev(layer.get('brightness_ev', 0)) for layer in layers],
+                enabled_values=[layer.get('enabled',True) for layer in layers],opacity_values=[validate_opacity(layer.get('opacity',1)) for layer in layers])
 
 
 async def compose_layers_route(request):

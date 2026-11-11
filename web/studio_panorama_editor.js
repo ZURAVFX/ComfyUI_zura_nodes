@@ -18,7 +18,7 @@ export function installSourcePreview(root,source){
 /** Open the installed Panorama editor on an isolated native graph.
  * The artist's Graph view is never replaced. Only Apply returns native state.
  */
-export async function openPanoramaEditor({app,state,geometryKey,output,source,sky=null,environment=false,onApply,onCancel,onError}){
+export async function openPanoramaEditor({app,state,geometryKey,output,source,sky=null,environment=false,host=null,onApply,onCancel,onError}){
   const create=app.createNode?.bind(app)||globalThis.LiteGraph?.createNode?.bind(globalThis.LiteGraph);
   if(!create)throw new Error('Update ComfyUI to open the Panorama camera editor.');
   const graph=new app.graph.constructor();
@@ -26,7 +26,7 @@ export async function openPanoramaEditor({app,state,geometryKey,output,source,sk
   if(!node||!geometry)throw new Error('Install Panorama 2.0.2 or newer and restart ComfyUI.');
   // IDs must be unique across app.nodeOutputs, not just inside this graph.
   node.id='zura-panorama-'+crypto.randomUUID();geometry.id='zura-geometry-'+crypto.randomUUID();
-  graph.add(geometry);graph.add(node);node.title='Zura · Change camera angle';
+  graph.add(geometry);graph.add(node);node.title=environment?'Zura · Compose 360°':'Zura · Change camera angle';
   if(geometryKey)geometry.widgets.find(w=>w.name==='cache_key').value=geometryKey;else{const file=sky?.file;if(!file)throw new Error('Prepare a panorama source first.');geometry.widgets.find(w=>w.name==='image').value=[file.subfolder,file.filename].filter(Boolean).join('/')+(file.type==='output'?' [output]':'');}
   geometry.connect(0,node,node.inputs.findIndex(i=>i.name===(geometryKey?'world':sky.port||'background')));
   const widget=node.widgets.find(w=>w.name==='state_json');
@@ -46,7 +46,8 @@ export async function openPanoramaEditor({app,state,geometryKey,output,source,sk
   controls.setAttribute('role','group');controls.setAttribute('aria-label',environment?'Panorama changes':'Camera changes');
   controls.innerHTML='<span>Review the camera move, then apply.</span><button type="button" data-cancel>Cancel</button><button type="button" class="zc-panorama-apply" data-apply>Apply camera</button>';
   if(environment){controls.querySelector('span').textContent='Compose a still panorama. AI fills the missing areas afterwards.';controls.querySelector('[data-apply]').textContent='Use panorama';}
-  let handle,disposeCamera,disposeSource,done=false,applying=false;
+  let handle,editorRoot,disposeCamera,disposeSource,done=false,applying=false;
+  const snapshot=()=>handle?.session?.stateText?.(node,widget.value)||widget.value;
   const previousCallback=widget.callback;
   const cleanup=()=>{
     if(done)return;done=true;observer.disconnect();disposeSource?.();disposeCamera?.();controls.remove();widget.callback=previousCallback;
@@ -63,15 +64,15 @@ export async function openPanoramaEditor({app,state,geometryKey,output,source,sk
   };
   // Native close/Escape is Cancel. Native state writes never change the shot.
   const observer=new MutationObserver(()=>{
-    if(handle&&!applying&&!document.querySelector('.pano-studio-backdrop'))cancel();
+    if(handle&&!applying&&!(editorRoot?.isConnected??document.querySelector('.pano-studio-backdrop')))cancel();
   });
   try{
-    document.body.classList.add('zura-camera-editor-open');
+    if(!host)document.body.classList.add('zura-camera-editor-open');
     handle=await button.callback();
     if(!handle?.close)throw new Error('Panorama did not open its camera editor. Enable its new editor and retry.');
-    const root=document.querySelector('.pano-studio-backdrop');if(environment){root.classList.add('zc-hdri-editor');root.querySelector('.pano-studio-tabs [data-value="sky"]')?.click();}else{disposeCamera=cameraOnlyControls(handle,root);disposeSource=installSourcePreview(root,source);}
-    document.body.append(controls);observer.observe(document.body,{childList:true,subtree:true});
-    controls.querySelector('[data-apply]').focus({preventScroll:true});
-    return {cancel};
+    const root=editorRoot=document.querySelector('.pano-studio-backdrop');if(host){host.replaceChildren(root);root.classList.add('zc-panorama-inline');const dialog=root.querySelector('[role=dialog]');if(dialog){dialog.setAttribute('role','region');dialog.setAttribute('aria-modal','false');}}if(environment){root.classList.add('zc-hdri-editor');root.querySelector('.pano-studio-tabs [data-value="sky"]')?.click();}else{disposeCamera=cameraOnlyControls(handle,root);disposeSource=installSourcePreview(root,source);}
+    if(!host){document.body.append(controls);controls.querySelector('[data-apply]').focus({preventScroll:true});}
+    observer.observe(document.body,{childList:true,subtree:true});
+    return {cancel,snapshot,root,dispose:()=>{applying=true;handle?.close();cleanup();}};
   }catch(error){handle?.close?.();cleanup();throw error;}
 }

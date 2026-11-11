@@ -67,3 +67,12 @@ assert.throws(()=>buildImageGraph({model:'klein9b',prompt:'Edit',references:refs
 assert.throws(()=>buildImageGraph({model:'klein9b',prompt:'Edit',references:refs,edit_area:{...selected,feather:999}}),/valid context/);
 assert.throws(()=>buildImageGraph({model:'flux2',prompt:'Create',references:refs,edit_area:selected}),/Choose Edit image/);
 console.log('All local and browser edit graphs preserve source and guides, support both Hallett schemas, and composite the painted area.');
+
+const drawn=buildImageGraph({model:'flux3edit',operation:'edit',prompt:'Make the sketched balloon photoreal',shape:'auto',width:1024,height:1024,references:refs,seed:23,edit_area:{...selected,guide:{file:'images/drawing.png'},drawing_region:true}});
+assert.equal(drawn.reference_1.inputs.image,refs[0].file);
+assert.equal(drawn.zura_drawing.inputs.image,'images/drawing.png');
+assert.deepEqual(drawn.zura_area_working.inputs.image,['zura_drawing_crop',0]);
+assert.deepEqual(drawn.zura_area_stitch.inputs.original_image,['reference_1',0]);
+assert.deepEqual(drawn.zura_area_composite.inputs.destination,['reference_1',0]);
+assert.equal(drawn.zura_area_mask.inputs.drawing_region,true);
+console.log('Drawing guide is model conditioning; original source is retained for stitch and final composite');

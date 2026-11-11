@@ -15,6 +15,17 @@ layers=importlib.util.module_from_spec(spec);sys.modules[spec.name]=layers;spec.
 
 
 class PaintLayerTests(unittest.TestCase):
+    def test_opacity_blends_hdr_values_without_clipping_or_changing_outside(self):
+        original=np.full((6,8,3),-0.25,np.float32);candidate=np.full_like(original,8.0);mask=np.zeros((6,8),np.float32);mask[2:5,3:6]=1
+        transparent=layers.compose_pixels(original,[(candidate,mask,0,0,0)],linear=True)
+        np.testing.assert_array_equal(transparent,original)
+        half=layers.compose_pixels(original,[(candidate,mask,0,0,.5)],linear=True)
+        np.testing.assert_array_equal(half[mask==0],original[mask==0])
+        np.testing.assert_allclose(half[mask>0],3.875)
+        for value in (-.1,1.1,float('nan'),True):
+            with self.assertRaisesRegex(ValueError,'opacity'):
+                layers.compose_pixels(original,[(candidate,mask,0,0,value)])
+
     def test_inward_blend_has_expected_pixel_ramp_and_wider_edge(self):
         mask=np.zeros((20,24),np.float32);mask[2:18,2:22]=1
         original_mask=mask.copy()
@@ -177,6 +188,15 @@ class PaintLayerTests(unittest.TestCase):
                 self.assertTrue(pathlib.Path(row['file']).is_file());self.assertTrue(pathlib.Path(row['png_file']).is_file())
                 self.assertEqual((row['width'],row['height'],row['frame']),(16,12,0))
                 self.assertEqual(row['blend_widths'],[0]);self.assertEqual(row['brightness_values'],[0.0])
+                hidden=layers.compose_layers(dict(body,layers=[dict(body['layers'][0],enabled=False)]))
+                self.assertEqual(hidden['enabled_values'],[False])
+                np.testing.assert_allclose(layers.read_image(hidden['file']),np.full((12,16,3),20/255,np.float32),atol=1e-6)
+                half=layers.compose_layers(dict(body,layers=[dict(body['layers'][0],opacity=.5)]))
+                self.assertEqual(half['opacity_values'],[.5])
+                for invalid in (True,-.1,1.1):
+                    with self.assertRaisesRegex(ValueError,'opacity'):
+                        layers.compose_layers(dict(body,layers=[dict(body['layers'][0],opacity=invalid)]))
+
                 blended=layers.compose_layers(dict(body,layers=[dict(body['layers'][0],blend_pixels=2)]))
                 self.assertEqual(blended['blend_widths'],[2])
                 brightened=layers.compose_layers(dict(body,layers=[dict(body['layers'][0],brightness_ev=.5)]))

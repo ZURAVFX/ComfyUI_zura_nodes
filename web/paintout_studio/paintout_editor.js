@@ -7,7 +7,7 @@ import {buildFrameEditGraph,buildInpaintFrameGraph,frameEditAvailability,DEFAULT
 
 const endpoint='/zura/paintout/editor';
 const el=(tag,text)=>{const node=document.createElement(tag);if(text)node.textContent=text;return node;};
-const paintLayerRequest=layer=>({file:layer.file,colour_space:layer.colour_space,mask:layer.layer_mask,blend_pixels:layer.blend_pixels||0,brightness_ev:layer.brightness_ev||0});
+const paintLayerRequest=layer=>({file:layer.file,colour_space:layer.colour_space,mask:layer.layer_mask,blend_pixels:layer.blend_pixels||0,brightness_ev:layer.brightness_ev||0,enabled:layer.enabled!==false,opacity:layer.opacity??1});
 const copyLayers=layers=>structuredClone(layers||[]);
 const actionMenu=(label,buttons)=>{
   const menu=el('details'),summary=el('summary',label),panel=el('div');menu.className='zp-editor-action-menu';panel.setAttribute('role','group');panel.setAttribute('aria-label',label);menu.append(summary,panel);for(const button of buttons.filter(Boolean))panel.append(button);
@@ -858,7 +858,7 @@ export class PaintoutEditor{
     if(attempt){anchor.layers=copyLayers(attempt.layers);anchor.cleanAttempt=structuredClone(attempt);anchor.editMask=attempt.mask;anchor.editGrow=attempt.grow;}
     else delete anchor.cleanAttempt;
     const layers=this.ensureLayers(anchor);
-    layers.push({...result,brightness_ev:result.brightness_ev||0,id:crypto.randomUUID(),layer_mask:result.layer_mask||result.effective_mask||result.mask||this.fullFrameMask()});
+    layers.push({...result,enabled:result.enabled!==false,opacity:result.opacity??1,brightness_ev:result.brightness_ev||0,id:crypto.randomUUID(),layer_mask:result.layer_mask||result.effective_mask||result.mask||this.fullFrameMask()});
     Object.assign(anchor,{file:result.file,preview_file:result.png_file||result.preview_file||'',preview_colour_space:result.preview_colour_space||'srgb_display',colour_space:result.colour_space,status:'accepted'});
     // Keep the selection available for another attempt, including drafts reopened later.
     anchor.editMask=anchor.editMask||result.layer_mask||result.effective_mask||result.mask;
@@ -868,17 +868,20 @@ export class PaintoutEditor{
   }
   renderLayers(anchor,visible,busy){
     this.layersPanel.hidden=!visible;if(!visible){this.layerPanelKey=null;return;}
-    const layers=this.ensureLayers(anchor),key=JSON.stringify([anchor.id||anchor.frame,busy,!!this.candidate,layers.map(layer=>[layer.id,layer.file,layer.prompt,layer.blend_pixels||0,layer.brightness_ev||0])]);if(key===this.layerPanelKey)return;this.layerPanelKey=key;this.layersPanel.replaceChildren();
-    const heading=el('strong',`Paint layers${layers.length?' · '+layers.length:''}`),help=el('span',layers.length?'Your chosen repairs, newest on top. Try again replaces the latest repair; saved results remain available.':'Paint an area above, then generate a clean frame.');
+    const layers=this.ensureLayers(anchor),key=JSON.stringify([anchor.id||anchor.frame,busy,!!this.candidate,layers.map(layer=>[layer.id,layer.file,layer.prompt,layer.blend_pixels||0,layer.brightness_ev||0,layer.enabled!==false,layer.opacity??1])]);if(key===this.layerPanelKey)return;this.layerPanelKey=key;this.layersPanel.replaceChildren();
+    const heading=el('strong',`Layers${layers.length?' · '+layers.length:''}`),help=el('span',layers.length?'Your chosen repairs, newest on top. Try again replaces the latest repair; saved results remain available.':'Your edits appear here. Each layer can be adjusted or hidden.');
     heading.title=help.textContent;this.layersPanel.append(heading);const list=el('ol');list.setAttribute('aria-label','Paint layers, newest first');
     layers.map((layer,index)=>({layer,index})).reverse().forEach(({layer,index})=>{
       const row=el('li'),image=el('img');image.alt='';image.src=this.w.thumbnail(layer.png_file||layer.preview_file||layer.file,0,layer.png_file||layer.preview_file?(layer.preview_colour_space||'srgb_display'):layer.colour_space,160);
-      const label=el('div');label.append(el('strong',`Layer ${index+1}${layer.method==='manual'?' · Imported':layer.method==='saved'?' · Saved':' · FLUX'}`),el('span',layer.prompt||'Painted repair'));
+      const label=el('div');label.append(el('strong',`Layer ${index+1}${layer.method==='manual'?' · Imported':layer.method==='saved'?' · Saved':layer.method==='image'?' · Edited':' · FLUX'}`),el('span',layer.prompt||'Painted repair'));
       const adjustments=el('div');adjustments.className='zp-editor-layer-adjustments';
       const blend=el('label'),slider=el('input'),amount=el('output',`${layer.blend_pixels||0} px`);blend.className='zp-editor-layer-blend';slider.type='range';slider.min=0;slider.max=100;slider.step=1;slider.value=layer.blend_pixels||0;slider.disabled=busy||!!this.candidate;slider.setAttribute('aria-label',`Blend edge of paint layer ${index+1}`);slider.title='Soften the join inside this layer’s mask. Frame edges and pixels outside the mask stay unchanged.';slider.oninput=()=>{amount.textContent=slider.value+' px';};slider.onchange=()=>this.blendPaintLayer(layer.id,Number(slider.value));blend.append(el('span','Blend edge'),slider,amount);
       const brightness=el('label'),light=el('input'),level=el('output',brightnessLabel(layer.brightness_ev||0));brightness.className='zp-editor-layer-brightness';light.type='range';light.min=-2;light.max=2;light.step=.05;light.value=layer.brightness_ev||0;light.disabled=busy||!!this.candidate;light.setAttribute('aria-label',`Brightness of paint layer ${index+1}`);light.title='Fine-tune this layer in stops. 0 keeps the saved layer brightness. Release to update without generating again.';light.oninput=()=>{level.textContent=brightnessLabel(light.value);};light.onchange=()=>this.brightnessPaintLayer(layer.id,Number(light.value));brightness.append(el('span','Brightness'),light,level);adjustments.append(blend,brightness);label.append(adjustments);
       const remove=el('button');iconLabel(remove,'trash','Delete layer');remove.type='button';remove.disabled=busy||!!this.candidate;remove.setAttribute('aria-label',`Delete paint layer ${index+1}`);remove.querySelector('span').hidden=true;remove.title=`Delete paint layer ${index+1}`;remove.onclick=()=>this.removePaintLayer(layer.id);
-      row.append(image,label,remove);list.append(row);
+      const toggle=el('button',layer.enabled===false?'Show':'Hide');toggle.type='button';toggle.className='zp-layer-visibility';toggle.disabled=busy||!!this.candidate;toggle.setAttribute('aria-pressed',String(layer.enabled!==false));toggle.setAttribute('aria-label',`${layer.enabled===false?'Show':'Hide'} layer ${index+1}`);toggle.onclick=()=>this.adjustPaintLayer(layer.id,{enabled:layer.enabled===false});
+      const opacity=el('label'),opacitySlider=el('input'),opacityValue=el('output',Math.round((layer.opacity??1)*100)+'%');opacity.className='zp-editor-layer-opacity';opacitySlider.type='range';opacitySlider.min=0;opacitySlider.max=100;opacitySlider.value=Math.round((layer.opacity??1)*100);opacitySlider.disabled=busy||!!this.candidate;opacitySlider.setAttribute('aria-label',`Opacity of layer ${index+1}`);opacitySlider.oninput=()=>{opacityValue.textContent=opacitySlider.value+'%';};opacitySlider.onchange=()=>this.adjustPaintLayer(layer.id,{opacity:Number(opacitySlider.value)/100});opacity.append(el('span','Opacity'),opacitySlider,opacityValue);adjustments.prepend(opacity);
+      const up=el('button','Move up'),down=el('button','Move down');up.type=down.type='button';up.disabled=busy||!!this.candidate||index===layers.length-1;down.disabled=busy||!!this.candidate||index===0;up.onclick=()=>this.movePaintLayer(layer.id,1);down.onclick=()=>this.movePaintLayer(layer.id,-1);const menu=actionMenu('⋯',[up,down,remove]);menu.classList.add('zp-layer-menu');menu.querySelector('summary').setAttribute('aria-label',`Actions for layer ${index+1}`);
+      row.classList.toggle('is-muted',layer.enabled===false);row.append(toggle,image,label,menu);list.append(row);
     });this.layersPanel.append(list);
   }
   blendPaintLayer(id,width){return this.adjustPaintLayer(id,{blend_pixels:width});}
@@ -886,9 +889,11 @@ export class PaintoutEditor{
   async adjustPaintLayer(id,change){
     const anchor=this.selected();if(this.w.busy()||this.candidate||!anchor||anchor.frame!==this.w.playhead)return;
     const layers=this.ensureLayers(anchor),layer=layers.find(layer=>layer.id===id);if(!layer)return;
+    if('enabled' in change&&typeof change.enabled!=='boolean')return;
+    if('opacity' in change&&(!Number.isFinite(change.opacity)||change.opacity<0||change.opacity>1))return;
     if('blend_pixels' in change&&(!Number.isInteger(change.blend_pixels)||change.blend_pixels<0||change.blend_pixels>100))return;
     if('brightness_ev' in change&&(!Number.isFinite(change.brightness_ev)||change.brightness_ev< -2||change.brightness_ev>2))return;
-    if(Object.entries(change).every(([key,value])=>value===(layer[key]||0)))return;
+    if(Object.entries(change).every(([key,value])=>value===(key==='enabled'?layer.enabled!==false:key==='opacity'?layer.opacity??1:layer[key]||0)))return;
     const source=this.w.state.source,project=this.project,requested=layers.map(item=>paintLayerRequest(item.id===id?{...item,...change}:item));
     this.importing=true;this.updateControls();this.status('Updating the paint layer…');
     try{
@@ -896,9 +901,23 @@ export class PaintoutEditor{
       const result=await this.w.fetch(endpoint+'/compose-layers',{project,source,frame:anchor.frame,colour_space:this.w.state.sourceColour,expected_revision:this.revision,layers:requested});
       if(this.project!==project||this.w.state.source!==source||this.selected()!==anchor||anchor.frame!==this.w.playhead||anchor.layers!==layers)throw Error('The selected frame changed. Adjust its layer again.');
       if(!Array.isArray(result.blend_widths)||result.blend_widths.length!==requested.length||result.blend_widths.some((value,index)=>value!==requested[index].blend_pixels)||!Array.isArray(result.brightness_values)||result.brightness_values.length!==requested.length||result.brightness_values.some((value,index)=>value!==requested[index].brightness_ev))throw Error('Restart ComfyUI after updating to enable paint-layer brightness and blending, then refresh this page.');
+      if(('enabled' in change||'opacity' in change)&&(!Array.isArray(result.enabled_values)||!Array.isArray(result.opacity_values)))throw Error('Restart ComfyUI after updating to use layer visibility and opacity.');
       this.saveFrameVersion(anchor);Object.assign(layer,change);Object.assign(anchor,{file:result.file,preview_file:result.png_file||result.preview_file||'',preview_colour_space:result.preview_colour_space||'srgb_display',colour_space:result.colour_space,status:'accepted'});delete anchor.cleanAttempt;this.saveFrameVersion(anchor);
-      this.showOriginal=false;this.frameKey=null;this.w.syncAnchorControls?.(this.w.selected);this.status('brightness_ev' in change?`Brightness updated to ${brightnessLabel(change.brightness_ev)} stops.`:`Blend edge updated to ${change.blend_pixels} px.`);
+      this.showOriginal=false;this.frameKey=null;this.w.syncAnchorControls?.(this.w.selected);this.status('enabled' in change?(change.enabled?'Layer shown.':'Layer hidden.'):'opacity' in change?`Layer opacity ${Math.round(change.opacity*100)}%.`:'brightness_ev' in change?`Brightness updated to ${brightnessLabel(change.brightness_ev)} stops.`:`Blend edge updated to ${change.blend_pixels} px.`);
     }catch(error){this.status('Could not update this layer: '+error.message);}finally{this.importing=false;this.layerPanelKey=null;this.w.save();this.w.render();await this.frameChanged(true);}
+  }
+  async movePaintLayer(id,delta){
+    const anchor=this.selected();if(this.w.busy()||this.candidate||!anchor||anchor.frame!==this.w.playhead)return;
+    const layers=this.ensureLayers(anchor),index=layers.findIndex(layer=>layer.id===id),nextIndex=index+delta;
+    if(index<0||nextIndex<0||nextIndex>=layers.length)return;
+    const reordered=[...layers];[reordered[index],reordered[nextIndex]]=[reordered[nextIndex],reordered[index]];
+    const source=this.w.state.source,project=this.project;this.importing=true;this.updateControls();this.status('Updating layer order…');
+    try{
+      while(this.saving)await new Promise(resolve=>setTimeout(resolve,20));
+      const result=await this.w.fetch(endpoint+'/compose-layers',{project,source,frame:anchor.frame,colour_space:this.w.state.sourceColour,expected_revision:this.revision,layers:reordered.map(paintLayerRequest)});
+      if(this.project!==project||this.w.state.source!==source||this.selected()!==anchor||anchor.layers!==layers)throw Error('The selected frame changed. Reorder its layers again.');
+      this.saveFrameVersion(anchor);anchor.layers=reordered;Object.assign(anchor,{file:result.file,preview_file:result.png_file||'',preview_colour_space:result.preview_colour_space||'srgb_display',colour_space:result.colour_space,status:'accepted'});delete anchor.cleanAttempt;this.saveFrameVersion(anchor);this.showOriginal=false;this.frameKey=null;this.status('Layer order updated.');
+    }catch(error){this.status('Could not reorder layers: '+error.message);}finally{this.importing=false;this.layerPanelKey=null;this.w.save();this.w.render();await this.frameChanged(true);}
   }
   async removePaintLayer(id){
     const anchor=this.selected();if(this.w.busy()||this.candidate||!anchor||anchor.frame!==this.w.playhead)return;

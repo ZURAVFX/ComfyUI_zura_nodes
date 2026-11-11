@@ -159,7 +159,7 @@ function buildImageGraphBase({model="flux3",prompt,shape="square",seed=42,width,
   return graph;
 }
 export function buildImageGraph(config={}){
-  const graph=buildImageGraphBase(config);
+  const graph=buildImageGraphBase(config.edit_area?.guide?.file?{...config,prompt:'Refine the rough painted guide into a finished edit. Match the original scene with realistic detail, lighting and materials unless the prompt asks for another style. Use the drawing for placement, shape and colour. '+config.prompt}:config);
   if(!config.edit_area?.enabled)return graph;
   const model=config.model||'flux3',shape=config.shape||'square';
   const recipe=IMAGE_MODELS.find(item=>item.id===model);

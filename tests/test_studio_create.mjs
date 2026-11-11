@@ -109,7 +109,7 @@ assert.equal(ui.imageTask.parentElement,ui.videoComposer.modeHost,'Image mode sh
 const workflowMenu=ui.videoComposer.task;
 assert.equal(workflowMenu.tagName,'DETAILS');
 assert.equal(workflowMenu.querySelector('select').hidden,true,'OS-native workflow dropdown is hidden behind the styled menu');
-assert.equal(workflowMenu.querySelectorAll('[role="menuitemradio"]').length,13);
+assert.equal(workflowMenu.querySelectorAll('[role="menuitemradio"]').length,12);
 assert.ok(workflowMenu.querySelector('[data-workflow="director"]'),'Director shares the persistent video workflow selector');
 assert.equal(workflowMenu.querySelector('[data-workflow="inpaint"]'),null,'Edited-frame work has one Ripple route, without a duplicate Inpaint preview');
 assert.ok(workflowMenu.querySelector('[data-workflow="outpaint"]'),'Frame extension is available as a preview workflow');
@@ -119,7 +119,7 @@ for(const button of workflowMenu.querySelectorAll('[data-workflow]')){assert.ok(
 const modeSearch=workflowMenu.querySelector('input[type=search]');modeSearch.value='lighting';modeSearch.oninput({target:modeSearch});
 assert.deepEqual([...workflowMenu.querySelectorAll('[data-workflow]')].filter(button=>!button.hidden).map(button=>button.dataset.workflow),['relight']);
 modeSearch.value='no such mode';modeSearch.oninput({target:modeSearch});assert.equal(workflowMenu.querySelector('.zc-mode-no-results').hidden,false);
-modeSearch.value='';modeSearch.oninput({target:modeSearch});assert.equal([...workflowMenu.querySelectorAll('[data-workflow]')].filter(button=>!button.hidden).length,13);
+modeSearch.value='';modeSearch.oninput({target:modeSearch});assert.equal([...workflowMenu.querySelectorAll('[data-workflow]')].filter(button=>!button.hidden).length,12);
 
 const removedInputs=[],savedRemoveInput=studio.removeInput;studio.removeInput=type=>removedInputs.push(type);
 for(const id of ['source','refs','frame'])studio.container.querySelector('#zc-remove-'+id).onclick();
@@ -566,19 +566,19 @@ assert.equal(task.closest('.gs-top'),navStudio.container.querySelector('.gs-top'
 assert.equal(task.closest('.zc-mode-host'),navUi.videoComposer.modeHost);
 while(navStudio.busy)await new Promise(resolve=>setTimeout(resolve,1));
 task.value='swap';task.dispatchEvent(new window.Event('change'));assert.equal(navUi.mode,'video');assert.equal(navUi.outpaint.page.hidden,true);
-task.value='paintout';task.dispatchEvent(new window.Event('change'));
+navUi.videoComposer.selectWorkflow('paintout');
 assert.equal(navUi.mode,'paintout');assert.equal(navUi.paintout.page.hidden,false);assert.equal(navUi.frames.page.hidden,true);assert.equal(navUi.referencesVideo.page.hidden,true);
 assert.equal(task.closest('.gs-top'),navStudio.container.querySelector('.gs-top'),'The same selector stays in workspace navigation');
 assert.equal(task.closest('.zc-mode-host'),navUi.videoComposer.modeHost);
 navUi.paintout.setMode('inpaint');navUi.videoComposer.syncWorkflow();
-assert.equal(task.value,'paintout','A restored legacy Inpaint draft keeps a valid Paintout selector');
+assert.equal(task.value,'plate','A restored legacy Inpaint draft keeps a valid Paintout selector');
 assert.match(navUi.paintout.$('prompt').value,/Add the object/,'Legacy masked drafts remain available without rewriting their conditioning');
 navUi.videoComposer.selectWorkflow('inpaint');
 assert.equal(navUi.mode,'ripple','Old Inpaint navigation opens the shared edited-frame timeline');
 assert.equal(navUi.ripple.page.hidden,false);assert.equal(navUi.paintout.page.hidden,true);
 assert.equal(navUi.paintout.state.mode,'inpaint','Opening Ripple does not rewrite the legacy draft');
-assert.equal(task.value,'ripple','The shared workflow menu identifies the consolidated Ripple workspace');
-task.value='paintout';task.dispatchEvent(new window.Event('change'));
+assert.equal(task.value,'plate','The shared workflow menu identifies the consolidated Ripple workspace');
+navUi.videoComposer.selectWorkflow('paintout');
 assert.equal(navUi.paintout.state.mode,'targeted','Returning to paintout restores removal conditioning');
 navUi.paintout.loras.setValue([{name:'ltx-style.safetensors',strength:.7,confirm_unknown:true}]);
 let paintLoraRequest;navUi.paintout.loras.request=async(path,body)=>{paintLoraRequest={path,body};return {graph:{...body.graph,custom_test:{class_type:'LoraLoaderModelOnly',inputs:{}}}};};
@@ -600,7 +600,7 @@ for(const type of ['mousedown','dblclick','keydown','selectstart','copy']){
 assert.equal(escapedTextEvents,0,'Text editing cannot reach graph selection/shortcut handlers');
 navUi.paintout.state.anchors=[{file:'Z:/painted_42.png',frame:42,strength:.75,enabled:true}];navUi.paintout.renderAnchors();navUi.paintout.save();
 task.value='frames';task.dispatchEvent(new window.Event('change'));assert.equal(navUi.paintout.page.hidden,true);assert.equal(navUi.frames.page.hidden,false);
-task.value='paintout';task.dispatchEvent(new window.Event('change'));assert.equal(navUi.paintout.state.anchors[0].frame,42,'Leaving Paintout retains artist anchor IDs');
+navUi.videoComposer.selectWorkflow('paintout');assert.equal(navUi.paintout.state.anchors[0].frame,42,'Leaving Paintout retains artist anchor IDs');
 while(navStudio.busy)await new Promise(resolve=>setTimeout(resolve,1));
 task.value='swap';task.dispatchEvent(new window.Event('change'));assert.equal(navUi.mode,'video');assert.equal(navUi.paintout.page.hidden,true);
 assert.equal(navStudio.source.id,'retained-video');assert.equal(navStudio.references[0].id,'retained-reference');

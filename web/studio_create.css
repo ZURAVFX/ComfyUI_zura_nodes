@@ -444,3 +444,34 @@
 #genj-studio .zhe-export>.zc-tool-panel label{display:grid;gap:6px}
 #genj-studio .zhe-main [data-hdri=export]{margin-left:auto}
 .zc-hdri-editor .pano-studio-tabs [data-value=world],.zc-hdri-editor .pano-studio-timeline{display:none!important}
+
+/* Embedded native environment composer shares the Studio prompt and viewport. */
+.zhe-viewport{width:100%;height:clamp(360px,58dvh,760px);min-height:320px;position:relative;overflow:hidden;border:1px solid var(--zc-border,#333);border-radius:12px;background:#101010}
+.zhe-viewport[hidden]{display:none!important}
+.zhe-viewport .zc-panorama-inline{position:absolute!important;inset:0!important;width:100%!important;height:100%!important;z-index:auto!important;padding:0!important;background:transparent!important}
+.zhe-viewport .pano-studio-editor{width:100%!important;height:100%!important;max-width:none!important;max-height:none!important;border:0!important;border-radius:0!important}
+.zhe-viewport .pano-studio-close,.zhe-viewport [data-action="close"],.zhe-viewport .pano-studio-timeline{display:none!important}
+.zhe-viewport .pano-studio-main{min-height:0!important}
+.zhe-viewport .pano-studio-inspector{width:240px!important;min-width:200px!important}
+.zhe-viewport .pano-studio-root{height:100%!important;min-height:0!important}
+.zhe-controls .zhe-main{gap:8px;align-items:center;flex-wrap:wrap}
+.zia-colour{display:flex;gap:8px;align-items:center;font-size:12px}.zia-colour input{width:32px;height:32px;padding:2px}
+@media(max-width:900px){.zhe-viewport .pano-studio-inspector{width:200px!important}.zhe-viewport{height:52dvh;min-height:320px}}
+
+.zplate-actions{display:flex;gap:4px;align-items:center;align-self:flex-start;padding:4px;border:1px solid var(--zc-border,#333);border-radius:10px;background:var(--zc-composer,#1b1b1b);margin-bottom:12px}
+.zplate-actions button{min-height:36px;padding:8px 20px;border:0!important;background:transparent!important;border-radius:6px;color:var(--zc-muted,#aaa)}
+.zplate-actions button[aria-pressed="true"]{background:var(--zc-surface,#303030)!important;color:var(--zc-text,#eee);box-shadow:inset 0 -2px var(--zc-accent,#d5ff40)}
+.zplate-actions button:focus-visible{outline:2px solid var(--zc-accent,#d5ff40);outline-offset:2px}
+
+.zhe-viewport .pano-studio-editor{inset:0!important;position:absolute!important;grid-template-rows:minmax(0,1fr)!important;min-height:0!important}.zhe-viewport [aria-modal]{outline:none}
+
+#genj-studio[data-workspace=image] .zc-image-page:has(.zhe-viewport:not([hidden])){display:flex;flex-direction:column;gap:12px;overflow:auto}
+#genj-studio[data-workspace=image] .zc-image-scroll:has(>.zhe-viewport:not([hidden])){display:flex;flex-direction:column;flex:1 1 0;min-height:380px;overflow:hidden;padding-bottom:0;gap:12px}
+#genj-studio .zc-image-scroll>.zhe-viewport:not([hidden]){flex:1 1 0;height:auto;min-height:280px}
+#genj-studio .zc-image-composer:has(.zhe-controls:not([hidden])){max-height:none;flex:0 0 auto;gap:8px;padding:16px 20px}
+#genj-studio .zc-image-composer:has(.zhe-controls:not([hidden])) #zc-reference-drop{margin:0;padding:0;border:0}
+#genj-studio .zc-image-composer:has(.zhe-controls:not([hidden])) textarea{height:64px;min-height:56px}
+.zhe-viewport .pano-studio-inspector{width:280px!important;min-width:280px!important}
+.zhe-viewport.is-empty .pano-studio-stage-canvas{opacity:0}
+.zhe-empty-hint{position:absolute;left:72px;right:320px;top:45%;text-align:center;color:var(--gs-muted,#aaa);font-size:14px;pointer-events:none;z-index:2}
+.zhe-viewport:not(.is-empty) .zhe-empty-hint{display:none}

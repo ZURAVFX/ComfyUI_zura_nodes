@@ -16,7 +16,7 @@ const app={graph:new Graph(),nodeOutputs:{existing:{images:['retained']}},ui:{se
     native.widgets.push({name:'Open Studio Editor',callback:async()=>{
       const backdrop=document.createElement('div');backdrop.className='pano-studio-backdrop';document.body.append(backdrop);
       backdrop.innerHTML='<div class="pano-studio-main"><div class="pano-studio-tabs"><button data-value="camera"></button></div><div data-head="camera"><button data-part="name"></button></div><span class="pano-studio-tl-frame">0 / 48</span></div>';
-      return {session:{state:{camera:{}},applyInspector(){}},stage:()=>({settle(){},redraw(){}}),close(){native.widgets[0].value=edited;backdrop.remove();}};
+      return {session:{state:{camera:{}},stateText:()=>edited,applyInspector(){}},stage:()=>({settle(){},redraw(){}}),close(){native.widgets[0].value=edited;backdrop.remove();}};
     }});
     return native;
   }};
@@ -45,3 +45,12 @@ await new Promise(resolve=>setTimeout(resolve,0));
 assert.equal(applied,null,'Native close without Apply must never change the project');
 assert.equal(cancelled,2);
 console.log('Panorama popout Apply/Cancel, native-close rollback and artist-graph isolation pass.');
+
+const host=document.createElement('section');document.body.append(host);
+const inline=await openPanoramaEditor({...args,environment:true,host});
+assert.ok(host.querySelector('.zc-panorama-inline'),'The native editor lives inside the Studio viewport');
+assert.equal(document.querySelector('.zc-panorama-actions'),null,'An inline editor has no modal Apply or Cancel footer');
+assert.equal(document.body.classList.contains('zura-camera-editor-open'),false);
+assert.equal(inline.snapshot(),edited,'Generation reads the current native scene without closing it');
+inline.dispose();assert.equal(host.children.length,0);assert.deepEqual(app.nodeOutputs,{existing:{images:['retained']}});
+console.log('Inline Compose360: native live state, no modal chrome, isolated graph and disposal pass');

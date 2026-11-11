@@ -18,14 +18,14 @@ class ZuraImageEditMask:
             "image": ("IMAGE",),
             "painted_mask": ("IMAGE",),
             "feather_pixels": ("INT", {"default": 16, "min": 0, "max": 256}),
-        }}
+        }, "optional": {"drawing_region": ("BOOLEAN", {"default": False})}}
 
     RETURN_TYPES = ("MASK", "MASK")
     RETURN_NAMES = ("selection", "inward_blend")
     FUNCTION = "prepare"
     CATEGORY = "Zura Studio/image"
 
-    def prepare(self, image, painted_mask, feather_pixels):
+    def prepare(self, image, painted_mask, feather_pixels, drawing_region=False):
         if image.ndim != 4 or painted_mask.ndim != 4 or not image.shape[0] or not painted_mask.shape[0]:
             raise ValueError("Could not read the main image and edit-area mask.")
         height, width = image.shape[1:3]
@@ -43,6 +43,13 @@ class ZuraImageEditMask:
         raw = F.interpolate(mask.unsqueeze(1), size=(height, width), mode="nearest").squeeze(1)
         if not torch.any(raw > 0):
             raise ValueError("Paint an edit area, or switch back to the whole image.")
+        if drawing_region:
+            ys, xs = torch.where(raw[0] > 0)
+            padding = max(16, min(96, round(max(int(xs.max()-xs.min()), int(ys.max()-ys.min()))*.08)))
+            x0,x1=max(0,int(xs.min())-padding),min(width,int(xs.max())+padding+1)
+            y0,y1=max(0,int(ys.min())-padding),min(height,int(ys.max())+padding+1)
+            raw.zero_();raw[:,y0:y1,x0:x1]=1
+            mask=raw;mask_height,mask_width=height,width
         feather = max(0, min(256, int(feather_pixels)))
         if feather == 0:
             return (raw, raw.clone())

@@ -34,6 +34,14 @@ class ImageEditAreaTests(unittest.TestCase):
         self.assertTrue(torch.equal(soft[raw == 0], torch.zeros_like(soft[raw == 0])))
         self.assertTrue(torch.any((soft > 0) & (soft < raw)))
 
+    def test_drawn_guide_refines_a_region_not_just_the_coloured_strokes(self):
+        mask=torch.zeros((1,79,133,3));mask[:,25:28,50:53,:]=1;mask[:,45:48,70:73,:]=1
+        raw,blend=area.ZuraImageEditMask().prepare(self.source,mask,6,drawing_region=True)
+        self.assertEqual(float(mask[0,35,60,0]),0)
+        self.assertEqual(float(raw[0,35,60]),1)
+        self.assertGreater(float(blend[0,35,60]),.9)
+        self.assertEqual(float(blend[0,0,0]),0)
+
     def test_empty_invalid_and_wrong_shape_are_rejected(self):
         node = area.ZuraImageEditMask()
         with self.assertRaisesRegex(ValueError, "Paint an edit area"):

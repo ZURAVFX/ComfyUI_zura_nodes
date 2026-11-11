@@ -392,3 +392,10 @@
 @media(max-width:600px){#genj-studio .zc-mode-groups{grid-template-columns:1fr}#genj-studio .zc-mode-group{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:2px 8px}#genj-studio .zc-mode-group h3{grid-column:1/-1}#genj-studio .zc-mode-current-copy>small{display:none}#genj-studio .zc-mode-host .zc-mode-switcher>summary{gap:6px}#genj-studio .zc-mode-current-icon{display:none}}
 @media(prefers-reduced-motion:no-preference){#genj-studio .zc-mode-switcher[open]>.zc-tool-panel{animation:zc-mode-open 120ms ease-out}}
 @keyframes zc-mode-open{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:translateY(0)}}
+
+/* One focus ring per active control, including the native search field. */
+#genj-studio .zc-mode-search input:focus,#genj-studio .zc-mode-search input:focus-visible{outline:none!important;box-shadow:none!important;border:0!important}
+#genj-studio .zc-mode-search:focus-within{outline:none!important;box-shadow:none!important}
+#genj-studio .zc-mode-search label:focus-within{outline:2px solid var(--gs-focus);outline-offset:2px;box-shadow:none!important}
+#genj-studio .zc-task-control[open]>summary:not(:focus-visible){outline:none!important;box-shadow:none!important}
+#genj-studio .zc-task-control:has(.zc-mode-menu :focus-visible){outline:none!important;box-shadow:none!important}

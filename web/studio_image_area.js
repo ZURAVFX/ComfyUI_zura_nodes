@@ -7,9 +7,10 @@ import {PaintoutMaskViewer} from './paintout_studio/paintout_viewer.js';
 const clamp=(value,min,max)=>Math.max(min,Math.min(max,Number(value)||0));
 export const imageAreaSourceKey=ref=>String(ref?.file||[ref?.subfolder,ref?.filename].filter(Boolean).join('/')||'').replace(/\\/g,'/');
 const clone=value=>value?JSON.parse(JSON.stringify(value)):null;
-const empty=key=>({enabled:false,source_key:key||'',mask:null,context:64,feather:16});
+const empty=key=>({enabled:false,source_key:key||'',mask:null,guide:null,sketch:null,context:64,feather:16});
 const accepted=value=>value&&typeof value==='object'?{
   enabled:!!value.enabled,source_key:String(value.source_key||''),mask:value.mask?.file?clone(value.mask):null,
+  guide:value.guide?.file?clone(value.guide):null,sketch:value.sketch?.file?clone(value.sketch):null,drawing_region:value.drawing_region!==false,
   context:Math.round(clamp(value.context??64,0,512)),feather:Math.round(clamp(value.feather??16,0,128)),
 }:empty('');
 const imageUrl=(owner,ref)=>owner.api.apiURL('/view?'+new URLSearchParams({filename:ref.filename,subfolder:ref.subfolder||'',type:'input'}));
@@ -32,15 +33,16 @@ export class ImageEditArea {
     this.host=doc.createElement('section');this.host.className='zia-editor';this.host.hidden=true;this.host.setAttribute('aria-label','Image edit area');
     this.host.innerHTML=`<div class="zia-stage"><div class="zia-viewer-host"></div><div class="zia-loading" role="status">Loading image…</div></div>
       <div class="zia-toolbar"><div class="zia-tools" role="group" aria-label="Selection tools">
-        <button type="button" data-area-tool="brush" aria-pressed="true">Brush</button><button type="button" data-area-tool="protect" aria-pressed="false">Erase</button><button type="button" data-area-tool="pan" aria-pressed="false">Pan</button>
+        <button type="button" data-area-tool="draw" aria-pressed="false">Draw guide</button><label class="zia-colour">Colour <input type="color" value="#ff6347" aria-label="Drawing colour"></label><button type="button" data-area-tool="brush" aria-pressed="true">Select area</button><button type="button" data-area-tool="protect" aria-pressed="false">Erase</button><button type="button" data-area-tool="pan" aria-pressed="false">Pan</button>
         <label class="zia-brush">Size <input type="range" min="1" max="1000" value="96" aria-label="Brush size in source pixels"><output>96 px</output></label>
         <button type="button" data-area-action="undo">Undo</button><button type="button" data-area-action="clear">Clear</button><button type="button" data-area-action="fit">Fit</button></div>
         <details class="zia-options"><summary>Blend</summary><div class="zia-options-panel"><label>Surrounding context <input type="number" min="0" max="512" step="1" data-area-context></label><label>Edge softness <input type="number" min="0" max="128" step="1" data-area-feather></label><p>Context helps the model match the scene. Only the painted area is changed.</p></div></details>
         <button type="button" data-area-action="whole">Whole image</button><button type="button" class="zia-done" data-area-action="done">Done</button></div>
       <p class="zia-status" role="status" aria-live="polite"></p>`;
     owner.editInputs.source.after(this.host);
-    this.stage=this.host.querySelector('.zia-viewer-host');this.loading=this.host.querySelector('.zia-loading');this.status=this.host.querySelector('.zia-status');
+    this.tools=this.host.querySelector('.zia-tools');this.stage=this.host.querySelector('.zia-viewer-host');this.loading=this.host.querySelector('.zia-loading');this.status=this.host.querySelector('.zia-status');
     this.brush=this.host.querySelector('.zia-brush input');this.brushOutput=this.host.querySelector('.zia-brush output');
+    this.colour=this.host.querySelector('.zia-colour input');this.colour.oninput=()=>this.viewer?.setDrawColor(this.colour.value);
     this.context=this.host.querySelector('[data-area-context]');this.feather=this.host.querySelector('[data-area-feather]');
     for(const field of [this.context,this.feather])field.addEventListener('focus',()=>field.select());
     this.host.querySelectorAll('[data-area-tool]').forEach(button=>button.addEventListener('click',()=>this.setTool(button.dataset.areaTool)));
@@ -111,15 +113,16 @@ export class ImageEditArea {
     if(!this.host)return;
     const busy=this.busy(),ready=!!this.viewer&&!this.load;
     this.stage.style.pointerEvents=busy?'none':'';
-    for(const element of this.host.querySelectorAll('button,input'))element.disabled=busy||(!ready&&!element.matches('[data-area-action=whole],[data-area-action=done]'));
-    this.host.querySelector('[data-area-action=undo]').disabled=busy||!ready||!this.viewer.history.length;
+    for(const element of [...this.host.querySelectorAll('button,input'),...this.tools.querySelectorAll('button,input')])element.disabled=busy||(!ready&&!element.matches('[data-area-action=whole],[data-area-action=done]'));
+    this.tools.querySelector('[data-area-action=undo]').disabled=busy||!ready||!this.viewer.history.length;
     const focused=this.owner.root.ownerDocument.activeElement;
     if(focused!==this.context)this.context.value=String(this.state.context);
     if(focused!==this.feather)this.feather.value=String(this.state.feather);
     const capability=this.owner.imageAreaCapabilities;
-    this.status.textContent=this.error||(!capability?.available&&capability?'Smart crop nodes are needed before this selection can be applied. Open Models to check setup.':this.upload?.key===this.state.source_key?'Saving selection…':'Paint the area to change. The rest of the image stays untouched.');
+    this.status.textContent=this.error||(!capability?.available&&capability?'Smart crop nodes are needed before this selection can be applied. Open Models to check setup.':this.upload?.key===this.state.source_key?'Saving selection…':this.inline?'':this.viewer?.tool==='draw'?'Sketch the change, then describe how it should look. AI refines your drawing.':'Select the area to change. Everything outside it stays untouched.');
   }
-  openEditor(){
+  openEditor(tool){
+    if(tool)this.pendingTool=tool;
     if(this.busy()||!this.source())return;this.state.enabled=true;this.editing=true;this.error='';
     if(this.owner.imageComparison)this.owner.imageComparison.active=false;
     this.owner.editInputs.showSource=true;this.owner.save();this.owner.render();
@@ -151,21 +154,22 @@ export class ImageEditArea {
       await viewer.setFrame(url,proxyWidth,proxyHeight,0);
       if(epoch!==this.viewerEpoch||revision!==this.revision||!this.isCurrent(key)){viewer.dispose();if(this.viewer===viewer)this.viewer=null;return;}
       if(this.state.mask?.filename)await viewer.setMask(maskUrl(this.owner,this.state.mask));
+      if(this.state.sketch?.filename)await viewer.setSketch(maskUrl(this.owner,this.state.sketch));
       if(epoch!==this.viewerEpoch||revision!==this.revision||!this.isCurrent(key)){viewer.dispose();if(this.viewer===viewer)this.viewer=null;return;}
-      this.setTool('brush');this.applyBrushSize();this.loading.hidden=true;this.error='';
+      viewer.setDrawColor(this.colour.value);this.setTool(this.pendingTool||'brush');this.pendingTool=null;this.applyBrushSize();this.loading.hidden=true;this.error='';
     })();
     this.load=work;
     try{await work;}catch(error){if(epoch===this.viewerEpoch){this.error=error.message||'Could not open the image selection.';this.loading.textContent=this.error;this.viewer?.dispose();this.viewer=null;}}
     finally{if(this.load===work)this.load=null;this.refreshTools();}
   }
   setTool(tool){
-    if(!this.viewer)return;this.viewer.setTool(tool);
-    this.viewer.root.setAttribute('aria-label',tool==='brush'?'Paint the image area to edit':tool==='protect'?'Erase from the edit area':'Drag to pan the image');
-    this.host.querySelectorAll('[data-area-tool]').forEach(button=>button.setAttribute('aria-pressed',String(button.dataset.areaTool===tool)));
+    if(!this.viewer)return;this.viewer.setTool(tool);this.refreshTools();
+    this.viewer.root.setAttribute('aria-label',tool==='draw'?'Draw a visual guide for the image edit':tool==='brush'?'Paint the image area to edit':tool==='protect'?'Erase from the edit area':'Drag to pan the image');
+    this.tools.querySelectorAll('[data-area-tool]').forEach(button=>button.setAttribute('aria-pressed',String(button.dataset.areaTool===tool)));
   }
   applyBrushSize(){this.viewer?.setBrushSize(Math.max(1,this.brushSize*(this.sourceScale||1)));}
   changed(){
-    if(!this.isCurrent())return;const firstChange=!this.dirty;this.revision++;this.dirty=true;this.state.mask=null;this.error='';
+    if(!this.isCurrent())return;const firstChange=!this.dirty;this.revision++;this.dirty=true;this.state.mask=null;this.state.guide=null;this.state.sketch=null;this.error='';
     // Record a pending selection once, instead of writing storage on every pointer move.
     if(firstChange)this.owner.save();this.scheduleSave();this.refreshTools();
   }
@@ -180,20 +184,41 @@ export class ImageEditArea {
     const viewer=this.viewer,key=this.state.source_key,revision=this.revision;
     if(!viewer||!this.isCurrent(key))throw new Error('The main image changed. Paint the edit area again.');
     if(!viewer.measureMask()){
-      this.state.mask=null;this.dirty=false;this.owner.save();this.refreshTools();return null;
+      this.state.mask=null;this.state.guide=null;this.state.sketch=null;this.dirty=false;this.owner.save();this.refreshTools();return null;
     }
     if(this.upload?.revision===revision&&this.upload.key===key)return this.upload.promise;
     const stale=()=>{const error=new Error('The edit area changed while it was saving.');error.code='STALE_SELECTION';return error;};
     const promise=(async()=>{
-      const blob=await asBlob(viewer.maskCanvas);if(revision!==this.revision||!this.isCurrent(key))throw stale();
-      const form=new FormData();form.append('image',blob,`${crypto.randomUUID()}.png`);form.append('subfolder','zura_images/edit_areas');form.append('type','input');
-      const response=await this.owner.api.fetchApi('/upload/image',{method:'POST',body:form});if(!response.ok)throw new Error('Could not save the edit area. Try again.');
-      const asset=await response.json();if(!asset.name)throw new Error('ComfyUI did not return the saved edit area.');
+      const upload=async blobPromise=>{
+        const blob=await blobPromise;if(revision!==this.revision||!this.isCurrent(key))throw stale();
+        const form=new FormData();form.append('image',blob,`${crypto.randomUUID()}.png`);form.append('subfolder','zura_images/edit_areas');form.append('type','input');
+        const response=await this.owner.api.fetchApi('/upload/image',{method:'POST',body:form});if(!response.ok)throw new Error('Could not save the edit area. Try again.');
+        const asset=await response.json();if(!asset.name)throw new Error('ComfyUI did not return the saved edit area.');
+        if(revision!==this.revision||!this.isCurrent(key))throw stale();
+        const subfolder=asset.subfolder||'';return{filename:asset.name,subfolder,file:(subfolder?subfolder+'/':'')+asset.name};
+      };
+      // Capture all layers before awaiting uploads so a pointer move cannot mix revisions.
+      const maskBlob=asBlob(viewer.maskCanvas),sketchBlob=viewer.sketchPresent?asBlob(viewer.sketchCanvas):null;
+      let guideBlob;
+      if(sketchBlob){const composite=this.owner.root.ownerDocument.createElement('canvas');composite.width=viewer.width;composite.height=viewer.height;const ctx=composite.getContext('2d');ctx.drawImage(viewer.image,0,0,composite.width,composite.height);ctx.drawImage(viewer.sketchCanvas,0,0);guideBlob=asBlob(composite);}
+      const mask=await upload(maskBlob),sketch=sketchBlob?await upload(sketchBlob):null,guide=guideBlob?await upload(guideBlob):null;
       if(revision!==this.revision||!this.isCurrent(key))throw stale();
-      const subfolder=asset.subfolder||'';this.state.mask={filename:asset.name,subfolder,file:(subfolder?subfolder+'/':'')+asset.name};this.dirty=false;this.error='';this.owner.save();return clone(this.state.mask);
+      Object.assign(this.state,{mask,sketch,guide,drawing_region:true});this.dirty=false;this.error='';this.owner.save();return clone(mask);
     })();
     const upload={key,revision,promise};this.upload=upload;this.refreshTools();
     try{return await promise;}finally{if(this.upload===upload)this.upload=null;this.refreshTools();}
+  }
+  async layerMask(){
+    if(!this.state.enabled||!this.state.mask?.filename)return null;
+    const source=this.source();if(!source)return null;
+    const canvas=this.owner.root.ownerDocument.createElement('canvas');canvas.width=source.width;canvas.height=source.height;
+    const ctx=canvas.getContext('2d',{willReadFrequently:true}),image=new Image();
+    await new Promise((resolve,reject)=>{image.onload=resolve;image.onerror=()=>reject(Error('Could not read the layer selection.'));image.src=maskUrl(this.owner,this.state.mask);});
+    ctx.imageSmoothingEnabled=false;ctx.drawImage(image,0,0,canvas.width,canvas.height);
+    if(this.state.guide){const data=ctx.getImageData(0,0,canvas.width,canvas.height).data;let left=canvas.width,top=canvas.height,right=-1,bottom=-1;
+      for(let y=0;y<canvas.height;y++)for(let x=0;x<canvas.width;x++)if(data[(y*canvas.width+x)*4]){left=Math.min(left,x);right=Math.max(right,x);top=Math.min(top,y);bottom=Math.max(bottom,y);}
+      if(right>=left){const pad=Math.max(16,Math.min(96,Math.round(Math.max(right-left,bottom-top)*.08)));ctx.fillStyle='black';ctx.fillRect(0,0,canvas.width,canvas.height);ctx.fillStyle='white';ctx.fillRect(Math.max(0,left-pad),Math.max(0,top-pad),Math.min(canvas.width,right+pad+1)-Math.max(0,left-pad),Math.min(canvas.height,bottom+pad+1)-Math.max(0,top-pad));}}
+    return canvas.toDataURL('image/png');
   }
   async flush(){
     if(this.dirty)await this.persist();

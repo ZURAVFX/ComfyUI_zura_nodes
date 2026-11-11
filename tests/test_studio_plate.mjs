@@ -1,0 +1,14 @@
+import assert from 'node:assert/strict';
+import {memoryStorage} from '../web/studio_storage.js';
+import {PlateWorkspace} from '../web/studio_plate.js';
+const storage=memoryStorage(),fields={prompt:{value:'Add a red balloon'}};
+const primary={state:{mode:'targeted',source:'source.mp4',startFrame:18,frameCount:27,plateEngine:'ltx',plateScale:.5,anchors:[{id:'one',frame:22,file:'edit22.png',edit_area:{guide:{file:'draw.png'}}},{id:'two',frame:35,file:'edit35.png'}]},sourceInfo:{path:'source.mp4',width:1080,height:1920,fps:30},selected:1,fps:()=>30,$:key=>fields[key],busy:()=>false,save(){},render(){},editor:{stage:'clean',flushManual:async()=>{},persist:async()=>{},setStage:async()=>{}}};
+const calls=[],owner={storage,paintout:primary,mode:'paintout',show(mode){calls.push(mode);this.mode=mode;},videoComposer:{syncWorkflow(){}}};
+const plate=new PlateWorkspace(owner);plate.primary=primary;plate.attach=()=>{};plate.sync=()=>{};plate.ensureRunner=()=>({state:{},checkModels(){}});
+const source=primary.state.source,anchors=primary.state.anchors;
+await plate.select('paint');assert.equal(owner.mode,'paintout');assert.equal(plate.primary,primary);assert.equal(primary.state.source,source);assert.equal(primary.state.anchors,anchors);
+let config=plate.config();assert.equal(config.anchors.length,1);assert.equal(config.anchors[0].frame,35);assert.equal(config.sequenceFps,30);assert.equal(config.startFrame,18);assert.equal(config.frameCount,27);assert.equal(config.width,576);assert.equal(config.height,960);
+await plate.select('replace');assert.equal(primary.state.anchors,anchors);assert.equal(primary.state.mode,'targeted','Selecting an operation leaves the native Paintout conditioning intact');
+primary.state.plateEngine='h3';config=plate.config();assert.deepEqual(config.anchors.map(a=>a.frame),[22,35]);assert.equal(config.width,544);assert.equal(config.height,960);assert.equal(primary.state.anchors[0].edit_area.guide.file,'draw.png');
+await plate.select('remove');assert.equal(plate.action,'remove');assert.equal(primary.state.source,source);assert.equal(primary.state.anchors,anchors);assert.ok(calls.every(mode=>mode==='paintout'),'Every operation uses the same Paintout workspace');assert.equal(storage.getItem('zura-plate-action-v1'),'remove');
+console.log('Paintout remains the single workspace across Paint/Remove/Replace; native removal state, anchors, drawing, source cadence and LTX/H3 guide contracts survive switches');
