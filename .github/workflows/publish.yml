@@ -29,9 +29,19 @@ jobs:
       - name: Install test dependencies
         run: |
           if ! command -v ffmpeg >/dev/null || ! command -v ffprobe >/dev/null; then
-            sudo apt-get update
-            sudo apt-get install -y --no-install-recommends ffmpeg
+            sudo timeout --kill-after=10s 120s apt-get \
+              -o APT::Update::Error-Mode=any \
+              -o Acquire::Retries=0 \
+              -o Acquire::http::Timeout=15 \
+              -o Acquire::https::Timeout=15 update
+            sudo timeout --kill-after=10s 120s apt-get \
+              -o Acquire::Retries=0 \
+              -o Acquire::http::Timeout=15 \
+              -o Acquire::https::Timeout=15 \
+              install -y --no-install-recommends ffmpeg
           fi
+          ffmpeg -version >/dev/null
+          ffprobe -version >/dev/null
           python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
           python -m pip install numpy scipy pillow requests soundfile av aiohttp opencv-python-headless safetensors OpenImageIO psutil huggingface_hub
       - name: Install graph test DOM dependency outside the package
