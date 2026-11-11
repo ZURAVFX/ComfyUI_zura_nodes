@@ -42,7 +42,7 @@ def register(server, package_version):
                                   "adapter_version": ADAPTER_VERSION,
                                   "zura_version": package_version,
                                   "pairing_configured": bool(token and instance_id and fingerprint),
-                                  "features": ["identity", "presets", "graph_preflight", "studio_sessions", "studio_desktop_handoff", "studio_source_float32", "studio_result_float32", "float_frames_v1"],
+                                  "features": ["identity", "presets", "graph_preflight", "studio_sessions", "studio_desktop_handoff", "studio_source_float32", "studio_result_float32", "float_frames_v1"] + (["float_frame_staging_v1"] if os.name == "nt" else []),
                                   "studio": {"schemaVersion": 1, "instanceId": studio_instance_id, "prefix": PREFIX + "/studio",
                                              "sessionHeader": "X-ComfyLink-Studio-Session",
                                              "sourceFormats": ["rgba32f", "rgba16u"],
@@ -146,6 +146,8 @@ def register(server, package_version):
                                   "graph_ready": graph_result["ready"],
                                   "execution_ready": execution_ready, "ready": execution_ready == "ready"})
 
+    from .native_float_staging import register as register_native_float_staging
+    register_native_float_staging(server)
     from .studio_sessions import register as register_studio_sessions
     register_studio_sessions(server, instance_id=studio_instance_id)
     server._zura_comfylink_registered = True
