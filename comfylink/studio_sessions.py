@@ -265,8 +265,13 @@ def _video_sdr_metadata(value, inherited=None):
     fmt = getattr(value, "format", None)
     if fmt is None or not fmt.components or any(component.bits != 8 for component in fmt.components):
         raise ValueError("Video storage is not eight bits per component")
-    transfer, primaries = int(value.color_trc), int(value.color_primaries)
-    space = int(value.colorspace)
+    # Older PyAV builds expose transfer/primaries on the codec context but
+    # omit them on decoded frames. Missing fields are unspecified, so inherit
+    # only the separately validated current stream declaration below.
+    transfer = getattr(value, "color_trc", None)
+    primaries = getattr(value, "color_primaries", None)
+    space = getattr(value, "colorspace", None)
+    transfer, primaries, space = (2 if item is None else int(item) for item in (transfer, primaries, space))
     if inherited is not None:
         transfer = inherited[0] if transfer == 2 else transfer
         primaries = inherited[1] if primaries == 2 else primaries
@@ -854,7 +859,7 @@ class StudioSessions:
                         raise ValueError("Select one master video stream")
                     stream = media.streams.video[0]
                     context = stream.codec_context
-                    stream_colour = _video_sdr_metadata(context)
+                    _video_sdr_metadata(context)
                     _unmanaged_metadata(stream.metadata)
                     if getattr(stream, "side_data", ()):
                         raise ValueError("Unsupported video stream side metadata")
@@ -862,7 +867,11 @@ class StudioSessions:
                     if rate is None or rate <= 0:
                         raise ValueError("Unknown master video frame rate")
                     for frame in media.decode(video=0):
-                        frame_colour = _video_sdr_metadata(frame, stream_colour)
+                        # SPS/VUI changes can update the decoder context even
+                        # when this PyAV version lacks per-frame colour fields.
+                        # Revalidate it for every decoded frame before fallback.
+                        current_stream_colour = _video_sdr_metadata(context)
+                        frame_colour = _video_sdr_metadata(frame, current_stream_colour)
                         if frames and frame_colour != actual_colour:
                             raise ValueError("Video colour metadata changes between frames")
                         actual_colour = frame_colour

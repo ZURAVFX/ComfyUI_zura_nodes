@@ -619,6 +619,14 @@ class StudioHTTPTest(unittest.IsolatedAsyncioTestCase):
         session, headers = await self.create()
         body = {"kind": "video", "master": {"filename": path.name, "type": "output"}}
         response = await self.client.post(self.route(session, '/result'), headers=headers, json=body)
+        if response.status != 200:
+            # Keep detailed codec failures in this synthetic fixture's test
+            # output, while the public endpoint continues to redact paths.
+            try:
+                self.service.convert_master(path, {})
+            except Exception as error:
+                reason = str(error).replace(str(self.root), '<test-root>')
+                self.fail(f'H.264 SDR fixture failed with PyAV {av.__version__}: {type(error).__name__}: {reason}')
         self.assertEqual(response.status, 200, await response.text())
         self.assertEqual(self.received[-1]['provenance']['transfer'], 'bt709')
         self.assertEqual(self.received[-1]['provenance']['primaries'], 'bt709')
@@ -634,11 +642,26 @@ class StudioHTTPTest(unittest.IsolatedAsyncioTestCase):
         import av
         frame = av.VideoFrame(2, 2, 'rgba')
         self.assertEqual(_video_sdr_metadata(frame), (2, 2, 2))
-        frame.color_trc = 18
+        # A portable metadata view exercises an explicit per-frame HLG tag
+        # even on PyAV versions which do not expose those frame properties.
+        hdr_frame = types.SimpleNamespace(format=frame.format, side_data=(),
+            color_trc=18, color_primaries=2, colorspace=2)
         with self.assertRaises(ValueError):
-            _video_sdr_metadata(frame, (1, 1, 1))
+            _video_sdr_metadata(hdr_frame, (1, 1, 1))
         with self.assertRaises(ValueError):
             _video_sdr_metadata(av.VideoFrame(2, 2, 'rgba64le'))
+
+    async def test_decoded_frame_missing_colour_fields_inherits_only_safe_stream(self):
+        import av
+        decoded = av.VideoFrame(2, 2, 'yuv420p')
+        legacy_frame = types.SimpleNamespace(format=decoded.format, side_data=(), colorspace=1)
+        self.assertEqual(_video_sdr_metadata(legacy_frame, (1, 1, 1)), (1, 1, 1))
+        nullable_frame = types.SimpleNamespace(format=decoded.format, side_data=(),
+            color_trc=None, color_primaries=None, colorspace=None)
+        self.assertEqual(_video_sdr_metadata(nullable_frame, (1, 1, 1)), (1, 1, 1))
+        for unsafe in ((16, 9, 9), (18, 9, 9), (1, 9, 1)):
+            with self.assertRaises(ValueError):
+                _video_sdr_metadata(legacy_frame, unsafe)
 
     @unittest.skipUnless(importlib.util.find_spec('OpenImageIO'), 'OpenImageIO required for actual EXR fidelity')
     async def test_actual_float_and_half_exr_original_containers_retained_byte_for_byte(self):
