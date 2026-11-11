@@ -182,7 +182,7 @@ class FloatTransportTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "Pixel"):
             fio.validate_manifest(m)
         m["width"], m["height"] = 4096, 4096
-        m["frames"] *= 5
+        m["frames"] *= fio.MAX_TRANSFER_BYTES // (4096 * 4096 * 16) + 1
         with self.assertRaisesRegex(ValueError, "byte limit"):
             fio.validate_manifest(m)
 

@@ -183,6 +183,61 @@ class StudioHTTPTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(response.status, 200)
         self.assertEqual(self.broker_calls.count('source'), 1)
 
+    async def test_source_admission_rejects_low_disk_before_download(self):
+        session, headers = await self.create()
+        with patch('comfylink.studio_sessions.shutil.disk_usage', return_value=types.SimpleNamespace(free=0)):
+            response = await self.client.post(self.route(session,'/source'), headers=headers,json={})
+        self.assertEqual(response.status,507)
+        self.assertNotIn('blob',self.broker_calls)
+        self.assertFalse((self.inputs/'ComfyLink').exists())
+
+    async def test_large_source_reserves_memory_headroom_for_ae_and_os(self):
+        with patch.object(float_io,'available_memory_bytes',return_value=8*1024**3-1):
+            with self.assertRaisesRegex(ValueError,'8.0 GiB'):
+                self.service.check_stream_memory(3840*2160*16)
+        with patch.object(float_io,'available_memory_bytes',return_value=8*1024**3):
+            self.service.check_stream_memory(3840*2160*16)
+
+    async def test_source_validation_never_loads_a_whole_batch(self):
+        session, headers = await self.create()
+        with patch.object(float_io,'load_transfer',side_effect=AssertionError('whole batch forbidden')):
+            response = await self.client.post(self.route(session,'/source'),headers=headers,json={})
+        self.assertEqual(response.status,200,await response.text())
+
+    @unittest.skipUnless(importlib.util.find_spec('OpenImageIO'),'OpenImageIO required for streamed native FLOAT cache')
+    async def test_native_hdr_import_streams_101_actual_float_exrs(self):
+        import OpenImageIO as oiio
+        from test_comfylink_large_shot import tiny_frames
+        native_root = self.root/'native-upload';native_root.mkdir()
+        received=[]
+        async def native_upload(request):
+            reader=await request.multipart()
+            while (part:=await reader.next()) is not None:
+                path=native_root/part.filename
+                with path.open('xb') as stream:
+                    while chunk:=await part.read_chunk():stream.write(chunk)
+                image=oiio.ImageInput.open(str(path))
+                try:
+                    spec=image.spec()
+                    self.assertEqual(spec.format,oiio.FLOAT)
+                    data=image.read_image(format=oiio.FLOAT)[:,:, [list(spec.channelnames).index(c) for c in 'RGBA']]
+                    received.append(data.tobytes())
+                finally:image.close()
+            return web.json_response({'id':'e'*32,'kind':'asset','asset_kind':'hdr_sequence','count':len(received)})
+        app=web.Application();app.router.add_post('/zura/studio/hdr/exr-sequence',native_upload)
+        native=TestServer(app,host='127.0.0.1');await native.start_server()
+        try:
+            identity='f'*32
+            relative,manifest=float_io.write_transfer_frames(self.inputs,'ComfyLink/'+identity,tiny_frames(),
+                colour={'encoding':'acescg','sceneLinear':True},frame_rate={'numerator':25,'denominator':1},expected_count=101)
+            session=types.SimpleNamespace(id=identity,origin=str(native.make_url('/')).rstrip('/'),closed=False,expires=time.time()+600)
+            self.service.sessions[identity]=session
+            with patch.object(float_io,'load_transfer',side_effect=AssertionError('whole batch forbidden')),patch.object(np,'stack',side_effect=AssertionError('whole batch forbidden')):
+                result=await self.service.native_import(session,self.inputs/Path(relative).parent,manifest)
+            self.assertEqual(result['studioAsset']['count'],101)
+            self.assertEqual(received,[frame.tobytes() for frame in tiny_frames()])
+        finally:await native.close()
+
     async def test_ssrf_urls_rejected_before_network(self):
         for url in ('http://example.com/studio-bridge/' + self.broker_id,
                     'http://localhost:2/studio-bridge/' + self.broker_id,

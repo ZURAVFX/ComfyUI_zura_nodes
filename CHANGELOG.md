@@ -7,6 +7,13 @@
 
 # Release notes
 
+## 1.3.62 - 11 November 2026
+
+- Raise the bounded ComfyLink whole-shot FLOAT RGBA allowance to 16 GiB. Keep the existing per-frame raster limits, exact frame count, rational timing, alpha association and finite float values.
+- Stream source validation, native FLOAT EXR caching and result conversion one frame at a time. Check free disk space before source staging and reserve memory headroom for large inputs. Explicit in-memory frame batches use a separate available-RAM check and preallocation rather than a second full stacked copy.
+- Preserve bounded OCIO configuration and working-space identities without guessing an encoding from their names. Native AE return with an unverified OCIO input mapping remains unsupported. The separate AE client can stop after its first colour inspection, retaining the actual identity for diagnosis without changing project colour settings.
+- Qualify a synthetic 3840 × 2160, 101-frame shot at 25 fps through actual raw FLOAT files, FLOAT EXRs and a raw return. All 101 frame hashes match, with no repeated frames, trimming or resizing. The local disk test transferred 13.4 GB each way and measured a peak process working set of 1.87 GiB. This is numeric transport qualification, not live AE import, OCIO mapping or model-render qualification. Existing model and saver limits still apply.
+
 ## 1.3.61 - 11 November 2026
 
 - Add an optional ComfyLink After Effects session to the existing Studio, with 14 native mode adapters, a compact session strip and immediate Leave control. Keep AE drafts separate from ordinary Studio and other tabs. Normal Studio remains available without a ComfyLink licence; the separate AE extension is not bundled.
