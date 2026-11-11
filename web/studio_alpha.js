@@ -1,3 +1,4 @@
+import {workspaceStorage} from './studio_storage.js';
 import {ClipTrimmer} from './studio_trim.js';
 import {StudioModelDownloads} from './studio_model_download.js';
 import {submitOwnedGraph,recoverOwnedSubmission,cancelOwnedJob} from './studio_owned_jobs.js';
@@ -8,13 +9,13 @@ const KEY='zura-alpha-workspace-v1';
 const initial=()=>({processingScale:.5,startFrame:0,frameCount:49,view:'source',seed:42});
 const clamp=(n,min,max)=>Math.max(min,Math.min(max,n));
 const rate=fps=>String(Number(Number(fps||0).toFixed(3)));
-const savedState=()=>{try{return JSON.parse(localStorage.getItem(KEY))||{};}catch{return {};}};
+const savedState=storage=>{try{return JSON.parse(storage.getItem(KEY))||{};}catch{return {};}};
 
 /** Automatic video matting, with source footage kept visible throughout a run. */
 export class AlphaWorkspace {
-  constructor(owner){
+  constructor(owner){this.storage=workspaceStorage(owner);
     this.owner=owner;this.api=owner.api;this.root=owner.root;this.app=owner.app;this.closed=true;this.disposed=false;
-    const saved=savedState();this.state={...initial(),...saved};
+    const saved=savedState(this.storage);this.state={...initial(),...saved};
     if(![1,.75,.5,.25].includes(Number(this.state.processingScale)))this.state.processingScale=.5;
     this.source=null;this.sourceInfo=null;this.result=saved.result||null;this.job=saved.job||null;this.pendingSubmission=saved.pendingSubmission||null;
     if(this.job?.cancelPending)this.job.cancelRetryAvailable=true;
@@ -58,7 +59,7 @@ export class AlphaWorkspace {
   busy(){return !!(this.job||this.pendingSubmission||this.submitting||this.picking);}
   elapsed(){return `${durationLabel((Date.now()-(this.job?.started||Date.now()))/1000)} elapsed`;}
   message(text){this.messageText=text||'';this.$('status').textContent=this.messageText;this.$('status').hidden=!this.messageText;}
-  save(){try{localStorage.setItem(KEY,JSON.stringify({...this.state,sourcePath:this.source?.path||this.state.sourcePath||'',sourceName:this.source?.name||this.state.sourceName||'',job:this.job,pendingSubmission:this.pendingSubmission,result:this.result}));return true;}catch{return false;}}
+  save(){try{this.storage.setItem(KEY,JSON.stringify({...this.state,sourcePath:this.source?.path||this.state.sourcePath||'',sourceName:this.source?.name||this.state.sourceName||'',job:this.job,pendingSubmission:this.pendingSubmission,result:this.result}));return true;}catch{return false;}}
   config(){return {source:this.source?.path||'',sourceWidth:Number(this.source?.width)||0,sourceHeight:Number(this.source?.height)||0,sourceFrames:this.source?.frames,startFrame:this.state.startFrame,frameCount:this.state.frameCount,processingScale:Number(this.state.processingScale),sequenceFps:this.fps(),seed:this.state.seed??42};}
   releaseLocalPreview(){if(this.localPreview){URL.revokeObjectURL?.(this.localPreview);this.localPreview=null;}}
   async uploadSource(file){

@@ -1,3 +1,4 @@
+import {runStudioVMInContext} from './studio_vm_fixture.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
@@ -12,7 +13,7 @@ const context={crypto:{randomUUID:()=> 'copy'},window:{ELK:class {}},
   api:{fetchApi:async()=>({ok:true,json:async()=>exported})},
   app:{rootGraph:{serialize:()=>original},loadApiJson:async graph=>loaded.push(graph),loadGraphData:async graph=>restored.push(graph)},
   tidyArtistGraph:async()=>{throw new Error('Routing failed');},attachWanGraphControls(){},tidyWanStage(){}};
-vm.createContext(context);vm.runInContext(source+'\nthis.Studio=ArtistStudio;',context);
+vm.createContext(context);runStudioVMInContext(source+'\nthis.Studio=ArtistStudio;',context);
 const ui=Object.create(context.Studio.prototype);
 Object.assign(ui,{project:{id:'project',phase:'working'},resetEpoch:0,readConfig:()=>({}),$:()=>({value:'animate'}),perform:fn=>fn(0),close(){this.closed=true;}});
 await assert.rejects(()=>ui.graphView(),/previous workflow has been restored.*Routing failed/);

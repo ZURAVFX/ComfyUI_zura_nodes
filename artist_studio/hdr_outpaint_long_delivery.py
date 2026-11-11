@@ -36,13 +36,15 @@ class HeldHDRStage:
 
 
 async def export_long_hdr_outpaint(staged, output_root, prefix, *, source_path, has_audio,
-                                   start_seconds, source_duration=None, ffmpeg=None):
+                                   start_seconds, source_duration=None, ffmpeg=None, exr_storage="half"):
     """Export HLG, ACEScg EXR and an SDR preview; publish only on success."""
     from .hdr_chunk_exr import export_exr_zip
     from .hdr_chunk_video import export_hlg_video
     from .hdr_chunk_preview import export_sdr_preview
     if type(has_audio) is not bool:
         raise ValueError('Audio selection must be explicit.')
+    if exr_storage not in ('half', 'float32'):
+        raise ValueError('Choose half or float32 EXR storage.')
     held = HeldHDRStage(staged)
     if source_duration is None: source_duration = held.original / 24.0
     paths = []
@@ -61,7 +63,7 @@ async def export_long_hdr_outpaint(staged, output_root, prefix, *, source_path, 
             raise
         paths.append(path)
     try:
-        await publish(export_exr_zip, held, output_root, prefix)
+        await publish(export_exr_zip, held, output_root, prefix, half_precision=exr_storage == "half")
         await publish(export_hlg_video, held, output_root, prefix,
             fps=24., audio_source=source_path if has_audio else None,
             audio_start_seconds=start_seconds, audio_duration_seconds=source_duration, ffmpeg=ffmpeg)
@@ -69,7 +71,7 @@ async def export_long_hdr_outpaint(staged, output_root, prefix, *, source_path, 
             fps=24., audio_source=source_path if has_audio else None,
             audio_start_seconds=start_seconds, audio_duration_seconds=source_duration, ffmpeg=ffmpeg)
         if staged.cancelled.is_set(): raise HDRChunkCancelled('HDR conversion cancelled.')
-        return {'files':[str(paths[0]),str(paths[1])], 'preview':str(paths[2]), 'frames':held.total, 'fps':24.}
+        return {'files':[str(paths[0]),str(paths[1])], 'preview':str(paths[2]), 'frames':held.total, 'fps':24., 'exr_storage':exr_storage}
     except BaseException:
         # Each exporter exclusively creates its result; remove only paths this
         # call successfully published, never a pre-existing file.

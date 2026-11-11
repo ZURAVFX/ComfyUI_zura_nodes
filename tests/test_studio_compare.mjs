@@ -1,8 +1,9 @@
+import {runStudioVMInContext} from './studio_vm_fixture.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
 const code=fs.readFileSync(new URL('../web/studio_compare.js',import.meta.url),'utf8').replace('export class','class');
-const context={};vm.createContext(context);vm.runInContext(code+'\nthis.ShotComparison=ShotComparison;',context);
+const context={};vm.createContext(context);runStudioVMInContext(code+'\nthis.ShotComparison=ShotComparison;',context);
 const media=()=>({paused:true,muted:false,currentTime:0,duration:2,readyState:1,loads:0,playbackRate:1,load(){this.loads++;},play(){this.paused=false;return Promise.resolve();},pause(){this.paused=true;},setAttribute(){}});
 const fields={'[data-result]':media(),'[data-source]':media(),'[data-seek]':{},'[data-time]':{},'[data-play]':{setAttribute(){}},'[data-wipe]':{},'[data-mute]':{},'[data-fullscreen]':{},'[data-close]':{},'.gs-compare-message':{},'.gs-compare-controls':{},'[data-result-label]':{},'[data-source-label]':{},'[data-result-image-slot]':{replaceWith(){}},'[data-source-image-slot]':{replaceWith(){}}};
 const css={};const host={ownerDocument:{createElement:()=>({setAttribute(){}})},querySelector:s=>fields[s],style:{setProperty:(k,v)=>css[k]=v}};
@@ -30,7 +31,7 @@ view.show('original.mp4','finished.mp4',1);assert.equal(view.resultImage.hidden,
 const studio=fs.readFileSync(new URL('../web/studio.js',import.meta.url),'utf8');
 assert.ok(studio.includes('this.compareProject!==p?.id'),'Project changes cannot retain another shot comparison');
 assert.ok(studio.includes('p?.selected_url || this.sourcePlayback()'),'Prefer exact trimmed source, with a playable proxy fallback');
-vm.runInContext(studio.replace(/^import .*;\r?\n/gm,'').replace(/^export /gm,'').split('app.registerExtension({')[0]+'\nthis.Studio=ArtistStudio;',context);
+runStudioVMInContext(studio.replace(/^import .*;\r?\n/gm,'').replace(/^export /gm,'').split('app.registerExtension({')[0]+'\nthis.Studio=ArtistStudio;',context);
 const ui=Object.create(context.Studio.prototype);
 ui.config={workflow_mode:'relight'};ui.source={url:'original.mp4'};ui.project={id:'shot',phase:'opening',selected_url:'selected.mp4',opening_url:'lighting.png',config:{start:4}};ui.composerStage=()=> 'review';
 assert.equal(ui.comparisonTarget().kind,'image');assert.equal(ui.comparisonTarget().result,'lighting.png');assert.equal(ui.comparisonTarget().resultLabel,'Lighting image');assert.equal(ui.comparisonTarget().offset,0);

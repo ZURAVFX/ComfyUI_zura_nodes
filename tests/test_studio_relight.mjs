@@ -1,3 +1,4 @@
+import {runStudioVMInContext} from './studio_vm_fixture.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
@@ -6,12 +7,12 @@ const code=fs.readFileSync(new URL('../web/studio.js',import.meta.url),'utf8').r
 const calls=[];
 let response;
 const context={clipLength,recoverClipLength,api:{fetchApi:async(path,options)=>{calls.push({path,body:options?.body?JSON.parse(options.body):null});return {ok:true,json:async()=>response};}},localStorage:{setItem(){},removeItem(){}}};
-vm.createContext(context);vm.runInContext(code+'\nthis.Studio=ArtistStudio;',context);
+vm.createContext(context);runStudioVMInContext(code+'\nthis.Studio=ArtistStudio;',context);
 const ui=Object.create(context.Studio.prototype),fields={};
 for(const [id,value] of Object.entries({prompt:'Warm sunset through the windows',image_prompt:'',scope:'person',length_mode:'custom',mask_method:'auto',mask_prompt:'person',subject_mode:'auto',finished_frame_position:'first',finished_frame_number:1,start:0,duration:2,performer:-1,margin:20,seed:42,audio_start:0,'audio-mode':'original',resolution:'1280',quality:'fast',h3_steps:8,h3_attention:'native'}))fields[id]={value};
 for(const id of ['pitch','remove_text','lip_sync','refine_lips','preserve_identity'])fields[id]={checked:false};
 let mode='relight',engine='wan';
-Object.assign(ui,{$:id=>fields[id],container:{querySelector:selector=>({value:selector.includes('gs-workflow')?mode:engine})},config:{workflow_mode:'relight',engine:'wan',image_prompt:'',prompt:''},lookMode:'build',references:[],source:{id:'source',duration:3},resetEpoch:0,busy:false,perform:fn=>fn(0),syncForm(){},render(){}});
+Object.assign(ui,{storage:context.localStorage,$:id=>fields[id],container:{querySelector:selector=>({value:selector.includes('gs-workflow')?mode:engine})},config:{workflow_mode:'relight',engine:'wan',image_prompt:'',prompt:''},lookMode:'build',references:[],source:{id:'source',duration:3},resetEpoch:0,busy:false,perform:fn=>fn(0),syncForm(){},render(){}});
 ui.selectWorkflow();assert.equal(ui.config.engine,'h3');assert.equal(ui.config.edit_area,'scene');assert.equal(ui.lookMode,'build');
 assert.equal(ui.hasLook(),true,'Lighting direction enables prompt-only setup with no appearance reference');
 fields.prompt.value='';ui.config.prompt='Old saved lighting';assert.equal(ui.hasLook(),false,'Clearing the visible direction must disable preparation even if saved config has an old prompt');

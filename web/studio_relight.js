@@ -1,5 +1,6 @@
+import {workspaceStorage} from './studio_storage.js';
 const KEY='zura-relight-engine-v1';
-const read=()=>{try{return localStorage.getItem(KEY)||'wan21';}catch{return'wan21';}};
+const read=storage=>{try{return storage.getItem(KEY)||'wan21';}catch{return'wan21';}};
 const frameFile=file=>file&&('/view?'+new URLSearchParams({filename:file.filename,subfolder:file.subfolder||'',type:file.type||'output'}));
 
 /** Match the original plate, undoing a lighting model's smaller working raster. */
@@ -13,8 +14,9 @@ export async function lightingFrameAtSourceSize(owner,blob,source){
 
 /** Relight shares the proven edited-frame renderers without sharing its draft. */
 export function installRelightEngines(owner){
-  owner.relightEngine=['wan21','ltx','h3'].includes(read())?read():'wan21';
-  owner.rememberRelightEngine=engine=>{owner.relightEngine=engine;try{localStorage.setItem(KEY,engine);}catch{}};
+  const storage=workspaceStorage(owner);
+  owner.relightEngine=['wan21','ltx','h3'].includes(read(storage))?read(storage):'wan21';
+  owner.rememberRelightEngine=engine=>{owner.relightEngine=engine;try{storage.setItem(KEY,engine);}catch{}};
   owner.selectRelightEngine=engine=>selectRelightEngine(owner,engine);
 }
 

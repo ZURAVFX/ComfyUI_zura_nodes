@@ -1,3 +1,4 @@
+import {normaliseEXRStorage} from './studio_exr_precision.js';
 // Native HDR assets retain their uploaded EXR identity. The PNG is display-only.
 import {frameOutputSize} from './frame_source_resolution.js';
 export const isHDREndpoint=asset=>asset?.asset_kind==='hdr_endpoint';
@@ -38,8 +39,8 @@ export class LTXHDREndpoints{
     if(!this.info.ready)throw new Error('Native HDR setup is incomplete: '+[...(this.info.files||[]).filter(f=>!f.ready).map(f=>f.filename),...(this.info.missingNodes||[])].join(', '));
     const delivery=c.outputWidth===undefined&&c.outputHeight===undefined?{}:{output_width:c.outputWidth,output_height:c.outputHeight};
     const result=await this.request('/zura/studio/ltx/hdr-endpoints/graph',{
-      first_id:c.first.id,last_id:c.last?.id,first_colour:c.first.colour_space,last_colour:c.last?.colour_space,
-      width:c.width,height:c.height,frames:c.frames,prompt:c.prompt,seed:c.seed,output:c.hdrOutput,
+      ...(c.ae_frame_contract?{ae_frame_contract:c.ae_frame_contract}:{}),first_id:c.first.id,last_id:c.last?.id,first_colour:c.first.colour_space,last_colour:c.last?.colour_space,
+      width:c.width,height:c.height,frames:c.frames,prompt:c.prompt,seed:c.seed,output:c.hdrOutput,exr_storage:normaliseEXRStorage(c.exr_storage),
       audio_enabled:c.audioEnabled,audio_file:c.audio?.file,audio_start:c.audioStart||0,custom_loras:c.custom_loras||[],...delivery});
     return result.graph;
   }

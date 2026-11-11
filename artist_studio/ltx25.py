@@ -251,6 +251,10 @@ def build_plan(project, *, scenario, timeline, models, text_encoder_inputs,
              "sigmas": [STAGE1_SIGMAS, STAGE2_SIGMAS]}
     if objects:
         basis["guide_type"] = "canny_objects"
+    if c.get('ae_frame_contract') is not None:
+        from ..comfylink.frame_contract import validate_interval
+        basis['ae_frame_contract'] = validate_interval(c['ae_frame_contract'], frames=frames,
+            fps=fps, width=delivery[0], height=delivery[1])
     if finished_anchor is not None:
         basis["finished_frame_index"] = finished_anchor
     custom_loras = _checked_loras(custom_loras)
@@ -461,6 +465,10 @@ def build_plan(project, *, scenario, timeline, models, text_encoder_inputs,
     video = node(g, "create_video", "CreateVideo", **inputs)
     node(g, "save_video", "SaveVideo", video=video, filename_prefix="zura/ltx25/" + key + "/result",
          format="mp4", **{"format.codec": "h264", "format.codec.encoding": "re-encode", "format.codec.encoding.crf": 16.})
+    if c.get('ae_frame_contract') is not None:
+        from ..comfylink.frame_contract import apply_frame_contract
+        phases['decode'] = apply_frame_contract(g, c['ae_frame_contract'],
+            {'family': 'ltx', 'native_fps': 24, 'output_nodes': ['save_video']})
     return {"schema": SCHEMA, "key": key, "scenario": scenario, "basis": basis,
             "phases": {phase: phases[phase] for phase in PHASES}, "dependencies": dependencies, "artifacts": artifacts,
             "scope": "whole_scene", "background_preservation": False,
@@ -548,6 +556,10 @@ def build_viewport_plan(project, *, scenario, timeline, models, text_encoder_inp
              "model_pins": copy.deepcopy(model_pins), "encoder": copy.deepcopy(text_encoder_inputs),
              "audio": {"generation": "disabled", "delivery": scenario},
              "sigmas": [STAGE1_SIGMAS, STAGE2_SIGMAS]}
+    if c.get('ae_frame_contract') is not None:
+        from ..comfylink.frame_contract import validate_interval
+        basis['ae_frame_contract'] = validate_interval(c['ae_frame_contract'], frames=source_frames,
+            fps=fps, width=delivery[0], height=delivery[1])
     if finished_anchor is not None:
         basis["finished_frame_index"] = finished_anchor
     custom_loras = _checked_loras(custom_loras)
@@ -658,6 +670,10 @@ def build_viewport_plan(project, *, scenario, timeline, models, text_encoder_inp
     video = node(g, "create_video", "CreateVideo", **args)
     node(g, "save_video", "SaveVideo", video=video, filename_prefix="zura/ltx25/" + key + "/result",
          format="mp4", **{"format.codec": "h264", "format.codec.encoding": "re-encode", "format.codec.encoding.crf": 16.})
+    if c.get('ae_frame_contract') is not None:
+        from ..comfylink.frame_contract import apply_frame_contract
+        phases['decode'] = apply_frame_contract(g, c['ae_frame_contract'],
+            {'family': 'ltx', 'native_fps': 24, 'output_nodes': ['save_video']})
     return {"schema": SCHEMA, "key": key, "scenario": scenario, "basis": basis,
             "phases": {phase: phases[phase] for phase in PHASES}, "dependencies": dependencies, "artifacts": artifacts,
             "scope": "whole_scene", "background_preservation": False, "generation_audio": "disabled",
@@ -666,7 +682,8 @@ def build_viewport_plan(project, *, scenario, timeline, models, text_encoder_inp
             "stage1_handoff": "Layout and appearance guides remain native and are cropped before caching.",
             "qualification": "Experimental viewport route; current-media visual testing required.",
             "source_frames": source_frames, "generation_frames": padded,
-            "delivered_frames": padded, "trimmed_tail_frames": 0,
+            "delivered_frames": source_frames if c.get('ae_frame_contract') is not None else padded,
+            "trimmed_tail_frames": padded-source_frames if c.get('ae_frame_contract') is not None else 0,
             "appearance_reference_role": ("composed_scene_plate_at_rope_minus_one" if finished_anchor is None
                                           else "finished_frame_at_selected_time"),
             "graph_hashes": {phase: digest(value) for phase, value in phases.items()}}

@@ -1,3 +1,4 @@
+import {workspaceStorage} from './studio_storage.js';
 import {megapixelSlider,selectNumberOnFocus} from './studio_resolution.js';
 import {buildPaintoutGraph,paintoutValidation,paintoutAvailability,PAINTOUT_DEFAULT_PROMPTS,PAINTOUT_OUTPUT_MODES,PAINTOUT_SIZE_PRESETS,paintoutPresetSize,paintoutRangeFix} from './paintout_recipes.js';
 import {composerIcons as icons} from './studio_composer.js';
@@ -15,9 +16,9 @@ const options=(items,value)=>items.map(([id,label])=>`<option value="${id}" ${id
 
 /** Whole-shot native paintout. Painted anchors always use original source frame IDs. */
 export class PaintoutWorkspace{
-  constructor(owner){
+  constructor(owner){this.storage=workspaceStorage(owner);
     this.owner=owner;this.api=owner.api;this.app=owner.app;this.studio=owner.studio;
-    let saved={};try{saved=JSON.parse(localStorage.getItem(KEY))||{};}catch{}
+    let saved={};try{saved=JSON.parse(this.storage.getItem(KEY))||{};}catch{}
     this.state={mode:'targeted',source:'',mask:'',anchors:[],startFrame:0,frameCount:81,sequenceFps:25,sourceColour:'srgb_display',processingSpace:'SDR (sRGB)',width:1152,height:640,resolutionMode:'default',megapixels:.75,outputMode:'SDR video',seed:42,...saved.draft};
     this.state.anchors=Array.isArray(this.state.anchors)?this.state.anchors:[];this.prompts=saved.prompts||{};this.sourceInfo=saved.sourceInfo||null;this.maskInfo=saved.maskInfo||null;this.job=saved.job||null;this.items=Array.isArray(saved.items)?saved.items.slice(0,12):[];this.playhead=this.state.startFrame;this.selected=-1;this.view='source';this.result=saved.result||this.items.find(item=>item.config?.source===this.state.source)||null;
     this.page=document.createElement('section');this.page.className='zf-page zp-page';
@@ -107,7 +108,7 @@ export class PaintoutWorkspace{
   fps(){return this.sourceInfo?.kind==='video'?this.sourceInfo.fps:this.state.sequenceFps;}
   config(){const c={...this.state,sourceWidth:this.sourceInfo?.width,sourceHeight:this.sourceInfo?.height,anchors:this.state.anchors.map(a=>({...a})),prompt:this.$('prompt').value,keepAudio:true,savePrefix:'paintout/studio',exrPrecision:'float32'};if(c.resolutionMode==='source'&&this.sourceInfo){c.width=Math.ceil(c.sourceWidth/64)*64;c.height=Math.ceil(c.sourceHeight/64)*64;}return c;}
   applySize(){const mode=this.state.resolutionMode;if(mode==='default'){this.state.width=1152;this.state.height=640;}else if(PAINTOUT_SIZE_PRESETS.some(p=>p[0]===mode))Object.assign(this.state,paintoutPresetSize(mode,this.state.megapixels));this.$('width').value=this.state.width;this.$('height').value=this.state.height;}
-  save(){try{localStorage.setItem(KEY,JSON.stringify({draft:this.state,prompts:this.prompts,sourceInfo:this.sourceInfo,maskInfo:this.maskInfo,job:this.job,items:this.items,result:this.result}));}catch{this.message('Browser storage is full. Your output files remain on disk.');}}
+  save(){try{this.storage.setItem(KEY,JSON.stringify({draft:this.state,prompts:this.prompts,sourceInfo:this.sourceInfo,maskInfo:this.maskInfo,job:this.job,items:this.items,result:this.result}));}catch{this.message('Browser storage is full. Your output files remain on disk.');}}
   changed(){this.message('');this.save();this.render();}
   message(text){this.$('message').textContent=text||'';this.$('message').hidden=!text;}
   url(path){return this.api.apiURL(path);}

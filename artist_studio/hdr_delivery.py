@@ -14,7 +14,7 @@ DISTILLED_SIGMAS = "1.0, 0.99375, 0.9875, 0.98125, 0.975, 0.909375, 0.725, 0.421
 
 
 def ltx25_sdr_to_hdr_dynamic_graph(images, *, fps, model, video_vae, audio_vae,
-                                    output, prefix, seed=42, audio=None):
+                                    output, prefix, seed=42, audio=None, exr_storage='half'):
     """Build bounded SDR-to-HDR conversion with exact source-frame restoration.
 
     The source must already have been decoded to normalised sRGB. The caller
@@ -29,7 +29,7 @@ def ltx25_sdr_to_hdr_dynamic_graph(images, *, fps, model, video_vae, audio_vae,
     graph=ltx25_sdr_to_hdr_graph(['zura_hdr_prepare',0],width=64,height=64,
                                   frames=9,fps=fps,model=model,video_vae=video_vae,
                                   audio_vae=audio_vae,output=output,prefix=prefix,
-                                  seed=seed,audio=audio_link)
+                                  seed=seed,audio=audio_link,exr_storage=exr_storage)
     graph['zura_hdr_prepare']={'class_type':'ZuraLTXHDRPrepare','inputs':{'images':list(images)}}
     if audio is not None:
         if not isinstance(audio,(list,tuple)) or len(audio)!=2:
@@ -47,7 +47,7 @@ def ltx25_sdr_to_hdr_dynamic_graph(images, *, fps, model, video_vae, audio_vae,
 
 def ltx25_sdr_to_hdr_graph(images, *, width, height, frames, fps, model, video_vae,
                            audio_vae, output, prefix, seed=42, audio=None,
-                           delivered_width=None, delivered_height=None, delivered_frames=None):
+                           delivered_width=None, delivered_height=None, delivered_frames=None, exr_storage='half'):
     """Construct the official single-stage LTX 2.5 SDR-to-HDR recipe.
 
     Caller supplies sRGB images already resized/padded to exactly width x height
@@ -104,11 +104,11 @@ def ltx25_sdr_to_hdr_graph(images, *, width, height, frames, fps, model, video_v
     graph["hdr_unpad_raster"] = n("ImageCrop", image=["hdr_unpad_frames", 0], width=delivered_width,
                                   height=delivered_height, x=0, y=0)
     graph.update(ltx_hdr_delivery(["hdr_unpad_raster", 0], fps, output=output, prefix=prefix,
-                                  working_space="ltx25_acescct_qualified", audio=audio))
+                                  working_space="ltx25_acescct_qualified", audio=audio, exr_storage=exr_storage))
     return graph
 
 
-def ltx_hdr_delivery(images, fps, *, output, prefix, working_space, audio=None):
+def ltx_hdr_delivery(images, fps, *, output, prefix, working_space, audio=None, exr_storage="half"):
     """Build native Comfy delivery nodes for already-qualified ACEScct frames.
 
     ``images`` and ``audio`` are Comfy API graph links. The return value is a
@@ -118,6 +118,8 @@ def ltx_hdr_delivery(images, fps, *, output, prefix, working_space, audio=None):
     """
     if working_space != "ltx25_acescct_qualified":
         raise ValueError("HDR delivery requires a qualified LTX 2.5 ACEScct generation.")
+    if exr_storage not in ("half", "float32"):
+        raise ValueError("Choose half or float32 EXR storage.")
     if output not in ("hlg_video", "acescg_exr", "hlg_and_exr"):
         raise ValueError("Choose HLG video, ACEScg EXR, or both.")
     if not isinstance(images, (list, tuple)) or len(images) != 2:
@@ -148,5 +150,5 @@ def ltx_hdr_delivery(images, fps, *, output, prefix, working_space, audio=None):
         graph["zura_hdr_exr"] = {"class_type": "LTXVHDRDecodePostprocess", "inputs": {
             "image": list(images), "transfer": "acescct", "save_exr": False,
             "exr_color_space": "acescg", "output_dir": "genj/hdr/" + prefix,
-            "filename_prefix": "frame", "half_precision": True}}
+            "filename_prefix": "frame", "half_precision": exr_storage == "half"}}
     return graph

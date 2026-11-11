@@ -40,8 +40,16 @@ def create_native_job(server, asset, body, check_asset, output_root, *, ffmpeg=N
     else:raise ValueError('Choose HDR video or an EXR sequence.')
     info=describe(str(source))
     if start+count>info['count']:raise ValueError('The selected range extends past the source.')
+    contract=body.get('ae_frame_contract')
+    if contract is not None:
+        from ..comfylink.frame_contract import validate_interval
+        fps=body.get('sequence_fps',24) if sequence else info['fps']
+        validate_interval(contract,frames=count,fps=fps,width=info['width'],height=info['height'])
     plan=plan_chunks(start,count,info['width'],info['height'],overlap=overlap,max_frames=max_chunk_frames,mode=_planning_mode)
     chunk_body=dict(body,start_frame=plan[0].start,frame_count=plan[0].count)
+    # The immutable whole-source contract belongs to assembly, not each
+    # overlapping inference window. Native chunk staging verifies each count.
+    chunk_body.pop('ae_frame_contract',None)
     builder=_graph_builder or build_asset_graph
     first_graph,details=builder(asset,chunk_body,check_asset)
     # Validate artist-selected LoRAs before starting a potentially expensive
@@ -52,6 +60,9 @@ def create_native_job(server, asset, body, check_asset, output_root, *, ffmpeg=N
     selections=copy.deepcopy(selections)
     apply_installed_ltx_loras(first_graph,selections)
     output=details['output']
+    exr_storage=body.get('exr_storage','half')
+    if exr_storage not in ('half','float32'): raise ValueError('Choose half or float32 EXR storage.')
+    if details.get('exr_storage','half') != exr_storage: raise ValueError('HDR graph storage does not match the requested output.')
     # Fail before running the expensive GPU graph if the final outputs cannot
     # be encoded or safely published. The staged float32 size is predictable;
     # leave room for one EXR copy and the compressed deliverable as well.
@@ -63,7 +74,7 @@ def create_native_job(server, asset, body, check_asset, output_root, *, ffmpeg=N
     output_dir=Path(output_root)/'genj'/'hdr'
     # Conservative estimate for an uncompressed half-float EXR sequence,
     # encoded video and one temporary frame. Actual codec sizes can vary.
-    output_bytes=count*details['width']*details['height']*(8 if output!='hlg_video' else 2)
+    output_bytes=count*details['width']*details['height']*((14 if exr_storage=='float32' else 8) if output!='hlg_video' else 2)
     reserve=64*1024*1024
     same_device=os.stat(staging).st_dev==os.stat(output_dir).st_dev
     if shutil.disk_usage(staging).free < staged_bytes + (output_bytes if same_device else 0) + reserve:
@@ -86,7 +97,9 @@ def create_native_job(server, asset, body, check_asset, output_root, *, ffmpeg=N
     store=HDRChunkStore(staging,identity,plan,details['width'],details['height'],create=True)
 
     def make_graph(part):
-        graph,_=builder(asset,dict(body,start_frame=part.start,frame_count=part.count),check_asset)
+        part_body=dict(body,start_frame=part.start,frame_count=part.count)
+        part_body.pop('ae_frame_contract',None)
+        graph,_=builder(asset,part_body,check_asset)
         return apply_installed_ltx_loras(graph,selections)
     renderer=ComfyHDRRenderer(server,store,make_graph,_image_node,anchor_strength,anchor_mode,client_id)
 
@@ -94,7 +107,7 @@ def create_native_job(server, asset, body, check_asset, output_root, *, ffmpeg=N
         paths=[]
         try:
             if output in ('acescg_exr','hlg_and_exr'):
-                paths.append(await asyncio.to_thread(export_exr_zip,staged,output_root,_prefix+'_'+identity))
+                paths.append(await asyncio.to_thread(export_exr_zip,staged,output_root,_prefix+'_'+identity,half_precision=exr_storage=='half'))
             if output in ('hlg_video','hlg_and_exr'):
                 paths.append(await asyncio.to_thread(export_hlg_video,staged,output_root,_prefix+'_'+identity,
                     fps=details['fps'],audio_source=str(source) if details['has_audio'] else None,
@@ -105,7 +118,7 @@ def create_native_job(server, asset, body, check_asset, output_root, *, ffmpeg=N
             paths.append(preview)
             if staged.cancelled.is_set():raise HDRChunkCancelled('HDR conversion cancelled.')
             return {'files':[str(path) for path in paths if path!=preview],'preview':str(preview),
-                    'frames':count,'fps':details['fps']}
+                    'frames':count,'fps':details['fps'],'exr_storage':exr_storage}
         except Exception:
             # Both paths were created exclusively by this call. Never touch a
             # pre-existing deliverable if a subsequent export fails.
@@ -114,7 +127,7 @@ def create_native_job(server, asset, body, check_asset, output_root, *, ffmpeg=N
 
     job=HDRChunkRunner(store,renderer.submit,export,renderer.cancel)
     return job,{'id':identity,'chunks':len(plan),'frames':count,'fps':details['fps'],
-                'width':details['width'],'height':details['height'],'output':output}
+                'width':details['width'],'height':details['height'],'output':output,'exr_storage':exr_storage}
 
 
 def create_sdr_job(server, asset, body, check_asset, output_root, *, ffmpeg=None, max_chunk_frames=121, overlap=8, anchor_strength=None):

@@ -16,6 +16,7 @@ class ReviewedHDRQueue:
             raise ValueError('Invalid HDR outpaint job identity.')
         self.server, self.root, self.client_id, self.identity = server, Path(output_root).resolve(), client_id, identity
         self.selection, self.has_audio, self.update, self.on_prompt = selection, has_audio, update, on_prompt
+        self.exr_storage = 'half'
         self.started = {}
         self.owned_stage = None
 
@@ -62,7 +63,7 @@ class ReviewedHDRQueue:
                 return await asyncio.to_thread(checked_delivery, self.root, outputs, self.identity,
                     width=self.selection['width'] if self.selection.get('mode')=='black' else self.selection['padded_width'],
                     height=self.selection['height'] if self.selection.get('mode')=='black' else self.selection['padded_height'],
-                    frames=count, has_audio=self.has_audio)
+                    frames=count, has_audio=self.has_audio, exr_storage=self.exr_storage)
             running, pending = queue.get_current_queue_volatile()
             if (not any(item[1] == prompt_id for item in (*running, *pending)) and
                     time.monotonic() - self.started[prompt_id] > 20):
@@ -85,8 +86,9 @@ class ReviewedHDRQueue:
             await asyncio.to_thread(path.unlink, missing_ok=True)
             self.owned_stage = None
 
-    async def run(self, *, source, review_key, colour_space, prompt, seed, check_asset):
+    async def run(self, *, source, review_key, colour_space, prompt, seed, check_asset, exr_storage='half'):
+        self.exr_storage = exr_storage
         return await run_reviewed_hdr_outpaint(source=source, selection=self.selection, review_key=review_key,
             colour_space=colour_space, has_audio=self.has_audio, prompt=prompt, seed=seed, identity=self.identity,
             check_asset=check_asset, submit=self.submit, wait=self.wait, cancel=self.cancel,
-            update=self.update, cleanup=self.cleanup)
+            update=self.update, cleanup=self.cleanup, exr_storage=exr_storage)

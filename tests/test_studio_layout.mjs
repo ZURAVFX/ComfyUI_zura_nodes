@@ -1,3 +1,4 @@
+import {runStudioVMInContext} from './studio_vm_fixture.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
@@ -7,7 +8,7 @@ const imageAreaCss=fs.readFileSync(new URL('../web/studio_image_area.css',import
 const studioSource=fs.readFileSync(new URL('../web/studio.js',import.meta.url),'utf8');
 const source=studioSource.replace(/^import .*;\r?\n/gm,'').replace(/^export /gm,'').split('app.registerExtension({')[0];
 const context={ContentDetection:class{},document:{createElement:()=>({setAttribute(){}})}};
-vm.createContext(context);vm.runInContext(source+'\nthis.Studio=ArtistStudio;',context);
+vm.createContext(context);runStudioVMInContext(source+'\nthis.Studio=ArtistStudio;',context);
 context.Studio.prototype.bind=()=>{};context.Studio.prototype.syncForm=()=>{};
 const html=new context.Studio().container.innerHTML;
 const ids=[...html.matchAll(/\bid="([^"]+)"/g)].map(match=>match[1]);

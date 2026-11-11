@@ -13,13 +13,15 @@ from .hdr_delivery import ltx_hdr_delivery
 from .ltx_hdr_endpoints import VIDEO_VAE, MAX_PIXEL_FRAMES, endpoint_source
 
 
-def build_native_hdr_plan(project, *, hdr_endpoint, hdr_source=None, output="hlg_and_exr", **kwargs):
+def build_native_hdr_plan(project, *, hdr_endpoint, hdr_source=None, output="hlg_and_exr", exr_storage='half', **kwargs):
     """Adapt an approved native plan without sharing SDR caches or thumbnails.
 
     The caller must resolve/check the EXR manifest and every model pin, and
     associate that EXR with the approved opening. Its PNG is display-only.
     Existing signed Union masks and frozen soundtrack semantics stay intact.
     """
+    if exr_storage not in ('half','float32'):
+        raise ValueError('Choose half or float32 EXR storage.')
     if project.get("config", {}).get("viewport_render"):
         raise ValueError("Native HDR performance is not a viewport recipe.")
     if output not in ("hlg_video", "hlg_and_exr", "acescg_exr"):
@@ -58,6 +60,7 @@ def build_native_hdr_plan(project, *, hdr_endpoint, hdr_source=None, output="hlg
         "guide_space": "ACEScct",
         "resize_space": "linear ACEScg",
     }
+    if exr_storage != 'half': basis['native_hdr']['exr_storage'] = exr_storage
     from .ltx_hdr_performance import marker as hdr_video_marker
     source_marker = hdr_video_marker(project.get("source"))
     if bool(source_marker) != bool(hdr_source):
@@ -136,9 +139,9 @@ def build_native_hdr_plan(project, *, hdr_endpoint, hdr_source=None, output="hlg
     audio = ["trim_audio", 0] if "trim_audio" in graph else None
     prefix = "performance_" + new_key[:32]
     graph.update(ltx_hdr_delivery(images, basis["timeline"]["fps"], output=output,
-        prefix=prefix, working_space="ltx25_acescct_qualified", audio=audio))
+        prefix=prefix, working_space="ltx25_acescct_qualified", audio=audio, exr_storage=exr_storage))
     if output in ("hlg_and_exr", "acescg_exr"):
-        graph["zura_hdr_archive"] = n("ZuraHDRPackageACEScct", images=images, prefix=prefix)
+        graph["zura_hdr_archive"] = n("ZuraHDRPackageACEScct", images=images, prefix=prefix, **({'exr_storage':exr_storage} if exr_storage != 'half' else {}))
         preview = ["zura_hdr_exr", 0]
     else:
         graph["tonemap"] = n("LTXVHDRDecodePostprocess", image=images, transfer="acescct",
@@ -151,6 +154,9 @@ def build_native_hdr_plan(project, *, hdr_endpoint, hdr_source=None, output="hlg
     graph["preview_video"] = n("CreateVideo", **inputs)
     graph["save_preview"] = n("ZuraHDRSaveExactRate", video=["preview_video", 0],
         filename_prefix="genj/hdr/" + prefix + "_preview", fps=basis["timeline"]["fps"])
+    if basis.get('ae_frame_contract') is not None:
+        from ..comfylink.frame_contract import prepare_frame_contract_graph
+        phases['decode']=prepare_frame_contract_graph(graph,basis['ae_frame_contract'],'hdr')
     titles = {"opening": "Read original HDR appearance reference",
         "video_vae_load": "Load full HDR VAE", "video_vae": "Prepare float32 HDR VAE",
         "sample": "Generate HDR performance", "decode": "Decode HDR performance",
@@ -164,5 +170,6 @@ def build_native_hdr_plan(project, *, hdr_endpoint, hdr_source=None, output="hlg
     plan["hdr_delivery"] = {"output": output, "prefix": prefix,
         "preview_node": "save_preview", "video_node": "zura_hdr_save_video" if output != "acescg_exr" else None,
         "archive_node": "zura_hdr_archive" if output != "hlg_video" else None}
+    if exr_storage != 'half': plan['hdr_delivery']['exr_storage'] = exr_storage
     plan["qualification"] = "Internal native HDR Union experiment. Not enabled in Studio by default; representative HDR/artist qualification required."
     return plan

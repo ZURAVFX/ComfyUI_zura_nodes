@@ -105,9 +105,10 @@ def create_long_hdr_review_job(server, source, selection, *, review_key, output_
 
 def create_long_hdr_outpaint_job(server, source, selection, *, review_key, output_root,
                                  input_root, check_asset, prompt='', seed=42,
-                                 client_id='zura-hdr-outpaint', ffmpeg=None):
+                                 client_id='zura-hdr-outpaint', ffmpeg=None, exr_storage='half'):
     """Create one isolated job; no Studio route is registered here."""
     from .outpaint_chunks import disk_requirements
+    if exr_storage not in ('half','float32'): raise ValueError('Choose half or float32 EXR storage.')
     values=long_plan_values(selection)
     expected,parts,_=plan_hdr_windows(source,duration=selection['requested_duration'],
                                        **values)
@@ -131,7 +132,7 @@ def create_long_hdr_outpaint_job(server, source, selection, *, review_key, outpu
     from .hdr_chunk_comfy import staging_root
     stage_dir=staging_root();stage_dir.mkdir(parents=True,exist_ok=True)
     staging_bytes=sum(part.count for part in parts)*expected['width']*expected['height']*12+512*1024**2
-    output_bytes+=expected['frames']*expected['width']*expected['height']*10
+    output_bytes+=expected['frames']*expected['width']*expected['height']*(16 if exr_storage=='float32' else 10)
     groups={}
     for directory,needed in ((output_dir,output_bytes),(input_dir,input_bytes),(stage_dir,staging_bytes)):
         device=os.stat(directory).st_dev
@@ -195,7 +196,7 @@ def create_long_hdr_outpaint_job(server, source, selection, *, review_key, outpu
 
     def conversion(path):
         return create_long_hdr_conversion(server,source,expected,path,review_key=review_key,
-            output_root=output_root,check_asset=check_asset,client_id=client_id,ffmpeg=executable)
+            output_root=output_root,check_asset=check_asset,client_id=client_id,ffmpeg=executable,exr_storage=exr_storage)
 
     async def cleanup(path):
         if Path(path)==intermediate:await asyncio.to_thread(intermediate.unlink,missing_ok=True)

@@ -16,6 +16,31 @@ tree = ast.parse(Path('__init__.py').read_text(encoding='utf-8'))
 module_version = next(ast.literal_eval(n.value) for n in tree.body if isinstance(n, ast.Assign) and any(isinstance(t, ast.Name) and t.id == '__version__' for t in n.targets))
 assert version == module_version, 'Update __version__ as well as pyproject.toml'
 assert Path('LICENSE').is_file()
+for asset in ('comfylink/__init__.py', 'comfylink/MIT-LICENSE.txt',
+              'comfylink/security.py', 'comfylink/routes.py',
+              'comfylink/preflight.py', 'comfylink/presets.py',
+              'comfylink/nodes.py', 'comfylink/float_io.py',
+              'comfylink/float_nodes.py', 'comfylink/ltx_colour.py',
+              'comfylink/frame_contract.py', 'comfylink/frame_nodes.py',
+              'comfylink/studio_sessions.py', 'docs/COMFYLINK.md',
+              'docs/COMFYLINK_STUDIO.md', 'web/studio_comfylink.js',
+              'web/studio_comfylink.css', 'web/studio_storage.js',
+              'web/studio_mode_adapters.js', 'web/studio_ae_frame_contract.js',
+              'web/studio_exr_precision.js', 'tests/test_comfylink_adapter.py',
+              'tests/test_comfylink_nodes.py', 'tests/test_comfylink_float_io.py',
+              'tests/test_comfylink_float_preflight.py',
+              'tests/test_comfylink_ltx_colour.py',
+              'tests/test_comfylink_frame_contract.py',
+              'tests/test_comfylink_studio.py',
+              'tests/test_comfylink_studio_instance.py',
+              'tests/test_hdr_exr_precision.py', 'tests/test_studio_ae_bridge.mjs',
+              'tests/test_studio_ae_frames.mjs', 'tests/test_studio_exr_precision.mjs'):
+    assert Path(asset).is_file(), f'Missing ComfyLink/precision release asset: {asset}'
+for name in ('01-roundtrip.json', '02-invert.json', '03-batch-invert.json',
+             '04-native-video.json', '05-zura-character-mask.json',
+             '06-zura-character-matte.json'):
+    preset = json.loads(Path('comfylink/catalogue', name).read_text(encoding='utf-8'))
+    assert preset, f'Empty ComfyLink preset: {name}'
 for asset in ('model_folders.py', 'model_access.py', 'model_file_import.py', 'web/studio_model_access.js',
               'tests/test_model_access.py', 'tests/test_model_access_ui.mjs', 'web/studio_model_storage.js',
               'web/studio_model_setup.css', 'web/studio_model_download.js',

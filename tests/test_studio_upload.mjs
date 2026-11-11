@@ -1,9 +1,10 @@
+import {runStudioVMInContext} from './studio_vm_fixture.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
 const source=fs.readFileSync(new URL('../web/studio.js',import.meta.url),'utf8').replace(/^import .*;\r?\n/gm,'').replace(/^export /gm,'').split('app.registerExtension({')[0];
 const context={FormData,URLSearchParams,AbortController,setInterval,clearInterval,setTimeout,clearTimeout,localStorage:{removeItem(){}}};
-vm.createContext(context);vm.runInContext(source+'\nthis.Studio=ArtistStudio;',context);
+vm.createContext(context);runStudioVMInContext(source+'\nthis.Studio=ArtistStudio;',context);
 for(const type of ['source','character','ready','audio']){
   const input={},classes=new Set(),drop={classList:{add:c=>classes.add(c),remove:c=>classes.delete(c)}};
   const ui=Object.create(context.Studio.prototype),uploads=[];ui.$=id=>id===type?input:drop;ui.upload=(...args)=>uploads.push(args);ui.bindUpload(type);
@@ -19,7 +20,7 @@ for(const type of ['source','character','ready','audio']){
 // resets the old shot and retains a working thumbnail URL for the loaded clip.
 const ui=Object.create(context.Studio.prototype);const calls=[];
 context.api={apiURL:p=>p,fetchApi:async(path,options)=>{calls.push(path);assert.equal(options.body.get('file').name,'source.mp4');return {ok:true,json:async()=>({id:'video',file:'genj_studio/video/reference.mp4',duration:15,thumbnail_url:'/view?thumbnail'})};}};
-Object.assign(ui,{resetEpoch:0,resetting:false,busy:false,project:{phase:'done'},config:{duration:9,start:4},message(){},render(){},syncForm(){this.synced=true;}});
+Object.assign(ui,{storage:context.localStorage,resetEpoch:0,resetting:false,busy:false,project:{phase:'done'},config:{duration:9,start:4},message(){},render(){},syncForm(){this.synced=true;}});
 await ui.upload('source',new File(['video bytes'],'source.mp4',{type:'video/mp4'}));
 assert.deepEqual(calls,['/zura/studio/upload?kind=video']);assert.equal(ui.source.id,'video');assert.equal(ui.source.thumbnail_url,'/view?thumbnail');assert.equal(ui.project,null);assert.equal(ui.config.duration,2);assert.equal(ui.config.start,0);assert.equal(ui.busy,false);assert.equal(ui.synced,true);
 ui.message=(text,error)=>{ui.notice=text;ui.noticeError=error;};

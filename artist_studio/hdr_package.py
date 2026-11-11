@@ -82,14 +82,17 @@ class ZuraHDRPackageACEScct:
     """Deliver bounded ACEScct model output as scene-linear ACEScg EXRs."""
     @classmethod
     def INPUT_TYPES(cls):
-        return {'required':{'images':('IMAGE',), 'prefix':('STRING',{'default':''})}}
+        return {'required':{'images':('IMAGE',), 'prefix':('STRING',{'default':''})},
+                'optional':{'exr_storage':(['half','float32'],{'default':'half'})}}
     RETURN_TYPES=('STRING',)
     RETURN_NAMES=('archive',)
     OUTPUT_NODE=True
     FUNCTION='package'
     CATEGORY='Zura/Artist Studio'
 
-    def package(self, images, prefix):
+    def package(self, images, prefix, exr_storage="half"):
+        if exr_storage not in ("half", "float32"):
+            raise ValueError("Choose half or float32 EXR storage.")
         import threading
         import torch
         import folder_paths
@@ -103,7 +106,7 @@ class ZuraHDRPackageACEScct:
             cancelled=threading.Event()
             def stitched(self):
                 yield images
-        path=export_exr_zip(BoundedFrames(),folder_paths.get_output_directory(),prefix)
+        path=export_exr_zip(BoundedFrames(),folder_paths.get_output_directory(),prefix, half_precision=exr_storage == "half")
         return {'ui':{'files':[{'filename':path.name,'subfolder':'genj/hdr','type':'output'}]},
                 'result':(str(path),)}
 

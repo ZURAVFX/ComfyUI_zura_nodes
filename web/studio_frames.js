@@ -1,3 +1,5 @@
+import {selectedEXRStorage} from './studio_exr_precision.js';
+import {workspaceStorage} from './studio_storage.js';
 import {installOwnedExecuting} from './studio_progress.js';
 import {submitOwnedGraph,recoverOwnedSubmission,cancelOwnedJob} from './studio_owned_jobs.js';
 import {megapixelSlider,editableDimension,megapixelMaximum} from './studio_resolution.js';
@@ -17,9 +19,9 @@ const KEY='zura-first-last-v1';
 const escape=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const view=(api,file,type='output')=>api.apiURL('/view?'+new URLSearchParams({filename:file.filename,subfolder:file.subfolder||'',type}));
 export class FrameVideoWorkspace{
-  constructor(owner){
+  constructor(owner){this.storage=workspaceStorage(owner);
     this.owner=owner;this.api=owner.api;this.app=owner.app;this.studio=owner.studio;
-    let saved={};try{saved=JSON.parse(localStorage.getItem(KEY))||{};}catch{}
+    let saved={};try{saved=JSON.parse(this.storage.getItem(KEY))||{};}catch{}
     this.nativeHDR=new LTXHDREndpoints(this.api,(path,body)=>this.fetch(path,body));
     this.assets=saved.assets||{};this.job=saved.job||null;this.pendingSubmission=saved.pendingSubmission||null;this.items=Array.isArray(saved.items)?saved.items.slice(0,12):[];
     if(this.job?.cancelPending)this.job.cancelRetryAvailable=true;
@@ -65,7 +67,7 @@ export class FrameVideoWorkspace{
     // Progress gets its own row; it must never cover the shot being reviewed.
     this.page.querySelector('.zf-viewer').after(this.$('progress'));
     this.$('progress').classList.add('zs-progress-row');
-    this.hdrOutput=new LTXHDRDelivery(this.api,{key:'zura-first-last-hdr',onSetup:info=>{this.hdrSetup=info;this.selectAvailability();if(!info.ready)this.$('model-downloads').open=true;},onUpdate:job=>this.hdrUpdate(job),onComplete:take=>{
+    this.hdrOutput=new LTXHDRDelivery(this.api,{storage:this.storage,key:'zura-first-last-hdr',onSetup:info=>{this.hdrSetup=info;this.selectAvailability();if(!info.ready)this.$('model-downloads').open=true;},onUpdate:job=>this.hdrUpdate(job),onComplete:take=>{
       if(!this.items.some(item=>item.file.filename===take.file.filename&&item.file.subfolder===take.file.subfolder))this.items.unshift(take);
       this.items=this.items.slice(0,12);this.save();this.renderHistory();
     }});
@@ -145,9 +147,9 @@ export class FrameVideoWorkspace{
     if(!Object.values(this.assets).includes(asset))return;
     asset.width=width;asset.height=height;if(asset===this.assets.first)this.applySourceSize();this.save();this.render();
   }
-  config(){return {twoStage:this.$('engine').value==='ltx'&&!hasHDREndpoint(this.assets)&&this.$('two-stage').checked,fast:this.$('engine').value==='ltx'&&!hasHDREndpoint(this.assets)&&this.$('fast').checked,engine:this.$('engine').value,first:this.assets.first,last:this.assets.last,audio:this.assets.audio,audioEnabled:this.$('audio-enabled').checked,prompt:this.$('prompt').value,width:Number(this.$('width').value),height:Number(this.$('height').value),...(this.sourceResolution()||{}),sourceSize:this.sourceSize,sizePreset:this.$('size-preset').value,megapixels:Number(this.$('megapixels').value),frames:Number(this.$('length').value),steps:Number(''+this.$('steps').value),seed:Number(this.$('seed').value),random:this.$('random').checked,hdrOutput:this.$('engine').value==='ltx'?this.$('output').value:'sdr',custom_loras:this.loras.value(),wan_high_loras:this.wanHighLoras.value(),wan_low_loras:this.wanLowLoras.value()};}
+  config(){return {exr_storage:selectedEXRStorage(this.owner.outputSettings,this.$('output').value),twoStage:this.$('engine').value==='ltx'&&!hasHDREndpoint(this.assets)&&this.$('two-stage').checked,fast:this.$('engine').value==='ltx'&&!hasHDREndpoint(this.assets)&&this.$('fast').checked,engine:this.$('engine').value,first:this.assets.first,last:this.assets.last,audio:this.assets.audio,audioEnabled:this.$('audio-enabled').checked,prompt:this.$('prompt').value,width:Number(this.$('width').value),height:Number(this.$('height').value),...(this.sourceResolution()||{}),sourceSize:this.sourceSize,sizePreset:this.$('size-preset').value,megapixels:Number(this.$('megapixels').value),frames:Number(this.$('length').value),steps:Number(''+this.$('steps').value),seed:Number(this.$('seed').value),random:this.$('random').checked,hdrOutput:this.$('engine').value==='ltx'?this.$('output').value:'sdr',custom_loras:this.loras.value(),wan_high_loras:this.wanHighLoras.value(),wan_low_loras:this.wanLowLoras.value()};}
   async patchLoras(graph,config){if(config.engine==='wan'){graph=await this.wanHighLoras.patch(graph,config.wan_high_loras||[]);return this.wanLowLoras.patch(graph,config.wan_low_loras||[]);}return this.loras.patch(graph,config.custom_loras||[]);}
-  save(){const c=this.config();try{localStorage.setItem(KEY,JSON.stringify({assets:this.assets,draft:{...c,fastLtx:this.$('fast').checked,length:c.frames},job:this.job,pendingSubmission:this.pendingSubmission,items:this.items}));return true;}catch{this.message('Browser storage is full. Outputs still save in ComfyUI/output/zura/first_last.');return false;}}
+  save(){const c=this.config();try{this.storage.setItem(KEY,JSON.stringify({assets:this.assets,draft:{...c,fastLtx:this.$('fast').checked,length:c.frames},job:this.job,pendingSubmission:this.pendingSubmission,items:this.items}));return true;}catch{this.message('Browser storage is full. Outputs still save in ComfyUI/output/zura/first_last.');return false;}}
   busy(){return !!(this.job||this.pendingSubmission||this.submitting||this.uploading||this.hdrOutput?.busy);}
   message(text){this.$('message').hidden=!text;this.$('message').textContent=text;}
   async fetch(path,body){return this.owner.fetch(path,body);}

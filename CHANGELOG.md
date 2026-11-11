@@ -7,6 +7,14 @@
 
 # Release notes
 
+## 1.3.61 - 11 November 2026
+
+- Add an optional ComfyLink After Effects session to the existing Studio, with 14 native mode adapters, a compact session strip and immediate Leave control. Keep AE drafts separate from ordinary Studio and other tabs. Normal Studio remains available without a ComfyLink licence; the separate AE extension is not bundled.
+- Bind the local bridge to its ComfyUI instance and active session, authenticate source and result transfers, consume the launch credential from the URL fragment and clean up expired or departed sessions. Preserve selected original masters separately from previews.
+- Carry the requested AE source interval through supported native graphs. Generate the model's required frame grid internally, then trim delivery to the requested frame count and check received media dimensions, count and rational frame rate. Main character/viewport and authored Director routes require 24 fps; unsupported routes fail explicitly. Image return requires one source frame. HDR frame extension in an AE session remains unsupported.
+- Add high-depth frame load/save nodes and an explicit scene-linear Rec.709/ACEScg to LTX ACEScct colour bridge. Raw FLOAT transport retains finite negative, over-one and alpha samples; downstream model processing can still alter them. The LTX model's ACEScct domain remains bounded to [0, 1], with rejection by default and explicit clamping as an option. Custom ICC conversion remains unsupported.
+- Add selectable FLOAT (32-bit) EXR storage to native HDR delivery paths, with the existing HALF (16-bit) default preserved for ordinary Studio. The separate high-depth save node defaults to FLOAT. Verify CPU transport, graph construction, session boundaries and real OpenImageIO EXR storage/readback. Full live GPU, After Effects import and shot-quality qualification across the mode matrix remains outstanding.
+
 ## 1.3.60 - 9 November 2026
 
 - Restore a reviewed Wan lighting image to the original source dimensions before transferring it to LTX or H3 Relight. This accepts smaller working images without cropping or asking for another generation.

@@ -1,3 +1,6 @@
+import {aeFrameRequest} from './studio_ae_frame_contract.js';
+import {selectedEXRStorage,normaliseEXRStorage} from './studio_exr_precision.js';
+import {workspaceStorage} from './studio_storage.js';
 import {OutpaintFirstFrame} from './studio_outpaint_first_frame.js';
 import {installOwnedExecuting} from './studio_progress.js';
 import {OutpaintTrim} from './studio_outpaint_trim.js';
@@ -9,7 +12,7 @@ import {OutpaintLayers} from './studio_outpaint_layers.js';
 // Experimental workspace. The owner must deliberately enable the entry point.
 // Review is mandatory and server-bound to the exact source and geometry.
 export class OutpaintWorkspace {
-  constructor(owner){
+  constructor(owner){this.storage=workspaceStorage(owner);
     this.owner=owner;this.api=owner.api;this.root=owner.root;this.source=null;this.sourceColour='auto';this.job=null;this.review=null;this.submitting=false;
     this.page=document.createElement('section');this.page.className='zo-page';this.page.hidden=true;
     this.page.innerHTML=`<header><h2>Extend a video</h2><button type="button" data-back>Back to video</button></header>
@@ -24,8 +27,8 @@ export class OutpaintWorkspace {
     this.loras=new LTXLoras(this.page.querySelector('.zo-composer'),path=>this.fetch(path),()=>!!this.job||this.submitting);this.$('prompt').after(this.loras.root);
     this.modelDownloads=new StudioModelDownloads(this.$('model-downloads'),(path,body)=>this.fetch('/zura/studio'+path,body),()=>this.checkCapabilities());
     this.closed=true;this.hdrSubmitting=false;this.hdrJob=null;
-    try{this.hdrRecord=JSON.parse(localStorage.getItem('zura-outpaint-hdr-record'))||null;}catch{this.hdrRecord=null;}
-    this.hdrDelivery=new LTXHDRDelivery(this.api,{key:'zura-outpaint-hdr',onSetup:info=>{this.hdrSetup=info;this.modelContextKey=null;this.updateModelContext();if(!info.ready)this.$('model-downloads').open=true;},onUpdate:job=>this.hdrUpdate(job),onComplete:take=>this.hdrComplete(take)});
+    try{this.hdrRecord=JSON.parse(this.storage.getItem('zura-outpaint-hdr-record'))||null;}catch{this.hdrRecord=null;}
+    this.hdrDelivery=new LTXHDRDelivery(this.api,{storage:this.storage,key:'zura-outpaint-hdr',onSetup:info=>{this.hdrSetup=info;this.modelContextKey=null;this.updateModelContext();if(!info.ready)this.$('model-downloads').open=true;},onUpdate:job=>this.hdrUpdate(job),onComplete:take=>this.hdrComplete(take)});
     this.layers=new OutpaintLayers(this.page.querySelector('.zo-action'),{fetch:(path,body)=>this.fetch(path,body),apiURL:path=>this.api.apiURL(path),onChange:()=>this.paint()});
     this.$('download-exr').after(this.layers.root);
     this.$('delivery').onchange=()=>{this.hdrSetup=null;this.modelContextKey=null;this.paint();};
@@ -150,8 +153,8 @@ export class OutpaintWorkspace {
     Object.assign(this.video.style,{left:`${100*b.left/w}%`,top:`${100*b.top/h}%`,width:`${100*(w-b.left-b.right)/w}%`,height:`${100*(h-b.top-b.bottom)/h}%`});
     Object.assign(this.canvas.querySelector('.zo-border').style,{left:this.video.style.left,top:this.video.style.top,width:this.video.style.width,height:this.video.style.height});
   }
-  clearHDRRecord(){if(this.hdrBusy())return false;this.hdrRecord=null;this.hdrJob=null;this.renderHDROutput=null;try{localStorage.removeItem('zura-outpaint-hdr-record');}catch{}return true;}
-  clearResultLinks(){this.outputRef=null;this.outputIsHDR=null;this.$('download').hidden=true;this.$('download-exr').hidden=true;this.$('download-sdr').hidden=true;this.$('retry-hdr').hidden=true;this.layers?.setResult(null);}
+  clearHDRRecord(){if(this.hdrBusy())return false;this.hdrRecord=null;this.hdrJob=null;this.renderHDROutput=null;try{this.storage.removeItem('zura-outpaint-hdr-record');}catch{}return true;}
+  clearResultLinks(){this.completedResult=null;this.outputRef=null;this.outputIsHDR=null;this.$('download').hidden=true;this.$('download-exr').hidden=true;this.$('download-sdr').hidden=true;this.$('retry-hdr').hidden=true;this.layers?.setResult(null);}
   invalidate(){if(this.job||!this.clearHDRRecord())return false;this.review=null;this.setRunState(null,'');this.firstFrame?.changed();this.clearResultLinks();this.$('generate').hidden=true;this.result.hidden=true;this.canvas.hidden=false;this.message(this.source?'Review the selected area before generating.':'Add a source video to begin.');return true;}
   dragStart(e){if(this.mode==='black'||!this.source||this.job||this.submitting||this.hdrBusy())return;e.preventDefault();this.drag={id:e.pointerId,x:e.clientX,y:e.clientY,box:{...this.box}};this.canvas.setPointerCapture?.(e.pointerId);}
   dragMove(e){if(this.job||this.submitting||this.hdrBusy()){this.drag=null;return;}if(!this.drag||this.drag.id!==e.pointerId)return;const r=this.canvas.getBoundingClientRect(),{width:w,height:h}=this.dimensions(),b=this.drag.box;
@@ -201,19 +204,19 @@ export class OutpaintWorkspace {
     }finally{this.submitting=false;this.paint();}
   }
   async pollPreview(id){for(let i=0;i<300&&this.source?.id===id;i++){await new Promise(r=>setTimeout(r,1000));if(this.source?.id!==id)return;try{const a=await this.fetch('/zura/studio/assets/'+encodeURIComponent(id)+'/preview');if(this.source?.id!==id)return;if(a.preview_status==='ready'){this.video.src=a.preview_url;this.video.load();this.trim.update();return;}if(a.preview_status==='error'){this.message(a.preview_error||'Could not prepare the video preview.');return;}}catch{if(this.source?.id!==id)return;this.message('Reconnecting to video preview…');}}}
-  config(){const hdr=this.$('hdr-output').checked;if(this.isHDRSource&&!hdr)throw new Error('HDR input requires the HDR frame-extension workflow.');return {source:this.source?.id,mode:this.mode,start:Number(this.$('start').value),duration:Number(this.$('duration').value),...this.dimensions(),...this.box,black_threshold:2/255,...((hdr?this.trim.long&&this.usesLongHDR():this.usesSDRSections())?{strategy:hdr?'hdr_long':'anchored_masked'}:{}),...(hdr?{hdr:true,colour_space:this.sourceColour||'auto'}:{})};}
+  config(){const hdr=this.$('hdr-output').checked;if(this.isHDRSource&&!hdr)throw new Error('HDR input requires the HDR frame-extension workflow.');return {exr_storage:selectedEXRStorage(this.owner.outputSettings,hdr?'hlg_and_exr':this.$('delivery').value),source:this.source?.id,mode:this.mode,start:Number(this.$('start').value),duration:Number(this.$('duration').value),...this.dimensions(),...this.box,black_threshold:2/255,...((hdr?this.trim.long&&this.usesLongHDR():this.usesSDRSections())?{strategy:hdr?'hdr_long':'anchored_masked'}:{}),...(hdr?{hdr:true,colour_space:this.sourceColour||'auto'}:{})};}
   async reviewSelection(){if(this.job||this.submitting||this.hdrBusy()||!this.source)return;this.submitting=true;this.progressNode=null;this.sampleClock=null;this.sampleRemaining=null;this.sectionTiming=null;this.sectionRemaining=null;this.jobStarted=Date.now();this.$('progress').removeAttribute('value');this.progressDetail();this.paint();try{this.firstFrame.preview.hidden=true;this.setRunState('reviewing','Preparing selection preview','This checks the selected area. It does not generate the final video.');this.message('Preparing selection preview…');this.job=await this.fetch('/zura/studio/outpaint/review',{...this.config(),client_id:this.api.clientId||null});this.poll();}catch(e){this.job=null;this.setRunState('failed','Could not start the job',e.message);this.message(e.message,true);}finally{this.submitting=false;this.paint();}}
   async generate(){if(this.job||this.submitting||this.hdrBusy()||!this.review)return;this.submitting=true;this.progressNode=null;this.sampleClock=null;this.sampleRemaining=null;this.sectionTiming=null;this.sectionRemaining=null;this.jobStarted=Date.now();this.$('progress').removeAttribute('value');this.progressDetail();this.paint();try{
     if(this.isHDRSource&&!this.review.hdr)throw new Error('Review this HDR source using the HDR frame-extension workflow.');
     const output=this.review.hdr?'sdr':this.$('delivery').value;
     if(output!=='sdr'){this.message('Checking HDR conversion setup…');await this.hdrDelivery.preflight({engine:'ltx',hdrOutput:output,...this.dimensions()});}
     if(!this.clearHDRRecord())throw new Error('Wait for HDR delivery or cancel it before starting another render.');
-    this.firstFrame.preview.hidden=true;this.clearResultLinks();this.renderHDROutput=output;
-    await this.fetch('/zura/studio/outpaint/jobs/'+this.review.id+'/approve',{});this.setRunState('rendering','Generating extended video','The video below is the selection preview until generation finishes.');this.message('Starting LTX outpaint…');this.job=await this.fetch('/zura/studio/outpaint/jobs/'+this.review.id+'/render',{prompt:this.$('prompt').value,seed:42,first_frame:this.review.hdr?null:this.firstFrame?.asset?.id||null,custom_loras:this.review.hdr?[]:this.loras.value(),client_id:this.api.clientId||null});this.poll();}catch(e){this.job=null;this.setRunState('failed','Could not start the job',e.message);this.message(e.message,true);}finally{this.submitting=false;this.paint();}}
+    this.firstFrame.preview.hidden=true;this.clearResultLinks();this.renderHDROutput=output;this.renderEXRStorage=this.review.hdr?normaliseEXRStorage(this.review.exr_storage):selectedEXRStorage(this.owner.outputSettings,output);
+    await this.fetch('/zura/studio/outpaint/jobs/'+this.review.id+'/approve',{});this.setRunState('rendering','Generating extended video','The video below is the selection preview until generation finishes.');this.message('Starting LTX outpaint…');this.job=await this.fetch('/zura/studio/outpaint/jobs/'+this.review.id+'/render',aeFrameRequest(this,{exr_storage:this.renderEXRStorage,prompt:this.$('prompt').value,seed:42,first_frame:this.review.hdr?null:this.firstFrame?.asset?.id||null,custom_loras:this.review.hdr?[]:this.loras.value(),client_id:this.api.clientId||null}));this.poll();}catch(e){this.job=null;this.setRunState('failed','Could not start the job',e.message);this.message(e.message,true);}finally{this.submitting=false;this.paint();}}
   async poll(){if(!this.job)return;const identity=this.job.id;try{const state=await this.fetch('/zura/studio/outpaint/jobs/'+identity);if(this.job?.id!==identity)return;
     if(this.job.active_prompt_id!==(state.active_prompt_id||null)){this.progressNode=null;this.sampleClock=null;this.sampleRemaining=null;this.$('progress').removeAttribute('value');}
     if(state.state==='cancelling'||this.job.cancelling){this.sectionTiming=null;this.sectionRemaining=null;}else this.updateSectionEstimate(state);this.job.active_prompt_id=state.active_prompt_id||null;this.job.window=state.window;this.job.windows=state.windows;
-    if(state.state==='complete'){if(typeof state.url!=='string'||!state.url){this.job=null;this.setRunState('failed','Finished video unavailable','ComfyUI did not return a video link. Your selection is kept.');this.message('The job finished without a video link. Review and retry generation.',true);this.paint();return;}this.job=null;this.outputRef=state.kind==='render'?state.artifact:null;this.outputIsHDR=state.kind==='render'?!!state.hdr:null;this.result.src=this.api.apiURL(state.url);this.result.hidden=false;this.canvas.hidden=true;this.layers.setResult(state);
+    if(state.state==='complete'){if(typeof state.url!=='string'||!state.url){this.job=null;this.setRunState('failed','Finished video unavailable','ComfyUI did not return a video link. Your selection is kept.');this.message('The job finished without a video link. Review and retry generation.',true);this.paint();return;}this.job=null;this.completedResult=state.kind==='render'?state:null;this.outputRef=state.kind==='render'?state.artifact:null;this.outputIsHDR=state.kind==='render'?!!state.hdr:null;this.result.src=this.api.apiURL(state.url);this.result.hidden=false;this.canvas.hidden=true;this.layers.setResult(state);
       if(state.kind==='review'){this.setRunState('review','Selection preview · not the finished video','Orange marks the area to fill. Approve & generate starts the video render.');this.review=state;this.$('download').hidden=true;this.$('download-exr').hidden=true;this.message(state.hdr?'Orange marks the added area. Check the frame before generating.':'Orange marks the target area. This method may also redraw the original footage. Check the whole clip, then approve.');}else{this.setRunState('complete','Your extended video is ready','Play the result below or download it.');this.result.load();this.review=null;const url=ref=>this.api.apiURL('/view?'+new URLSearchParams({filename:ref.filename,subfolder:ref.subfolder,type:ref.type}));this.$('download').href=state.hdr_files?.hlg?url(state.hdr_files.hlg):this.api.apiURL(state.url);this.$('download').hidden=false;this.$('download').textContent=state.hdr_files?.hlg?'Download HLG':'Download SDR';this.$('download-exr').hidden=!state.hdr_files?.exr;if(state.hdr_files?.exr)this.$('download-exr').href=url(state.hdr_files.exr);this.message(state.hdr?'HDR video ready. Preview is tone-mapped for SDR.':'Your extended video is ready.');
         if(!state.hdr&&this.renderHDROutput&&this.renderHDROutput!=='sdr')void this.prepareHDRFromOutpaint(state,this.renderHDROutput);}
       this.paint();return;}
@@ -225,14 +228,14 @@ export class OutpaintWorkspace {
     if(!this.review){this.message('Review the selection before opening its graph.');return;}
     if(this.review.hdr||this.review.selection?.strategy==='anchored_masked'){this.message('This workflow renders in multiple passes and cannot be opened as a single graph.');return;}
     try{await this.fetch('/zura/studio/outpaint/jobs/'+this.review.id+'/approve',{});
-      const data=await this.fetch('/zura/studio/outpaint/jobs/'+this.review.id+'/graph',{prompt:this.$('prompt').value,seed:42,custom_loras:this.loras.value()});
+      const data=await this.fetch('/zura/studio/outpaint/jobs/'+this.review.id+'/graph',{exr_storage:this.review.hdr?normaliseEXRStorage(this.review.exr_storage):selectedEXRStorage(this.owner.outputSettings,this.$('delivery').value),prompt:this.$('prompt').value,seed:42,custom_loras:this.loras.value()});
       const app=this.owner.app,original=(app.rootGraph||app.graph)?.serialize?.();
       if(!original||typeof app.loadApiJson!=='function')throw new Error('Update ComfyUI to open this graph.');
       try{await app.loadApiJson(data.graph,'Zura frame extension.json');}catch(error){await app.loadGraphData(original);throw error;}
       this.owner.studio.close();
     }catch(error){this.message(error.message);}
   }
-  saveHDR(){try{localStorage.setItem('zura-outpaint-hdr-record',JSON.stringify(this.hdrRecord));}catch{}}
+  saveHDR(){try{this.storage.setItem('zura-outpaint-hdr-record',JSON.stringify(this.hdrRecord));}catch{}}
   viewFile(file){return this.api.apiURL('/view?'+new URLSearchParams({filename:file.filename,subfolder:file.subfolder,type:file.type}));}
   async prepareHDRFromOutpaint(state,output){
     if(this.hdrSubmitting||this.hdrDelivery.busy)return;
@@ -243,7 +246,7 @@ export class OutpaintWorkspace {
       const original=state.artifact,actual=verified?.artifact;
       if(!original||!actual||original.filename!==actual.filename||original.subfolder!==actual.subfolder||original.type!==actual.type)
         throw new Error('The finished video did not match this render.');
-      take=outpaintHDRTake({...state,...verified},output);
+      take=outpaintHDRTake({...state,...verified,exr_storage:this.renderEXRStorage||state.exr_storage},output);
       if(!take)throw new Error('The finished video has no verified HDR conversion details.');
       this.hdrRecord={state:'waiting',take};this.saveHDR();
     }catch(error){this.message((error.message||'Could not verify the SDR result.')+' Your SDR video is available to download.');}
@@ -297,9 +300,9 @@ export class OutpaintWorkspace {
   updateModelContext(){const hdr=this.$('hdr-output').checked,long=hdr?this.usesLongHDR():this.usesSDRSections(),route=hdr?(long?'ltx_outpaint_hdr_long':'ltx_outpaint_hdr'):long?'ltx_outpaint_long':`ltx_outpaint_${this.mode}`,d=hdr?(this.mode==='black'?(long?this.capabilities?.hdr_black_long_dependencies:this.capabilities?.hdr_black_dependencies):(long?this.capabilities?.hdr_expand_long_dependencies:this.capabilities?.hdr_expand_dependencies)):long?this.capabilities?.dependencies:this.capabilities?.short_dependencies?.[this.mode];let missing=d?[...(d.missing_files||[]),...(d.missing_nodes||[])]:null;if(!hdr&&this.$('delivery').value!=='sdr'&&this.hdrSetup){missing=[...new Set([...(missing||[]),...(this.hdrSetup.files||[]).filter(f=>!f.ready).map(f=>f.filename),...(this.hdrSetup.missingNodes||[])])];}const key=JSON.stringify([route,missing]);if(key!==this.modelContextKey){this.modelContextKey=key;this.modelDownloads.setMissingContext(route,missing);}}
   async checkCapabilities(){try{const c=await this.fetch('/zura/studio/outpaint/capabilities');this.capabilities=c;this.longReady=c?.anchored_masked===true;}catch{this.capabilities=null;this.longReady=false;}if(!this.capabilities?.hdr_expand_experiment)this.$('hdr-output').checked=false;if(this.isHDRSource&&this.mode==='black'&&!this.capabilities?.hdr_black_experiment){this.$('mode').value='expand';this.reframe();this.invalidate();}this.trim.modeChanged();this.paint();}
   open(){this.closed=false;this.page.hidden=false;this.layers.resume();
-    let identity=this.hdrDelivery.client.id||this.hdrDelivery.client.requestId;try{identity=identity||localStorage.getItem('zura-outpaint-hdr-job')||localStorage.getItem('zura-outpaint-hdr-request');}catch{}
+    let identity=this.hdrDelivery.client.id||this.hdrDelivery.client.requestId;try{identity=identity||this.storage.getItem('zura-outpaint-hdr-job')||this.storage.getItem('zura-outpaint-hdr-request');}catch{}
     if(!this.hdrSubmitting&&!this.hdrDelivery.busy&&!identity&&(this.hdrDelivery.take||this.hdrRecord?.state==='preparing')){
-      this.hdrRecord={state:'unknown',take:this.hdrDelivery.take||this.hdrRecord?.take,error:'HDR job confirmation is missing. Check ComfyUI before trying again. Your SDR result is retained.'};this.hdrDelivery.take=null;try{localStorage.removeItem('zura-outpaint-hdr-take');}catch{}this.saveHDR();
+      this.hdrRecord={state:'unknown',take:this.hdrDelivery.take||this.hdrRecord?.take,error:'HDR job confirmation is missing. Check ComfyUI before trying again. Your SDR result is retained.'};this.hdrDelivery.take=null;try{this.storage.removeItem('zura-outpaint-hdr-take');}catch{}this.saveHDR();
     }
     this.hdrDelivery.resume();if(this.hdrRecord?.state==='complete'&&!this.job)this.showHDR(this.hdrRecord.take);else if(['failed','cancelled','unknown'].includes(this.hdrRecord?.state)&&!this.job)this.showRetainedSDR(this.hdrRecord);else if(this.hdrRecord?.state==='waiting'&&!this.job&&!this.hdrDelivery.busy)void this.startHDR(this.hdrRecord.take);this.paint();if(this.job)this.poll();this.checkCapabilities();}
   close(){this.closed=true;clearTimeout(this.timer);this.layers.close();this.hdrDelivery.close();this.trim.close();this.video.pause();this.result.pause();this.page.hidden=true;}

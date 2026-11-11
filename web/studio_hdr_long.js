@@ -1,10 +1,11 @@
+import {normalStudioStorage} from './studio_storage.js';
 // Long HDR is opt-in and remains gated until its visual and end-to-end checks.
 const definitiveClientError=error=>error.status>=400&&error.status<500&&error.status!==408&&error.status!==429;
 export class HDRLongJobClient {
-  constructor(api,onUpdate,storageKey='zura-hdr-long'){this.api=api;this.onUpdate=onUpdate;this.storageKey=storageKey;this.id=null;this.requestId=null;this.busy=false;this.timer=null;this.cancelPending=false;this.closed=false;this.pollPromise=null;this.recoveryPromise=null;}
+  constructor(api,onUpdate,storageKey='zura-hdr-long',storage=normalStudioStorage()){this.storage=storage;this.api=api;this.onUpdate=onUpdate;this.storageKey=storageKey;this.id=null;this.requestId=null;this.busy=false;this.timer=null;this.cancelPending=false;this.closed=false;this.pollPromise=null;this.recoveryPromise=null;}
   publish(job){this.onUpdate(job);if(['complete','failed','cancelled'].includes(job.state)){this.finish();return true;}return false;}
   schedule(method){if(this.closed||!this.busy)return;clearTimeout(this.timer);this.timer=setTimeout(()=>{this.timer=null;this[method]();},2000);}
-  remember(kind,value){try{localStorage.setItem(this.storageKey+'-'+kind,value);}catch{}}
+  remember(kind,value){try{this.storage.setItem(this.storageKey+'-'+kind,value);}catch{}}
   async request(path,body){
     const response=await this.api.fetchApi(path,body===undefined?{}:{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
     const data=await response.json();
@@ -74,6 +75,6 @@ export class HDRLongJobClient {
     try{await this.request('/zura/studio/hdr/jobs/'+encodeURIComponent(this.id)+'/cancel',{});}
     catch(error){this.cancelPending=false;this.onUpdate({state:'cancel-error',error:error.message});}
   }
-  finish(){clearTimeout(this.timer);this.timer=null;this.id=null;this.requestId=null;this.busy=false;this.cancelPending=false;try{localStorage.removeItem(this.storageKey+'-job');localStorage.removeItem(this.storageKey+'-request');}catch{}}
+  finish(){clearTimeout(this.timer);this.timer=null;this.id=null;this.requestId=null;this.busy=false;this.cancelPending=false;try{this.storage.removeItem(this.storageKey+'-job');this.storage.removeItem(this.storageKey+'-request');}catch{}}
   close(){this.closed=true;clearTimeout(this.timer);this.timer=null;}
 }

@@ -22,6 +22,21 @@ core=importlib.import_module('ComfyUI_zura_nodes.paintout.paintout')
 class EndpointAssetTests(unittest.TestCase):
     def setUp(self):
         import OpenImageIO as oiio
+        # Ownership/preview fixtures run without importing Comfy's GPU runtime.
+        # These are the actual native nodes_images primary-transform constants
+        # (Rec.709 D65 -> Rec.2020 D65 -> AP1 D60, Bradford adapted), not an
+        # identity colour substitute. Pixel I/O remains real OpenImageIO.
+        matrices=types.ModuleType('comfy_extras.nodes_images')
+        matrices._REC709_TO_REC2020=(
+            (0.6274038959346991,0.3292830383778837,0.0433130656874172),
+            (0.0690972893582320,0.9195403950754587,0.0113623155663092),
+            (0.0163914388751503,0.0880133078772259,0.8955952532476238))
+        matrices._REC2020_TO_ACESCG=(
+            (0.9748949779244186,0.0195991086370050,0.0055059134385761),
+            (0.0021795627977041,0.9955354688932213,0.0022849683090752),
+            (0.0047972396837727,0.0245320166345895,0.9706707436816380))
+        colour_patch=patch.dict(sys.modules,{'comfy_extras.nodes_images':matrices})
+        colour_patch.start();self.addCleanup(colour_patch.stop)
         self.temp=tempfile.TemporaryDirectory();self.addCleanup(self.temp.cleanup)
         self.root=Path(self.temp.name)
         directory=self.root/'genj_studio'/'endpoint'

@@ -36,6 +36,20 @@ jobs:
           python -m pip install numpy scipy pillow requests soundfile av aiohttp opencv-python-headless safetensors OpenImageIO psutil huggingface_hub
       - name: Install graph test DOM dependency outside the package
         run: npm install --prefix "$GITHUB_WORKSPACE/../ui-check" --ignore-scripts --no-audit --no-fund linkedom@0.18.13
+      - name: Check ComfyLink sessions, frame contracts and FLOAT/HALF EXRs
+        run: |
+          python -m unittest discover -s tests -p 'test_comfylink_adapter.py'
+          python -m unittest discover -s tests -p 'test_comfylink_nodes.py'
+          python -m unittest discover -s tests -p 'test_comfylink_float_io.py'
+          python -m unittest discover -s tests -p 'test_comfylink_float_preflight.py'
+          python -m unittest discover -s tests -p 'test_comfylink_ltx_colour.py'
+          python -m unittest discover -s tests -p 'test_comfylink_frame_contract.py'
+          python -m unittest discover -s tests -p 'test_comfylink_studio.py'
+          python -m unittest discover -s tests -p 'test_comfylink_studio_instance.py'
+          python -m unittest discover -s tests -p 'test_hdr_exr_precision.py'
+          node tests/test_studio_ae_bridge.mjs
+          node tests/test_studio_ae_frames.mjs
+          node tests/test_studio_exr_precision.mjs
       - name: Run regression checks
         run: |
           python -m unittest discover -s tests -p 'test_model*.py'

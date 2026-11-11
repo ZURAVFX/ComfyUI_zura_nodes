@@ -1,3 +1,4 @@
+import {runStudioVMInContext} from './studio_vm_fixture.mjs';
 import assert from 'node:assert/strict';
 import vm from 'node:vm';
 import fs from 'node:fs';
@@ -22,7 +23,7 @@ assert.equal(clipLength(legacyRelight,15).maximum,null,'Wan relight supports cha
 // Execute the actual CTA handler without browser APIs or any Comfy queue.
 const source=fs.readFileSync(new URL('../web/studio.js',import.meta.url),'utf8').replace(/^import .*;\r?\n/gm,'').replace(/^export /gm,'').split('app.registerExtension({')[0];
 const context={app:{registerExtension(){}},clipLength,recoverClipLength};
-vm.createContext(context);vm.runInContext(source+'\nthis.Studio=ArtistStudio;',context);
+vm.createContext(context);runStudioVMInContext(source+'\nthis.Studio=ArtistStudio;',context);
 const studio=Object.create(context.Studio.prototype),events=[];
 Object.assign(studio,{busy:false,project:null,source:{duration:15},references:[],readConfig:()=>original,
   syncForm:()=>events.push('sync'),render:()=>events.push('render'),message:text=>events.push(text),

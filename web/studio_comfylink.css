@@ -1,0 +1,18 @@
+/* Quiet session chrome follows the existing Studio theme. Unslop craft guidance:
+   Damir Sokolovsky (@heydamir), CC BY 4.0. */
+#genj-studio .zc-ae-session{display:flex;align-items:center;gap:16px;min-height:48px;padding:8px 24px;border-bottom:1px solid var(--zc-border,rgba(237,237,237,.1));background:var(--zc-surface,#19191b);color:var(--zc-text,#ededed);font-size:12px;line-height:16px}
+#genj-studio .zc-ae-context{display:flex;flex-direction:column;gap:4px;min-width:160px;max-width:40%}
+#genj-studio .zc-ae-context strong{font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#genj-studio .zc-ae-context>span,#genj-studio .zc-ae-status{color:var(--zc-muted,#a1a1a6);font-variant-numeric:tabular-nums}
+#genj-studio .zc-ae-status{flex:1;min-width:0}
+#genj-studio .zc-ae-actions{display:flex;align-items:center;gap:8px;flex-shrink:0}
+#genj-studio .zc-ae-actions button{height:32px;padding:0 12px;border:1px solid var(--zc-border,rgba(237,237,237,.1));border-radius:8px;background:transparent;color:inherit;font:inherit;font-weight:500;cursor:pointer;transition:background-color 140ms cubic-bezier(.22,1,.36,1)}
+#genj-studio .zc-ae-actions button:hover{background:var(--zc-raised,#232325)}
+#genj-studio .zc-ae-actions button:focus-visible{outline:2px solid currentColor;outline-offset:2px}
+#genj-studio .zc-ae-actions [data-ae-send]{background:#ededed;color:#171717;border-color:#ededed}
+#genj-studio .zc-ae-actions [data-ae-send]:hover{background:#fff}
+#genj-studio .zc-ae-actions button:disabled{opacity:.5;cursor:default}
+#genj-studio[data-theme=light] .zc-ae-session{background:#f4f4f5;color:#171717;border-color:#dedee0}
+#genj-studio[data-theme=light] .zc-ae-context>span,#genj-studio[data-theme=light] .zc-ae-status{color:#525252}
+#genj-studio[data-theme=light] .zc-ae-actions [data-ae-send]{background:#171717;color:#fafafa;border-color:#171717}
+@media(max-width:900px){#genj-studio .zc-ae-session{flex-wrap:wrap;padding:8px 16px;gap:8px}#genj-studio .zc-ae-context{max-width:100%;flex:1}#genj-studio .zc-ae-status{flex-basis:100%;order:3}#genj-studio .zc-ae-actions{margin-left:auto}}

@@ -96,7 +96,7 @@ def _colour_metadata(path):
                 "matrix": int(codec.colorspace or 2)}
 
 
-def _check_archive(path, frames, width, height):
+def _check_archive(path, frames, width, height, exr_storage=None):
     """Validate a complete bounded ZIP without extracting user-controlled paths."""
     try:
         with zipfile.ZipFile(path) as archive:
@@ -130,7 +130,9 @@ def _check_archive(path, frames, width, height):
                         spec = reader.spec()
                         if (spec.width != width or spec.height != height or spec.depth != 1 or spec.deep
                                 or spec.nchannels != 3 or set(spec.channelnames) != {'R', 'G', 'B'}
-                                or not (spec.format == oiio.HALF or spec.format == oiio.FLOAT)):
+                                or not (spec.format == oiio.HALF or spec.format == oiio.FLOAT)
+                                or (exr_storage == 'half' and spec.format != oiio.HALF)
+                                or (exr_storage == 'float32' and spec.format != oiio.FLOAT)) :
                             raise ValueError('The HDR EXR archive has the wrong image raster or channels.')
                         chroma = spec.getattribute('chromaticities')
                         ap1 = (.713, .293, .165, .830, .128, .044, .32168, .33767)
@@ -165,6 +167,9 @@ def collect_native_delivery(plan, submitted_graph, frozen_history, output_direct
     info = plan.get("hdr_delivery", {})
     output, prefix = info.get("output"), info.get("prefix")
     basis = plan["basis"]
+    storage = info.get('exr_storage','half')
+    if storage not in ('half','float32') or basis.get('native_hdr',{}).get('exr_storage','half') != storage:
+        raise ValueError('The native HDR EXR storage does not match the plan.')
     if (output not in _OUTPUTS or not isinstance(prefix, str) or not _PREFIX.fullmatch(prefix) or
             prefix != "performance_" + plan["key"][:32] or
             basis.get("native_hdr", {}).get("output") != output or
@@ -213,11 +218,12 @@ def collect_native_delivery(plan, submitted_graph, frozen_history, output_direct
     if info["archive_node"]:
         archive_node = submitted_graph["zura_hdr_archive"]
         if (archive_node.get("class_type") != "ZuraHDRPackageACEScct" or
-                archive_node.get("inputs", {}).get("prefix") != prefix):
+                archive_node.get("inputs", {}).get("prefix") != prefix or
+                archive_node.get('inputs',{}).get('exr_storage','half') != storage):
             raise ValueError("The native HDR archive prefix changed.")
         reference, path = _source_ref(frozen_history, "zura_hdr_archive", "files",
                                       "genj/hdr/" + prefix, ".zip", output_directory, counter=False)
-        _check_archive(path, frames, *size)
+        _check_archive(path, frames, *size, exr_storage=storage)
         files.append({**reference, "label": "ACEScg EXR sequence"})
     return {"asset": asset, "hdr_files": files, "output_raster": raster,
-            "sha256": ltx25.file_digest(preview), "native_hdr": True, "hdr_output": output}
+            "sha256": ltx25.file_digest(preview), "native_hdr": True, "hdr_output": output, 'exr_storage': storage}
