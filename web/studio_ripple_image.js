@@ -1,23 +1,24 @@
+import {workspaceStorage} from './studio_storage.js';
 // Ripple borrows the ordinary Image workspace, including local models and
 // browser sign-in providers. Only a result belonging to this keyframe returns.
 const HANDOFF_KEY='zura-ripple-image-handoff-v1';
-function readHandoff(){
+function readHandoff(storage){
   try{
-    const value=JSON.parse(localStorage.getItem(HANDOFF_KEY));
+    const value=JSON.parse(storage.getItem(HANDOFF_KEY));
     if(value?.version===1&&typeof value.id==='string'&&value.id&&typeof value.source==='string'&&value.source&&['h3','ltx'].includes(value.engine)&&typeof value.anchorId==='string'&&Number.isInteger(value.frame)&&value.frame>=0&&Number.isInteger(value.width)&&value.width>0&&Number.isInteger(value.height)&&value.height>0&&['create','edit'].includes(value.previous?.config?.operation))return value;
   }catch{}
   return null;
 }
 export class RippleImageHandoff {
-  constructor(owner){this.owner=owner;this.revision=0;this.request=null;this.stored=readHandoff();this.restoring=null;this.importing=false;}
+  constructor(owner){this.storage=workspaceStorage(owner);this.owner=owner;this.revision=0;this.request=null;this.stored=readHandoff(this.storage);this.restoring=null;this.importing=false;}
   imageBusy(){const o=this.owner;return !!(o.job||o.pendingSubmission||o.submitting||o.uploading);}
   key(workspace,anchor){return JSON.stringify([workspace.source?.path,workspace.revision,workspace.state.engine,anchor.id,anchor.frame]);}
   current(request){const w=request?.workspace;return !!w&&this.key(w,request.anchor)===request.key&&w.anchors().includes(request.anchor);}
   persist(request){
     const w=request.workspace,value={version:1,intent:w.intent||'edit',id:request.id,source:w.source.path,engine:w.state.engine,anchorId:String(request.anchor.id),frame:request.anchor.frame,width:request.width,height:request.height,previous:request.previous};
-    try{localStorage.setItem(HANDOFF_KEY,JSON.stringify(value));this.stored=value;return true;}catch{return false;}
+    try{this.storage.setItem(HANDOFF_KEY,JSON.stringify(value));this.stored=value;return true;}catch{return false;}
   }
-  clear(){this.request=null;this.stored=null;++this.revision;try{localStorage.removeItem(HANDOFF_KEY);}catch{}if(this.banner)this.banner.hidden=true;}
+  clear(){this.request=null;this.stored=null;++this.revision;try{this.storage.removeItem(HANDOFF_KEY);}catch{}if(this.banner)this.banner.hidden=true;}
   invalidate(workspace){if(this.request?.workspace===workspace||this.stored?.source===(workspace.source?.path||workspace.state.sourcePath))this.clear();}
   async resume(){
     if(this.request){if(!this.current(this.request))this.clear();this.syncImageUI();return;}

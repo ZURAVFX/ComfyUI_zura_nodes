@@ -32,7 +32,7 @@ def endpoint_source(asset):
 
 def build_native_endpoint_graph(*, first, last=None, width, height, frames, prompt,
                                 seed=42, output='hlg_and_exr', prefix, audio_file=None,
-                                audio_start=0., output_width=None, output_height=None):
+                                audio_start=0., output_width=None, output_height=None, exr_storage='half'):
     if any(type(v) is not int or not 512 <= v <= 2048 or v % 64 for v in (width, height)):
         raise ValueError('Native HDR endpoints need 512–2048 pixels per side on a 64-pixel grid.')
     if (output_width is None) != (output_height is None):
@@ -140,9 +140,9 @@ def build_native_endpoint_graph(*, first, last=None, width, height, frames, prom
             width=output_width, height=output_height, crop='disabled')
         delivered_images = ['restore_output', 0]
     g.update(ltx_hdr_delivery(delivered_images, 24., output=output, prefix=prefix,
-        working_space='ltx25_acescct_qualified', audio=delivered_audio))
+        working_space='ltx25_acescct_qualified', audio=delivered_audio, exr_storage=exr_storage))
     if output in ('acescg_exr', 'hlg_and_exr'):
-        g['zura_hdr_archive'] = n('ZuraHDRPackageACEScct', images=delivered_images, prefix=prefix)
+        g['zura_hdr_archive'] = n('ZuraHDRPackageACEScct', images=delivered_images, prefix=prefix, **({'exr_storage':exr_storage} if exr_storage != 'half' else {}))
         preview = ['zura_hdr_exr', 0]
     else:
         g['tonemap'] = n('LTXVHDRDecodePostprocess', image=delivered_images, transfer='acescct', save_exr=False,

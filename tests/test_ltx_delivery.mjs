@@ -38,7 +38,7 @@ assert.equal(complete.length,1);assert.equal(complete[0].file,preview);assert.de
 
 // Exercise the workspace's actual completed-generation -> HDR -> displayed take.
 state='rendering';const owner={api,root:document.querySelector('main'),studio:{},app:{},fetch:async path=>path==='/history/video-1'?{'video-1':{status:{completed:true},outputs:{save:{images:[take.file]}}}}:{}};
-const ui=new FrameVideoWorkspace(owner);ui.$('engine').value='ltx';ui.$('output').value='hlg_and_exr';ui.assets.first={file:'first.png'};ui.$('prompt').value=config.prompt;ui.availability={ready:true,missing:[]};ui.render();
+const ui=new FrameVideoWorkspace(owner);ui.$('engine').value='ltx';ui.$('output').value='hlg_and_exr';ui.assets.first={file:'first.png',width:1344,height:768};ui.$('prompt').value=config.prompt;ui.availability={ready:true,missing:[]};ui.render();
 assert.equal(ui.$('output-control').hidden,false);assert.equal(ui.config().hdrOutput,'hlg_and_exr');
 ui.job={id:'video-1',config};await ui.poll();
 assert.equal(ui.job,null);assert.equal(ui.hdrOutput.busy,true);assert.equal(ui.$('generate').disabled,true);assert.equal(ui.$('progress').hidden,false);

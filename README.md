@@ -32,7 +32,9 @@ Use your own ComfyUI host and port if they differ.
 
 ## Current release
 
-**1.3.60** includes [LTX and H3 Relight options](docs/RELIGHT_MODELS.md) alongside Wan 2.1, with shared lighting frames and a separate Relight draft. It also includes a shared visual mode picker, compact browser sign-in controls and the native LTX/H3 [Director timeline](docs/DIRECTOR_STUDIO.md), including clip dragging, resizing and preserved source audio. First/last-frame video can match image 1 dimensions or scale its aspect ratio with the megapixel slider. Camera editing gains optional [locked scene geometry](docs/PANORAMA_STUDIO_INTEGRATION.md). Existing Paintout retries, [alpha extraction](docs/LTX_ALPHA.md), [Ripple editing](docs/RIPPLE_STUDIO.md) and [painted image edits](docs/IMAGE_EDIT_AREA.md) remain included. See the [release notes](CHANGELOG.md) for validation and remaining limits.
+**1.3.61** adds an optional [ComfyLink After Effects session](docs/COMFYLINK_STUDIO.md), isolated Studio drafts, exact source-interval checks and high-depth transfer nodes. Studio's advanced output settings now offer **FLOAT (32-bit)** EXR storage alongside the normal **HALF (16-bit)** default. The [LTX colour bridge](docs/COMFYLINK.md#high-depth-nodes-and-colour) makes its colour and range conversion explicit. CPU checks cover transport, graphs and EXR readback; full live GPU and After Effects qualification remains outstanding. See the [release notes](CHANGELOG.md) for limits.
+
+Zura Studio remains free to open and use normally, without a ComfyLink licence. The separate ComfyLink After Effects extension is optional and is not bundled here. Existing [Relight](docs/RELIGHT_MODELS.md), [Director](docs/DIRECTOR_STUDIO.md), [Paintout](PAINTOUT.md), [alpha extraction](docs/LTX_ALPHA.md), [Ripple editing](docs/RIPPLE_STUDIO.md) and [painted image edits](docs/IMAGE_EDIT_AREA.md) remain available.
 
 The previous update adds complete camera-angle model setup, including MoGe 3, and checks gated-model access before large downloads. Choose a mode to see its missing files and extension guidance. Restart ComfyUI and refresh Studio after updating. See the [model setup notes](docs/STUDIO_1348_VALIDATION.md).
 
@@ -56,6 +58,7 @@ Examples use placeholder media. Personal reference images, videos, voice recordi
 | --- | --- |
 | Install and select model files | [Installation](INSTALL_STUDIO.md) |
 | Use the guided interface and Graph view | [Zura Studio](ARTIST_STUDIO.md) |
+| Use an optional After Effects session | [ComfyLink Studio](docs/COMFYLINK_STUDIO.md) |
 | Direct LTX or H3 with a shared timeline | [Director](docs/DIRECTOR_STUDIO.md) |
 | Use standalone nodes and Wan continuation | [Node and workflow guide](docs/NODE_GUIDE.md) |
 | Mask, remove objects and create clean plates | [Paintout](PAINTOUT.md) |
@@ -73,4 +76,4 @@ See [contributing and checks](CONTRIBUTING.md) for the repository layout and loc
 
 ## Licence
 
-Original Zura code is **AGPL-3.0-only**. See [LICENSE](LICENSE), [third-party notices](THIRD_PARTY_NOTICES.md) and the bundled licences for upstream components. Model weights retain their own licences.
+Original Zura code is **AGPL-3.0-only**. The ComfyLink adapter includes MIT-licensed files with their original notices; see [the adapter guide](docs/COMFYLINK.md) and [MIT licence](comfylink/MIT-LICENSE.txt). See [LICENSE](LICENSE), [third-party notices](THIRD_PARTY_NOTICES.md) and the bundled licences for upstream components. Model weights retain their own licences.

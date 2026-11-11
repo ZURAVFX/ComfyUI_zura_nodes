@@ -10,7 +10,7 @@ from .hdr_outpaint_experiment import build_reviewed_sdr_first_stage, build_revie
 
 async def run_reviewed_hdr_outpaint(*, source, selection, review_key, colour_space,
                                    has_audio, prompt, seed, identity, check_asset,
-                                   submit, wait, cancel, update, cleanup):
+                                   submit, wait, cancel, update, cleanup, exr_storage='half'):
     """Run two bounded graphs sequentially and publish only verified outputs.
 
     ``wait`` must verify its own artifact and return an input path for the SDR
@@ -53,7 +53,7 @@ async def run_reviewed_hdr_outpaint(*, source, selection, review_key, colour_spa
         # pass; a changed selection must not reuse an earlier approval.
         final = await asyncio.to_thread(build_reviewed_sdr_first_composite, source, selection, intermediate,
             review_key=review_key, colour_space=colour_space, has_audio=has_audio,
-            seed=seed, prefix='hdr_outpaint_' + identity, check_asset=check_asset)
+            seed=seed, prefix='hdr_outpaint_' + identity, check_asset=check_asset, exr_storage=exr_storage)
         return await run_pass('hdr', final)
     except BaseException:
         if active is not None:

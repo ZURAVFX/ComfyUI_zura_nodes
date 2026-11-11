@@ -14,7 +14,7 @@ from .hdr_source import MAX_FRAMES, SDR_SPACES
 
 
 def build_hdr_graph(*, source, start_frame, frame_count, fps, colour_space='auto',
-                    output='hlg_and_exr', prefix, has_audio=False, seed=42,
+                    output='hlg_and_exr', prefix, has_audio=False, seed=42, exr_storage='half',
                     model='ltx-2.5-22b-distilled-transformer-comfy-int8-convrot.safetensors',
                     video_vae='ltx-2.5-video-vae-bf16.safetensors',
                     audio_vae='ltx-2.5-audio-vae-bf16.safetensors'):
@@ -34,9 +34,9 @@ def build_hdr_graph(*, source, start_frame, frame_count, fps, colour_space='auto
             frame_count=frame_count,fps=float(fps))
     graph.update(ltx25_sdr_to_hdr_dynamic_graph(['zura_hdr_source',0],fps=float(fps),model=model,
         video_vae=video_vae,audio_vae=audio_vae,output=output,prefix=prefix,seed=seed,
-        audio=['zura_hdr_audio_source',0] if has_audio else None))
+        audio=['zura_hdr_audio_source',0] if has_audio else None, exr_storage=exr_storage))
     if output in ('acescg_exr','hlg_and_exr'):
-        graph['zura_hdr_archive']=node('ZuraHDRPackageACEScct',images=['hdr_unpad_raster',0],prefix=prefix)
+        graph['zura_hdr_archive']=node('ZuraHDRPackageACEScct',images=['hdr_unpad_raster',0],prefix=prefix, **({'exr_storage':exr_storage} if exr_storage != 'half' else {}))
     # Native LTX tonemap produces a viewable SDR proxy; EXR/video retain HDR.
     if 'zura_hdr_exr' in graph:
         preview=['zura_hdr_exr',0]
@@ -79,13 +79,20 @@ def build_asset_graph(asset, body, check_asset):
     colour=sdr_source_space(info,colour)
     if colour not in SDR_SPACES:raise ValueError('Choose a supported SDR source colour space.')
     fps=info['fps']
+    contract = body.get('ae_frame_contract')
+    if contract is not None:
+        from ..comfylink.frame_contract import validate_interval
+        contract = validate_interval(contract,frames=count,fps=fps,width=info['width'],height=info['height'])
     with av.open(str(path)) as input_video:has_audio=bool(input_video.streams.audio)
     name='shot_'+uuid.uuid4().hex
     graph=build_hdr_graph(source=str(path),start_frame=start,frame_count=count,fps=fps,
                           colour_space=colour,output=body.get('output','hlg_and_exr'),
-                          prefix=name,has_audio=has_audio,seed=body.get('seed',42))
+                          prefix=name,has_audio=has_audio,seed=body.get('seed',42),exr_storage=body.get('exr_storage','half'))
+    if contract is not None:
+        from ..comfylink.frame_contract import prepare_frame_contract_graph
+        graph=prepare_frame_contract_graph(graph,contract,'hdr')
     return graph, {'prefix':name,'width':info['width'],'height':info['height'],
-                   'frames':count,'fps':fps,'has_audio':has_audio,'output':body.get('output','hlg_and_exr')}
+                   'frames':count,'fps':fps,'has_audio':has_audio,'output':body.get('output','hlg_and_exr'),'exr_storage':body.get('exr_storage','half')}
 
 
 def register(studio, routes, response, check_asset):

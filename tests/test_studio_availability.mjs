@@ -1,9 +1,10 @@
+import {runStudioVMInContext} from './studio_vm_fixture.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
 const source=fs.readFileSync(new URL('../web/studio.js',import.meta.url),'utf8').replace(/^import .*;\r?\n/gm,'').replace(/^export /gm,'').split('app.registerExtension({')[0];
 assert.ok(source.includes('<option value="restyle">LTX character animation</option>'),'The restored native LTX stage exists in the real selector');
-const context={};vm.createContext(context);vm.runInContext(source+'\nthis.Studio=ArtistStudio;this.allowed=verifiedSetup;this.initial=defaults;',context);
+const context={};vm.createContext(context);runStudioVMInContext(source+'\nthis.Studio=ArtistStudio;this.allowed=verifiedSetup;this.initial=defaults;',context);
 assert.equal(context.initial.engine,'h3');assert.equal(context.initial.h3_character_method,'openjutsu');assert.equal(context.initial.openjutsu_direct,true);
 assert.equal(context.allowed(context.initial),true);
 assert.equal(context.allowed({...context.initial,openjutsu_background:'replace',edit_area:'scene'}),true);

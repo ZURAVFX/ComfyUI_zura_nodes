@@ -1,3 +1,4 @@
+import {workspaceStorage} from './studio_storage.js';
 import {StudioModelDownloads} from './studio_model_download.js';
 import {submitOwnedGraph,recoverOwnedSubmission,cancelOwnedJob} from './studio_owned_jobs.js';
 import {installOwnedExecuting} from './studio_progress.js';
@@ -14,9 +15,9 @@ const icon=path=>`<svg class="zdir-icon" viewBox="0 0 20 20" aria-hidden="true" 
 const icons={image:icon('<rect x="3" y="3" width="14" height="14" rx="2"/><circle cx="7" cy="7" r="1"/><path d="m3 14 4-4 4 4 2-2 4 4"/>'),prompt:icon('<path d="M4 4h12v9H9l-5 3z"/><path d="M7 8h6"/>'),audio:icon('<path d="M4 9v2m4-5v8m4-10v12m4-8v4"/>'),graph:icon('<path d="m10 3 7 4-7 4-7-4zM3 10l7 4 7-4M3 14l7 4 7-4"/>'),download:icon('<path d="M10 3v10m-4-4 4 4 4-4M4 16h12"/>')};
 
 export class DirectorWorkspace{
-  constructor(owner){
+  constructor(owner){this.storage=workspaceStorage(owner);
     this.owner=owner;this.api=owner.api;this.app=owner.app;this.studio=owner.studio;this.root=owner.root;
-    let saved={};try{saved=JSON.parse(localStorage.getItem(KEY))||{};}catch{}
+    let saved={};try{saved=JSON.parse(this.storage.getItem(KEY))||{};}catch{}
     this.draft=this.defaults(saved.config);this.items=Array.isArray(saved.items)?saved.items.slice(0,16):[];
     this.job=saved.job||null;this.pendingSubmission=saved.pendingSubmission||null;
     if(this.job?.cancelPending)this.job.cancelRetryAvailable=true;
@@ -77,7 +78,7 @@ export class DirectorWorkspace{
   executing(event){const detail=event.detail;if(!this.job||this.job.cancelPending||detail?.prompt_id!==this.job.id||!detail.node)return;this.job.currentNode=detail.node;this.$('bar').removeAttribute('value');this.$('progress-title').textContent=this.job.stages?.[detail.node]||({director:'Building the shot timeline',prompt:'Loading direction',image:'Preparing image anchors',audio:'Preparing sound cues',sample:'Generating the directed shot',decode:'Decoding video',save:'Saving video'})[detail.node]||'Preparing video';}
   elapsed(){if(!this.job?.started)return'Waiting for ComfyUI';const seconds=Math.max(0,Math.floor((Date.now()-this.job.started)/1000));return`${Math.floor(seconds/60)}m ${seconds%60}s elapsed`;}
   async fetch(path,body){return this.owner.fetch(path,body);}
-  save(){try{localStorage.setItem(KEY,JSON.stringify({config:{...this.config(),playhead:this.draft.playhead},job:this.job,pendingSubmission:this.pendingSubmission,items:this.items,selectedResult:this.selectedResult,resultView:this.resultView}));return true;}catch{this.message('Browser storage is full. Your current controls remain available.',true);return false;}}
+  save(){try{this.storage.setItem(KEY,JSON.stringify({config:{...this.config(),playhead:this.draft.playhead},job:this.job,pendingSubmission:this.pendingSubmission,items:this.items,selectedResult:this.selectedResult,resultView:this.resultView}));return true;}catch{this.message('Browser storage is full. Your current controls remain available.',true);return false;}}
   busy(){return!!(this.job||this.pendingSubmission||this.submitting||this.uploading);}
   message(text='',error=false){this.$('note').textContent=text;this.$('note').classList.toggle('is-error',error);}
   setMissingContext(){const route=`${this.draft.engine}_director`;this.modelDownloads.setMissingContext(route,this.availability?.missing||[]);this.$('model-downloads').hidden=this.availability?.ready!==false;}

@@ -1,3 +1,4 @@
+import {runStudioVMInContext} from './studio_vm_fixture.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
@@ -7,12 +8,12 @@ const calls=[],removed=[];
 const context={clipLength,recoverClipLength,localStorage:{setItem(){},removeItem:key=>removed.push(key)},api:{fetchApi:async(path,options)=>{
   const body=JSON.parse(options.body);calls.push({path,body});return {ok:true,json:async()=>({id:'new-build-project',phase:'new',look_mode:body.look_mode,config:body.config})};
 }}};
-vm.createContext(context);vm.runInContext(code+'\nthis.Studio=ArtistStudio;',context);
+vm.createContext(context);runStudioVMInContext(code+'\nthis.Studio=ArtistStudio;',context);
 for(const scenario of ['relight','preserve']){
   calls.length=0;removed.length=0;
   const ui=Object.create(context.Studio.prototype),oldProject={id:'saved-ready',phase:'opening',look_mode:'ready',opening_input:{file:'old-ready.png'}};
   const config={workflow_mode:scenario==='relight'?'relight':'motion',engine:'h3',preserve_people:scenario==='preserve',edit_area:'scene',length_mode:'custom',duration:2,start:0,prompt:'Soft evening light',image_prompt:'',quality:'fast'};
-  Object.assign(ui,{project:oldProject,config,lookMode:'ready',readyAsset:{id:'ready'},character:{id:'ready'},references:[{id:'scene-ref'}],source:{id:'source',duration:3},resetEpoch:0,busy:false,$:()=>({value:'original'}),readConfig(){return this.config;},perform:fn=>fn(0),syncForm(){},render(){}});
+  Object.assign(ui,{storage:context.localStorage,project:oldProject,config,lookMode:'ready',readyAsset:{id:'ready'},character:{id:'ready'},references:[{id:'scene-ref'}],source:{id:'source',duration:3},resetEpoch:0,busy:false,$:()=>({value:'original'}),readConfig(){return this.config;},perform:fn=>fn(0),syncForm(){},render(){}});
   if(scenario==='relight'){
     ui.selectWorkflow();
     assert.equal(ui.lookMode,'ready','Relight accepts a supplied lighting image until the user chooses to generate one');

@@ -1,3 +1,4 @@
+import {runStudioVMInContext} from './studio_vm_fixture.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
@@ -51,7 +52,7 @@ const app={};
 const context={installStudioRestartNavigation,document,window,localStorage,api,app,CreativeWorkspace,ContentDetection,ClipTrimmer,clipLength,recoverClipLength,stageProgress,setTimeout,clearTimeout,setInterval,clearInterval,crypto:globalThis.crypto,URLSearchParams,AbortController,FormData};
 vm.createContext(context);
 const source=fs.readFileSync(new URL('../web/studio.js',import.meta.url),'utf8').replace(/^import .*;\r?\n/gm,'').replace(/^export /gm,'').split('app.registerExtension({')[0];
-vm.runInContext(source+'\nthis.Studio=ArtistStudio;',context);
+runStudioVMInContext(source+'\nthis.Studio=ArtistStudio;',context);
 const studio=new context.Studio(),ui=studio.creative;
 assert.equal(studio.$('working').parentElement,studio.container.querySelector('.gs-main'),'Progress is outside the video preview');
 assert.equal(studio.$('live-preview').parentElement,studio.$('canvas'),'Live image keeps the full canvas');

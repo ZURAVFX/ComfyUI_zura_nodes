@@ -43,7 +43,7 @@ def needs_bounded_canvas(width, height, duration, fps=FPS):
 
 
 def plan(source, *, start, duration, mode, width, height, left=0, top=0,
-         right=0, bottom=0, black_threshold=2 / 255, allow_partial_end=False):
+         right=0, bottom=0, black_threshold=2 / 255, allow_partial_end=False, ae_frame_contract=None):
     """Validate a short source range and bind its cadence and geometry to review."""
     if not isinstance(source, dict) or not source.get('sha') or not source.get('file'):
         raise ValueError('Select a source video first.')
@@ -85,6 +85,9 @@ def plan(source, *, start, duration, mode, width, height, left=0, top=0,
               'mode': mode, 'width': width, 'height': height,
               'left': left, 'top': top, 'right': right, 'bottom': bottom,
               'black_threshold': float(black_threshold)}
+    if ae_frame_contract is not None:
+        from ..comfylink.frame_contract import validate_interval
+        values['ae_frame_contract']=validate_interval(ae_frame_contract,frames=frames,fps=fps,width=width,height=height)
     key = hashlib.sha256(json.dumps(values, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
     return {**values, 'duration': float(frames / fps), 'padded_frames': max(9, 1 + 8 * ((frames + 6) // 8)),
             'padded_width': padded_width, 'padded_height': padded_height, 'review_key': key}
@@ -220,7 +223,7 @@ def build_review_graph(source, selection, *, output_prefix, check_asset=lambda a
     expected = plan(source, start=selection['start'], duration=selection.get('requested_duration', selection['duration']), mode=selection['mode'],
                     width=selection['width'], height=selection['height'], left=selection['left'],
                     top=selection['top'], right=selection['right'], bottom=selection['bottom'],
-                    black_threshold=selection['black_threshold'], allow_partial_end=True)
+                    black_threshold=selection['black_threshold'], allow_partial_end=True, ae_frame_contract=selection.get('ae_frame_contract'))
     if expected['review_key'] != selection.get('review_key'):
         raise ValueError('The source or canvas changed. Create a fresh selection preview.')
     if not re.fullmatch(r'genj/outpaint/[a-zA-Z0-9_-]{1,96}', str(output_prefix)):
@@ -254,13 +257,17 @@ def build_studio_graph(source, selection, *, review_key, prompt='', seed=42, out
     expected = plan(source, start=selection['start'], duration=selection.get('requested_duration', selection['duration']), mode=selection['mode'],
                     width=selection['width'], height=selection['height'], left=selection['left'],
                     top=selection['top'], right=selection['right'], bottom=selection['bottom'],
-                    black_threshold=selection['black_threshold'], allow_partial_end=True)
+                    black_threshold=selection['black_threshold'], allow_partial_end=True, ae_frame_contract=selection.get('ae_frame_contract'))
     if expected['review_key'] != review_key:
         raise ValueError('The source or canvas changed. Review the selection again.')
+    if expected.get('ae_frame_contract') is not None:
+        pad_delivery=False
     if not re.fullmatch(r'genj/outpaint/[a-zA-Z0-9_-]{1,96}', str(output_prefix)):
         raise ValueError('Choose a safe outpaint output destination.')
     check_asset(source)
     if masked_black and expected['mode'] == 'black':
+        if expected.get('ae_frame_contract') is not None and source_rate(source)!=24:
+            raise ValueError('This masked black-area recipe requires 24 fps. Use the source-cadence outpaint recipe for this AE clip.')
         # A black guide on its own can be interpreted as a permanent letterbox.
         # For explicitly selected black areas, use the separately tested native
         # in/outpainting guide so the reviewed mask reaches the sampler.
@@ -281,6 +288,9 @@ def build_studio_graph(source, selection, *, review_key, prompt='', seed=42, out
         g['unpad_result'] = {'class_type': 'ImageCrop', 'inputs': {'image': ['trim_result', 0],
             'width': expected['width'], 'height': expected['height'], 'x': 0, 'y': 0}}
         g['assemble']['inputs'].update(images=['unpad_result', 0], audio=['components', 1])
+        if expected.get('ae_frame_contract') is not None:
+            from ..comfylink.frame_contract import prepare_frame_contract_graph
+            return prepare_frame_contract_graph(g,expected['ae_frame_contract'],'outpaint')
         return pad_outpaint_delivery(g) if pad_delivery else g
     def n(kind, **inputs): return {'class_type': kind, 'inputs': inputs}
     g = {
@@ -330,6 +340,9 @@ def build_studio_graph(source, selection, *, review_key, prompt='', seed=42, out
         g['unpad_result'] = {'class_type': 'ImageCrop', 'inputs': {'image': ['trim_result', 0],
             'width': expected['width'], 'height': expected['height'], 'x': 0, 'y': 0}}
         g['assemble']['inputs']['images'] = ['unpad_result', 0]
+    if expected.get('ae_frame_contract') is not None:
+        from ..comfylink.frame_contract import prepare_frame_contract_graph
+        return prepare_frame_contract_graph(g,expected['ae_frame_contract'],'outpaint')
     return pad_outpaint_delivery(g) if pad_delivery else g
 
 

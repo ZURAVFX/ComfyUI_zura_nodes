@@ -35,7 +35,7 @@ def checked_stage(root, ref, identity, *, width, height, frames):
     return path
 
 
-def checked_delivery(root, outputs, identity, *, width, height, frames, has_audio):
+def checked_delivery(root, outputs, identity, *, width, height, frames, has_audio, exr_storage='half'):
     if not isinstance(identity, str) or not identity.isalnum() or len(identity) > 64:
         raise ValueError('Invalid HDR outpaint job identity.')
     if type(has_audio) is not bool or not isinstance(outputs, dict):
@@ -50,10 +50,14 @@ def checked_delivery(root, outputs, identity, *, width, height, frames, has_audi
     preview = _owned_file(root, ref('zura_hdr_save_preview', 'images'), 'genj/hdr', re.escape(prefix) + r'_preview_\d{5}_\.mp4')
     archive = _owned_file(root, ref('zura_hdr_archive', 'files'), 'genj/hdr', re.escape(prefix) + r'\.zip')
     _check_media(hlg, preview, archive, width=width, height=height, frames=frames, has_audio=has_audio)
+    if exr_storage == 'float32':
+        from .ltx25_hdr_result import _check_archive
+        _check_archive(archive, frames, width, height, exr_storage='float32')
+    elif exr_storage != 'half': raise ValueError('Choose half or float32 EXR storage.')
     return {'hlg': hlg, 'preview': preview, 'exr': archive}
 
 
-def checked_long_delivery(root, result, identity, *, width, height, frames, has_audio):
+def checked_long_delivery(root, result, identity, *, width, height, frames, has_audio, exr_storage='half'):
     """Verify all files belong to the conversion and match the reviewed delivery."""
     if not isinstance(identity, str) or not identity.isalnum() or len(identity) > 64:
         raise ValueError('Invalid HDR outpaint job identity.')
@@ -76,6 +80,11 @@ def checked_long_delivery(root, result, identity, *, width, height, frames, has_
     hlg = owned(files[1], prefix + '.mp4')
     preview = owned(preview_path, prefix + '_preview.mp4')
     _check_media(hlg, preview, exr, width=width, height=height, frames=frames, has_audio=has_audio)
+    if exr_storage == 'float32':
+        if result.get('exr_storage') != 'float32': raise ValueError('The HDR EXR storage does not match the job.')
+        from .ltx25_hdr_result import _check_archive
+        _check_archive(exr, frames, width, height, exr_storage='float32')
+    elif exr_storage != 'half': raise ValueError('Choose half or float32 EXR storage.')
     return {'hlg': hlg, 'preview': preview, 'exr': exr}
 
 

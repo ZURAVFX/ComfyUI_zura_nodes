@@ -1,3 +1,4 @@
+import {runStudioVMInContext} from './studio_vm_fixture.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
@@ -5,7 +6,7 @@ import {clipLength,recoverClipLength} from '../web/studio_length.js';
 const code=fs.readFileSync(new URL('../web/studio.js',import.meta.url),'utf8').replace(/^import .*;\r?\n/gm,'').replace(/^export /gm,'').split('app.registerExtension({')[0];
 let response;
 const context={clipLength,recoverClipLength,localStorage:{setItem(){},removeItem(){}},api:{fetchApi:async()=>({ok:true,json:async()=>response})}};
-vm.createContext(context);vm.runInContext(code+'\nthis.Studio=ArtistStudio;',context);
+vm.createContext(context);runStudioVMInContext(code+'\nthis.Studio=ArtistStudio;',context);
 function ui(phase='review'){
   const value=Object.create(context.Studio.prototype);
   Object.assign(value,{config:{workflow_mode:'viewport',engine:'h3',h3_viewport_direct:true,length_mode:'custom',duration:2,start:0},lookMode:'build',references:[{id:'ref'}],source:{id:'source',duration:15},resetEpoch:0,busy:false,project:{id:'project',phase,review:'review',prepared_key:'approved',approval:phase==='review'?null:'approved'},$:()=>({value:'original'}),readConfig(){return this.config;},perform:fn=>fn(0),syncForm(){},render(){}});

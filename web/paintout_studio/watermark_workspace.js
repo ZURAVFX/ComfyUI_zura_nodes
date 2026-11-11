@@ -1,3 +1,5 @@
+import {prepareAEFrameGraph} from '../studio_ae_frame_contract.js';
+import {workspaceStorage} from '../studio_storage.js';
 import {installOwnedExecuting} from './studio_progress.js';
 import {LTXLoras} from '../studio_ltx_loras.js';
 import {PaintoutModels} from './watermark_models.js';
@@ -61,12 +63,12 @@ export async function findPaintoutSubmission(fetch, requestId){
 
 export class WatermarkWorkspace{
 
-  constructor(owner,workspaceOptions={}){
+  constructor(owner,workspaceOptions={}){this.storage=workspaceStorage(owner);
 
     this.owner=owner;this.api=owner.api;this.app=owner.app;this.studio=owner.studio;
 
     this.storageKey=workspaceOptions.storageKey||KEY;this.ripple=workspaceOptions.mode==='ripple';
-    let saved={};try{saved=JSON.parse(localStorage.getItem(this.storageKey))||{};}catch{}
+    let saved={};try{saved=JSON.parse(this.storage.getItem(this.storageKey))||{};}catch{}
 
     this.state=paintoutDraft(saved.draft);this.watermark=true;this.state.mode='targeted';if(!this.state.referenceImage?.file)this.state.referenceEnabled=false;this.state.targetedMethod='automatic';this.state.removalMethod=this.state.removalMethod==='subtitles'?'subtitles':'watermark';this.state.subtitleVariant=this.state.subtitleVariant==='joyfox'?'joyfox':'zarxrax';
     this.ripple=this.state.mode==='ripple'||this.ripple;
@@ -316,7 +318,7 @@ export class WatermarkWorkspace{
 
   applySize(){const mode=this.state.resolutionMode;if(mode==='default'){this.state.width=1152;this.state.height=640;}else if(PAINTOUT_SIZE_PRESETS.some(p=>p[0]===mode))Object.assign(this.state,paintoutPresetSize(mode,this.state.megapixels));this.$('width').value=this.state.width;this.$('height').value=this.state.height;}
 
-  save(){this.editor?.saveSoon();try{localStorage.setItem(this.storageKey,JSON.stringify({draft:this.state,prompts:this.prompts,sourceInfo:this.sourceInfo,maskInfo:this.maskInfo,job:this.job,pendingHDR:this.pendingHDR,cleanupPrompt:this.cleanupPrompt,items:this.items,result:this.result}));}catch{this.message('Browser storage is full. Your output files remain on disk.');}}
+  save(){this.editor?.saveSoon();try{this.storage.setItem(this.storageKey,JSON.stringify({draft:this.state,prompts:this.prompts,sourceInfo:this.sourceInfo,maskInfo:this.maskInfo,job:this.job,pendingHDR:this.pendingHDR,cleanupPrompt:this.cleanupPrompt,items:this.items,result:this.result}));}catch{this.message('Browser storage is full. Your output files remain on disk.');}}
 
   changed(){this.message('');this.save();this.render();this.owner.videoComposer?.syncWorkflow();}
 
@@ -683,9 +685,10 @@ export class WatermarkWorkspace{
   updateGenerationGuide(){updateGenerationSteps(this.$('generation-steps'),this.job||{phase:paintoutColourPipeline(this.config())==='sdr_hdr'?'repair':'complete'});}
 
   async submitGraph(graph){
+    graph=(await prepareAEFrameGraph(this,graph,this.config())).graph;
     const requestId=crypto.randomUUID();
     try{
-      const response=await this.fetch('/prompt',{prompt:graph,client_id:this.api.clientId,extra_data:{zura_paintout:true,zura_paintout_request:requestId,preview_method:'auto'}});
+      const response=await this.fetch('/prompt',{prompt:graph,client_id:this.api.clientId,extra_data:{...(this.config().ae_frame_contract?{ae_frame_contract:this.config().ae_frame_contract}:{}),zura_paintout:true,zura_paintout_request:requestId,preview_method:'auto'}});
       if(response.prompt_id)return response;
     }catch(error){
       if(error.status>=400&&error.status<500)throw error;

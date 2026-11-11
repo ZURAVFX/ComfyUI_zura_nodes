@@ -720,11 +720,16 @@ def save_exr(path,a,space,half):
 
 class ZuraPaintoutUncrop:
     @classmethod
-    def INPUT_TYPES(cls):return {'required':{'decoded_crop':('IMAGE',),'plate':('ZURA_PLATE',),'output_name':string('paintout/take'),'precision':(['float32','float16'],),'match_context':('BOOLEAN',{'default':True})},'optional':{'export_format':(EXPORT_FORMATS,), 'motion_preview':('BOOLEAN',{'default':True})}}
+    def INPUT_TYPES(cls):return {'required':{'decoded_crop':('IMAGE',),'plate':('ZURA_PLATE',),'output_name':string('paintout/take'),'precision':(['float32','float16'],),'match_context':('BOOLEAN',{'default':True})},'optional':{'export_format':(EXPORT_FORMATS,), 'motion_preview':('BOOLEAN',{'default':True}), 'ae_frame_contract':string('')}}
     RETURN_TYPES=('STRING',);RETURN_NAMES=('saved_sequence',);OUTPUT_NODE=True;FUNCTION='save';CATEGORY=CATEGORY
     @cpu_frames
-    def save(self,decoded_crop,plate,output_name,precision,match_context,export_format='EXR sequence',motion_preview=False):
+    def save(self,decoded_crop,plate,output_name,precision,match_context,export_format='EXR sequence',motion_preview=False,ae_frame_contract=''):
         import folder_paths
+        if ae_frame_contract:
+            from ..comfylink.frame_contract import validate_interval
+            source=plate['source']
+            validate_interval(json.loads(ae_frame_contract),frames=plate['count'],fps=plate['fps'],
+                width=source['width'],height=source['height'])
         if len(decoded_crop)<plate['count']:raise ValueError('Decoded sequence is shorter than source range')
         ph,pw=plate['padded'];rh,rw=plate['resized'];x,y,w,h=plate['rect']
         if tuple(decoded_crop.shape[1:3])!=(ph,pw):raise ValueError('Decoded crop size differs from crop metadata')

@@ -79,7 +79,7 @@ def inspect_sdr_delivery(job):
         raise ValueError('The completed video is outside frame-extension storage.')
     selection = job['selection']
     count = selection['frames']
-    if job.get('long') or job.get('pad_delivery'):
+    if (job.get('long') or job.get('pad_delivery')) and selection.get('ae_frame_contract') is None:
         count += (1 - count) % 8
     before = path.stat()
     raster = inspect_video(path, expected_frames=count, expected_width=selection['width'],
@@ -262,7 +262,7 @@ class OutpaintJobs:
 
     @staticmethod
     def public(job):
-        result = {k: job.get(k) for k in ('id', 'kind', 'state', 'url', 'artifact', 'error', 'selection', 'approved', 'window', 'windows', 'active_prompt_id', 'estimated_bytes', 'stage', 'hdr_files', 'output_raster')}
+        result = {k: job.get(k) for k in ('id', 'kind', 'state', 'url', 'artifact', 'error', 'selection', 'approved', 'window', 'windows', 'active_prompt_id', 'estimated_bytes', 'stage', 'hdr_files', 'output_raster', 'exr_storage')}
         result['hdr'] = bool(job.get('hdr_review_key') or job.get('hdr_render'))
         return result
 
@@ -272,8 +272,9 @@ class OutpaintJobs:
         job['output_raster'] = result['output_raster']
         return result
 
-    async def submit_hdr_review(self, source, selection, *, colour_space, client_id=None):
+    async def submit_hdr_review(self, source, selection, *, colour_space, client_id=None, exr_storage='half'):
         """Internal HDR geometry review; not registered as a public route yet."""
+        if exr_storage not in ('half','float32'): raise ValueError('Choose half or float32 EXR storage.')
         import execution
         from .hdr_outpaint_experiment import build_hdr_review_experiment
         if client_id is not None and (not isinstance(client_id, str) or not client_id or len(client_id) > 128):
@@ -292,7 +293,7 @@ class OutpaintJobs:
             raise ValueError('ComfyUI needs attention: ' + (details or str(valid[1]))[:1200])
         job = {'id': identity, 'kind': 'review', 'state': 'queued', 'source': source,
                'selection': selection, 'created': time.time(), 'approved': False,
-               'hdr_review_key': review_key, 'hdr_colour_space': colour_space}
+               'hdr_review_key': review_key, 'hdr_colour_space': colour_space, 'exr_storage':exr_storage}
         self.jobs[identity] = job
         number = server.number; server.number += 1
         server.prompt_queue.put((number, identity, graph, {'client_id': event_client,
@@ -300,13 +301,15 @@ class OutpaintJobs:
         return self.public(job)
 
     async def submit_reviewed_hdr(self, source, selection, reviewed, *, colour_space, has_audio,
-                                  prompt='', seed=42, client_id=None):
+                                  prompt='', seed=42, client_id=None, exr_storage='half'):
         """Internal bounded HDR render; not registered as a public route yet."""
+        if exr_storage not in ('half','float32'): raise ValueError('Choose half or float32 EXR storage.')
         from .hdr_outpaint_experiment import _reviewed_sdr_first_selection
         from .hdr_outpaint_queue import ReviewedHDRQueue
         if (not reviewed or reviewed.get('kind') != 'review' or reviewed.get('state') != 'complete'
                 or not reviewed.get('approved') or reviewed.get('source', {}).get('sha') != source.get('sha')):
             raise ValueError('Review and approve the HDR selection before generating.')
+        if reviewed.get('exr_storage','half') != exr_storage: raise ValueError('EXR storage changed since review. Review again.')
         key = reviewed.get('hdr_review_key')
         await asyncio.to_thread(_reviewed_sdr_first_selection, source, selection, key, colour_space, check_asset)
         if not isinstance(prompt, str) or len(prompt) > 4000 or type(seed) is not int or not 0 <= seed <= 2**53-1:
@@ -318,7 +321,7 @@ class OutpaintJobs:
         identity = uuid.uuid4().hex
         job = {'id': identity, 'kind': 'render', 'state': 'queued', 'source': source,
                'selection': selection, 'created': time.time(), 'approved': False,
-               'long': True, 'hdr_render': True, 'stage': 'preparing', 'active_prompt_id': None}
+               'long': True, 'hdr_render': True, 'stage': 'preparing', 'active_prompt_id': None, 'exr_storage':exr_storage}
         def update(stage):
             job.update(state='running', stage=stage)
         def on_prompt(prompt_id):
@@ -330,7 +333,7 @@ class OutpaintJobs:
         async def execute():
             try:
                 files = await adapter.run(source=source, review_key=key, colour_space=colour_space,
-                                          prompt=prompt, seed=seed, check_asset=check_asset)
+                                          prompt=prompt, seed=seed, check_asset=check_asset, exr_storage=exr_storage)
                 def reference(path):
                     relative = Path(path).resolve().relative_to(root)
                     return {'type': 'output', 'subfolder': relative.parent.as_posix(), 'filename': relative.name}
@@ -345,10 +348,11 @@ class OutpaintJobs:
         job['task'] = asyncio.create_task(execute())
         return self.public(job)
 
-    async def submit_long_hdr(self, kind, source, selection, *, reviewed=None, prompt='', seed=42, client_id=None):
+    async def submit_long_hdr(self, kind, source, selection, *, reviewed=None, prompt='', seed=42, client_id=None, exr_storage='half'):
         """Internal full-range review or render; gated from normal Studio."""
         import folder_paths
         from .hdr_outpaint_long_comfy import create_long_hdr_review_job, create_long_hdr_outpaint_job
+        if exr_storage not in ('half','float32'): raise ValueError('Choose half or float32 EXR storage.')
         if kind not in ('review','render'):
             raise ValueError('Choose a valid HDR frame-extension job.')
         if kind=='render' and (not reviewed or reviewed.get('kind')!='review' or
@@ -356,6 +360,7 @@ class OutpaintJobs:
                 not reviewed.get('hdr_long') or reviewed.get('source',{}).get('sha')!=source.get('sha') or
                 reviewed.get('selection',{}).get('review_key')!=selection.get('review_key')):
             raise ValueError('Review and approve the full HDR selection before generating.')
+        if kind == 'render' and reviewed.get('exr_storage','half') != exr_storage: raise ValueError('EXR storage changed since review. Review again.')
         root=Path(folder_paths.get_output_directory()).resolve()
         args={'review_key':selection.get('review_key'), 'output_root':root,
               'check_asset':check_asset, 'client_id':client_id or 'zura-hdr-outpaint'}
@@ -363,12 +368,12 @@ class OutpaintJobs:
             controller,details=await asyncio.to_thread(create_long_hdr_review_job,self.studio.server,source,selection,**args)
         else:
             controller,details=await asyncio.to_thread(create_long_hdr_outpaint_job,self.studio.server,source,selection,
-                input_root=folder_paths.get_input_directory(),prompt=prompt,seed=seed,**args)
+                input_root=folder_paths.get_input_directory(),prompt=prompt,seed=seed,exr_storage=exr_storage,**args)
         identity=details['id']
         job={'id':identity,'kind':kind,'state':'queued','source':source,'selection':selection,
              'created':time.time(),'approved':False,'long':True,'hdr_long':True,
              'hdr_review_key':selection['review_key'],'hdr_colour_space':selection['colour_space'],
-             'hdr_controller':controller,'windows':details['sections']}
+             'hdr_controller':controller,'windows':details['sections'],'exr_storage':exr_storage}
         self.jobs[identity]=job
         async def execute():
             try:
@@ -382,7 +387,7 @@ class OutpaintJobs:
                         raise ValueError('The HDR conversion metadata is unavailable.')
                     validated=await asyncio.to_thread(checked_long_delivery, root, result, details['id'],
                         width=details['width'], height=details['height'], frames=details['frames'],
-                        has_audio=details['has_audio'])
+                        has_audio=details['has_audio'], exr_storage=exr_storage)
                     def ref(path):
                         relative=path.relative_to(root)
                         return {'type':'output','subfolder':relative.parent.as_posix(),'filename':relative.name}
@@ -407,6 +412,8 @@ class OutpaintJobs:
         keys = ('start', 'duration', 'mode', 'width', 'height', 'left', 'top', 'right', 'bottom', 'black_threshold')
         options = {k: selection[k] for k in keys}
         options['duration'] = selection.get('requested_duration', selection['duration'])
+        if selection.get('ae_frame_contract') is not None:
+            options['ae_frame_contract']=selection['ae_frame_contract']
         current, parts, subplans = plan_long(source, **options,
             overlap=selection.get('overlap', 12), strategy=selection.get('strategy'), allow_partial_end=True)
         if current['review_key'] != selection.get('review_key'):
@@ -526,7 +533,7 @@ class OutpaintJobs:
                 await run_windows(kind=kind, source=source, selection=current, parts=parts, subplans=subplans,
                     submit=submit_child, wait=wait_child, cancel=cancel_child, update=update,
                     ffmpeg=executable, output=output, source_audio=audio, anchor=anchor)
-                await asyncio.to_thread(inspect_video, output, expected_frames=(current['frames'] + (1 - current['frames']) % 8 if kind == 'render' else current['frames']),
+                await asyncio.to_thread(inspect_video, output, expected_frames=(current['frames'] + (1 - current['frames']) % 8 if kind == 'render' and current.get('ae_frame_contract') is None else current['frames']),
                     expected_width=current['width'], expected_height=current['height'], expected_fps=float(source_rate(current)))
                 asset = {'type': 'output', 'subfolder': 'genj/outpaint', 'filename': output.name}
                 job.update(state='complete', url=media_url(asset), artifact=asset)
@@ -551,6 +558,8 @@ class OutpaintJobs:
 
     async def submit(self, kind, source, selection, prompt='', seed=42, client_id=None, anchor_file=None, strategy=None, custom_loras=None, pad_delivery=False):
         import execution
+        if selection.get('ae_frame_contract') is not None:
+            pad_delivery=False
         identity = uuid.uuid4().hex
         prefix = 'genj/outpaint/' + identity
         builder = build_review_graph if kind == 'review' else build_studio_graph
@@ -658,6 +667,14 @@ def register(studio, routes, response):
                 source = await asyncio.to_thread(probe_sdr_source, source)
             if type(hdr) is not bool:
                 raise ValueError('Choose a valid HDR option.')
+            contract=body.get('ae_frame_contract') or (body.get('config') or {}).get('ae_frame_contract')
+            if contract is not None:
+                from ..comfylink.frame_contract import normalise_frame_contract, contract_rate, validate_interval
+                contract=normalise_frame_contract(contract)
+                if hdr:
+                    raise ValueError('HDR frame extension cannot yet guarantee exact AE frame delivery. Use SDR frame extension or a supported HDR conversion workflow.')
+                fields.update(start=0,duration=float(contract['frameCount']/contract_rate(contract)),ae_frame_contract=contract)
+                validate_interval(contract,frames=contract['frameCount'],fps=source_rate(source),width=fields['width'],height=fields['height'])
             if not hdr and fields['mode'] in ('expand', 'black') and strategy in (None, 'black_guide') and (float(fields['duration'])*float(source_rate(source)) > 120 or needs_bounded_canvas(fields['width'], fields['height'], fields['duration'], source_rate(source))):
                 strategy = 'anchored_masked'
             if hdr:
@@ -677,7 +694,7 @@ def register(studio, routes, response):
                     from .hdr_outpaint_long_plan import plan_hdr_windows
                     selection,_,_=plan_hdr_windows(source,**fields,
                         colour_space=body.get('colour_space','auto'))
-                    return web.json_response(await jobs.submit_long_hdr('review',source,selection,client_id=body.get('client_id')))
+                    return web.json_response(await jobs.submit_long_hdr('review',source,selection,client_id=body.get('client_id'),exr_storage=body.get('exr_storage','half')))
                 if strategy not in (None, 'black_guide'):
                     raise ValueError('Choose a supported HDR frame-extension preview.')
                 dependencies = await asyncio.to_thread(hdr_black_dependencies if black else hdr_expand_dependencies)
@@ -686,7 +703,7 @@ def register(studio, routes, response):
                     raise ValueError('HDR frame extension needs these models or nodes: ' + ', '.join(missing) + '. Open model setup for guidance.')
                 selection = plan(source, **fields)
                 return web.json_response(await jobs.submit_hdr_review(source, selection,
-                    colour_space=body.get('colour_space', 'auto'), client_id=body.get('client_id')))
+                    colour_space=body.get('colour_space', 'auto'), client_id=body.get('client_id'), exr_storage=body.get('exr_storage','half')))
             if strategy == 'anchored_masked':
                 if not LONG_MODE_READY:
                     raise ValueError('Long frame extension is not available in this version yet.')
@@ -739,6 +756,12 @@ def register(studio, routes, response):
             review_job = jobs.state(request.match_info['identity'])
             if review_job['kind'] != 'review' or review_job['state'] != 'complete' or not review_job['approved']:
                 raise ValueError('Review and approve the selection before generating.')
+            requested_contract=body.get('ae_frame_contract')
+            if requested_contract is not None:
+                from ..comfylink.frame_contract import normalise_frame_contract
+                requested_contract=normalise_frame_contract(requested_contract)
+            if requested_contract is not None and requested_contract != review_job['selection'].get('ae_frame_contract'):
+                raise ValueError('The AE source contract changed. Review the complete source interval again.')
             if review_job.get('render_id'):
                 previous_render = jobs.state(review_job['render_id'])
                 if previous_render['state'] not in ('failed', 'cancelled', 'interrupted'):
@@ -765,7 +788,7 @@ def register(studio, routes, response):
                 if body.get('custom_loras'):
                     raise ValueError('Custom LoRAs are not supported by the long HDR preview yet.')
                 result=await jobs.submit_long_hdr('render',review_job['source'],review_job['selection'],
-                    reviewed=review_job,prompt=body.get('prompt',''),seed=seed,client_id=body.get('client_id'))
+                    reviewed=review_job,prompt=body.get('prompt',''),seed=seed,client_id=body.get('client_id'),exr_storage=body.get('exr_storage','half'))
             elif review_job.get('hdr_review_key'):
                 if not hdr_outpaint_enabled():
                     raise ValueError('HDR frame extension is not available in this version yet.')
@@ -776,7 +799,7 @@ def register(studio, routes, response):
                 has_audio = await asyncio.to_thread(source_has_audio, review_job['source'])
                 result = await jobs.submit_reviewed_hdr(review_job['source'], review_job['selection'], review_job,
                     colour_space=review_job['hdr_colour_space'], has_audio=has_audio,
-                    prompt=body.get('prompt', ''), seed=seed, client_id=body.get('client_id'))
+                    prompt=body.get('prompt', ''), seed=seed, client_id=body.get('client_id'), exr_storage=body.get('exr_storage','half'))
             elif review_job.get('long'):
                 if not LONG_MODE_READY or review_job['selection'].get('strategy') != 'anchored_masked':
                     raise ValueError('Long frame extension is not available in this version yet.')

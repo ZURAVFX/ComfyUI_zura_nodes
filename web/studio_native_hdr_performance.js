@@ -1,3 +1,4 @@
+import {normaliseEXRStorage} from './studio_exr_precision.js';
 // The original HDR image or video frame is generation data. Its PNG is only a display proxy.
 export const nativePerformanceOpening=studio=>(studio.lookMode==='ready'?studio.readyAsset?.native_hdr:null)||studio.project?.opening_input?.native_hdr;
 
@@ -38,5 +39,5 @@ export function mainNativeLTXTake(project,result){
     ||!Array.isArray(result.hdr_files)||!result.hdr_files.length
     ||result.hdr_files.some(file=>file.type!=='output'||!file.filename))return null;
   return {projectId:project.id,resultKey:`${project.id}:${result.action_id||result.asset.filename}`,
-    file:result.asset,hdrFiles:result.hdr_files,nativeHDR:true};
+    file:result.asset,hdrFiles:result.hdr_files,nativeHDR:true,exr_storage:normaliseEXRStorage(result.exr_storage??project.config?.exr_storage)};
 }

@@ -1,3 +1,4 @@
+import {runStudioVMInContext} from './studio_vm_fixture.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
@@ -8,7 +9,7 @@ const start=code.indexOf('export async function openZuraStudio(');
 const entry=code.slice(start,code.indexOf('\n}',start)+2).replace('export ','');
 let opens=0;const modes=[];
 const studio={container:{isConnected:false},async open(){opens++;this.container.isConnected=true;},creative:{show:mode=>modes.push(mode)}};
-const context=vm.createContext({registeredStudio:studio});vm.runInContext(entry,context);
+const context=vm.createContext({registeredStudio:studio});runStudioVMInContext(entry,context);
 assert.equal(await context.openZuraStudio('paintout'),studio);
 assert.deepEqual(modes,['paintout']);assert.equal(opens,1);
 await context.openZuraStudio();assert.equal(opens,1,'Opening the connected shell must not reload the active project');

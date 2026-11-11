@@ -80,6 +80,7 @@ class HDRLongService:
 
     async def start(self, body):
         if not isinstance(body,dict):raise ValueError('Choose HDR conversion settings.')
+        if body.get('exr_storage','half') not in ('half','float32'):raise ValueError('Choose half or float32 EXR storage.')
         mode=body.get('mode')
         if mode not in ('sdr','native'):raise ValueError('Choose SDR to HDR or HDR to HDR.')
         section_frames=section_frames_for(mode,requested=body.get('section_frames'))

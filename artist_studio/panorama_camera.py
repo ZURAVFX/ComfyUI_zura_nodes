@@ -64,6 +64,13 @@ def stabilise_geometry(geometry, texture_images):
 
 
 def plan(source, config):
+    contract=config.get('ae_frame_contract')
+    if contract is not None:
+        from ..comfylink.frame_contract import normalise_frame_contract, contract_rate
+        contract=normalise_frame_contract(contract)
+        if contract_rate(contract)!=24:
+            raise ValueError('The native camera recipe requires 24 fps and cannot preserve this AE source cadence.')
+        config={**config,'start':0,'duration':contract['frameCount']/24}
     start, seconds = float(config.get('start', 0)), float(config.get('duration', 2))
     width, height = int(config.get('width', 1920)), int(config.get('height', 1080))
     if not all(math.isfinite(v) for v in (start, seconds)) or start < 0 or seconds <= 0:
@@ -84,6 +91,9 @@ def plan(source, config):
                 'duration': seconds, 'frames': frames, 'fps': 24, 'width': width, 'height': height,
                 'model': MODELS['geometry'][1], 'level': 8 if max(width, height) > 1280 else 7,
                 'refine': 3, 'batch': 1, 'projection': True, 'mask': True, 'geometry_mode': mode}
+    if contract is not None:
+        from ..comfylink.frame_contract import validate_interval
+        geometry['ae_frame_contract']=validate_interval(contract,frames=frames,fps=24,width=width,height=height)
     if mode == 'stable_scene':
         geometry['scene_texture'] = 'still-v2'
     identity = geometry if mode == 'stable_scene' else {k: v for k, v in geometry.items() if k != 'geometry_mode'}

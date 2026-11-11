@@ -13,7 +13,7 @@ from .hdr_outpaint_long_plan import plan_hdr_windows, long_plan_values, build_lo
 
 
 def create_long_hdr_conversion(server, source, selection, intermediate, *, review_key,
-                               output_root, check_asset, client_id=None, ffmpeg=None):
+                               output_root, check_asset, client_id=None, ffmpeg=None, exr_storage='half'):
     """Prepare one cancellable HDR conversion of a reviewed SDR intermediate.
 
     The input must be an owned, verified file under the Comfy output root.
@@ -30,6 +30,7 @@ def create_long_hdr_conversion(server, source, selection, intermediate, *, revie
         raise ValueError('The full HDR selection changed. Review it again.')
     if len(parts) < 2:
         raise ValueError('Use the single-section HDR workflow for this range.')
+    if exr_storage not in ('half','float32'): raise ValueError('Choose half or float32 EXR storage.')
     client_id = validated_client_id(client_id)
     root = Path(output_root).resolve()
     candidate = Path(intermediate)
@@ -51,7 +52,7 @@ def create_long_hdr_conversion(server, source, selection, intermediate, *, revie
     staging = staging_root(); staging.mkdir(parents=True, exist_ok=True)
     destination = root/'genj'/'hdr'; destination.mkdir(parents=True, exist_ok=True)
     staged_bytes = sum(part.count for part in parts) * expected['width'] * expected['height'] * 12
-    output_bytes = total * expected['width'] * expected['height'] * 10
+    output_bytes = total * expected['width'] * expected['height'] * (16 if exr_storage=='float32' else 10)
     reserve = 512 * 1024**2
     if os.stat(staging).st_dev == os.stat(destination).st_dev:
         if shutil.disk_usage(staging).free < staged_bytes + output_bytes + reserve:
@@ -73,7 +74,7 @@ def create_long_hdr_conversion(server, source, selection, intermediate, *, revie
         checked = await asyncio.to_thread(check_asset, source)
         return await export_long_hdr_outpaint(staged, root, 'hdr_outpaint_'+identity,
             source_path=str(checked), has_audio=has_audio, start_seconds=expected['start'],
-            source_duration=expected['requested_duration'], ffmpeg=executable)
+            source_duration=expected['requested_duration'], ffmpeg=executable, exr_storage=exr_storage)
     job=HDRChunkRunner(store, renderer.submit, export, renderer.cancel)
     return job, {'id':identity, 'frames':total, 'sections':len(parts), 'fps':24,
-                 'width':expected['width'], 'height':expected['height'], 'has_audio':has_audio}
+                 'width':expected['width'], 'height':expected['height'], 'has_audio':has_audio, 'exr_storage':exr_storage}

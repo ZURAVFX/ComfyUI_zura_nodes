@@ -1,3 +1,5 @@
+import {normaliseEXRStorage} from './studio_exr_precision.js';
+import {workspaceStorage} from './studio_storage.js';
 import {LTXHDRDelivery} from './studio_ltx_delivery.js';
 import {installOwnedExecuting} from './studio_progress.js';
 import {nativePerformanceOpening,validateNativePerformance,nativePerformanceReadiness,mainNativeLTXTake} from './studio_native_hdr_performance.js';
@@ -11,14 +13,14 @@ export function mainLTXTake(project,result){
   const raster=result.output_raster,file=result.asset;
   if(!file?.filename||file.type!=='output'||!raster||!Number.isInteger(raster.frames)||raster.frames<1||![raster.width,raster.height].every(v=>Number.isInteger(v)&&v>0))return null;
   return {projectId:project.id,resultKey:`${project.id}:${result.action_id||file.subfolder+'/'+file.filename}`,
-    file,config:{engine:'ltx',hdrOutput:result.hdr_output,frames:raster.frames,width:raster.width,height:raster.height,seed:result.seed??42}};
+    file,config:{engine:'ltx',...(result.ae_frame_contract||project.config?.ae_frame_contract?{ae_frame_contract:result.ae_frame_contract||project.config.ae_frame_contract}:{}),exr_storage:normaliseEXRStorage(result.exr_storage??project.config?.exr_storage),hdrOutput:result.hdr_output,frames:raster.frames,width:raster.width,height:raster.height,seed:result.seed??42}};
 }
 
 /** HDR delivery stays beside the main LTX generation. Its SDR master is never replaced. */
 export class MainLTXDelivery {
-  constructor(studio,api,tools){
+  constructor(studio,api,tools){this.storage=workspaceStorage(studio);
     this.studio=studio;this.api=api;this.records={};this.submitting=false;this.closed=false;
-    try{this.records=JSON.parse(localStorage.getItem(STORE))||{};}catch{}
+    try{this.records=JSON.parse(this.storage.getItem(STORE))||{};}catch{}
     this.control=document.createElement('label');this.control.className='zc-tool zc-model-control';this.control.hidden=true;
     this.control.title='HDR adds an LTX conversion pass after generation. Your SDR master is retained.';
     this.control.innerHTML='<span class="zc-sr-only">LTX output format</span><select aria-label="LTX output format"><option value="sdr">SDR</option><option value="hlg_video">HDR · HLG video</option><option value="hlg_and_exr">HDR · HLG + EXR</option><option value="acescg_exr">HDR · EXR</option></select>';
@@ -32,7 +34,7 @@ export class MainLTXDelivery {
     this.progress.querySelector('button').onclick=()=>this.delivery.cancel();
     this.downloads=document.createElement('div');this.downloads.className='zc-prompt-tools';this.downloads.hidden=true;this.downloads.setAttribute('aria-label','HDR delivery files');
     studio.container.querySelector('.gs-composer').append(this.downloads);
-    this.delivery=new LTXHDRDelivery(api,{key:'zura-main-ltx-hdr',onSetup:info=>{this.setup=info;if(!info.ready&&studio.$('model-downloads'))studio.$('model-downloads').open=true;},onUpdate:job=>this.update(job),onComplete:take=>{
+    this.delivery=new LTXHDRDelivery(api,{storage:this.storage,key:'zura-main-ltx-hdr',onSetup:info=>{this.setup=info;if(!info.ready&&studio.$('model-downloads'))studio.$('model-downloads').open=true;},onUpdate:job=>this.update(job),onComplete:take=>{
       this.records[take.resultKey]={state:'complete',take};this.save();
     }});
     this.onProgress=event=>this.sample(event.detail);
@@ -43,7 +45,7 @@ export class MainLTXDelivery {
       this.detail.textContent=this.section()+this.nodeLabel(p.node);
     });
   }
-  save(){try{const entries=Object.entries(this.records).slice(-24);this.records=Object.fromEntries(entries);localStorage.setItem(STORE,JSON.stringify(this.records));}catch{}}
+  save(){try{const entries=Object.entries(this.records).slice(-24);this.records=Object.fromEntries(entries);this.storage.setItem(STORE,JSON.stringify(this.records));}catch{}}
   async useSourceFrame(){
     const s=this.studio,id=s.project?.id,epoch=s.resetEpoch;
     if(!s.modelStatus?.native_hdr_performance||s.config.engine!=='local'||s.config.workflow_mode!=='motion'||s.config.edit_area!=='scene'||this.sourcePreparing||this.delivery.busy||s.busy||s.project?.phase==='working')return;

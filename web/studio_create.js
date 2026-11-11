@@ -1,3 +1,4 @@
+import {workspaceStorage} from './studio_storage.js';
 import {installRelightEngines} from './studio_relight.js';
 import {ImageEditInputs} from './studio_image_edit_inputs.js';
 import {ImageEditArea} from './studio_image_area.js';
@@ -34,15 +35,15 @@ const closeIcon=()=>'<svg viewBox="0 0 20 20" width="16" height="16" aria-hidden
 const previousIcon=()=>'<svg viewBox="0 0 20 20" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M16 10H4m5-5-5 5 5 5"/></svg>';
 const plusIcon=()=>'<svg viewBox="0 0 20 20" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M10 4v12M4 10h12"/></svg>';
 const KEY="zura-image-workspace-v1";
-const read=()=>{try{return JSON.parse(localStorage.getItem(KEY))||{};}catch{return {};}};
+const read=storage=>{try{return JSON.parse(storage.getItem(KEY))||{};}catch{return {};}};
 const view=file=>"/view?"+new URLSearchParams({filename:file.filename,subfolder:file.subfolder||"",type:"output"});
 
 /** Independent image workspace; video recipes and their saved state stay intact. */
 export class CreativeWorkspace {
-  constructor(studio,api,app){
+  constructor(studio,api,app){this.storage=workspaceStorage(studio);
     this.studio=studio;this.api=api;this.app=app;this.root=studio.container;
     this.disposePopovers=installPopoverDismissal(this.root);
-    const saved=read();this.selectedImage=Number.isInteger(saved.selectedImage)?saved.selectedImage:0;this.items=Array.isArray(saved.items)?saved.items.slice(0,30):[];
+    const saved=read(this.storage);this.selectedImage=Number.isInteger(saved.selectedImage)?saved.selectedImage:0;this.items=Array.isArray(saved.items)?saved.items.slice(0,30):[];
     this.job=saved.job||null;this.pendingSubmission=saved.pendingSubmission||null;this.draft=saved.draft||{};this.models=[];this.submitting=false;this.uploading=false;this.references=Array.isArray(this.draft.references)?this.draft.references:[];
     if(this.job?.cancelPending)this.job.cancelRetryAvailable=true;
     this.editMainMissing=!!this.draft.editMainMissing;this.autoCanvasSuppressed=!!this.draft.autoCanvasSuppressed;
@@ -53,11 +54,11 @@ export class CreativeWorkspace {
     this.root.querySelector(".gs-brand>span").textContent="";
     const theme=document.createElement("button");theme.id="zc-theme";theme.type="button";theme.className="zc-theme-toggle";
     this.root.querySelector(".gs-top-actions").prepend(theme);
-    this.outputSettings=new StudioOutputSettings(this.root,api);
+    this.outputSettings=new StudioOutputSettings(this.root,api,this);
     // Reuse the existing downloader, including its running-download ownership.
     const modelDownloads=studio.$('model-downloads');
     if(modelDownloads?.querySelector('summary')){modelDownloads.classList.add('zc-tool-popup','zc-global-models');modelDownloads.querySelector('summary').textContent='Models';modelDownloads.querySelector('.gs-advanced-body')?.classList.add('zc-tool-panel');this.root.querySelector('.gs-top-actions').prepend(modelDownloads);}
-    let savedTheme;try{savedTheme=localStorage.getItem("zura-studio-theme");}catch{}
+    let savedTheme;try{savedTheme=this.storage.getItem("zura-studio-theme");}catch{}
     this.setTheme(savedTheme==="light"?"light":"dark",false);
     theme.onclick=()=>this.setTheme(this.root.dataset.theme==="light"?"dark":"light");
     const home=document.createElement("section");home.className="zc-home";
@@ -281,7 +282,7 @@ export class CreativeWorkspace {
     this.root.dataset.theme=theme;const light=theme==="light";
     this.$("theme").textContent=light?"Dark mode":"Light mode";
     this.$("theme").setAttribute("aria-label",light?"Switch to dark mode":"Switch to light mode");
-    if(persist)try{localStorage.setItem("zura-studio-theme",theme);}catch{this.message("Theme changed for this session. Browser storage is unavailable.");}
+    if(persist)try{this.storage.setItem("zura-studio-theme",theme);}catch{this.message("Theme changed for this session. Browser storage is unavailable.");}
   }
   $(id){return this.root.querySelector("#zc-"+id);}
   async fetch(path,body){const r=await this.api.fetchApi(path,body===undefined?{}:{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});let data;try{data=await r.json();}catch{if(r.ok)return {};const e=new Error("ComfyUI is unavailable. Reconnect and try again.");e.status=r.status;throw e;}if(!r.ok){const e=new Error(data.error?.message||data.error||"ComfyUI could not complete this request.");e.status=r.status;throw e;}return data;}
@@ -346,7 +347,7 @@ export class CreativeWorkspace {
     }catch(error){this.message(error.name==='AbortError'?'Adding the canvas image timed out. Choose Edit image again to retry.':error.message);}
     finally{clearTimeout(timer);this.uploading=false;this.render();}
   }
-  save(){this.draft=this.config();try{localStorage.setItem(KEY,JSON.stringify({draft:this.draft,items:this.items,selectedImage:this.selectedImage,job:this.job,pendingSubmission:this.pendingSubmission}));return true;}catch{this.message("Browser storage is full. Your generated files remain saved on disk.");return false;}}
+  save(){this.draft=this.config();try{this.storage.setItem(KEY,JSON.stringify({draft:this.draft,items:this.items,selectedImage:this.selectedImage,job:this.job,pendingSubmission:this.pendingSubmission}));return true;}catch{this.message("Browser storage is full. Your generated files remain saved on disk.");return false;}}
   message(text){this.$("message").textContent=text||"";this.$("message").hidden=!text;}
   open(){
     this.modelDownloadClosed=false;
@@ -368,7 +369,7 @@ export class CreativeWorkspace {
     }:this.mode==='video'&&this.studio.modelStatus?.native_hdr_performance&&this.studio.config.engine==='local'&&this.studio.config.workflow_mode==='motion'&&this.studio.config.edit_area==='scene'?async(asset,colour)=>{
       const source=await this.fetch('/zura/studio/ltx/hdr-performance/source',{asset_id:asset.id,colour_space:colour});
       const parts=source.file.split('/');source.url=this.api.apiURL('/view?'+new URLSearchParams({filename:parts.pop(),subfolder:parts.join('/'),type:'input'}));
-      this.studio.source=source;this.studio.hdrSourceLook=false;this.studio.project=null;this.studio.lastVideo=null;localStorage.removeItem('genj-studio-project');
+      this.studio.source=source;this.studio.hdrSourceLook=false;this.studio.project=null;this.studio.lastVideo=null;this.storage.removeItem('genj-studio-project');
       Object.assign(this.studio.config,{start:0,duration:Math.min(2,source.duration),mask_points:[],ltx_output:'hlg_and_exr'});
       this.studio.trimSeeking=false;this.studio.trimSeekTime=null;this.studio.pointFrameStart=0;this.studio.syncForm();this.show('video');this.studio.render();
       this.studio.message('HDR video loaded. Choose an HDR EXR or use the source frame for its appearance.');
@@ -441,6 +442,7 @@ export class CreativeWorkspace {
     if(mode==='image'||mode==='ripple')void this.rippleImage?.resume();
     this.rippleImage?.syncImageUI();
     this.imageArea?.sync();
+    this.studio.aeBridge?.modeChanged();
   }
   async loadModels(){
     if(this.loading)return;this.loading=true;
@@ -585,6 +587,7 @@ export class CreativeWorkspace {
     this.imageComparison?.update(this.items[this.selectedImage||0],this.references);
     this.editInputs?.sync();
     this.imageArea?.sync();
+    this.studio.aeBridge?.modeChanged();
   }
   activateImageResult(index=0){
     if(!this.items[index]?.file?.filename)return;
@@ -607,6 +610,7 @@ export class CreativeWorkspace {
     this.imageComparison?.update(this.items[this.selectedImage],this.references);
     this.editInputs?.sync();
     this.imageArea?.sync();
+    this.studio.aeBridge?.modeChanged();
   }
   async pasteReferences(event){
     if(this.mode==='frames')return this.frames.paste(event);

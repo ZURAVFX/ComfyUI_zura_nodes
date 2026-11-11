@@ -18,7 +18,7 @@ from .outpaint_studio import plan, source_rate
 
 
 def plan_long(source, *, start, duration, mode, width, height, left=0, top=0,
-              right=0, bottom=0, black_threshold=2/255, overlap=12, strategy=None, allow_partial_end=False):
+              right=0, bottom=0, black_threshold=2/255, overlap=12, strategy=None, allow_partial_end=False, ae_frame_contract=None):
     """Bind the whole source range and canvas, not just the first window."""
     if isinstance(start, bool) or isinstance(duration, bool):
         raise ValueError('Choose a valid start and duration.')
@@ -40,6 +40,9 @@ def plan_long(source, *, start, duration, mode, width, height, left=0, top=0,
     if strategy is not None and (strategy != 'anchored_masked' or mode not in ('expand', 'black') or overlap != 9):
         raise ValueError('The anchored long workflow requires a nine-frame overlap.')
     values = {'source_sha': str(source['sha']), 'start': start, 'frames': frames, 'requested_duration': duration, 'fps_num': fps.numerator, 'fps_den': fps.denominator, 'overlap': overlap, **args}
+    if ae_frame_contract is not None:
+        from ..comfylink.frame_contract import validate_interval
+        values['ae_frame_contract']=validate_interval(ae_frame_contract,frames=frames,fps=fps,width=width,height=height)
     if strategy is not None:
         values['strategy'] = strategy
     digest = hashlib.sha256(json.dumps(values, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
@@ -82,7 +85,7 @@ async def run_windows(*, kind, source, selection, parts, subplans, submit, wait,
         update('assembling', len(parts), len(parts))
         command = ffmpeg_assembly(ffmpeg, parts, paths, output,
             source=source_audio if kind == 'render' else None,
-            audio_start=selection['start'], pad_tail=kind == 'render',
+            audio_start=selection['start'], pad_tail=kind == 'render' and selection.get('ae_frame_contract') is None,
             audio_duration=selection.get('requested_duration', selection['duration']),
             fps=Fraction(selection.get('fps_num', FPS),selection.get('fps_den', 1)))
         process = await asyncio.create_subprocess_exec(*command, stdout=asyncio.subprocess.DEVNULL,

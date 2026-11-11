@@ -101,9 +101,13 @@ def prepare_graph(store, check_asset, body):
         width=body.get('width'), height=body.get('height'), frames=body.get('frames'),
         prompt=body.get('prompt'), seed=body.get('seed', 42), output=body.get('output', 'hlg_and_exr'),
         prefix='endpoint_'+uuid.uuid4().hex, audio_file=audio, audio_start=body.get('audio_start', 0.),
-        output_width=body.get('output_width'), output_height=body.get('output_height'))
+        output_width=body.get('output_width'), output_height=body.get('output_height'), exr_storage=body.get('exr_storage','half'))
     from .custom_loras import apply_installed_ltx_loras
-    return apply_installed_ltx_loras(graph, body.get('custom_loras', []))
+    graph=apply_installed_ltx_loras(graph, body.get('custom_loras', []))
+    if body.get('ae_frame_contract') is not None:
+        from ..comfylink.frame_contract import prepare_frame_contract_graph
+        graph=prepare_frame_contract_graph(graph,body['ae_frame_contract'],'frames')
+    return graph
 
 
 def register(studio, routes, response, check_asset):

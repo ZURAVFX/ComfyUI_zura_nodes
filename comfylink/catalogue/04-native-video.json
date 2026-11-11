@@ -1,0 +1,32 @@
+{
+  "id": "native-video-roundtrip",
+  "name": "04 – Native video round-trip (no model)",
+  "description": "Native LoadVideo → SaveVideo. Sends the selected layer range as one video job. No custom input nodes or AI models required.",
+  "mode": "video",
+  "workflow": {
+    "1": {
+      "class_type": "LoadVideo",
+      "inputs": {
+        "file": "placeholder.mp4"
+      },
+      "_meta": {
+        "title": "AE_INPUT"
+      }
+    },
+    "2": {
+      "class_type": "SaveVideo",
+      "inputs": {
+        "video": [
+          "1",
+          0
+        ],
+        "filename_prefix": "video/ComfyLink",
+        "format": "auto",
+        "codec": "auto"
+      },
+      "_meta": {
+        "title": "AE_OUTPUT"
+      }
+    }
+  }
+}

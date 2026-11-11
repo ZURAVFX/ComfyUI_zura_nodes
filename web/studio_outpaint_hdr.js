@@ -1,3 +1,4 @@
+import {normaliseEXRStorage} from './studio_exr_precision.js';
 // Only the actual, inspected SDR render may be sent to the HDR converter.
 // Review overlays and the SDR preview of a native HDR result are never inputs.
 export function outpaintHDRTake(state, output, seed=42){
@@ -10,6 +11,6 @@ export function outpaintHDRTake(state, output, seed=42){
      !raster||![raster.width,raster.height,raster.frames].every(v=>Number.isInteger(v)&&v>0)||
      raster.fps!==24||typeof raster.has_audio!=='boolean')return null;
   return {resultKey:state.id,file,sdrFile:file,
-    config:{engine:'ltx',hdrOutput:output,frames:raster.frames,width:raster.width,
+    config:{engine:'ltx',...(state.ae_frame_contract?{ae_frame_contract:state.ae_frame_contract}:{}),exr_storage:normaliseEXRStorage(state.exr_storage),hdrOutput:output,frames:raster.frames,width:raster.width,
       height:raster.height,seed},hasAudio:raster.has_audio};
 }

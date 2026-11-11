@@ -1,3 +1,4 @@
+import {runStudioVMInContext} from './studio_vm_fixture.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
@@ -40,7 +41,7 @@ const app={};
 const context={HDRSourceTool,installStudioRestartNavigation,document,window,localStorage,api,app,CreativeWorkspace,ContentDetection,ClipTrimmer,clipLength,recoverClipLength,stageProgress,setTimeout,clearTimeout,setInterval,clearInterval,crypto:globalThis.crypto,URLSearchParams,AbortController,FormData};
 vm.createContext(context);
 const source=fs.readFileSync(new URL('../web/studio.js',import.meta.url),'utf8').replace(/^import .*;\r?\n/gm,'').replace(/^export /gm,'').split('app.registerExtension({')[0];
-vm.runInContext(source+'\nthis.Studio=ArtistStudio;',context);
+runStudioVMInContext(source+'\nthis.Studio=ArtistStudio;',context);
 const studio=new context.Studio(),ui=studio.creative;
 const issues=[],counts={};
 for(const mode of ['video','image','frames','references','paintout','watermark','outpaint','panorama','hdr','inpaint','objects','relight','viewport','swap']){

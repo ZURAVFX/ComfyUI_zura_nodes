@@ -1,3 +1,4 @@
+import {runStudioVMInContext} from './studio_vm_fixture.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
@@ -5,7 +6,7 @@ import vm from 'node:vm';
 const source=fs.readFileSync(new URL('../web/studio.js',import.meta.url),'utf8')
   .replace(/^import .*;\r?\n/gm,'').replace(/^export /gm,'').split('app.registerExtension({')[0];
 const context={};vm.createContext(context);
-vm.runInContext(source+'\nthis.Studio=ArtistStudio;this.allowed=verifiedSetup;this.defaults=defaults;',context);
+runStudioVMInContext(source+'\nthis.Studio=ArtistStudio;this.allowed=verifiedSetup;this.defaults=defaults;',context);
 const ui=Object.create(context.Studio.prototype),fields=new Map();
 ui.config={...context.defaults,engine:'wan2',h3_character_method:'control',workflow_mode:'swap',edit_area:'mask',scope:'person',mask_method:'auto'};
 ui.$=id=>{

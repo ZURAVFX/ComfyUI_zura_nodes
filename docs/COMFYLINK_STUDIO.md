@@ -1,0 +1,87 @@
+# Optional ComfyLink Studio session
+
+ComfyLink can open the existing Zura Studio for a selected After Effects
+layer and source interval. The separate After Effects extension is optional
+and is not bundled with Zura Nodes. Normal Zura Studio is free to open and
+use without a ComfyLink licence.
+
+## Working in Studio
+
+Start the session from the ComfyLink extension. Studio opens its normal mode
+chooser with one compact AE strip showing the target, source status, result
+transfer and **Leave**. Choose a mode, load the source and use that mode's
+existing controls. **Send to AE** uses the selected finished master, rather
+than the displayed preview. A retained result or pending import is not a
+successful AE return.
+
+**Leave** exits immediately, including while source loading is pending, and
+returns to normal Studio. AE drafts use separate per-tab session storage;
+they do not replace ordinary Studio drafts or another tab's work. Session
+authority is cleared on departure or expiry. Leaving does not cancel a
+running ComfyUI generation or delete its saved output.
+
+The native adapter registry covers character replacement, Ripple, viewport
+to final, camera angle, Relight, Paintout, watermark removal, alpha extraction,
+frame extension, HDR conversion, Director, first/last frame, reference video
+and Image. These 14 adapters connect to existing workspaces. Their presence
+does not mean every engine, source format, frame rate or HDR combination has
+been qualified end to end.
+
+## Source interval and delivery limits
+
+The AE source supplies the requested frame count **N**, dimensions and exact
+rational frame rate. Supported graph preparation keeps N as the delivery
+contract. A model may process a larger count **M** on its native frame grid,
+for example LTX's 8n+1 grid, then trim internally to N before saving. Prepared
+source and returned media must satisfy the active interval. A mismatch must
+retain the result with an explanation rather than silently retime it, loop
+it, extend it or claim a successful return.
+
+- Main character/viewport and authored Director routes are limited to 24 fps
+  for this integration. H3 routes with a fixed native cadence also reject
+  incompatible rates. A general rational-rate transport does not make every
+  model route compatible with that rate.
+- Image mode needs a one-frame source interval. Choose **Current frame** in
+  AE for a still return.
+- Model frame limits and supported native saver interfaces still apply.
+  Longer intervals need a supported long workflow.
+- Native HDR conversion and SDR frame extension have frame-contract paths.
+  HDR frame extension in an AE session is unsupported.
+- High-depth input requires a compatible native media route and EXR support.
+  A route that only accepts SDR must reject incompatible high-depth input.
+- Unknown/custom ICC conversion remains unsupported. An available original
+  master does not establish that AE can import it with the intended colour.
+
+The separate AE client controls layer application and restoration. Its
+native import, layer-pair behaviour and licence implementation are outside
+this public package and need their own live qualification.
+
+## Local session boundary
+
+The public adapter runs on the existing ComfyUI server under
+`/zura/comfylink/v1/studio`. Discovery exposes a process nonce so the local
+supervisor can bind its grant to the intended running instance. This nonce
+does not replace authenticated authority. Session grants bind the ComfyUI
+origin, target and source/transfer capabilities, with a maximum 15-minute
+lifetime. Requests validate local peer, Host, Origin and session credentials.
+
+The launch credential is consumed from the URL fragment and removed from the
+address bar. The browser uses a separate ephemeral session capability;
+supervisor profile credentials are not exposed to it. Source payloads and
+selected original masters have bounded metadata and verified hashes.
+Expired or departed sessions revoke access and clean up staged transfers.
+Original finished ComfyUI output is retained. Tokens and private extension
+binaries must not be put in workflows, screenshots, logs or public archives.
+
+## What the checks establish
+
+CPU tests cover real float I/O, OpenImageIO FLOAT/HALF readback, colour
+conversion, native graph frame contracts, local HTTP authentication,
+instance binding, departure/expiry and selected-master handling. JavaScript
+tests cover adapter routing, isolated storage, exact-frame controls and
+precision settings. These are boundary and numeric checks.
+
+Full live GPU generation, After Effects import, fresh installation and
+representative shot-quality review across all modes remain outstanding.
+Consult the [release notes](../CHANGELOG.md) and
+[adapter/high-depth guide](COMFYLINK.md) before relying on a particular route.
