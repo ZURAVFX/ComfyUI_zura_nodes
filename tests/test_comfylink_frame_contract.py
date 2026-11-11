@@ -24,7 +24,7 @@ def contract(count=50, numerator=30000, denominator=1001):
         'trimFrames': count, 'sessionId': 'a' * 32}
 
 
-def native_module():
+def native_module(module_name="hdr_native_graph"):
     # The graph builder imports no Comfy or GPU runtime. Give it only its
     # relative-import package rather than importing the plugin entry point.
     root = Path(__file__).resolve().parents[1]
@@ -33,10 +33,29 @@ def native_module():
             package = types.ModuleType(name)
             package.__path__ = [str(directory)]
             sys.modules[name] = package
-    return importlib.import_module('frame_contract_fixture.artist_studio.hdr_native_graph')
+    return importlib.import_module('frame_contract_fixture.artist_studio.' + module_name)
 
 
 class FrameContractTests(unittest.TestCase):
+    def test_temporal_camera_retains_ae_interval_and_rejects_rate_or_raster_changes(self):
+        camera = native_module('panorama_camera')
+        ae = contract(50, 24, 1)
+        source = {'sha': 'a' * 64, 'duration': 5, 'fps': 24,
+                  'file': 'source.mp4', 'has_audio': True}
+        selection = camera.plan(source, {'width': 512, 'height': 512, 'ae_frame_contract': ae})
+        self.assertEqual(selection['frames'], 50)
+        self.assertEqual(selection['padded'], 57)
+        self.assertEqual(selection['ae_frame_contract'], ae)
+        graph = camera.build_graph(source, selection, None, 'render', warp='warp.mp4')
+        self.assertEqual(graph['source_pad']['inputs']['required_source_frames'], 50)
+        self.assertEqual(graph['source_pad']['inputs']['frames'], 57)
+        self.assertEqual(graph['trim']['inputs']['length'], 50)
+        self.assertEqual(graph['video']['inputs']['fps'], 24)
+        with self.assertRaisesRegex(ValueError, '24 fps'):
+            camera.plan(source, {'ae_frame_contract': contract(50)})
+        with self.assertRaisesRegex(ValueError, 'source raster'):
+            camera.plan(source, {'width': 768, 'height': 512, 'ae_frame_contract': ae})
+
     def test_actual_native_ltx_graphs_request_at_least_all_source_frames(self):
         native = native_module()
         for count in (9, 25, 48, 50):

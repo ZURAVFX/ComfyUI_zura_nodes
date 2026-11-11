@@ -52,6 +52,12 @@ class TemporalSceneTests(unittest.TestCase):
  def test_padding_holds_end_and_never_rounds_down(self):
   frames=torch.arange(3.).reshape(3,1,1,1);result,=scene.ZuraCameraPadFrames().pad(frames,9)
   self.assertEqual(len(result),9);self.assertTrue(torch.equal(result[3:],frames[-1:].expand(6,-1,-1,-1)))
+ def test_model_padding_cannot_hide_missing_source_frames(self):
+  frames=torch.zeros(3,2,2,3)
+  with self.assertRaisesRegex(ValueError,'shorter than the requested interval'):
+   scene.ZuraCameraPadFrames().pad(frames,9,required_source_frames=4)
+  padded,=scene.ZuraCameraPadFrames().pad(frames,9,required_source_frames=3)
+  self.assertEqual(len(padded),9)
  def test_vertex_colours_follow_native_linear_convention(self):
   self.assertAlmostEqual(float(scene.srgb_to_linear(np.array([.5]))[0]),.214041,places=5)
 if __name__=='__main__':unittest.main()

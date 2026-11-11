@@ -19,6 +19,8 @@ const calls=[],w=()=>({assets:{images:[]},references:[],draft:{clips:[]},state:{
 const c={...w(),mode:'video',studio:{...w(),config:{workflow_mode:'swap'},hdrTool:w()},frames:w(),referencesVideo:w(),ripple:w(),alpha:w(),outpaint:w(),panorama:w(),paintout:w(),watermark:w(),director:w(),async show(id){this.mode=id;},videoComposer:{selectWorkflow(id){c.mode='video';c.studio.config.workflow_mode=id;}},openHDR(){this.mode='hdr';},selectRelightEngine(){this.mode='video';this.studio.config.workflow_mode='relight';},fetch:async path=>{calls.push(path);return {path:'native-source',frames:2};}};
 const source={precision:{sourceBitDepth:8},studioAsset:{id:'asset',duration:1},stills:{first:{file:'first.png'},last:{file:'last.png'}}};
 for(const adapter of STUDIO_MODE_ADAPTERS){await adapter.acceptInput(c,source);assert.equal(adapter.isBusy(c),false,adapter.id);assert.ok(adapter.resolveWorkspace(c),adapter.id);}
+c.ripple.intent='relight';c.ensureRippleWorkspace=intent=>{c.ripple.intent=intent;};
+await navigateStudioMode(c,'ripple');assert.equal(c.ripple.intent,'edit','The AE Ripple adapter leaves a prior relight intent');
 assert.ok(calls.some(v=>v.endsWith('/paintout')));assert.ok(calls.some(v=>v.endsWith('/ripple')));
 await assert.rejects(studioModeAdapter('frames').acceptInput(c,{precision:{sourceBitDepth:32},studioAsset:{id:'float'}}),/floating-point/);
 c.alpha.result={alpha:file('transparent.mov'),preview:file('checkerboard.mp4')};assert.equal(studioModeAdapter('alpha').getSelectedOutput(c).master.filename,'transparent.mov');
