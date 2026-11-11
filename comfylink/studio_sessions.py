@@ -33,6 +33,9 @@ MAX_JSON = float_io.MAX_MANIFEST_BYTES
 TTL = 15 * 60
 MAX_SESSIONS = 32
 MAX_ORIGINAL_BYTES = float_io.MAX_TRANSFER_BYTES
+SOURCE_DISK_HEADROOM = 4 * 1024**3
+SOURCE_FRAME_OVERHEAD = 8 * 1024**2
+SOURCE_SYSTEM_MEMORY_HEADROOM = 6 * 1024**3
 _ORIGINAL_TYPES = {".exr": "image/x-exr", ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
                    ".webp": "image/webp", ".mp4": "video/mp4", ".mov": "video/quicktime",
                    ".mkv": "video/x-matroska", ".webm": "video/webm", ".zip": "application/zip"}
@@ -378,6 +381,7 @@ class StudioSessions:
         self.used = {}
         self._registration_lock = asyncio.Lock()
         self._revocations = set()
+        self._source_reservations = {}
 
     def roots(self):
         if self.input_root is None or self.output_root is None:
@@ -441,7 +445,11 @@ class StudioSessions:
 
     async def broker_json(self, session, suffix, body=None):
         try:
-            timeout = aiohttp.ClientTimeout(total=180 if suffix == "/result" else 30, connect=3, sock_read=30)
+            transfer_bytes = 0
+            if suffix == "/result" and isinstance(body, dict):
+                transfer_bytes = sum(item["byteLength"] for name in ("files", "originals") for item in body.get(name, []))
+            deadline = min(1800, 180 + transfer_bytes / (16 * 1024**2)) if suffix == "/result" else 30
+            timeout = aiohttp.ClientTimeout(total=deadline, connect=3, sock_read=deadline if suffix == "/result" else 30)
             async with aiohttp.ClientSession(trust_env=False, timeout=timeout) as client:
                 async with client.request("GET" if body is None else "POST", session.broker + suffix,
                                           headers={TOKEN_HEADER: session.token}, json=body,
@@ -515,6 +523,31 @@ class StudioSessions:
 
     async def stage_source(self, session, data):
         manifest = float_io.validate_manifest(data.get("manifest", data))
+        input_root, _ = self.roots()
+        wire_bytes = sum(frame["byteLength"] for frame in manifest["frames"])
+        decoded_bytes = manifest["width"] * manifest["height"] * 16 * len(manifest["frames"])
+        # Raw staging plus FLOAT EXR cache and the existing native uploader's
+        # own copy. Admission counts unwritten reservations from other sessions.
+        budget = wire_bytes + 2 * (decoded_bytes + SOURCE_FRAME_OVERHEAD * len(manifest["frames"])) + SOURCE_DISK_HEADROOM
+        free = shutil.disk_usage(input_root).free
+        if free < budget + sum(self._source_reservations.values()):
+            raise web.HTTPInsufficientStorage(text=f"Studio source needs {budget / 2**30:.1f} GiB free input disk including native cache and safety headroom")
+        if decoded_bytes > float_io.LEGACY_BATCH_BYTES:
+            self.check_stream_memory(manifest["width"] * manifest["height"] * 16)
+        self._source_reservations[session.id] = budget
+        try:
+            return await self._stage_source_reserved(session, data)
+        finally:
+            self._source_reservations.pop(session.id, None)
+
+    @staticmethod
+    def check_stream_memory(frame_bytes):
+        needed = max(2 * 1024**3, frame_bytes * 4) + SOURCE_SYSTEM_MEMORY_HEADROOM
+        if float_io.available_memory_bytes() < needed:
+            raise ValueError(f"Streamed float input needs {needed / 2**30:.1f} GiB currently available RAM for frame buffers and OS/AE headroom")
+
+    async def _stage_source_reserved(self, session, data):
+        manifest = float_io.validate_manifest(data.get("manifest", data))
         expected = [{key: frame[key] for key in ("filename", "byteLength", "sha256")} for frame in manifest["frames"]]
         if "files" in data and data["files"] != expected:
             raise ValueError("Source file list differs from manifest")
@@ -556,7 +589,7 @@ class StudioSessions:
             with float_io._locked_parents(parent):
                 os.rename(temporary, validation_folder)
             try:
-                await asyncio.to_thread(float_io.load_transfer, input_root, "ComfyLink/" + probe + "/manifest.json")
+                await asyncio.to_thread(float_io.verify_transfer, input_root, "ComfyLink/" + probe + "/manifest.json")
                 self.active(session)
                 with float_io._locked_parents(parent):
                     if folder.exists() or folder.is_symlink():
@@ -615,14 +648,13 @@ class StudioSessions:
         """
         import numpy as np
         input_root, _ = self.roots()
-        pixels, _ = await asyncio.to_thread(float_io.load_transfer, input_root,
-                                              "ComfyLink/" + session.id + "/manifest.json")
+        relative_manifest = "ComfyLink/" + session.id + "/manifest.json"
+        count = len(manifest["frames"])
         generated = folder / ("native-" + secrets.token_hex(16))
         with float_io._locked_parents(folder):
             generated.mkdir()
         is_sdr8 = (manifest["sourceBitDepth"] == 8 and manifest["colour"]["encoding"] == "unknown"
-                   and manifest["colour"]["sceneLinear"] is False and manifest["alphaAssociation"] == "straight"
-                   and np.all(pixels >= 0) and np.all(pixels <= 1))
+                   and manifest["colour"]["sceneLinear"] is False and manifest["alphaAssociation"] == "straight")
         async def upload(paths, endpoint):
             self.active(session)
             form = aiohttp.FormData()
@@ -633,7 +665,10 @@ class StudioSessions:
                     streams.append(stream)
                     form.add_field("frames" if len(paths) > 1 or endpoint.endswith("exr-sequence") else "file",
                                    stream, filename=path.name, content_type="application/octet-stream")
-                async with aiohttp.ClientSession(trust_env=False, timeout=aiohttp.ClientTimeout(total=180, connect=3)) as client:
+                # Scoped native upload can be a complete 16 GiB shot. JSON and
+                # capability probes retain their separate short deadlines.
+                timeout = min(1800, 180 + sum(path.stat().st_size for path in paths) / (16 * 1024**2))
+                async with aiohttp.ClientSession(trust_env=False, timeout=aiohttp.ClientTimeout(total=timeout, connect=3, sock_read=180)) as client:
                     async with client.post(session.origin + endpoint, data=form, headers={"Origin": session.origin}, allow_redirects=False) as response:
                         if response.status != 200:
                             raise ValueError("Native Studio upload unavailable")
@@ -650,32 +685,45 @@ class StudioSessions:
                 from fractions import Fraction
                 # Source bit depth alone is insufficient to authorise a lossy
                 # quantisation. Only exact eight-bit levels enter this path.
-                encoded = np.rint(pixels * 255).astype(np.uint8)
-                if not np.array_equal(pixels, encoded.astype(np.float32) / np.float32(255)):
-                    raise ValueError("Source samples are not eight-bit levels")
+                def encode_eight(rgba):
+                    if np.any(rgba < 0) or np.any(rgba > 1):
+                        raise ValueError("Source samples are outside eight-bit SDR range")
+                    encoded = np.rint(rgba * 255).astype(np.uint8)
+                    if not np.array_equal(rgba, encoded.astype(np.float32) / np.float32(255)):
+                        raise ValueError("Source samples are not eight-bit levels")
+                    return encoded
                 first = generated / "first.png"
-                Image.fromarray(encoded[0], "RGBA").save(first)
                 last = first
-                if len(encoded) > 1:
+                if count > 1:
                     last = generated / "last.png"
-                    Image.fromarray(encoded[-1], "RGBA").save(last)
                     import av
                     video = generated / "source.mkv"
                     rate = Fraction(manifest["frameRate"]["numerator"], manifest["frameRate"]["denominator"])
                     with av.open(str(video), "w") as container:
                         stream = container.add_stream("ffv1", rate=rate)
                         stream.width, stream.height, stream.pix_fmt = manifest["width"], manifest["height"], "bgra"
-                        for index, rgba in enumerate(encoded):
-                            frame = av.VideoFrame.from_ndarray(rgba, format="rgba")
+                        for index, rgba in enumerate(float_io.iter_transfer(input_root, relative_manifest)):
+                            self.active(session)
+                            encoded = encode_eight(rgba)
+                            if index == 0:
+                                Image.fromarray(encoded, "RGBA").save(first)
+                            if index == count - 1:
+                                Image.fromarray(encoded, "RGBA").save(last)
+                            frame = av.VideoFrame.from_ndarray(encoded, format="rgba")
                             frame.pts, frame.time_base = index, 1 / rate
                             for packet in stream.encode(frame):
                                 container.mux(packet)
                         for packet in stream.encode():
                             container.mux(packet)
                     return [video], first, last
+                rgba = next(float_io.iter_transfer(input_root, relative_manifest))
+                Image.fromarray(encode_eight(rgba), "RGBA").save(first)
                 return [first], first, last
             paths = []
-            for index, rgba in enumerate(pixels):
+            for index, rgba in enumerate(float_io.iter_transfer(input_root, relative_manifest)):
+                self.active(session)
+                if manifest["width"] * manifest["height"] * 16 * count > float_io.LEGACY_BATCH_BYTES:
+                    self.check_stream_memory(rgba.nbytes)
                 path = generated / (f"{index + 1:06d}.exr")
                 float_io.write_exr(path, rgba, colour=manifest["colour"], storage="float32",
                                    alpha_association=manifest["alphaAssociation"])
@@ -684,7 +732,7 @@ class StudioSessions:
 
         paths, first, last = await asyncio.to_thread(encode)
         self.active(session)
-        asset = await upload(paths, "/zura/studio/upload?kind=" + ("video" if len(pixels) > 1 else "image")
+        asset = await upload(paths, "/zura/studio/upload?kind=" + ("video" if count > 1 else "image")
                              if is_sdr8 else "/zura/studio/hdr/exr-sequence")
         result = {"studioAsset": asset}
         if first:
@@ -695,7 +743,7 @@ class StudioSessions:
                                "file": relative.as_posix(), "type": "input", "width": manifest["width"], "height": manifest["height"]}
             result["stills"] = stills
         try:
-            if is_sdr8 and len(pixels) > 1 and _HEX32.fullmatch(str(asset.get("id", ""))):
+            if is_sdr8 and count > 1 and _HEX32.fullmatch(str(asset.get("id", ""))):
                 endpoint = session.origin + "/zura/studio/assets/" + asset["id"] + "/ripple"
                 async with aiohttp.ClientSession(trust_env=False, timeout=aiohttp.ClientTimeout(total=30, connect=3)) as client:
                     async with client.post(endpoint, json={}, headers={"Origin": session.origin}, allow_redirects=False) as response:
@@ -776,7 +824,7 @@ class StudioSessions:
             if storage is not None:
                 original_descriptors[0]["storage"] = storage
         relative = path.relative_to(root.absolute()).as_posix()
-        _, manifest = float_io.load_transfer(root, relative)
+        manifest = float_io.verify_transfer(root, relative)
         for field_name, actual in (("width", manifest["width"]), ("height", manifest["height"]),
                                    ("frameCount", len(manifest["frames"])), ("colour", manifest["colour"]),
                                    ("alpha", manifest["alphaAssociation"])):
@@ -856,7 +904,6 @@ class StudioSessions:
                     rate = Fraction(str(body["fps"]))
             elif suffix in {".mp4", ".mov", ".mkv", ".webm"}:
                 import av
-                frames, total = [], 0
                 with av.open(str(path)) as media:
                     _unmanaged_metadata(media.metadata)
                     iso = suffix in {".mp4", ".mov"}
@@ -878,28 +925,30 @@ class StudioSessions:
                     rate = stream.average_rate
                     if rate is None or rate <= 0:
                         raise ValueError("Unknown master video frame rate")
-                    for frame in media.decode(video=0):
-                        # SPS/VUI changes can update the decoder context even
-                        # when this PyAV version lacks per-frame colour fields.
-                        # Revalidate it for every decoded frame before fallback.
-                        current_stream_colour = _video_sdr_metadata(context)
-                        frame_colour = _video_sdr_metadata(frame, current_stream_colour)
-                        if frames and frame_colour != actual_colour:
-                            raise ValueError("Video colour metadata changes between frames")
-                        actual_colour = frame_colour
-                        if (frame.width * frame.height > float_io.MAX_PIXELS
-                                or len(frames) >= float_io.MAX_FRAMES):
-                            raise ValueError("Master video dimensions or count exceed limit")
-                        total += frame.width * frame.height * 16
-                        if total > float_io.MAX_TRANSFER_BYTES:
-                            raise ValueError("Decoded video exceeds transfer limit")
-                        frames.append(frame.to_ndarray(format="rgba").astype(np.float32) / np.float32(255))
-                    if not frames:
-                        raise ValueError("Master video has no readable pixels")
-                    pixels = np.stack(frames)
+                    if "colour" in body and body["colour"] != colour:
+                        raise ValueError("An SDR master cannot be labelled as HDR or scene linear")
+                    actual_colour = None
+                    def decoded_frames():
+                        nonlocal actual_colour
+                        for frame in media.decode(video=0):
+                            current_stream_colour = _video_sdr_metadata(context)
+                            frame_colour = _video_sdr_metadata(frame, current_stream_colour)
+                            if actual_colour is not None and frame_colour != actual_colour:
+                                raise ValueError("Video colour metadata changes between frames")
+                            actual_colour = frame_colour
+                            if frame.width * frame.height > float_io.MAX_PIXELS:
+                                raise ValueError("Master video dimensions exceed limit")
+                            yield frame.to_ndarray(format="rgba").astype(np.float32) / np.float32(255)
+                    _, output_root = self.roots()
+                    relative, wire = float_io.write_transfer_frames(output_root, "ComfyLink/" + secrets.token_hex(16), decoded_frames(),
+                        colour=colour, frame_rate={"numerator": rate.numerator, "denominator": rate.denominator},
+                        source_bit_depth=8, alpha_association="straight")
                     provenance = {"schemaVersion": 1, "kind": "sdr8_video", "sourceBitDepth": 8,
                                   "embeddedICC": False, "hdrMetadata": False, "transfer": _SDR_TRANSFERS[actual_colour[0]],
-                                  "primaries": _SDR_PRIMARIES[actual_colour[1]], "validatedFrameCount": len(frames)}
+                                  "primaries": _SDR_PRIMARIES[actual_colour[1]], "validatedFrameCount": len(wire["frames"])}
+                if _stamp(float_io._safe_stat(path)) != _stamp(state):
+                    raise ValueError("Master changed during validation")
+                return output_root.absolute() / relative, None, provenance
             else:
                 raise ValueError("Unsupported master format; retain pending")
             actual = float_io._safe_stat(path)
@@ -917,26 +966,26 @@ class StudioSessions:
         """Convert only explicitly selected, verified EXRs, preserving originals."""
         import numpy as np
         from fractions import Fraction
-        frames, storages, total, contract = [], [], 0, None
-        for path in paths:
+        def read(path):
             if native_records is None:
-                pixels, side = float_io.read_exr(path)
-            else:
-                pixels, side = self.native_archive_frame(path, native_records[path])
-            current = (pixels.shape, side["colour"], side["alphaAssociation"])
-            if contract is not None and contract != current:
-                raise ValueError("EXR master sequence shape, colour or alpha differs")
-            contract = current
-            total += pixels.nbytes
-            if total > float_io.MAX_TRANSFER_BYTES:
-                raise ValueError("Decoded EXR sequence exceeds byte limit")
-            frames.append(pixels)
-            storages.append(side["storage"])
+                return float_io.read_exr(path)
+            return self.native_archive_frame(path, native_records[path])
+        first, side = read(paths[0])
+        contract = (first.shape, side["colour"], side["alphaAssociation"])
+        storages = [side["storage"]]
+        def frames():
+            yield first
+            for path in paths[1:]:
+                pixels, current = read(path)
+                if contract != (pixels.shape, current["colour"], current["alphaAssociation"]):
+                    raise ValueError("EXR master sequence shape, colour or alpha differs")
+                storages.append(current["storage"])
+                yield pixels
         rate = frame_rate if frame_rate is not None else Fraction(str(body["fps"]))
         _, root = self.roots()
-        relative, _ = float_io.write_transfer(root, "ComfyLink/" + secrets.token_hex(16), np.stack(frames),
+        relative, _ = float_io.write_transfer_frames(root, "ComfyLink/" + secrets.token_hex(16), frames(),
             colour=contract[1], frame_rate={"numerator": rate.numerator, "denominator": rate.denominator},
-            source_bit_depth=32, alpha_association=contract[2])
+            source_bit_depth=32, alpha_association=contract[2], expected_count=len(paths))
         return root.absolute() / relative, storages
 
     def native_archive_frame(self, path, expected):
