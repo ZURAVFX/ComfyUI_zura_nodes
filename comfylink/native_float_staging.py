@@ -11,10 +11,8 @@ import secrets
 import shutil
 import time
 
-import numpy as np
 
 from aiohttp import web
-import folder_paths
 
 from . import float_io
 from .security import require_local
@@ -25,6 +23,11 @@ HEADER = "X-ComfyLink-Float-Capability"
 MAX_PENDING = 8
 TTL = 300
 READY_TTL = 25 * 60 * 60  # longer than the native job maximum of 24 hours
+
+
+def _input_root():
+    import folder_paths
+    return Path(folder_paths.get_input_directory())
 
 
 def _delete_exact_leaf(path, expected):
@@ -63,7 +66,7 @@ def _delete_exact_leaf(path, expected):
 
 class FloatStaging:
     def __init__(self, roots=None):
-        self.roots = roots or (lambda: Path(folder_paths.get_input_directory()))
+        self.roots = roots or _input_root
         self.pending = {}
 
     @staticmethod
@@ -133,6 +136,7 @@ class FloatStaging:
 
     async def frame(self, request):
         require_local(request)
+        import numpy as np
         ident = request.match_info["id"]
         session = self.pending.get(ident)
         supplied = request.headers.get(HEADER, "")

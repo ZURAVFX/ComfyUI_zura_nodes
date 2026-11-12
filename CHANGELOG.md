@@ -7,6 +7,15 @@
 
 # Release notes
 
+## 1.3.63 - 12 November 2026
+
+- Combine Paint, Remove and Replace in one canvas-first workbench with the existing Paintout removal recipe, LTX/H3 edited-frame propagation, thumbnail keyframes and an editable layer stack. Add drawn image guides, reversible layer visibility/opacity/order, retained edit attempts and inline frame editing.
+- Fix workspace visibility, stretched action buttons, crushed prompts, premature empty timelines and completion-state controls. Preserve model download access and expose retry, new-edit and cancellation actions. Check 13 sections at three desktop window sizes without AI generation.
+- Add an embedded 360-degree panorama composer to Image, optional panorama guidance and FLOAT EXR environment export. Generated SDR panoramas remain distinct from native HDR sources.
+- Replace independent camera depth solves with overlapping DA3 multiview preparation, shared scene geometry and an LTX 2.5 dual-guide camera recipe. Geometry and graph checks pass; the new final camera-render quality is not yet qualified.
+- Include scoped ComfyLink Desktop handoff, OCIO source previews and bounded Windows FLOAT frame staging. Keep display transforms separate from masters and retain the 14 adapters, isolated drafts and exact frame contracts. Actual 8/32-bit current-frame AE replacement was checked on an opaque 32-bpc OCIO project with normal timing; this does not qualify every Studio model, alpha workflow, arbitrary EXR channel/part or long HDR render. The separate private AE plug-in is not bundled.
+- Defer optional staging imports until needed so loopback discovery works independently of the Comfy runtime and does not initialise NumPy within test-isolation scopes.
+
 ## 1.3.62 - 11 November 2026
 
 - Raise the bounded ComfyLink whole-shot FLOAT RGBA allowance to 16 GiB. Keep the existing per-frame raster limits, exact frame count, rational timing, alpha association and finite float values.

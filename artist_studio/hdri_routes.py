@@ -60,11 +60,12 @@ def register(studio, routes, response, check_asset):
     def rendered(body):
         path, space = source(body)
         linear, used = hdri.read_environment(path,space)
-        if linear.shape[0]*linear.shape[1]>8192*4096:raise ValueError('Use an environment up to 8K × 4K.')
+        if linear.shape[0]*linear.shape[1]>8192*4096:raise ValueError('Use an environment up to 8K Ã— 4K.')
         result = hdri.build_environment(linear,**params(body))
         return result, {'source_hdr':path.suffix.lower() in ('.exr','.hdr'), 'color_space':used, **hdri.summary(result)}
 
     @routes.post('/zura/studio/hdri/import')
+    @routes.post('/genj/studio/hdri/import')
     @response
     async def import_environment(request):
         import folder_paths
@@ -96,6 +97,7 @@ def register(studio, routes, response, check_asset):
             path.unlink(missing_ok=True);raise
 
     @routes.post('/zura/studio/hdri/preview')
+    @routes.post('/genj/studio/hdri/preview')
     @response
     async def preview(request):
         body=await request.json()
@@ -108,6 +110,7 @@ def register(studio, routes, response, check_asset):
             return web.json_response(await asyncio.to_thread(work))
 
     @routes.post('/zura/studio/hdri/export')
+    @routes.post('/genj/studio/hdri/export')
     @response
     async def export(request):
         body=await request.json()
@@ -119,6 +122,7 @@ def register(studio, routes, response, check_asset):
             return web.json_response(await asyncio.to_thread(work))
 
     @routes.post('/zura/studio/hdri/scene')
+    @routes.post('/genj/studio/hdri/scene')
     @response
     async def scene(request):
         body=await request.json()
