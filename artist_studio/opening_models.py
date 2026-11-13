@@ -52,6 +52,19 @@ MODELS = {
     },
 }
 
+RASTER_LIMITS = {
+    "qwen21": {"size_step": 32, "max_dimension": 4096, "max_pixels": 8_388_608},
+    "ph3": {"size_step": 32, "max_dimension": 4096, "max_pixels": 16_777_216},
+}
+DEFAULT_RASTER_LIMITS = {"size_step": 16, "max_dimension": 8192, "max_pixels": 8_388_608}
+
+
+def raster_limits(model):
+    """Return the operational raster contract shared with the Studio UI."""
+    if model not in MODELS:
+        raise ValueError("Choose an available starting image generator.")
+    return dict(RASTER_LIMITS.get(model, DEFAULT_RASTER_LIMITS))
+
 
 PROPORTIONS = ("Do not change the proportions of Image 1 at all. Preserve its aspect ratio and output canvas dimensions; "
                "do not stretch or squash the image. Keep the framing unchanged unless the requested edit explicitly "
@@ -76,6 +89,64 @@ def browser_node(model, prompt, source, references, width, height, *, identity="
     return graph
 
 
+def fit_source_raster(graph, dimensions=None):
+    """Keep source and identity images on the selected working raster.
+
+    Studio supplies a source-aligned grid raster. Direct callers without one
+    retain the actual source dimensions rather than falling back to a silent
+    one-megapixel reduction.
+    """
+    if dimensions:
+        width, height = dimensions
+        if not all(isinstance(value, int) and value > 0 for value in dimensions):
+            raise ValueError("Opening-frame dimensions must be positive whole numbers.")
+        width_source, height_source = width, height
+        size_title = "Starting image generation resolution"
+    else:
+        graph["zura_opening_source_size"] = {
+            "class_type": "GetImageSize",
+            "inputs": {"image": ["125", 0]},
+            "_meta": {"title": "Original opening-frame dimensions"},
+        }
+        width_source, height_source = ["zura_opening_source_size", 0], ["zura_opening_source_size", 1]
+        size_title = "Keep the original opening-frame raster"
+    graph["92:111"] = {
+        "class_type": "ImageScale",
+        "inputs": {
+            "image": ["125", 0],
+            "width": width_source,
+            "height": height_source,
+            "upscale_method": "lanczos",
+            "crop": "disabled",
+        },
+        "_meta": {"title": size_title},
+    }
+    reference_scales = {
+        identity
+        for identity, entry in graph.items()
+        if identity == "92:85"
+        or (
+            identity.startswith("zura_reference_")
+            and identity.endswith("_scale")
+            and entry.get("class_type") == "ImageScaleToTotalPixels"
+            and entry.get("inputs", {}).get("megapixels") == 1
+        )
+    }
+    for identity in reference_scales:
+        image = graph[identity]["inputs"]["image"]
+        graph[identity] = {
+            "class_type": "ImageScale",
+            "inputs": {
+                "image": image,
+                "width": width_source,
+                "height": height_source,
+                "upscale_method": "lanczos",
+                "crop": "disabled",
+            },
+            "_meta": {"title": "Reference on the source raster"},
+        }
+
+
 def apply_model(graph, model="klein9b", references=None, *, dimensions=None):
     """Apply a native recipe, keeping existing source and mask connections.
 
@@ -85,8 +156,27 @@ def apply_model(graph, model="klein9b", references=None, *, dimensions=None):
     """
     if model not in MODELS:
         raise ValueError("Choose an available starting image generator.")
+    if dimensions is not None:
+        limits = raster_limits(model)
+        if (len(dimensions) != 2
+                or not all(isinstance(value, int) and value > 0 for value in dimensions)):
+            raise ValueError("Opening-frame dimensions must be positive whole numbers.")
+        width, height = dimensions
+        if width % limits["size_step"] or height % limits["size_step"]:
+            raise ValueError(
+                f"Opening-frame dimensions must use the model's {limits['size_step']}-pixel raster grid.")
+        if (width > limits["max_dimension"] or height > limits["max_dimension"]
+                or width * height > limits["max_pixels"]):
+            raise ValueError(
+                "Opening-frame dimensions exceed the selected model's supported raster.")
+    if model == "klein9b" and dimensions is None:
+        # The reviewed opening graph is already complete when Studio has not
+        # selected an explicit source-sized raster. Do not rewrite it on a
+        # simple model inspection or readiness check.
+        return graph
+    fit_source_raster(graph, dimensions)
     if model == "klein9b":
-        return graph  # Keep the existing approved Klein recipe exactly.
+        return graph
     references = references or []
     if MODELS[model].get('provider'):
         graph['zura_original_size'] = {'class_type': 'GetImageSize', 'inputs': {'image': ['125', 0]}}
@@ -115,26 +205,41 @@ def apply_model(graph, model="klein9b", references=None, *, dimensions=None):
     shifted = node("zura_qwen_sampling", "ModelSamplingAuraFlow", "Qwen sampling shift", model=accelerated, shift=3.1)
     normalised = node("zura_qwen_cfg_norm", "CFGNorm", "Qwen guidance normalisation", model=shifted, strength=1.0)
     images = {"image1": ["92:111", 0]}
+    working_images = [["92:111", 0]]
     for index, ref in enumerate(references, 2):
         if not isinstance(ref, dict) or not ref.get("file"):
             raise ValueError("Upload each appearance reference before generating the starting image.")
-        images[f"image{index}"] = node(f"zura_qwen_reference_{index}", "LoadImage", f"Appearance reference {index-1}", image=ref["file"])
+        loaded = node(f"zura_qwen_reference_{index}", "LoadImage", f"Appearance reference {index-1}", image=ref["file"])
+        scaled = node(f"zura_qwen_reference_scale_{index}", "ImageScale", f"Reference {index-1} at source raster",
+                      image=loaded, width=["92:114", 0], height=["92:114", 1],
+                      upscale_method="lanczos", crop="disabled")
+        images[f"image{index}"] = scaled
+        working_images.append(scaled)
+    # Edit Plus resamples its VAE image inputs to roughly one megapixel. Keep
+    # its image-token conditioning separate from explicit source-sized
+    # reference latents so sampler, references and reviewed mask share a raster.
     pos = node("92:109", "TextEncodeQwenImageEditPlus", "Edit the original video frame",
-               clip=clip, vae=vae, prompt=["127", 0], **images)
+               clip=clip, prompt=["127", 0], **images)
     neg = node("92:86", "TextEncodeQwenImageEditPlus", "Qwen negative conditioning",
-               clip=clip, vae=vae, prompt="", **images)
-    positive = node("zura_qwen_positive", "FluxKontextMultiReferenceLatentMethod", "Qwen positive reference method",
-                    conditioning=pos, reference_latents_method="index_timestep_zero")
-    negative = node("zura_qwen_negative", "FluxKontextMultiReferenceLatentMethod", "Qwen negative reference method",
-                    conditioning=neg, reference_latents_method="index_timestep_zero")
-    graph["92:103"]["inputs"] = {"model": normalised, "positive": positive, "negative": negative, "cfg": 4.0}
+               clip=clip, prompt="", **images)
+    positive, negative = pos, neg
+    for index, image in enumerate(working_images, 1):
+        encode_id = "92:127" if index == 1 else f"zura_qwen_reference_latent_{index}"
+        encoded = node(encode_id, "VAEEncode", f"Encode reference {index} at source raster",
+                       pixels=image, vae=vae)
+        positive = node(f"zura_qwen_positive_reference_{index}", "ReferenceLatent",
+                        f"Attach positive reference {index}", conditioning=positive, latent=encoded)
+        negative = node(f"zura_qwen_negative_reference_{index}", "ReferenceLatent",
+                        f"Attach negative reference {index}", conditioning=negative, latent=encoded)
+    graph["92:103"]["inputs"] = {"model": normalised, "positive": positive, "negative": negative, "cfg": 1.0}
     node("92:102", "BasicScheduler", "Qwen 4-step simple schedule", model=normalised, scheduler="simple", steps=4, denoise=1.0)
-    # Existing masked source latents must survive the model switch. Both this
-    # encoder and the mask node refer to the selected VAE at stable ID92:110.
     if graph["92:104"]["inputs"]["latent_image"] == ["92:113", 0]:
         graph["92:104"]["inputs"]["latent_image"] = ["92:127", 0]
-    graph["92:127"]["inputs"].update(pixels=["92:111", 0], vae=vae)
-    graph["92:105"]["inputs"]["vae"] = vae
+    decoded = node("zura_qwen_decoded", "VAEDecode", "Decode the complete Qwen reference canvas",
+                   samples=["92:104", 0], vae=vae)
+    node("92:105", "ImageScale", "Register Qwen edit to the original working frame",
+         image=decoded, width=["92:114", 0], height=["92:114", 1],
+         upscale_method="lanczos", crop="disabled")
     # Drop the now-unused Flux conditioning/latent branches. Standalone native
     # graphs should not require Flux-only nodes to run the Qwen recipe.
     return _prune(graph)
@@ -149,7 +254,8 @@ def readiness(node_mappings, get_full_path):
         if model.get('provider'):
             missing = [name for name in (model['node'], 'LoadImage', 'GetImageSize', 'SaveImage') if name not in node_mappings]
             result[identity] = {**{key: model[key] for key in ('id', 'name', 'max_references', 'provider')},
-                                'ready': not missing, 'missing_nodes': missing, 'model_files': []}
+                                'ready': not missing, 'missing_nodes': missing, 'model_files': [],
+                                'raster_limits': raster_limits(identity)}
             continue
         graph = json.loads(json.dumps(template))
         apply_model(graph, identity, [{"file": "availability-check.png"}])
@@ -158,7 +264,8 @@ def readiness(node_mappings, get_full_path):
                  for folder, filename in model["files"]]
         result[identity] = {"id": identity, "name": model["name"], "max_references": model["max_references"],
                             "ready": not missing and all(item["ready"] for item in files),
-                            "missing_nodes": missing, "model_files": files, "experimental": model.get("experimental", False)}
+                            "missing_nodes": missing, "model_files": files, "experimental": model.get("experimental", False),
+                            "raster_limits": raster_limits(identity)}
     return result
 
 
@@ -211,19 +318,20 @@ def _apply_ph3(graph, references):
     # The native conditioning node expects all image slots in a fixed order.
     graph["92:111"]["inputs"]["resolution_steps"] = 32
     images = {"images.image_1": ["92:111", 0]}
-    prompt_image = node("zura_ph3_prompt_source", "ImageScaleToTotalPixels", "Prompt source image",
-                        image=["92:111", 0], upscale_method="lanczos", megapixels=1.0, resolution_steps=1)
+    prompt_image = node("zura_ph3_prompt_source", "ImageScale", "Prompt source image",
+                        image=["92:111", 0], width=["92:114", 0], height=["92:114", 1],
+                        upscale_method="lanczos", crop="disabled")
     source_size = node("zura_ph3_prompt_size", "GetImageSize", "Prompt image dimensions", image=prompt_image)
     batch_images = {"images.image0": prompt_image}
     for index, ref in enumerate(references, 2):
         if not isinstance(ref, dict) or not ref.get("file"):
             raise ValueError("Upload each appearance reference before generating the starting image.")
-        image = node(f"zura_ph3_reference_{index}", "LoadImage", f"Appearance reference {index-1}", image=ref["file"])
+        loaded = node(f"zura_ph3_reference_{index}", "LoadImage", f"Appearance reference {index-1}", image=ref["file"])
+        image = node(f"zura_ph3_reference_scale_{index}", "ImageScale", "Prepare prompt reference",
+                     image=loaded, width=["zura_ph3_prompt_size", 0],
+                     height=["zura_ph3_prompt_size", 1], upscale_method="lanczos", crop="disabled")
         images[f"images.image_{index}"] = image
-        batch_images[f"images.image{index-1}"] = node(
-            f"zura_ph3_prompt_ref_{index}", "ResizeAndPadImage", "Prepare prompt reference",
-            image=image, target_width=source_size, target_height=["zura_ph3_prompt_size", 1],
-            padding_color="white", interpolation="lanczos")
+        batch_images[f"images.image{index-1}"] = image
     image_batch = node("zura_ph3_prompt_images", "BatchImagesNode", "Prompt images", **batch_images)
     picture_tokens = "".join(
         f"<Picture {i}>: <|vision_start|><|image_pad|><|vision_end|>"
@@ -261,17 +369,18 @@ def _apply_flux3(graph, references):
     for index, ref in enumerate(references, 1):
         if not isinstance(ref, dict) or not ref.get("file"):
             raise ValueError("Upload each appearance reference before generating the starting image.")
-        images[f"images.image{index}"] = node(f"zura_flux3_reference_{index}", "LoadImage", image=ref["file"])
+        loaded = node(f"zura_flux3_reference_{index}", "LoadImage", image=ref["file"])
+        images[f"images.image{index}"] = node(
+            f"zura_flux3_reference_scale_{index}", "ImageScale",
+            image=loaded, width=["92:114", 0], height=["92:114", 1],
+            upscale_method="lanczos", crop="disabled")
     # Keep source-first image roles and complete donors in the official visual
     # prompt expansion stage, just as in the standalone Image workspace.
     upsampler = node("zura_flux3_upsampler", "CLIPLoader", clip_name=files[3][1], type="flux3", device="default")
     source_size = node("zura_flux3_prompt_size", "GetImageSize", image=["92:111", 0])
     prompt_images = {"images.image0": ["92:111", 0]}
     for index in range(1, len(references) + 1):
-        prompt_images[f"images.image{index}"] = node(
-            f"zura_flux3_prompt_ref_{index}", "ResizeAndPadImage", image=images[f"images.image{index}"],
-            target_width=source_size, target_height=["zura_flux3_prompt_size", 1],
-            padding_color="white", interpolation="lanczos")
+        prompt_images[f"images.image{index}"] = images[f"images.image{index}"]
     image_batch = node("zura_flux3_prompt_images", "BatchImagesNode", **prompt_images)
     request = graph["127"]["inputs"]["value"].strip()
     expanded = node("zura_flux3_prompt", "TextGenerate", clip=upsampler, image=image_batch,
@@ -288,7 +397,7 @@ def _apply_flux3(graph, references):
     model = node("zura_flux3_sampling", "ModelSamplingFlux", model=model,
                  max_shift=math.log(16), base_shift=math.log(16), width=["92:114", 0], height=["92:114", 1])
     node("zura_flux3_references", "ReferenceMultiLatent", positive=positive, negative=negative,
-         vae=vae, resolution="resize", **{"resolution.megapixels": min(1, 2 / (len(references) + 1)), **images})
+         vae=vae, resolution="keep resolution", **images)
     graph["92:103"]["inputs"] = {"model": model, "positive": ["zura_flux3_references", 0],
                                  "negative": ["zura_flux3_references", 1], "cfg": 1.0}
     node("92:102", "BasicScheduler", model=model, scheduler="simple", steps=16, denoise=1.0)

@@ -22,4 +22,11 @@ listeners.get('comfylink-desktop-finished')({detail:{requestId}});assert.equal(d
 listeners.get('comfylink-desktop-handoff')({detail:{...detail,token,broker:'http://127.0.0.1:8199/studio-bridge/'+'d'.repeat(32)}});await new Promise(resolve=>setImmediate(resolve));assert.equal(opened.length,1,'cancelled challenge cannot open late');
 dispose();assert.equal(listeners.size,0);
 assert.equal(installDesktopHandoff(api,()=>true,{window:{},document:doc,crypto:random,fetch:fetcher}),null,'normal browsers do not register as Desktop');
+assert.equal(installDesktopHandoff(api,()=>true,{window:{location:{search:'?zuraWindow=bad'}},document:doc,crypto:random,fetch:fetcher}),null,'invalid owned-window hint does not register');
+const ownedDispose=installDesktopHandoff(api,()=>true,{window:{location:{search:'?zuraWindow='+'e'.repeat(32)}},document:doc,crypto:random,fetch:fetcher});
+assert.equal(typeof ownedDispose,'function','owned app window registers for an OS-verified handoff');
+await new Promise(resolve=>setImmediate(resolve));
+listeners.get('comfylink-desktop-challenge')({detail:{requestId,challenge}});await new Promise(resolve=>setImmediate(resolve));
+assert.match(doc.title,new RegExp('ComfyLink '+nonce+'$'),'owned window answers a fresh title challenge');
+ownedDispose();assert.equal(doc.title,'ComfyUI');
 console.log('Desktop handoff: targeted challenge, title proof, one-use credential, ack, cancellation and browser isolation passed');

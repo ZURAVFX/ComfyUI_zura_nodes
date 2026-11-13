@@ -48,11 +48,14 @@ def readiness(mode, output, get_path, node_mappings, *, longer=False):
             'ready':all(item['ready'] for item in files) and not missing_nodes}
 
 
-def frame_limit(mode, width, height):
+def frame_limit(mode, width, height, *, single_frame=False):
     """The software padding budget, not a hardware capacity guarantee."""
     if mode not in ('sdr','native') or any(type(v) is not int or v < 32 or v % 2 for v in (width,height)):
         return None
     if mode == 'sdr':
+        if single_frame:
+            from .hdr_prepare import sdr_still_limit
+            return sdr_still_limit(width,height) if max(width,height)<=4096 else None
         return sdr_frame_limit(width,height) if max(width,height)<=4096 else None
     if max(width,height)>2048:return None
     pw=max(512,math.ceil(width/64)*64);ph=max(512,math.ceil(height/64)*64)
@@ -79,6 +82,7 @@ def register(routes,response):
         except (KeyError,TypeError,ValueError):
             pass
         else:
-            limit=frame_limit(request.query.get('mode','sdr'),width,height)
-            if limit is not None:result['frameLimit']={'width':width,'height':height,'maxFrames':limit}
+            still=request.query.get('single_frame')=='1' and request.query.get('mode','sdr')=='sdr'
+            limit=frame_limit(request.query.get('mode','sdr'),width,height,single_frame=still)
+            if limit is not None:result['frameLimit']={'width':width,'height':height,'maxFrames':limit,**({'singleFrame':True} if still else {})}
         return web.json_response(result)

@@ -15,7 +15,7 @@ from .model_downloads import _publish_verified
 
 
 def export_hlg_video(staged, output_root, prefix, *, fps, audio_source=None, audio_start_frame=0,
-                     audio_start_seconds=None, audio_duration_seconds=None, ffmpeg=None, progress=None):
+                     audio_start_seconds=None, audio_duration_seconds=None, ffmpeg=None, progress=None, linear_rgb=False):
     """Encode 10-bit Rec.2020 HLG and restore one source soundtrack.
 
     LTX ACEScct is transformed using Comfy's same ImageColorSpace operation as
@@ -72,7 +72,7 @@ def export_hlg_video(staged, output_root, prefix, *, fps, audio_source=None, aud
                 for batch in staged.stitched():
                     for frame in batch:
                         if staged.cancelled.is_set():raise HDRChunkCancelled('HDR conversion cancelled.')
-                        hlg=native_colour(frame[None].float(),'HDR ACEScct','HDR')[0].clamp(0,1)
+                        hlg=native_colour(frame[None].float(),'linear ACEScg' if linear_rgb else 'HDR ACEScct','HDR')[0].clamp(0,1)
                         packed=(hlg.cpu().numpy()*65535.0).round().astype('<u2',copy=False)
                         process.stdin.write(np.ascontiguousarray(packed).tobytes())
                         written+=1

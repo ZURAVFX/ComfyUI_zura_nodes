@@ -14,7 +14,7 @@ assert.equal(graph.image_adapter.inputs.lora_name,model.lora);
 assert.deepEqual([graph.sampling.inputs.shift_video,graph.sampling.inputs.shift_audio],[1,1]);
 assert.deepEqual(graph.prompt.inputs['images.image_1'],['source_size',0]);
 assert.deepEqual(graph.prompt.inputs['images.image_8'],['reference_8',0]);
-assert.deepEqual(graph.prompt_images.inputs['images.image0'],['prompt_source',0]);
+assert.deepEqual(graph.prompt_images.inputs['images.image0'],['source_size',0]);
 assert.deepEqual(graph.prompt_images.inputs['images.image7'],['prompt_reference_8',0]);
 assert.equal(graph.expand_prompt.inputs.sampling_mode,'off');
 assert.equal((graph.expand_prompt.inputs.prompt.match(/<\|image_pad\|>/g)||[]).length,8);

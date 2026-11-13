@@ -41,6 +41,7 @@ export function buildAlphaVideoGraph(c,info){
   const error=alphaVideoValidation(c);if(error)throw Error(error);
   const g={},r=(id,slot=0)=>[id,slot],n=(id,class_type,inputs,title)=>{g[id]={class_type,inputs,_meta:{title}};};
   n('source','ZuraAlphaVideoInput',{source_path:c.source,start_frame:c.startFrame,frame_count:c.frameCount,processing_scale:Number(c.processingScale??1)},'Reading and padding the selected footage');
+  if(c.originalSource)g.source.inputs.original_source=JSON.stringify(c.originalSource);
   n('model','UNETLoader',{unet_name:choice(info,'UNETLoader','unet_name',ALPHA_VIDEO_MODELS.model),weight_dtype:'default'},'Loading LTX 2.5');
   n('adapter','LTXICLoRALoaderModelOnly',{model:r('model'),lora_name:choice(info,'LTXICLoRALoaderModelOnly','lora_name',ALPHA_VIDEO_MODELS.lora),strength_model:1},'Loading Alpha Gen');
   n('attention','ModelAttentionBackend',{model:r('adapter'),attention:'comfy kitchen attention'},'Preparing Comfy Kitchen attention');
@@ -68,7 +69,8 @@ export function buildAlphaVideoGraph(c,info){
 
 export function alphaVideoOutput(entry,config){
   const output=entry?.outputs?.save||{},files=[...(output.images||[]),...(output.files||[])].filter(f=>f?.filename),find=(role,pattern)=>files.find(f=>f.role===role)||files.find(f=>pattern.test(f.filename));
-  const matte=find('matte',/matte.*\.mp4$/i),preview=find('preview',/(checker|preview).*\.mp4$/i),alpha=find('alpha',/\.mov$/i),sequence=find('sequence',/\.zip$/i);
+  const matte=find('matte',/matte.*\.mp4$/i),preview=find('preview',/(checker|preview).*\.mp4$/i),alpha=find('alpha',/\.mov$/i),sequence=find('sequence',/\.zip$/i),ae_float=files.find(f=>f.role==='ae_float'&&f.filename==='manifest.json'),alpha_float=files.find(f=>f.role==='alpha_float'&&f.filename==='alpha_manifest.json');
   if(!matte||!preview||!alpha)return null;
-  return {matte,preview,alpha,...(sequence?{sequence}:{}),config};
+  const native_hdr=files.find(f=>f.role==='native_hdr'&&/\.zip$/i.test(f.filename));
+  return {matte,preview,alpha,...(sequence?{sequence}:{}),...(ae_float?{ae_float}:{}),...(alpha_float?{alpha_float}:{}),...(native_hdr?{native_hdr}:{}),config};
 }

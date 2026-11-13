@@ -12,11 +12,12 @@ import numpy as np
 
 from .hdr_chunk_store import HDRChunkCancelled
 from .model_downloads import _publish_verified
+from .hdr_preview_colour import acescg_sdr_preview
 
 
 def export_sdr_preview(staged, output_root, prefix, *, fps, audio_source=None,
-                       audio_start_frame=0, audio_start_seconds=None, audio_duration_seconds=None, ffmpeg=None, progress=None):
-    from ..paintout.paintout import decode_ct, _encode_original
+                       audio_start_frame=0, audio_start_seconds=None, audio_duration_seconds=None, ffmpeg=None, progress=None, linear_rgb=False):
+    from ..paintout.paintout import decode_ct
     if not isinstance(prefix,str) or not re.fullmatch(r'[A-Za-z0-9_-]{1,100}',prefix):
         raise ValueError('Invalid HDR preview name.')
     if isinstance(fps,bool) or not isinstance(fps,(int,float)) or not math.isfinite(fps) or not 1<=fps<=120:
@@ -49,7 +50,10 @@ def export_sdr_preview(staged, output_root, prefix, *, fps, audio_source=None,
             command+=['-ss',str(audio_offset),'-i',str(audio_source),'-map','0:v:0','-map','1:a:0',
                       '-af',f'atrim=duration={audio_duration:.9f},apad=whole_dur={duration:.9f},atrim=duration={duration:.9f}','-c:a','aac','-ar','48000']
         else:command+=['-map','0:v:0','-an']
-        command+=['-frames:v',str(total),'-t',str(duration),'-c:v','libx264','-pix_fmt','yuv420p',
+        command+=['-frames:v',str(total),'-t',str(duration),'-vf',
+                  'scale=w=iw:h=ih:out_color_matrix=bt709:in_range=full:out_range=tv,setparams=range=limited:color_primaries=bt709:color_trc=iec61966-2-1:colorspace=bt709',
+                  '-c:v','libx264','-pix_fmt','yuv420p','-color_range','tv','-colorspace','bt709',
+                  '-color_primaries','bt709','-color_trc','iec61966-2-1',
                   '-movflags','+faststart','-f','mp4',str(output)]
         with (temporary/'ffmpeg.log').open('wb') as log:
             process=subprocess.Popen(command,stdin=subprocess.PIPE,stdout=subprocess.DEVNULL,stderr=log)
@@ -58,10 +62,9 @@ def export_sdr_preview(staged, output_root, prefix, *, fps, audio_source=None,
                 for batch in staged.stitched():
                     for frame in batch:
                         if staged.cancelled.is_set():raise HDRChunkCancelled('HDR conversion cancelled.')
-                        linear=decode_ct(frame.float()).clamp_min(0)
-                        # Match the LTX node's neutral, zero-exposure preview.
-                        preview=_encode_original(linear/(1+linear),'srgb_display').clamp(0,1)
-                        packed=(preview.cpu().numpy()*255).round().astype('u1',copy=False)
+                        linear=(frame.float() if linear_rgb else decode_ct(frame.float())).cpu().numpy()
+                        preview=acescg_sdr_preview(linear)
+                        packed=(preview*255).round().astype('u1',copy=False)
                         process.stdin.write(np.ascontiguousarray(packed).tobytes());written+=1
                         if progress:progress(written,total)
                 if written!=total:raise ValueError('The HDR preview has the wrong frame count.')

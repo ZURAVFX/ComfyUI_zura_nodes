@@ -34,6 +34,9 @@
 #genj-studio .zpx-side [hidden]{display:none!important}
 
 #genj-studio[data-workspace] .zp-page.zplate-rebuilt>.zplate-surface{width:100%;max-width:none!important;margin:0!important;height:100%}
+#genj-studio[data-workspace] .zp-page.zplate-page.zplate-rebuilt:not([hidden]){box-sizing:border-box;width:calc(100% - 40px)!important;max-width:1600px!important;margin:16px auto 24px!important;border:1px solid var(--gs-line);border-radius:10px}
+#genj-studio .zpx-stage>[data-plate-timeline]{box-sizing:border-box;padding:12px 14px 16px;max-height:218px;background:var(--gs-panel);border-top:1px solid var(--gs-line)}
+@media(max-width:700px){#genj-studio[data-workspace] .zp-page.zplate-page.zplate-rebuilt:not([hidden]){width:calc(100% - 16px)!important;margin:8px auto 16px!important}#genj-studio .zpx-stage>[data-plate-timeline]{padding:8px 8px 12px}}
 
 #genj-studio .zpx-side [data-plate-image-settings]{padding:8px 0;margin-bottom:12px}
 #genj-studio .zpx-side [data-plate-image-settings] .zc-image-settings{display:flex!important;position:static!important;width:100%;padding:8px 0;max-height:none;overflow:visible;border:0}
@@ -63,6 +66,26 @@
 #genj-studio .zplate-surface [hidden]{display:none!important}
 #genj-studio .zplate-surface:not(.has-source) .zps-start-mode{display:none!important}
 #genj-studio .zplate-surface:not(.has-source) #zps-empty{gap:12px;padding:24px}
+
+/* Remove keeps its existing mask, clean-frame and render steps reachable. */
+#genj-studio .zpx-model-setup{position:relative;flex:none}
+#genj-studio .zpx-model-setup>details{margin:0}
+#genj-studio .zpx-model-setup .zc-tool-panel{width:min(560px,calc(100vw - 32px));max-height:min(720px,calc(100vh - 140px));overflow:auto;right:0;left:auto}
+#genj-studio .zpx-removal-flow{flex:none;padding:8px 12px;border-bottom:1px solid var(--gs-line)}
+#genj-studio .zpx-removal-flow .zp-editor-stages{display:flex!important;gap:4px}
+#genj-studio .zpx-removal-flow .zp-editor-stages>button{min-height:32px;padding:4px 10px}
+#genj-studio .zpx-removal-flow .zp-editor-guide{gap:4px 12px;padding:8px 0 0;flex-basis:100%}
+#genj-studio .zpx-removal-flow .zp-editor-guide>strong{font-size:13px;font-weight:500}
+#genj-studio .zpx-removal-flow .zp-editor-guide>span{font-size:12px;line-height:1.4}
+#genj-studio .zpx-removal-flow .zp-editor-guide-actions{display:flex!important}
+#genj-studio .zpx-removal-flow .zp-editor-next{min-height:32px;padding:6px 10px;background:var(--gs-input);border:1px solid var(--gs-line);color:var(--zc-text);font-size:12px;font-weight:500}
+#genj-studio .zpx-removal-flow .zp-editor-next:hover:not(:disabled){background:var(--zc-hover)}
+#genj-studio [data-plate-clean-controls] .zp-editor-clean-actions{border:0;padding:0;margin:0 0 8px}
+#genj-studio [data-plate-clean-controls] .zp-frame-actions{display:flex!important;flex-wrap:wrap;align-items:center;gap:8px;margin:0 0 12px}
+#genj-studio [data-plate-clean-controls] .zp-frame-actions>button:not([hidden]){display:inline-flex!important;max-width:100%}
+#genj-studio [data-plate-clean-controls] .zp-frame-actions>label{display:flex;align-items:center;gap:8px;min-width:0;width:100%}
+#genj-studio [data-plate-clean-controls] .zp-frame-actions select{min-width:0;max-width:100%;flex:1}
+@media(max-width:700px){#genj-studio .zpx-removal-flow .zp-editor-guide{grid-template-columns:minmax(0,1fr)}#genj-studio .zpx-removal-flow .zp-editor-guide-actions{grid-column:1;grid-row:auto}#genj-studio .zpx-removal-flow .zp-editor-stages>button{min-height:36px;padding-inline:6px}}
 #genj-studio .zplate-surface:not(.has-source) #zps-empty>p{max-width:420px;margin:0 0 8px;line-height:1.6}
 #genj-studio .zplate-surface:not(.has-source) #zps-empty h3{margin:0;font-size:20px}
 @media(max-width:700px){#genj-studio .zplate-surface .zpx-prompt{grid-template-columns:minmax(0,1fr) auto}#genj-studio .zplate-surface .zpx-prompt textarea{grid-column:1/-1}}

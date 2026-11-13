@@ -145,8 +145,7 @@ def build_native_endpoint_graph(*, first, last=None, width, height, frames, prom
         g['zura_hdr_archive'] = n('ZuraHDRPackageACEScct', images=delivered_images, prefix=prefix, **({'exr_storage':exr_storage} if exr_storage != 'half' else {}))
         preview = ['zura_hdr_exr', 0]
     else:
-        g['tonemap'] = n('LTXVHDRDecodePostprocess', image=delivered_images, transfer='acescct', save_exr=False,
-            exr_color_space='acescg', output_dir='genj/hdr/'+prefix, filename_prefix='frame', half_precision=True)
+        g['tonemap'] = n('ZuraHDRSDRPreview', image=delivered_images)
         preview = ['tonemap', 0]
     g['preview_video'] = n('CreateVideo', images=preview, audio=delivered_audio, fps=24.)
     g['save_preview'] = n('ZuraHDRSaveExactRate', video=['preview_video', 0], filename_prefix='genj/hdr/'+prefix+'_preview', fps=24.)

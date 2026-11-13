@@ -16,7 +16,7 @@ area=new ImageEditArea(owner);
 let disposed=0;
 const viewer=()=>({maskPresent:false,history:[1],root:document.createElement('div'),
   maskCanvas:{toBlob(callback){callback(new Blob(['mask'],{type:'image/png'}));}},
-  measureMask(){return this.maskPresent;},setBrushSize(){},setTool(){},fit(){},undo(){this.history.pop();},clear(){this.maskPresent=false;area.changed();},dispose(){disposed++;}});
+  measureMask(){return this.maskPresent;},setBrushSize(){},setTool(tool){this.tool=tool;},fit(){},undo(){this.history.pop();},clear(){this.maskPresent=false;area.changed();},dispose(){disposed++;}});
 area.loadViewer=async()=>{area.viewer=viewer();area.loading.hidden=true;area.refreshTools();};
 
 assert.equal(imageAreaSourceKey(main),'zura_images/references/original.png');
@@ -77,4 +77,8 @@ area.button.click();area.viewer.maskPresent=true;area.changed();clearTimeout(are
 const before=disposed;area.close();await new Promise(resolve=>setTimeout(resolve,0));
 assert.equal(area.state.mask.filename,'saved-on-close.png');assert.ok(disposed>before);area.open();assert.equal(area.closed,false);
 area.reset();clearTimeout(area.saveTimer);
+area.inline=true;area.refreshTools();assert.equal(area.editing,false,'Loading an inline frame does not force painting');
+const drawButton=area.tools.querySelector('[data-area-tool=draw]');assert.equal(drawButton.disabled,false,'The visible rail can explicitly open painting before a canvas exists');drawButton.click();assert.equal(area.editing,true);
+area.finishEditor();area.tools.querySelector('[data-area-tool=brush]').click();assert.equal(area.viewer.tool,'brush','Reopening a cached canvas applies the explicitly chosen tool');
+area.finishEditor();drawButton.click();assert.equal(area.viewer.tool,'draw');area.reset();
 console.log('Image edit area: optional selection, upload ownership, handoff, stale-source protection and close flush pass.');

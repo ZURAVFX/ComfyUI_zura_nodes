@@ -40,7 +40,10 @@ export function buildRippleGraph(c,info){
   n('ripple_guide','ZuraRippleGuide',{plate:r('source',2),anchors:r('anchors')},'Preparing the first-frame Ripple guide');
   n('model','UNETLoader',{unet_name:file(info,'UNETLoader','unet_name',PAINTOUT_MODELS.model),weight_dtype:'default'},'Loading LTX 2.5');
   n('lora','LoraLoaderModelOnly',{model:r('model'),lora_name:file(info,'LoraLoaderModelOnly','lora_name',RIPPLE_LORA),strength_model:Number(c.rippleStrength??1.35)},'Loading Ripple');
-  n('attention','ModelAttentionBackend',{model:r('lora'),attention:'comfy kitchen attention'},'Preparing attention');
+  // Kitchen INT8 attention can retain the source appearance instead of carrying
+  // the edited frame through the shot. Use the visually verified PyTorch path
+  // for every LTX Ripple entry point, including Replace and LTX Relight.
+  n('attention','ModelAttentionBackend',{model:r('lora'),attention:'pytorch attention'},'PyTorch attention');
   n('text','CLIPLoader',{clip_name:file(info,'CLIPLoader','clip_name',PAINTOUT_MODELS.text),type:'ltxv',device:'default'},'Loading the text encoder');
   n('positive','CLIPTextEncode',{clip:r('text'),text:RIPPLE_PROMPT+'\n'+String(c.prompt||'').trim()},'Encoding your object direction');
   n('negative','CLIPTextEncode',{clip:r('text'),text:'blurry, low resolution, ugly, garbled mess, compression artifacts, glitch, stop motion, still image, pixelated, robotic voice, oversaturated'},'Preparing conditioning');

@@ -102,7 +102,7 @@ def probe_source(path):
     return {"source_path": str(path), "width": width, "height": height, "fps_rational": str(rate),
             "fps": float(rate), "source_frames": int(count), "has_audio": any(s.get("codec_type") == "audio" for s in streams),
             "primaries": video.get("color_primaries"), "transfer": video.get("color_transfer"),
-            "matrix": video.get("color_space"), "range": video.get("color_range")}
+            "matrix": video.get("color_space"), "range": video.get("color_range"), "pixel_format": video.get("pix_fmt")}
 
 
 def processing_geometry(width, height, scale):
@@ -142,7 +142,7 @@ class ZuraAlphaVideoInput:
             "start_frame": ("INT", {"default": 0, "min": 0, "max": 10000000}),
             "frame_count": ("INT", {"default": 49, "min": 1, "max": MAX_FRAMES}),
             "processing_scale": ("FLOAT", {"default": .5, "min": .25, "max": 1, "step": .25}),
-        }}
+        },"optional":{"original_source":("STRING",{"default":""})}}
 
     RETURN_TYPES = ("IMAGE", "ZURA_ALPHA_INFO", "INT", "INT", "INT", "FLOAT")
     RETURN_NAMES = ("images", "info", "width", "height", "frames", "fps")
@@ -156,7 +156,7 @@ class ZuraAlphaVideoInput:
         except (ValueError, OSError):
             return float("nan")
 
-    def prepare(self, source_path, start_frame, frame_count, processing_scale):
+    def prepare(self, source_path, start_frame, frame_count, processing_scale, original_source=""):
         if type(start_frame) is not int or start_frame < 0 or type(frame_count) is not int or not 1 <= frame_count <= MAX_FRAMES:
             raise ValueError("Choose a frame range of 1 to 145 frames.")
         path = _source(source_path)
@@ -198,6 +198,13 @@ class ZuraAlphaVideoInput:
         info.update({"schema": SCHEMA, "source_pin": pin, "start_frame": start_frame, "frame_count": frame_count,
                      "content_width": cw, "content_height": ch, "working_width": pw, "working_height": ph,
                      "padded_frames": padded_frames, "processing_scale": float(processing_scale)})
+        if original_source:
+            import folder_paths
+            from .studio import Store,check_asset
+            from .alpha_original import bind_original
+            roots={key:getattr(folder_paths,f'get_{key}_directory')() for key in ('input','output','temp')}
+            binding=bind_original(original_source,info,Store(),check_asset,roots)
+            if binding:info['original_hdr']=binding
         return images, info, pw, ph, padded_frames, info["fps"]
 
 
@@ -272,9 +279,16 @@ class ZuraAlphaVideoOutput:
 
     def save(self, images, info, filename_prefix="ZURA STUDIO/alpha", ae_frame_contract=""):
         source = _validate_info(info, images)
+        if not info.get('pixel_format'):info={**info,'pixel_format':probe_source(source).get('pixel_format')}
+        from .alpha_matte import AlphaFloatWriter, final_alpha_frames
+        try:
+            from comfy.model_management import throw_exception_if_processing_interrupted as check_cancelled
+        except ImportError:
+            check_cancelled=lambda:None
+        contract = None
         if ae_frame_contract:
             from ..comfylink.frame_contract import validate_interval
-            validate_interval(json.loads(ae_frame_contract), frames=info['frame_count'],
+            contract = validate_interval(json.loads(ae_frame_contract), frames=info['frame_count'],
                 fps=Fraction(info['fps_rational']), width=info['width'], height=info['height'])
         output, target = _target_folder(filename_prefix)
         rate = Fraction(info["fps_rational"])
@@ -288,21 +302,15 @@ class ZuraAlphaVideoOutput:
                  "sequence": target.with_name(target.name + "_matte_png16.zip")}
         temporary_outputs = {role: path.with_name(path.stem + ".partial" + path.suffix) for role, path in names.items()}
         update = _progress(count + 3)
+        float_writer=AlphaFloatWriter(output,info)
         try:
             with tempfile.TemporaryDirectory(prefix="zura_alpha_") as temporary:
                 folder = Path(temporary)
                 sequence = folder / "%06d.png"
                 with zipfile.ZipFile(temporary_outputs["sequence"], "w", compression=zipfile.ZIP_DEFLATED, compresslevel=1) as archive:
-                    for index in range(count):
-                        frame = images[index, :info["content_height"], :info["content_width"], :3].detach().to(device="cpu", dtype=torch.float32)
-                        if not torch.isfinite(frame).all():
-                            raise ValueError("The generated matte contains invalid pixels.")
-                        # A conventional matte is white foreground. Comfy MASK
-                        # inversion conventions do not apply to these RGB pixels.
-                        alpha = frame.mean(dim=-1).clamp(0, 1).numpy()
+                    for index,alpha in enumerate(final_alpha_frames(images,info,source,_tool('ffmpeg'),check_cancelled=check_cancelled)):
+                        float_writer.write(index,alpha)
                         matte = Image.fromarray(np.rint(alpha * 65535).astype(np.uint16))
-                        if matte.size != (width, height):
-                            matte = matte.resize((width, height), Image.Resampling.BILINEAR)
                         frame_path = folder / f"{index:06d}.png"
                         matte.save(frame_path)
                         archive.write(frame_path, frame_path.name)
@@ -353,17 +361,34 @@ class ZuraAlphaVideoOutput:
                 raise ValueError("The source changed while saving. Generate its alpha again.")
             for role, file in temporary_outputs.items():
                 file.replace(names[role])
+            check_cancelled();alpha_file=float_writer.finish()
         except BaseException:
+            float_writer.abort()
             for file in temporary_outputs.values():
                 file.unlink(missing_ok=True)
             for file in names.values():
                 file.unlink(missing_ok=True)
             raise
-        files = []
+        files, ae_files = [], [alpha_file]
+        if info.get('original_hdr'):
+            import folder_paths
+            from .studio import Store,check_asset
+            from .alpha_original import write_original_alpha
+            roots={key:getattr(folder_paths,f'get_{key}_directory')() for key in ('input','output','temp')}
+            native_alpha,native_master=write_original_alpha(info['original_hdr'],images,info,Store(),check_asset,roots,output,check_cancelled=check_cancelled)
+            ae_files=[native_alpha,native_master]
+        if contract is not None:
+            import folder_paths
+            from comfy.model_management import throw_exception_if_processing_interrupted
+            from ..comfylink.studio_alpha import write_ae_alpha
+            relative, manifest = write_ae_alpha(folder_paths.get_input_directory(), output, contract, info, images,
+                check_cancelled=throw_exception_if_processing_interrupted)
+            master = Path(relative)
+            ae_files.append({'filename': master.name, 'subfolder': master.parent.as_posix(), 'type': 'output', 'role': 'ae_float', 'colour': manifest['colour']})
         for role in ("preview", "matte", "alpha", "sequence"):
             relative = names[role].relative_to(output)
             files.append({"filename": relative.name, "subfolder": relative.parent.as_posix(), "type": "output", "role": role})
-        return {"ui": {"images": files, "animated": (True,)}}
+        return {"ui": {"images": files, "animated": (True,), **({'files': ae_files} if ae_files else {})}}
 
 
 NODE_CLASS_MAPPINGS = {"ZuraAlphaVideoInput": ZuraAlphaVideoInput, "ZuraAlphaVideoOutput": ZuraAlphaVideoOutput}

@@ -7,6 +7,11 @@ import torch.nn.functional as F
 
 MAX_PIXEL_FRAMES = 40_000_000
 
+def sdr_still_limit(width,height):
+    """A true one-frame guide needs only its spatially padded source raster."""
+    if any(type(value) is not int or not 32<=value<=4096 for value in (width,height)):return 0
+    return int(((width+31)//32*32)*((height+31)//32*32)<=MAX_PIXEL_FRAMES)
+
 
 def sdr_frame_limit(width, height, frame_limit=121):
     """Maximum source frames whose 32-pixel and 8n+1 padding fits the budget."""
@@ -16,7 +21,7 @@ def sdr_frame_limit(width, height, frame_limit=121):
     return 1 + 8 * ((budget - 1) // 8) if budget >= 9 else 0
 
 
-def pad_sdr_guide(images, frame_limit=121):
+def pad_sdr_guide(images, frame_limit=121, *, single_frame=False):
     """Pad right/bottom reflectively, hold the final frame to 8n+1.
 
     Return the padded batch and exact original W, H and frame count. Cropping
@@ -26,11 +31,12 @@ def pad_sdr_guide(images, frame_limit=121):
     if not isinstance(images, torch.Tensor) or images.ndim != 4 or images.shape[-1] != 3:
         raise ValueError('Expected RGB video frames.')
     count,height,width,_ = images.shape
+    if type(single_frame) is not bool or single_frame and count!=1:raise ValueError('The still HDR path requires exactly one source frame.')
     if count < 1 or count > frame_limit:
         raise ValueError(f'This HDR test supports 1–{frame_limit} source frames per render.')
     if height < 32 or width < 32 or height > 4096 or width > 4096:
         raise ValueError('Source dimensions must be between 32 and 4096 pixels.')
-    maximum = sdr_frame_limit(width, height, frame_limit)
+    maximum = sdr_still_limit(width,height) if single_frame else sdr_frame_limit(width, height, frame_limit)
     if count > maximum:
         raise ValueError(f'This resolution supports up to {maximum} frames per HDR conversion within the padding budget. Choose fewer frames or smaller footage.')
     if not images.is_floating_point() or not bool(torch.isfinite(images).all()):
@@ -41,7 +47,7 @@ def pad_sdr_guide(images, frame_limit=121):
     right=(-width)%32; bottom=(-height)%32
     if right or bottom:
         images=F.pad(images.permute(0,3,1,2),(0,right,0,bottom),mode='reflect').permute(0,2,3,1)
-    target=max(9,1+8*((max(1,count)-1+7)//8))
+    target=1 if single_frame else max(9,1+8*((max(1,count)-1+7)//8))
     if count < target:
         images=torch.cat((images,images[-1:].expand(target-count,-1,-1,-1)),dim=0)
     return images,width,height,count,width+right,height+bottom,target
@@ -50,12 +56,12 @@ def pad_sdr_guide(images, frame_limit=121):
 class ZuraLTXHDRPrepare:
     @classmethod
     def INPUT_TYPES(cls):
-        return {'required':{'images':('IMAGE',)}}
+        return {'required':{'images':('IMAGE',)},'optional':{'single_frame':('BOOLEAN',{'default':False})}}
     RETURN_TYPES=('IMAGE','INT','INT','INT','INT','INT','INT')
     RETURN_NAMES=('padded_frames','original_width','original_height','original_frames','padded_width','padded_height','padded_count')
     FUNCTION='prepare'
     CATEGORY='Zura/Artist Studio'
-    def prepare(self,images):return pad_sdr_guide(images)
+    def prepare(self,images,single_frame=False):return pad_sdr_guide(images,single_frame=single_frame)
 
 
 class ZuraHDRTrimAudio:

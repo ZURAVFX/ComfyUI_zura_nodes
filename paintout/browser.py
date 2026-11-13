@@ -7,7 +7,7 @@ from aiohttp import web
 from server import PromptServer
 
 VIDEO_EXTENSIONS={'.mov','.mp4','.mxf','.mkv','.avi','.webm'}
-IMAGE_EXTENSIONS={'.exr','.png','.tif','.tiff'}
+IMAGE_EXTENSIONS={'.exr','.png','.tif','.tiff','.jpg','.jpeg','.webp'}
 _media_grants=OrderedDict()
 
 def checked_path(path):
@@ -33,9 +33,9 @@ def grant(path):
     while len(_media_grants)>256:_media_grants.popitem(last=False)
     return '/zura/paintout/media?'+urlencode({'token':token})
 
-def describe_media(path):
+def describe_media(path,cancel=None):
     from .paintout import describe, selected_space
-    p=checked_path(path);d=describe(str(p));kind='image' if p.is_file() and p.suffix.lower() in IMAGE_EXTENSIONS else d['kind']
+    p=checked_path(path);d=describe(str(p),cancel=cancel);kind='image' if p.is_file() and p.suffix.lower() in IMAGE_EXTENSIONS else d['kind']
     if kind=='image':
         from .frame_editor import validate_edit_orientation
         validate_edit_orientation(p)
@@ -44,12 +44,21 @@ def describe_media(path):
     try:result['resolved_colour']=selected_space(d,'auto')
     except (ValueError,OSError) as error:result['colour_error']=str(error)
     if kind=='video':result['media_url']=grant(p)
+    try:
+        from ..artist_studio.display_view_routes import grant_source
+        result['display_source']=grant_source(p,result.get('resolved_colour','auto'))
+    except ValueError as error:
+        result['display_preview_error']=str(error)
     return result
 
 async def info(request):
     from ..media_source import require_same_origin
     require_same_origin(request)
-    try:return web.json_response(await asyncio.to_thread(describe_media,request.query.get('file','')))
+    try:
+        path=request.query.get('file','')
+        described=await asyncio.to_thread(describe_media,path)
+        from ..artist_studio.media_import import restore_model_info
+        return web.json_response(await asyncio.to_thread(restore_model_info,path,described))
     except Exception as error:return web.json_response({'error':str(error)},status=400)
 
 async def media(request):

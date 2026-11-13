@@ -269,7 +269,7 @@
 .zp-editor-paint-layers button:hover{background:var(--gs-line,#33333d)}.zp-editor-paint-layers button:disabled{opacity:.45;cursor:default}
 .zp-editor-paint-layers button:focus-visible{outline:2px solid var(--gs-accent,#caff00);outline-offset:2px}
 .zp-editor-layer-adjustments{display:flex;flex-wrap:wrap;gap:6px 24px;margin-top:6px;max-width:700px}
-.zp-editor-layer-blend,.zp-editor-layer-brightness{display:flex;align-items:center;gap:10px;flex:1 1 260px;min-width:0;font-size:11px}
+.zp-editor-layer-expand,.zp-editor-layer-blend,.zp-editor-layer-brightness{display:flex;align-items:center;gap:10px;flex:1 1 260px;min-width:0;font-size:11px}
 .zp-editor-layer-adjustments label>span{min-width:62px}
 .zp-editor-layer-adjustments input{min-width:70px;width:140px;flex:1;accent-color:var(--gs-accent,#caff00)}
 .zp-editor-layer-adjustments output{min-width:44px;text-align:right;font-variant-numeric:tabular-nums}
@@ -438,7 +438,7 @@
  #genj-studio[data-workspace] .zp-page.zplate-page[data-editor-stage]>.zp-editor-trim-tools{position:absolute;right:324px;bottom:196px;width:auto;z-index:5}
 }
 #genj-studio .zplate-page>.zp-editor-stages{display:none!important}
-#genj-studio .zplate-page .zp-editor-guide-actions{display:none!important}
+#genj-studio .zplate-page:is([data-plate-action=paint],[data-plate-action=replace]) .zp-editor-guide-actions{display:none!important}
 #genj-studio .zplate-page .zp-editor-timeline__clean-lane{display:block!important}
 #genj-studio[data-workspace] .zp-page.zplate-page.zp-navigation-only>.zf-composer>#zps-prompt{display:block!important;height:56px;min-height:48px!important}
 #genj-studio[data-workspace] .zp-page.zplate-page.zp-navigation-only>.zf-composer>.zc-prompt-bottom{display:flex!important}
@@ -491,3 +491,12 @@
 #genj-studio[data-workspace] .zplate-inline-composer #zc-prompt{height:48px!important;min-height:48px!important;max-height:120px;resize:vertical;flex:none}
 #genj-studio[data-workspace] .zp-page.zplate-page>.zplate-inline-composer{align-self:start!important;min-height:0!important}
 #genj-studio .zplate-inline-image .zia-status:empty{display:none}
+
+/* Compact layer adjustments: one aligned source-pixel control per row. */
+#genj-studio :is(.zplate-canvas-shell,.zplate-sidebar) .zp-editor-paint-layers li{grid-template-columns:32px 32px minmax(0,1fr) 28px;gap:4px 8px;padding:8px 0}
+#genj-studio :is(.zplate-canvas-shell,.zplate-sidebar) .zp-editor-paint-layers li>img{width:32px;height:32px}
+#genj-studio :is(.zplate-canvas-shell,.zplate-sidebar) .zp-editor-paint-layers .zp-editor-layer-adjustments{gap:0;margin-top:4px}
+#genj-studio :is(.zplate-canvas-shell,.zplate-sidebar) .zp-editor-layer-adjustments label{grid-template-columns:76px minmax(0,1fr) 40px;gap:8px;min-height:28px;margin:0;padding:0;font-size:11px;line-height:16px}
+#genj-studio :is(.zplate-canvas-shell,.zplate-sidebar) .zp-editor-layer-adjustments label>span{min-width:0}
+#genj-studio :is(.zplate-canvas-shell,.zplate-sidebar) .zp-editor-layer-adjustments input[type=range]{width:100%;height:16px;min-height:0;margin:0;padding:0;align-self:center}
+#genj-studio :is(.zplate-canvas-shell,.zplate-sidebar) .zp-editor-layer-adjustments output{min-width:0;margin:0;line-height:16px}

@@ -1,3 +1,4 @@
+import {captureAEGuideParent,sameAEGuideParent} from './studio_image_handoff_contract.js';
 import {workspaceStorage} from './studio_storage.js';
 // Ripple borrows the ordinary Image workspace, including local models and
 // browser sign-in providers. Only a result belonging to this keyframe returns.
@@ -13,9 +14,9 @@ export class RippleImageHandoff {
   constructor(owner){this.storage=workspaceStorage(owner);this.owner=owner;this.revision=0;this.request=null;this.stored=readHandoff(this.storage);this.restoring=null;this.importing=false;}
   imageBusy(){const o=this.owner;return !!(o.job||o.pendingSubmission||o.submitting||o.uploading);}
   key(workspace,anchor){return JSON.stringify([workspace.source?.path,workspace.revision,workspace.state.engine,anchor.id,anchor.frame]);}
-  current(request){const w=request?.workspace;return !!w&&this.key(w,request.anchor)===request.key&&w.anchors().includes(request.anchor);}
+  current(request){const w=request?.workspace;return !!w&&sameAEGuideParent(request.aeParent,this.owner,w)&&this.key(w,request.anchor)===request.key&&w.anchors().includes(request.anchor);}
   persist(request){
-    const w=request.workspace,value={version:1,intent:w.intent||'edit',id:request.id,source:w.source.path,engine:w.state.engine,anchorId:String(request.anchor.id),frame:request.anchor.frame,width:request.width,height:request.height,previous:request.previous};
+    const w=request.workspace,value={version:1,intent:w.intent||'edit',id:request.id,source:w.source.path,engine:w.state.engine,anchorId:String(request.anchor.id),frame:request.anchor.frame,width:request.width,height:request.height,aeParent:request.aeParent||null,previous:request.previous};
     try{this.storage.setItem(HANDOFF_KEY,JSON.stringify(value));this.stored=value;return true;}catch{return false;}
   }
   clear(){this.owner.plate?.exitInlineImage();this.request=null;this.stored=null;++this.revision;try{this.storage.removeItem(HANDOFF_KEY);}catch{}if(this.banner)this.banner.hidden=true;}
@@ -28,6 +29,7 @@ export class RippleImageHandoff {
     if(active&&this.owner.mode==='ripple')this.owner.ripple=active;
     if(!w)return;
     this.restoring=(async()=>{
+      if(!sameAEGuideParent(saved.aeParent,this.owner,w)){this.clear();this.owner.message('The AE source changed. Choose the keyframe again.');return;}
       await w.restoreSource?.();
       if(revision!==this.revision||this.stored!==saved)return;
       // A connection problem is reversible. Keep the return path while the
@@ -48,9 +50,9 @@ export class RippleImageHandoff {
     if(this.request&&!this.current(this.request))this.clear();
     if(this.stored&&!this.request)await this.resume();
     if(this.request||this.stored){workspace.message('Return the current Ripple image edit first.');return;}
-    const key=this.key(workspace,anchor),revision=++this.revision;
+    const key=this.key(workspace,anchor),revision=++this.revision,aeParent=captureAEGuideParent(o,workspace);
     workspace.exporting=true;workspace.render();workspace.message('Preparing the original frame…');
-    const check=()=>{if(revision!==this.revision||key!==this.key(workspace,anchor)||!workspace.anchors().includes(anchor)||o.mode!==(workspace.platePrimary?'paintout':'ripple'))throw Error('The source, keyframe or workspace changed. Select the frame again.');};
+    const check=()=>{if(!sameAEGuideParent(aeParent,o,workspace)||revision!==this.revision||key!==this.key(workspace,anchor)||!workspace.anchors().includes(anchor)||o.mode!==(workspace.platePrimary?'paintout':'ripple'))throw Error('The source, keyframe or workspace changed. Select the frame again.');};
     try{
       const exported=await workspace.prepareAnchor(anchor);check();
       const response=await o.api.fetchApi(exported.url);check();if(!response.ok)throw Error('Could not load the original frame.');
@@ -59,7 +61,7 @@ export class RippleImageHandoff {
       const upload=await o.api.fetchApi('/upload/image',{method:'POST',body:form});check();const image=await upload.json();check();if(!upload.ok||!image.name)throw Error(image.error||'Could not prepare the frame for editing.');
       await o.imageArea?.flush();check();
       const previous={config:o.config(),selectedFile:o.items[o.selectedImage]?.file||null};
-      this.request={id:crypto.randomUUID(),workspace,anchor,key,width:workspace.source.width,height:workspace.source.height,previous};
+      this.request={id:crypto.randomUUID(),aeParent,workspace,anchor,key,width:workspace.source.width,height:workspace.source.height,previous};
       if(!this.persist(this.request)){this.clear();throw Error('Browser storage is unavailable. Free storage before editing a tracked keyframe.');}
       const request=this.request;o.show('image');if(!o.models.length)await o.loadModels();this.check(request);
       await o.setImageOperation('edit',{useCanvas:false});this.check(request);
@@ -69,7 +71,7 @@ export class RippleImageHandoff {
       if(anchor.edit_area)o.imageArea?.restore({...anchor.edit_area,source_key:o.references[0].file});
       o.$('shape').value='auto';o.$('width').value=request.width;o.$('height').value=request.height;
       o.$('prompt').value=workspace.$('prompt').value;o.selectedImage=-1;
-      o.save();o.render();o.renderGallery();this.syncImageUI();if(o.plate?.action==='paint'&&workspace.intent==='plate')o.imageArea?.openEditor('draw');workspace.message('');
+      o.save();o.render();o.renderGallery();this.syncImageUI();workspace.message('');
     }catch(error){
       if(this.request&&this.request.workspace===workspace){if(o.mode==='image')await this.leave();else this.clear();}
       workspace.message(error.message||'Could not prepare this keyframe.');
@@ -100,7 +102,10 @@ export class RippleImageHandoff {
       const bitmap=await createImageBitmap(blob),canvas=o.root.ownerDocument.createElement('canvas');canvas.width=request.width;canvas.height=request.height;
       try{this.check(request);canvas.getContext('2d').drawImage(bitmap,0,0,request.width,request.height);}finally{bitmap.close();}
       const exact=await new Promise((resolve,reject)=>canvas.toBlob(value=>value?resolve(value):reject(Error('Could not prepare the edited frame.')),'image/png'));this.check(request);
-      await o.imageArea?.flush();this.check(request);const editArea=o.imageArea?.config?.();
+      await o.imageArea?.flush();this.check(request);
+      // Acceptance belongs to the generated image's selection, never a newer
+      // brush draft made while reviewing it. Keep that newer draft for retries.
+      const editArea=Object.hasOwn(item,'edit_area')?item.edit_area:o.imageArea?.config?.();
       await request.workspace.importAnchorFile(request.anchor,new File([exact],`ripple_frame_${request.anchor.frame}.png`,{type:'image/png'}),()=>this.check(request));this.check(request);
       request.anchor.edit_area=editArea;
       const prompt=o.$('prompt').value;request.workspace.state.prompt=prompt;request.workspace.$('prompt').value=prompt;request.workspace.save();
@@ -114,7 +119,7 @@ export class RippleImageHandoff {
     const o=this.owner,c=request.previous.config;
     if(this.request&&this.current(this.request)){
       try{await o.imageArea?.flush();}catch(error){o.message(error.message);return;}
-      request.anchor.image_references=o.references.slice(1).map(ref=>({...ref}));request.anchor.edit_area=o.imageArea?.config?.();request.workspace.state.prompt=o.$('prompt').value;request.workspace.$('prompt').value=o.$('prompt').value;request.workspace.save();
+      request.anchor.image_references=o.references.slice(1).map(ref=>({...ref}));if(!accepted)request.anchor.edit_area=o.imageArea?.config?.();request.workspace.state.prompt=o.$('prompt').value;request.workspace.$('prompt').value=o.$('prompt').value;request.workspace.save();
     }
     await o.setImageOperation(c.operation,{useCanvas:false});if(this.request!==request&&this.stored!==request)return;
     o.references=(c.references||[]).map(r=>({...r}));o.imageLoras=c.loras||[];o.editMainMissing=!!c.editMainMissing;o.autoCanvasSuppressed=!!c.autoCanvasSuppressed;

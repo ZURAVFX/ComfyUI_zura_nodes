@@ -69,18 +69,37 @@ def _decoded_video_count(path, size, modified_ns):
     if count<1:raise ValueError('The video contains no decodable frames.')
     return count
 
-def describe(path):
+
+def _media_probe(command,cancel=None):
+    if cancel is None:return subprocess.run(command,capture_output=True,check=True,text=True).stdout
+    with tempfile.TemporaryFile() as output,tempfile.TemporaryFile() as errors:
+        process=subprocess.Popen(command,stdout=output,stderr=errors)
+        try:
+            while process.poll() is None:
+                if cancel.is_set():raise ValueError('Media inspection was cancelled. The original is retained.')
+                try:process.wait(timeout=.05)
+                except subprocess.TimeoutExpired:pass
+            if cancel.is_set():raise ValueError('Media inspection was cancelled. The original is retained.')
+            if process.returncode:raise ValueError('The selected original could not be inspected.')
+            output.seek(0);payload=output.read(8*1024*1024+1)
+            if len(payload)>8*1024*1024:raise ValueError('The original media metadata exceeds its inspection limit.')
+            return payload.decode('utf-8')
+        finally:
+            if process.poll() is None:process.kill();process.wait()
+
+def describe(path,cancel=None):
+    if cancel is not None and cancel.is_set():raise ValueError('Media inspection was cancelled. The original is retained.')
     p=resolve_input(path)
     if p.is_dir():
         files=sorted([x for x in p.iterdir() if x.suffix.lower() in ('.exr','.png','.tif','.tiff')],key=natural)
         if not files: raise ValueError(f'No EXR/PNG/TIFF frames in {p}')
         shape=read_image(files[0]).shape
         return dict(kind='sequence',files=[str(x) for x in files],width=shape[1],height=shape[0],count=len(files))
-    if p.suffix.lower() in ('.exr','.png','.tif','.tiff'):
+    if p.suffix.lower() in ('.exr','.png','.tif','.tiff','.jpg','.jpeg','.webp'):
         shape=read_image(p).shape
         return dict(kind='sequence',files=[str(p)],width=shape[1],height=shape[0],count=1)
-    r=subprocess.run([find_media_tool('ffprobe'),'-v','error','-select_streams','v:0','-show_streams','-of','json',str(p)],capture_output=True,check=True,text=True)
-    s=json.loads(r.stdout)['streams'][0]
+    payload=_media_probe([find_media_tool('ffprobe'),'-v','error','-select_streams','v:0','-show_streams','-of','json',str(p)],cancel)
+    s=json.loads(payload)['streams'][0]
     rotations = [s.get('tags', {}).get('rotate', 0)] + [item.get('rotation', 0) for item in s.get('side_data_list', [])]
     if any(abs(float(value) % 360) > .01 for value in rotations):
         raise ValueError('Bake the video rotation into the pixels before importing this shot. Export a constant-frame-rate video with normal orientation.')
@@ -88,7 +107,12 @@ def describe(path):
     if abs(fps-rate)>.02: raise ValueError('Variable frame rate: conform to constant frame rate first')
     count=s.get('nb_frames')
     if not count or str(count)=='N/A':
-        stat=p.stat();count=_decoded_video_count(str(p),stat.st_size,stat.st_mtime_ns)
+        if cancel is None:
+            stat=p.stat();count=_decoded_video_count(str(p),stat.st_size,stat.st_mtime_ns)
+        else:
+            payload=_media_probe([find_media_tool('ffprobe'),'-v','error','-select_streams','v:0','-count_frames','-show_entries','stream=nb_read_frames','-of','json',str(p)],cancel)
+            count=int(json.loads(payload)['streams'][0].get('nb_read_frames',0))
+            if count<1:raise ValueError('The video contains no decodable frames.')
     return dict(kind='video',path=str(p),width=int(s['width']),height=int(s['height']),fps=fps,fps_rational=str(Fraction(s['avg_frame_rate'])),transfer=s.get('color_transfer'),primaries=s.get('color_primaries'),matrix=s.get('color_space'),range=s.get('color_range'),pixel_format=s.get('pix_fmt'),count=int(count))
 
 def resolve_input(path):

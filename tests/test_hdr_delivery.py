@@ -37,8 +37,7 @@ class HDRDeliveryTest(unittest.TestCase):
                          {"image": ["decode", 0], "source": "HDR ACEScct", "destination": "HDR"})
         self.assertEqual(graph["zura_hdr_video"]["inputs"]["bit_depth"], 10)
         self.assertEqual(graph["zura_hdr_video"]["inputs"]["audio"], ["audio", 0])
-        self.assertEqual(graph["zura_hdr_exr"]["inputs"]["exr_color_space"], "acescg")
-        self.assertFalse(graph["zura_hdr_exr"]["inputs"]["save_exr"])
+        self.assertEqual(graph["zura_hdr_exr"], {"class_type":"ZuraHDRSDRPreview","inputs":{"image":["decode",0]}})
 
     def test_rejects_unqualified_source_and_unsafe_output_paths(self):
         with self.assertRaises(ValueError):
@@ -62,7 +61,10 @@ class HDRDeliveryTest(unittest.TestCase):
         self.assertEqual(g["hdr_guide"]["inputs"]["latent_downscale_factor"], ["hdr_lora", 1])
         self.assertEqual(g["hdr_decode"]["inputs"]["vae"], ["hdr_vae", 0])
         self.assertEqual(g["hdr_unpad_frames"]["inputs"]["image"], ["hdr_decode", 0])
-        self.assertEqual(g["zura_hdr_exr"]["inputs"]["image"], ["hdr_unpad_raster", 0])
+        self.assertEqual(g["zura_hdr_exr"]["inputs"], {"image":["hdr_detail", 0],"source_space":"acescg"})
+        self.assertEqual(g['hdr_detail']['inputs'],{'source':['hdr_detail_source_raster',0],'prediction':['hdr_unpad_raster',0]})
+        self.assertEqual(g['hdr_detail_source_frames']['inputs'],{'image':['source',0],'batch_index':0,'length':25})
+        self.assertEqual(g['hdr_detail_source_raster']['inputs'],{'image':['hdr_detail_source_frames',0],'width':640,'height':384,'x':0,'y':0})
         self.assertEqual(g["hdr_condition"]["inputs"]["negative"], ["hdr_conditioning", 0])
         with self.assertRaises(ValueError):
             ltx25_sdr_to_hdr_graph(["source", 0], **{**args, "frames": 24})

@@ -46,7 +46,7 @@ DEFAULTS = {"engine": "local", "background": "keep", "scope": "person", "prompt"
             "h3_character_method": "control", "openjutsu_resolution": "480",
             "openjutsu_background": "keep", "openjutsu_direct": False,
             "opening_model": "klein9b",
-            "opening_width": 0, "opening_height": 0, "opening_shape": "source", "opening_megapixels": 1.0,
+            "opening_width": 0, "opening_height": 0, "opening_shape": "source_size", "opening_megapixels": 1.0,
             "relight_width": 0, "relight_height": 0, "relight_shape": "source", "relight_megapixels": 0.9,
             "camera_shape": "source", "camera_megapixels": 0.35,
             "start": 0.0, "duration": 2.0, "size": 512, "performer": -1,
@@ -102,15 +102,10 @@ def design_readiness(node_mappings, get_full_path, model="klein9b"):
 
 def clean_config(value):
     c = {**DEFAULTS, **{k: v for k, v in value.items() if k in DEFAULTS}}
+    contract = None
     if value.get('ae_frame_contract') is not None:
         from ..comfylink.frame_contract import normalise_frame_contract, contract_rate
         contract = normalise_frame_contract(value['ae_frame_contract'])
-        # These reviewed-source recipes actually decode at 24 fps. A display
-        # label cannot turn them into an NTSC-preserving source pipeline.
-        if contract_rate(contract) != 24:
-            raise ValueError('This native Studio project route requires 24 fps. Use a source-cadence mode for this AE clip.')
-        c.update(ae_frame_contract=contract, start=0.0,
-                 duration=contract['frameCount'] / 24, length_mode='custom', pitch=False)
     # Copy list-valued preferences: one shot must never mutate another shot's adapters.
     for key in ("custom_loras", "opening_loras"):
         adapters = c.get(key)
@@ -135,9 +130,10 @@ def clean_config(value):
     if "quality" in value or "resolution" in value:
         c["h3_preset"] = "take_fast" if c["quality"] == "fast" else "take_quality"
     from .h3 import H3_PRESETS
-    from .opening_models import MODELS as OPENING_MODELS
+    from .opening_models import MODELS as OPENING_MODELS, raster_limits
     if c['opening_model'] not in OPENING_MODELS:
         raise ValueError("Choose an available starting-image model.")
+    opening_limits = raster_limits(c['opening_model'])
     for key, options in [("engine", ("local", "h3", "wan", "wan2", "seedance")), ("background", ("keep", "restyle")),
                          ("quality", ("fast", "detailed")),
                          ("ltx_output", ("sdr", "hlg_video", "hlg_and_exr", "acescg_exr")),
@@ -180,6 +176,18 @@ def clean_config(value):
         c["relight_engine"] = "wan21"
         c["finished_frame_position"] = "first"
         c["finished_frame_number"] = 1
+    if contract is not None:
+        # Wan Relight reloads the verified original source after its 24 fps
+        # review proxy. Other reviewed-source routes still use that proxy's
+        # native cadence and must not acquire a label-only rate conversion.
+        wan_relight = c['workflow_mode'] == 'relight' and c['relight_engine'] == 'wan21'
+        rate = contract_rate(contract)
+        if rate != 24 and not wan_relight:
+            raise ValueError('This native Studio project route requires 24 fps. Use a source-cadence mode for this AE clip.')
+        c.update(ae_frame_contract=contract, start=0.0,
+                 duration=float(contract['frameCount'] / rate), length_mode='custom', pitch=False)
+        if wan_relight:
+            c['relight_shape'] = 'source_size'
     c["preserve_people"] = bool(c["preserve_people"])
     c["preserve_identity"] = bool(c["preserve_identity"]) and c["workflow_mode"] == "relight"
     if c["preserve_people"] and (c["engine"] != "h3" or c["workflow_mode"] != "motion"):
@@ -245,7 +253,9 @@ def clean_config(value):
     from .mask_selection import clean_points
     c["mask_points"] = clean_points(c["mask_points"], require_positive=False)
     relight_large = c['workflow_mode'] == 'relight' and c['relight_engine'] == 'wan21'
-    for prefix, step, maximum, pixels in (("opening", 32 if c["opening_model"] in ("qwen21", "ph3") else 16, 4096, 4_000_000), ("relight", 16, 4096 if relight_large else 1920, 8_388_608 if relight_large else 1920 * 1088)):
+    for prefix, step, maximum, pixels in (
+            ("opening", opening_limits["size_step"], opening_limits["max_dimension"], opening_limits["max_pixels"]),
+            ("relight", 16, 4096 if relight_large else 1920, 8_388_608 if relight_large else 1920 * 1088)):
         pair = []
         for side in ("width", "height"):
             raw = c[prefix + "_" + side]
@@ -1204,10 +1214,13 @@ def _build_native_graph(project, stage, use_cache=True, run_id=None):
                     dimensions=(c['opening_width'], c['opening_height']) if c.get('opening_width') and c.get('opening_height') else None)
         graph = apply_opening_loras(project, graph)
         if c.get("opening_width") and c.get("opening_height"):
-            graph["92:111"] = {"class_type": "ImageScale", "inputs": {
-                "image": ["125", 0], "width": c["opening_width"], "height": c["opening_height"],
-                "upscale_method": "lanczos", "crop": "center"},
-                "_meta": {"title": "Starting image generation resolution"}}
+            # apply_model already registered Image 1 and every reference on
+            # this exact source-aligned grid.  Register the reviewed masks as
+            # well before any model sampler or working-canvas composite sees
+            # them.  This is deliberately model-neutral: Qwen, P-H3 and Flux
+            # must never combine a grid source with source-sized mask pixels.
+            from .opening_edit import fit_opening_edit_canvas
+            fit_opening_edit_canvas(graph, c['opening_width'], c['opening_height'])
         restore_source_size(graph)
         graph["122"]["inputs"]["filename_prefix"] = "genj/studio_images/" + project["id"]
         if c.get('opening_model') in ('chatgpt', 'gemini') or c.get("workflow_mode") == "relight" and not references:
@@ -2582,6 +2595,8 @@ class Studio:
         from .live_preview import preview_method
         extra = {"client_id": data.get("client_id", "genj-studio"), "create_time": int(time.time() * 1000),
                  "comfy_usage_source": "zura-studio", "preview_method": preview_method(p["config"], stage)}
+        from ..comfylink.studio_cancel import project_extra
+        extra.update(project_extra(self.server, p))
         action["preview_method"] = extra["preview_method"]
         if (stage == "h3_enhance"
                 or stage == "h3" and p["config"].get("delivery_mode") == "enhanced1080"):
@@ -2658,6 +2673,12 @@ def register():
 
     from .output_settings import register as register_outputs
     outputs = register_outputs(server, routes, response)
+    from .display_view_routes import register as register_display_views
+    register_display_views(studio, routes, response, check_asset)
+    from .model_view import register as register_model_views
+    register_model_views(studio, routes, response, check_asset)
+    from .media_import import register as register_media_import
+    register_media_import(studio, routes, response, check_asset)
     from .opening import register as register_opening
     register_opening(studio, routes, response)
     from .content import register as register_content
@@ -2797,7 +2818,7 @@ def register():
             "h3_head_swap": head_swap, "wan2": wan2, "h3_camera": camera,
             "wan21_relight": wan21_relight,
             "opening_models": opening_models,
-            "opening_max_pixels": 4_000_000,
+            "opening_max_pixels": 16_777_216,
             "wan21_relight_max_pixels": 8_388_608,
             "hdr_paintout_handoff": True,
             "native_hdr_performance": hdr_performance_enabled(),
@@ -3025,6 +3046,8 @@ def register():
         p = {"id": uuid.uuid4().hex, "kind": "project", "name": source["name"], "source": source,
              **appearance, "config": config, "phase": "new",
              "actions": [], "results": [], "created": time.time()}
+        from ..comfylink.studio_cancel import claim_project
+        claim_project(studio, p)
         studio.configure(p, p["config"])
         return web.json_response(public_project(p))
 

@@ -110,6 +110,7 @@ class DirectViewportTests(unittest.TestCase):
             p.pop(key)
         controller = studio.Studio.__new__(studio.Studio)
         controller.collect = lambda _: None
+        controller.store = object()
         with patch.object(studio, 'validate_selection'), patch.object(studio, 'build_graph', side_effect=RuntimeError('reached native graph')) as build:
             with self.assertRaisesRegex(RuntimeError, 'reached native graph'):
                 asyncio.run(controller.action(p, 'animate', {'request_key': 'a' * 36}))

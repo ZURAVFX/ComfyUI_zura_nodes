@@ -194,13 +194,17 @@ class Wan21RelightTests(unittest.TestCase):
                 graph = studio.build_graph(project, "design", use_cache=False)
             self.assertEqual(graph["92:111"]["inputs"]["image"], ["125", 0])
             self.assertEqual(graph["92:111"]["inputs"]["width"], 1152)
-            self.assertEqual(graph["92:111"]["inputs"]["crop"], "center")
+            self.assertEqual(graph["92:111"]["inputs"]["crop"], "disabled")
             self.assertEqual(graph["zura_opening_original_resolution"]["inputs"]["width"], ["zura_original_size", 0])
+
+    def test_two_k_opening_fits_expanded_image_budget(self):
+        config = studio.clean_config({'engine':'h3', 'workflow_mode':'relight', 'opening_width':2048, 'opening_height':2048})
+        self.assertEqual((config['opening_width'], config['opening_height']), (2048,2048))
 
     def test_invalid_grid_and_pixel_budget_are_rejected_before_queueing(self):
         for sizes in ({"opening_width": 721, "opening_height": 1280},
                       {"relight_width": 4096, "relight_height": 4096},
-                      {"opening_width": 2048, "opening_height": 2048},
+                      {"opening_width": 8192, "opening_height": 8192},
                       {"relight_width": 720}):
             with self.subTest(sizes=sizes), self.assertRaises(ValueError):
                 studio.clean_config({"engine": "h3", "workflow_mode": "relight", **sizes})

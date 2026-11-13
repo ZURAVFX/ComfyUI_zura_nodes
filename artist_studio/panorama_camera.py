@@ -68,9 +68,9 @@ def plan(source, config):
     if contract is not None:
         from ..comfylink.frame_contract import normalise_frame_contract, contract_rate
         contract=normalise_frame_contract(contract)
-        if contract_rate(contract)!=24:
-            raise ValueError('The native camera recipe requires 24 fps and cannot preserve this AE source cadence.')
-        config={**config,'start':0,'duration':contract['frameCount']/24}
+        # Panorama's source, LTX conditioning, audio and final video already use
+        # the source cadence. Keep the AE interval on that same rational clock.
+        config={**config,'start':0,'duration':float(contract['frameCount']/contract_rate(contract))}
     start, seconds = float(config.get('start', 0)), float(config.get('duration', 2))
     width, height = int(config.get('width', 1920)), int(config.get('height', 1080))
     fps = float(source.get('fps') or 24)

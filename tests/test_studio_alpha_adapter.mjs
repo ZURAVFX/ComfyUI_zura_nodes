@@ -1,0 +1,16 @@
+import assert from 'node:assert/strict';
+import {studioModeAdapter,studioProcessingInput} from '../web/studio_mode_adapters.js';
+const colour={encoding:'acescg',sceneLinear:true};
+const creative={studio:{},alpha:{result:{ae_float:{filename:'manifest.json',subfolder:'ComfyLink/'+'a'.repeat(32),type:'output',role:'ae_float',colour},alpha:{filename:'alpha.mov',subfolder:'ZURA STUDIO/alpha',type:'output',role:'alpha'}}}};
+const adapter=studioModeAdapter('alpha'),result=adapter.getSelectedOutput(creative);
+assert.deepEqual(result,{kind:'alpha_extract',master:{filename:'manifest.json',subfolder:'ComfyLink/'+'a'.repeat(32),type:'output'},original:{filename:'alpha.mov',subfolder:'ZURA STUDIO/alpha',type:'output'},colour});
+assert.equal('role' in result.master,false,'UI roles never leak into the strict master reference');
+const original={precision:{sourceBitDepth:32},colour,processingInput:{precision:{sourceBitDepth:8},colour:{encoding:'unknown',sceneLinear:false}}};
+assert.equal(studioProcessingInput(original,'hdr'),original,'HDR conversion reads the original beauty');
+assert.equal(studioProcessingInput(original,'alpha'),original.processingInput,'The matte model may use the SDR viewing copy');
+let read=false;creative.outputSettings={delivery:{outputFor:(id,raw)=>{read=true;assert.equal(id,'alpha');return raw;},isBusyFor:()=>true}};
+assert.equal(adapter.getSelectedOutput(creative).kind,'alpha_extract');assert.equal(read,true);assert.equal(adapter.isBusy(creative),true);
+creative.outputSettings.delivery.readingOutput=true;read=false;assert.equal(adapter.getSelectedOutput(creative).kind,'alpha_extract');assert.equal(read,false,'Delivery may inspect the raw master without recursion');
+creative.alpha.result.native_hdr={filename:'original_hdr.zip',subfolder:'genj/hdr',type:'output',role:'native_hdr',colour};
+const native=adapter.getSelectedOutput(creative);assert.equal(native.kind,'hdr_sequence');assert.equal(native.master.filename,'original_hdr.zip');assert.equal(native.preview.filename,'alpha.mov');assert.equal(native.alpha,'straight');assert.equal('role' in native.master,false);
+console.log('Alpha adapter keeps FLOAT beauty metadata, strict file references and mode-aware source/delivery ownership');

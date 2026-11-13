@@ -45,6 +45,10 @@ ui.close();ui.open();assert.equal(ui.disposed,false);assert.equal(ui.page.isConn
 ui.close();const restored=new AlphaWorkspace(owner);await restored.restoreSource();
 assert.equal(restored.state.startFrame,30);assert.equal(restored.state.frameCount,100);assert.equal(restored.state.view,'matte');assert.match(restored.video.src,/matte.mp4/);
 restored.dispose();assert.equal(ui.reset(),true);assert.equal(ui.source,null);assert.equal(ui.result,null);assert.equal(ui.video.hidden,true);assert.equal(ui.$('trim').hidden,true);
+const imported={...source,path:'C:/input/genj_studio/proxy/model.mkv',studioAssetId:'proxy-id',media_url:'/browser-preview',processingView:{kind:'sdr8_inference',originalAssetId:'original-hdr',originalSource:{path:'C:/original.exr',resolved_colour:'acescg'}}};
+ui.setSource(imported);assert.deepEqual(ui.config().originalSource,{asset_id:'original-hdr',proxy_id:'proxy-id'});ui.close();
+const normalFetch=owner.fetch;owner.fetch=async(path,body)=>path==='/zura/studio/media-import/describe'?(assert.equal(body.asset_id,'proxy-id'),{mediaInfo:imported}):normalFetch(path,body);
+const importedRestore=new AlphaWorkspace(owner);await importedRestore.restoreSource();assert.deepEqual(importedRestore.config().originalSource,{asset_id:'original-hdr',proxy_id:'proxy-id'});assert.equal(importedRestore.video.src,'/browser-preview');importedRestore.dispose();ui.reset();owner.fetch=normalFetch;
 delayedSource=true;const loading=ui.uploadSource(new File(['video'],'late.mp4',{type:'video/mp4'}));
 await new Promise(resolve=>setTimeout(resolve,0));assert.equal(typeof delayedSource,'function');
 assert.equal(ui.reset(),true);delayedSource(source);await loading;assert.equal(ui.source,null,'Late upload metadata cannot resurrect cleared inputs');

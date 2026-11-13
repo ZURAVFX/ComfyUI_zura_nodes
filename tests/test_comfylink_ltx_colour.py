@@ -55,14 +55,17 @@ class LTXColourTests(unittest.TestCase):
         with self.assertRaises(ValueError): m.ZuraComfyLinkToLTXColour().convert(a, metadata())
 
 
-    def test_short_graph_precision_default_and_explicit(self):
+    def test_short_graph_storage_choice_keeps_display_preview_independent(self):
         spec = importlib.util.spec_from_file_location('delivery_test', Path(__file__).parents[1] / 'artist_studio' / 'hdr_delivery.py')
         delivery = importlib.util.module_from_spec(spec); spec.loader.exec_module(delivery)
         args = dict(output='acescg_exr', prefix='fixture', working_space='ltx25_acescct_qualified')
         default = delivery.ltx_hdr_delivery(['decode', 0], 24, **args)
         full = delivery.ltx_hdr_delivery(['decode', 0], 24, exr_storage='float32', **args)
-        self.assertIs(default['zura_hdr_exr']['inputs']['half_precision'], True)
-        self.assertIs(full['zura_hdr_exr']['inputs']['half_precision'], False)
+        # EXR storage is applied by the delivery writer. This graph's output
+        # node is a display-only preview and must not quantise the HDR master.
+        self.assertEqual(default['zura_hdr_exr']['class_type'], 'ZuraHDRSDRPreview')
+        self.assertEqual(default['zura_hdr_exr'], full['zura_hdr_exr'])
+        self.assertEqual(default['zura_hdr_exr']['inputs']['image'], ['decode', 0])
         with self.assertRaises(ValueError): delivery.ltx_hdr_delivery(['decode', 0], 24, exr_storage='unknown', **args)
 
 

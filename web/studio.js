@@ -3,6 +3,7 @@ import {takeStudioLaunch,createStudioSession,studioLaunchStorage,StudioAEBridge}
 import {installDesktopHandoff} from './studio_desktop_handoff.js';
 import {navigateStudioMode} from './studio_mode_adapters.js';
 import {normalStudioStorage} from './studio_storage.js';
+import {scopedStudioAPI} from './studio_ae_lifecycle.js';
 import { app } from "../../scripts/app.js";
 import { api } from "../../scripts/api.js";
 import { tidyArtistGraph, trimStageSignals, installArtistLinkRendering } from "./artist_graph.js";
@@ -56,8 +57,8 @@ const icon = (name) => {
 };
 const escape = (text) => String(text ?? "").replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
-async function request(path, body, method="POST") {
-  const response = await api.fetchApi(ROOT + path, body === undefined ? {} : {
+async function request(path, body, method="POST", client=api) {
+  const response = await client.fetchApi(ROOT + path, body === undefined ? {} : {
     method, headers:{"Content-Type":"application/json"}, body:JSON.stringify(body),
   });
   let data;
@@ -72,12 +73,15 @@ async function tidyWanStage(app, graph, stage) {
 }
 
 class ArtistStudio {
+  get api(){return this._api||api;}
+  set api(value){this._api=value;}
+  request(path,body,method){return request(path,body,method,this.api);}
   constructor({storage=normalStudioStorage(),aeSession=null}={}) {
-    this.storage=storage;this.aeSession=aeSession;
+    this.storage=storage;this.aeSession=aeSession;this.aeScope=scopedStudioAPI(api,aeSession);this.api=this.aeScope.api;this.request=this.request.bind(this);
     this.project = null; this.source = null; this.character = null; this.audio = null; this.busy = false;
     this.references=[];this.readyAsset=null;this.lookMode="build";this.hdrSourceLook=false;
     this.config = {...defaults}; this.preview = "mask"; this.lastVideo = null; this.resetEpoch=0;this.resetting=false;
-    this.contentDetection=new ContentDetection(body=>request("/content",body),()=>this.render());
+    this.contentDetection=new ContentDetection(body=>this.request("/content",body),()=>this.render());
     this.container = document.createElement("section");
     this.container.id = "genj-studio"; this.container.setAttribute("aria-label", "Zura Studio");
     this.container.innerHTML = `
@@ -209,8 +213,8 @@ class ArtistStudio {
         </div><footer class="gs-composer" aria-label="Prompt and source range"><div id="gs-trim-controls"></div><section id="gs-trimmer" hidden aria-label="Source video trim timeline"></section><details id="gs-trim-precision" class="gs-advanced" hidden><summary>Precise timing</summary><div class="gs-two"></div></details><div id="gs-prompt-stage" class="gs-prompt-stage" aria-label="Current generation stage"><strong id="gs-prompt-heading"></strong><button id="gs-edit-frame" type="button" hidden>Edit image</button><button id="gs-keep-frame" type="button" hidden>Keep current image</button></div><div id="gs-prompt-composer"></div></footer>
       </main></div>`;
     if(this.container.querySelector){
-      if(typeof StudioModelDownloads!=="undefined")this.modelDownloads=new StudioModelDownloads(this.$("model-downloads"),request,async()=>{this.modelStatus=await request("/status");this.syncForm();this.render();});
-      if(typeof HDRSourceTool!=="undefined")this.hdrTool=new HDRSourceTool(this.container,api,()=>({id:this.source?.id,file:this.source?.file,url:this.source?.url,preview_url:this.source?.preview_url,width:this.source?.width,height:this.source?.height,projectId:this.project?.id,busy:this.busy||this.project?.phase==='working'}),{storage:this.storage});
+      if(typeof StudioModelDownloads!=="undefined")this.modelDownloads=new StudioModelDownloads(this.$("model-downloads"),this.request,async()=>{this.modelStatus=await this.request("/status");this.syncForm();this.render();});
+      if(typeof HDRSourceTool!=="undefined")this.hdrTool=new HDRSourceTool(this.container,this.api,()=>({id:this.source?.id,file:this.source?.file,url:this.source?.url,preview_url:this.source?.preview_url,width:this.source?.width,height:this.source?.height,projectId:this.project?.id,busy:this.busy||this.project?.phase==='working'}),{storage:this.storage});
       const clip=this.container.querySelector(".gs-clip-length");
       this.$("trim-controls").appendChild(clip);
       this.$("trim-precision").querySelector(".gs-two").append(this.$("trim-start"),this.$("duration-setting"));
@@ -229,9 +233,10 @@ class ArtistStudio {
     }
     this.liveSampleAction=null;this.liveSampleData=null;
     this.connectNativePreview();
-    if(typeof api!=="undefined")api.addEventListener?.("minimax_h3_preview",event=>this.receiveH3Preview(event.detail||{}));
+    this.h3PreviewListener=event=>{if(!this.aeScope?.closed)this.receiveH3Preview(event.detail||{});};
+    if(typeof this.api!=="undefined")this.api.addEventListener?.("minimax_h3_preview",this.h3PreviewListener);
     this.bind();this.syncForm();
-    if(typeof CreativeWorkspace!=="undefined")this.creative=new CreativeWorkspace(this,api,app);
+    if(typeof CreativeWorkspace!=="undefined")this.creative=new CreativeWorkspace(this,this.api,app);
     if(this.creative&&typeof installStudioRestartNavigation!=="undefined")installStudioRestartNavigation(this);
   }
   comparisonTarget(url) {
@@ -255,7 +260,7 @@ class ArtistStudio {
     return this.perform(async epoch=>{
       this.config={...this.readConfig(),...range,length_mode:"custom",...(range.start!==this.config.start?{mask_points:[]}:{} )};
       this.trimSeeking=false;this.syncForm();
-      if(this.project){const id=this.project.id,updated=await request(`/projects/${id}/config`,this.configBody(this.config));if(epoch!==this.resetEpoch)return;if(this.project?.id===id)this.project=updated;}
+      if(this.project){const id=this.project.id,updated=await this.request(`/projects/${id}/config`,this.configBody(this.config));if(epoch!==this.resetEpoch)return;if(this.project?.id===id)this.project=updated;}
       this.render();
     });
   }
@@ -321,7 +326,7 @@ class ArtistStudio {
     if(this.busy || this.project?.phase==="working" || !["flux3","klein9b","qwen2511","qwen21","ph3","chatgpt","gemini"].includes(value))return;
     this.config={...this.readConfig(),opening_model:value,h3_viewport_direct:false};
     if(['chatgpt','gemini'].includes(value))this.config.opening_loras=[];
-    if(['qwen21','ph3'].includes(value)&&this.config.opening_width&&this.config.opening_height){for(const key of ['opening_width','opening_height'])this.config[key]=Math.floor(this.config[key]/32)*32;}
+    if(['qwen21','ph3'].includes(value)&&this.config.opening_width&&this.config.opening_height){for(const key of ['opening_width','opening_height'])this.config[key]=Math.ceil(this.config[key]/32)*32;}
     this.useGeneratedLook();
     this.promptStage="image";this.preview="original";
     this.syncForm();this.render();
@@ -371,7 +376,7 @@ class ArtistStudio {
        this.$("camera_preset").value!==(saved.camera_preset||"Left three-quarter"));
   }
   configBody(config){assertAEFrameConfig(this,config);return {config:{...aeFrameConfig(this,config),exr_storage:this.creative?.outputSettings?.exrStorage(config.ltx_output)||"half"},reference_roles:this.referenceRoles()};}
-  requestOpeningLoraConfig(id,config){return request(`/projects/${id}/config`,this.configBody(config));}
+  requestOpeningLoraConfig(id,config){return this.request(`/projects/${id}/config`,this.configBody(config));}
   projectBody(){assertAEFrameConfig(this,this.config);const generatedOnly=this.config.preserve_people,sourceHDR=this.hdrSourceLook&&!!this.source?.native_hdr_video;return {source:this.source.id,character:sourceHDR?undefined:this.character?.id,look_mode:sourceHDR?"source_hdr":generatedOnly?"build":this.lookMode,
     references:sourceHDR?[]:this.references.map(a=>a.id),reference_roles:sourceHDR?[]:this.references.map(a=>a.role||"auto"),starting_image:sourceHDR||generatedOnly?undefined:this.readyAsset?.id,config:{...aeFrameConfig(this,this.config),exr_storage:this.creative?.outputSettings?.exrStorage(this.config.ltx_output)||"half"}};}
   invalidateLook(){this.character=this.references[0] || this.readyAsset;this.project=null;this.storage.removeItem("genj-studio-project");}
@@ -486,7 +491,7 @@ class ArtistStudio {
     this.$("exit").onclick=()=>this.graphView(); this.$("close").onclick=()=>this.close(); this.$("new").onclick=()=>this.reset();
     this.$("clear-audio").onclick=()=>this.perform(async(epoch)=>{
       const config={...this.readConfig(),audio_id:"",audio_start:0,lip_sync:false,refine_lips:false};
-      if(this.project){const id=this.project.id,updated=await request(`/projects/${id}/config`,this.configBody(config));if(epoch!==this.resetEpoch)return;if(this.project?.id===id)this.project=updated;}
+      if(this.project){const id=this.project.id,updated=await this.request(`/projects/${id}/config`,this.configBody(config));if(epoch!==this.resetEpoch)return;if(this.project?.id===id)this.project=updated;}
       this.pendingReference=false;this.config=config;this.syncForm();this.render();
     });
     this.$("primary").onclick=()=>this.primary();
@@ -501,7 +506,7 @@ class ArtistStudio {
     this.$("voice-sample").onchange=e=>this.perform(async(epoch)=>{
       const file=e.target.files[0];if(!file)return;
       const form=new FormData();form.append("file",file);
-      const r=await api.fetchApi(`${ROOT}/upload?kind=audio`,{method:"POST",body:form});
+      const r=await this.api.fetchApi(`${ROOT}/upload?kind=audio`,{method:"POST",body:form});
       if(epoch!==this.resetEpoch)return;
       const asset=await r.json();if(!r.ok)throw new Error(asset.error||"The voice sample could not upload.");
       if(epoch!==this.resetEpoch)return;
@@ -510,7 +515,7 @@ class ArtistStudio {
     this.$("create-voice").onclick=()=>this.perform(async(epoch)=>{
       if(this.project?.phase==="working"||this.voiceJob)throw new Error("Wait for the current job to finish first.");
       const key=crypto.randomUUID();
-      const job=await request("/voice",{request_key:key,client_id:api.clientId,mode:this.$("voice-mode").value,
+      const job=await this.request("/voice",{request_key:key,client_id:this.api.clientId,mode:this.$("voice-mode").value,
         script:this.$("voice-script").value,reference_transcript:this.$("voice-transcript").value,
         reference_id:this.voiceSample?.id,seed:this.readConfig().seed%4294967296});
       if(epoch!==this.resetEpoch)return;
@@ -521,13 +526,13 @@ class ArtistStudio {
     this.$("redesign").onclick=()=>this.perform(async(epoch)=>{
       if((!this.project?.approval && this.config.workflow_mode!=="camera") || !this.project?.opening_input || this.project.phase==="working")return;
       this.config={...this.readConfig(),seed:Math.floor(Math.random()*2**48)};this.syncForm();
-      const id=this.project.id,updated=await request(`/projects/${id}/config`,this.configBody(this.config));if(epoch!==this.resetEpoch)return;if(this.project?.id!==id)return;this.project=updated;
+      const id=this.project.id,updated=await this.request(`/projects/${id}/config`,this.configBody(this.config));if(epoch!==this.resetEpoch)return;if(this.project?.id!==id)return;this.project=updated;
       await this.run("design");if(epoch!==this.resetEpoch)return;
     });
     this.$("refresh").onclick=()=>this.loadLibrary();
     this.$("cancel").onclick=()=>this.perform(async(epoch)=>{
       const id=this.project?.id;if(!id)return;
-      const stopped=await request(`/projects/${id}/cancel`,{});if(epoch!==this.resetEpoch)return;if(this.project?.id===id)this.project=stopped;this.render();
+      const stopped=await this.request(`/projects/${id}/cancel`,{});if(epoch!==this.resetEpoch)return;if(this.project?.id===id)this.project=stopped;this.render();
     });
     this.$("live-cancel").onclick=()=>this.$("cancel").click();
     this.container.querySelectorAll('input[name="gs-look"]').forEach(input=>input.onchange=()=>{
@@ -547,7 +552,7 @@ class ArtistStudio {
       const select=e.target.closest("[data-reference-role]");if(!select || this.busy || this.project?.phase==="working")return;
       const reference=this.references.find(a=>a.id===select.dataset.referenceRole);if(!reference)return;
       reference.role=select.value;this.character=this.references[0] || this.readyAsset;
-      this.perform(async(epoch)=>{if(this.project){const id=this.project.id,updated=await request(`/projects/${id}/config`,this.configBody(this.readConfig()));if(epoch!==this.resetEpoch)return;if(this.project?.id===id)this.project=updated;}this.render();});
+      this.perform(async(epoch)=>{if(this.project){const id=this.project.id,updated=await this.request(`/projects/${id}/config`,this.configBody(this.readConfig()));if(epoch!==this.resetEpoch)return;if(this.project?.id===id)this.project=updated;}this.render();});
     };
     for (const type of ["source","character","ready","audio"])this.bindUpload(type);
     this.$("preview-tabs").querySelectorAll("button").forEach(button=>button.onclick=()=>{
@@ -590,7 +595,7 @@ class ArtistStudio {
         const pointStart=this.config.length_mode==="original"?0:this.config.start;
         const priorStart=this.project?.config?.length_mode==="original"?0:(this.project?.config?.start ?? this.pointFrameStart ?? pointStart);
         if(["gs-start","gs-length_mode"].includes(input.id) && pointStart!==priorStart)this.config.mask_points=[];
-        if(this.project){const id=this.project.id,updated=await request(`/projects/${id}/config`,this.configBody(this.config));if(epoch!==this.resetEpoch)return;if(this.project?.id===id)this.project=updated;}
+        if(this.project){const id=this.project.id,updated=await this.request(`/projects/${id}/config`,this.configBody(this.config));if(epoch!==this.resetEpoch)return;if(this.project?.id===id)this.project=updated;}
         this.render();
       }));
     });
@@ -693,7 +698,7 @@ class ArtistStudio {
       const choice=await new Promise(resolve=>{dialog.addEventListener("close",()=>{resolve(dialog.returnValue);dialog.remove();if(this.activeDialog===dialog)this.activeDialog=null;},{once:true});dialog.showModal();});
       if(choice!=="save"||epoch!==this.resetEpoch)return;
       const next={...config,mask_method:"points",mask_points:points};
-      if(this.project){const id=this.project.id,updated=await request(`/projects/${id}/config`,this.configBody(next));if(epoch!==this.resetEpoch)return;if(this.project?.id===id)this.project=updated;}
+      if(this.project){const id=this.project.id,updated=await this.request(`/projects/${id}/config`,this.configBody(next));if(epoch!==this.resetEpoch)return;if(this.project?.id===id)this.project=updated;}
       this.config=next;this.pointFrameStart=start;this.preview="mask";this.syncForm();
     } finally {video.pause();video.removeAttribute("src");video.load();}
   }
@@ -719,9 +724,9 @@ class ArtistStudio {
         // Comfy's short default API timeout is intended for JSON requests,
         // not large multipart uploads. Our controller bounds the whole upload.
         if(/\.exr$/i.test(file.name)&&["opening","ready"].includes(type)){
-          nativeAsset=await uploadNativePerformanceOpening(api,file,this.config,this.modelStatus?.native_hdr_performance,controller.signal);
+          nativeAsset=await uploadNativePerformanceOpening(this.api,file,this.config,this.modelStatus?.native_hdr_performance,controller.signal);
         }else{
-          r=await api.fetchApi(`${ROOT}/upload?kind=${type==="source"?"video":type==="audio"?"audio":"image"}`,{method:"POST",body:form,signal:controller.signal,timeoutMs:null});
+          r=await this.api.fetchApi(`${ROOT}/upload?kind=${type==="source"?"video":type==="audio"?"audio":"image"}`,{method:"POST",body:form,signal:controller.signal,timeoutMs:null});
         }
       }catch(error){
         if(error.name==="AbortError")throw new Error("Loading was stopped or took longer than five minutes. Try a trimmed MP4 or choose the file again.");
@@ -732,20 +737,20 @@ class ArtistStudio {
       if(epoch!==this.resetEpoch)return;
       if(nativeAsset){
         const config={...this.config,ltx_output:this.config.ltx_output&&this.config.ltx_output!=="sdr"?this.config.ltx_output:"hlg_and_exr"};
-        if(type==="opening"&&this.project){const id=this.project.id,updated=await request(`/projects/${id}/config`,this.configBody(config));if(epoch!==this.resetEpoch)return;if(this.project?.id===id)this.project=updated;}
+        if(type==="opening"&&this.project){const id=this.project.id,updated=await this.request(`/projects/${id}/config`,this.configBody(config));if(epoch!==this.resetEpoch)return;if(this.project?.id===id)this.project=updated;}
         this.config=config;
       }
-      asset.url=api.apiURL("/view?"+new URLSearchParams({filename:asset.file.split("/").pop(),subfolder:asset.file.split("/").slice(0,-1).join("/"),type:"input"}));
+      asset.url=this.api.apiURL("/view?"+new URLSearchParams({filename:asset.file.split("/").pop(),subfolder:asset.file.split("/").slice(0,-1).join("/"),type:"input"}));
       if(["character","ready","opening"].includes(type))this.hdrSourceLook=false;
       if(type==="audio"){
         const config=this.referenceAudioConfig(asset);
-        if(this.project){const id=this.project.id,updated=await request(`/projects/${id}/config`,this.configBody(config));if(epoch!==this.resetEpoch)return;if(this.project?.id===id)this.project=updated;}
+        if(this.project){const id=this.project.id,updated=await this.request(`/projects/${id}/config`,this.configBody(config));if(epoch!==this.resetEpoch)return;if(this.project?.id===id)this.project=updated;}
         this.audio=asset;this.pendingReference=false;this.config=config;this.syncForm();
       }else if(type==="opening"){
         if(this.project.phase==="review" && !this.project.approval)await this.run("approve");
         if(epoch!==this.resetEpoch)return;
         if(!this.project.approval)throw new Error("Review and approve the source mask before choosing a starting image.");
-        const id=this.project.id,updated=await request(`/projects/${id}/opening`,{asset_id:asset.id});if(epoch!==this.resetEpoch)return;if(this.project?.id===id)this.project=updated;
+        const id=this.project.id,updated=await this.request(`/projects/${id}/opening`,{asset_id:asset.id});if(epoch!==this.resetEpoch)return;if(this.project?.id===id)this.project=updated;
         this.readyAsset=asset;this.lookMode="ready";this.syncForm();
       }else if(type==="character"){
         if(!this.references.some(a=>a.sha===asset.sha))this.references.push({...asset,role:"auto"});
@@ -766,13 +771,13 @@ class ArtistStudio {
     if(!id)return null;
     await this.creative?.videoComposer?.ltxOutput?.beforeAction(action);
     if(epoch!==this.resetEpoch||this.project?.id!==id)return null;
-    const body={action,request_key:crypto.randomUUID(),client_id:api.clientId,
-      auth_token_comfy_org:api.authToken,api_key_comfy_org:api.apiKey};
-    const updated=await request(`/projects/${id}/action`,body);
+    const body={action,request_key:crypto.randomUUID(),client_id:this.api.clientId,
+      auth_token_comfy_org:this.api.authToken,api_key_comfy_org:this.api.apiKey};
+    const updated=await this.request(`/projects/${id}/action`,body);
     if(epoch!==this.resetEpoch||this.project?.id!==id){
       if(updated?.phase==="working"){
         try{
-          const stopped=await request(`/projects/${encodeURIComponent(id)}/cancel`,{});
+          const stopped=await this.request(`/projects/${encodeURIComponent(id)}/cancel`,{});
           if(stopped?.phase==="working"&&this.resetEpoch===epoch+1)this.message("The previous shot was cleared, but ComfyUI still reports it as running. Check Recent shots before starting another run.",true);
         }catch{
           if(this.resetEpoch===epoch+1)this.message("The previous shot was cleared, but ComfyUI could not confirm it stopped. Check Recent shots before starting another run.",true);
@@ -795,13 +800,13 @@ class ArtistStudio {
     await this.perform(async(epoch)=>{
       this.config=this.readConfig();
       if(!this.project){
-        const created=await request("/projects",this.projectBody());if(epoch!==this.resetEpoch)return;this.project=created;
+        const created=await this.request("/projects",this.projectBody());if(epoch!==this.resetEpoch)return;this.project=created;
         this.storage.setItem("genj-studio-project",this.project.id);
       }else if(this.project.phase!=="working"){
-        const id=this.project.id,updated=await request(`/projects/${id}/config`,this.configBody(this.config));if(epoch!==this.resetEpoch)return;if(this.project?.id!==id)return;this.project=updated;
+        const id=this.project.id,updated=await this.request(`/projects/${id}/config`,this.configBody(this.config));if(epoch!==this.resetEpoch)return;if(this.project?.id!==id)return;this.project=updated;
       }
       const stage=this.$("graph-stage").value;
-      const id=this.project.id,exported=await request(`/projects/${id}/graph?stage=${encodeURIComponent(stage)}`);if(epoch!==this.resetEpoch||this.project?.id!==id)return;
+      const id=this.project.id,exported=await this.request(`/projects/${id}/graph?stage=${encodeURIComponent(stage)}`);if(epoch!==this.resetEpoch||this.project?.id!==id)return;
       if(typeof app.loadApiJson!=="function")throw new Error("Update the ComfyUI frontend to open editable API graphs.");
       const originalGraph=(app.rootGraph||app.graph)?.serialize?.();
       if(!originalGraph || typeof app.loadGraphData!=="function")throw new Error("Update ComfyUI to open Graph view without replacing your current workflow.");
@@ -856,10 +861,10 @@ class ArtistStudio {
         this.config.seed=Math.floor(Math.random()*2**48);this.syncForm();
       }
       if(!this.project){
-        const created=await request("/projects",this.projectBody());if(epoch!==this.resetEpoch)return;this.project=created;
+        const created=await this.request("/projects",this.projectBody());if(epoch!==this.resetEpoch)return;this.project=created;
         this.storage.setItem("genj-studio-project",this.project.id);
       } else {
-        const id=this.project.id,updated=await request(`/projects/${id}/config`,this.configBody(this.config));if(epoch!==this.resetEpoch||this.project?.id!==id)return;this.project=updated;
+        const id=this.project.id,updated=await this.request(`/projects/${id}/config`,this.configBody(this.config));if(epoch!==this.resetEpoch||this.project?.id!==id)return;this.project=updated;
       }
       const p=this.project;
       if(this.hdrSourceLook || p.look_mode==="source_hdr"){
@@ -868,7 +873,7 @@ class ArtistStudio {
           await this.run("approve");if(epoch!==this.resetEpoch||this.project?.id!==p.id)return;
         }
         if(!this.project.opening_input){
-          const updated=await request(`/projects/${p.id}/hdr-source-opening`,{});if(epoch!==this.resetEpoch||this.project?.id!==p.id)return;
+          const updated=await this.request(`/projects/${p.id}/hdr-source-opening`,{});if(epoch!==this.resetEpoch||this.project?.id!==p.id)return;
           this.project=updated;Object.assign(this.config,updated.config||{finished_frame_position:"first",finished_frame_number:1});this.readyAsset=updated.starting_asset;this.lookMode="ready";this.hdrSourceLook=false;this.promptStage=null;this.syncForm();this.render();return;
         }
         return this.run("animate");
@@ -883,7 +888,7 @@ class ArtistStudio {
         if(epoch!==this.resetEpoch)return;
         if(this.directViewport())return this.run("h3");
         if(this.lookMode==="ready" && this.config.engine!=="seedance"){
-          const updated=await request(`/projects/${p.id}/opening`,{asset_id:this.readyAsset.id});
+          const updated=await this.request(`/projects/${p.id}/opening`,{asset_id:this.readyAsset.id});
           if(epoch===this.resetEpoch && this.project?.id===p.id)this.project=updated;
           return;
         }
@@ -893,7 +898,7 @@ class ArtistStudio {
       if(this.config.engine!=="seedance"){
         if(this.directViewport())return this.run("h3");
         if(this.lookMode==="ready" && !p.opening_input){
-          const updated=await request(`/projects/${p.id}/opening`,{asset_id:this.readyAsset.id});if(epoch!==this.resetEpoch||this.project?.id!==p.id)return;this.project=updated;return;
+          const updated=await this.request(`/projects/${p.id}/opening`,{asset_id:this.readyAsset.id});if(epoch!==this.resetEpoch||this.project?.id!==p.id)return;this.project=updated;return;
         }
         return this.run(p.opening_input?"animate":"design");
       }
@@ -1103,8 +1108,8 @@ class ArtistStudio {
     this.renderCustomLoras();
   }
   customLoraFamily(){if(this.config.workflow_mode==="relight"&&this.config.relight_engine==="wan21")return "wan21";if(this.config.engine==="h3")return this.config.delivery_mode==="enhanced1080"?null:"h3";if(this.config.engine==="wan"&&this.config.lip_sync)return null;if(this.config.engine==="local"&&this.config.edit_area==="scene")return "ltx25";return ({wan:"wan22",wan2:"wan_animate2"})[this.config.engine]||null;}
-  async loadCustomLoras(){try{const data=await request("/loras");this.loraCatalog=data.loras||[];this.renderCustomLoras();}catch(error){this.message(error.message,true);}}
-  saveCustomLoras(entries){this.perform(async epoch=>{const config={...this.readConfig(),custom_loras:entries};if(this.project){const id=this.project.id,updated=await request(`/projects/${id}/config`,this.configBody(config));if(epoch!==this.resetEpoch||this.project?.id!==id)return;this.project=updated;}this.config=config;this.renderCustomLoras();});}
+  async loadCustomLoras(){try{const data=await this.request("/loras");this.loraCatalog=data.loras||[];this.renderCustomLoras();}catch(error){this.message(error.message,true);}}
+  saveCustomLoras(entries){this.perform(async epoch=>{const config={...this.readConfig(),custom_loras:entries};if(this.project){const id=this.project.id,updated=await this.request(`/projects/${id}/config`,this.configBody(config));if(epoch!==this.resetEpoch||this.project?.id!==id)return;this.project=updated;}this.config=config;this.renderCustomLoras();});}
   renderCustomLoras(){
     const picker=this.$("lora-picker"),list=this.$("lora-list"),note=this.$("lora-note");if(!picker||!list||!note)return;
     const entries=this.config.custom_loras||[],family=this.customLoraFamily(),busy=this.busy||this.project?.phase==="working",selected=picker.value;
@@ -1134,7 +1139,7 @@ class ArtistStudio {
     this.resetting=true;this.busy=true;this.message("");this.render();
     if(project?.phase==="working"){
       try{
-        const stopped=await request(`/projects/${encodeURIComponent(project.id)}/cancel`,{});
+        const stopped=await this.request(`/projects/${encodeURIComponent(project.id)}/cancel`,{});
         if(epoch!==this.resetEpoch)return false;
         if(stopped?.phase==="working")throw new Error("ComfyUI still reports this shot as running. Its files and settings have been kept; try Start over again in a moment.");
         if(this.project?.id===project.id)this.project=stopped;
@@ -1163,7 +1168,7 @@ class ArtistStudio {
   async loadProject(id) {
     this.trimSeeking=false;this.trimSeekTime=null;this.promptStage=null;
     await this.perform(async()=>{
-      const epoch=this.resetEpoch,project=await request("/projects/"+id);
+      const epoch=this.resetEpoch,project=await this.request("/projects/"+id);
       if(epoch!==this.resetEpoch)return;
       this.project=project;
       this.source=this.project.source;this.character=this.project.character;this.audio=this.project.audio || this.project.reference_audio || null;this.pendingReference=false;this.config={...defaults,h3_character_method:"control",openjutsu_direct:false,...this.project.config};
@@ -1185,7 +1190,7 @@ class ArtistStudio {
   }
   async loadLibrary() {
     try{
-      const projects=await request("/projects");
+      const projects=await this.request("/projects");
       this.$("library-list").innerHTML=projects.length?projects.slice(0,12).map(p=>`<button class="gs-library-row" data-project="${escape(p.id)}"><span>${escape(p.name)}</span><small>${escape(({new:"Ready to prepare",review:"Mask ready",approved:"Ready to create",opening:"Character preview",working:"Rendering",draft:"Draft ready",done:"Finished",error:"Needs attention"})[p.phase] || p.phase)}</small>${icon("arrow")}</button>`).join(""):'<p class="gs-note">Your shots are saved on this computer. You can return to them later.</p>';
     }catch(e){this.message(e.message,true);}
   }
@@ -1591,7 +1596,7 @@ class ArtistStudio {
     }
     if((phase==="draft" || phase==="done") && p.results?.length && this.composerStage()==="video"){video=p.results.at(-1).url;title=phase==="draft"?"Review your draft":"Your finished take";description="The selected soundtrack is restored. Watch the entire take before keeping it.";}
     const hdrTake=phase==="done"&&this.composerStage()==="video"?this.creative?.videoComposer?.ltxOutput?.result(p):null;
-    if(hdrTake){video=api.apiURL('/view?'+new URLSearchParams(hdrTake.file));title="Your finished HDR take";description=hdrTake.nativeHDR?"SDR viewing preview. Download the native HDR master or EXRs below.":"SDR viewing preview. Download the HDR master or EXRs below; the SDR master remains in Takes.";}
+    if(hdrTake){video=this.api.apiURL('/view?'+new URLSearchParams(hdrTake.file));title="Your finished HDR take";description=hdrTake.nativeHDR?"SDR viewing preview. Download the native HDR master or EXRs below.":"SDR viewing preview. Download the HDR master or EXRs below; the SDR master remains in Takes.";}
     if(workflow==="camera"){
       if(phase==="opening"&&this.preview==="look"){title="Review your camera still";description="Check the angle, identity and framing before generating video.";}
       else if(phase==="done"){description="Check the middle and end for camera drift and motion changes. The original audio is restored.";}
@@ -1636,7 +1641,7 @@ class ArtistStudio {
         const label=item.label || ({wan2:"Wan Animate 2",wan:"Wan 2.2",h3:"MiniMax H3",h3_enhance:"Enhanced H3",draft:"Seedance draft",final:"Seedance final",background:"LTX · original background",restyle:"LTX · scene restyle"})[item.stage] || "Take";
         const raster=item.output_raster?.width&&item.output_raster?.height?`${item.output_raster.width} × ${item.output_raster.height}`:item.resolution?`${item.resolution}px`:"";
         const hdrFile=item.native_hdr?preferredHDRFile(item.hdr_files):null;
-        const download=hdrFile?api.apiURL('/view?'+new URLSearchParams(hdrFile)):item.url;
+        const download=hdrFile?this.api.apiURL('/view?'+new URLSearchParams(hdrFile)):item.url;
         const downloadName=hdrFile?.filename||`zura-take-${results.length-i}.mp4`;
         const downloadLabel=hdrFile?(hdrFile.filename.endsWith('.zip')?'Download EXRs':'Download HDR'):item.native_hdr?'Download SDR preview':'Download';
         return `<article class="gs-take"><video src="${escape(item.url)}" controls playsinline preload="metadata"></video><div><span>${escape(label+(raster?` · ${raster}`:"")+(item.duration?` · ${item.duration}s`:""))}</span><button class="gs-quiet" type="button" data-compare-result="${escape(item.url)}">Compare</button><a href="${escape(download)}" download="${escape(downloadName)}">${icon("download")} ${downloadLabel}</a></div></article>`;
@@ -1651,8 +1656,8 @@ class ArtistStudio {
     this.renderLiveH3Preview(project.phase==="working");
   }
   connectNativePreview(){
-    if(this.nativeSamplePreview||typeof installNativeSamplePreview!=="function"||typeof api==="undefined")return;
-    this.nativeSamplePreview=installNativeSamplePreview(api,{
+    if(this.nativeSamplePreview||typeof installNativeSamplePreview!=="function"||typeof this.api==="undefined")return;
+    this.nativeSamplePreview=installNativeSamplePreview(this.api,{
       getJob:()=>{const action=this.project?.actions?.at(-1);return this.project?.phase==="working"&&action?{id:action.id,previewMethod:action.preview_method}:null;},
       onPreview:sample=>{const action=this.project?.actions?.at(-1);if(!action)return;this.liveSampleAction=action.id;this.liveSampleData=sample;this.renderLiveH3Preview(true);},
       onClear:()=>{this.liveSampleData=null;this.renderLiveH3Preview(false);},
@@ -1676,7 +1681,7 @@ class ArtistStudio {
     if(this.creative&&!this.restartNavigation&&typeof installStudioRestartNavigation!=="undefined")installStudioRestartNavigation(this);
     if(window.matchMedia?.("(min-width: 901px)")?.matches ?? true)this.container.scrollTop=0;
     try{
-      this.modelStatus=await request("/status");this.syncForm();this.render();
+      this.modelStatus=await this.request("/status");this.syncForm();this.render();
     }catch(e){this.message(e.message,true);}
     const saved=this.storage.getItem("genj-studio-project");
     if(saved && !this.project)await this.loadProject(saved);
@@ -1725,10 +1730,10 @@ class ArtistStudio {
     if(this.container.isConnected && this.source?.preview_file && !this.source.preview_url && this.source.preview_status!=="error" && !this.previewPolling){
       const identity=this.source.id,epoch=this.resetEpoch;this.previewPolling=true;
       try{
-        const state=await request(`/assets/${identity}/preview`);
+        const state=await this.request(`/assets/${identity}/preview`);
         if(epoch===this.resetEpoch && this.source?.id===identity){
           this.source.preview_status=state.preview_status;
-          if(state.preview_url)this.source.preview_url=api.apiURL(state.preview_url);
+          if(state.preview_url)this.source.preview_url=this.api.apiURL(state.preview_url);
           if(state.preview_status==="error")this.message(state.preview_error,true);
           this.render();
         }
@@ -1740,10 +1745,10 @@ class ArtistStudio {
       if(identity){
         const epoch=this.resetEpoch;this.voicePolling=true;
         try{
-          const job=await request("/voice/"+identity);if(epoch!==this.resetEpoch)return;this.voiceJob=job;
+          const job=await this.request("/voice/"+identity);if(epoch!==this.resetEpoch)return;this.voiceJob=job;
           if(job.state==="complete"&&this.project?.phase!=="working"){
             const config=this.referenceAudioConfig(job.audio);
-            if(this.project){const id=this.project.id,updated=await request(`/projects/${id}/config`,this.configBody(config));if(epoch!==this.resetEpoch||this.project?.id!==id)return;this.project=updated;}
+            if(this.project){const id=this.project.id,updated=await this.request(`/projects/${id}/config`,this.configBody(config));if(epoch!==this.resetEpoch||this.project?.id!==id)return;this.project=updated;}
             this.audio=job.audio;this.pendingReference=false;this.config=config;this.voiceJob=null;this.storage.removeItem("zura-studio-voice-job");
             this.$("voice-note").textContent="Voice ready. It is selected as your reference audio.";this.syncForm();this.render();
           }else if(job.state==="error"){
@@ -1756,25 +1761,27 @@ class ArtistStudio {
     if(!this.container.isConnected || this.busy || this.polling || !this.project || this.project.phase!=="working" && !awaiting)return;
     const epoch=this.resetEpoch,projectId=this.project.id;this.polling=true;
     try{
-      const prior=this.project.phase,project=await request("/projects/"+projectId);if(epoch!==this.resetEpoch||this.project?.id!==projectId)return;this.project=project;this.render();
+      const prior=this.project.phase,project=await this.request("/projects/"+projectId);if(epoch!==this.resetEpoch||this.project?.id!==projectId)return;this.project=project;this.render();
       if(prior!==this.project.phase)await this.loadLibrary();
     }catch(e){if(epoch===this.resetEpoch)this.message("Connection interrupted. Your job is saved. Reopen this view when ComfyUI reconnects.",true);}
     finally{if(epoch===this.resetEpoch)this.polling=false;}
   }
-  close(){this.aeBridge?.dispose();if(this.aeSession&&registeredStudio===this)registeredStudio=null;this.restartNavigation?.dispose();this.nativeSamplePreview?.dispose();this.nativeSamplePreview=null;this.previewZoom?.stopDraw();this.hdrTool?.deactivate?.();this.creative?.close();this.comparison?.hide();this.trimTimeline?.close();this.$("canvas").classList.remove("is-expanded");if(document.fullscreenElement===this.$("canvas"))document.exitFullscreen?.().catch(()=>{});this.container.querySelectorAll("video,audio").forEach(media=>media.pause());this.container.remove();document.documentElement.classList.remove("genj-open");clearInterval(this.timer);this.onClosed?.();}
+  close(){this.api?.removeEventListener?.("minimax_h3_preview",this.h3PreviewListener);this.aeBridge?.dispose();if(this.aeSession&&registeredStudio===this)registeredStudio=null;this.restartNavigation?.dispose();this.nativeSamplePreview?.dispose();this.nativeSamplePreview=null;this.previewZoom?.stopDraw();this.hdrTool?.deactivate?.();this.creative?.close();this.comparison?.hide();this.trimTimeline?.close();this.$("canvas").classList.remove("is-expanded");if(document.fullscreenElement===this.$("canvas"))document.exitFullscreen?.().catch(()=>{});this.container.querySelectorAll("video,audio").forEach(media=>media.pause());this.container.remove();document.documentElement.classList.remove("genj-open");clearInterval(this.timer);this.onClosed?.();}
 }
 
 let registeredStudio;
+function initialStudio(aeSession){return !aeSession&&registeredStudio&&!registeredStudio.aeSession?registeredStudio:new ArtistStudio(aeSession?{aeSession,storage:studioLaunchStorage(aeSession)}:{});}
 export async function openZuraStudio(workspace){
   if(!registeredStudio){registeredStudio=new ArtistStudio();registeredStudio.container.querySelector(".gs-zura-mark").src=new URL("./assets/zura-logo.png",import.meta.url).href;}
-  if(!registeredStudio.container.isConnected)await registeredStudio.open();
-  if(workspace)await navigateStudioMode(registeredStudio.creative,workspace);
-  return registeredStudio;
+  const studio=registeredStudio;
+  if(!studio.container.isConnected)await studio.open();
+  if(workspace)await navigateStudioMode(studio.creative,workspace);
+  return studio;
 }
 
 async function openDesktopAESession(credential,{isCurrent=()=>true}={}){
-  const previous=registeredStudio;
-  if(previous?.aeSession&&previous.container.isConnected){previous.aeBridge?.message('Leave the current AE session before opening another');return false;}
+  let previous=registeredStudio;
+  if(previous?.aeSession){await previous.aeBridge?.cancelAndLeave();previous=registeredStudio;if(!isCurrent())return false;}
   const session=await createStudioSession(api,credential);if(session.error)return false;
   if(!isCurrent()){try{await api.fetchApi('/zura/comfylink/v1/studio/sessions/'+encodeURIComponent(session.id)+'/leave',{method:'POST',headers:{'Content-Type':'application/json','X-ComfyLink-Studio-Session':session.capability},body:'{}'});}catch{}return false;}
   const wasOpen=!!previous?.container.isConnected,parent=previous?.container.parentNode,next=previous?.container.nextSibling;
@@ -1819,7 +1826,7 @@ app.registerExtension({
     }).catch(error=>console.warn("Zura tooltips unavailable; native hints remain.",error));
     const aeSession=await takeStudioLaunch(api);
     installDesktopHandoff(api,openDesktopAESession);
-    const studio=new ArtistStudio(aeSession?{aeSession,storage:studioLaunchStorage(aeSession)}:{});
+    const studio=initialStudio(aeSession);
     registeredStudio=studio;
     if(aeSession)studio.creative.show('home');
     if(aeSession)studio.aeBridge=new StudioAEBridge(studio,api,aeSession,()=>{studio.close();void openZuraStudio();});

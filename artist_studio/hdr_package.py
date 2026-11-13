@@ -90,7 +90,7 @@ class ZuraHDRPackageACEScct:
     FUNCTION='package'
     CATEGORY='Zura/Artist Studio'
 
-    def package(self, images, prefix, exr_storage="half"):
+    def package(self, images, prefix, exr_storage="half", *, _linear_rgb=False):
         if exr_storage not in ("half", "float32"):
             raise ValueError("Choose half or float32 EXR storage.")
         import threading
@@ -106,11 +106,17 @@ class ZuraHDRPackageACEScct:
             cancelled=threading.Event()
             def stitched(self):
                 yield images
-        path=export_exr_zip(BoundedFrames(),folder_paths.get_output_directory(),prefix, half_precision=exr_storage == "half")
+        path=export_exr_zip(BoundedFrames(),folder_paths.get_output_directory(),prefix, half_precision=exr_storage == "half", **({'linear_rgb':True} if _linear_rgb else {}))
         return {'ui':{'files':[{'filename':path.name,'subfolder':'genj/hdr','type':'output'}]},
                 'result':(str(path),)}
 
 
+class ZuraHDRPackageACEScg(ZuraHDRPackageACEScct):
+    """Write the reconstructed scene-linear master without decoding it again."""
+    def package(self, images, prefix, exr_storage='half'):
+        return super().package(images, prefix, exr_storage, _linear_rgb=True)
+
+
 NODE_CLASS_MAPPINGS={'ZuraHDRPackageEXR':ZuraHDRPackageEXR,'ZuraHDRPackageEXRLong':ZuraHDRPackageEXRLong,
-                     'ZuraHDRPackageACEScct':ZuraHDRPackageACEScct}
+                     'ZuraHDRPackageACEScct':ZuraHDRPackageACEScct, 'ZuraHDRPackageACEScg':ZuraHDRPackageACEScg}
 NODE_DISPLAY_NAME_MAPPINGS={'ZuraHDRPackageEXR':'Zura · Package HDR EXR Sequence'}

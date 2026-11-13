@@ -39,7 +39,10 @@ def load_browser(native):
         exec(compile(ast.Module(body=[function],type_ignores=[]),str(ROOT/'paintout'/file),'exec'),helper.__dict__)
         helpers[helper.__name__]=helper
     helpers[PACKAGE+'.paintout.editor_store'].load_project=Mock()
+    display=types.ModuleType(PACKAGE+'.artist_studio.display_view_routes')
+    display.grant_source=Mock(return_value='display-preview-token')
     modules={PACKAGE:types.ModuleType(PACKAGE),PACKAGE+'.paintout':types.ModuleType(PACKAGE+'.paintout'),
+             PACKAGE+'.artist_studio':types.ModuleType(PACKAGE+'.artist_studio'),display.__name__:display,
              PACKAGE+'.paintout.paintout':native,PACKAGE+'.media_source':security,'server':server,**helpers}
     spec=importlib.util.spec_from_file_location(PACKAGE+'.paintout.browser',ROOT/'paintout/browser.py')
     module=importlib.util.module_from_spec(spec)
@@ -68,6 +71,8 @@ class PaintoutBrowserTests(unittest.TestCase):
 
     def test_metadata_has_frame_count_and_token_scoped_video_url(self):
         result=self.browser.describe_media(str(self.video))
+        self.assertEqual(result['display_source'],'display-preview-token')
+        self.modules[PACKAGE+'.artist_studio.display_view_routes'].grant_source.assert_called_once_with(self.video.resolve(),'auto')
         self.assertEqual((result['frames'],result['fps'],result['width'],result['height']),(181,24,1920,1080))
         self.assertEqual(result['kind'],'video')
         self.assertNotIn(str(self.video),result['media_url'])

@@ -331,6 +331,22 @@ jobs:
           for pattern in patterns:
               subprocess.run([sys.executable, '-c', runner, pattern], check=True)
           PY
+      - name: Check shared colour and transfer regressions
+        run: |
+          python -m unittest discover -s tests -p 'test_studio_linear_processing.py'
+          python -m unittest discover -s tests -p 'test_studio_media_import.py'
+          python -m unittest discover -s tests -p 'test_hdr_detail.py'
+          node tests/test_studio_media_import.mjs
+          python -m unittest discover -s tests -p 'test_studio_helper_aliases.py'
+          node tests/test_camera_ae_cadence.mjs
+          node tests/test_studio_image_model_probe.mjs
+          node tests/test_image_geometry_matrix.mjs
+      - name: Check Add Replace placement and startup
+        run: |
+          node tests/test_studio_plate_prompts.mjs
+          node tests/test_image_edit_placement.mjs
+          node tests/test_paintout_style_ready.mjs
+          python -m unittest discover -s tests -p 'test_image_edit_crop_roundtrip.py'
       - name: Publish reviewed version
         uses: Comfy-Org/publish-node-action@d2366e7abb6ab16f3bb03e3520ae25c8cf749bc9
         with:

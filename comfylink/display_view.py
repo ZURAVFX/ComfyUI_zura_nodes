@@ -7,6 +7,7 @@ from functools import lru_cache
 from io import BytesIO
 import hashlib
 import os
+import re
 from pathlib import Path
 
 import numpy as np
@@ -58,7 +59,35 @@ def describe(name=DEFAULT_CONFIG):
     view = DEFAULT_VIEW if DEFAULT_VIEW in views else config.getDefaultView(display)
     if view not in views:
         raise ValueError("Display configuration has no default view")
-    return {"config": name, "configs": configurations(), "displays": displays, "display": display, "view": view}
+    return {"config": name, "configs": configurations(), "displays": displays, "display": display, "view": view,
+            "presets": view_presets()}
+
+
+@lru_cache(maxsize=1)
+def view_presets():
+    """Actual built-in display/view tuples, without duplicate config versions."""
+    versions = {}
+    for entry in configurations():
+        match = re.fullmatch(r'ocio://studio-config-v([\d.]+)_aces-v(1\.3|2\.0)_ocio-v[\d.]+',entry['name'])
+        if match:
+            rank = tuple(int(value) for value in match[1].split('.'))
+            if match[2] not in versions or rank > versions[match[2]][0]:
+                versions[match[2]] = (rank,entry['name'])
+    names = [DEFAULT_CONFIG] + [versions[key][1] for key in ('2.0','1.3') if key in versions]
+    result,seen = [],set()
+    for name in names:
+        config = _config(name)
+        for display in config.getDisplays():
+            for view in config.getViews(display):
+                # Common identity/video views are shared between these configs.
+                key = (display,view)
+                if key in seen:continue
+                seen.add(key)
+                short = display.removesuffix(' - Display')
+                label = short if view == DEFAULT_VIEW else f'{short} · {view}'
+                result.append({'config':name,'display':display,'view':view,'label':label})
+    result.sort(key=lambda item:(item['display'] != DEFAULT_DISPLAY,item['view'] != DEFAULT_VIEW,item['display'],item['view']))
+    return result
 
 
 def _source(config, colour, source_depth):
@@ -104,8 +133,14 @@ def _verified_ocio_source(colour):
     if hashlib.sha256(path.read_bytes()).hexdigest() != expected:
         raise ValueError('The AE OCIO configuration changed')
     spaces = [space for space in actual.getColorSpaces() if space.getName() == working]
+    if not spaces and '/' in working:
+        family, name = working.rsplit('/', 1)
+        spaces = [space for space in actual.getColorSpaces() if space.getName() == name
+                  and space.getFamily().strip('/') == family.strip('/')]
     if len(spaces) != 1:
         raise ValueError('The AE working space is not uniquely mapped')
+    if spaces[0].isData():
+        raise ValueError('An OCIO data space does not identify RGB colour')
     space = spaces[0].getName()
     if any(view.lower().replace(' ', '') == 'srgb' and actual.getDisplayViewColorSpaceName(display, view) == space
            for display in actual.getDisplays() for view in actual.getViews(display)):

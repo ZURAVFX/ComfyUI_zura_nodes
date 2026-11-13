@@ -25,7 +25,7 @@ class NativeHDRGraphTests(unittest.TestCase):
         self.assertTrue(g['guide1']['inputs']['use_streaming'])
         self.assertTrue(g['guide2']['inputs']['use_streaming'])
         self.assertEqual(g['zura_hdr_save_video']['class_type'],'ZuraHDRSaveExactRate')
-        self.assertEqual(g['zura_hdr_exr']['class_type'],'LTXVHDRDecodePostprocess')
+        self.assertEqual(g['zura_hdr_exr']['class_type'],'ZuraHDRSDRPreview')
     def test_rejects_unsupported_frame_and_canvas_constraints(self):
         for change in ({'frame_count':10},{'width':500},{'source_colour':'srgb_display'}):
             with self.subTest(change=change),self.assertRaises(ValueError):

@@ -22,6 +22,29 @@ class OpeningModelTests(unittest.TestCase):
         self.assertIs(models.apply_model(graph), graph)
         self.assertEqual(graph, before)
 
+    def test_explicit_source_raster_retargets_klein_and_cloned_references(self):
+        graph = self.graph()
+        graph["zura_reference_2"] = {
+            "class_type": "LoadImage",
+            "inputs": {"image": "second.png"},
+            "_meta": {"title": "Appearance reference 2"},
+        }
+        graph["zura_reference_2_scale"] = copy.deepcopy(graph["92:85"])
+        graph["zura_reference_2_scale"]["inputs"]["image"] = ["zura_reference_2", 0]
+
+        models.apply_model(graph, "klein9b", dimensions=(1936, 1088))
+
+        for identity, image in (("92:111", ["125", 0]),
+                                ("92:85", ["121", 0]),
+                                ("zura_reference_2_scale", ["zura_reference_2", 0])):
+            with self.subTest(identity=identity):
+                node = graph[identity]
+                self.assertEqual(node["class_type"], "ImageScale")
+                self.assertEqual(node["inputs"]["image"], image)
+                self.assertEqual(node["inputs"]["width"], 1936)
+                self.assertEqual(node["inputs"]["height"], 1088)
+                self.assertEqual(node["inputs"]["crop"], "disabled")
+
     def test_flux3_reuses_native_int8_image_recipe_with_original_first(self):
         graph = models.apply_model(self.graph(), "flux3", [{"file": "character.png"}])
         self.assertEqual(graph["92:107"]["inputs"]["unet_name"], "flux3-image-klein-int8-convrot.safetensors")
@@ -40,10 +63,14 @@ class OpeningModelTests(unittest.TestCase):
         self.assertEqual(prompt["image"], ["zura_flux3_prompt_images", 0])
         batch = graph["zura_flux3_prompt_images"]["inputs"]
         self.assertEqual(batch["images.image0"], ["92:111", 0])
-        self.assertEqual(batch["images.image1"], ["zura_flux3_prompt_ref_1", 0])
-        donor = graph["zura_flux3_prompt_ref_1"]
-        self.assertEqual(donor["class_type"], "ResizeAndPadImage")
+        self.assertEqual(batch["images.image1"], ["zura_flux3_reference_scale_1", 0])
+        donor = graph["zura_flux3_reference_scale_1"]
+        self.assertEqual(donor["class_type"], "ImageScale")
         self.assertEqual(donor["inputs"]["image"], ["zura_flux3_reference_1", 0])
+        self.assertEqual((donor["inputs"]["width"], donor["inputs"]["height"]), (["92:114", 0], ["92:114", 1]))
+        self.assertEqual(donor["inputs"]["crop"], "disabled")
+        self.assertEqual(graph["zura_flux3_references"]["inputs"]["resolution"], "keep resolution")
+        self.assertNotIn("resolution.megapixels", graph["zura_flux3_references"]["inputs"])
         shift = graph["zura_flux3_sampling"]["inputs"]
         self.assertEqual(shift["max_shift"], math.log(16))
         self.assertEqual(shift["base_shift"], math.log(16))
@@ -59,11 +86,23 @@ class OpeningModelTests(unittest.TestCase):
         self.assertEqual(negative["prompt"], "")
         for name in ("image1", "image2", "image3"):
             self.assertEqual(positive[name], negative[name])
-        self.assertEqual(graph[positive["image2"][0]]["inputs"]["image"], "one.png")
-        self.assertEqual(graph[positive["image3"][0]]["inputs"]["image"], "two.png")
+        self.assertNotIn("vae", positive)
+        self.assertNotIn("vae", negative)
+        self.assertEqual(graph[positive["image2"][0]]["inputs"]["image"], ["zura_qwen_reference_2", 0])
+        self.assertEqual(graph[graph[positive["image2"][0]]["inputs"]["image"][0]]["inputs"]["image"], "one.png")
+        self.assertEqual(graph[positive["image3"][0]]["inputs"]["image"], ["zura_qwen_reference_3", 0])
+        self.assertEqual(graph[graph[positive["image3"][0]]["inputs"]["image"][0]]["inputs"]["image"], "two.png")
         self.assertEqual(graph["92:104"]["inputs"]["latent_image"], ["92:127", 0])
+        self.assertEqual(graph["92:127"]["class_type"], "VAEEncode")
+        self.assertEqual(graph["92:127"]["inputs"]["pixels"], ["92:111", 0])
+        self.assertEqual(graph["92:103"]["inputs"]["positive"], ["zura_qwen_positive_reference_3", 0])
+        self.assertEqual(graph["92:103"]["inputs"]["negative"], ["zura_qwen_negative_reference_3", 0])
+        self.assertEqual(graph["92:103"]["inputs"]["cfg"], 1.0)
+        self.assertEqual(graph["zura_qwen_positive_reference_1"]["class_type"], "ReferenceLatent")
+        self.assertEqual(graph["zura_qwen_negative_reference_1"]["class_type"], "ReferenceLatent")
         self.assertEqual(graph["92:110"]["inputs"]["vae_name"], "qwen_image_vae.safetensors")
-        self.assertFalse(any(node["class_type"] in ("ReferenceLatent", "Flux2Scheduler", "EmptyFlux2LatentImage") for node in graph.values()))
+        self.assertFalse(any(node["class_type"] in ("ZuraQwenEditLatent", "FluxKontextMultiReferenceLatentMethod",
+                                                   "Flux2Scheduler", "EmptyFlux2LatentImage") for node in graph.values()))
 
     def test_qwen_retains_native_mask_and_output_ids(self):
         graph = self.graph()
@@ -74,7 +113,13 @@ class OpeningModelTests(unittest.TestCase):
         models.apply_model(graph, "qwen2511", [])
         self.assertEqual(graph["92:104"]["inputs"]["latent_image"], ["zura_opening_latent_mask", 0])
         self.assertEqual(graph["zura_opening_latent_mask"]["inputs"]["samples"], ["92:127", 0])
-        self.assertEqual(graph["92:127"]["inputs"]["vae"], ["92:110", 0])
+        self.assertEqual(graph["92:127"]["class_type"], "VAEEncode")
+        self.assertEqual(graph["92:127"]["inputs"]["pixels"], ["92:111", 0])
+        self.assertEqual(graph["zura_qwen_positive_reference_1"]["inputs"]["latent"], ["92:127", 0])
+        self.assertEqual(graph["zura_qwen_negative_reference_1"]["inputs"]["latent"], ["92:127", 0])
+        self.assertEqual(graph["zura_qwen_decoded"]["inputs"]["vae"], ["92:110",0])
+        self.assertEqual(graph["92:105"]["class_type"],"ImageScale")
+        self.assertEqual(graph["92:105"]["inputs"]["crop"],"disabled")
         for identity in ("122", "125", "127", "92:105", "92:114", "zura_original_size"):
             self.assertIn(identity, graph)
 
@@ -107,8 +152,14 @@ class OpeningModelTests(unittest.TestCase):
         self.assertEqual(result["zura_ph3_shift"]["inputs"]["shift_video"], 1.0)
         conditioning = result["92:109"]["inputs"]
         self.assertEqual(conditioning["images.image_1"], ["92:111", 0])
-        self.assertEqual(result[conditioning["images.image_2"][0]]["inputs"]["image"], "one.png")
-        self.assertEqual(result[conditioning["images.image_3"][0]]["inputs"]["image"], "two.png")
+        self.assertEqual(result[conditioning["images.image_2"][0]]["inputs"]["image"], ["zura_ph3_reference_2", 0])
+        self.assertEqual(result[conditioning["images.image_3"][0]]["inputs"]["image"], ["zura_ph3_reference_3", 0])
+        self.assertEqual(result["zura_ph3_reference_2"]["inputs"]["image"], "one.png")
+        self.assertEqual(result["zura_ph3_reference_3"]["inputs"]["image"], "two.png")
+        self.assertEqual(result["zura_ph3_prompt_source"]["class_type"], "ImageScale")
+        self.assertEqual(result["zura_ph3_prompt_source"]["inputs"]["crop"], "disabled")
+        self.assertFalse(any(node["class_type"] in ("ImageScaleToTotalPixels", "ResizeAndPadImage")
+                             for node in result.values()))
         self.assertEqual(result["92:104"]["inputs"]["latent_image"], ["92:109", 1])
         self.assertEqual(result["92:103"]["class_type"], "BasicGuider")
         self.assertEqual(result["92:102"]["class_type"], "ManualSigmas")
@@ -138,6 +189,12 @@ class OpeningModelTests(unittest.TestCase):
         files = {pair for model in models.MODELS.values() for pair in model["files"]}
         status = models.readiness(kinds, lambda folder, name: "installed" if (folder, name) in files else None)
         self.assertTrue(all(m["ready"] for m in status.values()))
+        self.assertEqual(status["qwen2511"]["raster_limits"]["max_pixels"], 8_388_608)
+        self.assertEqual(status["ph3"]["raster_limits"]["max_pixels"], 16_777_216)
+        with self.assertRaisesRegex(ValueError, "16-pixel raster grid"):
+            models.apply_model(self.graph(), "klein9b", dimensions=(1921, 1081))
+        with self.assertRaisesRegex(ValueError, "supported raster"):
+            models.apply_model(self.graph(), "klein9b", dimensions=(4096, 4096))
         absent_upsampler = models.readiness(kinds, lambda folder, name: None if name == "qwen3.5_9b_flux3_prompt_upsampler_w4a8.safetensors" else "installed")
         self.assertFalse(absent_upsampler["flux3"]["ready"])
         self.assertTrue(absent_upsampler["ph3"]["ready"])

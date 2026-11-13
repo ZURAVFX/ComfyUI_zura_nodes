@@ -184,7 +184,17 @@ def build_studio_graph(project: Mapping[str, Any], check_asset) -> dict[str, dic
                    "take_name": "studio_" + str(project["id"])[:8] + "_wan21_relight"},
         "_meta": {"title": "Save relight with original soundtrack"},
     }
-    if config.get("relight_shape") == "source_size":
+    if config.get('ae_frame_contract') is not None:
+        from ..comfylink.frame_contract import normalise_frame_contract
+        contract = normalise_frame_contract(config['ae_frame_contract'])
+        source_width, source_height = _source_size(source_path)
+        if ((source_width, source_height) != (contract['width'], contract['height'])
+                or any(side < 2 or side > 16384 or side % 2 for side in (source_width, source_height))):
+            raise Wan21RelightError('Wan Relight requires the exact AE source raster with even output dimensions.')
+        # Keep the model's proven working canvas; its native export restores
+        # the original source raster and verifies the final AE interval.
+        graph['wan21_export']['inputs'].update(output_width=source_width, output_height=source_height)
+    elif config.get("relight_shape") == "source_size":
         source_width, source_height = _source_size(source_path)
         # H.264 yuv420p requires even output dimensions.
         graph["wan21_export"]["inputs"].update(output_width=source_width - source_width % 2,

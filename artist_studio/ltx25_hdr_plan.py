@@ -144,9 +144,7 @@ def build_native_hdr_plan(project, *, hdr_endpoint, hdr_source=None, output="hlg
         graph["zura_hdr_archive"] = n("ZuraHDRPackageACEScct", images=images, prefix=prefix, **({'exr_storage':exr_storage} if exr_storage != 'half' else {}))
         preview = ["zura_hdr_exr", 0]
     else:
-        graph["tonemap"] = n("LTXVHDRDecodePostprocess", image=images, transfer="acescct",
-            save_exr=False, exr_color_space="acescg", output_dir="genj/hdr/" + prefix,
-            filename_prefix="frame", half_precision=True)
+        graph["tonemap"] = n("ZuraHDRSDRPreview", image=images)
         preview = ["tonemap", 0]
     inputs = {"images": preview, "fps": basis["timeline"]["fps"]}
     if audio is not None:

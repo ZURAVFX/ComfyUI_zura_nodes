@@ -59,7 +59,11 @@ def load_sdr_frames(path, start_frame, frame_count, colour_space='auto', sequenc
     if isinstance(fps, bool) or not isinstance(fps, (int, float)) or not math.isfinite(fps) or not 1 <= fps <= 120:
         raise ValueError('Choose a valid frame rate between 1 and 120 fps.')
     output=[]
-    for frame in frames(info, start_frame, frame_count):
+    if info.get('kind')=='sequence':
+        from .hdr_alpha import read_straight_rgb
+        selected_frames=(read_straight_rgb(path) for path in info['files'][start_frame:start_frame+frame_count])
+    else:selected_frames=frames(info,start_frame,frame_count)
+    for frame in selected_frames:
         if frame.shape != (info['height'], info['width'], 3):
             raise ValueError('The source dimensions change within the selection.')
         encoded=torch.from_numpy(frame.copy()).float()[None]

@@ -8,7 +8,7 @@ import numpy as np
 import torch
 from PIL import Image
 from aiohttp import web
-from scipy.ndimage import distance_transform_edt, label
+from scipy.ndimage import distance_transform_edt, label, maximum_filter
 from .paintout import COLOUR_SPACES, describe, frames, selected_space, read_image, is_hdr, to_linear, working, sdr_view, save_exr, protection_mask
 
 
@@ -34,9 +34,25 @@ def load_layer_image(file, colour_space, shape):
 
 
 def validate_blend_pixels(value):
-    if type(value) is not int or not 0 <= value <= 100:
-        raise ValueError('Layer blend edge must be a whole number from 0 to 100 pixels.')
+    if type(value) is not int or not 0 <= value <= 256:
+        raise ValueError('Layer blend edge must be a whole number from 0 to 256 pixels.')
     return value
+
+
+def validate_expand_pixels(value):
+    if type(value) is not int or not 0 <= value <= 256:
+        raise ValueError('Layer mask expansion must be a whole number from 0 to 256 source pixels.')
+    return value
+
+
+def expanded_layer_mask(mask, expand_pixels=0):
+    """Grow the editable support without changing saved masks or RGB samples.
+
+    The separable maximum filter matches the editor's source-pixel mask growth
+    and retains fractional mask values. A zero width preserves legacy layers.
+    """
+    expand_pixels = validate_expand_pixels(expand_pixels)
+    return maximum_filter(mask, size=2*expand_pixels+1, mode='nearest') if expand_pixels else mask.copy()
 
 
 def validate_brightness_ev(value):
@@ -92,14 +108,15 @@ def compose_pixels(original, layers, protection=None, linear=False):
     """Each cumulative candidate contributes only its own independent paint mask."""
     result = original.copy()
     for layer in layers:
-        if not isinstance(layer, (tuple, list)) or len(layer) not in (2, 3, 4, 5):
-            raise ValueError('Each clean-frame layer needs pixels, a mask and optional blend and brightness controls.')
+        if not isinstance(layer, (tuple, list)) or len(layer) not in (2, 3, 4, 5, 6):
+            raise ValueError('Each clean-frame layer needs pixels, a mask and optional layer controls.')
         pixels, mask = layer[:2]
         brightness_ev = validate_brightness_ev(layer[3] if len(layer) >= 4 else 0)
         blend_pixels = validate_blend_pixels(layer[2] if len(layer) >= 3 else 0)
         if pixels.shape != original.shape or mask.shape != original.shape[:2] or not np.isfinite(pixels).all() or not np.isfinite(mask).all() or np.any((mask < 0) | (mask > 1)):
             raise ValueError('Each layer and mask must match the finite original frame.')
-        alpha = inward_layer_alpha(mask, blend_pixels) * validate_opacity(layer[4] if len(layer) >= 5 else 1)
+        expanded = expanded_layer_mask(mask, layer[5] if len(layer) >= 6 else 0)
+        alpha = inward_layer_alpha(expanded, blend_pixels) * validate_opacity(layer[4] if len(layer) >= 5 else 1)
         if protection is not None:
             if protection.shape != mask.shape or not np.isfinite(protection).all():
                 raise ValueError('The protection mask must match the frame.')
@@ -154,12 +171,13 @@ def compose_layers(body):
             if not isinstance(layer, dict): raise ValueError('Each clean-frame layer needs a saved file and mask.')
             if type(layer.get('enabled', True)) is not bool:raise ValueError('Layer visibility must be true or false.')
             opacity=validate_opacity(layer.get('opacity', 1))
-            if not layer.get('enabled', True):continue
             blend_pixels = validate_blend_pixels(layer.get('blend_pixels', 0))
+            expand_pixels = validate_expand_pixels(layer.get('expand_pixels', 0))
             brightness_ev = validate_brightness_ev(layer.get('brightness_ev', 0))
+            if not layer.get('enabled', True):continue
             pixels, colour = load_layer_image(layer['file'], layer.get('colour_space', 'srgb_display'), original.shape[:2])
             pixels = to_linear(torch.from_numpy(pixels.copy()).float(), colour).numpy() if hdr else working(torch.from_numpy(pixels.copy())[None].float(), colour, 'SDR (sRGB)')[0].numpy()
-            yield pixels, decode_mask(layer['mask'], description['width'], description['height']), blend_pixels, brightness_ev, opacity
+            yield pixels, decode_mask(layer['mask'], description['width'], description['height']), blend_pixels, brightness_ev, opacity, expand_pixels
     result = compose_pixels(original, prepared_layers(), protection, linear=hdr)
     if source_identity(str(source), describe(str(source))) != before:
         raise ValueError('The source changed while composing. Reload the footage.')
@@ -171,6 +189,7 @@ def compose_layers(body):
     save_png16(png, preview)
     return dict(file=str(master), png_file=str(png), url=grant(png), master_url=grant(master), frame=frame, colour_space=colour, preview_colour_space='srgb_display', width=result.shape[1], height=result.shape[0],
                 blend_widths=[layer.get('blend_pixels', 0) for layer in layers],
+                expansion_widths=[validate_expand_pixels(layer.get('expand_pixels', 0)) for layer in layers],
                 brightness_values=[validate_brightness_ev(layer.get('brightness_ev', 0)) for layer in layers],
                 enabled_values=[layer.get('enabled',True) for layer in layers],opacity_values=[validate_opacity(layer.get('opacity',1)) for layer in layers])
 

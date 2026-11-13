@@ -124,6 +124,7 @@ class AvailabilityTests(unittest.TestCase):
             controller = types.SimpleNamespace(lock=asyncio.Lock(), start_watcher=lambda: None,
                 store=types.SimpleNamespace(load=lambda _: source), configure=lambda p, c: p)
             server = types.SimpleNamespace(routes=studio.web.RouteTableDef())
+            controller.server = server
             module = types.ModuleType("server"); module.PromptServer = types.SimpleNamespace(instance=server)
             cfg = self.config(engine="local", workflow_mode="motion", subject_mode="objects", ltx_output="hlg_video")
             request = types.SimpleNamespace(headers={}, host="local", json=AsyncMock(return_value={"source":"source", "config":cfg, "look_mode":"source_hdr"}))
@@ -154,6 +155,7 @@ class AvailabilityTests(unittest.TestCase):
             controller = types.SimpleNamespace(lock=asyncio.Lock(), start_watcher=lambda: None,
                 store=types.SimpleNamespace(load=lambda _: project), action=AsyncMock(return_value=project), collect=lambda p: p)
             server = types.SimpleNamespace(routes=studio.web.RouteTableDef())
+            controller.server = server
             module = types.ModuleType("server")
             module.PromptServer = types.SimpleNamespace(instance=server)
             with patch.dict(sys.modules, {"server": module}), patch.object(studio, "Studio", return_value=controller), patch.object(studio, "public_project", side_effect=lambda p: p):

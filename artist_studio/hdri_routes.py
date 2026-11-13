@@ -50,6 +50,8 @@ def params(body):
 
 
 def register(studio, routes, response, check_asset):
+    from .route_aliases import require_studio_alias_paths
+    require_studio_alias_paths(routes,(('POST','hdri/import'),('POST','hdri/preview'),('POST','hdri/export'),('POST','hdri/scene')))
     operation_lock = asyncio.Lock()
     def source(body):
         if body.get('source_id'):
@@ -60,7 +62,7 @@ def register(studio, routes, response, check_asset):
     def rendered(body):
         path, space = source(body)
         linear, used = hdri.read_environment(path,space)
-        if linear.shape[0]*linear.shape[1]>8192*4096:raise ValueError('Use an environment up to 8K Ã— 4K.')
+        if linear.shape[0]*linear.shape[1]>8192*4096:raise ValueError('Use an environment up to 8K × 4K.')
         result = hdri.build_environment(linear,**params(body))
         return result, {'source_hdr':path.suffix.lower() in ('.exr','.hdr'), 'color_space':used, **hdri.summary(result)}
 

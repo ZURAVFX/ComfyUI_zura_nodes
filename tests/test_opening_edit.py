@@ -37,6 +37,8 @@ class OpeningEditTests(fixture.unittest.TestCase):
     def test_ph3_retry_uses_original_frame_and_keeps_reviewed_mask_composite(self):
         p = self.project()
         p['config']['opening_model'] = 'ph3'
+        p['config']['opening_width'] = 512
+        p['config']['opening_height'] = 512
         first = self.graph(p)
         p['opening_input']['file'] = 'another-generated-image.png'
         retry = self.graph(p)
@@ -45,8 +47,9 @@ class OpeningEditTests(fixture.unittest.TestCase):
         self.assertEqual(retry['92:109']['inputs']['images.image_1'], ['92:111', 0])
         self.assertEqual(retry['92:104']['inputs']['latent_image'], ['92:109', 1])
         self.assertIn('zura_masked_look', retry)
+        self.assertEqual(retry['zura_masked_look']['inputs']['mask'], ['zura_opening_inside_mask_working', 0])
         self.assertEqual(retry['zura_opening_preserve_source']['inputs']['destination'], ['125', 0])
-        self.assertEqual(retry['zura_opening_preserve_source']['inputs']['mask'], ['zura_look_inside_mask', 0])
+        self.assertEqual(retry['zura_opening_preserve_source']['inputs']['mask'], ['zura_opening_original_mask', 0])
         self.assertEqual(retry['122']['inputs']['images'], ['zura_opening_preserve_source', 0])
         self.assertNotIn('zura_opening_latent_mask', retry)
         self.assertNotIn('another-generated-image.png', str(retry))

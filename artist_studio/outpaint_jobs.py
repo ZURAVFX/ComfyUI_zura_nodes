@@ -201,6 +201,21 @@ class OutpaintJobs:
         self.jobs = {}
         self.lock = asyncio.Lock()
 
+    def claim_ae_work(self, job):
+        async def cancel():
+            async with self.lock:
+                if job.get('state') in ('complete', 'failed', 'cancelled'):
+                    return
+                job.update(state='cancelling', error=None)
+                if job.get('long') and job.get('task'):
+                    job['task'].cancel()
+                queue = self.studio.server.prompt_queue
+                with queue.mutex:
+                    queue.interrupt_if_running(job['id'])
+                    queue.delete_queue_item(lambda item: item[1] == job['id'])
+        from ..comfylink.studio_cancel import claim_work
+        claim_work(self.studio.server, ('outpaint', job['id']), cancel)
+
     def source(self, identity):
         asset = self.studio.store.load(identity)
         if asset.get('asset_kind') != 'video':
@@ -295,6 +310,7 @@ class OutpaintJobs:
                'selection': selection, 'created': time.time(), 'approved': False,
                'hdr_review_key': review_key, 'hdr_colour_space': colour_space, 'exr_storage':exr_storage}
         self.jobs[identity] = job
+        self.claim_ae_work(job)
         number = server.number; server.number += 1
         server.prompt_queue.put((number, identity, graph, {'client_id': event_client,
             'create_time': int(time.time()*1000), 'comfy_usage_source':'zura-studio'}, valid[2], {}))
@@ -329,6 +345,7 @@ class OutpaintJobs:
         adapter = ReviewedHDRQueue(self.studio.server, root, client_id='zura-hdr-outpaint' if client_id is None else client_id,
             identity=identity, selection=selection, has_audio=has_audio, update=update, on_prompt=on_prompt)
         self.jobs[identity] = job
+        self.claim_ae_work(job)
 
         async def execute():
             try:
@@ -375,6 +392,7 @@ class OutpaintJobs:
              'hdr_review_key':selection['review_key'],'hdr_colour_space':selection['colour_space'],
              'hdr_controller':controller,'windows':details['sections'],'exr_storage':exr_storage}
         self.jobs[identity]=job
+        self.claim_ae_work(job)
         async def execute():
             try:
                 job['state']='running';result=await controller.run()
@@ -457,6 +475,7 @@ class OutpaintJobs:
                'selection': current, 'created': time.time(), 'approved': False,
                'long': True, 'window': 0, 'windows': len(parts), 'estimated_bytes': output_bytes + input_bytes}
         self.jobs[identity] = job
+        self.claim_ae_work(job)
 
         anchor_dir = None
         anchor_files = []
@@ -599,6 +618,7 @@ class OutpaintJobs:
                'selection': selection, 'created': time.time(), 'approved': False,
                'pad_delivery': bool(kind == 'render' and pad_delivery and builder == build_studio_graph)}
         self.jobs[identity] = job
+        self.claim_ae_work(job)
         number = server.number; server.number += 1
         server.prompt_queue.put((number, identity, graph,
                                  {'client_id': event_client, 'create_time': int(time.time()*1000),

@@ -72,8 +72,8 @@ def _ancestors(graph, roots):
     return seen
 
 
-def _known_raster(graph, source):
-    seen=set()
+def _known_raster(graph, source, seen=None):
+    seen=set() if seen is None else seen
     while _link(source,graph) and source[0] not in seen:
         seen.add(source[0])
         node=graph[source[0]]
@@ -82,6 +82,8 @@ def _known_raster(graph, source):
             if all(type(inputs.get(side)) is int for side in ('width','height')):
                 return inputs['width'],inputs['height']
             return None
+        if kind in ('VAEDecode', 'VAEDecodeTiled'):
+            return _known_latent_raster(graph, inputs.get('samples'), seen)
         field={'GenjHoldToModelLength':'images','ImageFromBatch':'image',
                'GetImageRangeFromBatch':'images'}.get(kind)
         if field is None:
@@ -90,13 +92,194 @@ def _known_raster(graph, source):
     return None
 
 
+def _known_latent_raster(graph, source, seen):
+    # These native recipes preserve the supplied latent raster. Unknown
+    # encoders, latent resizing or dynamically linked sizes remain unproven.
+    while _link(source, graph) and source[0] not in seen:
+        seen.add(source[0])
+        node = graph[source[0]]
+        kind, inputs = node.get('class_type'), node.get('inputs', {})
+        if kind in ('EmptyFlux2LatentImage', 'EmptySD3LatentImage', 'EmptyLatentImage'):
+            if all(type(inputs.get(side)) is int and inputs[side] > 0 and inputs[side] % 16 == 0 for side in ('width', 'height')):
+                return inputs['width'], inputs['height']
+            return None
+        if kind == 'PH3ImageConditioning':
+            # Output 0 is conditioning; only output 1 is the explicitly sized
+            # image latent. Zero dimensions invoke native reference inference.
+            if source[1] == 1 and all(type(inputs.get(side)) is int and inputs[side] > 0
+                                      and inputs[side] % 32 == 0 for side in ('width', 'height')):
+                return inputs['width'], inputs['height']
+            return None
+        if kind == 'MiniMaxH3ReferenceToVideo':
+            # H3's reference conditioning is output 0; output 1 is the AV
+            # latent created directly from the explicit generation dimensions.
+            if source[1] == 1 and all(type(inputs.get(side)) is int and inputs[side] > 0
+                                      and inputs[side] % 32 == 0 for side in ('width', 'height')):
+                return inputs['width'], inputs['height']
+            return None
+        if kind == 'TextEncodeQwenImage21':
+            # Only the third output is a latent. With resolution=0 its first
+            # reference controls the raster; the native node rounds to 32 px.
+            # Already aligned, statically known references avoid guessing the
+            # effect of dynamic reference resizing or a nonzero area setting.
+            if source[1] != 2 or type(inputs.get('resolution')) is not int or inputs['resolution'] != 0:
+                return None
+            raster = _known_raster(graph, inputs.get('images.image_1'), seen)
+            return raster if raster is not None and all(side > 0 and side % 32 == 0 for side in raster) else None
+        if kind in ('KSampler', 'KSamplerAdvanced', 'SamplerCustomAdvanced'):
+            source = inputs.get('latent_image')
+        elif kind == 'VAEEncode':
+            return _known_raster(graph, inputs.get('pixels'), seen)
+        else:
+            return None
+    return None
+
+
+def _known_h3_reference_decode(graph, source):
+    """Recognise the exact normal/quality References video decode path.
+
+    An unrelated H3 node elsewhere in a graph cannot authorise resizing a
+    different output. Unverified samplers/upscalers retain the strict guard.
+    """
+    if not _link(source, graph) or source[1] != 0:
+        return None
+    decode = graph[source[0]]
+    if decode.get('class_type') != 'VAEDecode':
+        return None
+    samples = decode.get('inputs', {}).get('samples')
+    if not _link(samples, graph) or samples[1] not in (0, 1):
+        return None
+    sampler = graph[samples[0]]
+    if sampler.get('class_type') != 'SamplerCustomAdvanced':
+        return None
+    latent = sampler.get('inputs', {}).get('latent_image')
+    if (not _link(latent, graph) or latent[1] != 1
+            or graph[latent[0]].get('class_type') != 'MiniMaxH3ReferenceToVideo'):
+        return None
+    return _known_latent_raster(graph, latent, set())
+
+
 # Only real IMAGE-bearing saver interfaces belong here. Container encoders are
 # traversed through VIDEO to CreateVideo rather than treating VIDEO as IMAGE.
 IMAGE_SAVERS = {'SaveImage': 'images', 'PreviewImage': 'images',
-    'VHS_VideoCombine': 'images', 'ZuraHDRPackageACEScct': 'images',
+    'VHS_VideoCombine': 'images', 'ZuraHDRPackageACEScct': 'images', 'ZuraHDRPackageACEScg': 'images',
     'ZuraHDRPackage': 'images'}
 NATIVE_SAVERS = {'ZuraPaintoutUncrop', 'ZuraAlphaVideoOutput'}
 VIDEO_SAVERS = {'SaveVideo', 'ZuraHDRSaveExactRate', 'GenjRestoreSoundtrack', 'GenjRecordDraft'}
+
+
+def intermediate_image_contract(parent, value):
+    """Derive one guide frame without relaxing the parent shot's contract.
+
+    The UI owns the live handoff. The session endpoint supplies the separately
+    authenticated parent contract; a handoff ID alone conveys no authority.
+    """
+    parent = normalise_frame_contract(parent)
+    if 'ae_intermediate_image' in parent or not isinstance(value, dict):
+        raise ValueError('An intermediate image needs the original AE source contract.')
+    required = {'schemaVersion', 'kind', 'handoffId', 'sourceFrame', 'width',
+                'height', 'parentSessionId', 'parentFrameCount'}
+    kind = value.get('kind')
+    if kind == 'ripple_keyframe':
+        required.add('anchorId')
+    if (kind not in {'ripple_keyframe', 'outpaint_guide'} or set(value) != required
+            or type(value.get('schemaVersion')) is not int or value['schemaVersion'] != 1):
+        raise ValueError('Choose a supported intermediate image handoff.')
+    for field in ('handoffId', 'anchorId') if kind == 'ripple_keyframe' else ('handoffId',):
+        if not isinstance(value[field], str) or not re.fullmatch(r'[A-Za-z0-9_-]{1,128}', value[field]):
+            raise ValueError('The intermediate image handoff has an invalid identity.')
+    if (value['parentSessionId'] != parent['sessionId']
+            or type(value['parentFrameCount']) is not int or value['parentFrameCount'] != parent['frameCount']
+            or type(value['sourceFrame']) is not int or not 0 <= value['sourceFrame'] < parent['frameCount']):
+        raise ValueError('The intermediate image does not belong to this AE source interval.')
+    if (any(type(value[side]) is not int or not 1 <= value[side] <= 16384 for side in ('width', 'height'))
+            or value['width'] * value['height'] > 16 * 1024 * 1024):
+        raise ValueError('The intermediate image guide raster exceeds supported bounds.')
+    if kind == 'ripple_keyframe' and (value['width'], value['height']) != (parent['width'], parent['height']):
+        raise ValueError('A Ripple keyframe must keep its AE source raster.')
+    if kind == 'outpaint_guide' and value['sourceFrame'] != 0:
+        raise ValueError('A frame-extension guide must use the first AE source frame.')
+    return {**parent, 'frameCount': 1, 'modelFrames': 1, 'trimFrames': 1,
+            'width': value['width'], 'height': value['height'],
+            'ae_intermediate_image': copy.deepcopy(value)}
+
+
+def prepare_intermediate_image_graph(graph, parent, value):
+    """Prepare only the native Image workspace's single SaveImage branch.
+
+    Decoder alignment is restored here only for a guide. Final shot preparation
+    has its own narrowly typed grid policies and keeps the complete source
+    interval; a guide never authorises resizing a final video.
+    """
+    contract = intermediate_image_contract(parent, value)
+    if (not isinstance(graph, dict) or not isinstance(graph.get('save'), dict)
+            or graph['save'].get('class_type') != 'SaveImage'):
+        raise ValueError('An intermediate edit needs the native Image output.')
+    for identity, node in graph.items():
+        kind = node.get('class_type')
+        if (kind in VIDEO_SAVERS | NATIVE_SAVERS | (set(IMAGE_SAVERS) - {'SaveImage', 'PreviewImage'})
+                or kind in {'ZuraHDRPackageEXR', 'ZuraHDRPackageEXRLong', 'CreateVideo', 'ZuraOutpaintExactVideo'}
+                or kind == 'SaveImage' and identity != 'save'):
+            raise ValueError('An intermediate edit cannot prepare a video or another master output.')
+    result = copy.deepcopy(graph)
+    inputs = result['save']['inputs']
+    source = inputs.get('images')
+    if not _link(source, result):
+        raise ValueError('The intermediate Image output has no decoded image source.')
+    name = 'zura_ae_restore_guide_raster'
+    while name in result:
+        name += '_'
+    result[name] = {'class_type': 'ImageScale', 'inputs': {
+        'image': source, 'upscale_method': 'lanczos', 'width': contract['width'],
+        'height': contract['height'], 'crop': 'disabled'}}
+    inputs['images'] = [name, 0]
+    inputs['filename_prefix'] = 'ComfyLink/intermediate/' + parent['sessionId'] + '/' + value['handoffId'] + '/guide'
+    result['save']['_meta'] = {**result['save'].get('_meta', {}),
+                               'ae_intermediate_image': copy.deepcopy(value)}
+    return apply_frame_contract(result, contract, {'family': 'native', 'output_nodes': ['save']}), contract
+
+
+def _wan21_native_export(graph, contract):
+    """Recognise the source-cadence Wan export, not an arbitrary VIDEO saver.
+
+    GenjRestoreSoundtrack validates the verified source interval, rejects a
+    decoded frame shortage, restores the source raster and writes exactly N
+    frames at its rational rate. A tensor guard before that restoration would
+    compare the model's working raster with the final source raster too early.
+    """
+    def inputs(identity, kind):
+        node = graph.get(identity)
+        return node.get('inputs') if isinstance(node, dict) and node.get('class_type') == kind else None
+
+    save = inputs('wan21_export', 'GenjRestoreSoundtrack')
+    video = inputs('wan21_video', 'CreateVideo')
+    source = inputs('wan21_shot', 'GenjLoadReviewedShot')
+    components = inputs('wan21_source_frames', 'GetVideoComponents')
+    hold = inputs('wan21_hold_result', 'GenjHoldToModelLength')
+    selected = inputs('272:402', 'ImageFromBatch')
+    loop = inputs('272:401', 'ForLoopClose')
+    source_count = inputs('272:403:388', 'GetImageSizeAndCount')
+    native = inputs('272:407:276:252', 'WanImageToVideo')
+    if any(not isinstance(value, dict) for value in (save, video, source, components, hold, selected, loop, source_count, native)):
+        return False
+    return (save.get('video') == ['wan21_video', 0]
+            and save.get('clip_details') == ['wan21_shot', 3]
+            and type(save.get('output_width')) is int and save['output_width'] == contract['width']
+            and type(save.get('output_height')) is int and save['output_height'] == contract['height']
+            and all(2 <= contract[side] <= 16384 and contract[side] % 2 == 0 for side in ('width', 'height'))
+            and video.get('images') == ['wan21_hold_result', 0]
+            and video.get('fps') == ['wan21_source_frames', 2]
+            and components.get('video') == ['wan21_shot', 0]
+            and source.get('preserve_source_timing') is True
+            and isinstance(source.get('shot_id'), str) and bool(source['shot_id'])
+            and source.get('approved_shot_id') == source['shot_id']
+            and hold.get('images') == ['272:402', 0] and type(hold.get('stride')) is int and hold['stride'] == 4
+            and selected.get('image') == ['272:401', 0]
+            and selected.get('length') == ['272:403:388', 3]
+            and type(selected.get('batch_index')) is int and selected['batch_index'] == 0
+            and source_count.get('image') == ['wan21_source_frames', 0]
+            and _link(native.get('length'), graph)
+            and '272:407:276:252' in _ancestors(graph, ['wan21_video']))
 
 
 def apply_frame_contract(graph, contract, descriptor):
@@ -130,7 +313,10 @@ def apply_frame_contract(graph, contract, descriptor):
         raise ValueError(f'This native Studio mode supports at most {maximum} model frames. The complete {count}-frame AE interval needs a supported long workflow.')
     result = copy.deepcopy(graph)
     image_edges, create_nodes = [], set()
-    video_pending = [root for root in roots if result[root].get('class_type') in VIDEO_SAVERS]
+    native_wan_export = (descriptor.get('wan21_native_export') is True
+                        and 'wan21_export' in roots and _wan21_native_export(result, contract))
+    video_pending = [root for root in roots if result[root].get('class_type') in VIDEO_SAVERS
+                     and not (native_wan_export and root == 'wan21_export')]
     output_encoders, video_seen = set(), set()
     while video_pending:
         identity = video_pending.pop()
@@ -185,6 +371,29 @@ def apply_frame_contract(graph, contract, descriptor):
         if not _link(source, result):
             raise ValueError('The selected native saver has no decoded frame source.')
         raster=_known_raster(result,source)
+        restore_image_grid = (descriptor.get('restore_image_grid') and count == 1
+                and result[identity]['class_type'] == 'SaveImage'
+                and raster is not None
+                and all(abs(actual - contract[side]) <= 31 for actual, side in zip(raster, ('width', 'height'))))
+        restore_reference_grid = (descriptor.get('restore_h3_reference_grid') and identity in create_nodes
+                and result[identity]['class_type'] == 'CreateVideo' and raster is not None
+                and _known_h3_reference_decode(result, source) == raster
+                and all(32 <= actual <= 4096 and 0 <= actual - contract[side] <= 31
+                        for actual, side in zip(raster, ('width', 'height')))
+                and raster[0] * raster[1] <= 8_388_608)
+        if (raster is not None and raster != (contract['width'], contract['height'])
+                and (restore_image_grid or restore_reference_grid)):
+            # Final stills and native H3 References have separate proven grid
+            # policies. Restore only their small alignment difference; other
+            # video routes and arbitrary canvas changes retain the strict guard.
+            restore = ('zura_ae_restore_h3_reference_grid_' if restore_reference_grid
+                       else 'zura_ae_restore_image_grid_') + str(index)
+            while restore in result:
+                restore += '_'
+            result[restore] = {'class_type': 'ImageScale', 'inputs': {
+                'image': source, 'upscale_method': 'lanczos', 'width': contract['width'],
+                'height': contract['height'], 'crop': 'disabled'}}
+            source, raster = [restore, 0], (contract['width'], contract['height'])
         if raster is not None and raster != (contract['width'],contract['height']):
             raise ValueError('This native output raster differs from the AE source. Use the source dimensions before generating.')
         name = 'zura_ae_match_frames_' + str(index)
@@ -220,6 +429,11 @@ def prepare_frame_contract_graph(graph, contract, mode, *, output_nodes=None):
         'camera', 'viewport', 'swap'}
     if mode not in modes:
         raise ValueError('Choose a supported AE Studio mode.')
+    checked = normalise_frame_contract(contract)
+    if 'ae_intermediate_image' in checked:
+        raise ValueError('An intermediate image cannot stand in for the final AE source interval.')
+    if mode == 'image' and checked['frameCount'] != 1:
+        raise ValueError('Image mode produces one frame. Choose Current frame in After Effects or use a video mode.')
     # These IDs are the native Studio builders' delivery interfaces. Do not
     # touch SaveImage reference/cache branches that happen to share the graph.
     canonical_roots = ('save', 'save_video', 'save_preview', 'h3_export', 'h3_enhance_export', 'wan_export', 'wan2_export', 'wan21_export', 'export', 'final',
@@ -229,7 +443,10 @@ def prepare_frame_contract_graph(graph, contract, mode, *, output_nodes=None):
         graph[key].get('class_type') in set(IMAGE_SAVERS) | VIDEO_SAVERS | NATIVE_SAVERS]
     kinds = {node.get('class_type') for node in graph.values()}
     family = 'ltx' if kinds & {'EmptyLTXVLatentVideo', 'LTXDirector'} else 'wan' if kinds & {'WanFirstLastFrameToVideo', 'WanImageToVideo'} else 'native'
-    descriptor = {'family': family, 'output_nodes': roots}
+    descriptor = {'family': family, 'output_nodes': roots,
+                  'restore_image_grid': mode == 'image' and checked['frameCount'] == 1,
+                  'restore_h3_reference_grid': mode == 'references',
+                  'wan21_native_export': mode == 'relight'}
     if kinds & {'EmptyMiniMaxH3LatentAV', 'MiniMaxH3ImageToVideo', 'MiniMaxH3ReferenceToVideo', 'MiniMaxH3DirectorCS'}:
         descriptor['native_fps'] = 24
         descriptor['authored_h3']=mode in ('frames','references','director')

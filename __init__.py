@@ -68,7 +68,7 @@ NODE_DISPLAY_NAME_MAPPINGS.update(QWEN_DESIGN_NAMES)
 
 WEB_DIRECTORY = "./web"
 PACKAGE_ROOT = Path(__file__).resolve().parent
-__version__ = "1.3.63"
+__version__ = "1.3.64"
 
 
 def _register_routes():
@@ -196,6 +196,12 @@ NODE_DISPLAY_NAME_MAPPINGS.update(PAINTOUT_NAMES)
 from .artist_studio.hdr_prepare import NODE_CLASS_MAPPINGS as HDR_PREPARE_NODES, NODE_DISPLAY_NAME_MAPPINGS as HDR_PREPARE_NAMES
 NODE_CLASS_MAPPINGS.update(HDR_PREPARE_NODES)
 NODE_DISPLAY_NAME_MAPPINGS.update(HDR_PREPARE_NAMES)
+from .artist_studio.hdr_preview_colour import NODE_CLASS_MAPPINGS as HDR_PREVIEW_NODES, NODE_DISPLAY_NAME_MAPPINGS as HDR_PREVIEW_NAMES
+NODE_CLASS_MAPPINGS.update(HDR_PREVIEW_NODES)
+NODE_DISPLAY_NAME_MAPPINGS.update(HDR_PREVIEW_NAMES)
+from .artist_studio.hdr_detail import NODE_CLASS_MAPPINGS as HDR_DETAIL_NODES, NODE_DISPLAY_NAME_MAPPINGS as HDR_DETAIL_NAMES
+NODE_CLASS_MAPPINGS.update(HDR_DETAIL_NODES)
+NODE_DISPLAY_NAME_MAPPINGS.update(HDR_DETAIL_NAMES)
 from .artist_studio.hdr_source import NODE_CLASS_MAPPINGS as HDR_SOURCE_NODES, NODE_DISPLAY_NAME_MAPPINGS as HDR_SOURCE_NAMES
 from .artist_studio.hdr_package import NODE_CLASS_MAPPINGS as HDR_PACKAGE_NODES, NODE_DISPLAY_NAME_MAPPINGS as HDR_PACKAGE_NAMES
 NODE_CLASS_MAPPINGS.update(HDR_SOURCE_NODES)
@@ -273,6 +279,9 @@ NODE_DISPLAY_NAME_MAPPINGS.update(COMFYLINK_LTX_NAMES)
 from .comfylink.frame_nodes import ZuraComfyLinkMatchFrames
 NODE_CLASS_MAPPINGS["ZuraComfyLinkMatchFrames"] = ZuraComfyLinkMatchFrames
 NODE_DISPLAY_NAME_MAPPINGS["ZuraComfyLinkMatchFrames"] = "Zura ComfyLink Match Frames"
+from .artist_studio.qwen_edit_canvas import ZuraQwenEditLatent
+NODE_CLASS_MAPPINGS["ZuraQwenEditLatent"] = ZuraQwenEditLatent
+NODE_DISPLAY_NAME_MAPPINGS["ZuraQwenEditLatent"] = "Qwen Edit Reference Canvas"
 
 if getattr(PromptServer, "instance", None) is not None:
     from .comfylink.routes import register as register_comfylink_routes

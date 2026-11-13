@@ -1,10 +1,11 @@
 import {PlateSurface} from './studio_plate_surface.js';
 import {aeFrameConfig} from './studio_ae_frame_contract.js';
 import {workspaceStorage} from './studio_storage.js';
+import {platePrompt,platePromptDrafts,savePlatePrompt} from './studio_plate_prompts.js';
 import {rippleStudioProcessingSize,rippleStudioValidation} from './studio_ripple_recipes.js';
 
 const KEY='zura-plate-action-v1';
-const actions=[['paint','Paint','Draw a change and refine it with AI'],['remove','Remove','Your masked Paintout and clean-frame workflow'],['replace','Replace','Use edited frames to replace or change something']];
+const actions=[['paint','Add','Draw an addition and refine it with AI'],['remove','Remove','Mask the object, make clean frames, then render the removal'],['replace','Replace','Use edited frames to replace or change something']];
 const copy=value=>JSON.parse(JSON.stringify(value));
 const byFile=path=>String(path||'').replaceAll('\\','/');
 
@@ -16,6 +17,11 @@ export class PlateWorkspace{
   current(){return this.owner.paintout;}
   active(){return this.owner.mode==='paintout';}
   propagation(){return this.action!=='remove';}
+  // Explicit compatibility modes retain their own saved instruction. Merely
+  // restoring one must not classify it as a new Remove/Add/Replace draft.
+  legacyPromptMode(){const mode=this.primary?.state.mode;return ['inpaint','ripple'].includes(mode)?mode:null;}
+  rememberPrompt(value,action=this.action){const w=this.primary;if(!w)return;const legacy=this.legacyPromptMode();if(legacy)w.prompts[legacy]=String(value);else savePlatePrompt(w.state,action,value);if(legacy||action==='remove'){w.cleanupPrompt=String(value);w.$('prompt').value=String(value);if(w.editor?.$?.('instruction'))w.editor.$('instruction').value=String(value);}}
+  applyPrompt(){const w=this.primary;if(!w)return;const legacy=this.legacyPromptMode(),value=legacy?w.$('prompt').value:platePrompt(w.state,this.action);w.$('prompt').value=value;if(legacy||this.action==='remove'){w.cleanupPrompt=value;if(w.editor?.$?.('instruction'))w.editor.$('instruction').value=value;}this.promptDraft=platePromptDrafts(w.state);}
   async select(action=this.action){
     if(!actions.some(([id])=>id===action)||this.switching)return;
     const o=this.owner,w=o.paintout;if(w?.busy())return;if(o.rippleImage?.request?.workspace?.platePrimary){await o.rippleImage.leave();if(o.rippleImage.request)return;}
@@ -23,12 +29,15 @@ export class PlateWorkspace{
     try{
       if(w?.editor){await w.editor.flushManual();await w.editor.persist();}
       const previousAction=this.action;
-      if(w&&previousAction==='remove'&&action!=='remove'){w.state.removalPrompt=w.$('prompt').value;w.$('prompt').value=w.state.platePrompt||'';}
-      else if(w&&previousAction!=='remove'&&action==='remove'){w.state.platePrompt=w.$('prompt').value;w.$('prompt').value=w.state.removalPrompt||w.prompts[w.state.mode]||'';}
+      if(w&&this.promptDraft&&this.promptDraft===w.state.platePrompts)this.rememberPrompt(w.$('prompt').value,previousAction);
       this.action=action;this.storage.setItem(KEY,action);o.show('paintout');this.attach(o.paintout);this.action=action;
-      const primary=o.paintout;primary.state.plateAction=action;if(!w&&action!=='remove'){primary.state.removalPrompt=primary.$('prompt').value;primary.$('prompt').value=primary.state.platePrompt||'';}
+      const primary=o.paintout;primary.state.plateAction=action;
       // Never change conditioning or discard anchors when choosing an operation.
-      if(primary.state.mode==='ripple'||primary.state.mode==='inpaint')primary.setMode('targeted');
+      const enteringRemove=previousAction!=='remove'&&action==='remove',staleFull=enteringRemove&&primary.state.mode==='full';
+      if(staleFull){const removalPrompt=primary.$('prompt').value;primary.setMode('targeted');primary.$('prompt').value=removalPrompt;}
+      else if(primary.state.mode==='ripple'||primary.state.mode==='inpaint')primary.setMode('targeted');
+      this.applyPrompt();
+      if(!this.propagation()&&enteringRemove&&primary.state.source&&primary.state.clipTrimConfirmed&&(staleFull||!(primary.state.mask||primary.state.maskProject&&primary.state.maskRevision!=null)))await primary.editor.setStage('mask');
       if(this.propagation()&&primary.state.source&&primary.state.clipTrimConfirmed&&primary.editor.stage==='mask')await primary.editor.setStage('clean');
       if(this.propagation()){const runner=this.ensureRunner();runner.state.engine=primary.state.plateEngine;void runner.checkModels();}
       primary.save();primary.render();o.videoComposer?.syncWorkflow();
@@ -45,7 +54,7 @@ export class PlateWorkspace{
     w.page.querySelector('.zf-heading').after(this.strip);
     const viewer=w.page.querySelector('.zf-viewer');this.canvasShell=doc.createElement('div');this.canvasShell.className='zplate-canvas-shell';viewer.before(this.canvasShell);this.canvasShell.append(viewer);this.sidebar=doc.createElement('aside');this.sidebar.className='zplate-sidebar';this.sidebar.setAttribute('aria-label','Edits and layers');this.sidebar.append(w.editor.layersPanel,w.editor.tools);w.page.append(this.sidebar);this.canvasShell.after(w.$('message'));w.$('message').classList.add('zplate-feedback');
     this.frameToolbar=doc.createElement('div');this.frameToolbar.className='zplate-frame-toolbar';this.frameButton=doc.createElement('button');this.frameButton.type='button';this.frameButton.className='gs-primary';this.frameButton.onclick=()=>this.editFrame();this.newEditButton=doc.createElement('button');this.newEditButton.type='button';this.newEditButton.textContent='New edit';this.newEditButton.title='Start another edit while keeping the existing layers';this.newEditButton.onclick=()=>{const anchor=w.editor.selected();if(!anchor||w.busy())return;anchor.plateEditLayerId=null;anchor.edit_area=null;w.editor.newPaintArea();w.save();void this.editFrame();};this.frameToolbar.append(this.frameButton,this.newEditButton);w.editor.viewerHost.prepend(this.frameToolbar);
-    w.$('prompt').addEventListener('input',()=>{if(this.propagation())w.state.platePrompt=w.$('prompt').value;else w.state.removalPrompt=w.$('prompt').value;w.save();});
+    w.$('prompt').addEventListener('input',()=>{this.rememberPrompt(w.$('prompt').value);w.save();});
     this.trimButton=doc.createElement('button');this.trimButton.type='button';this.trimButton.textContent='Trim clip';this.trimButton.onclick=()=>w.editor.setStage('trim');w.page.querySelector('.zf-heading').append(this.trimButton);
     this.engine=doc.createElement('label');this.engine.className='zc-tool zplate-engine';this.engine.innerHTML='<span>Video model</span><select aria-label="Video processing model"><option value="ltx">LTX 2.5</option><option value="h3">MiniMax H3</option></select>';
     this.scale=doc.createElement('label');this.scale.className='zc-tool zplate-scale';this.scale.innerHTML='<span>Process</span><select aria-label="Video processing scale"><option value="1">Full size</option><option value="0.75">75%</option><option value="0.5">50%</option><option value="0.25">25%</option></select>';
@@ -61,10 +70,12 @@ export class PlateWorkspace{
     w.generate=()=>this.propagation()?this.generate():generate();w.graph=()=>this.propagation()?this.ensureRunner().graph():graph();w.cancel=()=>this.runner?.job||this.runner?.pendingSubmission?this.runner.onCancel():cancel();
     this.frameActions=w.page.querySelector('.zp-frame-actions');this.frameActionsHome=this.frameActions?.parentElement;
     const editor=w.editor,update=editor.updateControls.bind(editor),clean=editor.$('clean').onclick,confirm=editor.confirmClipTrim.bind(editor);
+    this.nativeEditorUpdate=update;
     editor.updateControls=(...args)=>{const result=update(...args);this.syncControls();return result;};
     editor.$('clean').onclick=event=>this.propagation()?this.editFrame():clean(event);
     editor.confirmClipTrim=async()=>{await confirm();if(this.propagation()&&w.state.clipTrimConfirmed&&!w.busy())await editor.setStage('clean');};
-    const reset=w.resetSource.bind(w);w.resetSource=async()=>{if(this.inline){await this.owner.rippleImage.leave();if(this.inline)return false;}const success=await reset();if(success!==false){this.revision++;if(this.runner&&!this.runner.busy())this.runner.reset();}return success;};
+    const setMode=w.setMode.bind(w);w.setMode=(...args)=>{const result=setMode(...args);this.applyPrompt();w.save();return result;};
+    const reset=w.resetSource.bind(w);w.resetSource=async()=>{if(this.inline){await this.owner.rippleImage.leave();if(this.inline)return false;}const success=await reset();if(success!==false){delete w.state.platePrompts;this.applyPrompt();this.revision++;if(this.runner&&!this.runner.busy())this.runner.reset();w.save();}return success;};
     for(const key of ['onSeek','onCreate','onSelect','onRemove']){
       const callback=editor.timeline.callbacks[key];
       editor.timeline.callbacks[key]=async(...args)=>{
@@ -82,8 +93,10 @@ export class PlateWorkspace{
   sync(){if(this.active()){this.attach(this.owner.paintout);this.syncControls();}}
   syncControls(){
     const w=this.primary;if(!w)return;const propagation=this.propagation(),e=w.editor,busy=w.busy();
+    if(this.promptDraft!==platePromptDrafts(w.state))this.applyPrompt();
+    if(this.lastPropagation===true&&!propagation)this.nativeEditorUpdate?.();this.lastPropagation=propagation;
     w.page.classList.add('zplate-page');w.page.dataset.plateAction=this.action;
-    w.page.querySelector('h2').textContent='Paint, remove & replace';w.$('new').textContent='Start over';
+    w.page.querySelector('h2').textContent='Add, remove & replace';w.$('new').textContent='Start over';
     for(const b of this.strip.querySelectorAll('button')){b.disabled=this.switching||busy;b.setAttribute('aria-pressed',String(b.dataset.plateAction===this.action));}
     if(this.frameActions){const host=propagation?this.frameToolbar:this.frameActionsHome;if(this.frameActions.parentElement!==host)host.append(this.frameActions);}
     this.frameToolbar.hidden=!(propagation&&e.stage==='clean');this.frameButton.textContent=this.action==='paint'?'Draw / edit frame':'Edit frame';this.frameButton.disabled=busy||!e.selected();this.newEditButton.disabled=busy||!e.selected();this.newEditButton.hidden=!e.selected()?.layers?.length;e.viewerToolbar.hidden=propagation;
@@ -94,7 +107,7 @@ export class PlateWorkspace{
     e.nav.querySelector('[data-stage=mask]').hidden=propagation;
     e.nav.querySelector('[data-stage=clean]').textContent=propagation?'Edit frames':'Clean frames';
     e.timelineHost.hidden=!w.state.source;
-    w.$('workflow-label').textContent='Paint, remove & replace';
+    w.$('workflow-label').textContent='Add, remove & replace';
     w.$('empty').querySelector('h3').textContent='Add footage to begin';
     w.$('empty').querySelector('p').textContent=propagation?'Choose a frame on the timeline, then draw or edit it.':'Select what to remove, then add clean frames where needed.';
     w.$('empty').querySelector('.zps-start-mode').hidden=propagation;
@@ -104,12 +117,12 @@ export class PlateWorkspace{
     e.$('clean').hidden=propagation;
     if(propagation){
       e.$('clean').textContent=this.action==='paint'?'Draw / edit frame':'Edit frame';e.$('clean').disabled=busy||!e.selected();
-      e.objectReferenceTools.hidden=true;e.guideTitle.textContent=this.action==='paint'?'Paint your change':'Edit your frame';
+      e.objectReferenceTools.hidden=true;e.guideTitle.textContent=this.action==='paint'?'Add to your frame':'Edit your frame';
       e.$('tool-help').textContent='Add an edited frame on the timeline. Area selection and drawing are optional.';
       e.maskSummary.hidden=true;e.maskReview.hidden=true;
-      w.$('title').textContent=this.action==='paint'?'Paint a change':'Replace or edit';
+      w.$('title').textContent=this.action==='paint'?'Add to your shot':'Replace or edit';
       w.$('prompt').placeholder='Describe the change and how it should move';
-      const config=this.config(),error=rippleStudioValidation(config);
+      const config=this.config(),delivery=this.owner.outputSettings?.delivery,error=rippleStudioValidation(delivery?.modelInputValidationConfig?.(w,config)||config);
       w.$('generate').disabled=busy||!!error;w.$('generate').textContent=busy?'Generating…':'Generate video';
       w.$('note').textContent=error||`${w.state.plateEngine==='h3'?'H3 uses timed edited frames':'LTX uses one selected edited frame'} · Original resolution, frame rate and audio retained`;
       w.$('note').hidden=false;w.$('note').classList.toggle('is-error',!!error);
@@ -145,9 +158,9 @@ export class PlateWorkspace{
     if(Number.isFinite(value.value))w.$('bar').value=value.value;else w.$('bar').removeAttribute('value');w.$('cancel').disabled=false;
   }
   async generate(){
-    const w=this.primary;if(w.busy())return;const config=this.config(),error=rippleStudioValidation(config);if(error){w.message(error);return;}
+    const w=this.primary;if(w.busy())return;let config=this.config();const delivery=this.owner.outputSettings?.delivery,error=rippleStudioValidation(delivery?.modelInputValidationConfig?.(w,config)||config);if(error){w.message(error);return;}
     const r=this.ensureRunner();r.source=r.sourceInfo=w.sourceInfo;r.aeFrameBase=w.aeFrameBase;r.aeFrameMode='ripple';Object.assign(r.state,{engine:config.engine,sourcePath:w.state.source,sourceName:w.sourceInfo.name||'',startFrame:config.startFrame,frameCount:config.frameCount,sourceColour:config.sourceColour,anchors:w.state.anchors,prompt:config.prompt});
-    try{await r.onGenerate(config);if(r.job||r.pendingSubmission)w.preview('source');}catch(error){w.message(error.message);}finally{w.render();}
+    try{config=await delivery?.prepareInferenceView?.(r,'paintout',config)||config;const invalid=rippleStudioValidation(config);if(invalid)throw Error(invalid);await r.onGenerate(config);if(r.job||r.pendingSubmission)w.preview('source');}catch(error){w.message(error.message);}finally{w.render();}
   }
   imageWorkspace(){
     if(this.imageFacade)return this.imageFacade;
@@ -155,22 +168,24 @@ export class PlateWorkspace{
     this.imageFacade={intent:'plate',platePrimary:w,owner:this.owner,api:w.api,app:w.app,root:w.page,
       get source(){return w.sourceInfo;},get revision(){return plate.revision;},get state(){return {...w.state,engine:w.state.plateEngine};},
       get exporting(){return w.exporting;},set exporting(value){w.exporting=value;},
-      busy:()=>w.busy(),anchors:()=>w.state.anchors,selected:()=>w.state.anchors[w.selected],save:()=>w.save(),render:()=>w.render(),message:value=>w.message(value),$:name=>w.$(name),
+      busy:()=>w.busy(),anchors:()=>w.state.anchors,selected:()=>w.state.anchors[w.selected],save:()=>{plate.rememberPrompt(w.$('prompt').value);w.save();},render:()=>w.render(),message:value=>w.message(value),$:name=>w.$(name),
       prepareAnchor:async anchor=>{
         await w.editor.ensureProject();const layers=w.editor.ensureLayers(anchor),index=layers.findIndex(layer=>layer.id===anchor.plateEditLayerId),before=index>=0?layers.slice(0,index):layers;
-        if(before.length){const base=await w.fetch('/zura/paintout/editor/compose-layers',{project:w.editor.project,source:w.state.source,frame:anchor.frame,colour_space:w.state.sourceColour,expected_revision:w.editor.revision,layers:before.map(layer=>({file:layer.file,colour_space:layer.colour_space,mask:layer.layer_mask,blend_pixels:layer.blend_pixels||0,brightness_ev:layer.brightness_ev||0,enabled:layer.enabled!==false,opacity:layer.opacity??1}))});return w.fetch('/zura/paintout/export-frame',{file:base.file,frame:0,colour_space:base.colour_space});}
+        if(before.length){const base=await w.fetch('/zura/paintout/editor/compose-layers',{project:w.editor.project,source:w.state.source,frame:anchor.frame,colour_space:w.state.sourceColour,expected_revision:w.editor.revision,layers:before.map(layer=>({file:layer.file,colour_space:layer.colour_space,mask:layer.layer_mask,expand_pixels:layer.expand_pixels||0,blend_pixels:layer.blend_pixels||0,brightness_ev:layer.brightness_ev||0,enabled:layer.enabled!==false,opacity:layer.opacity??1}))});return w.fetch('/zura/paintout/export-frame',{file:base.file,frame:0,colour_space:base.colour_space});}
         return w.fetch('/zura/paintout/export-frame',{project:w.editor.project,file:w.state.source,frame:anchor.frame,colour_space:w.state.sourceColour});
       },
       async importAnchorFile(anchor,file,check){
+        const imageItem=plate.owner.items?.[plate.owner.selectedImage],retainedContext=imageItem?.retain_layer_context===true;
+        const imageFeather=retainedContext&&imageItem.edit_area?.enabled?Number(imageItem.edit_area.feather??16):0;
         await w.editor.ensureProject();const body=new FormData();body.append('project',w.editor.project);body.append('source',w.state.source);body.append('frame',String(anchor.frame));body.append('colour_space','srgb_display');body.append('file',file,file.name);
         const response=await w.api.fetchApi('/zura/paintout/editor/import-frame',{method:'POST',body});const result=await response.json();if(!response.ok)throw Error(result.error||'Could not import the edited frame.');check();
-        const mask=await plate.owner.imageArea.layerMask();check();
+        const mask=await plate.owner.imageArea.layerMask(imageItem?.edit_area||null);check();
         // Regeneration updates the current edit. New edit creates another layer.
         // Keep earlier attempts in frame history, and only commit after recomposition.
         const previous=w.editor.ensureLayers(anchor),layers=copy(previous),index=layers.findIndex(layer=>layer.id===anchor.plateEditLayerId);
-        const layer={...(index>=0?layers[index]:{}),...result,id:index>=0?layers[index].id:crypto.randomUUID(),method:'image',prompt:plate.owner.$('prompt').value,layer_mask:mask||w.editor.fullFrameMask(),enabled:index>=0?layers[index].enabled!==false:true,opacity:index>=0?layers[index].opacity??1:1};
+        const layer={...(index>=0?layers[index]:{}),...result,id:index>=0?layers[index].id:crypto.randomUUID(),method:'image',retain_layer_context:retainedContext,blend_pixels:index>=0?layers[index].blend_pixels??imageFeather:imageFeather,prompt:plate.owner.$('prompt').value,layer_mask:mask||w.editor.fullFrameMask(),enabled:index>=0?layers[index].enabled!==false:true,opacity:index>=0?layers[index].opacity??1:1};
         if(index>=0)layers[index]=layer;else layers.push(layer);
-        const composed=await w.fetch('/zura/paintout/editor/compose-layers',{project:w.editor.project,source:w.state.source,frame:anchor.frame,colour_space:w.state.sourceColour,expected_revision:w.editor.revision,layers:layers.map(layer=>({file:layer.file,colour_space:layer.colour_space,mask:layer.layer_mask,blend_pixels:layer.blend_pixels||0,brightness_ev:layer.brightness_ev||0,enabled:layer.enabled!==false,opacity:layer.opacity??1}))});check();
+        const composed=await w.fetch('/zura/paintout/editor/compose-layers',{project:w.editor.project,source:w.state.source,frame:anchor.frame,colour_space:w.state.sourceColour,expected_revision:w.editor.revision,layers:layers.map(layer=>({file:layer.file,colour_space:layer.colour_space,mask:layer.layer_mask,expand_pixels:layer.expand_pixels||0,blend_pixels:layer.blend_pixels||0,brightness_ev:layer.brightness_ev||0,enabled:layer.enabled!==false,opacity:layer.opacity??1}))});check();
         if(anchor.layers!==previous)throw Error('The layer stack changed while the edit was being prepared. Choose its frame again.');
         w.editor.saveFrameVersion(anchor);anchor.layers=layers;anchor.plateEditLayerId=layer.id;
         Object.assign(anchor,{file:composed.file,preview_file:composed.png_file,preview_colour_space:composed.preview_colour_space,colour_space:composed.colour_space,status:'accepted'});
@@ -191,7 +206,7 @@ export class PlateWorkspace{
     }
     w.page.hidden=false;o.root.querySelector('.zc-image-page').hidden=true;o.root.dataset.workspace='paintout';o.videoComposer.task.hidden=false;o.imageTask.hidden=true;
     for(const b of o.root.querySelectorAll('.zc-nav [data-space]'))b.setAttribute('aria-current',b.dataset.space==='video'?'page':'false');
-    o.videoComposer.syncWorkflow();this.surface?.sync();
+    o.imageArea.refreshTools();o.videoComposer.syncWorkflow();this.surface?.sync();
   }
   exitInlineImage(){
     if(!this.inline)return;this.owner.imageArea.inline=false;const {host,moved,composer}=this.inline;this.inline=null;

@@ -66,9 +66,7 @@ def build_experimental_graph(source, *, start_frame, frame_count, fps, width, he
                                   frames_number=frame_count, frame_rate=source_fps, batch_size=1)
     g['hdr_composite'] = node('ZuraHDRCompositeOutpaint', generated=['blend_high', 0], source=['canvas', 0],
                               mask=['canvas', 1], feather=16)
-    g['hdr_preview'] = node('LTXVHDRDecodePostprocess', image=['hdr_composite', 0], transfer='acescct',
-                            save_exr=False, exr_color_space='acescg', output_dir=prefix,
-                            filename_prefix='preview', half_precision=True)
+    g['hdr_preview'] = node('ZuraHDRSDRPreview', image=['hdr_composite', 0])
     preview = {'images': ['hdr_preview', 0], 'fps': source_fps}
     if has_audio:
         preview['audio'] = ['hdr_audio', 0]
@@ -135,9 +133,7 @@ def build_black_guide_experiment(source, *, start_frame, frame_count, width, hei
     fps = ['hdr_source', 1]
     g['conditioning']['inputs']['frame_rate'] = fps
     g['audio_empty']['inputs']['frame_rate'] = fps
-    g['hdr_preview'] = node('LTXVHDRDecodePostprocess', image=['trim_result', 0], transfer='acescct',
-                            save_exr=False, exr_color_space='acescg', output_dir=prefix,
-                            filename_prefix='preview', half_precision=True)
+    g['hdr_preview'] = node('ZuraHDRSDRPreview', image=['trim_result', 0])
     g['hdr_preview_video'] = node('CreateVideo', images=['hdr_preview', 0], fps=fps)
     g['hdr_preview_save'] = node('ZuraHDRSaveExactRate', video=['hdr_preview_video', 0],
                                  filename_prefix=prefix+'_sdr_preview', fps=fps)
@@ -217,7 +213,7 @@ def build_sdr_first_hdr_composite(source, intermediate, *, start_frame, frame_co
         colour_space=colour_space, prefix='genj/hdr_outpaint/composite_setup')
     from .hdr_studio import build_hdr_graph
     graph = build_hdr_graph(source=intermediate, start_frame=0, frame_count=frame_count, fps=24.,
-        colour_space='srgb_display', output='hlg_and_exr', prefix=prefix, has_audio=False, seed=seed, exr_storage=exr_storage)
+        colour_space='srgb_display', output='hlg_and_exr', prefix=prefix, has_audio=False, seed=seed, exr_storage=exr_storage,_source_detail=False)
     graph['native_original'] = {'class_type': 'ZuraHDRSelectNativeTimeline', 'inputs': {
         'source': source, 'start_seconds': selected_start, 'frame_count': frame_count,
         'output_fps': 24., 'colour_space': colour_space, 'sequence_fps': 24.}}
@@ -421,9 +417,7 @@ def build_hdr_review_experiment(source, selection, *, colour_space='auto',
                        width=expected['padded_width'], height=expected['padded_height'],
                        left=expected['left'], top=expected['top'], right=expected['right'],
                        bottom=expected['bottom'], black_threshold=expected['black_threshold']),
-        'hdr_preview': node('LTXVHDRDecodePostprocess', image=['canvas', 0], transfer='acescct',
-                            save_exr=False, exr_color_space='acescg', output_dir=prefix,
-                            filename_prefix='review', half_precision=True),
+        'hdr_preview': node('ZuraHDRSDRPreview', image=['canvas', 0]),
         'overlay': node('ZuraOutpaintReviewOverlay', images=['hdr_preview', 0], mask=['canvas', 1]),
         'video': node('CreateVideo', images=['overlay', 0], fps=['hdr_source', 1]),
         'save': node('ZuraHDRSaveExactRate', video=['video', 0], filename_prefix=prefix, fps=['hdr_source', 1]),

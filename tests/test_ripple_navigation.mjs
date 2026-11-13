@@ -26,7 +26,7 @@ composer.selectWorkflow('ripple');assert.equal(workspace.mode,'ripple');
 composer.mountWorkflow('ripple');
 assert.equal(task.parentElement,host,'Mode selector stays in workspace navigation');
 assert.equal(task.querySelector('select').value,'plate');
-assert.equal(task.querySelector('[data-workflow-label]').textContent,'Paint, remove & replace');
+assert.equal(task.querySelector('[data-workflow-label]').textContent,'Add, remove & replace');
 assert.equal(task.querySelector('[data-workflow="plate"]').getAttribute('aria-checked'),'true');
 composer.selectWorkflow('objects');assert.equal(workspace.mode,'ripple','Legacy object mode opens dedicated Ripple');
 const legacyDraft={mode:'inpaint',source:'legacy-shot.mp4',anchors:[{frame:12,file:'legacy-edit.png'}]};
@@ -35,7 +35,7 @@ workspace.ripple.source={path:'ripple-shot.mp4'};workspace.ripple.anchors=[{fram
 const retained=JSON.stringify({legacyDraft,source:workspace.ripple.source,anchors:workspace.ripple.anchors});
 workspace.mode='paintout';composer.syncWorkflow();
 assert.equal(task.querySelector('select').value,'plate','A restored legacy Inpaint draft retains a valid mode selector');
-assert.equal(task.querySelector('[data-workflow-label]').textContent,'Paint, remove & replace');
+assert.equal(task.querySelector('[data-workflow-label]').textContent,'Add, remove & replace');
 assert.equal(task.querySelector('[data-workflow="plate"]').getAttribute('aria-checked'),'true');
 composer.selectWorkflow('inpaint');assert.equal(workspace.mode,'ripple','Legacy Inpaint navigation opens the shared edited-frame timeline');
 assert.equal(JSON.stringify({legacyDraft,source:workspace.ripple.source,anchors:workspace.ripple.anchors}),retained,'Opening the consolidated route does not rewrite either saved project');

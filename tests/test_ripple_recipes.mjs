@@ -11,6 +11,8 @@ for(const fps of [24,25,30,30000/1001]){
  assert.deepEqual(g.conditioning.inputs.frame_rate,['take',5]);assert.deepEqual(g.audio.inputs.frame_rate,['take',5]);
  assert.deepEqual(g.latent.inputs.length,['ripple_guide',1]);assert.equal(g.align.inputs.batch_index,1);assert.deepEqual(g.align.inputs.length,['take',4]);
  assert.equal(g.lora.inputs.lora_name,RIPPLE_LORA);assert.equal(g.lora.inputs.strength_model,1.35);
+ assert.equal(g.attention.inputs.attention,'pytorch attention','LTX Ripple must propagate edits with PyTorch even when Kitchen is available');
+ assert.deepEqual(g.guider.inputs.model,['attention',0]);assert.deepEqual(g.sigmas.inputs.model,['attention',0]);
  assert.equal(g.save.inputs.match_context,false);assert.deepEqual(g.save.inputs.plate,['source',2]);
  assert.equal(g.guide.inputs.frame_idx,0);assert.deepEqual(g.guide.inputs.image,['ripple_guide',0]);
  assert.equal(g.sigmas.inputs.steps,8);

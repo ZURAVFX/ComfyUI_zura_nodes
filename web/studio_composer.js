@@ -20,7 +20,7 @@ export const composerIcons={
   takes:svg('<rect x="3" y="7" width="18" height="14" rx="2"/><path d="M7 3h10m-8 9 6 3-6 3z"/>'),
   download:svg('<path d="M12 3v12m-4-4 4 4 4-4M4 17v4h16v-4"/>'),
 };
-export const VIDEO_WORKFLOWS=[['swap','Character replacement'],['plate','Paint, remove & replace'],['viewport','Viewport to final'],['camera','Change camera angle'],['relight','Relight'],['watermark','Watermark removal'],['alpha','Extract alpha'],['outpaint','Frame extension · preview'],['hdr','Convert to HDR'],['director','Director'],['frames','First & last frame'],['references','Reference to video']];
+export const VIDEO_WORKFLOWS=[['swap','Character replacement'],['plate','Add, remove & replace'],['viewport','Viewport to final'],['camera','Change camera angle'],['relight','Relight'],['watermark','Watermark removal'],['alpha','Extract alpha'],['outpaint','Frame extension · preview'],['hdr','Convert to HDR'],['director','Director'],['frames','First & last frame'],['references','Reference to video']];
 
 // Navigation describes the artist's task; model choices stay with generation controls.
 const MODE_DETAILS={

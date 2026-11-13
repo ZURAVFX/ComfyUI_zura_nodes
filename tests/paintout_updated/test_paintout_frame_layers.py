@@ -15,6 +15,44 @@ layers=importlib.util.module_from_spec(spec);sys.modules[spec.name]=layers;spec.
 
 
 class PaintLayerTests(unittest.TestCase):
+    def test_expansion_reveals_generated_object_beyond_original_mask(self):
+        original=np.full((20,24,3),.25,np.float32)
+        candidate=original.copy();candidate[4:15,8:16]=[2.,-.25,.75]
+        mask=np.zeros((20,24),np.float32);mask[4:11,8:16]=1
+        saved=mask.copy()
+        hard=layers.compose_pixels(original,[(candidate,mask,0,0,1,0)],linear=True)
+        expanded=layers.compose_pixels(original,[(candidate,mask,1,0,1,5)],linear=True)
+        np.testing.assert_array_equal(hard[13,12],original[13,12])
+        np.testing.assert_array_equal(expanded[13,12],candidate[13,12])
+        np.testing.assert_array_equal(mask,saved)
+        support=layers.expanded_layer_mask(mask,5)
+        np.testing.assert_array_equal(expanded[support==0],original[support==0])
+        self.assertGreater(float(expanded.max()),1)
+        self.assertLess(float(expanded.min()),0)
+
+    def test_expansion_defaults_and_fractional_masks_remain_reversible(self):
+        original=np.full((8,9,3),-.25,np.float32);candidate=np.full_like(original,4.)
+        mask=np.zeros((8,9),np.float32);mask[3:5,3:6]=.25
+        legacy=layers.compose_pixels(original,[(candidate,mask,0,0,.5)],linear=True)
+        zero=layers.compose_pixels(original,[(candidate,mask,0,0,.5,0)],linear=True)
+        np.testing.assert_array_equal(legacy,zero)
+        expanded=layers.expanded_layer_mask(mask,2)
+        self.assertEqual(float(expanded.max()),.25)
+        self.assertEqual(float(expanded[1,1]),.25)
+        self.assertEqual(float(expanded[0,0]),0)
+        protection=np.zeros_like(mask);protection[2,2]=1
+        protected=layers.compose_pixels(original,[(candidate,mask,0,0,.5,2)],protection,linear=True)
+        np.testing.assert_array_equal(protected[2,2],original[2,2])
+        np.testing.assert_array_equal(layers.expanded_layer_mask(np.zeros_like(mask),256),0)
+        np.testing.assert_array_equal(layers.expanded_layer_mask(np.ones_like(mask),256),1)
+
+    def test_expansion_controls_are_bounded_source_pixels(self):
+        mask=np.ones((3,4),np.float32)
+        for value in (-1,257,True,False,1.,None,'5',float('nan'),np.int64(2)):
+            with self.subTest(value=value),self.assertRaisesRegex(ValueError,'mask expansion'):
+                layers.expanded_layer_mask(mask,value)
+        for value in (0,1,256):self.assertEqual(layers.validate_expand_pixels(value),value)
+
     def test_opacity_blends_hdr_values_without_clipping_or_changing_outside(self):
         original=np.full((6,8,3),-0.25,np.float32);candidate=np.full_like(original,8.0);mask=np.zeros((6,8),np.float32);mask[2:5,3:6]=1
         transparent=layers.compose_pixels(original,[(candidate,mask,0,0,0)],linear=True)
@@ -121,10 +159,10 @@ class PaintLayerTests(unittest.TestCase):
 
     def test_blend_edge_only_accepts_whole_pixels_in_supported_range(self):
         original=np.zeros((4,5,3),np.float32);mask=np.ones((4,5),np.float32)
-        for value in [-1,101,True,False,1.,0.,float('nan'),float('inf'),'2',None,np.int64(2)]:
-            with self.subTest(value=value),self.assertRaisesRegex(ValueError,'0 to 100'):
+        for value in [-1,257,True,False,1.,0.,float('nan'),float('inf'),'2',None,np.int64(2)]:
+            with self.subTest(value=value),self.assertRaisesRegex(ValueError,'0 to 256'):
                 layers.compose_pixels(original,[(original,mask,value)])
-        for value in (0,100):
+        for value in (0,100,256):
             self.assertEqual(layers.validate_blend_pixels(value),value)
 
     def test_delete_earlier_layer_does_not_restore_it_from_cumulative_later_file(self):
@@ -187,7 +225,15 @@ class PaintLayerTests(unittest.TestCase):
                 row=layers.compose_layers(body)
                 self.assertTrue(pathlib.Path(row['file']).is_file());self.assertTrue(pathlib.Path(row['png_file']).is_file())
                 self.assertEqual((row['width'],row['height'],row['frame']),(16,12,0))
-                self.assertEqual(row['blend_widths'],[0]);self.assertEqual(row['brightness_values'],[0.0])
+                self.assertEqual(row['blend_widths'],[0]);self.assertEqual(row['brightness_values'],[0.0]);self.assertEqual(row['expansion_widths'],[0])
+                grown=layers.compose_layers(dict(body,layers=[dict(body['layers'][0],expand_pixels=2)]))
+                self.assertEqual(grown['expansion_widths'],[2])
+                grown_pixels=layers.read_image(grown['file'])
+                np.testing.assert_allclose(grown_pixels[6,6],np.array([200,50,20],np.float32)/255,atol=1e-6)
+                for invalid in (True,-1,257,1.5):
+                    for enabled in (True,False):
+                        with self.assertRaisesRegex(ValueError,'mask expansion'):
+                            layers.compose_layers(dict(body,layers=[dict(body['layers'][0],expand_pixels=invalid,enabled=enabled)]))
                 hidden=layers.compose_layers(dict(body,layers=[dict(body['layers'][0],enabled=False)]))
                 self.assertEqual(hidden['enabled_values'],[False])
                 np.testing.assert_allclose(layers.read_image(hidden['file']),np.full((12,16,3),20/255,np.float32),atol=1e-6)
@@ -205,8 +251,8 @@ class PaintLayerTests(unittest.TestCase):
                 pixels=layers.read_image(blended['file'])
                 expected=np.array([20,20,20],np.float32)/255*.75+np.array([200,50,20],np.float32)/255*.25
                 np.testing.assert_allclose(pixels[3,4],expected,atol=1e-6)
-                for invalid in (True,2.5,101):
-                    with self.subTest(blend_pixels=invalid),self.assertRaisesRegex(ValueError,'0 to 100'):
+                for invalid in (True,2.5,257):
+                    with self.subTest(blend_pixels=invalid),self.assertRaisesRegex(ValueError,'0 to 256'):
                         layers.compose_layers(dict(body,layers=[dict(body['layers'][0],blend_pixels=invalid)]))
                 with self.assertRaises(Conflict):layers.compose_layers(dict(body,expected_revision=3))
                 with self.assertRaisesRegex(ValueError,'1 and 32'):layers.compose_layers(dict(body,layers=[]))

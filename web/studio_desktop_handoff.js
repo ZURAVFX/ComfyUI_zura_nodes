@@ -9,7 +9,11 @@ const validBroker=value=>typeof value==='string'&&/^http:\/\/127\.0\.0\.1:\d+\/s
 export function installDesktopHandoff(api,onOpen,{window:win=globalThis.window,document:doc=globalThis.document,crypto:random=globalThis.crypto,fetch:fetcher=globalThis.fetch}={}){
   // Desktop 1.x injects __comfyDesktop2 into its Comfy view. Older Desktop
   // releases use electronAPI. Neither marker is treated as authorization.
-  if(!(win?.__comfyDesktop2||win?.electronAPI)||!api?.addEventListener||installations.has(api))return installations.get(api)||null;
+  // This query flag opts an owned app window into discovery only. The helper
+  // still requires the fresh title nonce on its exact HWND/PID/creation time
+  // and membership in its own browser job before delivering any credential.
+  const ownedWindow=hex(new URLSearchParams(win?.location?.search||'').get('zuraWindow'),32);
+  if(!(win?.__comfyDesktop2||win?.electronAPI||ownedWindow)||!api?.addEventListener||installations.has(api))return installations.get(api)||null;
   let active=null,closed=false;
   const post=async(path,body)=>api.fetchApi(ROOT+path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
   const restore=()=>{if(!active)return;clearTimeout(active.timer);if(doc.title===active.title)doc.title=active.previous;active=null;};

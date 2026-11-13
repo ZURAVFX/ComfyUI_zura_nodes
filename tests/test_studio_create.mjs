@@ -36,7 +36,7 @@ Object.assign(globalThis,{document,window,localStorage,ResizeObserver,createImag
   host.remove();
 }
 const info={};
-for(const m of IMAGE_MODELS)for(const n of Object.values(buildImageGraph({model:m.id,prompt:'test',references:m.minReferences?[{file:'source.png'}]:[]})))info[n.class_type]={input:{required:{}}};
+for(const m of IMAGE_MODELS)for(const n of Object.values(buildImageGraph({model:m.id,prompt:'test',references:m.minReferences?[{file:'source.png',width:1024,height:1024}]:[]})))info[n.class_type]={input:{required:{}}};
 info.UNETLoader.input.required.unet_name=[IMAGE_MODELS.map(m=>m.model)];info.CLIPLoader.input.required={clip_name:[IMAGE_MODELS.flatMap(m=>[m.text,m.upsampler].filter(Boolean))],type:[IMAGE_MODELS.map(m=>m.type)]};info.VAELoader.input.required.vae_name=[IMAGE_MODELS.map(m=>m.vae)];info.LoraLoaderModelOnly.input.required.lora_name=[IMAGE_MODELS.map(m=>m.lora).filter(Boolean)];info.LoraLoaderBypassModelOnly.input.required.lora_name=[IMAGE_MODELS.map(m=>m.lora).filter(Boolean)];
 assert.ok(imageAvailability(info).every(m=>m.ready));
 assert.throws(()=>buildImageGraph({prompt:' '}),/Describe/);
@@ -54,6 +54,8 @@ vm.createContext(context);
 const source=fs.readFileSync(new URL('../web/studio.js',import.meta.url),'utf8').replace(/^import .*;\r?\n/gm,'').replace(/^export /gm,'').split('app.registerExtension({')[0];
 runStudioVMInContext(source+'\nthis.Studio=ArtistStudio;',context);
 const studio=new context.Studio(),ui=studio.creative;
+assert.equal(ui.$('model').getAttribute('aria-label'),'Image model','The native model selector keeps its accessible label');
+assert.ok(ui.imageModelName.textContent.trim(),'The composer has a visible model label before discovery finishes');
 assert.equal(studio.$('working').parentElement,studio.container.querySelector('.gs-main'),'Progress is outside the video preview');
 assert.equal(studio.$('live-preview').parentElement,studio.$('canvas'),'Live image keeps the full canvas');
 assert.equal(ui.$('progress').closest('.zc-image-scroll'),null,'Image progress never covers the comparison or result');
@@ -211,12 +213,14 @@ ui.show('image');await ui.loadModels();
 // First show starts loading. Wait for that bounded set of mocked requests.
 for(let i=0;i<10&&ui.loading;i++)await Promise.resolve();
 assert.equal(ui.models.length,IMAGE_MODELS.length);
+assert.equal(ui.imageModelName.textContent,ui.models.find(m=>m.id===ui.$('model').value).name,'The visible model label follows the actual selection');
 {
   const global=studio.modelDownloads={setMissingContext(route,missing,label){this.context={route,missing,label};},setContext(context){this.context=context;}};
   ui.render();
   assert.equal(global.context.route,'image','Global Models follows the Image workspace');
   assert.equal(global.context.label,ui.models.find(m=>m.id===ui.$('model').value).name);
   const previousModel=ui.$('model').value;const alternate=ui.models.find(m=>!m.edit&&!m.provider&&m.id!==previousModel);ui.$('model').value=alternate.id;ui.render();
+  assert.equal(ui.imageModelName.textContent,alternate.name,'Changing the native model selection updates the visible composer label');
   assert.equal(global.context.label,alternate.name,'Global Models follows the selected image model');
   ui.$('model').value=previousModel;ui.render();
   studio.updateModelStatus();
@@ -297,7 +301,7 @@ const recoveringImage=ui.startModelDownload('qwen2511');await ui.startModelDownl
 ui.fetch=originalFetch;
 ui.setImageOperation('edit');assert.equal(ui.$('model').value,'qwen2511');assert.equal(ui.$('generate').disabled,true,'Editing needs a source image');
 assert.equal(ui.$('model').querySelector('option[value="flux3"]').hidden,true);
-ui.references=[{file:'edit-source.png',name:'source.png'}];ui.$('prompt').value='Make the wall blue';ui.render();assert.equal(ui.$('generate').disabled,false);
+ui.references=[{file:'edit-source.png',name:'source.png',width:1024,height:1024}];ui.editMainMissing=false;ui.$('prompt').value='Make the wall blue';ui.render();assert.equal(ui.$('generate').disabled,false);
 assert.match(ui.$('generate').textContent,/Apply edit/);assert.match(ui.$('reference-hint').textContent,/Image 1: source/);
 // The edited plate is a separate slot; references cannot silently replace it.
 {
@@ -356,7 +360,7 @@ assert.match(ui.$('generate').textContent,/Apply edit/);assert.match(ui.$('refer
 }
 ui.$('model').value='klein9b';ui.render();assert.equal(ui.$('generate').disabled,false);
 ui.references=[];ui.setImageOperation('create');ui.$('prompt').value='';ui.render();
-ui.items=[{model:'klein9b',prompt:'Change the wall',references:[{file:'source.png'}],shape:'square',width:1024,height:1024,seed:7,file:{filename:'edit.png'}}];ui.renderGallery();
+ui.items=[{model:'klein9b',prompt:'Change the wall',references:[{file:'source.png',width:1024,height:1024}],shape:'square',width:1024,height:1024,seed:7,file:{filename:'edit.png'}}];ui.renderGallery();
 ui.$('gallery').querySelector('[data-reuse]').click();
 assert.equal(ui.imageOperation,'edit','Reusing an edited image returns to Edit instead of selecting a hidden model in Create');assert.equal(ui.$('model').value,'klein9b');
 ui.items=[];ui.references=[];ui.setImageOperation('create');ui.$('prompt').value='';ui.renderGallery();ui.render();
@@ -429,17 +433,17 @@ ui.show('video');await ui.root.onpaste(paste);assert.equal(prevented,2);assert.e
 ui.uploading=true;await ui.root.onpaste(paste);assert.equal(ui.references.length,3);assert.match(ui.$('message').textContent,/Wait/);ui.uploading=false;
 await ui.root.onpaste({clipboardData:{files:[new File(['fallback'],'fallback.webp',{type:'image/webp'})]},preventDefault(){},stopPropagation(){}});assert.equal(ui.references.length,4);
 
-assert.equal(buildImageGraph(ui.config()).references.inputs['images.image1'][0],'reference_2');
+{const graph=buildImageGraph(ui.config());assert.equal(graph.references.inputs['images.image1'][0],'reference_working_2');assert.equal(graph.reference_working_2.inputs.image[0],'reference_2');}
 const count=calls.filter(c=>c.path==='/upload/image').length;
 await ui.uploadReferences(Array.from({length:10},()=>new File(['x'],'extra.png',{type:'image/png'})));
 assert.equal(calls.filter(c=>c.path==='/upload/image').length,count,'Oversize selection never silently truncates');
 ui.$('model').value='zimage';ui.render();assert.equal(ui.$('generate').disabled,true);assert.throws(()=>buildImageGraph(ui.config()),/supports 0/);
-ui.$('model').value='flux3';ui.render();
+ui.references=[];ui.$('model').value='flux3';ui.render();
 ui.$('width').value='1280';ui.$('height').value='720';ui.$('width').oninput();
 assert.equal(ui.$('generate').disabled,false);
 assert.deepEqual(buildImageGraph(ui.config()).size.inputs,{width:1280,height:720,batch_size:1});
-ui.$('width').value='1279';ui.$('width').oninput();assert.equal(ui.$('generate').disabled,true);
-assert.throws(()=>buildImageGraph(ui.config()),/multiples/);
+ui.$('width').value='1279';ui.$('width').oninput();assert.equal(ui.$('generate').disabled,false);
+assert.equal(buildImageGraph(ui.config()).size.inputs.width,1280,'Unsupported dimensions round up to the model grid');
 ui.$('width').value='1280';ui.$('width').oninput();
 ui.$('swap-size').onclick();assert.equal(Number(ui.$('width').value),720);assert.equal(Number(ui.$('height').value),1280);
 ui.setTheme('light');assert.equal(studio.container.dataset.theme,'light');assert.equal(storage['zura-studio-theme'],'light');
@@ -457,11 +461,14 @@ await ui.cancel();
 assert.deepEqual(calls.find(c=>c.path==='/interrupt').body,{prompt_id:'own-run'},'Never interrupt another user job');
 assert.deepEqual(calls.find(c=>c.path==='/queue'&&c.body).body,{delete:['own-run']});
 assert.equal(ui.$('cancel').disabled,true);const cancelCount=calls.filter(c=>c.path==='/interrupt').length;await ui.cancel();assert.equal(calls.filter(c=>c.path==='/interrupt').length,cancelCount);apiEvents.get('progress')({detail:{prompt_id:'own-run',node:'sample',value:2,max:8}});apiEvents.get('executing')({detail:'decode'});assert.match(ui.$('progress-title').textContent,/Cancelling/,'Late image events do not replace cancellation');
+const guideMetadata={schemaVersion:1,kind:'ripple_keyframe',handoffId:'scoped-guide',anchorId:'frame4',sourceFrame:4,width:512,height:512,parentSessionId:'a'.repeat(32),parentFrameCount:9};ui.job.config.ae_intermediate_image=guideMetadata;
+ui.job.config.retain_layer_context=true;
 history={'own-run':{status:{completed:true,messages:[['execution_start',{timestamp:1000}],['execution_success',{timestamp:4000}]]},outputs:{save:{images:[{filename:'image.png',subfolder:'zura_images',type:'output'}]}}}};
 ui.editInputs.showSource=true;ui.imageComparison.active=true;ui.imageArea={editing:true,prepare:async()=>null,config(){return null;},sync(){},close(){}};
 while(ui.polling)await new Promise(r=>setTimeout(r,1));
 await ui.poll();
-assert.equal(ui.job,null);assert.equal(ui.items.length,1);assert.equal(ui.items[0].seconds,3);assert.equal(ui.$('gallery').querySelectorAll('img').length,1);assert.equal(ui.timer,null);
+assert.equal(ui.job,null);assert.equal(ui.items.length,1);assert.deepEqual(ui.items[0].ae_intermediate_image,guideMetadata,'Finished image history retains its intermediate identity');assert.deepEqual(JSON.parse(storage['zura-image-workspace-v1']).items[0].ae_intermediate_image,guideMetadata,'Saved history retains the parent session and frame identity');assert.equal(ui.items[0].seconds,3);assert.equal(ui.$('gallery').querySelectorAll('img').length,1);assert.equal(ui.timer,null);
+assert.equal(ui.items[0].retain_layer_context,true,'The editable layer retains its full-context provenance');assert.equal(JSON.parse(storage['zura-image-workspace-v1']).items[0].retain_layer_context,true,'Layer context provenance survives reload');
 assert.equal(ui.imageArea.editing,false,'A completed image exits painting');assert.equal(ui.editInputs.showSource,false,'A new result replaces the source view');assert.equal(ui.imageComparison.active,false,'A new result exits comparison');assert.equal(ui.$('gallery').hidden,false,'The generated image is visible');
 reject=true;await ui.generate();assert.match(ui.$('message').textContent,/validation/);assert.equal(ui.job,null);assert.equal(ui.$('generate').disabled,false);
 const ids=[...studio.container.querySelectorAll('[id]')].map(n=>n.id);assert.equal(ids.length,new Set(ids).size);
@@ -499,8 +506,8 @@ navStudio.source={id:'retained-video',name:'source.mp4'};navStudio.references=[{
 const navRequests=calls.filter(c=>c.path==='/prompt').length;
 const task=navStudio.container.querySelector('#zc-video-task');task.value='frames';task.dispatchEvent(new window.Event('change'));
 assert.equal(navUi.mode,'frames');assert.equal(navUi.frames.page.hidden,false);assert.equal(task.closest('.gs-top'),navStudio.container.querySelector('.gs-top'),'The same selector stays in workspace navigation');assert.equal(task.value,'frames');assert.equal(task.closest('.zc-mode-host'),navUi.videoComposer.modeHost);assert.equal(navUi.frames.page.querySelector('#zf-back'),null);assert.equal(navStudio.container.querySelector('.gs-workspace').hidden,true);
-const hdrRoot=document.createElement('section');hdrRoot.className='zf-page zh-page';hdrRoot.innerHTML='<button data-hdr="back">Back</button><button data-hdr="use-video"></button><select data-hdr="mode"><option value="sdr">SDR</option><option value="native">HDR</option></select><select data-hdr="source-kind"><option value="own">Choose another video</option><option value="upload">Source footage</option></select>';navStudio.container.append(hdrRoot);
-navStudio.hdrTool={root:hdrRoot,setOutput(ref){this.output=ref;},$(id){return hdrRoot.querySelector(`[data-hdr="${id}"]`);},updateMode(){},activate(){this.active=true;},deactivate(){this.active=false;},sourceChanged(){},close(){}};
+const hdrRoot=document.createElement('section');hdrRoot.className='zf-page zh-page';hdrRoot.innerHTML='<button data-hdr="back">Back</button><button data-hdr="use-video"></button><select data-hdr="mode"><option value="sdr">SDR</option><option value="native">HDR</option></select><select data-hdr="source-kind"><option value="own">Choose another video</option><option value="upload">Source footage</option><option value="output">Selected result</option></select>';navStudio.container.append(hdrRoot);
+navStudio.hdrTool={root:hdrRoot,setOutput(ref){this.output=this.outputRef=ref;if(ref)this.$('source-kind').value='output';},$(id){return hdrRoot.querySelector(`[data-hdr="${id}"]`);},updateMode(){},activate(){this.active=true;},deactivate(){this.active=false;},sourceChanged(){},close(){}};
 const ltxTake={type:'output',subfolder:'zura/first_last',filename:'ltx.mp4'},h3Take={type:'output',subfolder:'zura/first_last',filename:'h3.mp4'};navUi.frames.items=[{file:ltxTake,config:{engine:'ltx'}},{file:h3Take,config:{engine:'h3'}}];
 navUi.frames.showResult(h3Take);assert.equal(navUi.frames.$('convert-hdr').hidden,true,'The LTX conversion action is not shown for another engine');
 navUi.frames.showResult(ltxTake);assert.equal(navUi.frames.$('convert-hdr').hidden,false,'An LTX result offers HDR conversion at the result');
@@ -571,8 +578,10 @@ assert.equal(navUi.mode,'paintout');assert.equal(navUi.paintout.page.hidden,fals
 assert.equal(task.closest('.gs-top'),navStudio.container.querySelector('.gs-top'),'The same selector stays in workspace navigation');
 assert.equal(task.closest('.zc-mode-host'),navUi.videoComposer.modeHost);
 navUi.paintout.setMode('inpaint');navUi.videoComposer.syncWorkflow();
+assert.match(navUi.paintout.$('prompt').value,/Add the object/,'Legacy masked drafts retain their original default conditioning');
+navUi.paintout.prompts.inpaint='A saved legacy masked instruction';navUi.paintout.$('prompt').value='A saved legacy masked instruction';navUi.paintout.setMode('inpaint');navUi.videoComposer.syncWorkflow();
 assert.equal(task.value,'plate','A restored legacy Inpaint draft keeps a valid Paintout selector');
-assert.match(navUi.paintout.$('prompt').value,/Add the object/,'Legacy masked drafts remain available without rewriting their conditioning');
+assert.equal(navUi.paintout.$('prompt').value,'A saved legacy masked instruction','Legacy masked drafts remain available without rewriting their conditioning');
 navUi.videoComposer.selectWorkflow('inpaint');
 assert.equal(navUi.mode,'ripple','Old Inpaint navigation opens the shared edited-frame timeline');
 assert.equal(navUi.ripple.page.hidden,false);assert.equal(navUi.paintout.page.hidden,true);
@@ -660,7 +669,7 @@ assert.deepEqual(ui.config().loras,[]);assert.match(ui.$('size').textContent,/we
 await ui.browserConnection.connect();assert.equal(ui.$('generate').disabled,false);
 assert.deepEqual(browserRequests.find(r=>r.path.endsWith('_login')).body,{provider:'chatgpt'});
 const browserGraph=await ui.imageGraph(ui.config());assert.equal(browserGraph.browser_image.class_type,'ZuraChatGPTImage');assert.ok(!browserGraph.model);assert.ok(!browserGraph.custom_image_lora_1);
-await ui.setImageOperation('edit',{useCanvas:false});ui.$('model').value='geminiedit';ui.render();await new Promise(resolve=>setImmediate(resolve));
+await ui.setImageOperation('edit',{useCanvas:false});ui.$('model').value='geminiedit';ui.references=[{file:'browser-edit.png',width:1024,height:1024}];ui.editMainMissing=false;ui.render();await new Promise(resolve=>setImmediate(resolve));
 assert.equal(ui.browserConnection.button.textContent,'Reconnect account');
 const geminiGraph=await ui.imageGraph(ui.config());assert.equal(geminiGraph.browser_image.class_type,'ZuraGeminiImage');assert.deepEqual(geminiGraph.browser_image.inputs.reference_1,['reference_1',0]);
 ui.browserConnection.close();assert.equal(ui.browserConnection.timer,null);ui.browserConnection.open();await new Promise(resolve=>setImmediate(resolve));assert.ok(ui.browserConnection.timer,'Returning to Image restarts status updates');

@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import {IMAGE_MODELS,buildImageGraph} from '../web/image_recipes.js';
 import {IMAGE_AREA_NODE_TYPES,imageAreaSourceKey,smartCropCapabilities} from '../web/studio_image_area_graph.js';
 
-const refs=[{file:'images/main.png'},{file:'images/guide.png'}];
+const refs=[{file:'images/main.png',width:1280,height:720},{file:'images/guide.png',width:512,height:512}];
 const selected={enabled:true,source_key:refs[0].file,mask:{file:'images/selection.png'},context:64,feather:16};
 assert.equal(imageAreaSourceKey(refs[0]),refs[0].file);
 const oldInfo=Object.fromEntries(IMAGE_AREA_NODE_TYPES.map(name=>[name,{input:{required:{},optional:{}}}]));
@@ -44,11 +44,11 @@ for(const model of IMAGE_MODELS.filter(item=>item.edit)){
       if(['height','custom_height'].some(k=>entry.inputs[k]===value))assert.deepEqual(value,['zura_area_size',1],`${model.id}: ${id} height follows crop`);
     }
     if(model.type==='flux3'){
-      assert.deepEqual(graph.prompt_source_size.inputs.image,['zura_area_working',0],'Upsampler observes the actual painted source crop');
-      assert.deepEqual(graph.prompt_images.inputs['images.image0'],['zura_area_working',0]);
+      assert.deepEqual(graph.source_size.inputs.image,['zura_area_working',0],'Upsampler and sampling share the actual painted source crop');
+      assert.deepEqual(graph.prompt_images.inputs['images.image0'],['source_size',0]);
       assert.deepEqual(graph.prompt_reference_2.inputs.image,['reference_2',0],'Appearance guide remains the full original reference');
-      assert.deepEqual(graph.references.inputs['images.image0'],['zura_area_working',0]);
-      assert.deepEqual(graph.references.inputs['images.image1'],['reference_2',0]);
+      assert.deepEqual(graph.references.inputs['images.image0'],['source_size',0]);
+      assert.deepEqual(graph.references.inputs['images.image1'],['reference_working_2',0],'Every batched reference uses the working raster');
       assert.deepEqual(graph.prompt.inputs.text,['expand_prompt',0]);
     }
     if(model.provider){
@@ -72,6 +72,7 @@ const drawn=buildImageGraph({model:'flux3edit',operation:'edit',prompt:'Make the
 assert.equal(drawn.reference_1.inputs.image,refs[0].file);
 assert.equal(drawn.zura_drawing.inputs.image,'images/drawing.png');
 assert.deepEqual(drawn.zura_area_working.inputs.image,['zura_drawing_crop',0]);
+assert.deepEqual(drawn.source_size.inputs.image,['zura_area_working',0]);
 assert.deepEqual(drawn.zura_area_stitch.inputs.original_image,['reference_1',0]);
 assert.deepEqual(drawn.zura_area_composite.inputs.destination,['reference_1',0]);
 assert.equal(drawn.zura_area_mask.inputs.drawing_region,true);

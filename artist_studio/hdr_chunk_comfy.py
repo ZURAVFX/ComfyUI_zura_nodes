@@ -38,18 +38,24 @@ class ZuraHDRWriteChunk:
     def INPUT_TYPES(cls):
         return {'required':{'images':('IMAGE',),'job_id':('STRING',{'default':''}),
             'start_frame':('INT',{'default':0,'min':0}),'total_frames':('INT',{'default':1,'min':1,'max':10000}),
-            'width':('INT',{'default':512,'min':32,'max':2048}),
-            'height':('INT',{'default':512,'min':32,'max':2048}),
+            'width':('INT',{'default':512,'min':32,'max':4096}),
+            'height':('INT',{'default':512,'min':32,'max':4096}),
             'max_frames':('INT',{'default':121,'min':9,'max':121}),
             'overlap':('INT',{'default':8,'min':1,'max':60}),
-            'chunk_index':('INT',{'default':0,'min':0})}}
+            'chunk_index':('INT',{'default':0,'min':0})},'optional':{'single_frame':('BOOLEAN',{'default':False}),'colour_space':(['acescct','acescg'],{'default':'acescct'}),'planning_mode':(['native','sdr'],{'default':'native'})}}
     RETURN_TYPES=()
     OUTPUT_NODE=True
     FUNCTION='write'
     CATEGORY='Zura/Artist Studio'
-    def write(self,images,job_id,start_frame,total_frames,width,height,max_frames,overlap,chunk_index):
-        plan=plan_chunks(start_frame,total_frames,width,height,overlap=overlap,max_frames=max_frames)
-        HDRChunkStore(staging_root(),job_id,plan,width,height).write(chunk_index,images)
+    def write(self,images,job_id,start_frame,total_frames,width,height,max_frames,overlap,chunk_index,single_frame=False,colour_space='acescct',planning_mode='native'):
+        if type(single_frame) is not bool:raise ValueError('Invalid still HDR staging mode.')
+        if single_frame:
+            from .hdr_prepare import sdr_still_limit
+            from .hdr_chunks import HDRChunk
+            if start_frame!=0 or total_frames!=1 or chunk_index!=0 or not sdr_still_limit(width,height):raise ValueError('Still HDR staging requires one exact source frame within the spatial budget.')
+            plan=[HDRChunk(0,1,0)]
+        else:plan=plan_chunks(start_frame,total_frames,width,height,overlap=overlap,max_frames=max_frames,mode=planning_mode)
+        HDRChunkStore(staging_root(),job_id,plan,width,height,colour_space=colour_space,planning_mode=planning_mode).write(chunk_index,images)
         return {'ui':{'text':[f'Staged HDR chunk {chunk_index+1} of {len(plan)}.']},'result':()}
 
 
@@ -58,21 +64,25 @@ class ZuraHDRReadChunkAnchor:
     def INPUT_TYPES(cls):
         return {'required':{'job_id':('STRING',{'default':''}),
             'start_frame':('INT',{'default':0,'min':0}),'total_frames':('INT',{'default':1,'min':1,'max':10000}),
-            'width':('INT',{'default':512,'min':32,'max':2048}),
-            'height':('INT',{'default':512,'min':32,'max':2048}),
+            'width':('INT',{'default':512,'min':32,'max':4096}),
+            'height':('INT',{'default':512,'min':32,'max':4096}),
             'max_frames':('INT',{'default':121,'min':9,'max':121}),
             'overlap':('INT',{'default':8,'min':1,'max':60}),
-            'chunk_index':('INT',{'default':1,'min':1})}}
+            'chunk_index':('INT',{'default':1,'min':1})},'optional':{'colour_space':(['acescct','acescg'],{'default':'acescct'}),'planning_mode':(['native','sdr'],{'default':'native'})}}
     RETURN_TYPES=('IMAGE',)
     FUNCTION='read'
     CATEGORY='Zura/Artist Studio'
-    def read(self,job_id,start_frame,total_frames,width,height,max_frames,overlap,chunk_index):
-        plan=plan_chunks(start_frame,total_frames,width,height,overlap=overlap,max_frames=max_frames)
+    def read(self,job_id,start_frame,total_frames,width,height,max_frames,overlap,chunk_index,colour_space='acescct',planning_mode='native'):
+        plan=plan_chunks(start_frame,total_frames,width,height,overlap=overlap,max_frames=max_frames,mode=planning_mode)
         if not 1<=chunk_index<len(plan):raise ValueError('Invalid continuation chunk index.')
-        previous=HDRChunkStore(staging_root(),job_id,plan,width,height).read(chunk_index-1)
+        previous=HDRChunkStore(staging_root(),job_id,plan,width,height,colour_space=colour_space,planning_mode=planning_mode).read(chunk_index-1)
         offset=plan[chunk_index].start-plan[chunk_index-1].start
         if not 0<=offset<len(previous):raise ValueError('Previous HDR chunk does not cover the continuation frame.')
-        return (previous[offset:offset+1].clone(),)
+        anchor=previous[offset:offset+1].clone()
+        if colour_space=='acescg':
+            from ..paintout.paintout import native_colour
+            anchor=native_colour(anchor,'linear ACEScg','HDR ACEScct')
+        return (anchor,)
 
 
 class ZuraHDRPadSDRAnchor:
@@ -88,7 +98,7 @@ class ZuraHDRPadSDRAnchor:
         if not isinstance(images,torch.Tensor) or images.ndim!=4 or images.shape[-1]!=3 or len(images)!=1 or not torch.isfinite(images).all():
             raise ValueError('Expected one finite ACEScct anchor frame.')
         height,width=images.shape[1:3]
-        if min(width,height)<32 or max(width,height)>2048:raise ValueError('Invalid HDR anchor dimensions.')
+        if min(width,height)<32 or max(width,height)>4096:raise ValueError('Invalid HDR anchor dimensions.')
         right=(-width)%32;bottom=(-height)%32
         if right or bottom:images=F.pad(images.permute(0,3,1,2),(0,right,0,bottom),mode='reflect').permute(0,2,3,1)
         return (images,)
@@ -102,6 +112,8 @@ NODE_DISPLAY_NAME_MAPPINGS={'ZuraHDRWriteChunk':'Zura · Stage HDR Chunk',
 
 def chunk_graph(graph, store, index, image_node, anchor_strength=None, anchor_mode='guide'):
     """Keep the model branch and replace whole-clip delivery with staging."""
+    source_detail=image_node=='hdr_unpad_raster' and graph.get('hdr_detail',{}).get('class_type')=='ZuraHDRSourceDetail'
+    if source_detail:image_node='hdr_detail'
     if image_node not in graph or not 0<=index<len(store.plan):
         raise ValueError('HDR chunk graph is missing its output frames.')
     graph={key:copy.deepcopy(value) for key,value in graph.items() if key not in {
@@ -114,6 +126,11 @@ def chunk_graph(graph, store, index, image_node, anchor_strength=None, anchor_mo
         'total_frames':total,'width':store.width,'height':store.height,
         'max_frames':store.plan[0].count if len(store.plan)>1 else 121,
         'overlap':store.plan[1].overlap if len(store.plan)>1 else 8,'chunk_index':index}}
+    planning_mode=getattr(store,'planning_mode','sdr' if source_detail else 'native')
+    if planning_mode=='sdr':graph['zura_hdr_stage_chunk']['inputs']['planning_mode']='sdr'
+    if graph.get('zura_hdr_prepare',{}).get('inputs',{}).get('single_frame') is True:
+        graph['zura_hdr_stage_chunk']['inputs']['single_frame']=True
+    if source_detail:graph['zura_hdr_stage_chunk']['inputs']['colour_space']='acescg'
     if index and anchor_strength is not None:
         validate_anchor_settings(anchor_strength,anchor_mode)
         is_sdr={'hdr_guide','hdr_vae','hdr_empty_video'} <= graph.keys()
@@ -123,6 +140,8 @@ def chunk_graph(graph, store, index, image_node, anchor_strength=None, anchor_mo
         inputs=graph['zura_hdr_stage_chunk']['inputs']
         graph['zura_hdr_previous_anchor']={'class_type':'ZuraHDRReadChunkAnchor','inputs':{
             key:inputs[key] for key in ('job_id','start_frame','total_frames','width','height','max_frames','overlap','chunk_index')}}
+        if source_detail:graph['zura_hdr_previous_anchor']['inputs']['colour_space']='acescg'
+        if planning_mode=='sdr':graph['zura_hdr_previous_anchor']['inputs']['planning_mode']='sdr'
         if is_sdr:
             graph['zura_hdr_anchor_pad']={'class_type':'ZuraHDRPadSDRAnchor','inputs':{'images':['zura_hdr_previous_anchor',0]}}
             graph['zura_hdr_sdr_anchor']={'class_type':'LTXVImgToVideoInplace','inputs':{'vae':['hdr_vae',0],

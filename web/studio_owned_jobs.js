@@ -42,6 +42,7 @@ export async function recoverOwnedSubmission(ui) {
 
 export async function submitOwnedGraph(ui, graph, config, previewMethod, extra) {
   const prepared=await prepareAEFrameGraph(ui,graph,config);graph=prepared.graph;config=prepared.config;
+  if(ui.aeSessionEnded)throw Object.assign(new Error('This AE shot has ended'),{name:'AbortError'});
   const pending={requestId:crypto.randomUUID(),started:Date.now(),config,previewMethod,
     stages:Object.fromEntries(Object.entries(graph).map(([id,node])=>[id,node._meta?.title]).filter(([,title])=>title))};
   ui.pendingSubmission=pending;
@@ -51,7 +52,7 @@ export async function submitOwnedGraph(ui, graph, config, previewMethod, extra) 
   ui.startPolling();
   try{
     const response=await ui.fetch('/prompt',{prompt:graph,client_id:ui.api.clientId,
-      extra_data:{...extra,...(config.ae_frame_contract?{ae_frame_contract:config.ae_frame_contract}:{}),preview_method:previewMethod,zura_studio_request:pending.requestId}});
+      extra_data:{...extra,...(config.ae_frame_contract?{ae_frame_contract:config.ae_frame_contract}:{}),...(config.ae_intermediate_image?{ae_intermediate_image:config.ae_intermediate_image}:{}),preview_method:previewMethod,zura_studio_request:pending.requestId}});
     if(response.prompt_id)adoptOwnedSubmission(ui,pending,response.prompt_id);
     else if(ui.pendingSubmission===pending)ui.message('Checking whether the run started. This run will not be submitted again automatically.');
   }catch(error){

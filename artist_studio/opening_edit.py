@@ -65,16 +65,78 @@ def constrain_sampling(graph, mask):
     graph['92:104']['inputs']['latent_image'] = ['zura_opening_latent_mask', 0]
 
 
+def fit_opening_edit_canvas(graph, width, height):
+    """Put every source-preserving opening-edit input on one working raster.
+
+    The image model sees a grid-aligned source image.  Its reference images,
+    mask used during sampling, and mask used for the preview composite must
+    use that exact same raster.  Keep the original mask chain intact for the
+    final inverse registration: it is the authoritative source-coordinate
+    selection after the decoded image has been stretched back to the source.
+    """
+    def fit(image):
+        return {'class_type': 'ImageScale', 'inputs': {'image': image,
+            'upscale_method': 'lanczos', 'width': width, 'height': height,
+            'crop': 'disabled'}}
+
+    graph['92:111'] = fit(['125', 0])
+    if 'zura_look_source' in graph:
+        graph['zura_look_source']['inputs']['image'] = ['92:111', 0]
+
+    fitted_masks = {}
+    def working_mask(mask, name):
+        key = tuple(mask) if isinstance(mask, list) else mask
+        if key in fitted_masks:
+            return fitted_masks[key]
+        image = f'zura_opening_{name}_mask_image'
+        scaled = f'zura_opening_{name}_mask_working_image'
+        result = f'zura_opening_{name}_mask_working'
+        graph[image] = {'class_type': 'MaskToImage', 'inputs': {'mask': mask}}
+        graph[scaled] = fit([image, 0])
+        graph[result] = {'class_type': 'ImageToMask', 'inputs': {
+            'image': [scaled, 0], 'channel': 'red'}}
+        fitted_masks[key] = [result, 0]
+        return fitted_masks[key]
+
+    # Final working-canvas composite and the sampling latent can originate
+    # from different reviewed masks.  Register both explicitly, without
+    # altering either original-coordinate source node.
+    composite = graph.get('zura_masked_look', {}).get('inputs')
+    if composite and composite.get('mask'):
+        composite['mask'] = working_mask(composite['mask'], 'inside')
+    latent = graph.get('zura_opening_latent_mask', {}).get('inputs')
+    if latent and latent.get('mask'):
+        latent['mask'] = working_mask(latent['mask'], 'sampling')
+
+
+# Kept as a narrow compatibility alias for third-party graphs that imported
+# the original helper while it was Qwen-only.  New Studio graphs use the
+# model-neutral function above.
+def fit_qwen_edit_canvas(graph, width, height):
+    return fit_opening_edit_canvas(graph, width, height)
+
+
 def restore_source_size(graph):
     generated = graph['122']['inputs']['images']
     graph['zura_opening_original_resolution'] = {'class_type': 'ImageScale', 'inputs': {
-        'image': generated, 'upscale_method': 'lanczos', 'crop': 'center',
+        'image': generated, 'upscale_method': 'lanczos', 'crop': 'disabled',
         'width': ['zura_original_size', 0], 'height': ['zura_original_size', 1]}}
     graph['122']['inputs']['images'] = ['zura_opening_original_resolution', 0]
     # Preserve the actual source pixels outside a reviewed mask even when the
     # selected image model uses a latent format that cannot be noise-masked.
     if 'zura_masked_look' in graph and 'zura_look_inside_mask' in graph:
+        mask = ['zura_look_inside_mask',0]
+        if graph.get('92:111',{}).get('class_type') == 'ImageScale':
+            # Apply the identical inverse raster to the mask before
+            # compositing onto the untouched original.
+            graph['zura_opening_original_mask_image_source'] = {'class_type':'MaskToImage','inputs':{'mask':mask}}
+            graph['zura_opening_original_mask_image'] = {'class_type':'ImageScale','inputs':{
+                'image':['zura_opening_original_mask_image_source',0],'upscale_method':'lanczos','crop':'disabled',
+                'width':['zura_original_size',0],'height':['zura_original_size',1]}}
+            graph['zura_opening_original_mask'] = {'class_type':'ImageToMask','inputs':{
+                'image':['zura_opening_original_mask_image',0],'channel':'red'}}
+            mask = ['zura_opening_original_mask',0]
         graph['zura_opening_preserve_source'] = {'class_type': 'ImageCompositeMasked', 'inputs': {
             'destination': ['125', 0], 'source': ['zura_opening_original_resolution', 0],
-            'mask': ['zura_look_inside_mask', 0], 'x': 0, 'y': 0, 'resize_source': False}}
+            'mask': mask, 'x': 0, 'y': 0, 'resize_source': False}}
         graph['122']['inputs']['images'] = ['zura_opening_preserve_source', 0]

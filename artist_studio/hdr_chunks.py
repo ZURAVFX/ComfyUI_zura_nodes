@@ -69,7 +69,7 @@ def plan_chunks(start, count, width, height, overlap=8, max_frames=MAX_FRAMES, *
     return chunks
 
 
-def blend_acescct_overlap(previous, following):
+def blend_acescct_overlap(previous, following, *, linear_rgb=False):
     """Blend equal-shape ACEScct overlap batches in linear ACEScg light.
 
     Inputs are model output tensors in [frames, height, width, RGB] order. No
@@ -86,10 +86,11 @@ def blend_acescct_overlap(previous, following):
         raise ValueError('Overlap frames must be finite and on the same device.')
     amount=torch.arange(1, len(previous)+1, device=previous.device, dtype=torch.float32)
     amount=(amount / (len(previous)+1)).reshape(-1, 1, 1, 1)
+    if linear_rgb:return previous.float()*(1-amount)+following.float()*amount
     return encode_ct(decode_ct(previous.float())*(1-amount) + decode_ct(following.float())*amount)
 
 
-def choose_overlap_cut(previous, following, overlap):
+def choose_overlap_cut(previous, following, overlap, *, linear_rgb=False):
     """Choose the least-discontinuous hard cut in two overlapping chunks.
 
     Scores adjacent output-frame luminance in a downscaled, tone-compressed
@@ -108,7 +109,7 @@ def choose_overlap_cut(previous, following, overlap):
         raise ValueError('HDR overlap frames must be finite.')
     tail=previous[-overlap-1:];head=following[:overlap+1]
     def luminance(frames):
-        linear=decode_ct(frames.float()).clamp_min(0)
+        linear=(frames.float() if linear_rgb else decode_ct(frames.float())).clamp_min(0)
         view=linear/(1+linear)
         view=(view[...,0]*.272229+view[...,1]*.674082+view[...,2]*.053689)
         return F.interpolate(view[:,None],size=(min(view.shape[1],96),min(view.shape[2],96)),mode='area')
@@ -117,7 +118,7 @@ def choose_overlap_cut(previous, following, overlap):
     return int(scores.argmin().item())
 
 
-def stitch_acescct_batches(plan, batches, *, strategy='blend'):
+def stitch_acescct_batches(plan, batches, *, strategy='blend', linear_rgb=False):
     """Yield bounded output batches, retaining at most one chunk at a time.
 
     ``batches`` must supply each rendered chunk in plan order. The yielded
@@ -151,10 +152,10 @@ def stitch_acescct_batches(plan, batches, *, strategy='blend'):
                 raise ValueError('HDR chunk overlap leaves no unique frames.')
             yield pending[:-part.overlap]
             if strategy=='cut':
-                cut=choose_overlap_cut(pending,batch,part.overlap)
+                cut=choose_overlap_cut(pending,batch,part.overlap,linear_rgb=linear_rgb)
                 yield torch.cat((pending[-part.overlap:][:cut],batch[:part.overlap][cut:]),dim=0)
             else:
-                yield blend_acescct_overlap(pending[-part.overlap:],batch[:part.overlap])
+                yield blend_acescct_overlap(pending[-part.overlap:],batch[:part.overlap],linear_rgb=linear_rgb)
             pending=batch[part.overlap:]
         previous=part
     if pending is not None:

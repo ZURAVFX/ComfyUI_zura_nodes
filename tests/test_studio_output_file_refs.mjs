@@ -1,0 +1,15 @@
+import assert from 'node:assert/strict';
+import {studioModeAdapter} from '../web/studio_mode_adapters.js';
+const record={filename:'klein9b_00009_.png',subfolder:'zura_images',type:'output',metadata:{kind:'image',width:512,height:512},id:'asset-id',role:'preview'};
+const expected={filename:record.filename,subfolder:record.subfolder,type:record.type};
+const before=JSON.stringify(record);
+const image={studio:{},items:[{file:record}],selectedImage:0};
+assert.deepEqual(studioModeAdapter('image').getSelectedOutput(image),{kind:'image',master:expected});
+assert.equal(JSON.stringify(record),before,'Normal history retains its ComfyUI asset metadata');
+image.outputSettings={delivery:{outputFor:()=>({kind:'hdr_sequence',master:{...record,filename:'converted.zip'},preview:record,alpha_ref:{filename:'private-to-the-postpass.json'},uiState:'complete'})}};
+assert.deepEqual(studioModeAdapter('image').getSelectedOutput(image),{kind:'hdr_sequence',master:{...expected,filename:'converted.zip'},preview:expected},'Post-converted HDR masters pass through the same strict file-ref adapter');
+const master={...record,filename:'master.zip',role:'hdr_archive'},preview={...record,filename:'preview.mp4'};
+const video={studio:{},paintout:{result:{master,file:preview}}};
+assert.deepEqual(studioModeAdapter('paintout').getSelectedOutput(video),{kind:'hdr_sequence',master:{...expected,filename:'master.zip'},preview:{...expected,filename:'preview.mp4'}});
+assert.equal(studioModeAdapter('image').getSelectedOutput({studio:{},items:[{file:{...record,type:'input'}}],selectedImage:0}),null,'Input files cannot be selected as output masters');
+console.log('ComfyUI asset metadata and IDs remain in history but never enter strict AE file references');

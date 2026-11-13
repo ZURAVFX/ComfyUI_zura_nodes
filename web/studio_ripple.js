@@ -193,9 +193,9 @@ export class RippleWorkspace {
     return {...(this.intent==='relight'?{intent:'relight',savePrefix:'ZURA STUDIO/relight'}:{}),engine:this.state.engine,source:source?.path||'',startFrame:start,frameCount:this.state.frameCount,sequenceFps:this.fps(),width:size.width,height:size.height,resolutionMode:'plate',anchors,prompt:this.$('prompt').value,seed:42,outputMode:'SDR video',sourceColour:this.colourSpace(),detectedSourceColour:source?.resolved_colour||''};
   }
   async generate(){
-    if(this.busy())return;const config=this.config(),error=rippleStudioValidation(config);if(error){this.message(error);return;}
+    if(this.busy())return;let config=this.config();const delivery=this.owner.outputSettings?.delivery,error=rippleStudioValidation(delivery?.modelInputValidationConfig?.(this,config)||config);if(error){this.message(error);return;}
     if(typeof this.onGenerate!=='function'){this.message('Ripple is still connecting to ComfyUI. Try again shortly.');return;}
-    try{await this.onGenerate(config);}catch(error){this.message(error.message||'Could not start the Ripple run.');this.render();}
+    try{config=await delivery?.prepareInferenceView?.(this,'ripple',config)||config;const invalid=rippleStudioValidation(config);if(invalid)throw Error(invalid);await this.onGenerate(config);}catch(error){this.message(error.message||'Could not start the Ripple run.');this.render();}
   }
   async cancel(){if(this.picking&&this.uploadController){this.uploadController.abort();this.uploadController=null;this.picking=false;++this.revision;this.clearProgress();this.message('Video upload cancelled.');this.render();return;}if((this.job||this.pendingSubmission)&&typeof this.onCancel==='function')await this.onCancel(this.job);}
   setProgress({title='Generating video',detail='',value=null}={}){this.$('progress').hidden=false;this.$('progress-title').textContent=this.intent==='relight'?title.replaceAll('Ripple','Relight'):title;this.$('progress-detail').textContent=this.intent==='relight'?detail.replaceAll('Ripple','Relight'):detail;if(Number.isFinite(value))this.$('bar').value=clamp(value,0,100);else this.$('bar').removeAttribute('value');}

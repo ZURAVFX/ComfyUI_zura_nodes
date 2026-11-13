@@ -3,6 +3,8 @@ import copy
 import importlib
 import json
 from pathlib import Path
+import shutil
+import subprocess
 import sys
 import types
 import unittest
@@ -13,7 +15,8 @@ import torch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from comfylink.frame_contract import (apply_frame_contract, contract_rate,
-    ltx_model_frames, normalise_frame_contract, prepare_frame_contract_graph, validate_interval)
+    ltx_model_frames, normalise_frame_contract, prepare_frame_contract_graph, validate_interval,
+    intermediate_image_contract, prepare_intermediate_image_graph)
 from comfylink.frame_nodes import ZuraComfyLinkMatchFrames
 
 
@@ -37,6 +40,205 @@ def native_module(module_name="hdr_native_graph"):
 
 
 class FrameContractTests(unittest.TestCase):
+    @staticmethod
+    def guide(parent, **changes):
+        return {'schemaVersion': 1, 'kind': 'ripple_keyframe', 'handoffId': 'handoff-1',
+                'anchorId': 'anchor-1', 'sourceFrame': 3, 'width': parent['width'], 'height': parent['height'],
+                'parentSessionId': parent['sessionId'], 'parentFrameCount': parent['frameCount'], **changes}
+
+    def test_intermediate_keyframe_restores_aligned_raster_without_changing_final_shot(self):
+        parent = {**contract(9, 24, 1), 'width': 1080, 'height': 1920}
+        guide = self.guide(parent)
+        graph = {'decode': {'class_type': 'ImageScale', 'inputs': {'width': 1088, 'height': 1920}},
+                 'save': {'class_type': 'SaveImage', 'inputs': {'images': ['decode', 0], 'filename_prefix': 'ordinary'}}}
+        before = copy.deepcopy((parent, guide, graph))
+        prepared, single = prepare_intermediate_image_graph(graph, parent, guide)
+        self.assertEqual((parent, guide, graph), before)
+        self.assertEqual((single['frameCount'], single['modelFrames'], single['trimFrames']), (1, 1, 1))
+        self.assertEqual(single['ae_intermediate_image'], guide)
+        saver = prepared['save']
+        self.assertEqual(saver['inputs']['filename_prefix'], 'ComfyLink/intermediate/' + parent['sessionId'] + '/handoff-1/guide')
+        self.assertEqual(saver['_meta']['ae_intermediate_image'], guide)
+        guard = prepared[saver['inputs']['images'][0]]
+        self.assertEqual(guard['class_type'], 'ZuraComfyLinkMatchFrames')
+        self.assertEqual(guard['inputs']['frame_count'], 1)
+        self.assertEqual(json.loads(guard['inputs']['metadata']), single)
+        restore = prepared[guard['inputs']['images'][0]]
+        self.assertEqual(restore['inputs'], {'image': ['decode', 0], 'upscale_method': 'lanczos',
+                                          'width': 1080, 'height': 1920, 'crop': 'disabled'})
+        with self.assertRaisesRegex(ValueError, 'one frame'):
+            prepare_frame_contract_graph(graph, parent, 'image')
+        with self.assertRaisesRegex(ValueError, 'intermediate image'):
+            prepare_frame_contract_graph(graph, single, 'image')
+        video = {'decode': {'class_type': 'VAEDecode', 'inputs': {}},
+                 'video': {'class_type': 'CreateVideo', 'inputs': {'images': ['decode', 0], 'fps': 24}},
+                 'save': {'class_type': 'SaveVideo', 'inputs': {'video': ['video', 0]}}}
+        final = prepare_frame_contract_graph(video, parent, 'paintout')
+        self.assertEqual(final['zura_ae_match_frames_0']['inputs']['frame_count'], 9)
+        self.assertNotIn('zura_ae_restore_guide_raster', final)
+
+    def test_intermediate_descriptor_rejects_stale_forged_or_unbounded_handoffs(self):
+        parent = contract(9, 24, 1)
+        for changes in ({'parentSessionId': 'f' * 32}, {'parentFrameCount': 1}, {'parentFrameCount': True},
+                        {'sourceFrame': -1}, {'sourceFrame': 9}, {'sourceFrame': True}, {'width': 640},
+                        {'schemaVersion': True}, {'kind': 'video'}, {'handoffId': '../escape'},
+                        {'anchorId': ''}, {'height': 0}, {'extra': True}):
+            with self.subTest(changes=changes), self.assertRaises(ValueError):
+                intermediate_image_contract(parent, self.guide(parent, **changes))
+        outpaint = self.guide(parent, kind='outpaint_guide', sourceFrame=0, width=640)
+        outpaint.pop('anchorId')
+        self.assertEqual(intermediate_image_contract(parent, outpaint)['width'], 640)
+        for changes in ({'sourceFrame': 1}, {'width': 16385}, {'width': 8192, 'height': 8192}):
+            with self.subTest(changes=changes), self.assertRaises(ValueError):
+                intermediate_image_contract(parent, {**outpaint, **changes})
+
+    def test_intermediate_image_cannot_prepare_additional_or_video_masters(self):
+        parent = contract(9, 24, 1)
+        graph = {'decode': {'class_type': 'VAEDecode', 'inputs': {}},
+                 'save': {'class_type': 'SaveImage', 'inputs': {'images': ['decode', 0]}}}
+        for kind in ('SaveImage', 'SaveVideo', 'VHS_VideoCombine', 'ZuraPaintoutUncrop', 'ZuraHDRPackageEXR'):
+            with self.subTest(kind=kind), self.assertRaises(ValueError):
+                prepare_intermediate_image_graph({**graph, 'other': {'class_type': kind, 'inputs': {}}}, parent, self.guide(parent))
+        with self.assertRaises(ValueError):
+            prepare_intermediate_image_graph({'decode': graph['decode']}, parent, self.guide(parent))
+
+    def test_final_still_restores_only_small_native_image_grid_alignment(self):
+        for source, working in (((1920, 1080), (1920, 1088)), ((3840, 2160), (3840, 2176))):
+            with self.subTest(source=source):
+                parent = {**contract(1, 25, 1), 'width': source[0], 'height': source[1]}
+                graph = {'size': {'class_type': 'EmptyFlux2LatentImage', 'inputs': {'width': working[0], 'height': working[1], 'batch_size': 1}},
+                         'sample': {'class_type': 'SamplerCustomAdvanced', 'inputs': {'latent_image': ['size', 0]}},
+                         'decode': {'class_type': 'VAEDecode', 'inputs': {'samples': ['sample', 0]}},
+                         'save': {'class_type': 'SaveImage', 'inputs': {'images': ['decode', 0]}}}
+                prepared = prepare_frame_contract_graph(graph, parent, 'image')
+                restore = prepared['zura_ae_restore_image_grid_0']['inputs']
+                self.assertEqual((restore['width'], restore['height']), source)
+                self.assertEqual(restore['image'], ['decode', 0])
+                self.assertEqual(restore['crop'], 'disabled')
+                self.assertEqual(prepared['zura_ae_match_frames_0']['inputs']['images'], ['zura_ae_restore_image_grid_0', 0])
+                self.assertEqual(prepared['size'], graph['size'])
+                with self.assertRaisesRegex(ValueError, 'raster differs'):
+                    prepare_frame_contract_graph(graph, parent, 'paintout')
+        parent = {**contract(1), 'width': 1920, 'height': 1080}
+        graph = {'scale': {'class_type': 'ImageScale', 'inputs': {'width': 1024, 'height': 1024}},
+                 'save': {'class_type': 'SaveImage', 'inputs': {'images': ['scale', 0]}}}
+        with self.assertRaisesRegex(ValueError, 'raster differs'):
+            prepare_frame_contract_graph(graph, parent, 'image')
+        graph['scale'] = {'class_type': 'UnknownDynamicImage', 'inputs': {}}
+        prepared = prepare_frame_contract_graph(graph, parent, 'image')
+        self.assertNotIn('zura_ae_restore_image_grid_0', prepared)
+        self.assertEqual(prepared['zura_ae_match_frames_0']['inputs']['images'], ['scale', 0])
+
+    @unittest.skipUnless(shutil.which('node'), 'Node.js is needed to build the actual native Image recipes')
+    def test_actual_ph3_and_qwen21_image_recipes_restore_only_verified_latent_slots(self):
+        script = """
+            import {buildImageGraph} from './web/image_recipes.js';
+            const graphs = {};
+            for (const model of ['ph3edit', 'qwen21edit']) {
+                graphs[model] = buildImageGraph({model, prompt:'Change only the coat', seed:17,
+                    shape:'auto', references:[{file:'test/source.png', width:1920, height:1080}]});
+            }
+            console.log(JSON.stringify(graphs));
+        """
+        graphs = json.loads(subprocess.check_output([shutil.which('node'), '--input-type=module', '-e', script],
+            cwd=Path(__file__).resolve().parents[1], text=True, timeout=30))
+        parent = {**contract(1, 25, 1), 'width': 1920, 'height': 1080}
+        for model, slot in (('ph3edit', 1), ('qwen21edit', 2)):
+            with self.subTest(model=model):
+                graph = graphs[model]
+                before = copy.deepcopy(graph)
+                self.assertEqual(graph['sample']['inputs']['latent_image'], ['prompt', slot])
+                self.assertEqual((graph['source_size']['inputs']['width'], graph['source_size']['inputs']['height']), (1920, 1088))
+                prepared = prepare_frame_contract_graph(graph, parent, 'image')
+                self.assertEqual(prepared['output_size'], graph['output_size'])
+                self.assertNotIn('zura_ae_restore_image_grid_0', prepared)
+                self.assertEqual(prepared['zura_ae_match_frames_0']['inputs']['images'], ['output_size', 0])
+                self.assertEqual(prepared['sample'], graph['sample'])
+                self.assertEqual(prepared['prompt'], graph['prompt'])
+                self.assertEqual(graph, before)
+                for wrong_slot in ({0, 1, 2} - {slot}):
+                    unknown = copy.deepcopy(graph)
+                    unknown['sample']['inputs']['latent_image'][1] = wrong_slot
+                    strict = prepare_frame_contract_graph(unknown, parent, 'image')
+                    self.assertNotIn('zura_ae_restore_image_grid_0', strict)
+                    self.assertEqual(strict['zura_ae_match_frames_0']['inputs']['images'], ['output_size', 0])
+                # The recipe already restores the exact source raster before
+                # this contract adds frame matching, so no second scale is
+                # needed when the same finished still is reviewed by another
+                # single-frame mode.
+                self.assertNotIn('zura_ae_restore_image_grid_0',
+                    prepare_frame_contract_graph(graph, parent, 'paintout'))
+                unknowns = []
+                if model == 'ph3edit':
+                    for value in (0, True, 1080, ['dynamic', 0]):
+                        unknown = copy.deepcopy(graph)
+                        unknown['prompt']['inputs']['height'] = value
+                        unknowns.append(unknown)
+                else:
+                    for value in (1024, False, ['dynamic', 0]):
+                        unknown = copy.deepcopy(graph)
+                        unknown['prompt']['inputs']['resolution'] = value
+                        unknowns.append(unknown)
+                    unknown = copy.deepcopy(graph)
+                    unknown['source_size']['inputs']['height'] = 1080
+                    unknowns.append(unknown)
+                    unknown = copy.deepcopy(graph)
+                    unknown['prompt']['inputs']['images.image_1'] = ['reference_1', 0]
+                    unknowns.append(unknown)
+                for unknown in unknowns:
+                    self.assertNotIn('zura_ae_restore_image_grid_0', prepare_frame_contract_graph(unknown, parent, 'image'))
+
+    @unittest.skipUnless(shutil.which('node'), 'Node.js is needed to build the actual native References recipe')
+    def test_actual_h3_references_video_restores_its_working_grid_to_exact_ae_raster(self):
+        script = """
+            import {buildReferenceVideoGraph} from './web/reference_video_recipes.js';
+            const configs = [
+                {width:1920,height:1088,frames:22},
+                {width:3840,height:2176,frames:39},
+                {width:1024,height:1024,frames:22},
+            ];
+            console.log(JSON.stringify(configs.map(c=>buildReferenceVideoGraph({...c,
+                prompt:'Keep the subject and camera composition', seed:17,
+                images:[{file:'test/source.png'}], videos:[], audios:[]}))));
+        """
+        graphs = json.loads(subprocess.check_output([shutil.which('node'), '--input-type=module', '-e', script],
+            cwd=Path(__file__).resolve().parents[1], text=True, timeout=30))
+        for graph, width, height, count, model_frames in ((graphs[0],1920,1080,9,22), (graphs[1],3840,2160,24,39)):
+            with self.subTest(raster=(width, height), count=count):
+                parent = {**contract(count,24,1), 'width':width, 'height':height, 'modelFrames':model_frames}
+                before = copy.deepcopy(graph)
+                prepared = prepare_frame_contract_graph(graph, parent, 'references')
+                self.assertEqual(graph, before)
+                restore = prepared['zura_ae_restore_h3_reference_grid_0']['inputs']
+                self.assertEqual(restore, {'image':['decode',0], 'upscale_method':'lanczos',
+                    'width':width, 'height':height, 'crop':'disabled'})
+                guard = prepared['zura_ae_match_frames_0']['inputs']
+                self.assertEqual(guard['images'], ['zura_ae_restore_h3_reference_grid_0',0])
+                self.assertEqual((guard['width'], guard['height'], guard['frame_count']), (width,height,count))
+                self.assertEqual(prepared['video']['inputs']['images'], ['zura_ae_match_frames_0',0])
+                self.assertEqual(prepared['video']['inputs']['fps'], 24)
+                self.assertEqual(prepared['zura_ae_match_frames_0_audio']['inputs']['duration'], count/24)
+                for node in ('sample','model','video_vae','audio_vae','references'):
+                    self.assertEqual(prepared[node], graph[node])
+                for mode in ('paintout','frames','director'):
+                    with self.assertRaisesRegex(ValueError, 'raster differs'):
+                        prepare_frame_contract_graph(graph, parent, mode)
+        parent = {**contract(9,24,1), 'width':1920, 'height':1080, 'modelFrames':22}
+        with self.assertRaisesRegex(ValueError, 'raster differs'):
+            prepare_frame_contract_graph(graphs[2], parent, 'references')
+        for wrong_slot in (0,2):
+            unknown = copy.deepcopy(graphs[0])
+            unknown['sample']['inputs']['latent_image'][1] = wrong_slot
+            strict = prepare_frame_contract_graph(unknown, parent, 'references')
+            self.assertNotIn('zura_ae_restore_h3_reference_grid_0', strict)
+            self.assertEqual(strict['zura_ae_match_frames_0']['inputs']['images'], ['decode',0])
+        # An unrelated H3 reference node cannot bless another aligned output.
+        unrelated = copy.deepcopy(graphs[0])
+        unrelated['other_canvas'] = {'class_type':'ImageScale', 'inputs':{'width':1920, 'height':1088}}
+        unrelated['video']['inputs']['images'] = ['other_canvas',0]
+        with self.assertRaisesRegex(ValueError, 'raster differs'):
+            prepare_frame_contract_graph(unrelated, parent, 'references')
+
     def test_temporal_camera_retains_ae_interval_and_rejects_rate_or_raster_changes(self):
         camera = native_module('panorama_camera')
         ae = contract(50, 24, 1)
@@ -51,7 +253,7 @@ class FrameContractTests(unittest.TestCase):
         self.assertEqual(graph['source_pad']['inputs']['frames'], 57)
         self.assertEqual(graph['trim']['inputs']['length'], 50)
         self.assertEqual(graph['video']['inputs']['fps'], 24)
-        with self.assertRaisesRegex(ValueError, '24 fps'):
+        with self.assertRaisesRegex(ValueError, 'match all AE source frames'):
             camera.plan(source, {'ae_frame_contract': contract(50)})
         with self.assertRaisesRegex(ValueError, 'source raster'):
             camera.plan(source, {'width': 768, 'height': 512, 'ae_frame_contract': ae})

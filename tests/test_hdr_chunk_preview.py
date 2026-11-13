@@ -7,6 +7,7 @@ import sys
 import tempfile
 import types
 import unittest
+import hashlib
 import wave
 from pathlib import Path
 import av
@@ -20,6 +21,7 @@ for name,path in [('ComfyUI_zura_nodes.artist_studio','artist_studio'),('ComfyUI
 chunk=importlib.import_module('ComfyUI_zura_nodes.artist_studio.hdr_chunks')
 storage=importlib.import_module('ComfyUI_zura_nodes.artist_studio.hdr_chunk_store')
 preview=importlib.import_module('ComfyUI_zura_nodes.artist_studio.hdr_chunk_preview')
+colour=importlib.import_module('ComfyUI_zura_nodes.artist_studio.hdr_preview_colour')
 
 class HDRPreviewTests(unittest.TestCase):
     def setUp(self):
@@ -50,6 +52,28 @@ class HDRPreviewTests(unittest.TestCase):
         with self.assertRaises(storage.HDRChunkCancelled):
             preview.export_sdr_preview(self.stage,self.tmp.name,'cancelled',fps=10,ffmpeg=self.ffmpeg,progress=stop)
         self.assertEqual(list((Path(self.tmp.name)/'genj'/'hdr').iterdir()),[])
+
+    def test_encoded_red_wall_matches_ocio_and_keeps_staged_master_bytes(self):
+        import PyOpenColorIO as ocio
+        from test_hdr_preview_colour import reference
+        paint=importlib.import_module('ComfyUI_zura_nodes.paintout.paintout')
+        linear=np.array([[[.8,.24,.08]]],np.float32)
+        config=ocio.Config.CreateFromFile('ocio://cg-config-latest')
+        config.getProcessor('sRGB Encoded Rec.709 (sRGB)','ACEScg').getDefaultCPUProcessor().applyRGB(linear)
+        stage=storage.HDRChunkStore(self.tmp.name,'b'*32,[chunk.HDRChunk(0,1,0)],32,32,create=True)
+        codes=paint.encode_ct(torch.from_numpy(linear)).expand(32,32,3).clone()[None]
+        stage.write(0,codes)
+        paths=list(stage.directory.iterdir());before={p.name:hashlib.sha256(p.read_bytes()).hexdigest() for p in paths}
+        path=preview.export_sdr_preview(stage,self.tmp.name,'colour',fps=24,ffmpeg=self.ffmpeg)
+        with av.open(str(path)) as stream:
+            decoded=list(stream.decode(video=0))
+            codec=stream.streams.video[0].codec_context
+            self.assertEqual((int(codec.color_primaries),int(codec.colorspace),int(codec.color_trc),int(codec.color_range)),(1,1,13,1),'Preview tags describe Rec.709 primaries/matrix with the actual sRGB curve and limited YUV range')
+        self.assertEqual(len(decoded),1)
+        pixels=decoded[0].to_ndarray(format='rgb24')[8:24,8:24].astype(np.float32).mean((0,1))
+        np.testing.assert_allclose(pixels,reference(linear)[0,0]*255,atol=4)
+        self.assertEqual({p.name:hashlib.sha256(p.read_bytes()).hexdigest() for p in paths},before)
+        self.assertEqual(stage.read(0).numpy().tobytes(),codes.numpy().tobytes())
 
     def test_exact_fractional_audio_offset_matches_preview(self):
         from scipy.signal import correlate, correlation_lags

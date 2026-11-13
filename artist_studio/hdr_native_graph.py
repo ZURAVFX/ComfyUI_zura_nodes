@@ -123,8 +123,7 @@ def build_native_video_graph(*, source, start_frame, frame_count, fps, width, he
         g['zura_hdr_archive']=n('ZuraHDRPackageACEScct',images=['trim_raster',0],prefix=prefix, **({'exr_storage':exr_storage} if exr_storage != 'half' else {}))
         preview=['zura_hdr_exr',0]
     else:
-        g['zura_hdr_preview_tonemap']=n('LTXVHDRDecodePostprocess',image=['trim_raster',0],transfer='acescct',save_exr=False,
-            exr_color_space='acescg',output_dir='genj/hdr/'+prefix,filename_prefix='frame',half_precision=True)
+        g['zura_hdr_preview_tonemap']=n('ZuraHDRSDRPreview',image=['trim_raster',0])
         preview=['zura_hdr_preview_tonemap',0]
     video={'images':preview,'fps':float(fps)}
     if audio:video['audio']=audio

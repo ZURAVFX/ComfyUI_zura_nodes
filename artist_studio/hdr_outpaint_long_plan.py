@@ -156,7 +156,7 @@ def build_long_hdr_conversion_window(source, full_selection, sub_selection, inte
         hdr_review_key(sub_selection, expected['colour_space']), expected['colour_space'], check_asset)
     graph = build_hdr_graph(source=intermediate, start_frame=prompt_start_frame,
         frame_count=validated['frames'], fps=24., colour_space='srgb_display',
-        output='hlg_and_exr', prefix=prefix, has_audio=False, seed=seed)
+        output='hlg_and_exr', prefix=prefix, has_audio=False, seed=seed,_source_detail=False)
     graph['native_original'] = {'class_type':'ZuraHDRSelectNativeTimeline','inputs':{
         'source':path, 'start_seconds':validated['start'], 'frame_count':validated['frames'],
         'output_fps':24., 'colour_space':expected['colour_space'], 'sequence_fps':24.}}

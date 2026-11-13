@@ -3,6 +3,10 @@ import fs from 'node:fs';
 import vm from 'node:vm';
 
 const code=fs.readFileSync(new URL('../web/studio_image_compare.js',import.meta.url),'utf8').replace(/^import .*;\r?\n/gm,'').replace('export class','class');
+const polishCss=fs.readFileSync(new URL('../web/studio_polish.css',import.meta.url),'utf8');
+assert.match(polishCss,/--zc-image-width:1040px/,'Image workbench surfaces share one responsive maximum width');
+assert.match(polishCss,/:is\(\.zc-image-scroll,\.zc-image-heading,\.zc-image-composer,\.zc-image-status\)\{width:100%;max-width:var\(--zc-image-width\);margin-inline:auto;box-sizing:border-box\}/,'Preview, prompt, result/empty/compare and progress states stay centred at the same width');
+assert.match(polishCss,/#zc-progress\{width:100%;max-width:none\}/,'Generation progress cannot exceed its shared status container');
 class Comparison {
   constructor(host){this.host=host;}
   show(...args){this.args=args;this.host.hidden=false;}

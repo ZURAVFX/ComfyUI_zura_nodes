@@ -47,7 +47,7 @@ class BrowserOpeningTests(unittest.TestCase):
                 self.assertIn('Do not change the proportions',inputs['prompt'])
                 self.assertEqual(graph['zura_original_video']['inputs']['file'],'source.mp4')
                 self.assertFalse(any(any(token in n['class_type'] for token in ('Loader','Sampler','VAE','SAM3')) for n in graph.values()))
-                self.assertEqual(graph['zura_opening_original_resolution']['inputs']['crop'],'center')
+                self.assertEqual(graph['zura_opening_original_resolution']['inputs']['crop'],'disabled')
                 self.assertEqual(graph['zura_opening_original_resolution']['inputs']['width'],['zura_original_size',0])
                 self.assert_links(graph)
 

@@ -90,7 +90,10 @@ class HDRNativeLongJobTests(unittest.IsolatedAsyncioTestCase):
                 result=await job.run()
             self.assertEqual((summary['chunks'],queue.submissions,job.state),(2,2,'complete'))
             self.assertEqual([g['zura_hdr_source']['inputs']['frame_count'] for g in queue.graphs],[121,9])
-            self.assertEqual([g['zura_hdr_stage_chunk']['inputs']['images'] for g in queue.graphs],[['hdr_unpad_raster',0]]*2)
+            self.assertEqual([g['zura_hdr_stage_chunk']['inputs']['images'] for g in queue.graphs],[['hdr_detail',0]]*2)
+            self.assertTrue(all(g['zura_hdr_stage_chunk']['inputs']['colour_space']=='acescg' for g in queue.graphs))
+            self.assertEqual(job.store.colour_space,'acescg')
+            self.assertEqual(job.store.planning_mode,'sdr')
             with zipfile.ZipFile(result['files'][0]) as archive:self.assertEqual(len(archive.namelist()),122)
 
     async def test_1080p_25_frame_sdr_job_automatically_plans_two_bounded_sections(self):

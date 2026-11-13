@@ -30,6 +30,13 @@ async def no_import(*args):
     return {}
 
 
+def processing_authority(manifest):
+    return {'schemaVersion': 1, 'precision': 8, 'conversion': 'verified_srgb_to_sdr8',
+            'sourceManifestSha256': hashlib.sha256(float_io.canonical_manifest_bytes(manifest)).hexdigest(),
+            'sourceColour': copy.deepcopy(manifest['colour']),
+            'colour': {'encoding': 'unknown', 'sceneLinear': False}, 'alphaAssociation': 'straight'}
+
+
 class StudioHTTPTest(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
         self.temp = tempfile.TemporaryDirectory()
@@ -252,11 +259,19 @@ class StudioHTTPTest(unittest.IsolatedAsyncioTestCase):
         session, headers = await self.create()
         with patch.dict(os.environ, {'ProgramFiles': str(self.root / 'Program Files')}):
             self.assertEqual(display_view._verified_ocio_source(colour), 'srgb8')
+            from comfylink.studio_processing import validate_processing_input
+            authority=processing_authority(self.manifest)
+            authority['sourceConfigSha256']=colour['ocioConfigFileSha256']
+            self.assertEqual(validate_processing_input(authority,self.manifest),authority)
+            bad=copy.deepcopy(authority);bad['sourceConfigSha256']='0'*64
+            with self.assertRaises(ValueError):validate_processing_input(bad,self.manifest)
             response = await self.client.get(self.route(session, '/display-frame?index=0'), headers=headers)
             self.assertEqual(response.status, 200)
             self.assertEqual(response.headers['X-ComfyLink-Preview-Note'], 'Preview uses the verified AE working space')
             self.assertTrue((await response.read()).startswith(b'\x89PNG'))
             colour['ocioConfigFileSha256'] = '0'*64
+            bad=processing_authority(self.manifest);bad['sourceConfigSha256']='0'*64
+            with self.assertRaises(ValueError):validate_processing_input(bad,self.manifest)
             response = await self.client.get(self.route(session, '/display-frame?index=0'), headers=headers)
             self.assertEqual(response.status, 422)
 
@@ -606,6 +621,117 @@ class StudioHTTPTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(response.status, 403)
         self.assertEqual(self.received, [])
 
+    async def test_alpha_graph_and_float_master_bind_original_source_and_keep_mov(self):
+        self.manifest['sourceStart'] = {'numerator': 0, 'denominator': 1}
+        session, headers = await self.create()
+        response = await self.client.post(self.route(session, '/source'), headers=headers, json={})
+        self.assertEqual(response.status, 200)
+        contract = {'schemaVersion': 1, 'sessionId': session['id'], 'frameCount': 1,
+            'frameRate': {'numerator': 24, 'denominator': 1}, 'width': 1, 'height': 1,
+            'modelFrames': 9, 'trimFrames': 1, 'sourceManifestSha256': 'f'*64}
+        graph = {'source': {'class_type': 'ZuraAlphaVideoInput', 'inputs': {}},
+                 'save': {'class_type': 'ZuraAlphaVideoOutput', 'inputs': {'images': ['source', 0], 'info': ['source', 1], 'filename_prefix': 'alpha'}}}
+        response = await self.client.post(self.route(session, '/prepare-graph'), headers=headers,
+            json={'mode': 'alpha', 'graph': graph, 'ae_frame_contract': contract})
+        self.assertEqual(response.status, 200, await response.text())
+        prepared = await response.json()
+        fingerprint = hashlib.sha256(float_io.canonical_manifest_bytes(self.manifest)).hexdigest()
+        self.assertEqual(prepared['ae_frame_contract']['sourceManifestSha256'], fingerprint)
+        self.assertEqual(json.loads(prepared['graph']['save']['inputs']['ae_frame_contract'])['sourceManifestSha256'], fingerprint)
+        pixels = self.payload.copy();pixels[..., 3] *= np.float32(.1234567)
+        relative, master = float_io.write_transfer(self.outputs, 'ComfyLink/'+'e'*32, pixels,
+            colour=self.manifest['colour'], frame_rate=self.manifest['frameRate'], source_start=self.manifest['sourceStart'])
+        original = self.outputs/'alpha.mov'; original.write_bytes(b'retained MOV fixture')
+        body = {'kind': 'alpha_extract', 'master': {'filename': 'manifest.json', 'subfolder': str(Path(relative).parent).replace('\\','/'), 'type': 'output'},
+                'original': {'filename': 'alpha.mov', 'subfolder': '', 'type': 'output'}}
+        response = await self.client.post(self.route(session, '/result'), headers=headers, json=body)
+        self.assertEqual(response.status, 200, await response.text())
+        descriptor = self.received[0]
+        self.assertEqual(descriptor['kind'], 'alpha_extract')
+        self.assertEqual(descriptor['manifest']['sourceBitDepth'], 32)
+        self.assertEqual(descriptor['provenance'], {'schemaVersion': 1, 'kind': 'source_alpha_float32',
+            'sourceManifestSha256': fingerprint, 'alphaOperation': 'multiply',
+            'originalSha256': hashlib.sha256(original.read_bytes()).hexdigest()})
+        self.assertEqual(self.received_originals[0][1], original.read_bytes())
+
+    async def test_intermediate_image_is_bound_to_parent_and_cannot_relax_final_video(self):
+        session, headers = await self.create()
+        _, manifest = float_io.write_transfer(self.inputs, 'ComfyLink/' + 'd' * 32,
+            np.repeat(self.payload, 9, axis=0), colour={'encoding': 'unknown', 'sceneLinear': False},
+            frame_rate={'numerator': 24, 'denominator': 1})
+        self.service.sessions[session['id']].source = {'manifest': manifest}
+        contract = {'schemaVersion': 1, 'sessionId': session['id'], 'frameCount': 9,
+            'frameRate': {'numerator': 24, 'denominator': 1}, 'width': 1, 'height': 1, 'modelFrames': 9, 'trimFrames': 9}
+        intermediate = {'schemaVersion': 1, 'kind': 'ripple_keyframe', 'handoffId': 'handoff-1',
+            'anchorId': 'anchor-1', 'sourceFrame': 8, 'width': 1, 'height': 1,
+            'parentSessionId': session['id'], 'parentFrameCount': 9}
+        graph = {'source': {'class_type': 'LoadImage', 'inputs': {'image': 'source.png'}},
+                 'save': {'class_type': 'SaveImage', 'inputs': {'images': ['source', 0], 'filename_prefix': 'ordinary'}}}
+        body = {'mode': 'image', 'graph': graph, 'ae_frame_contract': contract, 'ae_intermediate_image': intermediate}
+        response = await self.client.post(self.route(session, '/prepare-graph'), headers=headers, json=body)
+        self.assertEqual(response.status, 200, await response.text())
+        result = await response.json()
+        self.assertEqual(result['ae_frame_contract']['frameCount'], 1)
+        self.assertEqual(result['ae_intermediate_image'], intermediate)
+        self.assertEqual(self.service.sessions[session['id']].source['manifest'], manifest)
+        for change in ({'parentSessionId': 'f' * 32}, {'parentFrameCount': 1}, {'sourceFrame': 9},
+                       {'sourceFrame': -1}, {'width': 2}, {'anchorId': ''}):
+            response = await self.client.post(self.route(session, '/prepare-graph'), headers=headers,
+                json={**body, 'ae_intermediate_image': {**intermediate, **change}})
+            self.assertEqual(response.status, 422, change)
+        for invalid in ({**body, 'mode': 'paintout'}, {**body, 'ae_frame_contract': result['ae_frame_contract']},
+                        {key: value for key, value in body.items() if key != 'ae_intermediate_image'}):
+            response = await self.client.post(self.route(session, '/prepare-graph'), headers=headers, json=invalid)
+            self.assertEqual(response.status, 422)
+        video = {'source': graph['source'], 'video': {'class_type': 'CreateVideo', 'inputs': {'images': ['source', 0], 'fps': 24}},
+                 'save': {'class_type': 'SaveVideo', 'inputs': {'video': ['video', 0], 'filename_prefix': 'final'}}}
+        response = await self.client.post(self.route(session, '/prepare-graph'), headers=headers,
+            json={'mode': 'paintout', 'graph': video, 'ae_frame_contract': contract})
+        self.assertEqual(response.status, 200, await response.text())
+        result = await response.json()
+        self.assertEqual(result['ae_frame_contract']['frameCount'], 9)
+        self.assertEqual(result['graph']['zura_ae_match_frames_0']['inputs']['frame_count'], 9)
+        response = await self.client.post(self.route(session, '/prepare-graph'), json=body)
+        self.assertEqual(response.status, 403)
+        self.assertEqual(self.received, [])
+
+    async def test_intermediate_master_cannot_be_sent_as_even_a_single_frame_final(self):
+        from PIL import Image
+        session, headers = await self.create()
+        folder = self.outputs / 'ComfyLink' / 'intermediate' / session['id'] / 'handoff-1'
+        folder.mkdir(parents=True)
+        path = folder / 'guide.png'
+        Image.new('RGB', (1, 1)).save(path)
+        original = path.read_bytes()
+        response = await self.client.post(self.route(session, '/result'), headers=headers, json={
+            'kind': 'image', 'master': {'filename': path.name, 'subfolder': folder.relative_to(self.outputs).as_posix(), 'type': 'output'}})
+        self.assertEqual(response.status, 422)
+        self.assertEqual(self.received, [])
+        self.assertEqual(path.read_bytes(), original)
+
+    async def test_still_result_inherits_exact_authenticated_source_cadence(self):
+        from PIL import Image
+        path = self.outputs / 'still.png'
+        Image.new('RGB', (1, 1), (10, 20, 30)).save(path)
+        original = path.read_bytes()
+        session, headers = await self.create()
+        for rate in ({'numerator': 25, 'denominator': 1}, {'numerator': 30000, 'denominator': 1001}):
+            self.service.sessions[session['id']].source = {}
+            source = {**copy.deepcopy(self.manifest), 'frameRate': rate}
+            self.source_override = {'manifest': source}
+            for staged in (False, True):
+                if staged:
+                    self.service.sessions[session['id']].source = {'manifest': source}
+                body = {'kind': 'image', 'master': {'filename': path.name, 'type': 'output'}}
+                response = await self.client.post(self.route(session, '/result'), headers=headers, json=body)
+                self.assertEqual(response.status, 200, await response.text())
+                self.assertEqual(self.received[-1]['manifest']['frameRate'], rate)
+                self.assertEqual(self.received[-1]['frameCount'], 1)
+                self.assertEqual(self.received_originals[-1][1], original)
+                response = await self.client.post(self.route(session, '/result'), headers=headers,
+                    json={**body, 'fps': 24})
+                self.assertEqual(response.status, 422, 'Browser frame-rate labels cannot override the source cadence')
+
     @staticmethod
     def native_module(name):
         # Load the actual sibling helpers without running Studio's registration
@@ -655,6 +781,41 @@ class StudioHTTPTest(unittest.IsolatedAsyncioTestCase):
             actual, _ = float_io.load_transfer(self.outputs, descriptor['master']['subfolder'] + '/manifest.json')
             self.assertEqual(actual[0, :, :, :3].tobytes(), decoded.tobytes())
             self.assertTrue(np.all(actual[..., 3] == 1))
+
+    @unittest.skipUnless(importlib.util.find_spec('OpenImageIO') and importlib.util.find_spec('torch'), 'Native HDR exporter dependencies required')
+    async def test_actual_rgba_hdr_export_zip_transfers_alpha_and_hdr(self):
+        import shutil
+        from test_hdr_alpha_delivery import HDRAlphaDeliveryTests, export
+        from fractions import Fraction
+        fixture = HDRAlphaDeliveryTests(); fixture.setUp(); self.addCleanup(fixture.doCleanups)
+        session, headers = await self.create()
+        source = copy.deepcopy(self.manifest); source['frameRate'] = {'numerator':30000,'denominator':1001}
+        self.service.sessions[session['id']].source = {'manifest': source}
+        for count in (1, 9):
+            alpha, values, _ = fixture.source(count)
+            stage = fixture.staged(count, 'a' if count == 1 else 'b')
+            actual_archive = export.export_rgba_exr_zip(stage, fixture.root, 'interop_' + str(count), alpha_source=alpha, frame_rate=Fraction(30000,1001))
+            path = self.outputs / ('rgba_' + str(count) + '.zip'); shutil.copyfile(actual_archive, path)
+            response = await self.client.post(self.route(session, '/result'), headers=headers, json={
+                'kind':'hdr_sequence', 'master':{'filename':path.name,'type':'output'}})
+            self.assertEqual(response.status, 200, await response.text())
+            frames, manifest = float_io.load_transfer(self.outputs, self.received[-1]['master']['subfolder'] + '/manifest.json')
+            self.assertEqual(len(frames), count); self.assertEqual(manifest['colour'], {'encoding':'acescg','sceneLinear':True})
+            np.testing.assert_array_equal(frames[0,:,:,3].view(np.uint32), values.view(np.uint32))
+            self.assertGreater(float(frames[0,1,0,2]), 1)
+            self.assertEqual(self.received_originals[-1][1], path.read_bytes())
+            if count == 1:
+                with zipfile.ZipFile(path) as z: members = {n:z.read(n) for n in z.namelist()}
+                for field in ('alphaSha256','sha256'):
+                    proof = json.loads(members['zura_hdr_delivery.json']); proof['frames'][0][field] = '0'*64
+                    bad = self.outputs / ('invalid_'+field+'.zip')
+                    with zipfile.ZipFile(bad, 'w', compression=zipfile.ZIP_STORED) as z:
+                        for name, data in members.items(): z.writestr(name, json.dumps(proof).encode() if name == 'zura_hdr_delivery.json' else data)
+                    before = len(self.received)
+                    denied = await self.client.post(self.route(session, '/result'), headers=headers, json={
+                        'kind':'hdr_sequence','master':{'filename':bad.name,'type':'output'}})
+                    self.assertEqual(denied.status, 422);self.assertEqual(len(self.received),before)
+                    self.assertTrue(bad.is_file())
 
     @unittest.skipUnless(importlib.util.find_spec('OpenImageIO'), 'OpenImageIO required for native ZIP validation')
     async def test_native_zip_rejects_paths_links_duplicates_compression_gaps_and_limits(self):
@@ -776,6 +937,35 @@ class StudioHTTPTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.received[-1]['provenance']['kind'], 'sdr8_video')
         self.assertEqual(self.received[-1]['provenance']['validatedFrameCount'], 2)
         self.assertEqual(self.received[-1]['provenance']['originalSha256'], original['sha256'])
+
+    async def test_10bit_sdr_video_decode_keeps_more_than_eight_bit_precision(self):
+        import av
+        from fractions import Fraction
+        path=self.outputs/'tenbit.mp4'
+        try:
+            with av.open(str(path),'w') as container:
+                stream=container.add_stream('libx264',rate=Fraction(24,1))
+                stream.width=32;stream.height=32;stream.pix_fmt='yuv420p10le'
+                stream.codec_context.color_trc=13;stream.codec_context.color_primaries=1;stream.codec_context.colorspace=1;stream.codec_context.color_range=1
+                for n in range(2):
+                    rgb=np.arange(32*32*3,dtype=np.uint16).reshape(32,32,3)*19+n*13
+                    for packet in stream.encode(av.VideoFrame.from_ndarray(rgb,format='rgb48le')):container.mux(packet)
+                for packet in stream.encode():container.mux(packet)
+        except (av.error.FFmpegError, ValueError): self.skipTest('10-bit x264 encoder unavailable')
+        converted, _, proof = self.service.convert_master(path,{})
+        pixels, manifest = float_io.load_transfer(self.outputs,converted.relative_to(self.outputs).as_posix())
+        self.assertEqual(proof['kind'],'sdr10_video');self.assertEqual(proof['sourceBitDepth'],10)
+        self.assertEqual(manifest['sourceBitDepth'],32);self.assertEqual(len(pixels),2)
+        self.assertTrue(np.any(np.abs(pixels[...,:3]*255-np.rint(pixels[...,:3]*255))>1e-4))
+        with av.open(str(path)) as media:
+            expected=np.stack([frame.reformat(format='rgb48le',src_colorspace='ITU709',dst_colorspace='ITU709',src_color_range='MPEG',dst_color_range='JPEG').to_ndarray().astype(np.float32)/np.float32(65535) for frame in media.decode(video=0)])
+        np.testing.assert_array_equal(pixels[...,:3],expected)
+        session,headers=await self.create()
+        self.service.sessions[session['id']].source={'manifest':copy.deepcopy(self.manifest)}
+        response=await self.client.post(self.route(session,'/result'),headers=headers,json={'kind':'video','master':{'filename':path.name,'type':'output'}})
+        self.assertEqual(response.status,200,await response.text())
+        self.assertEqual(self.received[-1]['provenance']['kind'],'sdr10_video')
+        self.assertEqual(self.received_originals[-1][1],path.read_bytes())
 
     async def test_actual_eight_bit_video_with_hdr_tags_is_not_labelled_sdr(self):
         import av
@@ -946,7 +1136,9 @@ class StudioHTTPTest(unittest.IsolatedAsyncioTestCase):
         try:
             samples = np.array([[[[64, 128, 255, 128]]]], dtype=np.float32) / np.float32(255)
             relative, manifest = float_io.write_transfer(self.inputs, 'ComfyLink/' + 'f' * 32, samples,
-                colour={"encoding": "unknown", "sceneLinear": False}, frame_rate={"numerator": 24, "denominator": 1}, source_bit_depth=8)
+                colour={"encoding": "unknown", "sceneLinear": False}, frame_rate={"numerator": 24, "denominator": 1}, source_bit_depth=32 if getattr(self,'derived_processing',False) else 8)
+            if getattr(self,'derived_processing',False):
+                float_io._exclusive_write(self.inputs/Path(relative).parent/'processing-input.json',float_io.canonical_manifest_bytes(processing_authority(manifest)))
             session = types.SimpleNamespace(id='f' * 32, origin=str(native.make_url('/')).rstrip('/'), closed=False, expires=time.time() + 600)
             self.service.sessions[session.id] = session
             result = await self.service.native_import(session, self.inputs / Path(relative).parent, manifest)
@@ -955,6 +1147,37 @@ class StudioHTTPTest(unittest.IsolatedAsyncioTestCase):
             self.assertTrue((self.inputs / result['stills']['first']['file']).is_file())
         finally:
             await native.close()
+
+    async def test_real_derived_float_source_image_upload(self):
+        self.derived_processing=True
+        await self.test_real_native_sdr_upload_api_receives_generated_lossless_media()
+
+    async def test_processing_keeps_original_float_source_identity(self):
+        from comfylink.studio_processing import validate_processing_input, encode_sdr8
+        authority=processing_authority(self.manifest)
+        self.source_override={'manifest':self.manifest,'processingInput':authority}
+        session,headers=await self.create()
+        response=await self.client.post(self.route(session,'/source'),json={},headers=headers)
+        self.assertEqual(response.status,200)
+        source=await response.json()
+        self.assertEqual(source['precision']['sourceBitDepth'],32)
+        self.assertEqual(source['manifest'],self.manifest)
+        self.assertEqual(source['processingInput']['precision'],{'sampleType':'uint8','sourceBitDepth':8})
+        self.assertEqual(source['processingInput']['sourceManifestSha256'],authority['sourceManifestSha256'])
+        validate_processing_input(authority,self.manifest)
+        for values in ([float('nan'),.2,.3,1],[.1,.2,.3,float('nan')],[.1,.2,.3,1.1]):
+            with self.assertRaises(ValueError):
+                encode_sdr8(np.array(values,dtype=np.float32),derived=True)
+        original=np.array([-.25,2.,.5,.25],dtype=np.float32)
+        before=original.copy()
+        self.assertEqual(encode_sdr8(original,derived=True).tolist(),[0,255,128,64])
+        self.assertTrue(np.array_equal(original,before),'Clipping applies only to the derived model view')
+        encoded=encode_sdr8(np.array([.123,.456,.789,1],dtype=np.float32),derived=True)
+        self.assertEqual(encoded.tolist(),[31,116,201,255])
+        tampered=copy.deepcopy(authority);tampered['sourceColour']['sceneLinear']=True
+        with self.assertRaises(ValueError):validate_processing_input(tampered,self.manifest)
+        tampered=copy.deepcopy(authority);tampered['sourceManifestSha256']='0'*64
+        with self.assertRaises(ValueError):validate_processing_input(tampered,self.manifest)
 
     async def test_bounded_and_duplicate_json_rejected(self):
         response = await self.client.post(PREFIX + '/sessions', data=b'{' + b' ' * 5000 + b'}')
@@ -1004,7 +1227,9 @@ class StudioHTTPTest(unittest.IsolatedAsyncioTestCase):
             identity='f'*32
             source=(frame.astype(np.float32)/np.float32(255) for frame in expected)
             relative,manifest=float_io.write_transfer_frames(self.inputs,'ComfyLink/'+identity,source,
-                colour={'encoding':'unknown','sceneLinear':False},frame_rate={'numerator':25,'denominator':1},source_bit_depth=8,expected_count=len(expected))
+                colour={'encoding':'unknown','sceneLinear':False},frame_rate={'numerator':25,'denominator':1},source_bit_depth=32 if getattr(self,'derived_processing',False) else 8,expected_count=len(expected))
+            if getattr(self,'derived_processing',False):
+                float_io._exclusive_write(self.inputs/Path(relative).parent/'processing-input.json',float_io.canonical_manifest_bytes(processing_authority(manifest)))
             session=types.SimpleNamespace(id=identity,origin=str(native.make_url('/')).rstrip('/'),closed=False,expires=time.time()+600)
             self.service.sessions[identity]=session
             with patch.object(float_io,'load_transfer',side_effect=AssertionError('whole batch forbidden')),patch.object(np,'stack',side_effect=AssertionError('whole batch forbidden')):
@@ -1020,6 +1245,10 @@ class StudioHTTPTest(unittest.IsolatedAsyncioTestCase):
                     self.assertEqual(still.mode,'RGBA')
                     self.assertEqual(np.array(still).tobytes(),expected[index].tobytes())
         finally:await native.close()
+
+    async def test_real_derived_float_source_multiframe_upload(self):
+        self.derived_processing=True
+        await self.test_real_multiframe_sdr_native_upload_keeps_frames_rate_and_endpoints()
 
 
 if __name__ == '__main__':

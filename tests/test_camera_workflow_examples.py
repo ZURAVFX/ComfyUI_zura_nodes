@@ -32,6 +32,13 @@ def reachable_nodes(graph):
             pending.extend(definitions[node["type"]]["nodes"])
 
 
+def subgraph_origin(stage, node, input_name):
+    """Return the origin node and output index for a native subgraph input."""
+    socket = next(item for item in node["inputs"] if item["name"] == input_name)
+    link = next(item for item in stage["links"] if item["id"] == socket["link"])
+    return link["origin_id"], link["origin_slot"]
+
+
 class TestCameraWorkflows(unittest.TestCase):
     def test_classic_single_camera_has_one_whole_clip_selection(self):
         graph = workflow("Video - Change Camera (H3).json")
@@ -104,6 +111,40 @@ class TestCameraWorkflows(unittest.TestCase):
                                                  for node in definition["nodes"]]
                     self.assertEqual(recipe(stage), recipe(expected))
                     self.assertEqual(stage["links"], expected["links"])
+
+    def test_camera_reference_preserves_source_raster_and_restores_output(self):
+        for name in ("Video - Change Camera (H3).json",
+                     "Video - Multicam (H3 Advanced).json"):
+            graph = workflow(name)
+            stage = next(entry for entry in graph["definitions"]["subgraphs"]
+                         if entry["name"] == "Generate camera-reference image")
+            nodes = {node["id"]: node for node in stage["nodes"]}
+            classes = {node["type"] for node in nodes.values()}
+            with self.subTest(workflow=name):
+                self.assertNotIn("FluxKontextImageScale", classes)
+                self.assertNotIn("FluxKontextMultiReferenceLatentMethod", classes)
+                self.assertEqual((nodes[111]["type"], nodes[112]["type"],
+                                  nodes[113]["type"], nodes[114]["type"],
+                                  nodes[115]["type"]),
+                                 ("GetImageSize", "ImageScale", "ReferenceLatent",
+                                  "ReferenceLatent", "ImageScale"))
+
+                for text_id in (100, 103):
+                    self.assertIsNone(next(item for item in nodes[text_id]["inputs"]
+                                           if item["name"] == "vae")["link"])
+                    self.assertEqual(subgraph_origin(stage, nodes[text_id], "image1"), (112, 0))
+                self.assertEqual(subgraph_origin(stage, nodes[104], "pixels"), (112, 0))
+                self.assertEqual(subgraph_origin(stage, nodes[113], "conditioning"), (103, 0))
+                self.assertEqual(subgraph_origin(stage, nodes[113], "latent"), (104, 0))
+                self.assertEqual(subgraph_origin(stage, nodes[114], "conditioning"), (100, 0))
+                self.assertEqual(subgraph_origin(stage, nodes[114], "latent"), (104, 0))
+                self.assertEqual(subgraph_origin(stage, nodes[105], "positive"), (113, 0))
+                self.assertEqual(subgraph_origin(stage, nodes[105], "negative"), (114, 0))
+                self.assertEqual(subgraph_origin(stage, nodes[115], "image"), (102, 0))
+                self.assertEqual(subgraph_origin(stage, nodes[115], "width"), (111, 0))
+                self.assertEqual(subgraph_origin(stage, nodes[115], "height"), (111, 1))
+                self.assertTrue(any(link["origin_id"] == 115 and link["target_id"] == -20
+                                    for link in stage["links"]))
 
     def test_advanced_graph_has_a_planning_stage_before_rendering(self):
         graph = workflow("Video - Multicam (H3 Advanced).json")

@@ -196,9 +196,11 @@ export class HDRSourceTool {
     if(ref)this.$('source-kind').value='output';else if(this.$('source-kind').value==='output')this.$('source-kind').value=this.getSource()?.id?'upload':'own';this.updateMode();
   }
   setOwnAsset(asset){this.ownAsset=asset||null;if(asset){this.$('video-name').textContent=asset.name||'Source video';this.$('source-kind').value='own';}this.updateMode();}
-  setSequenceAsset(asset,{fps=24,colour}={}){
+  setSequenceAsset(asset,{fps=24,colour,nativeInputColour}={}){
     if(!asset?.id||!Number.isInteger(asset.count)||asset.count<1)throw Error('The native EXR sequence is not available');
-    const space={scene_linear_rec709:'linear_rec709',acescg:'acescg',acescct:'acescct'}[colour?.encoding];
+    const mapped=nativeInputColour||asset.nativeInputColour;
+    if(colour?.management==='ocio'&&(!mapped||mapped.source!=='verified_ae_ocio'||!/^[a-f0-9]{64}$/.test(colour.ocioConfigFileSha256||'')||mapped.ocioConfigFileSha256!==colour.ocioConfigFileSha256||!/^[a-f0-9]{64}$/.test(mapped.sourceColourSha256||'')||mapped.sceneLinear!==(mapped.encoding!=='acescct')))throw Error('The source colour space is not mapped from its verified AE configuration. The original float source is retained');
+    const space={scene_linear_rec709:'linear_rec709',acescg:'acescg',acescct:'acescct'}[colour?.management==='ocio'?mapped?.encoding:colour?.encoding||mapped?.encoding];
     if(!space)throw Error('The source colour space is not mapped for native HDR editing. The original float source is retained');
     this.sequenceAsset=asset;this.$('mode').value='native';this.$('source-kind').value='sequence';
     this.$('sequence-fps').value=String(fps);this.$('sequence-name').textContent=`${asset.count} frames · ${asset.width} × ${asset.height}`;

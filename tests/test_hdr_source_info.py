@@ -41,7 +41,9 @@ class HDRSourceInfoTests(unittest.IsolatedAsyncioTestCase):
             info={'kind':'video','count':72,'width':1280,'height':720,'fps':24}
             with patch('folder_paths.get_output_directory',return_value=tmp),patch.object(paintout,'describe',return_value=info):
                 result=await handler(Request(body))
-                self.assertEqual(json.loads(result.text),{'frames':72,'width':1280,'height':720,'fps':24})
+                data=json.loads(result.text)
+                self.assertEqual({key:data[key] for key in ('frames','width','height','fps')},{'frames':72,'width':1280,'height':720,'fps':24})
+                self.assertIsNone(data.get('transfer'),'Missing tags must not become an invented HDR transfer')
                 body['output_ref']['filename']='../outside.mp4'
                 with self.assertRaises(ValueError):await handler(Request(body))
                 with self.assertRaises(ValueError):await handler(Request({'source_kind':'other','path':str(video)}))

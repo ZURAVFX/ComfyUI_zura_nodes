@@ -1,3 +1,4 @@
+import {aeIntermediateImage} from './studio_image_handoff_contract.js';
 import {PlateWorkspace} from './studio_plate.js';
 import {HDRIBuilder,environmentGeneration} from './studio_hdri.js';
 import {workspaceStorage} from './studio_storage.js';
@@ -9,6 +10,7 @@ import {StudioModelDownloads} from './studio_model_download.js';
 import {ModelAccess,importModelFile} from './studio_model_access.js';
 import {resolutionSize,editableDimension} from './studio_resolution.js';
 import {IMAGE_MODELS,IMAGE_SIZES,buildImageGraph,imageAvailability,imageDimensions} from "./image_recipes.js";
+import {modelRasterOptions} from './source_model_resolution.js';
 import {VideoComposer,composerIcons} from "./studio_composer.js";
 import {FrameVideoWorkspace} from "./studio_frames.js";
 import {DirectorWorkspace} from './studio_director.js';
@@ -106,8 +108,9 @@ export class CreativeWorkspace {
     for(const id of ["new","clear-history"])this.$(id).classList.add("zc-menu-fallback");
     this.buildVideoCanvas(timing);
     this.videoComposer=new VideoComposer(studio,this);
-    const imageModelLabel=document.createElement('label');imageModelLabel.className='zc-model-control zc-tool';
-    imageModelLabel.innerHTML='<span class="zc-sr-only">Image model</span>';imageModelLabel.append(this.$('model'));
+    const imageModelLabel=document.createElement('label');imageModelLabel.className='zc-model-control zc-tool zc-image-model-control';
+    imageModelLabel.innerHTML='<span class="zc-sr-only">Image model</span><span class="zc-image-model-name" aria-hidden="true">Checking models…</span>'+composerIcons.chevron;imageModelLabel.append(this.$('model'));
+    this.imageModelName=imageModelLabel.querySelector('.zc-image-model-name');imageModelLabel.querySelector('select').setAttribute('aria-label','Image model');
     page.querySelector('.zc-composer-bottom').prepend(imageModelLabel);
     page.querySelector('.zc-image-settings>label[for="zc-model"]').remove();
     const imagePromptLabel=page.querySelector('label[for="zc-prompt"]');imagePromptLabel.className="zc-sr-only";
@@ -115,7 +118,7 @@ export class CreativeWorkspace {
     imageResolution.innerHTML='<summary id="zc-quick-settings" aria-label="Image resolution"></summary><div class="zc-tool-panel"><strong>Resolution</strong><label>Megapixels<input id="zc-image-megapixels" aria-label="Megapixels" type="range" min="0.25" max="8.5" step="0.05" value="1"/><output id="zc-image-mp-label" class="zc-resolution-readout"></output></label></div>';
     this.$('recipe-label').before(imageResolution);this.$('recipe-label').className='zc-sr-only';
     const sizePanel=imageResolution.querySelector('.zc-tool-panel');sizePanel.prepend(page.querySelector('.zc-shapes'));sizePanel.append(page.querySelector('.zc-dimensions'),this.$('size'));
-    this.$('image-megapixels').oninput=()=>{const ratio=this.imageSizeRatio||Number(this.$('width').value)/Number(this.$('height').value),size=resolutionSize(ratio,Number(this.$('image-megapixels').value),{step:IMAGE_MODELS.find(m=>m.id===this.$('model').value)?.sizeStep||16,min:256,max:8192,maxPixels:8.5e6});this.$('width').value=size.width;this.$('height').value=size.height;this.save();this.render();};
+    this.$('image-megapixels').oninput=()=>{const recipe=IMAGE_MODELS.find(m=>m.id===this.$('model').value),cap=modelRasterOptions(recipe),maxMegapixels=Math.floor(cap.maxPixels/1e6/.05)*.05,ratio=this.imageSizeRatio||Number(this.$('width').value)/Number(this.$('height').value),size=resolutionSize(ratio,Math.min(Number(this.$('image-megapixels').value),maxMegapixels),cap);this.$('width').value=size.width;this.$('height').value=size.height;this.save();this.render();};
     this.imageOperation=this.draft.operation==="edit"?"edit":"create";
     const imageTabs=document.createElement('details');imageTabs.className='zc-image-operation zc-task-control zc-tool-popup zc-mode-switcher';imageTabs.setAttribute('aria-label','Image task');
     imageTabs.innerHTML='<summary aria-label="Image mode" aria-haspopup="menu">'+composerIcons.image+'<span class="zc-mode-current-copy"><small>Image mode</small><span data-image-operation-label>Create image</span></span>'+composerIcons.chevron+'</summary><div class="zc-tool-panel zc-workflow-menu" role="menu" aria-label="Image modes"><button type="button" role="menuitemradio" data-image-operation="create">'+composerIcons.image+'<span class="zc-mode-copy"><strong>Create image</strong><small>Start with a prompt and optional references</small></span></button><button type="button" role="menuitemradio" data-image-operation="edit">'+composerIcons.settings+'<span class="zc-mode-copy"><strong>Edit image</strong><small>Change a source image or paint a local edit</small></span></button></div>';
@@ -135,7 +138,7 @@ export class CreativeWorkspace {
     this.$("prompt").oninput=()=>{this.save();this.render();};
     this.$("model").onchange=()=>{this.save();this.render();this.renderImageLoras();};
     for(const id of ["width","height"])this.$(id).oninput=()=>{this.save();this.render();};
-    for(const key of ['width','height'])editableDimension(this.$(key),()=>{this.imageSizeRatio=Number(this.$('width').value)/Number(this.$('height').value);this.save();this.render();},()=>({step:IMAGE_MODELS.find(m=>m.id===this.$('model').value)?.sizeStep||16,min:256,max:8192}));
+    for(const key of ['width','height'])editableDimension(this.$(key),()=>{this.imageSizeRatio=Number(this.$('width').value)/Number(this.$('height').value);this.save();this.render();},()=>modelRasterOptions(IMAGE_MODELS.find(m=>m.id===this.$('model').value)));
     this.$("swap-size").onclick=()=>{const w=this.$("width").value;this.$("width").value=this.$("height").value;this.$("height").value=w;this.save();this.render();};
     this.$("seed").onchange=()=>this.save();this.$("random").onchange=()=>this.save();
     for(const button of page.querySelectorAll("[data-shape]"))button.onclick=()=>{this.$("shape").value=button.dataset.shape;this.imageSizeRatio=null;const size=IMAGE_SIZES[button.dataset.shape];this.$("width").value=size[0];this.$("height").value=size[1];this.save();this.render();};
@@ -312,7 +315,7 @@ export class CreativeWorkspace {
     if(!Array.isArray(result.loras)||result.loras.length!==config.loras.length)throw new Error('Could not validate the selected image LoRAs.');
     return buildImageGraph({...config,loras:result.loras});
   }
-  config(){const config={image_intent:this.imageIntent||'standard',...(this.rippleImage?.request||this.rippleImage?.stored?{ripple_guide:(this.rippleImage.request||this.rippleImage.stored).id}:{}),...(this.outpaintGuide?.request?{outpaint_guide:this.outpaintGuide.request.id}:{}),edit_area:this.imageArea?.config()||null,operation:this.imageOperation,editMainMissing:!!this.editMainMissing,autoCanvasSuppressed:!!this.autoCanvasSuppressed,model:this.$("model").value||(this.imageOperation==='edit'?'qwen2511':'flux2'),prompt:this.$("prompt").value,shape:this.$("shape").value,references:this.references.map(r=>({...r})),loras:IMAGE_MODELS.find(model=>model.id===this.$('model').value)?.provider?[]:this.imageLoras.map(l=>({...l})),width:Number(this.$("width").value),height:Number(this.$("height").value),seed:Number(this.$("seed").value),random:this.$("random").checked};return this.imageIntent==='hdri'?{...config,operation:'create',editMainMissing:false,edit_area:null,shape:'landscape',width:environmentGeneration(config).width,height:environmentGeneration(config).height}:config;}
+  config(){const intermediate=aeIntermediateImage(this),request=this.rippleImage?.request,retainLayerContext=this.mode==='image'&&this.imageIntent!=='hdri'&&request?.workspace?.platePrimary&&this.rippleImage.current(request);const config={...(retainLayerContext?{retain_layer_context:true}:{}),...(intermediate?{ae_intermediate_image:intermediate}:{}),image_intent:this.imageIntent||'standard',...(this.rippleImage?.request||this.rippleImage?.stored?{ripple_guide:(this.rippleImage.request||this.rippleImage.stored).id}:{}),...(this.outpaintGuide?.request?{outpaint_guide:this.outpaintGuide.request.id}:{}),edit_area:this.imageArea?.config()||null,operation:this.imageOperation,editMainMissing:!!this.editMainMissing,autoCanvasSuppressed:!!this.autoCanvasSuppressed,model:this.$("model").value||(this.imageOperation==='edit'?'qwen2511':'flux2'),prompt:this.$("prompt").value,shape:this.$("shape").value,references:this.references.map(r=>({...r})),loras:IMAGE_MODELS.find(model=>model.id===this.$('model').value)?.provider?[]:this.imageLoras.map(l=>({...l})),width:Number(this.$("width").value),height:Number(this.$("height").value),seed:Number(this.$("seed").value),random:this.$("random").checked};return this.imageIntent==='hdri'?{...config,operation:'create',editMainMissing:false,edit_area:null,shape:'landscape',width:environmentGeneration(config).width,height:environmentGeneration(config).height}:config;}
   async setImageOperation(operation,{useCanvas=true}={}){
     if(this.job||this.pendingSubmission||this.submitting||this.uploading||this.rippleImage?.importing)return;
     this.imageIntent='standard';this.imageOperation=operation;
@@ -451,7 +454,7 @@ export class CreativeWorkspace {
   async loadModels(){
     if(this.loading)return;this.loading=true;
     try{
-      const types=[...new Set(IMAGE_MODELS.flatMap(m=>Object.values(buildImageGraph({model:m.id,prompt:"check",references:m.minReferences?[{file:"availability-check.png"}]:[]})).map(n=>n.class_type)).concat("ReferenceMultiLatent","LoadImage",IMAGE_AREA_NODE_TYPES))];
+      const types=[...new Set(IMAGE_MODELS.flatMap(m=>Object.values(buildImageGraph({model:m.id,prompt:"check",references:m.minReferences?[{file:"availability-check.png",width:1024,height:1024}]:[]})).map(n=>n.class_type)).concat("ReferenceMultiLatent","LoadImage",IMAGE_AREA_NODE_TYPES))];
       const parts=await Promise.all(types.map(t=>this.fetch("/object_info/"+t).catch(error=>{if(error.status===404)return {};throw error;})));
       const nodeInfo=Object.assign({},...parts);this.imageAreaCapabilities=smartCropCapabilities(nodeInfo);this.models=imageAvailability(nodeInfo);
       let available=[],activeDownload=null;try{const catalogue=await this.fetch('/zura/studio/model-downloads');available=catalogue.models||[];activeDownload=catalogue.active||null;}catch{}
@@ -577,13 +580,20 @@ export class CreativeWorkspace {
     if(this.references.length>max)this.$("reference-hint").textContent=`This model accepts ${max} references. Remove some or choose another model.`;
     const fingerprint=JSON.stringify([this.references,busy,this.imageOperation,this.editMainMissing]);
     if(fingerprint!==this.referenceFingerprint){if(this.editInputs?.addHome)this.editInputs.addHome.prepend(this.editInputs.addReferences);this.referenceFingerprint=fingerprint;this.$("reference-list").innerHTML=this.references.map((r,i)=>`<div class="zc-reference"><img src="${escape(this.api.apiURL('/view?'+new URLSearchParams({filename:r.filename,subfolder:r.subfolder||'',type:'input'})))}" alt="${escape(r.name||'Reference '+(i+1))}"/><span>Image ${i+1}</span><button type="button" data-remove-ref="${i}" aria-label="Remove reference ${i+1}" ${busy?'disabled':''}>${closeIcon()}</button>${i?`<button type="button" class="zc-ref-move" data-move-ref="${i}" aria-label="Move reference ${i+1} earlier" ${busy?'disabled':''}>${previousIcon()}</button>`:''}</div>`).join('');}
+    // Keep a visible model name independent of native select rendering and
+    // late model discovery. The select remains the keyboard/menu control.
+    if(this.imageModelName){this.imageModelName.textContent=m?m.name+(m.ready?'':' · Setup needed'):this.loading?'Checking models…':'Choose model';this.imageModelName.parentElement.title=this.imageModelName.textContent;}
+    if(!this.$('model').value&&m&&this.models.length)this.$('model').value=m.id;
     this.$("model-hint").textContent=m?.hint||"Checking local model files.";
     const sizeStep=m?.sizeStep||16;
     this.$("size").textContent=error || (auto?(m?.provider?"Auto · No size instruction is sent. The website chooses the final size.":this.references.length?`Auto · Uses Image 1 dimensions, aligned to ${sizeStep} px.`:"Auto · 1024 × 1024 when no reference is supplied.") : size.join(" × ")+" px · "+(size[0]*size[1]/1e6).toFixed(2)+" MP"+(m?.provider?" requested · The website determines the final size.":m?.id==='ph3edit'?" · 4–8 MP recommended; larger sizes need more memory.":size[0]*size[1]>1048576?" · Above the tested 1 MP size; needs more memory.":` · Multiples of ${sizeStep}`));
     if(!error&&auto&&c.edit_area?.enabled)this.$('size').textContent='Auto · Processes the selected crop at 1 MP or its larger native size. Final image keeps the source dimensions.';
     for(const id of ["width","height"])this.$(id).setAttribute("aria-invalid",String(!!error));
+    const rasterOptions=modelRasterOptions(m);
+    const maxMegapixels=Math.floor(rasterOptions.maxPixels/1e6/.05)*.05;
+    this.$('image-megapixels').max=String(maxMegapixels);
     this.$('image-megapixels').disabled=busy;this.$('image-mp-label').textContent=size?`${(size[0]*size[1]/1e6).toFixed(2)} MP`:'';
-    if(this.$('image-megapixels')!==document.activeElement&&size)this.$('image-megapixels').value=Math.min(8.5,size[0]*size[1]/1e6);
+    if(this.$('image-megapixels')!==document.activeElement&&size)this.$('image-megapixels').value=Math.min(maxMegapixels,size[0]*size[1]/1e6);
     if(this.$("quick-settings"))this.$("quick-settings").textContent=auto?"Auto":size?size.join(" × "):"Set size";
     if(this.$("history-menu")){const item=this.$("history-menu").querySelector('[value="clear-history"]');item?.toggleAttribute("disabled",!this.items.length);}
     this.$("recipe-label").textContent=m?`${m.name} · ${m.provider?'Browser account':m.steps+' steps'}`:"Local image generation";

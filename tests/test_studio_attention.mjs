@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import {attentionBackend} from '../web/studio_attention.js';
+import {attentionBackend,applyAvailableAttention} from '../web/studio_attention.js';
 import {buildFrameVideoGraph} from '../web/frame_video_recipes.js';
 import {buildLtxFrameVideoGraph} from '../web/ltx_frame_video_recipes.js';
 import {buildWanFrameVideoGraph} from '../web/wan_frame_video_recipes.js';
@@ -41,12 +41,23 @@ for(const engine of ['ltx','h3']){
   const fallback=buildRippleStudioGraph(config,{...info,...torchOnly});
   const without={...info};delete without.ModelAttentionBackend;
   const native=buildRippleStudioGraph(config,without);
-  assert.equal(original.attention.inputs.attention,'comfy kitchen attention');
+  assert.equal(original.attention.inputs.attention,engine==='ltx'?'pytorch attention':'comfy kitchen attention');
   assert.equal(fallback.attention.inputs.attention,'pytorch attention');
   assert.equal(native.attention,undefined);
   const consumers=Object.values(native).flatMap(node=>Object.values(node.inputs||{}));
   assert.ok(!consumers.some(v=>Array.isArray(v)&&v[0]==='attention'));
   // Removing only the optional patch must not make a previously ready graph unready.
   assert.deepEqual(rippleStudioAvailability(without,engine).missing,rippleStudioAvailability(info,engine).missing);
+}
+for(const intent of ['edit','relight']){
+  const graph=buildRippleStudioGraph({...c,intent},{...info,...kitchen});
+  assert.equal(graph.attention.inputs.attention,'pytorch attention',`${intent} uses the shared LTX Ripple quality default`);
+  assert.equal(graph.source.inputs.frame_count,c.frameCount);
+  assert.equal(graph.source.inputs.sequence_fps,c.sequenceFps);
+  assert.deepEqual(graph.align.inputs.length,['take',4]);
+  // Experts can still change an exported graph explicitly. The common
+  // capability helper must not rewrite a supported deliberate selection.
+  graph.attention.inputs.attention='comfy kitchen attention';
+  assert.equal(applyAvailableAttention(graph,kitchen).attention.inputs.attention,'comfy kitchen attention');
 }
 console.log('Attention capability selection and connected fallback graphs pass for H3, LTX, Wan and both Ripple engines.');

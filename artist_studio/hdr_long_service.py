@@ -65,7 +65,12 @@ class HDRLongService:
         if kind=='output':
             from .hdr_output import selected_output
             path=selected_output(self.output_root,body.get('output_ref'))
-            return {'asset_kind':'video'},lambda _:path
+            return {'asset_kind':'video',**({'hdr_alpha_ref':body['alpha_ref']} if body.get('alpha_ref') is not None else {})},lambda _:path
+        if kind=='output_image':
+            from .hdr_output import selected_image_output
+            path=selected_image_output(self.output_root,body.get('output_ref'),allow_transparency=True)
+            from .hdr_alpha import image_has_alpha
+            return {'asset_kind':'sdr_image',**({'hdr_alpha_image':body['output_ref']} if image_has_alpha(path) else {})},lambda _:path
         if kind=='result':
             project=self.store.load(body.get('project_id',''))
             if project.get('config',{}).get('engine')!='local' or not project.get('results'):
@@ -105,6 +110,8 @@ class HDRLongService:
                 job,details=await asyncio.to_thread(factory,self.server,asset,body,check,
                     self.output_root,anchor_strength=0.75,max_chunk_frames=section_frames)
                 identity=self.jobs.start(job,details)
+                from ..comfylink.studio_cancel import claim_work
+                claim_work(self.server, ('hdr', identity), lambda: self.jobs.cancel(identity))
             except Exception:
                 if request_id:self._requests.pop(request_id,None)
                 raise

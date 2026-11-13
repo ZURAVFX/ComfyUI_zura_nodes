@@ -32,7 +32,7 @@ Use your own ComfyUI host and port if they differ.
 
 ## Current release
 
-**1.3.63** adds the shared Paint / Remove / Replace workbench, inline keyframe editing and layers, an embedded panorama/HDRI composer, and the latest ComfyLink Desktop, OCIO-preview and FLOAT-staging integration. It also fixes workspace visibility and prompt/action layouts. The new camera recipe uses shared scene preparation and LTX 2.5; its final render quality remains under evaluation. Normal Studio stays independent of the separate AE extension. See the [release notes](CHANGELOG.md) for tested scope and limits.
+**1.3.64** improves shared SDR/HDR controls, high-depth source import, display-only OCIO views, source-sized image editing and the native ComfyLink handoff. It fixes LTX edit propagation and Camera source cadence while retaining the original guided removal flow and ordinary Studio drafts. Normal Studio remains free and independent of the separate native AE plug-in. Mode-specific GPU and AE acceptance is still in progress. See the [release notes](CHANGELOG.md) for tested scope and limits.
 
 Zura Studio remains free to open and use normally, without a ComfyLink licence. The separate ComfyLink After Effects extension is optional and is not bundled here. Existing [Relight](docs/RELIGHT_MODELS.md), [Director](docs/DIRECTOR_STUDIO.md), [Paintout](PAINTOUT.md), [alpha extraction](docs/LTX_ALPHA.md), [Ripple editing](docs/RIPPLE_STUDIO.md) and [painted image edits](docs/IMAGE_EDIT_AREA.md) remain available.
 

@@ -387,6 +387,7 @@ export class PaintoutWorkspace{
     if(!await this.resetSource())return false;
     this.items=[];this.prompts[this.state.mode]='';this.$('prompt').value='';this.cleanupPrompt='';
     if(this.editor)this.editor.$('instruction').value='';
+    this.plate?.applyPrompt();
     this.save();this.render();this.$('begin').focus({preventScroll:true});return true;
   }
 

@@ -80,8 +80,12 @@ class SharedEngineTests(unittest.TestCase):
     def test_opening_resolution_accepts_larger_images_with_pixel_budget(self):
         config = studio.clean_config({'opening_width': 2304, 'opening_height': 1280})
         self.assertEqual((config['opening_width'], config['opening_height']), (2304, 1280))
+        config = studio.clean_config({'opening_width': 3840, 'opening_height': 2160})
+        self.assertEqual((config['opening_width'], config['opening_height']), (3840, 2160))
         with self.assertRaisesRegex(ValueError, 'pixel limit'):
             studio.clean_config({'opening_width': 4096, 'opening_height': 4096})
+        config = studio.clean_config({'opening_model': 'ph3', 'opening_width': 4096, 'opening_height': 4096})
+        self.assertEqual((config['opening_width'], config['opening_height']), (4096, 4096))
         with self.assertRaisesRegex(ValueError, 'multiples of 32'):
             studio.clean_config({'opening_model': 'qwen21', 'opening_width': 2320, 'opening_height': 1280})
 

@@ -137,8 +137,8 @@ class FirstFrameParityTests(unittest.TestCase):
     def test_review_seek_first_frame_matches_cfr_rule(self):
         import av
         import shutil
-        ffmpeg=shutil.which('ffmpeg') or 'C:/Users/ellio/AppData/Local/Microsoft/WinGet/Links/ffmpeg.exe'
-        if not Path(ffmpeg).is_file():self.skipTest('FFmpeg is not installed')
+        ffmpeg=shutil.which('ffmpeg')
+        if not ffmpeg:self.skipTest('FFmpeg is not installed')
         with tempfile.TemporaryDirectory() as temporary:
             root=Path(temporary)
             for index in range(36):

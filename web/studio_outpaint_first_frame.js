@@ -1,3 +1,4 @@
+import {captureAEGuideParent,sameAEGuideParent} from './studio_image_handoff_contract.js';
 // The ordinary Image workspace owns model choice, browser sign-in and progress.
 // This hand-off supplies Image 1 and returns only this request's chosen result.
 export class OutpaintFirstFrame {
@@ -47,14 +48,18 @@ export class OutpaintFirstFrame {
     if(Math.min(...Object.values(w.dimensions()))<256){w.message('Use a canvas of at least 256 px per side to generate an image guide, or upload a finished frame.',true);return;}
     w.submitting=true;w.paint();w.message('Preparing the selected first frame…');
     try{
-      const key=this.key(),asset=await w.fetch('/zura/studio/outpaint/first-frame',w.config());
+      const key=this.key(),config=w.config(),aeParent=captureAEGuideParent(o,w),asset=await w.fetch('/zura/studio/outpaint/first-frame',config);
+      if(!sameAEGuideParent(aeParent,o,w))throw Error('The AE source changed. Prepare the guide again.');
+      const frameTime=aeParent?Number(config.start)*aeParent.frameRate.numerator/aeParent.frameRate.denominator:0,sourceFrame=Math.round(frameTime);
+      if(aeParent&&(!Number.isFinite(frameTime)||Math.abs(frameTime-sourceFrame)>1e-6||sourceFrame<0||sourceFrame>=aeParent.frameCount))throw Error('Choose a source-aligned frame inside the AE interval.');
       if(key!==this.key())throw Error('The canvas changed. Prepare the guide again.');
       await o.imageArea?.flush();if(key!==this.key())throw Error('The canvas changed. Prepare the guide again.');
-      this.previous={config:o.config(),selectedFile:o.items[o.selectedImage]?.file||null};this.request={key,id:crypto.randomUUID(),width:asset.width,height:asset.height};
+      this.previous={config:o.config(),selectedFile:o.items[o.selectedImage]?.file||null};this.request={key,id:crypto.randomUUID(),aeParent,sourceFrame,width:asset.width,height:asset.height};
       o.outpaintGuide=this;o.show('image');if(!o.models.length)await o.loadModels();
       await o.setImageOperation('edit',{useCanvas:false});
+      if(!sameAEGuideParent(aeParent,o,w)||key!==this.key())throw Error('The AE source or canvas changed. Prepare the guide again.');
       o.imageArea?.reset();o.editMainMissing=false;const parts=asset.file.split('/');o.references=[{...asset,filename:parts.pop(),subfolder:parts.join('/')}];
-      o.$('shape').value='square';o.$('width').value=asset.width;o.$('height').value=asset.height;
+      o.$('shape').value='auto';o.$('width').value=asset.width;o.$('height').value=asset.height;
       o.$('prompt').value=`Fill only the black empty areas of Image 1 with a natural continuation of the surrounding scene. Keep every existing visible part of the original footage unchanged, including the subject, camera, perspective, lighting and placement. Do not add borders or reframe the image. Keep exactly ${asset.width} × ${asset.height} pixels and the same proportions. ${w.$('prompt').value}`;
       o.save();o.render();o.renderGallery();this.syncImageUI();
     }catch(error){w.message(error.message,true);}finally{w.submitting=false;w.paint();}
@@ -69,7 +74,7 @@ export class OutpaintFirstFrame {
   async useResult(){
     const o=this.owner,w=this.workspace,item=o.items[o.selectedImage||0];if(!this.request||this.importing||item?.outpaint_guide!==this.request.id||o.job||o.pendingSubmission)return;
     const request=this.request,revision=++this.transferRevision;
-    const check=()=>{if(this.request!==request||revision!==this.transferRevision||this.key()!==request.key||o.mode!=='image')throw Error('The source, canvas or workspace changed. Return and prepare a new guide.');};
+    const check=()=>{if(!sameAEGuideParent(request.aeParent,o,w)||this.request!==request||revision!==this.transferRevision||this.key()!==request.key||o.mode!=='image')throw Error('The source, canvas or workspace changed. Return and prepare a new guide.');};
     this.importing=true;this.syncImageUI();
     try{
       check();

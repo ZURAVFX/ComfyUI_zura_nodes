@@ -50,4 +50,8 @@ const output=alphaVideoOutput({outputs:{save:{images:files}}},config);
 assert.equal(output.alpha.filename,'alpha.mov');assert.equal(output.preview.filename,'preview.mp4');assert.equal(output.config,config);
 assert.equal(alphaVideoOutput({outputs:{save:{images:files.slice(0,2)}}},config),null,'A matte preview cannot be passed off as a transparent master');
 assert.equal(alphaVideoOutput({outputs:{save:{files:[...files,{role:'sequence',filename:'matte.zip'}]}}},config).sequence.filename,'matte.zip');
+const floatMaster={role:'ae_float',filename:'manifest.json',subfolder:'ComfyLink/'+'a'.repeat(32),type:'output'};
+assert.equal(alphaVideoOutput({outputs:{save:{images:[...files,floatMaster]}}},config).ae_float,floatMaster,'The source-bound FLOAT master is retained alongside the normal MOV');
+const fullMatte={role:'alpha_float',filename:'alpha_manifest.json',subfolder:'genj/alpha/take',type:'output'};
+assert.equal(alphaVideoOutput({outputs:{save:{images:files,files:[fullMatte]}}},config).alpha_float,fullMatte,'Normal exports retain the unquantised final alpha too');
 console.log('Alpha native recipe preserves source timing, uses promptless native guidance and exposes complete exports.');

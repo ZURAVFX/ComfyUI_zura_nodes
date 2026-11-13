@@ -169,7 +169,7 @@ class OutpaintLongCancellation(unittest.IsolatedAsyncioTestCase):
         selection, _, _ = runner.plan_long(source, start=0, duration=6.25,
             mode='expand', width=128, height=128, left=16, right=16, overlap=9,
             strategy='anchored_masked')
-        instance = jobs_module.OutpaintJobs(SimpleNamespace())
+        instance = jobs_module.OutpaintJobs(SimpleNamespace(server=SimpleNamespace()))
         with tempfile.TemporaryDirectory() as folder, \
              patch.object(folder_paths, 'get_output_directory', return_value=folder), \
              patch.object(folder_paths, 'get_input_directory', return_value=folder), \
@@ -299,7 +299,7 @@ class OutpaintLongCancellation(unittest.IsolatedAsyncioTestCase):
                 mode='expand', width=128, height=128, left=16, right=16, overlap=9,
                 strategy='anchored_masked')
             self.assertEqual(selection['frames'], 147)
-            instance = jobs_module.OutpaintJobs(SimpleNamespace())
+            instance = jobs_module.OutpaintJobs(SimpleNamespace(server=SimpleNamespace()))
             serial = 0
             anchors = []; selected_loras=[]
             async def fake_submit(kind, asset, subplan, prompt='', seed=42, client_id=None, anchor_file=None, strategy=None, custom_loras=None):

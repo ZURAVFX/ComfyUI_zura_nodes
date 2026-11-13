@@ -20,7 +20,8 @@ class PrecisionTests(unittest.TestCase):
         self.assertNotEqual(half['key'],full['key'])
         self.assertEqual(full['basis']['native_hdr']['exr_storage'],'float32')
         self.assertEqual(full['phases']['decode']['zura_hdr_archive']['inputs']['exr_storage'],'float32')
-        self.assertFalse(full['phases']['decode']['zura_hdr_exr']['inputs']['half_precision'])
+        self.assertEqual(full['phases']['decode']['zura_hdr_exr']['class_type'],'ZuraHDRSDRPreview')
+        self.assertEqual(set(full['phases']['decode']['zura_hdr_exr']['inputs']),{'image'},'Preview has no master precision or save controls')
         self.assertEqual(full['hdr_delivery']['exr_storage'],'float32')
         with self.assertRaises(ValueError): hdr.build_native_hdr_plan(project, exr_storage='wrong', **kwargs)
 
@@ -33,7 +34,8 @@ class PrecisionTests(unittest.TestCase):
                 request={'start_frame':0,'frame_count':1, 'exr_storage':storage}
                 graph,details=native.build_asset_graph({'asset_kind':'video'},request,lambda _: 'source.mp4')
                 self.assertEqual(details['exr_storage'],storage)
-                self.assertEqual(graph['zura_hdr_exr']['inputs']['half_precision'],storage=='half')
+                self.assertEqual(graph['zura_hdr_exr']['class_type'],'ZuraHDRSDRPreview')
+                self.assertEqual(set(graph['zura_hdr_exr']['inputs']),{'image'})
                 writer=graph['zura_hdr_archive']['inputs']
                 self.assertEqual(writer.get('exr_storage','half'),storage)
                 folders=types.SimpleNamespace(get_output_directory=lambda:root)

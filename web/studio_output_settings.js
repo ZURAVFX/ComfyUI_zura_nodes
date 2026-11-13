@@ -1,5 +1,9 @@
 import {workspaceStorage} from './studio_storage.js';
 import {EXRExportPreference} from './studio_exr_precision.js';
+import {StudioDeliveryControls} from './studio_delivery_controls.js';
+import {StudioDisplaySettings} from './studio_display_settings.js';
+import {installStudioModelViews} from './studio_model_view.js';
+import {StudioMediaImport} from './studio_media_import.js';
 /** One saved delivery folder for the whole Studio, independent of each model. */
 export class StudioOutputSettings {
   constructor(root, api, owner) {
@@ -17,6 +21,13 @@ export class StudioOutputSettings {
     panel.addEventListener('toggle',()=>{if(panel.open)void this.load();});
     this.form.onsubmit=event=>{event.preventDefault();void this.save(this.input.value);};
     panel.querySelector('[data-default]').onclick=()=>void this.save('');
+    this.delivery=new StudioDeliveryControls(root,api,owner,this);
+    this.display=new StudioDisplaySettings(root,api,owner,this.delivery);
+    installStudioModelViews(this.delivery,api);
+    this.mediaImport=new StudioMediaImport(this.delivery,api);
+    const format=document.createElement('label');format.innerHTML='HDR files<select aria-label="HDR delivery files"><option value="hlg_and_exr">HLG video + EXR</option><option value="acescg_exr">EXR</option><option value="hlg_video">HLG video</option></select>';
+    advanced.append(format);this.hdrFormatSelect=format.querySelector('select');this.hdrFormatSelect.value=this.delivery.hdrFormat;this.hdrFormatSelect.onchange=()=>this.delivery.setHDRFormat(this.hdrFormatSelect.value);
+    this.delivery.mountAdvanced(this.exrSelect.closest('label'),format,advanced.querySelector('p'));advanced.remove();
     void this.load();
   }
   exrStorage(output){return this.precision.value(output);}

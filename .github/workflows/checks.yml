@@ -68,6 +68,15 @@ jobs:
           node tests/test_studio_ae_frames.mjs
           node tests/test_studio_exr_precision.mjs
 
+      - name: Check Studio transfer, display and edit placement
+        run: |
+          node tests/test_studio_media_import.mjs
+          node tests/test_studio_delivery_controls.mjs
+          node tests/test_studio_display_settings.mjs
+          node tests/test_studio_plate_prompts.mjs
+          node tests/test_image_edit_placement.mjs
+          node tests/test_paintout_style_ready.mjs
+
   frontend:
     runs-on: ubuntu-24.04
     timeout-minutes: 5

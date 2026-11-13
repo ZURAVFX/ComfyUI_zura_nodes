@@ -35,7 +35,11 @@ def _sha256(path):
 
 class HDRChunkStore:
     """Stage float32 ACEScct frames atomically, then read them lazily."""
-    def __init__(self, root, identity, plan, width, height, *, create=False):
+    def __init__(self, root, identity, plan, width, height, *, create=False, colour_space='acescct', planning_mode='native'):
+        if colour_space not in ('acescct','acescg'):raise ValueError('Invalid HDR staging colour space.')
+        if planning_mode not in ('native','sdr'):raise ValueError('Invalid HDR staging planning mode.')
+        self.colour_space=colour_space
+        self.planning_mode=planning_mode
         if not isinstance(identity,str) or not _ID.fullmatch(identity):
             raise ValueError('Invalid HDR staging ID.')
         if not plan or any(type(v) is not int or v <= 0 for v in (width,height)):
@@ -98,6 +102,8 @@ class HDRChunkStore:
             _publish_verified(temporary,target)
             record={'sha256':digest,'start':self.plan[index].start,'count':self.plan[index].count,
                     'width':self.width,'height':self.height}
+            if self.colour_space=='acescg':record['colour_space']='acescg'
+            if self.planning_mode=='sdr':record['planning_mode']='sdr'
             with metadata.open('x',encoding='utf8') as out:
                 json.dump(record,out,separators=(',',':'))
                 out.flush(); os.fsync(out.fileno())
@@ -112,6 +118,8 @@ class HDRChunkStore:
         record=json.loads(metadata.read_text(encoding='utf8'))
         expected={'start':self.plan[index].start,'count':self.plan[index].count,
                   'width':self.width,'height':self.height}
+        if record.get('colour_space','acescct')!=self.colour_space:raise ValueError('HDR staging colour space changed.')
+        if record.get('planning_mode','native')!=self.planning_mode:raise ValueError('HDR staging planning mode changed.')
         if any(record.get(key)!=value for key,value in expected.items()) or record.get('sha256')!=_sha256(path):
             raise ValueError('A staged HDR chunk changed or does not match its plan.')
         array=np.load(path,allow_pickle=False,mmap_mode='c')
@@ -126,6 +134,6 @@ class HDRChunkStore:
             for index in range(len(self.plan)):
                 self._check_cancelled()
                 yield self.read(index)
-        for output in stitch_acescct_batches(self.plan,batches(),strategy=strategy):
+        for output in stitch_acescct_batches(self.plan,batches(),strategy=strategy,linear_rgb=self.colour_space=='acescg'):
             self._check_cancelled()
             yield output

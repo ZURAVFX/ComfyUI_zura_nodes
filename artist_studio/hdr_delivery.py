@@ -14,7 +14,7 @@ DISTILLED_SIGMAS = "1.0, 0.99375, 0.9875, 0.98125, 0.975, 0.909375, 0.725, 0.421
 
 
 def ltx25_sdr_to_hdr_dynamic_graph(images, *, fps, model, video_vae, audio_vae,
-                                    output, prefix, seed=42, audio=None, exr_storage='half'):
+                                    output, prefix, seed=42, audio=None, exr_storage='half',single_frame=False, _source_detail=True):
     """Build bounded SDR-to-HDR conversion with exact source-frame restoration.
 
     The source must already have been decoded to normalised sRGB. The caller
@@ -25,11 +25,12 @@ def ltx25_sdr_to_hdr_dynamic_graph(images, *, fps, model, video_vae, audio_vae,
     """
     if not isinstance(images, (list, tuple)) or len(images) != 2:
         raise ValueError("Images must be a Comfy graph link.")
+    if type(single_frame) is not bool or single_frame and audio is not None:raise ValueError('The still HDR route needs one frame and no source audio.')
     audio_link=['zura_hdr_trim_audio',0] if audio is not None else None
     graph=ltx25_sdr_to_hdr_graph(['zura_hdr_prepare',0],width=64,height=64,
                                   frames=9,fps=fps,model=model,video_vae=video_vae,
                                   audio_vae=audio_vae,output=output,prefix=prefix,
-                                  seed=seed,audio=audio_link,exr_storage=exr_storage)
+                                  seed=seed,audio=audio_link,exr_storage=exr_storage,_source_detail=_source_detail)
     graph['zura_hdr_prepare']={'class_type':'ZuraLTXHDRPrepare','inputs':{'images':list(images)}}
     if audio is not None:
         if not isinstance(audio,(list,tuple)) or len(audio)!=2:
@@ -42,12 +43,23 @@ def ltx25_sdr_to_hdr_dynamic_graph(images, *, fps, model, video_vae, audio_vae,
     graph['hdr_unpad_frames']['inputs']['length']=['zura_hdr_prepare',3]
     graph['hdr_unpad_raster']['inputs'].update(width=['zura_hdr_prepare',1],
                                                 height=['zura_hdr_prepare',2])
+    if _source_detail:
+        graph['hdr_detail']['inputs']['source']=list(images)
+        del graph['hdr_detail_source_frames'],graph['hdr_detail_source_raster']
+    if single_frame:
+        graph['zura_hdr_prepare']['inputs']['single_frame']=True
+        # The native video latent and IC-LoRA guide both support T=1. Spatial
+        # encode/decode tiling bounds VAE activations without resizing pixels.
+        graph['hdr_guide']['inputs'].update(use_tiled_encode=True,tile_size=512,tile_overlap=64)
+        # This is an unused AV-model audio stream. Nine dummy frames avoid a
+        # zero-length audio latent at high timeline rates; no audio is exported.
+        graph['hdr_empty_audio']['inputs']['frames_number']=9
     return graph
 
 
 def ltx25_sdr_to_hdr_graph(images, *, width, height, frames, fps, model, video_vae,
                            audio_vae, output, prefix, seed=42, audio=None,
-                           delivered_width=None, delivered_height=None, delivered_frames=None, exr_storage='half'):
+                           delivered_width=None, delivered_height=None, delivered_frames=None, exr_storage='half', _source_detail=True):
     """Construct the official single-stage LTX 2.5 SDR-to-HDR recipe.
 
     Caller supplies sRGB images already resized/padded to exactly width x height
@@ -103,8 +115,15 @@ def ltx25_sdr_to_hdr_graph(images, *, width, height, frames, fps, model, video_v
     graph["hdr_unpad_frames"] = n("ImageFromBatch", image=["hdr_decode", 0], batch_index=0, length=delivered_frames)
     graph["hdr_unpad_raster"] = n("ImageCrop", image=["hdr_unpad_frames", 0], width=delivered_width,
                                   height=delivered_height, x=0, y=0)
-    graph.update(ltx_hdr_delivery(["hdr_unpad_raster", 0], fps, output=output, prefix=prefix,
-                                  working_space="ltx25_acescct_qualified", audio=audio, exr_storage=exr_storage))
+    # The raw LTX ACEScct tensor remains unchanged and available separately.
+    # Only this SDR conversion recipe reconstructs source-preserving ACEScg.
+    if _source_detail:
+        graph['hdr_detail_source_frames'] = n('ImageFromBatch', image=list(images), batch_index=0, length=delivered_frames)
+        graph['hdr_detail_source_raster'] = n('ImageCrop', image=['hdr_detail_source_frames', 0],
+            width=delivered_width, height=delivered_height, x=0, y=0)
+        graph['hdr_detail'] = n('ZuraHDRSourceDetail', source=['hdr_detail_source_raster', 0], prediction=['hdr_unpad_raster', 0])
+    graph.update(ltx_hdr_delivery(["hdr_detail" if _source_detail else "hdr_unpad_raster", 0], fps, output=output, prefix=prefix,
+                                  working_space="ltx25_source_detail_acescg" if _source_detail else "ltx25_acescct_qualified", audio=audio, exr_storage=exr_storage))
     return graph
 
 
@@ -116,7 +135,7 @@ def ltx_hdr_delivery(images, fps, *, output, prefix, working_space, audio=None, 
     resulting video and/or EXR directory. No implicit SDR->HDR conversion or
     claiming existing SDR samples are ACEScct is allowed.
     """
-    if working_space != "ltx25_acescct_qualified":
+    if working_space not in ("ltx25_acescct_qualified", "ltx25_source_detail_acescg"):
         raise ValueError("HDR delivery requires a qualified LTX 2.5 ACEScct generation.")
     if exr_storage not in ("half", "float32"):
         raise ValueError("Choose half or float32 EXR storage.")
@@ -132,12 +151,12 @@ def ltx_hdr_delivery(images, fps, *, output, prefix, working_space, audio=None, 
         raise ValueError("Use a simple output name without path separators.")
 
     graph = {}
-    # Official LTX-2.5 examples use ACEScct -> native Comfy HLG, CreateVideo
-    # at 10 bits. The official decoder is used for the SDR preview; EXR
-    # packaging uses the unclipped ACEScct output to retain negative AP1 values.
+    linear_rgb = working_space == "ltx25_source_detail_acescg"
+    # Creative masters retain ACEScct; reconstructed SDR masters are already
+    # linear ACEScg. The SDR view adapts AP1/D60 to Rec.709/D65 independently.
     if output in ("hlg_video", "hlg_and_exr"):
         graph["zura_hdr_hlg"] = {"class_type": "ImageColorSpace", "inputs": {
-            "image": list(images), "source": "HDR ACEScct", "destination": "HDR"}}
+            "image": list(images), "source": "linear ACEScg" if linear_rgb else "HDR ACEScct", "destination": "HDR"}}
         video = {"images": ["zura_hdr_hlg", 0], "fps": float(fps),
                  "bit_depth": 10, "color_space": "HDR", "codec": "none"}
         if audio is not None:
@@ -147,8 +166,5 @@ def ltx_hdr_delivery(images, fps, *, output, prefix, working_space, audio=None, 
             "video": ["zura_hdr_video", 0], "filename_prefix": "genj/hdr/" + prefix,
             "fps": float(fps)}}
     if output in ("acescg_exr", "hlg_and_exr"):
-        graph["zura_hdr_exr"] = {"class_type": "LTXVHDRDecodePostprocess", "inputs": {
-            "image": list(images), "transfer": "acescct", "save_exr": False,
-            "exr_color_space": "acescg", "output_dir": "genj/hdr/" + prefix,
-            "filename_prefix": "frame", "half_precision": exr_storage == "half"}}
+        graph["zura_hdr_exr"] = {"class_type": "ZuraHDRSDRPreview", "inputs": {"image": list(images), **({'source_space':'acescg'} if linear_rgb else {})}}
     return graph

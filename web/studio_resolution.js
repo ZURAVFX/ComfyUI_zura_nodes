@@ -1,5 +1,7 @@
 // Studio's configurable 4K canvas budget, not a model training limit.
 // Native model nodes accept larger sizes; high-resolution renders need more memory.
+import {SOURCE_MODEL_LIMITS,sourceModelRaster} from './source_model_resolution.js';
+
 export const VIDEO_CANVAS_LIMITS=Object.freeze({minDimension:256,maxDimension:4096,maxPixels:8_388_608});
 export const megapixelMaximum=cap=>Math.floor(cap.maxPixels/1e6/.05)*.05;
 // Shared size maths and editing behaviour for every Studio composer.
@@ -48,9 +50,8 @@ export function megapixelSlider(select,{min=.25,max=megapixelMaximum(VIDEO_CANVA
 export const RESOLUTION_SHAPES=[['source_size','Use source resolution',null],['source','Match source proportions',null],['landscape','Widescreen · 16:9',16/9],['portrait','Portrait · 9:16',9/16],['square','Square · 1:1',1],['standard','Landscape · 4:3',4/3],['vertical','Portrait · 3:4',3/4],['custom','Custom dimensions',null]];
 export function sourceResolution(width,height,cap){
   if(!(width>0&&height>0))return null;
-  if(Number.isInteger(width)&&Number.isInteger(height)&&width>=cap.min&&height>=cap.min&&width<=cap.max&&height<=cap.max&&width%cap.step===0&&height%cap.step===0&&width*height<=cap.maxPixels)return {width,height};
-  const scale=Math.min(1,cap.max/width,cap.max/height,Math.sqrt(cap.maxPixels/(width*height)));
-  return resolutionSize(width/height,width*height*scale*scale/1e6,cap);
+  return sourceModelRaster({width,height},{quantum:cap.step,minDimension:cap.min,
+    maxDimension:cap.max,maxPixels:cap.maxPixels,label:'Selected video model'});
 }
 export function resolutionMarkup(prefix){return `<div class="zc-resolution-header"><strong>Resolution</strong><output id="${prefix}-dimensions" class="zc-resolution-dimensions" aria-live="polite"></output></div><label class="zc-resolution-field"><span>Size</span><select id="${prefix}-shape">${RESOLUTION_SHAPES.map(([id,label])=>`<option value="${id}">${label}</option>`).join('')}</select></label><label class="zc-resolution-field zc-resolution-mp" id="${prefix}-mp-setting"><span class="zc-resolution-field-heading"><span>Megapixels</span><output id="${prefix}-mp-label" class="zc-resolution-readout"></output></span><input id="${prefix}-mp" type="range" min="0.25" max="8.35" step="0.05" value="1"/></label><div class="zf-dimensions" id="${prefix}-custom"><label>Width (px)<input id="${prefix}-width" value="1280"/></label><label>Height (px)<input id="${prefix}-height" value="720"/></label></div><p class="zc-resolution-hint" id="${prefix}-hint"></p>`;}
 
@@ -65,8 +66,12 @@ export class VideoResolutionControl {
   context(){
     const s=this.studio,c=s.config,source=s.source||{},ratio=(source.width||16)/(source.height||9),opening=s.composerStage()!=='video',camera=c.workflow_mode==='camera',relight=c.workflow_mode==='relight';
     const exact=opening||camera||relight;
-    const openingMax=s.modelStatus?.opening_max_pixels>=4e6?4e6:2e6,largeRelight=relight&&!opening&&c.relight_engine==='wan21'&&s.modelStatus?.wan21_relight_max_pixels>=8_388_608;
-    const cap=camera?{step:32,min:128,max:1280,maxPixels:1280*1280}:opening?{step:['qwen21','ph3'].includes(c.opening_model)?32:16,min:256,max:openingMax>2e6?4096:2048,maxPixels:openingMax}:largeRelight?{step:16,min:256,max:4096,maxPixels:8_388_608}:{step:16,min:256,max:1920,maxPixels:1920*1088};
+    const openingLimits=s.modelStatus?.opening_models?.[c.opening_model||'klein9b']?.raster_limits;
+    const openingMax=Math.max(Number(openingLimits?.max_pixels)||0,Number(s.modelStatus?.opening_max_pixels)||0,SOURCE_MODEL_LIMITS.maxPixels);
+    const openingMaxDimension=Number(openingLimits?.max_dimension)||SOURCE_MODEL_LIMITS.maxDimension;
+    const openingStep=Number(openingLimits?.size_step)||(['qwen21','ph3'].includes(c.opening_model)?32:16);
+    const largeRelight=relight&&!opening&&c.relight_engine==='wan21'&&s.modelStatus?.wan21_relight_max_pixels>=8_388_608;
+    const cap=camera?{step:32,min:128,max:1280,maxPixels:1280*1280}:opening?{step:openingStep,min:SOURCE_MODEL_LIMITS.minDimension,max:openingMaxDimension,maxPixels:openingMax}:largeRelight?{step:16,min:256,max:4096,maxPixels:8_388_608}:{step:16,min:256,max:1920,maxPixels:1920*1088};
     return {s,c,source,ratio,opening,camera,relight,exact,cap,key:camera?'camera':opening?'opening':'relight'};
   }
   apply(custom=false){
@@ -79,9 +84,19 @@ export class VideoResolutionControl {
       x.s.config.resolution=Number(x.s.$('resolution').value);this.sync();return;
     }
     const ratio=shape==='custom'?(x.c[x.key+'_width']/x.c[x.key+'_height']||x.ratio):RESOLUTION_SHAPES.find(p=>p[0]===shape)?.[2]||x.ratio;
-    let size=shape==='source_size'?sourceResolution(x.source.width,x.source.height,x.cap):custom?{width:Number(this.$('width').value),height:Number(this.$('height').value)}:resolutionSize(ratio,mp,x.cap);
+    let size;
+    if(shape==='source_size'){
+      try{
+        size=x.opening&&!x.camera
+          ?sourceModelRaster(x.source,{quantum:x.cap.step,minDimension:x.cap.min,maxDimension:x.cap.max,maxPixels:x.cap.maxPixels,label:'Selected starting-image model'})
+          :sourceResolution(x.source.width,x.source.height,x.cap);
+      }catch(error){
+        this.$('hint').textContent=error.message;
+        return;
+      }
+    }else size=custom?{width:Number(this.$('width').value),height:Number(this.$('height').value)}:resolutionSize(ratio,mp,x.cap);
     if(!size){this.$('hint').textContent='Add a source video to use its resolution.';return;}
-    if(Object.values(size).some(n=>!Number.isInteger(n)||n<x.cap.min||n>x.cap.max||n%x.cap.step)){this.$('hint').textContent=`Enter both dimensions in multiples of ${x.cap.step}.`;return;}
+    if([size.width,size.height].some(n=>!Number.isInteger(n)||n<x.cap.min||n>x.cap.max||n%x.cap.step)){this.$('hint').textContent=`Enter both dimensions in multiples of ${x.cap.step}.`;return;}
     if(size.width*size.height>x.cap.maxPixels){this.$('hint').textContent='Reduce the dimensions to fit this model’s pixel limit.';return;}
     if(custom)this.$('shape').value='custom';
     Object.assign(x.c,{[x.key+'_width']:size.width,[x.key+'_height']:size.height,[x.key+'_shape']:this.$('shape').value,[x.key+'_megapixels']:mp});
@@ -92,22 +107,37 @@ export class VideoResolutionControl {
     const x=this.context(),busy=x.s.busy||x.s.project?.phase==='working';
     const sourceWidth=x.source.width||1280,sourceHeight=x.source.height||720;
     const fallback=x.camera?{width:768,height:448}:x.opening?resolutionSize(x.ratio,1,x.cap):{width:Math.max(256,Math.round(sourceWidth*1280/Math.max(sourceWidth,sourceHeight)/16)*16),height:Math.max(256,Math.round(sourceHeight*1280/Math.max(sourceWidth,sourceHeight)/16)*16)};
-    const sourceSize=(x.camera||x.relight&&!x.opening)&&x.c[x.key+'_shape']==='source_size'?sourceResolution(x.source.width,x.source.height,x.cap):null;
+    const requestedShape=x.c[x.key+'_shape']||(x.opening?'source_size':'source');
+    let sourceSize=null,sourceError='';
+    if(x.exact&&requestedShape==='source_size'){
+      if(x.opening&&!x.camera){
+        try{sourceSize=sourceModelRaster(x.source,{quantum:x.cap.step,minDimension:x.cap.min,maxDimension:x.cap.max,maxPixels:x.cap.maxPixels,label:'Selected starting-image model'});}
+        catch(error){sourceError=error.message;}
+      }else{
+        try{sourceSize=sourceResolution(x.source.width,x.source.height,x.cap);}
+        catch(error){sourceError=error.message;}
+      }
+    }
     if(sourceSize)Object.assign(x.c,{[x.key+'_width']:sourceSize.width,[x.key+'_height']:sourceSize.height});
     const size=x.exact?(sourceSize||{width:x.c[x.key+'_width']||fallback.width,height:x.c[x.key+'_height']||fallback.height}):resolutionSize(x.ratio,(Number(x.c.resolution)||1280)**2/Math.max(x.ratio,1/x.ratio)/1e6,{step:x.c.engine==='wan2'?16:64,min:64,max:1920});
     if(this.nativeQuality)this.nativeQuality.hidden=x.exact;
-    this.$('mp').max=x.camera?1.6:x.opening?x.cap.maxPixels/1e6:x.exact&&x.cap.maxPixels>3e6?8.35:x.exact?2:2.1;
+    this.$('mp').max=x.camera?1.6:x.opening?megapixelMaximum(x.cap):x.exact&&x.cap.maxPixels>3e6?8.35:x.exact?2:2.1;
     this.$('mp').value=x.exact?(x.c[x.key+'_megapixels']??size.width*size.height/1e6):size.width*size.height/1e6;
     this.$('mp-label').textContent=`${(size.width*size.height/1e6).toFixed(2)} MP`;
-    this.$('shape').value=x.exact?(x.c[x.key+'_shape']||'source'):'source';this.$('shape').disabled=busy||!x.exact;
-    const sourceOption=this.$('shape').querySelector('option[value="source_size"]');sourceOption.disabled=!(x.camera||x.relight&&!x.opening)||!(x.source.width>=2&&x.source.height>=2&&x.source.width<=16384&&x.source.height<=16384);
+    this.$('shape').value=x.exact?requestedShape:'source';this.$('shape').disabled=busy||!x.exact;
+    const sourceOption=this.$('shape').querySelector('option[value="source_size"]');sourceOption.disabled=!(x.opening||x.camera||x.relight&&!x.opening)||!(x.source.width>=2&&x.source.height>=2&&x.source.width<=16384&&x.source.height<=16384);
     this.$('mp-setting').hidden=this.$('shape').value==='source_size'||this.$('shape').value==='custom';
     this.$('custom').hidden=this.$('shape').value!=='custom';
     for(const key of ['width','height']){const field=this.$(key);if(field!==this.panel.ownerDocument.activeElement)field.value=size[key];field.disabled=busy;}
     this.$('mp').disabled=busy||(!x.exact&&(x.c.engine==='wan2'||x.c.h3_head_swap));
-    const output=sourceSize&&x.relight?{width:sourceWidth-sourceWidth%2,height:sourceHeight-sourceHeight%2}:size;
+    const output=sourceSize&&x.relight?{width:sourceWidth,height:sourceHeight}:size;
     this.$('dimensions').textContent=`${output.width} × ${output.height} px`;
-    this.$('hint').textContent=x.camera?`Camera still and video use ${size.width} × ${size.height}. Images are fitted without stretching${sourceSize&&(size.width!==sourceWidth||size.height!==sourceHeight)?'; source size adjusted for H3':''}.`:sourceSize?`${output.width===sourceWidth&&output.height===sourceHeight?'Output matches the source.':'Output adjusted to even pixels for MP4.'} ${sourceSize.width===output.width&&sourceSize.height===output.height?'':`Generated at ${sourceSize.width} × ${sourceSize.height} on Wan’s ${x.cap.step}-pixel grid, then fitted to the output.`}${size.width*size.height>1920*1088?' High resolutions need more memory and are untested.':''}`.trim():x.opening?`Image generation · ${x.cap.step}-pixel grid. Saved frame stays ${sourceWidth} × ${sourceHeight}.${size.width*size.height>2e6?' High resolution needs more memory and may be slower.':''}`:x.exact?`Wan 2.1 · ${x.cap.step}-pixel grid. Images are fitted without stretching.${size.width*size.height>1920*1088?' High resolutions need more memory and are untested.':''}`:'The slider selects supported native sizes for this workflow.';
+    const sourceHint=sourceSize?(x.opening
+      ?(sourceSize.width===sourceWidth&&sourceSize.height===sourceHeight
+        ?'Processing matches the source.'
+        :`Processing is stretched up to the model grid. Generated at ${sourceSize.width} × ${sourceSize.height}, then restored to ${sourceWidth} × ${sourceHeight}.`)
+      :`${output.width===sourceWidth&&output.height===sourceHeight?'Output matches the source.':'Output is restored to the exact source raster.'} ${sourceSize.width===output.width&&sourceSize.height===output.height?'':`Generated at ${sourceSize.width} × ${sourceSize.height} on Wan’s ${x.cap.step}-pixel grid, then fitted to the output.`}`):'';
+    this.$('hint').textContent=sourceError?sourceError:x.camera?`Camera still and video use ${size.width} × ${size.height}. Images are fitted without stretching${sourceSize&&(size.width!==sourceWidth||size.height!==sourceHeight)?'; source size adjusted for H3':''}.`:sourceSize?`${sourceHint}${size.width*size.height>1920*1088?' High resolutions need more memory and may be slower.':''}`.trim():x.opening?`Image generation · ${x.cap.step}-pixel grid. Saved frame stays ${sourceWidth} × ${sourceHeight}.${size.width*size.height>2e6?' High resolution needs more memory and may be slower.':''}`:x.exact?`Wan 2.1 · ${x.cap.step}-pixel grid. Images are fitted without stretching.${size.width*size.height>1920*1088?' High resolutions need more memory and are untested.':''}`:'The slider selects supported native sizes for this workflow.';
     return output;
   }
 }

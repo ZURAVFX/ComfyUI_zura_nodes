@@ -31,6 +31,8 @@ TOKEN_HEADER = "X-ComfyLink-Studio-Token"
 DOWNLOAD_HEADER = "X-ComfyLink-Studio-Download"
 MAX_JSON = float_io.MAX_MANIFEST_BYTES
 TTL = 15 * 60
+MAX_LEASE_AGE = 8 * 60 * 60
+BROKER_LEASE_WINDOW = 30 * 60
 MAX_SESSIONS = 32
 MAX_ORIGINAL_BYTES = float_io.MAX_TRANSFER_BYTES
 SOURCE_DISK_HEADROOM = 4 * 1024**3
@@ -43,6 +45,8 @@ _STUDIO_MODES = {"swap", "ripple", "viewport", "camera", "relight", "paintout", 
                  "outpaint", "hdr", "director", "frames", "references", "image"}
 _BROKER_DIAGNOSTICS = {"float import needs a known colour profile; the result remains available",
                        "float import requires verified straight alpha",
+                       "HDR master retained. Choose a scene-linear AE working space such as ACEScg for verified HDR transfer.",
+                       "HDR master retained. This AE working space uses colour files that are not yet verified. Use ACEScg or linear Rec.709 and send the shot again.",
                        "Result retained; native import needs attention",
                        "Result retained: dimensions, frame count or frame rate do not match the original layer."}
 _SDR_TRANSFERS = {2: "unspecified", 1: "bt709", 4: "gamma22", 5: "gamma28", 6: "smpte170m", 7: "smpte240m", 13: "srgb"}
@@ -345,6 +349,8 @@ def _grant(value, origin, broker):
     # and tokens are not copied into the public context.
     context = {"target": {"label": target["label"]}, "capabilities": {
         "source": capabilities["source"], "transfer": capabilities["transfer"]}}
+    if capabilities.get("renew") is True:
+        context["capabilities"]["renew"] = True
     for name in ("range", "source"):
         item = value.get(name)
         if isinstance(item, dict):
@@ -370,14 +376,18 @@ class Session:
     download_capability: str = field(default="", repr=False)
     closed: bool = False
     preview_lock: asyncio.Lock = field(default_factory=asyncio.Lock)
+    created_at: float = field(default_factory=time.time)
+    max_expires: float = 0
+    renew_lock: asyncio.Lock = field(default_factory=asyncio.Lock)
 
 
 class StudioSessions:
-    def __init__(self, input_root=None, output_root=None, instance_id="", importer=None):
+    def __init__(self, input_root=None, output_root=None, instance_id="", importer=None, history_reader=None):
         self.input_root = Path(input_root) if input_root is not None else None
         self.output_root = Path(output_root) if output_root is not None else None
         self.instance_id = instance_id
         self.importer = importer
+        self.history_reader = history_reader
         self.sessions = {}
         self.used = {}
         self._registration_lock = asyncio.Lock()
@@ -412,6 +422,8 @@ class StudioSessions:
         if not session.closed and session.token:
             authority = Session(session.id, "", session.broker, session.token, session.origin, {}, session.expires)
         session.closed = True
+        if getattr(self, 'work', None) is not None:
+            self.work.schedule(session)
         if self.sessions.get(session.id) is session:
             self.sessions.pop(session.id, None)
         session.token = session.capability = session.download_capability = ""
@@ -465,8 +477,11 @@ class StudioSessions:
             raise web.HTTPBadGateway(text="Local Studio broker is unavailable")
 
     def public(self, session):
-        return {"id": session.id, "context": session.context, "label": session.context["target"]["label"],
+        return {"id": session.id, "comfyOrigin": session.origin, "context": session.context, "label": session.context["target"]["label"],
                 "expiresAt": datetime.fromtimestamp(session.expires, timezone.utc).isoformat(),
+                **({"lease": {"renewable": True, "renewAfterSeconds": 300,
+                    "maxExpiresAt": datetime.fromtimestamp(session.max_expires, timezone.utc).isoformat()}}
+                   if session.context.get("capabilities", {}).get("renew") is True else {}),
                 "modes": {"registry": "native_studio", "source": session.context["capabilities"]["source"],
                           "transfer": session.context["capabilities"]["transfer"]}}
 
@@ -486,7 +501,10 @@ class StudioSessions:
             session = Session(secrets.token_hex(16), secrets.token_hex(32), broker, token, origin, {}, 0)
             grant = await self.broker_json(session, "/grant")
             session.context, session.expires = _grant(grant, origin, broker)
+            session.max_expires = session.created_at + MAX_LEASE_AGE
             self.sessions[session.id] = session
+            if getattr(self, 'work', None) is not None:
+                self.work.watch(session)
             self.used[fingerprint] = max(_expiry(grant["expiresAt"]), time.time() + TTL)
             loop = asyncio.get_running_loop()
             loop.call_later(max(0, session.expires - time.time()) + .05, self.cleanup)
@@ -496,6 +514,52 @@ class StudioSessions:
 
     async def get(self, request):
         return web.json_response(self.public(self.authorize(request)))
+
+    async def renew(self, request):
+        session = self.authorize(request)
+        body = await _bounded_json(request.content, 4096)
+        if not isinstance(body, dict) or body:
+            raise web.HTTPBadRequest(text="Renewal requires an empty object")
+        if session.context.get("capabilities", {}).get("renew") is not True:
+            raise web.HTTPConflict(text="This AE link does not support renewal. Reopen Studio from After Effects")
+        observed = session.expires
+        # Independent from source/result locks: a long transfer must not queue
+        # the renewal until after its own authority has expired.
+        async with session.renew_lock:
+            self.active(session)
+            now = time.time()
+            if not session.max_expires or now >= session.max_expires:
+                raise web.HTTPGone(text="The maximum AE session duration has ended; results are retained")
+            if session.expires <= observed:
+                try:
+                    response = await self.broker_json(session, "/renew", {})
+                except web.HTTPGone:
+                    authority = self.close_local(session)
+                    if authority is not None:
+                        await self.revoke_broker(authority)
+                    raise
+                self.active(session)
+                now = time.time()
+                try:
+                    if not isinstance(response, dict) or response.get("ok") is not True:
+                        raise ValueError()
+                    expires, maximum = _expiry(response.get("expiresAt")), _expiry(response.get("maxExpiresAt"))
+                    if not now < expires <= now + BROKER_LEASE_WINDOW + 5 or not expires <= maximum <= now + MAX_LEASE_AGE + 5:
+                        raise ValueError()
+                except (ValueError, TypeError, web.HTTPException):
+                    raise web.HTTPBadGateway(text="Invalid AE session renewal") from None
+                maximum = min(maximum, session.max_expires)
+                if maximum <= now:
+                    raise web.HTTPGone(text="The maximum AE session duration has ended; results are retained")
+                session.max_expires = maximum
+                session.expires = min(expires, now + TTL, maximum)
+                fingerprint = hashlib.sha256((session.broker + session.token).encode()).hexdigest()
+                self.used[fingerprint] = max(self.used.get(fingerprint, 0), expires)
+                asyncio.get_running_loop().call_later(max(0, session.expires-now)+.05, self.cleanup)
+            return web.json_response({"ok": True,
+                "expiresAt": datetime.fromtimestamp(session.expires, timezone.utc).isoformat(),
+                "maxExpiresAt": datetime.fromtimestamp(session.max_expires, timezone.utc).isoformat()},
+                headers={"Cache-Control": "no-store"})
 
     async def download(self, session, filename, destination, expected):
         self.active(session)
@@ -550,6 +614,10 @@ class StudioSessions:
 
     async def _stage_source_reserved(self, session, data):
         manifest = float_io.validate_manifest(data.get("manifest", data))
+        # Only the authenticated local broker response supplies conversion
+        # authority. Browser POST fields never enter this descriptor.
+        from .studio_processing import validate_processing_input
+        processing = validate_processing_input(data.get("processingInput"), manifest)
         expected = [{key: frame[key] for key in ("filename", "byteLength", "sha256")} for frame in manifest["frames"]]
         if "files" in data and data["files"] != expected:
             raise ValueError("Source file list differs from manifest")
@@ -585,6 +653,8 @@ class StudioSessions:
                             or int.from_bytes(encoded_profile[:4], "big") != len(encoded_profile)):
                         raise ValueError("Invalid project ICC profile header")
                 float_io._exclusive_write(temporary / "manifest.json", float_io.canonical_manifest_bytes(manifest))
+                if processing:
+                    float_io._exclusive_write(temporary / "processing-input.json", float_io.canonical_manifest_bytes(processing))
             # Validate actual pixels before publication, including NaN/Inf.
             probe = secrets.token_hex(16)
             validation_folder = parent / probe
@@ -614,12 +684,18 @@ class StudioSessions:
         try:
             self.active(session)
             imported = await (self.importer or self.native_import)(session, folder, manifest)
-            result.update({key: value for key, value in imported.items() if key in {"studioAsset", "mediaInfo", "stills"}})
+            result.update({key: value for key, value in imported.items() if key in {"studioAsset", "mediaInfo", "stills", "nativeInputColour", "resolved_colour"}})
+            if processing:
+                model_input = imported.get('processingInput', imported)
+                result["processingInput"] = {**processing,
+                    "precision": {"sampleType": "uint8", "sourceBitDepth": 8},
+                    **{key: value for key, value in model_input.items() if key in {"studioAsset", "mediaInfo", "stills"}}}
         except Exception:
             # Media decoders use several library-specific exception classes.
             # Keep the verified raw source available without logging filenames.
             result["nativeImport"] = {"status": "unavailable", "diagnostic":
-                "Float source retained. Native Studio import needs a compatible media route and installed EXR support for high-depth sources."}
+                ("The SDR model input could not be prepared. The FLOAT source is retained. Check its colour mapping and installed EXR support."
+                 if processing else "Float source retained. Native Studio import needs a compatible media route and installed EXR support for high-depth sources.")}
         return result
 
     async def source(self, request):
@@ -640,6 +716,37 @@ class StudioSessions:
                 raise web.HTTPUnprocessableEntity(text="Source validation failed; the AE source is retained")
             self.active(session)
             return web.json_response(session.source)
+
+    async def retained_images(self, request):
+        from .studio_recovery import retained_images, MAX_HISTORY
+        session = self.authorize(request)
+        body = await _bounded_json(request.content, 4096)
+        if (not isinstance(body, dict) or set(body) not in (set(), {'candidateId'})
+                or 'candidateId' in body and not _secret(body['candidateId'])):
+            raise web.HTTPBadRequest(text='Invalid retained-result selection')
+        if not session.context['capabilities']['source'] or not session.context['capabilities']['transfer']:
+            raise web.HTTPForbidden(text='This session cannot recover an image result')
+        async with session.lock:
+            self.active(session)
+            if not session.source.get('manifest'):
+                raise web.HTTPConflict(text='Load the AE source before looking for a saved result')
+            try:
+                history = await asyncio.to_thread(self.history_reader, MAX_HISTORY) if self.history_reader else {}
+                self.active(session)
+                input_root, output_root = self.roots()
+                results = await asyncio.to_thread(retained_images, input_root, session.id,
+                    session.source['manifest'], history, self.resolve_master,
+                    lambda path: _image_container(path, '.png'), output_root)
+                self.active(session)
+            except (ValueError, OSError):
+                raise web.HTTPUnprocessableEntity(text='The retained result could not be verified against this AE source')
+            if 'candidateId' in body:
+                selected = next((item for item in results if item['id'] == body['candidateId']), None)
+                if selected is None:
+                    return web.json_response({'error': 'No matching saved result is available. Its files have not been changed'},
+                                             status=409, headers={'Cache-Control': 'no-store'})
+                return web.json_response({'result': selected}, headers={'Cache-Control': 'no-store'})
+            return web.json_response({'results': results}, headers={'Cache-Control': 'no-store'})
 
     async def display_config(self, request):
         session = self.authorize(request)
@@ -706,17 +813,32 @@ class StudioSessions:
 
         Raw float authority is retained even when optional EXR support is absent.
         Eight-bit source pixels may also be encoded losslessly for SDR controls.
-        Higher-depth sources exclusively use FLOAT EXR, without PIL conversion.
+        An explicit broker-authorised SDR copy may quantise verified display
+        values. Higher-depth source manifests are never relabelled or changed.
         """
         import numpy as np
         input_root, _ = self.roots()
         relative_manifest = "ComfyLink/" + session.id + "/manifest.json"
         count = len(manifest["frames"])
+        from .studio_processing import validate_processing_input, encode_sdr8, model_input_processor
+        processing_path = folder / "processing-input.json"
+        processing = validate_processing_input(json.loads(float_io._read_private(processing_path, 32768)), manifest) if processing_path.exists() else None
+        processor = model_input_processor(processing)
+        retain_native = bool(processing and processing['conversion'] == 'verified_ocio_to_sdr8')
         generated = folder / ("native-" + secrets.token_hex(16))
         with float_io._locked_parents(folder):
             generated.mkdir()
-        is_sdr8 = (manifest["sourceBitDepth"] == 8 and manifest["colour"]["encoding"] == "unknown"
+        is_sdr8 = bool(processing) or (manifest["sourceBitDepth"] == 8 and manifest["colour"]["encoding"] == "unknown"
                    and manifest["colour"]["sceneLinear"] is False and manifest["alphaAssociation"] == "straight")
+        native_colour=None
+        if (not is_sdr8 or retain_native) and manifest['colour'].get('management')=='ocio':
+            from .display_view import _verified_ocio_source
+            encoding=_verified_ocio_source(manifest['colour'])
+            if encoding not in {'acescg','acescct','scene_linear_rec709'}:
+                raise ValueError('The verified AE working space is not a supported native HDR input.')
+            native_colour={'encoding':encoding,'sceneLinear':encoding!='acescct','source':'verified_ae_ocio',
+                'sourceColourSha256':hashlib.sha256(float_io.canonical_manifest_bytes(manifest['colour'])).hexdigest(),
+                'ocioConfigFileSha256':manifest['colour']['ocioConfigFileSha256']}
         async def upload(paths, endpoint):
             self.active(session)
             form = aiohttp.FormData()
@@ -741,19 +863,14 @@ class StudioSessions:
                 for stream in streams:
                     stream.close()
 
-        def encode():
-            if is_sdr8:
+        def encode(native=False):
+            if is_sdr8 and not native:
                 from PIL import Image
                 from fractions import Fraction
-                # Source bit depth alone is insufficient to authorise a lossy
-                # quantisation. Only exact eight-bit levels enter this path.
+                # Quantisation requires separate broker authority; unconverted
+                # eight-bit inputs still need exact representable sample levels.
                 def encode_eight(rgba):
-                    if np.any(rgba < 0) or np.any(rgba > 1):
-                        raise ValueError("Source samples are outside eight-bit SDR range")
-                    encoded = np.rint(rgba * 255).astype(np.uint8)
-                    if not np.array_equal(rgba, encoded.astype(np.float32) / np.float32(255)):
-                        raise ValueError("Source samples are not eight-bit levels")
-                    return encoded
+                    return encode_sdr8(rgba, derived=bool(processing), processor=processor)
                 first = generated / "first.png"
                 last = first
                 if count > 1:
@@ -797,6 +914,11 @@ class StudioSessions:
         asset = await upload(paths, "/zura/studio/upload?kind=" + ("video" if count > 1 else "image")
                              if is_sdr8 else "/zura/studio/hdr/exr-sequence")
         result = {"studioAsset": asset}
+        if native_colour is not None and not retain_native:
+            expected_space={'scene_linear_rec709':'linear_rec709'}.get(native_colour['encoding'],native_colour['encoding'])
+            if asset.get('nativeInputColour')!=native_colour or asset.get('resolved_colour')!=expected_space:
+                raise ValueError('The uploaded EXR colour mapping differs from the captured AE identity.')
+            result.update(nativeInputColour=native_colour,resolved_colour=expected_space)
         if first:
             stills = {}
             for key, path in (("first", first), ("last", last)):
@@ -821,6 +943,21 @@ class StudioSessions:
                         str((first if first else paths[0].parent).absolute()))
         except Exception:
             pass
+        if native_colour is not None and not retain_native and 'mediaInfo' in result:
+            result['mediaInfo'].pop('colour_error',None)
+            result['mediaInfo'].update(nativeInputColour=native_colour,resolved_colour=expected_space)
+        if retain_native:
+            # HDR modes consume the original EXR asset. Ordinary models consume
+            # the independently prepared SDR asset above; neither replaces the
+            # retained FLOAT frames or their captured colour identity.
+            native_paths, _, _ = await asyncio.to_thread(encode, True)
+            self.active(session)
+            native_asset = await upload(native_paths, '/zura/studio/hdr/exr-sequence')
+            expected_space = {'scene_linear_rec709': 'linear_rec709'}.get(native_colour['encoding'], native_colour['encoding'])
+            if native_asset.get('nativeInputColour') != native_colour or native_asset.get('resolved_colour') != expected_space:
+                raise ValueError('The original EXR colour mapping differs from the captured AE identity.')
+            result = {'studioAsset': native_asset, 'nativeInputColour': native_colour,
+                      'resolved_colour': expected_space, 'processingInput': result}
         # Media-specific descriptors are obtained from the native API itself;
         # no fabricated duration or fake playable asset is returned.
         return result
@@ -833,6 +970,10 @@ class StudioSessions:
                 or filename in (".", "..") or not isinstance(subfolder, str) or "\\" in subfolder or ":" in subfolder
                 or subfolder.startswith("/") or any(p in (".", "..") for p in subfolder.split("/") if p)):
             raise ValueError("Invalid output master reference")
+        # Guide edits are useful inputs to a later video run, never a final AE
+        # result. The preparation endpoint owns this reserved output namespace.
+        if tuple(part.casefold() for part in subfolder.split('/') if part)[:2] == ('comfylink', 'intermediate'):
+            raise ValueError("Return this edited guide to its video workspace before sending the completed shot to AE")
         _, output_root = self.roots()
         root = output_root.absolute()
         path = root / subfolder / filename
@@ -842,11 +983,14 @@ class StudioSessions:
             float_io._safe_stat(path)
         return path
 
-    def prepare_result(self, session, body):
-        if set(body) - {"kind", "master", "preview", "colour", "alpha", "width", "height", "frameCount", "fps", "precision"}:
+    def prepare_result(self, session, body, *, source_manifest=None):
+        if set(body) - {"kind", "master", "preview", "original", "colour", "alpha", "width", "height", "frameCount", "fps", "precision"}:
             raise ValueError("Unsupported result descriptor fields")
-        if not isinstance(body.get("kind", "float_sequence"), str) or body.get("kind", "float_sequence") not in {"image", "video", "float_sequence", "float_manifest", "hdr_sequence", "sequence"}:
+        if not isinstance(body.get("kind", "float_sequence"), str) or body.get("kind", "float_sequence") not in {"image", "video", "float_sequence", "float_manifest", "hdr_sequence", "sequence", "alpha_extract"}:
             raise ValueError("Unsupported result kind")
+        alpha_extract = body.get('kind') == 'alpha_extract'
+        if 'original' in body and not alpha_extract:
+            raise ValueError('An explicit original is only supported for source-bound alpha')
         for name in ("width", "height", "frameCount"):
             if name in body and (type(body[name]) is not int or body[name] < 1):
                 raise ValueError("Invalid result dimensions or frame count")
@@ -863,6 +1007,11 @@ class StudioSessions:
         else:
             path = self.resolve_master(selected)
             originals = [] if path.name == "manifest.json" else [path]
+            if alpha_extract:
+                original = self.resolve_master(body.get('original'))
+                if path.name != 'manifest.json' or original.suffix.lower() != '.mov':
+                    raise ValueError('AE alpha needs its FLOAT manifest and retained MOV')
+                originals = [original]
         _, root = self.roots()
         original_records, original_descriptors, total = [], [], 0
         for index, original in enumerate(originals):
@@ -881,12 +1030,27 @@ class StudioSessions:
                 descriptor["storage"] = storage
         elif originals and path.suffix.lower() == ".zip":
             path = self.convert_zip_master(session, path, body)
-        elif originals:
-            path, storage, provenance = self.convert_master(path, body)
+        elif originals and not alpha_extract:
+            frame_rate = None
+            if path.suffix.lower() in {'.png', '.jpg', '.jpeg', '.webp', '.exr'}:
+                from fractions import Fraction
+                source = float_io.validate_manifest(source_manifest or session.source.get('manifest'))
+                frame_rate = Fraction(source['frameRate']['numerator'], source['frameRate']['denominator'])
+            path, storage, provenance = self.convert_master(path, body, frame_rate=frame_rate)
             if storage is not None:
                 original_descriptors[0]["storage"] = storage
         relative = path.relative_to(root.absolute()).as_posix()
         manifest = float_io.verify_transfer(root, relative)
+        if alpha_extract:
+            source = float_io.validate_manifest(source_manifest or session.source.get('manifest'))
+            if (manifest['sampleType'] != 'float32' or manifest['sourceBitDepth'] != 32
+                    or manifest['alphaAssociation'] != 'straight'
+                    or any(manifest.get(key) != source.get(key) for key in ('width', 'height', 'frameRate', 'colour', 'sourceStart'))
+                    or len(manifest['frames']) != len(source['frames'])):
+                raise ValueError('The alpha FLOAT master differs from its original AE source')
+            provenance = {'schemaVersion': 1, 'kind': 'source_alpha_float32',
+                'sourceManifestSha256': hashlib.sha256(float_io.canonical_manifest_bytes(source)).hexdigest(),
+                'alphaOperation': 'multiply'}
         for field_name, actual in (("width", manifest["width"]), ("height", manifest["height"]),
                                    ("frameCount", len(manifest["frames"])), ("colour", manifest["colour"]),
                                    ("alpha", manifest["alphaAssociation"])):
@@ -921,7 +1085,7 @@ class StudioSessions:
                 "width": manifest["width"], "height": manifest["height"], "frameCount": len(files),
                 "fps": manifest["frameRate"]["numerator"] / manifest["frameRate"]["denominator"]}
 
-    def convert_master(self, path, body):
+    def convert_master(self, path, body, *, frame_rate=None):
         """Decode a declared master and publish a separate verified float transfer.
 
         Only actual eight-bit SDR images/video enter the SDR decoder. A high
@@ -931,7 +1095,9 @@ class StudioSessions:
         import numpy as np
         from fractions import Fraction
         suffix = path.suffix.lower()
-        rate = Fraction(24, 1)
+        # A still inherits the authenticated AE timeline's rational cadence.
+        # A browser label cannot replace it with a rounded decimal or 24 fps.
+        rate = frame_rate
         colour = {"encoding": "unknown", "sceneLinear": False}
         alpha, depth, storage, provenance = "straight", 8, None, None
         with float_io._locked_parents(path.parent):
@@ -951,19 +1117,11 @@ class StudioSessions:
                 provenance = {"schemaVersion": 1, "kind": "sdr8_image", "sourceBitDepth": 8,
                               "embeddedICC": False, "hdrMetadata": False, "transfer": transfer,
                               "primaries": "bt709" if transfer == "srgb" else "unspecified", "validatedFrameCount": 1}
-                # Still images have no inherent frame rate; an explicitly
-                # selected timeline rate is metadata, not a pixel conversion.
-                if "fps" in body:
-                    if isinstance(body["fps"], bool):
-                        raise ValueError("Invalid result frame rate")
-                    rate = Fraction(str(body["fps"]))
             elif suffix == ".exr":
                 pixels, side = float_io.read_exr(path)
                 pixels = pixels[None]
                 colour, alpha, depth = side["colour"], side["alphaAssociation"], 32
                 storage = side["storage"]
-                if "fps" in body:
-                    rate = Fraction(str(body["fps"]))
             elif suffix in {".mp4", ".mov", ".mkv", ".webm"}:
                 import av
                 with av.open(str(path)) as media:
@@ -980,6 +1138,18 @@ class StudioSessions:
                         raise ValueError("Select one master video stream")
                     stream = media.streams.video[0]
                     context = stream.codec_context
+                    if context.format and context.format.name == "yuv420p10le":
+                        from .sdr10_video import decode_sdr10
+                        with decode_sdr10(path) as (rate10, frames10):
+                            _, output_root = self.roots()
+                            relative, wire = float_io.write_transfer_frames(output_root, "ComfyLink/" + secrets.token_hex(16), frames10,
+                                colour=colour, frame_rate={"numerator": rate10.numerator, "denominator": rate10.denominator},
+                                source_bit_depth=32, alpha_association="straight")
+                        if _stamp(float_io._safe_stat(path)) != _stamp(state): raise ValueError("Master changed during validation")
+                        provenance = {"schemaVersion":1, "kind":"sdr10_video", "sourceBitDepth":10,
+                            "embeddedICC":False, "hdrMetadata":False, "transfer":"srgb", "primaries":"bt709",
+                            "matrix":"bt709", "range":"limited", "validatedFrameCount":len(wire["frames"])}
+                        return output_root.absolute() / relative, None, provenance
                     _video_sdr_metadata(context)
                     _unmanaged_metadata(stream.metadata)
                     if getattr(stream, "side_data", ()):
@@ -1013,6 +1183,8 @@ class StudioSessions:
                 return output_root.absolute() / relative, None, provenance
             else:
                 raise ValueError("Unsupported master format; retain pending")
+            if not isinstance(rate, Fraction) or rate <= 0:
+                raise ValueError("A still master needs its authenticated AE source frame rate")
             actual = float_io._safe_stat(path)
             if (actual.st_dev, actual.st_ino, actual.st_size, actual.st_mtime_ns) != (state.st_dev, state.st_ino, state.st_size, state.st_mtime_ns):
                 raise ValueError("Master changed during validation")
@@ -1024,14 +1196,17 @@ class StudioSessions:
                                               source_bit_depth=depth, alpha_association=alpha)
         return output_root.absolute() / relative, storage, provenance
 
-    def convert_exr_sequence(self, paths, body, *, native_records=None, frame_rate=None):
+    def convert_exr_sequence(self, paths, body, *, native_records=None, frame_rate=None, rgba_master=False, alpha_hashes=None):
         """Convert only explicitly selected, verified EXRs, preserving originals."""
         import numpy as np
         from fractions import Fraction
         def read(path):
             if native_records is None:
                 return float_io.read_exr(path)
-            return self.native_archive_frame(path, native_records[path])
+            pixels, side = self.native_archive_frame(path, native_records[path], rgba_master=rgba_master)
+            if rgba_master and hashlib.sha256(np.ascontiguousarray(pixels[:, :, 3], dtype="<f4").tobytes()).hexdigest() != alpha_hashes[path]:
+                raise ValueError("Native HDR alpha differs from its archive proof")
+            return pixels, side
         first, side = read(paths[0])
         contract = (first.shape, side["colour"], side["alphaAssociation"])
         storages = [side["storage"]]
@@ -1050,20 +1225,24 @@ class StudioSessions:
             source_bit_depth=32, alpha_association=contract[2], expected_count=len(paths))
         return root.absolute() / relative, storages
 
-    def native_archive_frame(self, path, expected):
+    def native_archive_frame(self, path, expected, *, rgba_master=False):
         """Read a Studio-validated RGB AP1 frame without colour/range changes."""
         import numpy as np
         import OpenImageIO as oiio
         record = _file_record(path, float_io.MAX_TRANSFER_BYTES, expected)
         with float_io._locked_parents(path.parent):
-            reader = oiio.ImageInput.open(str(path))
+            config = oiio.ImageSpec()
+            if rgba_master: config.attribute("oiio:UnassociatedAlpha", 1)
+            reader = oiio.ImageInput.open(str(path), config)
             if reader is None:
                 raise ValueError("Unreadable native EXR frame")
             try:
                 spec = reader.spec()
                 storage = "float32" if spec.format == oiio.FLOAT else "half" if spec.format == oiio.HALF else None
-                if (storage is None or spec.deep or spec.depth != 1 or spec.nchannels != 3
-                        or set(spec.channelnames) != {"R", "G", "B"} or not 1 <= spec.width <= float_io.MAX_DIMENSION
+                if (storage is None or spec.deep or spec.depth != 1 or spec.nchannels != (4 if rgba_master else 3)
+                        or set(spec.channelnames) != ({"R", "G", "B", "A"} if rgba_master else {"R", "G", "B"})
+                        or (rgba_master and (storage != "float32" or spec.get_string_attribute("comfylink:alphaAssociation") != "straight"
+                            or spec.get_string_attribute("comfylink:colour") != '{"encoding":"acescg","sceneLinear":true}')) or not 1 <= spec.width <= float_io.MAX_DIMENSION
                         or not 1 <= spec.height <= float_io.MAX_DIMENSION or spec.width * spec.height > float_io.MAX_PIXELS
                         or any(fmt != spec.format for fmt in spec.channelformats)):
                     raise ValueError("Native EXR raster or storage differs from its archive")
@@ -1075,10 +1254,12 @@ class StudioSessions:
                         or any("icc" in attribute.name.lower() or "profile" in attribute.name.lower() for attribute in spec.extra_attribs)):
                     raise ValueError("Actual native EXR colour metadata is not unmanaged scene-linear AP1")
                 pixels = reader.read_image(format=oiio.FLOAT)
-                if pixels is None or pixels.shape != (spec.height, spec.width, 3) or not np.isfinite(pixels).all():
+                if pixels is None or pixels.shape != (spec.height, spec.width, 4 if rgba_master else 3) or not np.isfinite(pixels).all():
                     raise ValueError("Native EXR contains nonfinite or malformed pixels")
                 rgb = pixels[:, :, [list(spec.channelnames).index(channel) for channel in "RGB"]]
-                rgba = np.concatenate((rgb, np.ones((*rgb.shape[:2], 1), dtype=np.float32)), axis=2)
+                rgba = np.concatenate((rgb, pixels[:, :, [list(spec.channelnames).index("A")]] if rgba_master else np.ones((*rgb.shape[:2], 1), dtype=np.float32)), axis=2)
+                if rgba_master and (np.any(rgba[:, :, 3] < 0) or np.any(rgba[:, :, 3] > 1)):
+                    raise ValueError("Native EXR contains invalid alpha")
             finally:
                 reader.close()
         if _file_record(path, float_io.MAX_TRANSFER_BYTES, expected)[1] != record[1]:
@@ -1089,17 +1270,20 @@ class StudioSessions:
         """Prepare only the native Studio's bounded stored ACEScg EXR ZIP."""
         import OpenImageIO as oiio
         from fractions import Fraction
-        with float_io._locked_parents(path.parent), zipfile.ZipFile(path) as archive:
+        from .archive_zip import bounded_stored_archive
+        with float_io._locked_parents(path.parent), bounded_stored_archive(path, max_entries=float_io.MAX_FRAMES+1) as archive:
             infos = archive.infolist()
-            if not 1 <= len(infos) <= float_io.MAX_FRAMES:
+            proof_info = next((i for i in infos if i.filename == "zura_hdr_delivery.json"), None)
+            frame_infos = [i for i in infos if i.filename != "zura_hdr_delivery.json"]
+            if not 1 <= len(frame_infos) <= float_io.MAX_FRAMES or len(infos) != len(frame_infos) + bool(proof_info):
                 raise ValueError("Native archive frame count exceeds bounds")
             names, total = set(), 0
-            for info in infos:
+            for info in frame_infos:
                 name = info.filename
                 kind = (info.external_attr >> 16) & 0o170000
                 if (not isinstance(name, str) or not re.fullmatch(r"frame_[0-9]{5}\.exr", name)
                         or name.casefold() in names or info.is_dir() or info.flag_bits & 1
-                        or kind not in {0, stat.S_IFREG} or info.extra
+                        or kind not in {0, stat.S_IFREG}
                         or info.compress_type != zipfile.ZIP_STORED or info.compress_size != info.file_size
                         or not 0 < info.file_size <= float_io.MAX_TRANSFER_BYTES):
                     raise ValueError("Archive contains unsafe paths, metadata, links or compressed entries")
@@ -1107,13 +1291,40 @@ class StudioSessions:
                 total += info.file_size
                 if total > float_io.MAX_TRANSFER_BYTES:
                     raise ValueError("Native archive exceeds aggregate byte bound")
-            expected_names = [f"frame_{index:05d}.exr" for index in range(len(infos))]
-            if sorted(info.filename for info in infos) != expected_names:
+            expected_names = [f"frame_{index:05d}.exr" for index in range(len(frame_infos))]
+            if sorted(info.filename for info in frame_infos) != expected_names:
                 raise ValueError("Native archive has missing or unordered frame numbers")
             source = float_io.validate_manifest(session.source.get("manifest"))
             rate = Fraction(source["frameRate"]["numerator"], source["frameRate"]["denominator"])
             if "fps" in body and body["fps"] != float(rate):
                 rate = Fraction(str(body["fps"]))
+            proof = None
+            if proof_info is not None:
+                if (proof_info.is_dir() or proof_info.flag_bits & 1 or ((proof_info.external_attr >> 16) & 0o170000) not in {0, stat.S_IFREG}
+                        or proof_info.compress_type != zipfile.ZIP_STORED or not 1 <= proof_info.file_size <= 4 * 1024 * 1024):
+                    raise ValueError("Native HDR proof is invalid")
+                with archive.open(proof_info) as stream:
+                    raw = stream.read(proof_info.file_size + 1)
+                if len(raw) != proof_info.file_size: raise ValueError("Native HDR proof is truncated")
+                proof = json.loads(raw.decode("utf-8"), object_pairs_hook=float_io._json_pairs,
+                    parse_constant=lambda _: (_ for _ in ()).throw(ValueError("Nonfinite HDR proof")))
+                required = {"schemaVersion", "kind", "colour", "alphaAssociation", "width", "height", "frameCount", "frameRate", "alphaSource", "frames"}
+                if (not isinstance(proof, dict) or not required <= set(proof) or set(proof) - required - {"sourceStart"}
+                        or type(proof["schemaVersion"]) is not int or proof["schemaVersion"] != 1 or proof["kind"] != "rgba_hdr"
+                        or proof["colour"] != {"encoding": "acescg", "sceneLinear": True} or proof["colour"].get("sceneLinear") is not True
+                        or proof["alphaAssociation"] != "straight" or any(type(proof[k]) is not int or proof[k] < 1 for k in ("width", "height", "frameCount"))
+                        or proof["frameCount"] != len(frame_infos) or float_io._rational(proof["frameRate"], "HDR proof frame rate", True) != rate):
+                    raise ValueError("Native HDR proof does not match the selected result")
+                if "sourceStart" in proof: float_io._rational(proof["sourceStart"], "HDR source start", signed=True)
+                origin = proof["alphaSource"]
+                if (not isinstance(origin, dict) or set(origin) != {"kind", "sha256"} or origin["kind"] not in {"alpha_float32", "float_manifest", "rgba_image"}
+                        or not isinstance(origin["sha256"], str) or not re.fullmatch(r"[a-f0-9]{64}", origin["sha256"])):
+                    raise ValueError("Native HDR alpha provenance is invalid")
+                if not isinstance(proof["frames"], list) or len(proof["frames"]) != len(frame_infos): raise ValueError("Native HDR proof count differs")
+                for name, item in zip(expected_names, proof["frames"]):
+                    if (not isinstance(item, dict) or set(item) != {"filename", "sha256", "alphaSha256"} or item["filename"] != name
+                            or any(not isinstance(item[k], str) or not re.fullmatch(r"[a-f0-9]{64}", item[k]) for k in ("sha256", "alphaSha256"))):
+                        raise ValueError("Native HDR frame proof is invalid")
             _, root = self.roots()
             parent = root.absolute() / "ComfyLink"
             with float_io._locked_parents(root.absolute()):
@@ -1143,6 +1354,8 @@ class StudioSessions:
                         if length != info.file_size:
                             raise ValueError("Native ZIP entry length differs")
                         records[destination] = {"byteLength": length, "sha256": digest.hexdigest()}
+                        if proof is not None and records[destination]["sha256"] != proof["frames"][len(records)-1]["sha256"]:
+                            raise ValueError("Native HDR frame differs from its proof")
                 reader = oiio.ImageInput.open(str(prepared / expected_names[0]))
                 if reader is None:
                     raise ValueError("Native archive has no readable first EXR")
@@ -1151,24 +1364,34 @@ class StudioSessions:
                     width, height = spec.width, spec.height
                     storage = "half" if spec.format == oiio.HALF else "float32" if spec.format == oiio.FLOAT else None
                     if (storage is None or not 1 <= width <= float_io.MAX_DIMENSION or not 1 <= height <= float_io.MAX_DIMENSION
-                            or width * height > float_io.MAX_PIXELS or width * height * 16 * len(infos) > float_io.MAX_TRANSFER_BYTES):
+                            or width * height > float_io.MAX_PIXELS or width * height * 16 * len(frame_infos) > float_io.MAX_TRANSFER_BYTES
+                            or (proof is not None and (storage != "float32" or (width, height) != (proof["width"], proof["height"])))):
                         raise ValueError("Native archive decoded pixels exceed bounds")
                 finally:
                     reader.close()
                 # Reuse Studio's actual archive validator. It checks every RGB
                 # EXR's storage, AP1 chromaticities, scene-linear colour tags,
                 # raster, finite pixels and complete frame numbering.
-                _studio_module("ltx25_hdr_result")._check_archive(path, len(infos), width, height, exr_storage=storage)
+                if proof is None:
+                    _studio_module("ltx25_hdr_result")._check_archive(path, len(frame_infos), width, height, exr_storage=storage)
                 self.active(session)
                 converted, _ = self.convert_exr_sequence([prepared / name for name in expected_names],
-                    {}, native_records=records, frame_rate=rate)
+                    {}, native_records=records, frame_rate=rate, rgba_master=proof is not None,
+                    alpha_hashes={prepared / item["filename"]: item["alphaSha256"] for item in proof["frames"]} if proof else None)
                 complete = True
                 return converted
             finally:
-                if not complete:
-                    # Only this fresh, private extraction subtree is disposable.
-                    with float_io._locked_parents(parent):
-                        shutil.rmtree(private)
+                # This directory contains only the temporary EXR extraction;
+                # the verified original ZIP and converted transfer are separate.
+                with float_io._locked_parents(prepared):
+                    for extracted in prepared.iterdir():
+                        if extracted.name not in expected_names:
+                            raise ValueError("Unexpected file in native ZIP extraction")
+                        float_io._safe_stat(extracted)
+                        extracted.unlink()
+                with float_io._locked_parents(parent):
+                    prepared.rmdir()
+                    private.rmdir()
 
     async def result(self, request):
         session = self.authorize(request)
@@ -1178,7 +1401,17 @@ class StudioSessions:
         async with session.lock:
             self.active(session)
             try:
-                descriptor = await asyncio.to_thread(self.prepare_result, session, body)
+                source_manifest = session.source.get('manifest')
+                master = body.get('master')
+                if (source_manifest is None and isinstance(master, dict) and isinstance(master.get('filename'), str)
+                        and Path(master['filename']).suffix.lower() in {'.png', '.jpg', '.jpeg', '.webp', '.exr'}):
+                    # A restored result can precede source import in this tab.
+                    # Read only the broker's source metadata; do not fabricate
+                    # a staged source or change the user's Studio workspace.
+                    source_data = await self.broker_json(session, '/source')
+                    self.active(session)
+                    source_manifest = float_io.validate_manifest(source_data.get('manifest', source_data))
+                descriptor = await asyncio.to_thread(self.prepare_result, session, body, source_manifest=source_manifest)
             except Exception:
                 # Decode errors are returned without codec diagnostics, paths
                 # or capabilities; the original output is always retained.
@@ -1209,9 +1442,25 @@ class StudioSessions:
 
     async def status(self, request):
         session = self.authorize(request)
-        response = await self.broker_json(session, "/status")
+        try:
+            response = await self.broker_json(session, "/status")
+        except web.HTTPGone:
+            authority = self.close_local(session)
+            if authority is not None:
+                await self.revoke_broker(authority)
+            if getattr(self, 'work', None) is not None:
+                await self.work.cancel(session)
+            return web.json_response({'ok': True, 'status': 'cancelled', 'ready': False})
         self.active(session)
         status = response.get("status")
+        from .studio_cancel import broker_ended
+        if broker_ended(response):
+            authority = self.close_local(session)
+            if authority is not None:
+                await self.revoke_broker(authority)
+            if getattr(self, 'work', None) is not None:
+                await self.work.cancel(session)
+            return web.json_response({'ok': True, 'status': 'cancelled', 'ready': False})
         if not isinstance(status, str) or status not in {"preparing", "ready", "import_pending", "sent"}:
             status = "pending"
         diagnostic = response.get("diagnostic")
@@ -1222,16 +1471,21 @@ class StudioSessions:
 
     async def prepare_graph(self, request):
         from fractions import Fraction
-        from .frame_contract import normalise_frame_contract, prepare_frame_contract_graph, IMAGE_SAVERS, VIDEO_SAVERS
+        from .frame_contract import (normalise_frame_contract, prepare_frame_contract_graph,
+                                     prepare_intermediate_image_graph, IMAGE_SAVERS, VIDEO_SAVERS)
         session = self.authorize(request)
         body = await _bounded_json(request.content, 16 * 1024 * 1024)
         try:
-            if set(body) != {"mode", "graph", "ae_frame_contract"} or not isinstance(body["mode"], str) or body["mode"] not in _STUDIO_MODES:
+            required = {"mode", "graph", "ae_frame_contract"}
+            if (set(body) not in (required, required | {"ae_intermediate_image"})
+                    or not isinstance(body["mode"], str) or body["mode"] not in _STUDIO_MODES):
                 raise ValueError("Choose a supported native Studio mode")
             raw_contract = body["ae_frame_contract"]
             if not isinstance(raw_contract, dict) or type(raw_contract.get("schemaVersion")) is not int:
                 raise ValueError("Choose a valid AE frame contract")
             contract = normalise_frame_contract(raw_contract)
+            if 'ae_intermediate_image' in contract:
+                raise ValueError("Provide the unchanged AE parent source contract")
             manifest = float_io.validate_manifest(session.source.get("manifest"))
             if (contract["sessionId"] != session.id or contract["frameCount"] != len(manifest["frames"])
                     or contract["width"] != manifest["width"] or contract["height"] != manifest["height"]
@@ -1256,9 +1510,19 @@ class StudioSessions:
                                 or any(part in {".", ".."} for part in value.split("/"))):
                             raise ValueError("Native output must stay inside this Comfy output directory")
             self.active(session)
-            prepared = await asyncio.to_thread(prepare_frame_contract_graph, graph, contract, body["mode"])
+            if 'ae_intermediate_image' in body:
+                if body['mode'] != 'image':
+                    raise ValueError("Only the Image workspace can prepare an intermediate guide")
+                prepared, contract = await asyncio.to_thread(prepare_intermediate_image_graph,
+                    graph, contract, body['ae_intermediate_image'])
+            else:
+                if body['mode'] == 'alpha':
+                    contract['sourceManifestSha256'] = hashlib.sha256(float_io.canonical_manifest_bytes(manifest)).hexdigest()
+                prepared = await asyncio.to_thread(prepare_frame_contract_graph, graph, contract, body["mode"])
             self.active(session)
-            return web.json_response({"graph": prepared}, headers={"Cache-Control": "no-store"})
+            return web.json_response({"graph": prepared, "ae_frame_contract": contract,
+                **({'ae_intermediate_image': contract['ae_intermediate_image']} if 'ae_intermediate_image' in contract else {})},
+                headers={"Cache-Control": "no-store"})
         except (ValueError, TypeError, KeyError):
             raise web.HTTPUnprocessableEntity(text="Graph preparation requires this active session's exact source interval and a supported native output")
 
@@ -1330,6 +1594,8 @@ class StudioSessions:
             await _bounded_json(request.content, 4096)
         self.active(session)
         authority = self.close_local(session)
+        if getattr(self, 'work', None) is not None:
+            await self.work.cancel(session)
         if authority is not None:
             await self.revoke_broker(authority)
         return web.json_response({"ok": True, "status": "left"})
@@ -1338,16 +1604,28 @@ class StudioSessions:
 def register(server, instance_id="", **options):
     if getattr(server, "_zura_comfylink_studio_sessions", None) is not None:
         return server._zura_comfylink_studio_sessions
+    if 'history_reader' not in options:
+        queue = getattr(server, 'prompt_queue', None)
+        reader = getattr(queue, 'get_history', None)
+        if callable(reader):
+            options['history_reader'] = lambda limit: reader(max_items=limit)
     service = StudioSessions(instance_id=instance_id, **options)
+    from .studio_cancel import SessionWork
+    service.work = SessionWork(service, server)
+    if getattr(server, 'app', None) is not None:
+        server.app.middlewares.append(service.work.middleware)
     server.routes.post(PREFIX + "/sessions")(service.create)
     server.routes.get(PREFIX + "/sessions/{id}")(service.get)
+    server.routes.post(PREFIX + "/sessions/{id}/renew")(service.renew)
     server.routes.post(PREFIX + "/sessions/{id}/source")(service.source)
+    server.routes.post(PREFIX + "/sessions/{id}/retained-images")(service.retained_images)
     server.routes.get(PREFIX + "/sessions/{id}/display-config")(service.display_config)
     server.routes.get(PREFIX + "/sessions/{id}/display-frame")(service.display_frame)
     server.routes.post(PREFIX + "/sessions/{id}/result")(service.result)
     server.routes.get(PREFIX + "/sessions/{id}/status")(service.status)
     server.routes.post(PREFIX + "/sessions/{id}/prepare-graph")(service.prepare_graph)
     server.routes.post(PREFIX + "/sessions/{id}/leave")(service.leave)
+    server.routes.post(PREFIX + "/sessions/{id}/cancel")(service.leave)
     server.routes.get(PREFIX + "/sessions/{id}/result-files/{index}")(service.result_file)
     server.routes.get(PREFIX + "/sessions/{id}/original-files/{index}")(service.original_file)
     from . import studio_desktop

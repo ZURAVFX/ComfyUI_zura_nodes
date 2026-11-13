@@ -1,11 +1,19 @@
 """Native HDR black-mask graph parity; no GPU or public route required."""
 import copy
 import importlib
+import sys
+import types
 import unittest
 from unittest.mock import patch
 
 import torch
 import test_artist_studio
+import v2_bootstrap
+
+if 'ComfyUI_zura_nodes.paintout' not in sys.modules:
+    package=types.ModuleType('ComfyUI_zura_nodes.paintout')
+    package.__path__=[str(v2_bootstrap.ROOT/'paintout')]
+    sys.modules[package.__name__]=package
 
 experiment = importlib.import_module('ComfyUI_zura_nodes.artist_studio.hdr_outpaint_experiment')
 planner = importlib.import_module('ComfyUI_zura_nodes.artist_studio.hdr_outpaint_long_plan')
@@ -40,6 +48,7 @@ class HDRBlackTests(unittest.TestCase):
             self.assertEqual(actual['mode'],'black')
         self.assertEqual(stage['canvas']['inputs']['images'],['hdr_input_hold',0])
         self.assertEqual(stage['tone_map_source']['inputs']['image'],['canvas',0])
+        self.assertEqual(stage['tone_map_source']['class_type'],'LTXVHDRDecodePostprocess','Keep the trained model-conditioning transform unchanged')
         self.assertEqual(stage['masked_sdr_guide']['inputs']['mask'],['canvas',1])
         self.assertEqual(stage['masked_sdr_guide']['inputs']['source'],['black_fill',0])
         self.assertEqual(stage['mask_image']['inputs']['mask'],['canvas',1])

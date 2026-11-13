@@ -40,6 +40,7 @@ class HDRCanvasTests(unittest.TestCase):
         self.assertEqual(stage['hdr_source']['inputs']['start_seconds'], .517)
         self.assertEqual(stage['hdr_source']['inputs']['frame_count'], 12)
         self.assertEqual(stage['tone_map_source']['inputs']['image'], ['hdr_input_hold', 0])
+        self.assertEqual(stage['tone_map_source']['class_type'],'LTXVHDRDecodePostprocess','Model conditioning is outside this display-only change')
         self.assertEqual(final['native_original']['inputs']['frame_count'], 12)
         self.assertEqual(final['native_original']['inputs']['start_seconds'], .517)
         self.assertEqual(final['hdr_original_length']['inputs']['length'], 12)
@@ -79,6 +80,8 @@ class HDRCanvasTests(unittest.TestCase):
             self.assertEqual(graph['hdr_trim']['inputs']['length'], 24)
             self.assertEqual(graph['hdr_unpad']['inputs']['width'], 190)
             self.assertEqual(graph['hdr_preview']['inputs']['image'], ['hdr_unpad', 0])
+            self.assertEqual(review['hdr_preview'], {'class_type':'ZuraHDRSDRPreview','inputs':{'image':['canvas',0]}})
+            self.assertEqual(graph['hdr_preview']['class_type'],'ZuraHDRSDRPreview')
             self.assertEqual(graph['hdr_experiment_exr']['inputs']['images'], ['hdr_unpad', 0])
             self.assertEqual(graph['hdr_experiment_hlg']['inputs']['image'], ['hdr_unpad', 0])
             if audio:
@@ -179,6 +182,7 @@ class HDRCanvasTests(unittest.TestCase):
         self.assertEqual(graph['canvas']['inputs']['images'], ['hdr_source', 0])
         self.assertEqual(graph['hdr_source']['inputs']['start_frame'], 7)
         self.assertEqual(graph['hdr_experiment_exr']['inputs']['images'], ['trim_result', 0])
+        self.assertEqual(graph['hdr_preview'], {'class_type':'ZuraHDRSDRPreview','inputs':{'image':['trim_result',0]}})
         for node in graph.values():
             for value in node['inputs'].values():
                 if isinstance(value, list) and len(value) == 2 and isinstance(value[0], str):
@@ -199,6 +203,8 @@ class HDRCanvasTests(unittest.TestCase):
             self.assertEqual(graph['canvas']['inputs']['images'], ['hdr_source', 0])
             self.assertEqual(graph['guide']['inputs']['vae'], ['hdr_vae', 0])
             self.assertEqual(graph['hdr_preview']['inputs']['image'], ['hdr_composite', 0])
+            self.assertEqual(graph['hdr_preview']['class_type'],'ZuraHDRSDRPreview')
+            self.assertEqual(set(graph['hdr_preview']['inputs']),{'image'},'Review conversion has no master export controls')
             self.assertEqual(graph['hdr_composite']['inputs']['source'], ['canvas', 0])
             self.assertIn('sdr_preview', graph['hdr_preview_save']['inputs']['filename_prefix'])
             self.assertEqual(graph['audio_encoded']['class_type'], 'VAEEncodeAudio' if audio else 'LTXVEmptyLatentAudio')

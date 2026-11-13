@@ -33,25 +33,43 @@ def create_native_job(server, asset, body, check_asset, output_root, *, ffmpeg=N
     if type(start) is not int or start<0 or type(count) is not int or count<1:
         raise ValueError('Choose a valid HDR source range.')
     sequence=asset.get('asset_kind')=='hdr_sequence'
+    still=asset.get('asset_kind')=='sdr_image'
     if sequence:
         from .hdr_sequence import validate_manifest
         source,_=validate_manifest(manifest,asset['sha'],start,count)
-    elif asset.get('asset_kind')=='video':source=manifest
+    elif asset.get('asset_kind')=='video' or still:source=manifest
     else:raise ValueError('Choose HDR video or an EXR sequence.')
     info=describe(str(source))
     if start+count>info['count']:raise ValueError('The selected range extends past the source.')
     contract=body.get('ae_frame_contract')
     if contract is not None:
         from ..comfylink.frame_contract import validate_interval
-        fps=body.get('sequence_fps',24) if sequence else info['fps']
+        fps=body.get('sequence_fps',24) if sequence or still else info['fps']
         validate_interval(contract,frames=count,fps=fps,width=info['width'],height=info['height'])
-    plan=plan_chunks(start,count,info['width'],info['height'],overlap=overlap,max_frames=max_chunk_frames,mode=_planning_mode)
+    alpha_source=None
+    if asset.get('hdr_alpha_ref') is not None or asset.get('hdr_alpha_image') is not None:
+        from fractions import Fraction
+        from .hdr_alpha import HDRAlphaSource
+        rate=Fraction(info['fps_rational']) if not still and info.get('fps_rational') else Fraction(str(body.get('sequence_fps',24) if still else info['fps']))
+        if contract is not None:rate=Fraction(contract['frameRate']['numerator'],contract['frameRate']['denominator'])
+        reference=asset['hdr_alpha_ref'] if 'hdr_alpha_ref' in asset else asset['hdr_alpha_image']
+        alpha_source=HDRAlphaSource(output_root,reference,width=info['width'],height=info['height'],count=count,frame_rate=rate,image=asset.get('hdr_alpha_image') is not None)
+        # HEVC HLG cannot carry this alpha. Retain it in a FLOAT RGBA archive;
+        # the optional HLG file remains an RGB viewing/delivery companion.
+        body=dict(body,exr_storage='float32',output='hlg_and_exr' if body.get('output','hlg_and_exr')=='hlg_video' else body.get('output','hlg_and_exr'))
+    if still:
+        from .hdr_prepare import sdr_still_limit
+        from .hdr_chunks import HDRChunk
+        if start!=0 or count!=1 or not sdr_still_limit(info['width'],info['height']):raise ValueError('Still HDR needs one full-resolution frame within the spatial memory budget.')
+        plan=[HDRChunk(0,1,0)]
+    else:plan=plan_chunks(start,count,info['width'],info['height'],overlap=overlap,max_frames=max_chunk_frames,mode=_planning_mode)
     chunk_body=dict(body,start_frame=plan[0].start,frame_count=plan[0].count)
     # The immutable whole-source contract belongs to assembly, not each
     # overlapping inference window. Native chunk staging verifies each count.
     chunk_body.pop('ae_frame_contract',None)
     builder=_graph_builder or build_asset_graph
     first_graph,details=builder(asset,chunk_body,check_asset)
+    linear_rgb=_planning_mode=='sdr' and first_graph.get('hdr_detail',{}).get('class_type')=='ZuraHDRSourceDetail'
     # Validate artist-selected LoRAs before starting a potentially expensive
     # job, and apply the same validated selection to every subsequent window.
     from .custom_loras import apply_installed_ltx_loras
@@ -74,7 +92,7 @@ def create_native_job(server, asset, body, check_asset, output_root, *, ffmpeg=N
     output_dir=Path(output_root)/'genj'/'hdr'
     # Conservative estimate for an uncompressed half-float EXR sequence,
     # encoded video and one temporary frame. Actual codec sizes can vary.
-    output_bytes=count*details['width']*details['height']*((14 if exr_storage=='float32' else 8) if output!='hlg_video' else 2)
+    output_bytes=count*details['width']*details['height']*(18 if alpha_source is not None else ((14 if exr_storage=='float32' else 8) if output!='hlg_video' else 2))
     reserve=64*1024*1024
     same_device=os.stat(staging).st_dev==os.stat(output_dir).st_dev
     if shutil.disk_usage(staging).free < staged_bytes + (output_bytes if same_device else 0) + reserve:
@@ -94,7 +112,7 @@ def create_native_job(server, asset, body, check_asset, output_root, *, ffmpeg=N
         raise ValueError('FFmpeg needs a 10-bit HEVC encoder for HDR video.')
     ffmpeg=str(executable)
     identity=uuid.uuid4().hex
-    store=HDRChunkStore(staging,identity,plan,details['width'],details['height'],create=True)
+    store=HDRChunkStore(staging,identity,plan,details['width'],details['height'],create=True,planning_mode=_planning_mode,**({'colour_space':'acescg'} if linear_rgb else {}))
 
     def make_graph(part):
         part_body=dict(body,start_frame=part.start,frame_count=part.count)
@@ -107,18 +125,22 @@ def create_native_job(server, asset, body, check_asset, output_root, *, ffmpeg=N
         paths=[]
         try:
             if output in ('acescg_exr','hlg_and_exr'):
-                paths.append(await asyncio.to_thread(export_exr_zip,staged,output_root,_prefix+'_'+identity,half_precision=exr_storage=='half'))
+                if alpha_source is not None:
+                    from .hdr_chunk_exr import export_rgba_exr_zip
+                    paths.append(await asyncio.to_thread(export_rgba_exr_zip,staged,output_root,_prefix+'_'+identity,alpha_source=alpha_source,frame_rate=alpha_source.rate,**({'linear_rgb':True} if linear_rgb else {})))
+                else:paths.append(await asyncio.to_thread(export_exr_zip,staged,output_root,_prefix+'_'+identity,half_precision=exr_storage=='half',**({'linear_rgb':True} if linear_rgb else {})))
             if output in ('hlg_video','hlg_and_exr'):
                 paths.append(await asyncio.to_thread(export_hlg_video,staged,output_root,_prefix+'_'+identity,
                     fps=details['fps'],audio_source=str(source) if details['has_audio'] else None,
-                    audio_start_frame=start,ffmpeg=ffmpeg))
+                    audio_start_frame=start,ffmpeg=ffmpeg,**({'linear_rgb':True} if linear_rgb else {})))
             preview=await asyncio.to_thread(export_sdr_preview,staged,output_root,_prefix+'_'+identity,
                 fps=details['fps'],audio_source=str(source) if details['has_audio'] else None,
-                audio_start_frame=start,ffmpeg=ffmpeg)
+                audio_start_frame=start,ffmpeg=ffmpeg,**({'linear_rgb':True} if linear_rgb else {}))
             paths.append(preview)
             if staged.cancelled.is_set():raise HDRChunkCancelled('HDR conversion cancelled.')
+            if alpha_source is not None:alpha_source.verify()
             return {'files':[str(path) for path in paths if path!=preview],'preview':str(preview),
-                    'frames':count,'fps':details['fps'],'exr_storage':exr_storage}
+                    'frames':count,'fps':details['fps'],'exr_storage':exr_storage,**({'colour':{'encoding':'acescg','sceneLinear':True},'reconstruction':'ltx_luminance_source_detail'} if linear_rgb else {}),**({'alphaAssociation':'straight','layout':'RGBA','frameRate':{'numerator':alpha_source.rate.numerator,'denominator':alpha_source.rate.denominator}} if alpha_source is not None else {})}
         except Exception:
             # Both paths were created exclusively by this call. Never touch a
             # pre-existing deliverable if a subsequent export fails.
@@ -134,7 +156,7 @@ def create_sdr_job(server, asset, body, check_asset, output_root, *, ffmpeg=None
     """Build a frame-exact SDR-to-HDR job using bounded overlapping sections."""
     if body.get('mode','sdr')!='sdr':
         raise ValueError('The SDR conversion job only accepts SDR mode.')
-    if asset.get('asset_kind')!='video':raise ValueError('Choose an SDR source video.')
+    if asset.get('asset_kind') not in ('video','sdr_image'):raise ValueError('Choose an SDR source video or still image.')
     from .hdr_studio import build_asset_graph as build_sdr_graph
     return create_native_job(server,asset,body,check_asset,output_root,ffmpeg=ffmpeg,
         max_chunk_frames=max_chunk_frames,overlap=overlap,anchor_strength=anchor_strength,anchor_mode='i2v',_planning_mode='sdr',_graph_builder=build_sdr_graph,

@@ -44,6 +44,15 @@ function fixture({clearStorage=true}={}){
 }
 // Source changes while preparing cannot hijack the image workspace.
 {
+  const f=fixture();await f.handoff.edit(f.workspace,f.anchor);
+  const rendered={enabled:true,source_key:'zura_images/ripple/source.png',mask:{file:'rendered-selection.png'}},newer={...rendered,mask:{file:'newer-selection.png'}};
+  f.owner.imageArea={flush:async()=>newer,config:()=>newer,restore(){}};
+  f.owner.items=[{file:{filename:'edited.png'},ripple_guide:f.handoff.request.id,edit_area:rendered}];f.owner.selectedImage=0;
+  await f.handoff.useResult();
+  assert.deepEqual(f.anchor.edit_area,rendered,'Accepting a result retains the mask used for that generation, not a newly painted review draft');
+}
+// Source changes while preparing cannot hijack the image workspace.
+{
   const f=fixture(),pending=defer(),started=defer();f.workspace.prepareAnchor=()=>{started.resolve();return pending.promise;};
   const work=f.handoff.edit(f.workspace,f.anchor);await started.promise;f.workspace.revision++;pending.resolve({url:'/old'});await work;
   assert.equal(f.handoff.request,null);assert.equal(f.owner.mode,'ripple');assert.match(f.workspace.status,/changed/);
@@ -138,4 +147,15 @@ console.log('Ripple image handoff preserves original frames, exact raster, share
  const f=fixture();await f.handoff.edit(f.workspace,f.anchor);f.handoff.request=null;
  const visible={intent:'relight'};f.owner.mode='ripple';f.owner.ripple=visible;f.owner.rippleWorkspaces=new Map([['edit',f.workspace],['relight',visible]]);
  await f.handoff.resume();assert.equal(f.owner.ripple,visible);assert.equal(f.handoff.request.workspace,f.workspace);
+}
+
+// AE source identity survives draft storage and cannot cross into another session.
+{
+ const f=fixture();f.anchor.frame=4;
+ f.owner.aeFrameBase=Object.freeze({sessionId:'a'.repeat(32),frameCount:9,width:1081,height:1919,frameRate:Object.freeze({numerator:24,denominator:1})});
+ await f.handoff.edit(f.workspace,f.anchor);
+ assert.equal(f.handoff.request.aeParent.frameCount,9);assert.equal(f.handoff.stored.aeParent.sessionId,'a'.repeat(32));assert.equal(f.owner.aeFrameBase.frameCount,9);
+ f.handoff.request=null;await f.handoff.resume();assert.equal(f.handoff.request.anchor.frame,4);
+ f.handoff.request=null;f.owner.aeFrameBase={...f.owner.aeFrameBase,sessionId:'b'.repeat(32)};
+ await f.handoff.resume();assert.equal(f.handoff.request,null);assert.equal(f.handoff.stored,null);assert.match(f.owner.error,/AE source changed/);
 }

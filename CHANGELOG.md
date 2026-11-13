@@ -1,11 +1,16 @@
-## Unreleased: Paintout consolidation
-
-- Retired the separate Paintout Studio button and menu entry. Open Zura Studio, then Video > Paintout / clean plate.
-- Kept the newer integrated editor and shared Studio UI. Mask segments, clean-frame paint layers, blend/brightness, projects, model setup and SDR/HDR handling remain available.
-- Preserved old Paintout commands, links and saved launcher node IDs as shortcuts into Zura Studio; the old launcher node is deprecated for new workflows.
-- No model recipe, project storage or source media changes.
-
 # Release notes
+
+## 1.3.64 - 13 November 2026
+
+- Keep Input SDR/HDR and Output SDR/HDR controls available across Studio workspaces. Retain original high-depth sources while preparing separate SDR model inputs for verified ACEScg, linear Rec.709 and ACEScct AE sources. Honour proven sRGB and BT.709 video transfer declarations on working-space return.
+- Import ordinary images, high-depth EXRs and ProRes movies through the shared media picker. Preserve original precision and bytes, prepare the selected frame or interval, and keep native HDR assets separate from clipped model copies.
+- Restore image edits to their captured canvas and align model grids upwards without cropping. Carry dimensions through AE still-image adapters, fix model discovery, and compare source/result images using matching view geometry.
+- Use PyTorch attention for LTX Ripple, Replace and LTX Relight so edited-frame guidance propagates through the shot. Other engines retain their attention settings.
+- Keep Add placement inside the painted area and use mode-specific Add, Remove and Replace instructions. Wait for editor styles and canvas measurements before revealing the workbench. Retain the original mask, tracking and clean-frame removal flow within the shared Add / Remove / Replace workbench. Consolidate the retired Paintout launcher into Studio and preserve its saved links and nodes.
+- Preserve source detail and chroma during SDR-to-HDR conversion using the LTX lighting prediction. Deliver the final master in linear ACEScg, with FLOAT EXR storage, matching HLG/preview colour handling and explicit opt-outs for creative native HDR/outpaint routes.
+- Provide immediate display-only OCIO view changes, additional display transforms and right-click access. Display changes do not modify generated masters.
+- Keep AE shots, cancellation, replacement shots and ordinary Studio drafts separate. Preserve rational clocks and exact delivered frame counts; Camera's LTX route now accepts source cadence and applies its native internal frame grid while retaining its existing 120-source-frame cap. Restore legacy aliases for the public Studio helpers.
+- CPU graph, media, colour, source-contract and compatibility regressions cover these changes. Scoped AE image tests verified one-frame delivery and exact generated RGB; one-frame and nine-frame HDR conversions also completed. Full GPU/AE acceptance across all Studio modes, alpha, long 4K HDR shots and optional model variants remains incomplete. ComfyLink's separate paid native plug-in is not included in this public package.
 
 ## 1.3.63 - 12 November 2026
 

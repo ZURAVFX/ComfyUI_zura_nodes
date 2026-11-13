@@ -21,7 +21,7 @@ const config={engine:'ltx',hdrOutput:'hlg_and_exr',frames:73,width:1344,height:7
 const take={file:{filename:'sdr.mp4',subfolder:'zura/first_last',type:'output'},config};
 const stages=[],complete=[];
 const delivery=new LTXHDRDelivery(api,{key:'isolated-delivery',onUpdate:j=>stages.push(j.state),onComplete:t=>complete.push(t)});
-await delivery.preflight({...config,engine:'h3'});assert.equal(calls.length,0,'H3 never invokes HDR setup');
+await delivery.preflight({...config,engine:'h3'});assert.equal(calls.length,1,'A requested H3 HDR delivery checks the same real conversion setup');
 ready=false;await assert.rejects(delivery.preflight(config),/hdr-adapter/);assert.ok(!calls.some(c=>c.path.endsWith('/jobs')),'Missing HDR models fail before queuing');
 ready=true;enabled=false;await assert.rejects(delivery.preflight(config),/disabled/);enabled=true;
 await delivery.preflight(config);await delivery.start(take);

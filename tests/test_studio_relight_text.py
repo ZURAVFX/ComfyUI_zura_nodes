@@ -19,6 +19,8 @@ class RelightTextTests(unittest.TestCase):
     def project(self, remove=False):
         p = relight.RelightTests().project()
         p['config']['remove_text'] = remove
+        # Exercise retained legacy H3 graphs; public Relight config now migrates to Wan21.
+        p['config']['relight_engine'] = 'h3'
         return p
 
     def test_native_detection_covers_real_frames_and_saves_protected_review(self):
@@ -59,7 +61,10 @@ class RelightTextTests(unittest.TestCase):
     def test_approved_opening_preserves_same_reviewed_text_before_video(self):
         with patch.object(studio, 'check_asset'), patch.object(studio, 'assert_approved'):
             g = studio.build_graph(self.project(), 'design', use_cache=False)
-        self.assertEqual(g['122']['inputs']['images'], ['zura_masked_look', 0])
+        self.assertEqual(g['122']['inputs']['images'], ['zura_opening_preserve_source', 0])
+        self.assertEqual(g['zura_opening_original_resolution']['inputs']['image'], ['zura_masked_look', 0])
+        self.assertEqual(g['zura_opening_preserve_source']['inputs']['destination'], ['125', 0])
+        self.assertEqual(g['zura_opening_preserve_source']['inputs']['source'], ['zura_opening_original_resolution', 0])
         self.assertEqual(g['zura_masked_look']['class_type'], 'ImageCompositeMasked')
         self.assertEqual(g['zura_masked_look']['inputs']['destination'], ['zura_look_source', 0])
         self.assertEqual(g['zura_look_mask_video']['inputs']['video'], ['123', 1])
@@ -101,11 +106,11 @@ class RelightTextTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'protection timing'):
             adapter.preserve(latent, {'samples': video}, edit, protection_timing='future')
 
-    def test_uploaded_finished_frame_cannot_skip_lighting_frame_review(self):
+    def test_ready_mode_requires_a_real_finished_frame(self):
         p = self.project()
         p['look_mode'] = 'ready'
         with patch.object(studio, 'assert_approved'), patch.object(studio, 'check_asset'):
-            with self.assertRaisesRegex(ValueError, 'Relight requires Build from references'):
+            with self.assertRaisesRegex(ValueError, 'finished starting frame'):
                 studio.build_graph(p, 'design')
         with self.assertRaisesRegex(ValueError, 'Relight requires Build from references'):
             anchors.H3FinishedFrameAnchorTests().build_normal(p)

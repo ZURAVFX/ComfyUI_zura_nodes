@@ -304,3 +304,50 @@
 @layer zura_visibility {
  #genj-studio [hidden]{display:none!important}
 }
+
+/* Image workbench: the frame carries the image; a compact, centred prompt
+   stays below it. Keep this scoped so inline video edits retain their layout. */
+#genj-studio.image-composer-refined[data-workspace=image] .zc-image-main{gap:12px}
+#genj-studio.image-composer-refined[data-workspace=image] .zc-image-scroll{gap:8px;overflow:visible}
+#genj-studio.image-composer-refined[data-workspace=image] .zc-image-heading{gap:12px;min-height:36px}
+#genj-studio.image-composer-refined[data-workspace=image] .zc-image-tools{gap:4px}
+#genj-studio.image-composer-refined[data-workspace=image] .zc-image-tools>button,
+#genj-studio.image-composer-refined[data-workspace=image] .zc-image-tools>details>summary{min-height:36px;padding:8px 12px}
+#genj-studio.image-composer-refined[data-workspace=image] :is(.zc-gallery figure,.zc-image-empty,.zc-image-comparison){box-sizing:border-box;border:1px solid var(--gs-line);border-radius:12px;background:var(--zc-canvas);overflow:hidden}
+#genj-studio.image-composer-refined[data-workspace=image] .zc-gallery figure>a{border-radius:0}
+#genj-studio.image-composer-refined[data-workspace=image] .zc-gallery figure>a>img{border-radius:0}
+#genj-studio.image-composer-refined[data-workspace=image] .zc-gallery figcaption{min-height:36px;padding:4px 12px;border-top:1px solid var(--gs-line);background:var(--gs-bg);gap:8px}
+#genj-studio.image-composer-refined[data-workspace=image] .zc-gallery figcaption :is(button,a){min-height:28px;padding:4px 8px}
+#genj-studio.image-composer-refined[data-workspace=image] .gs-zoom-tools:not([hidden]){top:12px;left:12px;gap:0;padding:2px;border-radius:8px}
+#genj-studio.image-composer-refined[data-workspace=image] .gs-zoom-tools button{min-height:28px;min-width:28px;font-size:12px;padding:4px 8px}
+#genj-studio.image-composer-refined[data-workspace=image]{--zc-image-width:1040px}
+#genj-studio.image-composer-refined[data-workspace=image] :is(.zc-image-scroll,.zc-image-heading,.zc-image-composer,.zc-image-status){width:100%;max-width:var(--zc-image-width);margin-inline:auto;box-sizing:border-box}
+#genj-studio.image-composer-refined[data-workspace=image] #zc-progress{width:100%;max-width:none}
+#genj-studio.image-composer-refined[data-workspace=image] .zc-image-composer{padding:12px 16px;gap:8px;border-radius:12px}
+#genj-studio.image-composer-refined[data-workspace=image] #zc-prompt{flex:0 0 auto;min-height:56px!important;height:56px;max-height:160px;padding:8px 0;font-size:14px;line-height:20px;resize:vertical}
+#genj-studio.image-composer-refined[data-workspace=image] .zi-attachments{gap:8px}
+#genj-studio.image-composer-refined[data-workspace=image] .zi-attachments :is(.zi-add-main,.zi-references>summary,.zia-open){height:36px;min-height:36px;padding:8px 12px;font-size:12px}
+#genj-studio.image-composer-refined[data-workspace=image] .zi-main-chip>.zi-main-button{height:36px;min-height:36px;padding:4px 12px 4px 4px;font-size:12px}
+#genj-studio.image-composer-refined[data-workspace=image] .zi-main-button img{width:32px;height:28px}
+#genj-studio.image-composer-refined[data-workspace=image] .zc-composer-bottom{gap:8px;align-items:center}
+#genj-studio.image-composer-refined[data-workspace=image] .zi-output-tools{flex:1 1 440px;gap:8px;align-items:center}
+#genj-studio.image-composer-refined[data-workspace=image] .zi-output-tools>.zc-tool-group{gap:4px;padding-right:8px}
+#genj-studio.image-composer-refined[data-workspace=image] #zc-settings-toggle{min-height:36px;padding:8px}
+#genj-studio.image-composer-refined[data-workspace=image] #zc-generate{min-height:36px;min-width:132px;padding:8px 16px;margin-left:auto;font-size:13px}
+/* A native select still owns focus, arrow keys and the platform menu. The
+   selected name is ordinary text, so global select styling cannot blank it. */
+#genj-studio.image-composer-refined .zc-image-model-control{position:relative;display:inline-flex;flex:0 1 232px;width:auto;max-width:232px;min-width:128px;height:36px;min-height:36px;padding:8px 28px 8px 8px;gap:8px;box-sizing:border-box}
+#genj-studio.image-composer-refined .zc-image-model-control .zc-image-model-name{display:block;min-width:0;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--zc-text);font-size:13px;line-height:20px}
+#genj-studio.image-composer-refined .zc-image-model-control>svg{position:absolute;right:8px;top:12px;width:12px;height:12px;color:var(--gs-muted);pointer-events:none}
+#genj-studio.image-composer-refined .zc-image-model-control #zc-model{position:absolute;inset:0;display:block;width:100%;max-width:none;height:100%;min-height:0;margin:0;padding:0;border:0;opacity:0;cursor:pointer}
+#genj-studio.image-composer-refined .zc-image-model-control:has(select:disabled){opacity:.55;cursor:default}
+#genj-studio.image-composer-refined .zc-image-model-control:has(select:disabled) #zc-model{cursor:default}
+@media(max-width:700px){
+ #genj-studio.image-composer-refined[data-workspace=image] .zc-image-composer{padding:12px;gap:8px}
+ #genj-studio.image-composer-refined[data-workspace=image] #zc-prompt{font-size:16px;min-height:64px!important;height:64px;max-height:160px}
+ #genj-studio.image-composer-refined[data-workspace=image] .zi-output-tools{flex:1 1 100%;gap:4px}
+ #genj-studio.image-composer-refined[data-workspace=image] .zi-output-tools>.zc-tool-group{border:0}
+ #genj-studio.image-composer-refined[data-workspace=image] :is(.zi-add-main,.zi-references>summary,.zia-open,#zc-generate){min-height:44px;height:auto}
+ #genj-studio.image-composer-refined[data-workspace=image] .zc-image-model-control{min-height:44px;height:44px}
+ #genj-studio.image-composer-refined[data-workspace=image] .zc-image-model-control>svg{top:16px}
+}

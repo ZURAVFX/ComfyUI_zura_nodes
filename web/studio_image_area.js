@@ -114,6 +114,9 @@ export class ImageEditArea {
     const busy=this.busy(),ready=!!this.viewer&&!this.load;
     this.stage.style.pointerEvents=busy?'none':'';
     for(const element of [...this.host.querySelectorAll('button,input'),...this.tools.querySelectorAll('button,input')])element.disabled=busy||(!ready&&!element.matches('[data-area-action=whole],[data-area-action=done]'));
+    // The plate rail stays visible before painting begins. Selecting a tool is
+    // the explicit entry into paint mode, rather than opening it on frame load.
+    if(this.inline&&!busy&&this.source())for(const button of this.tools.querySelectorAll('[data-area-tool=draw],[data-area-tool=brush]'))button.disabled=false;
     this.tools.querySelector('[data-area-action=undo]').disabled=busy||!ready||!this.viewer.history.length;
     const focused=this.owner.root.ownerDocument.activeElement;
     if(focused!==this.context)this.context.value=String(this.state.context);
@@ -124,6 +127,7 @@ export class ImageEditArea {
   openEditor(tool){
     if(tool)this.pendingTool=tool;
     if(this.busy()||!this.source())return;this.state.enabled=true;this.editing=true;this.error='';
+    if(tool&&this.viewer){this.setTool(tool);this.pendingTool=null;}
     if(this.owner.imageComparison)this.owner.imageComparison.active=false;
     this.owner.editInputs.showSource=true;this.owner.save();this.owner.render();
   }
@@ -163,7 +167,8 @@ export class ImageEditArea {
     finally{if(this.load===work)this.load=null;this.refreshTools();}
   }
   setTool(tool){
-    if(!this.viewer)return;this.viewer.setTool(tool);this.refreshTools();
+    if(!this.editing){this.openEditor(tool);return;}
+    if(!this.viewer){this.pendingTool=tool;return;}this.viewer.setTool(tool);this.refreshTools();
     this.viewer.root.setAttribute('aria-label',tool==='draw'?'Draw a visual guide for the image edit':tool==='brush'?'Paint the image area to edit':tool==='protect'?'Erase from the edit area':'Drag to pan the image');
     this.tools.querySelectorAll('[data-area-tool]').forEach(button=>button.setAttribute('aria-pressed',String(button.dataset.areaTool===tool)));
   }
@@ -208,14 +213,15 @@ export class ImageEditArea {
     const upload={key,revision,promise};this.upload=upload;this.refreshTools();
     try{return await promise;}finally{if(this.upload===upload)this.upload=null;this.refreshTools();}
   }
-  async layerMask(){
-    if(!this.state.enabled||!this.state.mask?.filename)return null;
+  async layerMask(state=this.state){
+    if(!state?.enabled||!state.mask?.filename)return null;
     const source=this.source();if(!source)return null;
     const canvas=this.owner.root.ownerDocument.createElement('canvas');canvas.width=source.width;canvas.height=source.height;
     const ctx=canvas.getContext('2d',{willReadFrequently:true}),image=new Image();
-    await new Promise((resolve,reject)=>{image.onload=resolve;image.onerror=()=>reject(Error('Could not read the layer selection.'));image.src=maskUrl(this.owner,this.state.mask);});
+    if(state.source_key!==this.currentKey())throw Error('This result belongs to a different source image.');
+    await new Promise((resolve,reject)=>{image.onload=resolve;image.onerror=()=>reject(Error('Could not read the layer selection.'));image.src=maskUrl(this.owner,state.mask);});
     ctx.imageSmoothingEnabled=false;ctx.drawImage(image,0,0,canvas.width,canvas.height);
-    if(this.state.guide){const data=ctx.getImageData(0,0,canvas.width,canvas.height).data;let left=canvas.width,top=canvas.height,right=-1,bottom=-1;
+    if(state.guide){const data=ctx.getImageData(0,0,canvas.width,canvas.height).data;let left=canvas.width,top=canvas.height,right=-1,bottom=-1;
       for(let y=0;y<canvas.height;y++)for(let x=0;x<canvas.width;x++)if(data[(y*canvas.width+x)*4]){left=Math.min(left,x);right=Math.max(right,x);top=Math.min(top,y);bottom=Math.max(bottom,y);}
       if(right>=left){const pad=Math.max(16,Math.min(96,Math.round(Math.max(right-left,bottom-top)*.08)));ctx.fillStyle='black';ctx.fillRect(0,0,canvas.width,canvas.height);ctx.fillStyle='white';ctx.fillRect(Math.max(0,left-pad),Math.max(0,top-pad),Math.min(canvas.width,right+pad+1)-Math.max(0,left-pad),Math.min(canvas.height,bottom+pad+1)-Math.max(0,top-pad));}}
     return canvas.toDataURL('image/png');

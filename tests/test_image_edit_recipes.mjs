@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import {IMAGE_MODELS,buildImageGraph,imageAvailability} from '../web/image_recipes.js';
 import {FLUX3_PROMPT_SYSTEMS} from '../web/flux3_prompt_upsampling.js';
-const refs=[{file:'edit/source.png'},{file:'edit/style.png'},{file:'edit/subject.png'}];
+const refs=[{file:'edit/source.png',width:1280,height:720},{file:'edit/style.png',width:768,height:768},{file:'edit/subject.png',width:512,height:512}];
 const create=buildImageGraph({model:'flux2',prompt:'A natural portrait',width:1024,height:1024});
 assert.equal(create.model.inputs.unet_name,'flux-2-klein-9b-fp8.safetensors');
 assert.equal(create.text.inputs.clip_name,'qwen_3_8b_fp4mixed.safetensors');
@@ -22,9 +22,15 @@ for(const model of ['qwen2511','klein9b','flux3edit']){
     assert.equal(graph.sample.inputs.steps,4);assert.equal(graph.sample.inputs.cfg,1,'Qwen Lightning uses its distilled CFG rather than the full-step recipe');
     assert.equal(graph.sampling.inputs.shift,3.1);assert.equal(graph.cfg_norm.inputs.strength,1);
     assert.equal(graph.prompt.inputs.prompt,'Make the wall blue');assert.equal(graph.negative.inputs.prompt,'');
-    assert.deepEqual(graph.prompt.inputs.image1,['source_size',0]);assert.deepEqual(graph.size.inputs.pixels,['source_size',0]);
+    assert.deepEqual(graph.prompt.inputs.image1,['source_size',0]);assert.ok(!Object.hasOwn(graph.prompt.inputs,'vae'));
+    assert.equal(graph.size.class_type,'VAEEncode');assert.deepEqual(graph.size.inputs.pixels,['source_size',0]);
+    assert.equal(graph.positive_reference_1.class_type,'ReferenceLatent');assert.deepEqual(graph.positive_reference_1.inputs.latent,['size',0]);
+    assert.deepEqual(graph.sample.inputs.positive,['positive_reference_3',0]);assert.deepEqual(graph.sample.inputs.negative,['negative_reference_3',0]);
+    assert.equal(graph.source_size.class_type,'ImageScale');
     assert.equal(graph.source_size.inputs.width,1280);assert.equal(graph.source_size.inputs.height,720);
-    assert.equal(graph.positive_references.inputs.reference_latents_method,'index_timestep_zero');
+    assert.equal(graph.source_size.inputs.crop,'disabled');assert.equal(graph.source_size.inputs.upscale_method,'lanczos');
+    assert.equal(graph.output_size.inputs.width,1280);assert.equal(graph.output_size.inputs.height,720);assert.equal(graph.output_size.inputs.crop,'disabled');
+    assert.deepEqual(graph.save.inputs.images,['output_size',0]);
   }else if(model==='klein9b'){
     assert.equal(graph.sample.class_type,'SamplerCustomAdvanced');
     assert.deepEqual(graph.schedule.inputs,{steps:4,width:1280,height:720});
@@ -32,7 +38,8 @@ for(const model of ['qwen2511','klein9b','flux3edit']){
   }else{
     assert.equal(graph.text.inputs.type,'flux3');assert.equal(graph.sample.inputs.steps,16);
     assert.deepEqual(graph.sample.inputs.positive,['references',0]);
-    assert.equal(graph.size.inputs.width,1280);assert.equal(graph.size.inputs.height,720);
+    assert.deepEqual(graph.sample.inputs.latent_image,['references',2]);
+    assert.deepEqual(graph.references.inputs['images.image0'],['source_size',0]);
   }
 }
 // Image LoRAs precede each model's existing optimisations and reach the sampler.
@@ -83,6 +90,8 @@ for (const model of ['qwen21edit','flux2devedit']) {
     assert.equal(g.prompt.class_type,'TextEncodeQwenImage21');
     assert.deepEqual(g.prompt.inputs['images.image_1'],['source_size',0]);
     assert.deepEqual(g.sample.inputs.latent_image,['prompt',2]);
+    assert.equal(g.source_size.class_type,'ImageScale');
+    assert.equal(g.source_size.inputs.width,1280);
     assert.equal(g.source_size.inputs.height,736);
     assert.equal(g.sample.inputs.steps,40);
     assert.equal(g.reference_cache.inputs.device,'cpu');
@@ -92,7 +101,7 @@ for (const model of ['qwen21edit','flux2devedit']) {
     assert.equal(g.text.inputs.clip_name,'mistral_3_small_flux2_fp8.safetensors');
     assert.equal(g.schedule.inputs.steps,20);
     assert.ok(Object.values(g).some(n=>n.class_type==='FluxGuidance'&&n.inputs.guidance===4));
-    assert.equal(g.size.inputs.height,720);
+    assert.deepEqual(g.sample.inputs.latent_image,['references',2]);
   }
   const missingEncoder=structuredClone(info);
   missingEncoder.CLIPLoader.input.required.clip_name=combo(IMAGE_MODELS.filter(m=>m.id!==model).map(m=>m.text));
@@ -110,11 +119,14 @@ for(const model of ['flux3','flux3bf16','flux3edit','flux3editbf16']){
   assert.match(g.expand_prompt.inputs.prompt,/User request: Replace the walking person/);
   assert.deepEqual(g.prompt.inputs.text,['expand_prompt',0]);
   assert.deepEqual(g.expand_prompt.inputs.image,['prompt_images',0]);
-  assert.deepEqual(g.prompt_images.inputs['images.image0'],['reference_1',0]);
+  assert.deepEqual(g.prompt_images.inputs['images.image0'],['source_size',0]);
   assert.deepEqual(g.prompt_images.inputs['images.image1'],['prompt_reference_2',0]);
   assert.deepEqual(g.prompt_reference_2.inputs.image,['reference_2',0]);
-  assert.equal(g.prompt_reference_2.class_type,'ResizeAndPadImage','Tall character references must not be centre-cropped by image batching');
-  assert.deepEqual(g.references.inputs['images.image1'],['reference_2',0],'Diffusion retains original ordered references');
+  assert.equal(g.prompt_reference_2.class_type,'ImageScale');
+  assert.equal(g.prompt_reference_2.inputs.width,1280);
+  assert.equal(g.prompt_reference_2.inputs.height,720);
+  assert.equal(g.prompt_reference_2.inputs.crop,'disabled');
+  assert.deepEqual(g.references.inputs['images.image1'],['reference_working_2',0],'Diffusion sees the same source raster as prompt and sampling');
   assert.equal(g.expand_prompt.inputs['sampling_mode.seed'],17);
   assert.equal(g.expand_prompt.inputs.max_length,3584);
   assert.equal(g.expand_prompt.inputs.mtp,'off');

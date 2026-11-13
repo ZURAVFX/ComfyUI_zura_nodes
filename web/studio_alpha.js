@@ -59,8 +59,8 @@ export class AlphaWorkspace {
   busy(){return !!(this.job||this.pendingSubmission||this.submitting||this.picking);}
   elapsed(){return `${durationLabel((Date.now()-(this.job?.started||Date.now()))/1000)} elapsed`;}
   message(text){this.messageText=text||'';this.$('status').textContent=this.messageText;this.$('status').hidden=!this.messageText;}
-  save(){try{this.storage.setItem(KEY,JSON.stringify({...this.state,sourcePath:this.source?.path||this.state.sourcePath||'',sourceName:this.source?.name||this.state.sourceName||'',job:this.job,pendingSubmission:this.pendingSubmission,result:this.result}));return true;}catch{return false;}}
-  config(){return {source:this.source?.path||'',sourceWidth:Number(this.source?.width)||0,sourceHeight:Number(this.source?.height)||0,sourceFrames:this.source?.frames,startFrame:this.state.startFrame,frameCount:this.state.frameCount,processingScale:Number(this.state.processingScale),sequenceFps:this.fps(),seed:this.state.seed??42};}
+  save(){try{const sourceImport=this.source?.processingView?.originalAssetId?{path:this.source.path,processingView:this.source.processingView,studioAssetId:this.source.studioAssetId}:this.source?null:this.state.sourceImport||null;this.state.sourceImport=sourceImport;this.storage.setItem(KEY,JSON.stringify({...this.state,sourcePath:this.source?.path||this.state.sourcePath||'',sourceName:this.source?.name||this.state.sourceName||'',sourceImport,job:this.job,pendingSubmission:this.pendingSubmission,result:this.result}));return true;}catch{return false;}}
+  config(){const view=this.source?.processingView;return {source:this.source?.path||'',sourceWidth:Number(this.source?.width)||0,sourceHeight:Number(this.source?.height)||0,sourceFrames:this.source?.frames,startFrame:this.state.startFrame,frameCount:this.state.frameCount,processingScale:Number(this.state.processingScale),sequenceFps:this.fps(),seed:this.state.seed??42,...(view?.originalAssetId&&this.source?.studioAssetId?{originalSource:{asset_id:view.originalAssetId,proxy_id:this.source.studioAssetId}}:{})};}
   releaseLocalPreview(){if(this.localPreview){URL.revokeObjectURL?.(this.localPreview);this.localPreview=null;}}
   async uploadSource(file){
     if(this.busy()||this.disposed)return;const revision=++this.revision;this.picking=true;this.uploadController=new AbortController();
@@ -85,7 +85,7 @@ export class AlphaWorkspace {
   async restoreSource(){
     const path=this.state.sourcePath;if(!path||this.source?.path===path||this.restoring)return;
     const revision=this.revision;this.restoring=true;
-    try{const info=await this.fetch('/zura/paintout/info?'+new URLSearchParams({file:path}));if(this.disposed||revision!==this.revision||this.state.sourcePath!==path)return;if(!info?.path||info.kind!=='video'||!Number.isInteger(info.frames)||info.frames<1||![info.width,info.height,info.fps].every(v=>Number.isFinite(Number(v))&&Number(v)>0))throw Error('The saved source is no longer available. Replace the video to continue.');this.source=this.sourceInfo=info;this.showView(this.state.view);this.render();}
+    try{const imported=this.state.sourceImport,info=imported?.studioAssetId?(await this.fetch('/zura/studio/media-import/describe',{asset_id:imported.studioAssetId})).mediaInfo:await this.fetch('/zura/paintout/info?'+new URLSearchParams({file:path}));if(this.disposed||revision!==this.revision||this.state.sourcePath!==path)return;if(!info?.path||info.kind!=='video'||!Number.isInteger(info.frames)||info.frames<1||![info.width,info.height,info.fps].every(v=>Number.isFinite(Number(v))&&Number(v)>0))throw Error('The saved source is no longer available. Replace the video to continue.');this.source=this.sourceInfo=info;this.showView(this.state.view);this.render();}
     catch(error){if(!this.disposed&&revision===this.revision)this.message(error.message||'Could not restore this video.');}
     finally{this.restoring=false;}
   }

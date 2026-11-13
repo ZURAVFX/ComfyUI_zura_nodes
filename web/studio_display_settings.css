@@ -1,0 +1,23 @@
+@import url('./studio_comfylink.css');
+#genj-studio .zc-display-trigger{height:30px;max-width:240px;overflow:hidden;text-overflow:ellipsis;padding:4px 10px;border:1px solid var(--gs-line);border-radius:6px;background:transparent;color:var(--zc-text);font:inherit;font-size:12px;white-space:nowrap;cursor:pointer}
+#genj-studio .zc-display-trigger:hover{background:var(--zc-hover)}
+#genj-studio .zc-display-trigger:focus-visible{outline:2px solid var(--gs-accent);outline-offset:2px}
+.zc-studio-display .zc-display-source-choice{display:flex;align-items:center;gap:8px;margin-top:16px;color:inherit}
+.zc-studio-display .zc-display-source-choice select{min-width:160px}
+
+#genj-studio .zc-colour-menu{position:fixed;z-index:2100;width:304px;max-width:calc(100vw - 16px);max-height:calc(100dvh - 16px);overflow:auto;box-sizing:border-box;padding:12px;border:1px solid var(--gs-line);border-radius:10px;background:var(--gs-panel);color:var(--zc-text);box-shadow:0 12px 32px #0005;font-size:12px;line-height:1.4}
+#genj-studio .zc-colour-menu[hidden]{display:none!important}
+#genj-studio .zc-colour-menu-head{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:28px;margin-bottom:8px}
+#genj-studio .zc-colour-menu-head strong{font-size:13px;font-weight:600}
+#genj-studio .zc-colour-menu-head button{min-height:28px;padding:4px 6px;border:0;border-radius:6px;background:transparent;color:var(--gs-muted)}
+#genj-studio .zc-colour-menu-head button:hover{background:var(--zc-hover);color:var(--zc-text)}
+#genj-studio .zc-colour-menu label{display:grid;gap:6px;min-height:36px;color:var(--gs-muted)}
+#genj-studio .zc-colour-menu select{width:100%;min-width:0;min-height:32px;padding:5px 26px 5px 8px;border:1px solid var(--gs-line);border-radius:6px;background:var(--gs-input);color:var(--zc-text);font:inherit}
+#genj-studio .zc-colour-menu select:disabled{opacity:.62}
+#genj-studio .zc-colour-menu-status{min-height:32px;margin:8px 0;color:var(--gs-muted);line-height:1.45}
+#genj-studio .zc-colour-menu-actions{display:flex;justify-content:flex-end;padding-top:8px;border-top:1px solid var(--gs-line)}
+#genj-studio .zc-colour-menu-actions button{min-height:34px;padding:7px 8px;border:1px solid var(--gs-line);border-radius:7px;background:transparent;color:var(--zc-text);font:inherit}
+#genj-studio .zc-colour-menu-actions button:hover{background:var(--zc-hover)}
+#genj-studio .zc-colour-menu-actions button:disabled{cursor:default;opacity:.45}
+#genj-studio .zc-colour-menu :focus-visible{outline:2px solid var(--gs-focus);outline-offset:2px}
+.zc-colour-inline{position:fixed;z-index:2099;display:block;object-fit:contain;pointer-events:none;background:#101010}

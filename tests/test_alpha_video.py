@@ -17,7 +17,8 @@ import torch
 
 
 MODULE = Path(__file__).resolve().parents[1] / "artist_studio" / "alpha_video.py"
-spec = importlib.util.spec_from_file_location("zura_test_alpha_video", MODULE)
+package=types.ModuleType('zura_test_alpha_video_package');package.__path__=[str(MODULE.parent)];sys.modules[package.__name__]=package
+spec = importlib.util.spec_from_file_location("zura_test_alpha_video_package.alpha_video", MODULE)
 alpha = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(alpha)
 
@@ -100,6 +101,12 @@ class AlphaVideoTests(unittest.TestCase):
             self.assertEqual(png.size, (117, 75))
             self.assertEqual(int(np.asarray(png)[35, 60]), 32768)
         self.assertFalse(list(self.output.rglob("*.partial*")))
+        full=next(file for file in result['ui']['files'] if file['role']=='alpha_float')
+        manifest_path=self.output/full['subfolder']/full['filename'];manifest=json.loads(manifest_path.read_text())
+        self.assertEqual((manifest['layout'],manifest['sampleType'],manifest['width'],manifest['height']),('A','float32',117,75))
+        self.assertEqual(manifest['frameRate'],{'numerator':30000,'denominator':1001})
+        retained=np.frombuffer((manifest_path.parent/manifest['frames'][0]['filename']).read_bytes(),dtype='<f4').reshape(75,117)
+        self.assertEqual(float(retained[35,60]),.5)
 
     def test_rejects_misalignment_changed_source_nonfinite_and_escaping_prefix(self):
         images, info, *_ = alpha.ZuraAlphaVideoInput().prepare(str(self.source), 0, 2, 1)
