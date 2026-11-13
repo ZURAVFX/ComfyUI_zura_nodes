@@ -5,9 +5,24 @@ The caller retains and hashes the original and verifies framing independently.
 """
 from contextlib import contextmanager
 from fractions import Fraction
+from numbers import Rational
 from pathlib import Path
 import av
 import numpy as np
+
+
+def _positive_fraction(value, message):
+    # PyAV 19 uses AVRational where earlier versions returned Fraction. Both
+    # implement exact Rational; floats and guessed/absent clocks stay invalid.
+    if isinstance(value, bool) or not isinstance(value, Rational):
+        raise ValueError(message)
+    numerator, denominator = value.numerator, value.denominator
+    if type(numerator) is not int or type(denominator) is not int or denominator <= 0:
+        raise ValueError(message)
+    result = Fraction(numerator, denominator)
+    if result <= 0:
+        raise ValueError(message)
+    return result
 
 
 def _metadata(value, inherited=None):
@@ -59,17 +74,17 @@ def decode_sdr10(path):
                 raise ValueError('Unsupported video colour metadata')
         stream=media.streams.video[0];context=stream.codec_context;_metadata(context)
         if getattr(stream,'side_data',()): raise ValueError('Unsupported video stream side data')
-        rate=stream.average_rate
-        if not isinstance(rate,Fraction) or rate<=0: raise ValueError('Unsupported video frame rate')
+        rate=_positive_fraction(stream.average_rate, 'Unsupported video frame rate')
         width,height=context.width,context.height
         if not 1<=width<=16384 or not 1<=height<=16384 or width*height>16*1024*1024: raise ValueError('Video raster exceeds bounds')
         def frames():
             first = None
             for index, frame in enumerate(media.decode(video=0)):
                 _metadata(context);_metadata(frame,(13,1,1,1))
-                pts, time_base = frame.pts, frame.time_base
-                if type(pts) is not int or not isinstance(time_base, Fraction) or time_base <= 0:
+                pts = frame.pts
+                if type(pts) is not int:
                     raise ValueError('Video frame timestamp is missing or invalid')
+                time_base = _positive_fraction(frame.time_base, 'Video frame timestamp is missing or invalid')
                 instant = pts * time_base
                 if first is None: first = instant
                 if instant != first + Fraction(index, 1) / rate:

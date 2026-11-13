@@ -1,5 +1,10 @@
 # Release notes
 
+## 1.3.65 - 13 November 2026
+
+- Accept PyAV 19's exact AVRational clocks alongside earlier Fraction clocks when decoding 10-bit SDR masters. Keep missing, floating-point, non-positive and irregular timestamps rejected; preserve rational frame rates and decode precision.
+- Add direct clock-contract tests and retain the real 10-bit video round-trip test in both repository and Registry checks. Version 1.3.64's Registry submission stopped at this compatibility regression before publication.
+
 ## 1.3.64 - 13 November 2026
 
 - Keep Input SDR/HDR and Output SDR/HDR controls available across Studio workspaces. Retain original high-depth sources while preparing separate SDR model inputs for verified ACEScg, linear Rec.709 and ACEScct AE sources. Honour proven sRGB and BT.709 video transfer declarations on working-space return.

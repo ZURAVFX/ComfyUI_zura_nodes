@@ -64,6 +64,7 @@ jobs:
           python -m unittest discover -s tests -p 'test_comfylink_float_io.py'
           python -m unittest discover -s tests -p 'test_comfylink_float_staging.py'
           python -m unittest discover -s tests -p 'test_comfylink_float_preflight.py'
+          python -m unittest discover -s tests -p 'test_sdr10_rational.py'
           python -m unittest discover -s tests -p 'test_comfylink_ltx_colour.py'
           python -m unittest discover -s tests -p 'test_comfylink_frame_contract.py'
           python -m unittest discover -s tests -p 'test_comfylink_studio.py'
