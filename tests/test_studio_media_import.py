@@ -82,7 +82,7 @@ class ImportTests(unittest.TestCase):
     def test_actual_sdr_mp4_selected_frame_binding_crosses_js_adapter_and_display(self):
         identity,path=self.asset('sdr.mp4','video')
         subprocess.run([tools.find_media_tool('ffmpeg'),'-v','error','-f','lavfi','-i','testsrc=size=64x48:rate=25','-frames:v','9',
-            '-c:v','libx264','-x264-params','colorprim=bt709:transfer=bt709:colormatrix=bt709','-pix_fmt','yuv420p','-color_trc','bt709','-color_primaries','bt709','-colorspace','bt709',str(path)],check=True)
+            '-c:v','libx264','-x264-params','colorprim=bt709:transfer=bt709:colormatrix=bt709','-pix_fmt','yuv420p','-color_trc','bt709','-color_primaries','bt709','-colorspace','bt709','-color_range','tv',str(path)],check=True)
         self.register(identity,path,'video');before=path.read_bytes()
         result=media.prepare_import({'asset_id':identity,'frame':7},self.store,self.check,self.roots)
         self.assertEqual(result['precision']['decodedBitDepth'],8)
@@ -123,7 +123,7 @@ class ImportTests(unittest.TestCase):
         identity,path=self.asset('prores.mov','video')
         subprocess.run([tools.find_media_tool('ffmpeg'),'-v','error','-f','lavfi','-i','testsrc=size=64x48:rate=25',
             '-frames:v','2','-c:v','prores_ks','-profile:v','4','-pix_fmt','yuv444p10le',
-            '-color_trc','bt709','-color_primaries','bt709','-colorspace','bt709',str(path)],check=True)
+            '-color_trc','bt709','-color_primaries','bt709','-colorspace','bt709','-color_range','tv',str(path)],check=True)
         asset=self.register(identity,path,'video');before=path.read_bytes()
         described,_=media.describe_asset(asset,self.store,self.check,self.roots)
         self.assertEqual(described['precision']['decodedBitDepth'],12)
@@ -141,7 +141,7 @@ class ImportTests(unittest.TestCase):
         pixels[1,...,3]=pixels[0,...,3][:,::-1]
         subprocess.run([tools.find_media_tool('ffmpeg'),'-v','error','-f','rawvideo','-pixel_format','rgba','-video_size','64x48','-framerate','25','-i','-',
             '-c:v','prores_ks','-profile:v','4','-pix_fmt','yuva444p10le','-alpha_bits','16',
-            '-color_trc','bt709','-color_primaries','bt709','-colorspace','bt709',str(path)],input=pixels.tobytes(),check=True)
+            '-color_trc','bt709','-color_primaries','bt709','-colorspace','bt709','-color_range','tv',str(path)],input=pixels.tobytes(),check=True)
         asset=self.register(identity,path,'video');before=path.read_bytes()
         described,_=media.describe_asset(asset,self.store,self.check,self.roots)
         self.assertTrue(described['precision']['hasAlpha']);self.assertEqual(described['precision']['decodedBitDepth'],12)
@@ -298,7 +298,7 @@ class ImportHTTPTests(unittest.IsolatedAsyncioTestCase):
                         if suffix in ('jpg','webp'):Image.fromarray(np.full((48,64,3),128,np.uint8)).save(path)
                         else:
                             codec=['-c:v','libx264','-x264-params','colorprim=bt709:transfer=bt709:colormatrix=bt709','-pix_fmt','yuv420p'] if suffix=='mp4' else ['-c:v','prores_ks','-profile:v','4','-pix_fmt','yuv444p10le']
-                            subprocess.run([tools.find_media_tool('ffmpeg'),'-v','error','-f','lavfi','-i','testsrc=size=64x48:rate=25','-frames:v','3',*codec,'-color_trc','bt709','-color_primaries','bt709','-colorspace','bt709',str(path)],check=True)
+                            subprocess.run([tools.find_media_tool('ffmpeg'),'-v','error','-f','lavfi','-i','testsrc=size=64x48:rate=25','-frames:v','3',*codec,'-color_trc','bt709','-color_primaries','bt709','-colorspace','bt709','-color_range','tv',str(path)],check=True)
                         form=FormData();form.add_field('file',path.read_bytes(),filename=path.name)
                         response_value=await client.post('/zura/studio/media-import/upload',data=form);self.assertEqual(response_value.status,200,await response_value.text())
                         uploaded=await response_value.json();identity=uploaded['asset']['id']
