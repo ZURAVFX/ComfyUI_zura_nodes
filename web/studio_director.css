@@ -79,7 +79,7 @@
   background:var(--gs-panel);
 }
 .zdir-history button{display:grid;width:100%;grid-template-columns:52px minmax(0,1fr);gap:8px;padding:6px;text-align:left}
-.zdir-history img{width:52px;height:32px;border-radius:5px;object-fit:cover;background:#090909}
+.zdir-history :is(img,video){width:52px;height:32px;border-radius:5px;object-fit:cover;background:#090909}
 .zdir-timeline{
   position:relative;
   min-height:0;

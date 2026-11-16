@@ -1,0 +1,22 @@
+import assert from 'node:assert/strict';
+import {parseHTML} from '../../ui-check/node_modules/linkedom/esm/index.js';
+import {HDRIBuilder,panoramaGenerationBlocker} from '../web/studio_hdri.js';
+import {ImageEditInputs} from '../web/studio_image_edit_inputs.js';
+const {document}=parseHTML('<html><body><main><div class="zc-image-heading"><h2></h2></div><div class="zc-shapes"></div><div id="refs"></div><div id="gallery"></div><div id="empty"></div><div id="hint"></div><button id="generate">Generate image <span></span></button><select id="model"><option selected value="flux2">Flux</option></select><input id="prompt"></main></body></html>');
+const root=document.querySelector('main'),fields={generate:'#generate',model:'#model',prompt:'#prompt',gallery:'#gallery','image-empty':'#empty','reference-list':'#refs','reference-hint':'#hint'};
+const model={id:'flux2',ready:true,referenceReady:true,maxReferences:8,minReferences:0};let prompt='A wooded clearing at sunrise';
+const owner={root,mode:'image',imageIntent:'hdri',imageOperation:'edit',editMainMissing:true,items:[],references:[],selectedImage:-1,models:[model],studio:{},browserConnection:{connected:()=>true},$(id){return root.querySelector(fields[id]);},config(){return {model:'flux2',shape:'landscape',width:1024,height:512,prompt,references:this.references};}};
+owner.imageTask=document.createElement('details');owner.imageTask.innerHTML='<span data-image-operation-label></span>';
+const inputs=Object.create(ImageEditInputs.prototype);Object.assign(inputs,{owner,heading:document.createElement('strong'),addHome:document.createElement('div'),addReferences:document.createElement('button'),addLabel:'Add',clear:document.createElement('button'),toggle:document.createElement('button'),source:document.createElement('div')});owner.editInputs=inputs;
+const builder=Object.create(HDRIBuilder.prototype);builder.root=document.createElement('section');builder.root.innerHTML='<div class="zhe-feedback"></div>';builder.viewport=document.createElement('section');Object.assign(builder,{owner,source:()=>null,sourceKey:'null',modelChecked:'flux2',editor:{},state:{},renderLights(){},$(id){return this.root.querySelector('[data-hdri="'+id+'"]')||document.createElement('button');}});
+// Actual controller order: ordinary Edit inputs used to disable this no-source state.
+inputs.sync();builder.sync();assert.equal(owner.$('generate').disabled,false,'The canvas supplies Image 1 even when the inherited Edit mode has no main image');
+assert.match(owner.$('generate').textContent,/Generate panorama/);assert.equal(builder.root.hidden,false);
+prompt=' ';inputs.sync();builder.sync();assert.equal(owner.$('generate').disabled,true);assert.match(builder.root.textContent,/Describe the environment/);
+prompt='A forest';model.ready=false;builder.sync();assert.match(owner.$('generate').title,/Set up/);
+model.ready=true;owner.job={};builder.sync();assert.equal(owner.$('generate').disabled,true);assert.match(owner.$('generate').title,/cancel/);
+owner.job=null;builder.composing=true;builder.sync();assert.match(owner.$('generate').title,/canvas is opening/);builder.composing=false;builder.sync();assert.equal(owner.$('generate').disabled,false,'Cancellation restores the visible action');
+owner.references=Array.from({length:9},()=>({filename:'ref.png'}));builder.sync();assert.match(owner.$('generate').title,/at most 8/);
+assert.match(panoramaGenerationBlocker({model,prompt:'Forest',connected:false}),/Sign in/);
+assert.match(panoramaGenerationBlocker({model:{...model,referenceReady:false},prompt:'Forest',connected:true}),/reference-image/);
+console.log('Panorama UI: inherited Edit mode, canvas reference, prompt, model setup, sign-in, refs and cancellation pass.');

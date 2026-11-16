@@ -5,6 +5,11 @@ catalogue ID, never a URL or destination; no downloads start during discovery.
 """
 from __future__ import annotations
 
+try:
+    from ..model_folders import default_models_dir, preferred_category_roots
+except ImportError:  # Standalone catalogue tests and tools.
+    from model_folders import default_models_dir, preferred_category_roots
+
 import asyncio
 import hashlib
 import errno
@@ -331,6 +336,17 @@ CATALOG["ltx_alpha"] = dict(
     ])
 
 
+# Official retrained synthetic-only adapter; shared LTX files remain deduplicated.
+CATALOG['ltx_paint_vfx'] = dict(
+    name='Paint VFX · LTX 2.5 painted fluid', gated=True,
+    license_url='https://huggingface.co/AInVFX/ainvfx-fluid',
+    note='Painted keyframes become smoke, fire, explosions or liquid with the painted-frame adapter. Uses the LTX-2.x Community License. Existing shared LTX 2.5 files are reused. This produces SDR RGB video; alpha and HDR conversion are separate operations.',
+    files=[CATALOG['ltx25_core']['files'][0], CATALOG['ltx25_text_int8']['files'][0],
+           CATALOG['ltx25_core']['files'][1], CATALOG['ltx25_core']['files'][2],
+           {**_file('loras', 'ainvfx-fluid.safetensors', 'AInVFX/ainvfx-fluid',
+                    '6acb88df82c38a1f288a8f94fbd8b70eb5f975fb', 'ltx-2.5/ainvfx-fluid.safetensors',
+                    654446320, '167b4ccfd3ed5e95c7973a0233f8fbd8edb5e9182ecb3998bd972661c861ebaa'), 'gated': False}])
+
 CATALOG['ltx25_camera'] = dict(name='Camera angle · shared scene and LTX 2.5', gated=True,
     license_url='https://huggingface.co/Lightricks/LTX-2.5',
     note='Joint DA3 camera reconstruction and native LTX 2.5 rendering. CrossView v2 is a 2.3-trained adapter with matching 2.5 tensor dimensions; camera quality must be reviewed on your shots.',
@@ -564,14 +580,24 @@ class DownloadManager:
                 self._active = None
 
 
+def _default_models_root(folder_paths):
+    return default_models_dir(folder_paths)
+
+
+def _preferred_roots(folder_paths, folder, roots, base):
+    return preferred_category_roots(folder_paths, folder, roots)
+
+
 def folder_locations(folder_paths, folders):
     """Discover currently registered model categories without assuming import order."""
     locations = {}
+    base = _default_models_root(folder_paths)
     for folder in folders:
         try:
-            locations[folder] = folder_paths.get_folder_paths(folder)
+            roots = folder_paths.get_folder_paths(folder)
         except KeyError:
-            locations[folder] = []
+            roots = []
+        locations[folder] = _preferred_roots(folder_paths, folder, roots, base)
     return locations
 
 

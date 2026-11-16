@@ -1,20 +1,21 @@
 {
   "id": "01-roundtrip",
   "name": "01 - Round-trip test",
-  "description": "Returns the source unchanged through ComfyUI. No model downloads required.",
-  "mode": "frames",
+  "description": "Returns the selected source frames unchanged in bounded image batches. No model downloads required.",
+  "mode": "batch",
   "input": {
     "node": "1",
-    "field": "image"
+    "field": "folder"
   },
   "output": {
     "node": "3"
   },
   "workflow": {
     "1": {
-      "class_type": "LoadImage",
+      "class_type": "ComfyLinkLoadFrames",
       "inputs": {
-        "image": "placeholder.png"
+        "folder": "ComfyLink/00000000000000000000000000000000",
+        "fps": 25.0
       },
       "_meta": {
         "title": "AE_INPUT"
@@ -33,5 +34,7 @@
         "title": "AE_OUTPUT"
       }
     }
-  }
+  },
+  "revision": "batch-elementwise-v1",
+  "batchPolicy": "elementwise-v1"
 }

@@ -1,4 +1,4 @@
-"""CPU-only HTTP tests for immutable one-frame FLOAT staging."""
+"""CPU-only HTTP tests for immutable, streamed FLOAT sequence staging."""
 import hashlib
 import asyncio
 import os
@@ -26,8 +26,10 @@ class StagingTest(unittest.IsolatedAsyncioTestCase):
         self.root = Path(self.temp.name)
         self.service = FloatStaging(lambda: self.root)
         app = web.Application(client_max_size=1024)
+        app.router.add_get(PREFIX + '/capabilities', self.service.capabilities)
         app.router.add_post(PREFIX, self.service.create)
         app.router.add_post(PREFIX + '/{id}/frame', self.service.frame)
+        app.router.add_post(PREFIX + '/{id}/frame/{index}', self.service.frame)
         app.router.add_post(PREFIX + '/{id}/release', self.service.release)
         self.client = TestClient(TestServer(app))
         await self.client.start_server()
@@ -44,6 +46,164 @@ class StagingTest(unittest.IsolatedAsyncioTestCase):
         response = await self.client.post(PREFIX, json={'manifest':self.manifest})
         self.assertEqual(response.status, 200)
         return await response.json()
+
+    def sequence(self, count):
+        self.samples = np.concatenate([self.samples + np.float32(i / 32) for i in range(count)], axis=0)
+        # Alpha remains exact and independent of the RGB operation under test.
+        self.samples[..., 3] = 1
+        self.manifest['frameRate'] = {'numerator': 30000, 'denominator': 1001}
+        self.manifest['sourceStart'] = {'numerator': 1001, 'denominator': 30000}
+        self.manifest['frames'] = [dict(index=i, filename=f'{i+1:06d}.rgba32f',
+            byteLength=self.samples[i].nbytes, sha256=hashlib.sha256(self.samples[i].tobytes()).hexdigest(),
+            time={'numerator':i*1001,'denominator':30000}) for i in range(count)]
+
+    async def send_index(self, ticket, index, data=None):
+        return await self.client.post(PREFIX + '/' + ticket['id'] + '/frame/' + str(index),
+            data=self.samples[index].tobytes() if data is None else data,
+            headers={HEADER:ticket['capability']})
+
+    async def test_sequence_capabilities_and_4k_admission_preserve_existing_limits(self):
+        response = await self.client.get(PREFIX + '/capabilities')
+        self.assertEqual(response.status, 200)
+        caps = await response.json()
+        self.assertEqual(caps, dict(schemaVersion=1, sequence=True, indexBase=0,
+            maxFrames=10000, maxBytes=16*1024**3, maxFrameBytes=16*1024*1024*16))
+        self.manifest.update(width=3840, height=2160)
+        self.manifest['frames'][0]['byteLength'] = 3840*2160*16
+        ticket = await self.create()
+        self.assertEqual(self.service.pending[ticket['id']]['bytes'], 132710400)
+        self.assertFalse((self.root/'ComfyLink'/ticket['id']).exists())
+
+    async def test_17_frame_sequence_is_published_once_in_order_after_all_frames(self):
+        self.sequence(17)
+        ticket = await self.create()
+        relative = 'ComfyLink/' + ticket['id'] + '/manifest.json'
+        final = self.root / relative
+        # Indexed uploads may arrive in any order; the manifest retains exact
+        # rational source time and canonical frame order.
+        for index in list(range(16, -1, -1)):
+            response = await self.send_index(ticket, index)
+            self.assertEqual(response.status, 200, await response.text())
+            result = await response.json()
+            self.assertEqual(result['complete'], index == 0)
+            if index:
+                self.assertNotIn('manifest', result)
+                self.assertFalse(final.exists())
+            else:
+                self.assertEqual(result['manifest'], relative)
+        actual, manifest = float_io.load_transfer(self.root, relative)
+        np.testing.assert_array_equal(actual, self.samples)
+        self.assertEqual(manifest, self.manifest)
+        self.assertEqual((await self.send_index(ticket, 0)).status, 409)
+        response = await self.client.post(PREFIX + '/' + ticket['id'] + '/release',
+            headers={HEADER:ticket['capability']})
+        self.assertEqual(response.status, 200)
+        self.assertFalse(final.parent.exists())
+
+    async def test_sequence_missing_duplicate_invalid_index_and_legacy_route_never_publish(self):
+        self.sequence(3)
+        ticket = await self.create()
+        path = PREFIX + '/' + ticket['id']
+        headers = {HEADER:ticket['capability']}
+        self.assertEqual((await self.client.post(path+'/frame', data=self.samples[0].tobytes(), headers=headers)).status, 400)
+        for index in ('-1', '01', '3', '100000', 'not-an-index'):
+            self.assertEqual((await self.client.post(path+'/frame/'+index, data=b'', headers=headers)).status, 400)
+        self.assertEqual((await self.send_index(ticket, 0)).status, 200)
+        self.assertEqual((await self.send_index(ticket, 0)).status, 409)
+        self.assertEqual((await self.send_index(ticket, 2)).status, 200)
+        self.assertFalse((self.root/'ComfyLink'/ticket['id']).exists())
+        release = await self.client.post(path+'/release', headers=headers)
+        self.assertEqual(release.status, 409)
+        self.assertEqual(self.service.pending[ticket['id']]['received'], {0, 2})
+
+    async def test_sequence_tampered_earlier_frame_or_foreign_leaf_is_not_published_or_deleted(self):
+        self.sequence(2)
+        ticket = await self.create()
+        self.assertEqual((await self.send_index(ticket, 0)).status, 200)
+        temporary = self.service.pending[ticket['id']]['temp']
+        original = temporary/'000001.rgba32f'
+        changed = bytearray(original.read_bytes()); changed[0] ^= 1; original.write_bytes(changed)
+        response = await self.send_index(ticket, 1)
+        self.assertEqual(response.status, 422)
+        self.assertFalse((self.root/'ComfyLink'/ticket['id']).exists())
+
+        ticket = await self.create()
+        self.assertEqual((await self.send_index(ticket, 0)).status, 200)
+        temporary = self.service.pending[ticket['id']]['temp']
+        foreign = temporary/'user-file.txt'
+        foreign.write_text('preserve me')
+        response = await self.send_index(ticket, 1)
+        self.assertEqual(response.status, 422)
+        self.assertEqual(foreign.read_text(), 'preserve me')
+        self.assertFalse((self.root/'ComfyLink'/ticket['id']).exists())
+
+    async def test_sequence_wrong_capability_and_truncated_stream_do_not_publish(self):
+        self.sequence(2)
+        ticket = await self.create()
+        path = PREFIX + '/' + ticket['id'] + '/frame/0'
+        response = await self.client.post(path, data=self.samples[0].tobytes(), headers={HEADER:'f'*64})
+        self.assertEqual(response.status, 403)
+        async def truncated():
+            yield self.samples[0].tobytes()[:4]
+        response = await self.client.post(path, data=truncated(), headers={HEADER:ticket['capability']})
+        self.assertEqual(response.status, 422)
+        self.assertNotIn(ticket['id'], self.service.pending)
+        self.assertFalse((self.root/'ComfyLink'/ticket['id']).exists())
+
+    async def test_sequence_rejects_aggregate_overflow_without_allocating_frame_bytes(self):
+        self.manifest.update(width=4096, height=4096)
+        self.manifest['frames'] = [dict(index=i, filename=f'{i+1:06d}.rgba32f', byteLength=4096*4096*16,
+            sha256='0'*64, time={'numerator':i,'denominator':25}) for i in range(65)]
+        response = await self.client.post(PREFIX, json={'manifest':self.manifest})
+        self.assertEqual(response.status, 400)
+        self.assertEqual(self.service.pending, {})
+        self.assertFalse((self.root/'ComfyLink').exists())
+
+    async def test_sequence_accepts_large_manifest_and_rejects_frame_count_overflow(self):
+        original = self.manifest['frames'][0]
+        self.manifest['frames'] = [dict(original, index=i, filename=f'{i+1:06d}.rgba32f',
+            time={'numerator':i, 'denominator':25}) for i in range(1000)]
+        self.assertGreater(len(float_io.canonical_manifest_bytes(self.manifest)), 65536)
+        ticket = await self.create()
+        self.assertEqual(self.service.pending[ticket['id']]['bytes'], len(self.data)*1000)
+        self.assertFalse((self.root/'ComfyLink'/ticket['id']).exists())
+        self.manifest['frames'] = [dict(original, index=i, filename=f'{i+1:06d}.rgba32f',
+            time={'numerator':i, 'denominator':25}) for i in range(10001)]
+        response = await self.client.post(PREFIX, json={'manifest':self.manifest})
+        self.assertEqual(response.status, 400)
+        self.assertEqual(len(self.service.pending), 1)
+
+    async def test_sequence_storage_admission_reserves_all_frames(self):
+        from unittest.mock import patch
+        self.sequence(17)
+        total = sum(frame['byteLength'] for frame in self.manifest['frames'])
+        with patch('comfylink.native_float_staging.shutil.disk_usage',
+                   return_value=types.SimpleNamespace(free=4*1024**3 + total - 1)):
+            response = await self.client.post(PREFIX, json={'manifest':self.manifest})
+        self.assertEqual(response.status, 400)
+        self.assertEqual(self.service.pending, {})
+
+    async def test_17_frames_through_real_float_loader_and_saver_as_one_image_batch(self):
+        import importlib
+        import torch
+        self.sequence(17)
+        sys.modules['folder_paths'] = types.SimpleNamespace(get_input_directory=lambda: str(self.root), get_output_directory=lambda: str(self.root))
+        sys.modules.pop('comfylink.float_nodes', None)
+        nodes = importlib.import_module('comfylink.float_nodes')
+        ticket = await self.create()
+        for index in range(17):
+            response = await self.send_index(ticket, index)
+            self.assertEqual(response.status, 200, await response.text())
+        staged = await response.json()
+        rgb, _, metadata = nodes.ZuraComfyLinkLoadFloatFrames().load(staged['manifest'])
+        self.assertEqual(tuple(rgb.shape), (17, 1, 2, 3))
+        output = nodes.ZuraComfyLinkSaveFloatFrames().save(torch.ones_like(rgb)-rgb, metadata)
+        actual, manifest = float_io.load_transfer(self.root, output['result'][0])
+        np.testing.assert_array_equal(actual[..., :3], np.float32(1)-self.samples[..., :3])
+        np.testing.assert_array_equal(actual[..., 3], self.samples[..., 3])
+        self.assertEqual(len(manifest['frames']), 17)
+        self.assertEqual(manifest['frameRate'], self.manifest['frameRate'])
+        self.assertEqual(manifest['sourceStart'], self.manifest['sourceStart'])
 
     async def test_hdr_upload_is_exact_and_one_use(self):
         ticket = await self.create()
@@ -161,4 +321,6 @@ class StagingTest(unittest.IsolatedAsyncioTestCase):
 
     async def test_cross_origin_request_is_rejected(self):
         response = await self.client.post(PREFIX, json={'manifest':self.manifest}, headers={'Origin':'https://evil.invalid'})
+        self.assertEqual(response.status, 403)
+        response = await self.client.get(PREFIX+'/capabilities', headers={'Origin':'https://evil.invalid'})
         self.assertEqual(response.status, 403)

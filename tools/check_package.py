@@ -17,7 +17,7 @@ module_version = next(ast.literal_eval(n.value) for n in tree.body if isinstance
 assert version == module_version, 'Update __version__ as well as pyproject.toml'
 assert Path('LICENSE').is_file()
 for asset in ('comfylink/__init__.py', 'comfylink/MIT-LICENSE.txt',
-              'comfylink/security.py', 'comfylink/routes.py',
+              'comfylink/security.py', 'comfylink/routes.py', 'comfylink/studio_host.py',
               'comfylink/preflight.py', 'comfylink/presets.py',
               'comfylink/nodes.py', 'comfylink/float_io.py', 'comfylink/display_view.py', 'comfylink/native_float_staging.py',
               'comfylink/float_nodes.py', 'comfylink/ltx_colour.py',
@@ -81,6 +81,14 @@ for asset in ('studio_launchers.py', 'web/studio_launchers.js', 'web/studio_laun
     assert Path(asset).is_file(), f'Missing Paintout Studio release asset: {asset}'
 assert Path('web/v2_media_picker.js').is_file()
 studio_loader = Path('web/studio.js').read_text(encoding='utf-8')
+studio_core = Path('web/studio_core.js').read_text(encoding='utf-8')
+studio_host = Path('web/studio_host_adapters.js').read_text(encoding='utf-8')
+studio_ae_entry = Path('web/studio_ae_entry.js').read_text(encoding='utf-8')
+studio_ae_probe = Path('web/studio_ae_probe.js').read_text(encoding='utf-8')
+for asset in ('web/studio_ae.html', 'web/studio_ae_probe.js', 'web/studio_ae_entry.js',
+              'web/studio_host_version.js', 'web/studio_host_manifest.json',
+              'tools/studio-ui/build-manifest.mjs', 'tools/studio-ui/manifest-builder.mjs'):
+    assert Path(asset).is_file(), f'Missing shared Studio host release asset: {asset}'
 for asset in ('web/studio_create.js', 'web/studio_create.css',
               'web/studio_polish.css', 'web/studio_image_edit_inputs.js',
               'web/studio_outpaint_first_frame.js', 'artist_studio/outpaint_first_frame.py',
@@ -102,10 +110,23 @@ for asset in ('web/studio_create.js', 'web/studio_create.css',
               'licenses/tailwindcss-LICENSE.txt',
               'licenses/webawesome-LICENSE.md'):
     assert Path(asset).is_file(), f'Missing Studio component release asset: {asset}'
-for import_path in ('./studio_create.js', './studio_create.css',
-                    './studio_components.css', './vendor/studio-components.css',
-                    './vendor/studio-components.js'):
-    assert import_path in studio_loader, f'Studio does not load packaged UI asset: {import_path}'
+assert "from './studio_core.js'" in studio_loader, 'Comfy Studio must load the shared UI core'
+assert "from './studio_host_adapters.js'" in studio_loader, 'Comfy Studio must use the shared host styles'
+for comfy_import in ('../../scripts/app.js', '../../scripts/api.js'):
+    assert comfy_import in studio_loader, f'Comfy entry must retain {comfy_import}'
+    for name, source in (('studio_core.js', studio_core), ('studio_host_adapters.js', studio_host),
+                         ('studio_ae_entry.js', studio_ae_entry), ('studio_ae_probe.js', studio_ae_probe)):
+        assert comfy_import not in source, f'{name} must load without Comfy frontend globals'
+assert "src=\"./studio_ae_probe.js\"" in Path('web/studio_ae.html').read_text(encoding='utf-8')
+assert "from './studio_core.js'" in studio_ae_entry, 'AE Studio must mount the same UI core'
+assert './studio_create.js' in studio_core, 'The shared core must load the Image and Video workspace'
+for import_path in ('./studio_create.css', './studio_components.css',
+                    './vendor/studio-components.css', './vendor/studio-components.js'):
+    assert import_path in studio_host, f'Studio does not load packaged UI asset: {import_path}'
+host_manifest = json.loads(Path('web/studio_host_manifest.json').read_text(encoding='utf-8'))
+assert host_manifest['hostSchema'] == 1 and host_manifest['uiVersion'] == version and host_manifest['backendVersion'] == version
+assert host_manifest['entries'] == {'comfy': 'studio.js', 'ae': 'studio_ae.html'}
+assert f'STUDIO_UI_VERSION="{version}"' in Path('web/studio_host_version.js').read_text(encoding='utf-8')
 for asset in ('web/multicam_angle_gallery.js', 'web/anyangle_english.js', 'multicam_v3.py',
               'multicam_v4_clean.py', 'h3_single_angle.py',
               'idv2v_control.py', 'klein_look.py'):

@@ -40,7 +40,7 @@ def build_graph(project, check_asset=lambda asset: None):
         raise ValueError("Select up to five seconds for this OpenJutsu test.")
     if source.get("duration"):
         available = float(source["duration"]) - start
-        if available <= 0 or duration > available + 1e-6:
+        if available <= 0 or duration > available + 1/24:
             raise ValueError("The selected range extends past the end of the source video. Choose a shorter range.")
     tier = c.get("openjutsu_resolution", "480")
     if str(tier) not in ("480", "768"):
@@ -52,6 +52,8 @@ def build_graph(project, check_asset=lambda asset: None):
     graph = json.loads(TEMPLATE.read_text(encoding="utf8"))
     graph["30"]["inputs"]["file"] = source["file"]
     graph["9"]["inputs"]["image"] = character["file"]
+    graph["101"]["inputs"]["text"] = c.get("mask_prompt") or "person"
+
     # Video Slice can decode one frame short after a non-frame-aligned seek.
     # Prepare the requested 24 fps range once, with a one-frame tail hold if
     # needed, before both the H3 preparation and the shot's source reference.
@@ -70,9 +72,19 @@ def build_graph(project, check_asset=lambda asset: None):
         + str(c.get("prompt", "")).strip()).strip()
     # Native SelectCLIPDevice uses 'default' for the active GPU on this Comfy core.
     graph["58"]["inputs"]["device"] = "default"
-    opening = None if c.get("openjutsu_direct") and project.get("look_mode") != "ready" and not replace_background else project.get("opening_input")
+    opening = project.get("opening_input")
     if replace_background and not opening:
         raise ValueError("Create or upload a starting frame with the new background first.")
+    if not replace_background and project.get("review"):
+        if project.get("approval") != project.get("prepared_key"):
+            raise ValueError("Review and approve the subject mask before generating video.")
+        graph["reviewed_subject"] = {"class_type": "GenjLoadReviewedShot", "inputs": {
+            "shot_id": project["review"], "approved_shot_id": project["review"]}}
+        graph["reviewed_mask"] = {"class_type": "ZuraCharacterMaskFrames", "inputs": {
+            "mask_video": ["reviewed_subject", 1], "images": ["31", 0], "start_seconds": 0.0}}
+        graph["110"]["inputs"]["masks"] = ["reviewed_mask", 0]
+        for identity in map(str, range(100, 110)):
+            graph.pop(identity, None)
     graph["803"]["inputs"]["use_mask"] = not replace_background
     if replace_background:
         graph["803"]["inputs"].pop("body_mask", None)

@@ -116,8 +116,8 @@ def register(studio, routes, response, check_asset):
         body = await request.json()
         kind = body.get('source_kind', 'upload')
         if kind == 'output_image':
-            from .hdr_output import selected_image_output
-            path=selected_image_output(folder_paths.get_output_directory(),body.get('output_ref'),allow_transparency=True)
+            from .hdr_output import selected_hdr_model_image
+            path=selected_hdr_model_image(folder_paths.get_output_directory(),body.get('output_ref'))
             info=await asyncio.to_thread(describe,str(path))
             fps=body.get('sequence_fps',24)
             contract=body.get('ae_frame_contract')

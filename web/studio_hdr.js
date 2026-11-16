@@ -1,3 +1,4 @@
+import {deliveryVideoFile} from './studio_delivery_formats.js';
 import {aeFrameContract,aeFrameRate,aeFrameRequest,prepareAEFrameGraph} from './studio_ae_frame_contract.js';
 import {selectedEXRStorage,normaliseEXRStorage} from './studio_exr_precision.js';
 import {normalStudioStorage} from './studio_storage.js';
@@ -21,27 +22,29 @@ export class HDRSourceTool {
   constructor(host,api,getSource,{longAvailable=false,storage=normalStudioStorage()}={}){this.storage=storage;
     this.api=api;this.getSource=getSource;this.job=null;this.busy=false;this.starting=false;this.timer=null;this.cancelling=false;this.fps=24;
     this.root=document.createElement('section');this.root.className='zf-page zh-page';this.root.hidden=true;this.active=false;
-    this.root.innerHTML=`<div class="zf-heading"><h2>Convert to HDR</h2><div data-hdr="result" class="zh-downloads" hidden><a data-hdr="hlg" download hidden>Download HLG</a><a data-hdr="exr" download hidden>Download EXR</a></div></div>
+    this.root.innerHTML=`<div class="zf-heading"><h2>Convert to HDR</h2><div data-hdr="result" class="zh-downloads" hidden><a data-hdr="hlg" download hidden>Download ProRes 4444</a><a data-hdr="exr" download hidden>Download EXR</a></div></div>
       <div class="zf-viewer zh-viewer"><div data-hdr="empty" class="zh-empty"><h3>Import a video to get started</h3><p>Convert SDR footage to HDR or process an HDR source with LTX 2.5.</p></div><video data-hdr="source-preview" controls playsinline hidden></video><video data-hdr="preview" controls playsinline hidden></video><div class="zh-progress"><p data-hdr="status" role="status" aria-live="polite"></p><progress data-hdr="progress" max="100" aria-label="HDR conversion progress" hidden></progress><button data-hdr="cancel" type="button" hidden>Cancel</button></div></div>
       <div class="zf-composer zc-prompt-card gs-hdr-content zh-composer"><div class="zh-composer-heading"><strong class="zc-sr-only">Convert to HDR</strong><span class="zh-model" data-hdr="model" aria-hidden="true"></span><button type="button" data-hdr="back" class="zh-close" aria-label="Return to previous workflow" title="Return to previous workflow">×</button></div>
         <div class="zh-inputs"><label>Source<select data-hdr="source-kind"><option value="upload">Source footage</option><option value="output" hidden>Selected LTX result</option><option value="result">Latest LTX shot result</option><option value="own">Your video</option><option value="sequence" hidden>EXR sequence</option></select></label>
         <div data-hdr="video-controls" hidden><input data-hdr="video-file" type="file" accept="video/*,.mp4,.mov,.mkv,.webm" hidden/><button data-hdr="add-video" type="button">Import video</button><span data-hdr="video-name">No video selected</span></div>
         <div data-hdr="sequence-controls" hidden><input data-hdr="sequence-files" type="file" accept=".exr" multiple hidden/><button data-hdr="add-sequence" type="button">Import EXR frames</button><span data-hdr="sequence-name">No frames selected</span><label>Frame rate<input data-hdr="sequence-fps" type="number" min="1" max="120" step="0.001" value="24"/></label></div></div>
-        <div class="zh-controls"><div class="zh-colour-summary"><strong data-hdr="source-label">SDR footage → HDR</strong><span data-hdr="source-note">Untagged video uses Rec.709. Adjust in colour settings.</span></div><label>Output<select data-hdr="output"><option value="hlg_and_exr">HLG video + EXR</option><option value="hlg_video">HLG video</option><option value="acescg_exr">EXR sequence</option></select></label></div>
+        <div class="zh-controls"><div class="zh-colour-summary"><strong data-hdr="source-label">SDR footage → HDR</strong><span data-hdr="source-note">Untagged video uses Rec.709. Adjust in colour settings.</span></div><label>Output<select data-hdr="output"><option value="hlg_and_exr">ProRes 4444 MOV + EXR</option><option value="hlg_video">ProRes 4444 MOV</option><option value="acescg_exr">EXR sequence</option></select></label></div>
         <div class="zh-timeline" data-hdr="timeline" aria-label="Trim HDR clip"></div>
         <details class="zh-advanced"><summary data-hdr="advanced-summary">Precise timing &amp; colour settings</summary><div class="zh-advanced-body"><label>Input type<select data-hdr="mode"><option value="sdr">SDR footage · convert to HDR</option><option value="native">HDR footage · preserve HDR</option></select></label><div class="zh-range"><label>First frame<input data-hdr="start" type="number" min="0" step="1" value="0"/></label><label>Frames<input data-hdr="count" type="number" min="1" max="121" step="1" value="25"/></label><label>Source colour<select data-hdr="colour"><option value="auto">Read source tags</option><option value="rec709_oetf">Rec.709</option><option value="rec709_gamma24">Rec.709 gamma 2.4</option><option value="srgb_display">sRGB</option></select></label></div><details data-hdr="models" class="gs-advanced"></details></div></details>
         <div class="zh-range-summary"><span data-hdr="range-notice" aria-live="polite">25 frames selected</span><button type="button" data-hdr="full-range" hidden>Use full clip</button></div>
         <div class="zh-footer"><label data-hdr="long-control" hidden><input data-hdr="long" type="checkbox"/> Longer clip · preview</label><label data-hdr="sections-control" hidden>Section size<select data-hdr="sections"><option value="121">Longer sections · fewer joins</option><option value="25">Shorter sections · potentially faster, more joins</option></select></label><button data-hdr="use-video" type="button" hidden>Use in paintout</button><button data-hdr="use-result" type="button" hidden>Use converted video in paintout</button><button data-hdr="start-job" class="gs-primary" type="button">Convert video</button></div>
-        <p data-hdr="limits" role="status" aria-live="polite">Up to 121 frames per run. Large frame selections may need to be shorter.</p><p class="zh-note">HLG video is 10-bit; EXR is ACEScg. The on-screen preview is tone-mapped for SDR.</p>
+        <p data-hdr="limits" role="status" aria-live="polite">Up to 121 frames per run. Large frame selections may need to be shorter.</p><p class="zh-note">ProRes 4444 MOV retains working RGB within codec limits; EXR retains the float master. The on-screen preview is tone-mapped for SDR.</p>
       </div>`;
     host.append(this.root);
     this.root.querySelector('.zh-viewer').after(this.root.querySelector('.zh-progress'));
     const model=this.$('model');model.classList.add('zc-tool');model.textContent='LTX 2.5';model.removeAttribute('aria-hidden');this.root.querySelector('.zh-footer').prepend(model);
-    this.loras=new LTXLoras(this.root.querySelector('.zh-advanced-body'),path=>this.request(path),()=>this.busy);this.trimmer=this.createTrimmer();this.$('start-job').onclick=()=>this.start();this.$('cancel').onclick=()=>this.cancel();
+    const actionStatus=document.createElement('p');actionStatus.dataset.hdr='action-status';actionStatus.setAttribute('role','status');actionStatus.setAttribute('aria-live','polite');actionStatus.style.cssText='flex:1 1 220px;min-width:0;margin:0;font-size:12px;line-height:1.5';this.$('start-job').before(actionStatus);this.$('status').setAttribute('aria-live','off');
+    this.loras=new LTXLoras(this.root.querySelector('.zh-advanced-body'),path=>this.request(path),()=>this.busy);this.trimmer=this.createTrimmer();this.$('start-job').onclick=()=>void this.start();this.$('cancel').onclick=()=>this.cancel();
     this.longAvailable=longAvailable;this.$('long-control').hidden=!longAvailable;
     this.longClient=new HDRLongJobClient(api,job=>this.longUpdate(job),'zura-hdr-long',this.storage);
     this.$('long').onchange=()=>this.updateMode();
     this.models=new StudioModelDownloads(this.$('models'),(path,body)=>this.request('/zura/studio'+path,body),()=>this.refreshModelSetup());
+    this.models.mountQuick(this.root.querySelector('.zh-composer'));
     this.$('models').querySelector('summary').textContent='HDR model packages';
     const setupNote=document.createElement('p');setupNote.textContent='Checks for installed files and nodes. Source and frame limits are checked when you start.';this.$('models').querySelector('.gs-advanced-body').prepend(setupNote);
     this.$('models').ontoggle=()=>{if(this.$('models').open)this.refreshModelSetup();};
@@ -51,7 +54,9 @@ export class HDRSourceTool {
     this.$('full-range').onclick=()=>this.useFullRange();
     this.$('output').onchange=()=>{if(this.active)this.sourceChanged();else if(this.$('models').open)this.refreshModelSetup();};
     this.$('add-sequence').onclick=()=>this.$('sequence-files').click();this.$('sequence-files').onchange=event=>this.uploadSequence(event.target.files);this.updateMode();
-    this.$('add-video').onclick=()=>this.$('video-file').click();this.$('video-file').onchange=event=>{const file=event.target.files?.[0];event.target.value='';if(file)void this.uploadVideo(file);};
+    const sourceButton=this.$('add-video');sourceButton.classList.add('zc-attachment','zh-source-video');sourceButton.innerHTML='<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m10 9 5 3-5 3V9Z"/></svg><span>Source video</span>';sourceButton.setAttribute('aria-label','Choose source video');this.root.querySelector('.zh-inputs').prepend(sourceButton);this.$('source-kind').closest('label').hidden=true;
+    sourceButton.onclick=()=>this.$('video-file').click();this.$('video-file').onchange=event=>{const file=event.target.files?.[0];event.target.value='';if(file){this.$('source-kind').value='own';void this.uploadVideo(file);}};
+    sourceButton.ondragover=event=>{event.preventDefault();};sourceButton.ondrop=event=>{event.preventDefault();const file=event.dataTransfer?.files?.[0];if(file&&!this.busy){this.$('source-kind').value='own';void this.uploadVideo(file);}};
     this.$('use-video').onclick=async()=>{if(!this.onUseVideo||!this.ownAsset?.id||this.busy)return;this.$('use-video').disabled=true;try{await this.onUseVideo(this.ownAsset,this.$('colour').value,this.$('output').value);}catch(error){this.status(error.message||'Could not open this video in the selected workflow.');}finally{this.$('use-video').disabled=false;}};
     this.$('use-result').onclick=async()=>{if(!this.onUseResult||!this.hlgResult||this.busy)return;this.$('use-result').disabled=true;try{await this.onUseResult(this.hlgResult,this.$('output').value);}catch(error){this.status(error.message||'Could not open the converted video in paintout.');}finally{this.$('use-result').disabled=false;}};
     this.onEscape=event=>{if(!this.active||event.key!=='Escape'||event.defaultPrevented||event.isComposing)return;const expanded=this.root.querySelector('details[open]');if(expanded){expanded.open=false;expanded.querySelector('summary')?.focus();}else this.$('back').click();event.preventDefault();event.stopPropagation();};
@@ -214,7 +219,7 @@ export class HDRSourceTool {
     if(available&&!this.job&&!this.longClient.busy){let active,pending;try{active=this.storage.getItem('zura-hdr-long-job');pending=this.storage.getItem('zura-hdr-long-request');}catch{}if(active||pending){if(active)this.longClient.reconnect(active);else this.longClient.reconnectRequest(pending);}}
     this.updateMode();
   }
-  status(text){this.$('status').textContent=text;}
+  status(text){this.$('status').textContent=text;const action=this.$('action-status');if(action){action.textContent=text;action.hidden=!text;}}
   nodeLabel(node){return ({zura_hdr_source:'Reading source frames',zura_hdr_audio_source:'Reading source audio',zura_hdr_prepare:'Preparing HDR frames',hdr_model:'Loading LTX 2.5',model:'Loading LTX 2.5',hdr_lora:'Loading HDR adapter',lora:'Loading HDR adapter',hdr_vae_loader:'Loading video decoder',vae:'Loading video decoder',hdr_audio_vae:'Loading audio model',hdr_conditioning:'Preparing HDR conditioning',hdr_guide_input:'Preparing colour guidance',hdr_guide:'Preparing video guidance',guide1:'Preparing video guidance',guide2:'Preparing detail guidance',hdr_sample:'Generating HDR video',sample1:'Generating HDR video · pass 1 of 2',sample2:'Generating HDR video · pass 2 of 2',upsample:'Upscaling HDR detail',hdr_decode:'Decoding HDR video',decode:'Decoding HDR video',zura_hdr_exr:'Converting to EXR',zura_hdr_archive:'Packaging EXR frames',zura_hdr_hlg:'Converting to HLG',zura_hdr_save_video:'Saving HDR video',zura_hdr_preview_tonemap:'Preparing SDR preview',zura_hdr_save_preview:'Saving preview'})[node]||'Processing HDR video';}
   updateMode(){
     const native=this.$('mode').value==='native';
@@ -321,10 +326,14 @@ export class HDRSourceTool {
   }
   async request(path,body){const response=await this.api.fetchApi(path,body===undefined?{}:{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});let data;try{data=await response.json();}catch{throw new Error('ComfyUI could not respond.');}if(!response.ok)throw new Error(data.error?.message||data.error||'Could not complete the request.');return data;}
   async start(){
-    if(this.busy||this.starting)return;
+    if(this.starting)return;
+    if(this.longClient.busy){this.longUpdate({state:'reconnecting'});void this.longClient.resume();return;}
+    if(this.busy){this.status('An HDR operation is already in progress. Wait for it to finish or cancel it.');return;}
     this.starting=true;
+    this.$('start-job').disabled=true;this.$('start-job').textContent='Checking HDR setup…';this.$('progress').hidden=false;this.$('progress').removeAttribute('value');this.status('Preparing HDR conversion…');
     try{return await this.runStart();}
-    finally{this.starting=false;}
+    catch(error){this.status(error.message||'HDR conversion could not start. Check setup and try again.');if(!this.job&&!this.longClient.busy)this.finish();}
+    finally{this.starting=false;if(!this.busy){this.$('start-job').disabled=false;this.$('progress').hidden=true;}this.$('start-job').textContent=this.busy?'Converting HDR…':this.$('mode').value==='native'?'Prepare HDR video':'Convert to HDR';}
   }
   async runStart(){
     if(this.busy)return;
@@ -347,7 +356,7 @@ export class HDRSourceTool {
     if(needsAutomaticSections&&!this.longAvailable){this.status('This frame range needs section processing. Check model setup, then try again.');return;}
     const longer=needsAutomaticSections||this.longAvailable&&this.$('long').checked,limit=longer?10000:121;
     if(!Number.isInteger(start)||start<0||!Number.isInteger(count)||count<1||count>limit){this.status(`Choose a valid first frame and 1–${limit} frames.`);return;}
-      this.completedResult=null;this.hlgResult=null;this.$('use-result').hidden=true;this.busy=true;this.updateRangeSummary();this.loras.setBusy(true);this.$('start-job').disabled=true;this.$('result').hidden=true;this.$('progress').hidden=false;this.$('progress').removeAttribute('value');this.status(needsAutomaticSections?'Checking source and section limit…':'Checking source and model…');
+      this.$('use-result').hidden=true;this.busy=true;this.updateRangeSummary();this.loras.setBusy(true);this.$('start-job').disabled=true;this.$('result').hidden=true;this.$('progress').hidden=false;this.$('progress').removeAttribute('value');this.status(needsAutomaticSections?'Checking source and section limit…':'Checking source and model…');
     try{
       this.activeEXRStorage=selectedEXRStorage(this.outputSettings,this.$('output').value);try{this.storage.setItem('zura-hdr-active-exr-storage',this.activeEXRStorage);}catch{}
       const actualKind=sourceKind==='own'?'upload':sourceKind,sourceId=sourceKind==='sequence'?this.sequenceAsset.id:sourceKind==='own'?this.ownAsset.id:asset?.id;
@@ -367,9 +376,9 @@ export class HDRSourceTool {
     this.longState=state;
     this.longSection=Number.isInteger(job.total)&&job.total>0?`Segment ${Math.min(job.completed+1,job.total)} of ${job.total}`:null;
     if(state==='complete'){
-      const files=job.result?.files||[],preview=job.result?.preview,hlg=files.find(f=>f.filename.endsWith('.mp4')),exr=files.find(f=>f.filename.endsWith('.zip'));
+      const files=job.result?.files||[],preview=job.result?.preview,hlg=deliveryVideoFile(files),exr=files.find(f=>f.filename.endsWith('.zip'));
       if(!preview||(!hlg&&!exr)){this.status('HDR conversion finished without the requested files.');this.finish();return;}
-      this.completedResult={files:[hlg,exr].filter(Boolean),preview,exr_storage:normaliseEXRStorage(job.result?.exr_storage||job.exr_storage||this.activeEXRStorage)};this.showResult(preview);this.hlgResult=hlg||null;this.$('use-result').hidden=!hlg||!this.onUseResult;for(const [name,file] of [['hlg',hlg],['exr',exr]]){this.$(name).hidden=!file;if(file)this.$(name).href=this.url(file);}
+      this.completedResult={files:[hlg,exr].filter(Boolean),preview,...(job.result?.colour?{colour:job.result.colour}:{}),exr_storage:normaliseEXRStorage(job.result?.exr_storage||job.exr_storage||this.activeEXRStorage)};this.showResult(preview);this.hlgResult=hlg||null;this.$('use-result').hidden=!hlg||!this.onUseResult;for(const [name,file] of [['hlg',hlg],['exr',exr]]){this.$(name).hidden=!file;if(file)this.$(name).href=this.url(file);}
       this.status('HDR conversion complete.');this.finish();return;
     }
     if(state==='cancelled'||state==='failed'||state==='unknown'){this.status(job.error|| (state==='cancelled'?'HDR conversion cancelled.':'HDR conversion failed.'));this.finish();return;}
@@ -403,6 +412,6 @@ export class HDRSourceTool {
     }catch(error){if(!this.job)return;this.currentNode=null;this.$('progress').removeAttribute('value');this.status('Connection interrupted. Reconnecting to your HDR conversion…');this.timer=setTimeout(()=>this.poll(),2000);}
   }
   async cancel(){if(this.longClient.busy){await this.longClient.cancel();return;}if(!this.job||this.cancelling)return;this.cancelling=true;this.$('cancel').disabled=true;this.status('Cancelling HDR conversion…');try{await this.request('/queue',{delete:[this.job]});await this.request('/interrupt',{prompt_id:this.job});}catch(error){this.cancelling=false;this.$('cancel').disabled=false;this.status('Could not request cancellation. Try again.');}}
-  finish(){clearTimeout(this.timer);this.timer=null;this.job=null;this.longPrompt=null;this.longSection=null;this.cancelling=false;try{this.storage.removeItem('zura-hdr-active-job');this.storage.removeItem('zura-hdr-active-exr-storage');}catch{}this.busy=false;this.updateRangeSummary();this.loras.setBusy(false);this.$('start-job').disabled=false;this.$('cancel').hidden=true;this.$('cancel').disabled=false;this.$('progress').hidden=true;}
+  finish(){clearTimeout(this.timer);this.timer=null;this.job=null;this.longPrompt=null;this.longSection=null;this.cancelling=false;try{this.storage.removeItem('zura-hdr-active-job');this.storage.removeItem('zura-hdr-active-exr-storage');}catch{}this.busy=false;this.updateRangeSummary();this.loras.setBusy(false);this.$('start-job').disabled=false;this.$('cancel').hidden=true;this.$('cancel').disabled=false;this.$('progress').hidden=true;if(this.completedResult?.preview&&this.$('result').hidden){this.showResult(this.completedResult.preview);this.$('use-result').hidden=!this.hlgResult||!this.onUseResult;}}
   close(){clearTimeout(this.timer);this.longClient.close();this.modelSetupRevision=(this.modelSetupRevision||0)+1;this.models.dispose();this.trimmer?.close();this.root.ownerDocument.removeEventListener('keydown',this.onEscape);this.api.removeEventListener?.('progress',this.onProgress);this.disposeExecuting?.();this.$('preview').pause?.();this.root.remove();}
 }

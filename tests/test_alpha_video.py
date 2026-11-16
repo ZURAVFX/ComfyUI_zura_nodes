@@ -82,6 +82,11 @@ class AlphaVideoTests(unittest.TestCase):
         files = result["ui"]["images"]
         self.assertEqual({f["role"] for f in files}, {"matte", "preview", "alpha", "sequence"})
         paths = {f["role"]: self.output / f["subfolder"] / f["filename"] for f in files}
+        self.assertEqual(paths['matte'].suffix,'.mov')
+        matte_stream=next(s for s in self.probe(paths['matte']) if s['codec_type']=='video')
+        self.assertEqual(matte_stream['codec_name'],'prores')
+        self.assertEqual((matte_stream['width'],matte_stream['height']),(117,75))
+        matte_file=next(f for f in files if f['role']=='matte');self.assertTrue(matte_file['preview']['filename'].endswith('_matte_preview.mp4'))
         streams = self.probe(paths["alpha"])
         video = next(s for s in streams if s["codec_type"] == "video")
         self.assertEqual((video["width"], video["height"], int(video["nb_frames"])), (117, 75, 2))

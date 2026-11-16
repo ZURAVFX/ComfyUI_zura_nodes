@@ -140,7 +140,7 @@ def ltx_hdr_delivery(images, fps, *, output, prefix, working_space, audio=None, 
     if exr_storage not in ("half", "float32"):
         raise ValueError("Choose half or float32 EXR storage.")
     if output not in ("hlg_video", "acescg_exr", "hlg_and_exr"):
-        raise ValueError("Choose HLG video, ACEScg EXR, or both.")
+        raise ValueError("Choose ProRes 4444 MOV, ACEScg EXR, or both.")
     if not isinstance(images, (list, tuple)) or len(images) != 2:
         raise ValueError("Image input must be a Comfy node output link.")
     if audio is not None and (not isinstance(audio, (list, tuple)) or len(audio) != 2):
@@ -155,16 +155,10 @@ def ltx_hdr_delivery(images, fps, *, output, prefix, working_space, audio=None, 
     # Creative masters retain ACEScct; reconstructed SDR masters are already
     # linear ACEScg. The SDR view adapts AP1/D60 to Rec.709/D65 independently.
     if output in ("hlg_video", "hlg_and_exr"):
-        graph["zura_hdr_hlg"] = {"class_type": "ImageColorSpace", "inputs": {
-            "image": list(images), "source": "linear ACEScg" if linear_rgb else "HDR ACEScct", "destination": "HDR"}}
-        video = {"images": ["zura_hdr_hlg", 0], "fps": float(fps),
-                 "bit_depth": 10, "color_space": "HDR", "codec": "none"}
-        if audio is not None:
-            video["audio"] = list(audio)
-        graph["zura_hdr_video"] = {"class_type": "CreateVideo", "inputs": video}
-        graph["zura_hdr_save_video"] = {"class_type": "ZuraHDRSaveExactRate", "inputs": {
-            "video": ["zura_hdr_video", 0], "filename_prefix": "genj/hdr/" + prefix,
-            "fps": float(fps)}}
+        inputs = {'images':list(images),'filename_prefix':'genj/hdr/'+prefix,
+                  'fps':float(fps),'source_space':'acescg' if linear_rgb else 'acescct'}
+        if audio is not None: inputs['audio']=list(audio)
+        graph['zura_hdr_save_video']={'class_type':'ZuraHDRSaveProRes4444','inputs':inputs}
     if output in ("acescg_exr", "hlg_and_exr"):
         graph["zura_hdr_exr"] = {"class_type": "ZuraHDRSDRPreview", "inputs": {"image": list(images), **({'source_space':'acescg'} if linear_rgb else {})}}
     return graph

@@ -116,7 +116,7 @@ assert.deepEqual(graph.references.inputs['ref_audios.ref_audio_0'],['audio_guard
 assert.equal(graph.audio_guard_1.inputs.max_seconds,8);
 assert.equal(graph.references.inputs.length,124);
 assert.equal(graph.video.inputs.fps,24);
-assert.equal(graph.save.class_type,'SaveVideo');
+assert.equal(graph.save.class_type,'ZuraSaveProRes4444');
 assert.ok(Object.values(graph).every(node=>node._meta?.title));
 assert.equal(
   graph.references.inputs.prompt,

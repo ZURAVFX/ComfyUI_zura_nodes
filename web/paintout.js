@@ -77,8 +77,8 @@ app.registerExtension({
     };redrawOnConfigure(node,draw);node.size=[590,570];draw();
    }
    if(nodeData.name==='ZuraPaintoutUncrop'){
-    const box=panel(node,'motion_preview',230);box.append(el('p','After rendering, play the SDR motion preview here. Export SDR video, HLG video or EXR masters with the format control.','zp-help'));
-    const old=node.onExecuted;node.onExecuted=function(data){old?.apply(this,arguments);box.replaceChildren();for(const file of (data.images||[]).filter(f=>/\.mp4$/i.test(f.filename))){box.append(el('div',file.filename,'zp-help'));const video=el('video');video.controls=true;video.loop=true;video.muted=true;video.preload='metadata';video.src=api.apiURL('/view?'+new URLSearchParams(file));box.append(video);}if(data.text)box.append(el('div',data.text.join('\n'),'zp-help'));};node.size=[530,560];
+    const box=panel(node,'motion_preview',230);box.append(el('p','After rendering, play the SDR motion preview here. Export SDR video, ProRes 4444 MOV or EXR masters with the format control.','zp-help'));
+    const old=node.onExecuted;node.onExecuted=function(data){old?.apply(this,arguments);box.replaceChildren();for(const file of (data.images||[]).filter(f=>/\.(mp4|mov)$/i.test(f.filename))){box.append(el('div',file.filename,'zp-help'));const video=el('video');video.controls=true;video.loop=true;video.muted=true;video.preload='metadata';video.src=api.apiURL('/view?'+new URLSearchParams(file));box.append(video);}if(data.text)box.append(el('div',data.text.join('\n'),'zp-help'));};node.size=[530,560];
    }
    return result;
   };

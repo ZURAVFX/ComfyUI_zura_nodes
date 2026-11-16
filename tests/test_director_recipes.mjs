@@ -105,7 +105,7 @@ assert.throws(()=>buildDirectorGraph({
 const readyInfo={};
 for(const node of ['UNETLoader','CLIPLoader','LoraLoaderModelOnly','VAELoader','MiniMaxH3DirectorCS',
   'BasicGuider','BasicScheduler','KSamplerSelect','VAEDecode','VAEDecodeAudio','RandomNoise',
-  'SamplerCustomAdvanced','CreateVideo','SaveVideo']){
+  'SamplerCustomAdvanced','CreateVideo','ZuraSaveProRes4444']){
   readyInfo[node]={input:{required:{},optional:{}}};
 }
 readyInfo.UNETLoader.input.required.unet_name=[['other.safetensors',FRAME_VIDEO_MODELS.model]];
@@ -128,7 +128,7 @@ assert.deepEqual(missing.missingNodes,['MiniMaxH3DirectorCS']);
 const ltxReady={};
 for(const node of ['UNETLoader','CLIPLoader','VAELoader','CLIPTextEncode','LTXDirector','LTXDirectorGuide',
   'LTXVConcatAVLatent','CFGGuider','ManualSigmas','KSamplerSelect','LTXVSeparateAVLatent','LTXVCropGuides',
-  'VAEDecodeTiled','LTXVAudioVAEDecode','RandomNoise','SamplerCustomAdvanced','CreateVideo','SaveVideo']){
+  'VAEDecodeTiled','LTXVAudioVAEDecode','RandomNoise','SamplerCustomAdvanced','CreateVideo','ZuraSaveProRes4444']){
   ltxReady[node]={input:{required:{},optional:{}}};
 }
 ltxReady.UNETLoader.input.required.unet_name=[[LTX_FRAME_VIDEO_MODELS.model]];

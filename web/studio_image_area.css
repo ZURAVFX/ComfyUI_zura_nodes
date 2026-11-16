@@ -1,9 +1,9 @@
 /* Optional edit selection; keep Studio's preview and quiet composer intact. */
-#genj-studio .zc-edit-main>.zia-open{flex:0 0 auto;white-space:nowrap;min-height:44px;border:1px solid var(--gs-accent)!important;background:var(--gs-selected)!important;color:var(--zc-text)!important;font-weight:600;gap:9px}
-#genj-studio .zia-open>svg{width:16px;height:16px;flex:none}
-#genj-studio .zc-edit-main>.zia-open[aria-pressed=true]{background:var(--gs-accent)!important;color:var(--gs-ink)!important}
-#genj-studio .zc-edit-main>.zia-open:hover:not(:disabled){background:var(--gs-accent)!important;color:var(--gs-ink)!important}
-#genj-studio .zc-edit-main>.zia-open:disabled{opacity:.55}
+#genj-studio .zc-edit-main>:is(.zia-open,.zia-guide-open){flex:0 0 auto;white-space:nowrap;min-height:44px;border:1px solid var(--gs-accent)!important;background:var(--gs-selected)!important;color:var(--zc-text)!important;font-weight:600;gap:9px}
+#genj-studio :is(.zia-open,.zia-guide-open)>svg{width:16px;height:16px;flex:none}
+#genj-studio .zc-edit-main>:is(.zia-open,.zia-guide-open)[aria-pressed=true]{background:var(--gs-accent)!important;color:var(--gs-ink)!important}
+#genj-studio .zc-edit-main>:is(.zia-open,.zia-guide-open):hover:not(:disabled){background:var(--gs-accent)!important;color:var(--gs-ink)!important}
+#genj-studio .zc-edit-main>:is(.zia-open,.zia-guide-open):disabled{opacity:.55}
 #genj-studio[data-workspace=image] .zc-image-scroll:has(>.zia-editor:not([hidden])){display:flex;flex-direction:column;flex:1 0 auto;min-height:calc(var(--zs-preview-min,256px) + 48px);overflow:visible}
 #genj-studio[data-workspace=image] .zc-image-scroll:has(>.zia-editor:not([hidden]))>.zc-image-heading{flex:none}
 #genj-studio .zia-editor{grid-row:2;grid-column:1;flex:1 0 auto;min-width:0;min-height:0;display:grid;grid-template-rows:minmax(var(--zs-preview-min,256px),1fr) auto auto;overflow:visible;background:var(--zc-canvas,#101013)}
@@ -19,6 +19,7 @@
 #genj-studio .zia-loading{position:absolute;inset:0;display:grid;place-items:center;padding:24px;color:var(--gs-muted);pointer-events:none;text-align:center}
 #genj-studio .zia-loading[hidden]{display:none}
 #genj-studio .zia-toolbar{display:flex;align-items:center;flex-wrap:wrap;gap:8px;padding:12px 0 4px;font-size:13px}
+#genj-studio .zia-editor-title{font-size:13px;font-weight:650;margin-right:4px}
 #genj-studio .zia-tools{display:flex;align-items:center;flex-wrap:wrap;gap:4px;min-width:0;flex:1 1 440px}
 #genj-studio .zia-toolbar button,#genj-studio .zia-options>summary{display:inline-flex;align-items:center;justify-content:center;min-height:36px;padding:8px 12px;border:1px solid transparent;border-radius:6px;background:transparent;color:var(--zc-text);font:inherit;cursor:pointer;list-style:none}
 #genj-studio .zia-toolbar button:hover:not(:disabled),#genj-studio .zia-options>summary:hover{background:var(--zc-hover)}
@@ -37,3 +38,41 @@
 #genj-studio .zia-options-panel p,#genj-studio .zia-status{margin:0;color:var(--gs-muted);font-size:12px;line-height:1.5}
 #genj-studio .zia-status{padding:0 0 8px}
 @media(max-width:700px){#genj-studio .zia-toolbar{gap:4px;padding-top:8px}#genj-studio .zia-tools{flex-basis:100%}#genj-studio .zia-toolbar button,#genj-studio .zia-options>summary{padding-inline:8px}#genj-studio .zia-brush input{width:72px}}
+/* Existing image-edit controls gain compact groups when mounted by PlateSurface.
+   The same native buttons and inputs return to the image toolbar unchanged. */
+#genj-studio .zia-icon-tools{gap:8px}
+#genj-studio .zia-icon-tools .zia-tool-group{display:flex;align-items:center;gap:4px;min-width:0}
+#genj-studio .zia-icon-tools .zia-tool-group--settings{gap:8px}
+#genj-studio .zia-icon-tools button svg{width:18px;height:18px;flex:none;fill:none;stroke:currentColor;stroke-width:1.65;stroke-linecap:round;stroke-linejoin:round}
+#genj-studio .zia-icon-tools .zia-tool-label{margin-left:6px;white-space:nowrap}
+#genj-studio .zia-icon-tools button[aria-pressed=true]{background:var(--gs-selected);color:var(--gs-accent);box-shadow:inset 0 0 0 1px var(--gs-accent)}
+#genj-studio .zia-icon-tools :is(button,input):focus-visible{outline:2px solid var(--gs-focus,var(--gs-accent));outline-offset:2px}
+@media(max-width:700px){#genj-studio .zia-icon-tools{flex-wrap:wrap}#genj-studio .zia-icon-tools .zia-tool-group{flex-wrap:wrap}}
+
+/* Image and video editors share the same glyphs, readable labels and size input. */
+#genj-studio .zia-shared-paint{gap:8px;align-items:center}
+#genj-studio .zia-shared-paint>button{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:40px;padding:6px 10px;line-height:1.3;white-space:nowrap}
+#genj-studio .zia-shared-paint>button svg{width:20px;height:20px;flex:none}
+#genj-studio .zia-shared-paint .pap-brush-number{box-sizing:border-box;width:64px;min-width:0;min-height:34px;padding:4px 6px;border:1px solid var(--gs-line);border-radius:4px;background:var(--gs-input);color:var(--zc-text);font:inherit;text-align:center;font-variant-numeric:tabular-nums}
+#genj-studio .zia-shared-paint .zia-brush{flex-wrap:wrap;justify-content:center;gap:6px}
+#genj-studio .zia-shared-paint .zia-colour{display:flex;align-items:center;gap:6px;font-size:12px}
+#genj-studio .zia-shared-paint .zia-colour input{box-sizing:border-box;width:44px;height:34px;min-height:34px;padding:2px;border:1px solid var(--gs-line);border-radius:4px;background:var(--gs-input)}
+#genj-studio .zia-editor:has(>.zia-paint-rail:not(:empty)){grid-template-columns:104px minmax(0,1fr)}
+#genj-studio .zia-editor:has(>.zia-paint-rail:not(:empty))>:not(.zia-paint-rail){grid-column:2}
+#genj-studio .zia-paint-rail{grid-column:1;grid-row:1/-1;min-width:0;min-height:0;padding:10px;box-sizing:border-box;border-right:1px solid var(--gs-line);overflow-y:auto;overflow-x:hidden;background:var(--gs-panel);scrollbar-width:thin}
+#genj-studio .zia-paint-rail:empty{display:none}
+#genj-studio .zia-paint-rail .zia-tools{display:flex;flex-direction:column;align-items:stretch;flex-wrap:nowrap;gap:8px;width:100%}
+#genj-studio .zia-paint-rail :is(button,input,label){box-sizing:border-box;min-width:0;max-width:100%}
+#genj-studio .zia-paint-rail .zia-tools>button{width:100%;padding:6px 3px;min-height:40px;font-size:11px;border:1px solid var(--gs-line);border-radius:4px;background:var(--gs-input);color:var(--zc-text)}
+#genj-studio .zia-paint-rail .zia-tools>button[aria-pressed=true]{border-color:var(--gs-accent);color:var(--gs-accent);background:var(--gs-selected)}
+#genj-studio .zia-paint-rail .zia-brush,#genj-studio .zia-paint-rail .zia-colour{display:flex;flex-direction:column;align-items:stretch;gap:6px;padding:10px 0 0;border-top:1px solid var(--gs-line);font-size:11px;text-align:center}
+#genj-studio .zia-paint-rail .zia-brush :is(input,output),#genj-studio .zia-paint-rail .zia-colour input{width:100%;min-width:0}
+#genj-studio .zia-paint-rail .pap-swatches{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px;padding-top:10px;border-top:1px solid var(--gs-line)}
+#genj-studio .zia-paint-rail .pap-swatches button{height:28px;min-height:28px;padding:0;border:1px solid var(--gs-muted);border-radius:4px}
+#genj-studio .zia-paint-rail .pap-swatches button[aria-pressed=true]{outline:2px solid var(--gs-accent);outline-offset:1px}
+@media(max-width:700px){#genj-studio .zia-editor:has(>.zia-paint-rail:not(:empty)){grid-template-columns:96px minmax(0,1fr)}}
+#genj-studio .zia-toolbar .zia-brush-wide{display:grid;grid-template-columns:auto minmax(160px,1fr) 64px;align-items:center;gap:12px;flex:1 1 320px;max-width:480px;margin-left:auto;padding:8px 0;white-space:nowrap;font-size:12px;color:var(--gs-muted)}
+#genj-studio .zia-toolbar .zia-brush-wide input[type=range]{writing-mode:horizontal-tb;direction:ltr;box-sizing:border-box;width:100%;min-width:160px;height:32px;margin:0;accent-color:var(--gs-accent)}
+#genj-studio .zia-toolbar .zia-brush-wide output{display:none}
+#genj-studio .zia-toolbar .zia-brush-wide .pap-brush-number{box-sizing:border-box;width:64px;min-height:36px;padding:6px;border:1px solid var(--gs-line);border-radius:5px;background:var(--gs-input);color:var(--zc-text);font:inherit;text-align:center}
+#genj-studio .zia-toolbar .zia-brush-wide input[type=range]:focus-visible{outline:2px solid var(--gs-accent);outline-offset:3px}

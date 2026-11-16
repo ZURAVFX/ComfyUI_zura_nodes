@@ -351,3 +351,30 @@
  #genj-studio.image-composer-refined[data-workspace=image] .zc-image-model-control{min-height:44px;height:44px}
  #genj-studio.image-composer-refined[data-workspace=image] .zc-image-model-control>svg{top:16px}
 }
+
+/* Unified Model Picker with inline per-model Install buttons & Gated HF Popout Card */
+#genj-studio .zura-has-model-picker{position:relative;cursor:pointer;user-select:none}
+#genj-studio .zura-has-model-picker>select{pointer-events:none}
+#genj-studio .zura-model-picker-menu{background:var(--gs-panel,#181a1b);border:1px solid var(--gs-line,#2c3135);border-radius:10px;box-shadow:0 14px 36px rgba(0,0,0,.52);padding:6px;display:flex;flex-direction:column;gap:2px;box-sizing:border-box;overflow-y:auto}
+#genj-studio .zura-model-picker-row{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:2px 4px;border-radius:7px}
+#genj-studio .zura-model-picker-row:hover{background:var(--zc-hover,rgba(255,255,255,.06))}
+#genj-studio .zura-model-picker-choice{flex:1 1 auto;min-width:0;display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:6px;color:var(--zc-text,#f2f4f5);font-size:13px;line-height:18px;cursor:pointer}
+#genj-studio .zura-model-picker-choice[aria-disabled=true]{opacity:.45;cursor:default}
+#genj-studio .zura-model-picker-choice[aria-checked=true]{font-weight:600}
+#genj-studio .zura-model-picker-dot{width:7px;height:7px;border-radius:50%;flex:0 0 7px;background:transparent;border:1px solid var(--gs-muted,#7a8288)}
+#genj-studio .zura-model-picker-choice[aria-checked=true] .zura-model-picker-dot{background:var(--gs-accent,#bfe586);border-color:var(--gs-accent,#bfe586)}
+#genj-studio .zura-model-picker-label{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#genj-studio .zura-model-picker-action{flex:0 0 auto;display:flex;align-items:center}
+#genj-studio :is(.zura-picker-install-btn,.zc-opening-menu [data-setup-needed]){display:inline-flex;align-items:center;gap:4px;padding:4px 9px;border-radius:6px;background:rgba(191,229,134,.16);border:1px solid rgba(191,229,134,.55);color:var(--gs-accent,#bfe586);font-size:11.5px;font-weight:600;line-height:1.2;white-space:nowrap;cursor:pointer;margin-left:auto}
+#genj-studio :is(.zura-picker-install-btn,.zc-opening-menu [data-setup-needed]):hover{background:var(--gs-accent,#bfe586);color:var(--gs-ink,#111314);border-color:var(--gs-accent,#bfe586)}
+#genj-studio .zura-picker-install-btn.is-installing{background:rgba(255,255,255,.1);border-color:var(--gs-line,#2c3135);color:var(--zc-text,#f2f4f5)}
+#genj-studio .zura-picker-ready-badge{font-size:11px;color:var(--gs-muted,#8b949a);padding:2px 6px;white-space:nowrap}
+#genj-studio .zura-inline-install-btn{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:5px;background:var(--gs-accent,#bfe586);color:var(--gs-ink,#111314);font-size:11px;font-weight:600;line-height:1.2;white-space:nowrap;cursor:pointer;margin-left:4px;flex:0 0 auto}
+#genj-studio .zura-inline-install-btn.is-installing{background:rgba(191,229,134,.2);color:var(--gs-accent,#bfe586);border:1px solid rgba(191,229,134,.5)}
+#genj-studio .zura-model-access .zura-access-token-fallback{display:none!important}
+#genj-studio .zura-model-access[open]{padding:12px;border:1px solid rgba(191,229,134,.45);border-radius:10px;background:var(--gs-panel,#181a1b);margin-top:8px}
+#genj-studio .zura-model-access .zura-access-primary{display:flex;flex-wrap:wrap;gap:8px;margin:8px 0}
+#genj-studio .zura-model-access [data-access-browser]{background:var(--gs-accent,#bfe586);color:var(--gs-ink,#111314);border:1px solid var(--gs-accent,#bfe586);border-radius:8px;padding:8px 14px;font-weight:600;cursor:pointer}
+#genj-studio .zura-model-access .zura-access-terms-list{display:flex;flex-direction:column;gap:6px;margin:8px 0}
+#genj-studio .zura-model-access .zura-access-terms-btn{display:inline-flex;align-items:center;justify-content:center;padding:8px 12px;border-radius:8px;background:rgba(191,229,134,.16);border:1px solid rgba(191,229,134,.55);color:var(--gs-accent,#bfe586);font-weight:600;font-size:12.5px;text-decoration:none}
+#genj-studio .zura-model-access .zura-access-terms-btn:hover{background:var(--gs-accent,#bfe586);color:var(--gs-ink,#111314)}

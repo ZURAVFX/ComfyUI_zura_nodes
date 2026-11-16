@@ -2,7 +2,7 @@ import {runStudioVMInContext} from './studio_vm_fixture.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
-const code=fs.readFileSync(new URL('../web/studio.js',import.meta.url),'utf8').replace(/^import .*;\r?\n/gm,'').replace(/^export /gm,'').split('app.registerExtension({')[0];
+const code=fs.readFileSync(new URL('../web/studio_core.js',import.meta.url),'utf8').replace(/^import .*;\r?\n/gm,'').replace(/^export /gm,'').split('app.registerExtension({')[0];
 let restored;
 const context={api:{fetchApi:async()=>({ok:true,json:async()=>restored})},localStorage:{setItem(){},removeItem(){}}};
 vm.createContext(context);runStudioVMInContext(code+'\nthis.Studio=ArtistStudio;',context);

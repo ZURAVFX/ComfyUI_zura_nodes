@@ -1,4 +1,9 @@
+import {paintoutOutputRoles} from './paintout_outputs.js';
+import {captureResultExports,createResultExportRow,renderPaintoutResultExports} from '../studio_result_exports.js';
+import {playbackFile} from '../studio_delivery_formats.js';
+import {deliveryFormatLabel} from '../studio_delivery_formats.js';
 import {prepareAEFrameGraph} from '../studio_ae_frame_contract.js';
+import {PaintoutWorkspace} from './studio_paintout.js';
 import {workspaceStorage} from '../studio_storage.js';
 import {installOwnedExecuting} from './studio_progress.js';
 import {LTXLoras} from '../studio_ltx_loras.js';
@@ -34,7 +39,7 @@ const closeIcon='<svg viewBox="0 0 16 16" width="12" height="12" fill="none" str
 
 const colours=[['srgb_display','sRGB / standard images'],['auto','Detect video tags'],['rec709_gamma24','Rec.709 gamma 2.4'],['rec709_oetf','Rec.709 camera'],['acescg','ACEScg'],['acescct','ACEScct'],['hlg_rec2020','HLG Rec.2020'],['pq_rec2020','PQ Rec.2020'],['linear_rec709','Linear Rec.709']];
 
-const options=(items,value)=>items.map(([id,label])=>`<option value="${id}" ${id===value?'selected':''}>${label}</option>`).join('');
+const options=(items,value)=>items.map(([id,label])=>`<option value="${id}" ${id===value?'selected':''}>${deliveryFormatLabel(label)}</option>`).join('');
 
 export function buildWatermarkWorkspaceGraph(config,info,{repair=false}={}){
   if(config.removalMethod==='subtitles')return buildSubtitleGraph(config,info);
@@ -136,6 +141,7 @@ export class WatermarkWorkspace{
       </form>`;
 
     owner.root.append(this.page);
+    this.resultExportsRow=createResultExportRow(this.page.ownerDocument);this.page.querySelector('.zf-composer').append(this.resultExportsRow);
     // Progress must never cover or take height away from the picture.
     this.page.querySelector('.zf-viewer').after(this.$('progress'));
     const back=document.createElement('button');back.type='button';back.className='zps-back-video';back.textContent='Back to video';
@@ -355,16 +361,8 @@ export class WatermarkWorkspace{
     if(this.editor&&this.state.mode!=='full'){this.editor.tool='include';this.editor.viewer.setTool('include');await this.editor.setStage('trim');}
   }
 
-  async pickSource(kind){
-
-    if(this.busy())return;try{await this.editor?.flushManual();await this.editor?.persist();}catch(e){this.message(e.message);return;}let added=false;this.picking=true;this.render();
-
-    try{const [file]=await this.pick(kind);if(!file)return;const info=await this.info(file);this.state.source=file;this.state.activeMaskSegment=null;this.state.maskSegmentDraft=null;this.state.editorProject=null;this.state.maskProject=null;this.state.maskRevision=null;this.state.maskCoverage=null;this.state.editorStage='trim';this.state.clipTrimConfirmed=false;this.state.maskTrackStart=null;this.state.maskTrackEnd=null;this.sourceInfo=info;this.pendingHDR=null;this.state.sourceColourConfirmed=false;if(!info.resolved_colour){this.state.sourceColour="srgb_display";this.state.colourPipeline="sdr_sdr";this.state.processingSpace="SDR (sRGB)";this.state.outputMode="SDR video";this.$("colour").value=this.state.sourceColour;this.$("processing").value=this.state.processingSpace;this.$("output").value=this.state.outputMode;}if(info.resolved_colour){this.state.sourceColour=info.resolved_colour;this.$('colour').value=info.resolved_colour;this.state.colourPipeline=['acescg','acescct','hlg_rec2020','pq_rec2020','linear_rec709'].includes(info.resolved_colour)?'hdr_hdr':'sdr_sdr';this.state.processingSpace=this.state.colourPipeline==='hdr_hdr'?'HDR (ACEScct)':'SDR (sRGB)';this.state.outputMode=this.state.colourPipeline==='hdr_hdr'?'EXR + HLG video':'SDR video';this.$('processing').value=this.state.processingSpace;this.$('output').value=this.state.outputMode;}this.state.mask='';this.maskInfo=null;this.state.anchors=[];this.selected=-1;this.state.startFrame=0;this.state.frameCount=Math.min(81,info.frames);this.playhead=0;this.result=null;this.$('export-link').hidden=true;this.$('export-link').removeAttribute('href');this.$('start').value=0;this.$('count').value=this.state.frameCount;this.renderAnchors();this.changed();this.preview('source');this.state.editorStage='trim';this.state.clipTrimConfirmed=false;this.state.maskTrackStart=null;this.state.maskTrackEnd=null;added=true;}
-
-    catch(e){this.message(this.requestError(e));}finally{this.picking=false;this.save();this.render();}
-
-    if(added&&this.editor)await this.editor.setStage('trim');
-
+  async pickSource(kind,preparedInfo=null,options={}){
+    return PaintoutWorkspace.prototype.pickSource.call(this,kind,preparedInfo,options);
   }
 
   async pickMask(){
@@ -474,7 +472,7 @@ export class WatermarkWorkspace{
 
     let src='',video=false;
 
-    if(kind==='result'){this.nativeSamplePreview?.clear();src=this.outputURL(this.result.file);video=true;this.$('history').open=false;for(const popup of this.page.querySelectorAll('form details[open]'))popup.open=false;}
+    if(kind==='result'){this.nativeSamplePreview?.clear();const display=playbackFile(this.result.file);src=this.outputURL(display);video=!/\.(png|tiff?|jpe?g|webp)$/i.test(display.filename);this.$('history').open=false;for(const popup of this.page.querySelectorAll('form details[open]'))popup.open=false;}
 
     else if(kind==='anchor'){const a=this.state.anchors[this.selected];src=a.file?this.thumbnail(a.preview_file||a.file,0,a.preview_file?(a.preview_colour_space||'srgb_display'):a.colour_space,1280):this.thumbnail(this.state.source,a.frame,this.state.sourceColour,1280);}
 
@@ -532,13 +530,14 @@ export class WatermarkWorkspace{
     const format=config.outputMode||'SDR video',pipeline=paintoutColourPipeline(config);
     const output=format.includes('HLG')?'HDR':format.includes('SDR')?'SDR':pipeline==='sdr_sdr'?'SDR':'HDR';
     this.$('output-range').textContent=`Output: ${output}`;
-    this.$('output-space').textContent=format;
-    this.$('input-range').title=this.$('input-space').textContent;this.$('output-range').title=format;
+    this.$('output-space').textContent=deliveryFormatLabel(format);
+    this.$('input-range').title=this.$('input-space').textContent;this.$('output-range').title=deliveryFormatLabel(format);
     this.$('input-range').setAttribute('aria-describedby','zps-input-space');this.$('output-range').setAttribute('aria-describedby','zps-output-space');
-    this.$('output-confirmation').textContent=`Will save ${output} · ${format}`;
+    this.$('output-confirmation').textContent=`Will save ${output} · ${deliveryFormatLabel(format)}`;
   }
 
   render(){
+    renderPaintoutResultExports(this.resultExportsRow,this.api,this.result);
     this.state.targetedMethod='automatic';this.page.classList.toggle('is-generating',!!this.job||this.submitting);
 
     const busy=this.busy(),inpaint=this.state.mode==='inpaint',targeted=this.state.mode!=='full',subtitles=this.state.removalMethod==='subtitles',c=this.config(),availability=this.modelInfo?(subtitles?subtitleAvailability(this.modelInfo,c):this.ripple?rippleAvailability(this.modelInfo):inpaint?inpaintAvailability(this.modelInfo,c):paintoutAvailability(this.modelInfo,this.state.mode,c)):null;let error=[...this.page.querySelectorAll('[data-input-error]')].find(input=>!input.disabled)?.dataset.inputError||(subtitles?subtitleValidation(c):this.ripple?rippleValidation(c):inpaint?inpaintValidation(c):paintoutValidation(c));
@@ -750,15 +749,16 @@ export class WatermarkWorkspace{
 
   async poll(){if(!this.job||this.polling)return;const job=this.job;this.polling=true;try{const history=await this.fetch('/history/'+encodeURIComponent(job.id)),entry=history[job.id];if(this.job!==job)return;if(this.connectionLost){this.message('');this.connectionLost=false;}if(entry?.status?.completed||entry?.status?.status_str==='error'){
 
-      const repair=job.phase==='repair',output=entry.outputs?.[repair?'repair_save':'save']||{},files=output.images||[],file=files.find(f=>/motion_preview/.test(f.filename))||files.find(f=>/SDR/.test(f.filename))||files[0];
+      const repair=job.phase==='repair',output=entry.outputs?.[repair?'repair_save':'save']||{},files=output.images||[],roles=paintoutOutputRoles({files,exports:captureResultExports(output),config:job.config}),file=roles.preview||roles.sdrMaster||roles.master;
       const succeeded=entry.status.status_str==='success',checkpoint=output.zura_saved_sequence?.[0]||output.text?.map(text=>/^Saved \d+ frames: (.+)$/s.exec(text)?.[1]).find(Boolean);
+      const previousExports=job.phase==='hdr'&&this.result?.stage==='repair'&&this.pendingHDR?.savedSequence===job.savedSequence?this.result.exports:[];const resultExports=captureResultExports(output,previousExports);
       this.job=null;this.nativeSamplePreview?.clear();this.stopPolling();
       if(repair&&succeeded&&checkpoint){
         this.pendingHDR={config:job.config,savedSequence:checkpoint,failed:false};
-        if(file){this.result={file,master:files.find(f=>!/motion_preview/.test(f.filename))||file,config:job.config,saved:output.text?.join('\n')||'',stage:'repair'};this.items.unshift(this.result);this.items=this.items.slice(0,12);this.preview('result');}
+        if(file){this.result={...roles,file,config:job.config,exports:resultExports,saved:output.text?.join('\n')||'',stage:'repair'};this.items.unshift(this.result);this.items=this.items.slice(0,12);this.preview('result');}
         this.message('Repair saved. Next: convert to HDR.');
       }else if(file&&succeeded){
-        this.result={file,master:files.find(f=>!/motion_preview/.test(f.filename))||file,config:job.config,saved:output.text?.join('\n')||''};this.items.unshift(this.result);this.items=this.items.slice(0,12);this.preview('result');
+        this.result={...roles,file,config:job.config,exports:resultExports,saved:output.text?.join('\n')||''};this.items.unshift(this.result);this.items=this.items.slice(0,12);this.preview('result');
         if(job.phase==='hdr'&&this.pendingHDR?.savedSequence===job.savedSequence)this.pendingHDR=null;
         this.message(job.config.outputMode.includes('EXR')?this.result.saved:'');
       }else{
@@ -784,7 +784,7 @@ export class WatermarkWorkspace{
 
   async cancel(){if(!this.job||this.job.cancelPending)return;const job=this.job;job.cancelPending=true;this.progressSnapshot=null;this.$('bar').removeAttribute('value');this.$('progress-title').textContent='Cancelling paintout…';this.$('progress-detail').textContent='Waiting for ComfyUI to stop this run.';this.save();this.render();try{await this.fetch('/queue',{delete:[job.id]});await this.fetch('/interrupt',{prompt_id:job.id});await this.poll();}catch(e){if(this.job===job){job.cancelPending=false;this.save();this.render();this.message('Could not confirm cancellation. Try again.');}}}
 
-  compare(){if(!this.result||this.result.config.source!==this.state.source||!this.sourceInfo?.media_url)return;this.$('video').pause();this.comparison??=new ShotComparison(this.$('comparison'));this.$('comparison').hidden=false;this.comparison.onClose=()=>{this.$('comparison').hidden=true;};const c=this.result.config;this.comparison.show(this.url(this.sourceInfo.media_url),this.outputURL(this.result.file),c.startFrame/(this.sourceInfo.kind==='video'?this.sourceInfo.fps:c.sequenceFps),{resultLabel:'Clean plate'});}
+  compare(){if(!this.result||this.result.config.source!==this.state.source||!this.sourceInfo?.media_url)return;this.$('video').pause();this.comparison??=new ShotComparison(this.$('comparison'));this.$('comparison').hidden=false;this.comparison.onClose=()=>{this.$('comparison').hidden=true;};const c=this.result.config;this.comparison.show(this.url(this.sourceInfo.media_url),this.outputURL(playbackFile(this.result.file)),c.startFrame/(this.sourceInfo.kind==='video'?this.sourceInfo.fps:c.sequenceFps),{resultLabel:'Clean plate'});}
 
   async graph(){try{const config=this.job?.config||this.config(),base=buildWatermarkWorkspaceGraph(config,this.modelInfo),graph=this.loras?.patch?await this.loras.patch(base,config.custom_loras||[]):base,original=(this.app.rootGraph||this.app.graph)?.serialize?.();if(!original||typeof this.app.loadApiJson!=='function')throw new Error('Update ComfyUI to open this editable graph.');try{await this.app.loadApiJson(graph,`Zura Paintout · ${Date.now()}.json`);await import('../vendor/elk.bundled.js');await tidyArtistGraph(this.app,graph,'paintout',window.ELK);}catch(e){await this.app.loadGraphData(original);throw e;}this.studio.close();}catch(e){this.message(e.message);}}
 

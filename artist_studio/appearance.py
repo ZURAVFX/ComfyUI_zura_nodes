@@ -50,7 +50,7 @@ def resolve_appearance(body, load_asset, check_asset, *, source=None):
         from .ltx25_hdr_input import resolve_asset
         from types import SimpleNamespace
         resolve_asset(starting, body.get("config", {}), SimpleNamespace(load=load_asset), check_asset)
-    if mode == "build" and not references and body.get("config", {}).get("workflow_mode") not in ("relight", "camera"):
+    if mode == "build" and not references and body.get("config", {}).get("workflow_mode") not in ("relight", "camera", "swap"):
         raise ValueError("Add at least one reference image to build your starting frame.")
     return {"look_mode": mode, "references": references, "starting_asset": starting,
             "character": copy.deepcopy(references[0] if references else starting)}

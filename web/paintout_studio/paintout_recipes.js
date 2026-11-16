@@ -74,8 +74,8 @@ export function paintoutValidation(config={}){
   if(!['sdr_sdr','sdr_hdr','hdr_hdr'].includes(pipeline))return 'Choose SDR to SDR, SDR to HDR or HDR to HDR.';
   if(hdrSource(c)&&pipeline!=='hdr_hdr')return 'This is HDR footage. Choose HDR to HDR to preserve its highlights.';
   if(pipeline==='hdr_hdr'&&c.sourceColour!=='auto'&&!hdrSource(c))return 'HDR to HDR needs HLG, PQ or a scene-linear/ACES source. Choose SDR to HDR for SDR footage.';
-  if(pipeline==='sdr_sdr'&&c.outputMode.includes('HLG'))return 'Choose SDR to HDR for a real HDR conversion; HLG tags alone do not expand SDR.';
-  if(pipeline!=='sdr_sdr'&&c.outputMode.includes('SDR'))return 'Choose HLG video, EXR sequence or EXR + HLG video for HDR delivery.';
+  if(pipeline==='sdr_sdr'&&c.outputMode.includes('HLG'))return 'Choose SDR to HDR for HDR reconstruction; a ProRes container alone does not expand SDR.';
+  if(pipeline!=='sdr_sdr'&&c.outputMode.includes('SDR'))return 'Choose ProRes 4444 MOV, EXR sequence or EXR + ProRes 4444 for HDR delivery.';
   if(pipeline==='sdr_hdr'){
     const limit=paintoutHDRFrameLimit(c);
     if(c.frameCount>limit)return `SDR to HDR supports ${limit} frames at this plate size (streaming HDR memory limits). This clip has ${c.frameCount} frames. Keep SDR output for the full clip, or trim a shorter clip for HDR.`;

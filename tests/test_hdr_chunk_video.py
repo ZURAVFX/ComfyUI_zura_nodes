@@ -47,8 +47,8 @@ class HDRChunkVideoTests(unittest.TestCase):
         with av.open(str(path)) as container:
             stream=container.streams.video[0]
             self.assertEqual((stream.width,stream.height),(32,32))
-            self.assertEqual(stream.codec_context.format.name,'yuv420p10le')
-            self.assertEqual((stream.codec_context.color_primaries,stream.codec_context.color_trc,stream.codec_context.colorspace),(9,18,9))
+            self.assertEqual(stream.codec_context.format.name,'yuv444p12le')
+            self.assertEqual((stream.codec_context.color_primaries,stream.codec_context.color_trc,stream.codec_context.colorspace),(2,2,1))
             self.assertEqual(sum(1 for _ in container.decode(video=0)),14)
         with av.open(str(path)) as container:
             samples=np.concatenate([frame.to_ndarray().reshape(-1) for frame in container.decode(audio=0)])

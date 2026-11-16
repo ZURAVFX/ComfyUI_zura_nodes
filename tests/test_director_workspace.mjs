@@ -34,7 +34,9 @@ assert.equal(ui.clip().startFrame,12);assert.equal(ui.clip().asset.file,'zura_di
 assert.match(ui.$('preview').src,/filename=anchor.png&subfolder=zura_director&type=input/);
 ui.$('source-size').click();const size=ui.config();assert.equal(size.outputWidth,1002);assert.equal(size.outputHeight,564);assert.equal(size.width,1024);assert.equal(size.height,576);
 assert.equal(ui.$('megapixels').disabled,false,'Source dimensions still allow direct megapixel scaling');
-ui.$('megapixels').value=.4;ui.$('megapixels').oninput();assert.equal(ui.draft.sourceSize,false);assert.ok(ui.config().outputWidth<1002);
+const sizePopup=ui.page.querySelector('.zdir-size'),sizeSlider=ui.$('megapixels');sizePopup.open=true;
+for(const value of [.3,.35,.4]){sizeSlider.value=value;sizeSlider.oninput();assert.equal(sizePopup.open,true,'Continuous resolution changes keep the size popup open');assert.equal(ui.$('megapixels'),sizeSlider,'The active range node is retained during a drag');assert.equal(ui.draft.megapixels,value);}
+assert.equal(ui.draft.sourceSize,false);assert.ok(ui.config().outputWidth<1002);
 ui.$('source-size').click();assert.equal(ui.config().outputWidth,1002,'The explicit source-size action restores exact dimensions');
 ui.audioMetadata=async()=>({duration:1.25});uploadName='voice.wav';await ui.upload('audio',new File(['audio'],'Voice over.wav',{type:'audio/wav'}));assert.equal(ui.clip().asset.name,'Voice over.wav');assert.equal(ui.clip().asset.file,'zura_director/voice.wav');assert.equal(ui.clip().endFrame,42);assert.equal(ui.clip().audioDurationFrames,30);
 // Real gesture handlers: all tracks move/resize, frame-snap, persist and cancel.

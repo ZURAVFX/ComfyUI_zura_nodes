@@ -1,3 +1,4 @@
+import {playbackFile} from './studio_delivery_formats.js';
 import {selectedEXRStorage} from './studio_exr_precision.js';
 import {workspaceStorage} from './studio_storage.js';
 import {installOwnedExecuting} from './studio_progress.js';
@@ -58,7 +59,7 @@ export class FrameVideoWorkspace{
             </div>
           </details>
           <label class="zc-tool zc-model-control">${icons.clock}<span class="zc-sr-only">Clip length</span><select id="zf-length" aria-label="Clip length">${FRAME_LENGTHS.map(n=>`<option value="${n}" ${n===73?'selected':''}>${(n/24).toFixed(2)}s</option>`).join('')}</select>${icons.chevron}</label>
-          </div><label class="zc-tool zc-model-control" id="zf-output-control" hidden title="HDR adds an LTX conversion pass after generation. The SDR take is retained."><span class="zc-sr-only">Output format</span><select id="zf-output" aria-label="LTX output format"><option value="sdr">SDR</option><option value="hlg_video">HDR · HLG video</option><option value="hlg_and_exr">HDR · HLG + EXR</option><option value="acescg_exr">HDR · EXR</option></select>${icons.chevron}</label><label class="zc-tool zf-audio-switch"><input type="checkbox" id="zf-audio-enabled" role="switch"/>Audio reference</label><label class="zc-tool zf-audio-switch" id="zf-fast-control" hidden title="Processes at a smaller size then upscales. May lose fine detail; timing varies by clip."><input type="checkbox" id="zf-fast" role="switch" aria-describedby="zf-fast-hint"/>Fast · preview</label><span id="zf-fast-hint" class="zc-sr-only">Processes at a smaller size then upscales. May lose fine detail; timing varies by clip.</span>
+          </div><label class="zc-tool zc-model-control" id="zf-output-control" hidden title="HDR adds an LTX conversion pass after generation. The SDR take is retained."><span class="zc-sr-only">Output format</span><select id="zf-output" aria-label="LTX output format"><option value="sdr">SDR</option><option value="hlg_video">HDR · ProRes 4444 MOV</option><option value="hlg_and_exr">HDR · ProRes 4444 + EXR</option><option value="acescg_exr">HDR · EXR</option></select>${icons.chevron}</label><label class="zc-tool zf-audio-switch"><input type="checkbox" id="zf-audio-enabled" role="switch"/>Audio reference</label><label class="zc-tool zf-audio-switch" id="zf-fast-control" hidden title="Processes at a smaller size then upscales. May lose fine detail; timing varies by clip."><input type="checkbox" id="zf-fast" role="switch" aria-describedby="zf-fast-hint"/>Fast · preview</label><span id="zf-fast-hint" class="zc-sr-only">Processes at a smaller size then upscales. May lose fine detail; timing varies by clip.</span>
           <details class="zc-tool-popup"><summary aria-label="Advanced generation settings">${icons.settings}</summary><div class="zc-tool-panel"><label>Sampling steps<input type="number" id="zf-steps" min="4" max="40" value="8"/></label><p id="zf-recipe-hint"></p><label class="zf-check" id="zf-two-stage-control" hidden title="Samples at a smaller resolution, upscales, then refines the detail. Additional sampling may improve detail over Fast. This preview has no guaranteed speed or quality gain."><input type="checkbox" id="zf-two-stage"/>Two-stage · preview</label><label>Seed<input id="zf-seed" type="number" min="0" max="9007199254740991" value="42"/></label><label class="zf-check"><input type="checkbox" id="zf-random" checked/>New variation</label><div id="zf-setup"></div><button id="zf-refresh" type="button">Refresh installed models</button></div></details><details id="zf-model-downloads" class="zc-tool-popup gs-model-help"></details>
         </div><div class="zc-prompt-submit"><button id="zf-generate" class="gs-primary" type="submit" aria-describedby="zf-note" disabled>Generate video</button></div></div>
         <p id="zf-note" aria-live="polite">Add a first frame to begin. The last frame is optional.</p>
@@ -72,6 +73,9 @@ export class FrameVideoWorkspace{
       this.items=this.items.slice(0,12);this.save();this.renderHistory();
     }});
     this.modelDownloads=new StudioModelDownloads(this.$('model-downloads'),(path,body)=>this.fetch('/zura/studio'+path,body),()=>this.refreshSetup());
+    this.enginePicker=this.modelDownloads.attachPicker?.(this.$('engine'),{
+      resolveOption:val=>({key:`${val}_first_last`,readyOverride:val===this.$('engine').value?this.availability?.ready:undefined})
+    });
     this.loras=new LTXLoras(this.page.querySelector('.zc-prompt-tools'),(path,body)=>this.fetch(path,body),()=>this.busy(),()=>({h3:'h3',ltx:'ltx25'})[this.$('engine').value]||null,true);
     // Wan 2.2 has separate high and low models; never share one phase's
     // adapter with the other without an explicit selection.
@@ -178,7 +182,8 @@ export class FrameVideoWorkspace{
   }
   async paste(event){const item=Array.from(event.clipboardData?.items||[]).find(i=>i.kind==='file'&&i.type.startsWith('image/'));if(!item)return;event.preventDefault();event.stopPropagation();const file=item.getAsFile();if(file)await this.upload(this.pasteTarget||(!this.assets.first?'first':'last'),file);}
   preview(slot='first'){
-    if(!this.$('result').hidden)return;this.$('convert-hdr').hidden=true;const asset=this.assets[slot]||this.assets.first||this.assets.last;
+    if(this.masterDownload&&this.$('result').hidden)this.masterDownload.hidden=true;
+    if(!this.$('result').hidden)return;this.selectedResult=null;this.$('convert-hdr').hidden=true;const asset=this.assets[slot]||this.assets.first||this.assets.last;
     this.$('image-slot').hidden=!asset;this.$('empty').hidden=!!asset;if(asset){let image=this.$('image-slot').querySelector('img');if(!image){image=document.createElement('img');image.alt='Selected endpoint';this.$('image-slot').append(image);}image.onload=()=>this.rememberFrameSize(asset,image.naturalWidth,image.naturalHeight);image.src=view(this.api,asset,'input');}
     this.previewZoom?.update(asset?.file||'');
   }
@@ -215,7 +220,10 @@ export class FrameVideoWorkspace{
     if(!error&&!setup&&c.hdrOutput!=='sdr'){this.$('note').textContent+=hasHDREndpoint(c)?' \u00b7 Native HDR: two passes with an SDR viewing preview.':' · HDR adds a conversion pass; SDR is retained. Longer HDR delivery is a preview.';}this.$('note').hidden=!error&&!setup&&!this.dimensionNotice&&!longClip&&c.hdrOutput==='sdr';
   }
   renderHistory(){this.$('takes').innerHTML=this.items.map((item,i)=>`<button type="button" data-take="${i}">${escape(item.config.prompt.slice(0,60))} · ${(item.config.frames/24).toFixed(2)}s</button>`).join('');this.$('takes').onclick=e=>{const button=e.target.closest('[data-take]');if(button)this.showResult(this.items[Number(button.dataset.take)].file);};if(this.items[0])this.showResult(this.items[0].file);}
-  showResult(file){this.selectedResult=file;const take=this.items.find(item=>item.file===file||item.file?.filename===file?.filename&&item.file?.subfolder===file?.subfolder&&item.file?.type===file?.type);const convert=this.$('convert-hdr');if(convert)convert.hidden=!!take?.hdrFiles||take?.config?.engine!=='ltx'||typeof this.owner.openHDR!=='function';this.showHDRDownloads?.(take?.hdrFiles||[]);this.nativeSamplePreview?.clear();this.$('empty').hidden=true;this.$('image-slot').hidden=true;this.$('result').hidden=false;this.$('result').src=view(this.api,file);this.previewZoom?.update(this.$('result').src);this.$('history').open=false;}
+  showResult(file){this.selectedResult=file;const take=this.items.find(item=>item.file===file||item.file?.filename===file?.filename&&item.file?.subfolder===file?.subfolder&&item.file?.type===file?.type);const convert=this.$('convert-hdr');if(convert)convert.hidden=!!take?.hdrFiles||take?.config?.engine!=='ltx'||typeof this.owner.openHDR!=='function';this.showHDRDownloads?.(take?.hdrFiles||[]);this.nativeSamplePreview?.clear();this.$('empty').hidden=true;this.$('image-slot').hidden=true;this.$('result').hidden=false;this.$('result').src=view(this.api,playbackFile(file));this.previewZoom?.update(this.$('result').src);this.$('history').open=false;
+    if(!this.masterDownload){this.masterDownload=this.page.ownerDocument.createElement('a');this.masterDownload.className='zc-tool';this.masterDownload.textContent='Download master';this.page.querySelector('.zf-heading').append(this.masterDownload);}
+    this.masterDownload.hidden=!!take?.hdrFiles;this.masterDownload.href=view(this.api,file);this.masterDownload.download=file.filename;
+  }
   elapsed(step,max){const elapsed=Math.floor((Date.now()-this.job.started)/1000);const sampleElapsed=this.sampleStarted?(Date.now()-this.sampleStarted)/1000:0;if(!this.sampleStarted&&step)this.sampleStarted=Date.now();return step>1&&sampleElapsed>0?`About ${Math.ceil(sampleElapsed/(step-1)*(max-step))}s left in sampling · ${elapsed}s elapsed`:`${elapsed}s elapsed`;}
   async generate(){if(this.$('size-preset').value==='custom'&&['width','height'].some(k=>this.$(k).commitDimension?.()===false)){this.message('Enter a whole number for width and height.');return;}
     if(this.busy())return;this.submitting=true;const attempt={};this.submitAttempt=attempt;this.message('');this.render();

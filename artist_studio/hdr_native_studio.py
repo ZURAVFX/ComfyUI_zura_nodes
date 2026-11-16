@@ -27,11 +27,11 @@ def build_asset_graph(asset, body, check_asset):
     if not sequence and info.get('transfer') in ('bt709','iec61966-2-1'):
         raise ValueError('This source is SDR. Use SDR to HDR instead.')
     colour=body.get('colour_space','auto')
-    choices=('auto','acescg','acescct','linear_rec709') if sequence else ('auto','hlg_rec2020','pq_rec2020')
+    choices=('auto','acescg','acescct','linear_rec709') if sequence else ('auto','hlg_rec2020','pq_rec2020',*(['acescg','acescct','linear_rec709'] if info.get('working_space') else []))
     if colour not in choices:raise ValueError('Choose a supported HDR source colour space.')
     if not sequence and (info.get('transfer')=='smpte2084' and colour=='hlg_rec2020' or info.get('transfer')=='arib-std-b67' and colour=='pq_rec2020'):
         raise ValueError('The selected HDR colour space conflicts with the source transfer tags.')
-    accepted=('acescg','acescct','linear_rec709') if sequence else ('hlg_rec2020','pq_rec2020','pq_display_p3')
+    accepted=('acescg','acescct','linear_rec709') if sequence else ('hlg_rec2020','pq_rec2020','pq_display_p3',*(['acescg','acescct','linear_rec709'] if info.get('working_space') else []))
     if selected_space(info,colour) not in accepted:raise ValueError('Choose a supported HDR source colour space.')
     if sequence:
         fps=body.get('sequence_fps',24)

@@ -7,7 +7,7 @@ assert.ok(start>=0&&end>start);
 const body=source.slice(start,end).replace('export async function','async function').replaceAll('import.meta.url',JSON.stringify(new URL('../web/studio.js',import.meta.url).href));
 let release;const gate=new Promise(resolve=>release=resolve),navigation=[];let constructed=0;
 class ArtistStudio{constructor(options={}){constructed++;this.aeSession=options.aeSession;this.container={isConnected:false,querySelector:()=>({})};this.creative={owner:this};}async open(){await gate;this.container.isConnected=true;}}
-const context={ArtistStudio,URL,studioLaunchStorage:()=>({}),navigateStudioMode:async(creative,mode)=>navigation.push({owner:creative.owner,mode})};
+const context={ArtistStudio,URL,comfyHost:{},mountStudio:options=>new ArtistStudio({aeSession:options.session}),studioLaunchStorage:()=>({}),navigateStudioMode:async(creative,mode)=>navigation.push({owner:creative.owner,mode})};
 const api=vm.runInNewContext(`(()=>{${body};return{open:openZuraStudio,initial:initialStudio,get:()=>registeredStudio,set:value=>registeredStudio=value};})()`,context);
 const opening=api.open('image'),original=api.get();
 assert.equal(api.initial(null),original,'Late extension setup reuses the normal workspace already opened by a launcher');

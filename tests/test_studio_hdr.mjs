@@ -248,3 +248,11 @@ assert.ok(resumedCalls.some(([path])=>path==='/zura/studio/hdr/jobs/existing-lon
 assert.ok(!resumedCalls.some(([path,options])=>path==='/zura/studio/hdr/jobs'&&options?.method==='POST'));
 assert.match(resumedTool.$('preview').src,/restored.mp4/);assert.equal(savedJobs.has('zura-hdr-long-job'),false);resumedTool.close();
 console.log('LTX SDR-to-HDR source range, single submission, result preview and downloads pass.');
+
+const failedStart=new HDRSourceTool(document.querySelector('#host'),api,()=>({id:'source-id'}));
+failedStart.runStart=async()=>{throw Error('Fixture setup failure');};await failedStart.start();
+assert.equal(failedStart.$('action-status').textContent,'Fixture setup failure','Pre-submit exceptions are visible beside Convert');
+assert.equal(failedStart.$('start-job').disabled,false,'An unsuccessful start remains retryable');
+let resumed=0;failedStart.longClient.busy=true;failedStart.longClient.resume=()=>resumed++;await failedStart.start();
+assert.equal(resumed,1,'An existing sectioned job reconnects instead of ignoring Convert');
+assert.match(failedStart.$('action-status').textContent,/Reconnecting/);assert.equal(failedStart.$('start-job').disabled,true);failedStart.close();

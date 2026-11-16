@@ -77,15 +77,10 @@ def build_experimental_graph(source, *, start_frame, frame_count, fps, width, he
         g['hdr_experiment_exr'] = node('ZuraHDRPackageACEScct', images=['hdr_composite', 0],
                                        prefix='unverified_outpaint_' + prefix.rsplit('/', 1)[-1])
     if unverified_hlg:
-        g['hdr_experiment_hlg'] = node('ImageColorSpace', image=['hdr_composite', 0],
-                                       source='HDR ACEScct', destination='HDR')
-        hlg_video = {'images': ['hdr_experiment_hlg', 0], 'fps': source_fps,
-                     'bit_depth': 10, 'color_space': 'HDR', 'codec': 'none'}
-        if has_audio:
-            hlg_video['audio'] = ['hdr_audio', 0]
-        g['hdr_experiment_video'] = node('CreateVideo', **hlg_video)
-        g['hdr_experiment_save'] = node('ZuraHDRSaveExactRate', video=['hdr_experiment_video', 0],
-                                        filename_prefix=prefix + '_unverified_hlg', fps=source_fps)
+        video={'images':['hdr_composite',0],'source_space':'acescct',
+               'filename_prefix':prefix+'_unverified_working_rgb','fps':source_fps}
+        if has_audio:video['audio']=['hdr_audio',0]
+        g['hdr_experiment_save']=node('ZuraHDRSaveProRes4444',**video)
     return g
 
 
@@ -228,7 +223,7 @@ def build_sdr_first_hdr_composite(source, intermediate, *, start_frame, frame_co
         graph['original_audio'] = {'class_type': 'ZuraHDRLoadTimedAudio', 'inputs': {
             'source': source, 'start_seconds': selected_start, 'frame_count': frame_count,
             'fps': 24., 'allow_tail_hold': True}}
-        graph['zura_hdr_video']['inputs']['audio'] = ['original_audio', 0]
+        graph['zura_hdr_save_video']['inputs']['audio'] = ['original_audio', 0]
         graph['zura_hdr_preview_video']['inputs']['audio'] = ['original_audio', 0]
     for key, node in graph.items():
         if key == 'final_hdr_composite':
@@ -397,7 +392,7 @@ def build_reviewed_sdr_first_composite(source, selection, intermediate, *, revie
             'fps': 24., 'allow_tail_hold': True, 'source_duration': expected['requested_duration']}}
         graph['hdr_audio_hold'] = {'class_type': 'GenjPadAudioToFrames', 'inputs': {
             'audio': ['original_audio', 0], 'frames': ['hdr_delivery_hold', 1], 'fps': 24.}}
-        graph['zura_hdr_video']['inputs']['audio'] = ['hdr_audio_hold', 0]
+        graph['zura_hdr_save_video']['inputs']['audio'] = ['hdr_audio_hold', 0]
         graph['zura_hdr_preview_video']['inputs']['audio'] = ['hdr_audio_hold', 0]
     return graph
 
@@ -471,5 +466,5 @@ def build_reviewed_hdr_experiment(source, selection, *, review_key, has_audio=Fa
         final = ['hdr_unpad', 0]
     g['hdr_preview']['inputs']['image'] = final
     g['hdr_experiment_exr']['inputs']['images'] = final
-    g['hdr_experiment_hlg']['inputs']['image'] = final
+    g['hdr_experiment_save']['inputs']['images'] = final
     return g

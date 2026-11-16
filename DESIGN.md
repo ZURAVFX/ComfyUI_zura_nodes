@@ -64,6 +64,13 @@ The app stays within the Comfy window. Video uses a compact inspector beside a l
 
 ## Components
 
+Image Edit and the Add/Replace frame editor use the shared image paint controls:
+labelled SVG tools, the Video Paint colour palette, a slider and numeric brush
+size, and the same history/view icons. Keep the original input nodes when moving
+the controls between workspaces. Paint rails must fit their controls without
+horizontal scrolling. Canvas, timeline, heading and composer edges align within
+each workspace; medium-width layouts retain the same outer gutters.
+
 Uploads show the actual thumbnail and filename. Finished-frame and reference-built looks remain separate choices. Prompt stays visible. Optional setup, voice generation and technical controls use disclosure panels. The primary action lives with shot settings.
 
 The progress bar represents the current stage only. Unknown progress is indeterminate. Remaining time is labelled as an estimate and appears only after measured timing is available. Cancel run remains beside live progress. An oversized source selection enables Choose clip length, which suggests a valid custom interval and focuses the seconds field without queuing generation.
@@ -169,3 +176,19 @@ Keep the approved neutral surfaces, Manrope type and lime primary actions. Basic
 A missing supported starting-image model remains selectable and says Setup needed. Selecting it exposes the matching installer; it does not enable generation prematurely. Installer connections lead with browser sign-in, publisher terms and automatic retry. Token entry is an advanced fallback. All installers use the same connection and model storage controls.
 
 Floating workflow menus support arrow keys, Home/End and Escape, and opening one closes unrelated floating menus. Progress controls have accessible names. Live visual checks remain separate from DOM and state tests.
+
+## Shared controls and stage ownership, 16 November 2026
+
+`studio_brush_size.js` owns brush sizing for all shared paint surfaces. The
+slider favours precision at small sizes, numeric entry covers 1–1000 px and
+arrow keys adjust 1 px (Shift: 10 px). The original painting input remains the
+engine bridge. Move the shared palette with its canvas and restore it afterwards.
+
+`studio_composer_patterns.js` adds shared prompt styling and Ctrl/Cmd+Enter to
+existing composers, preserving their DOM, settings and submit handlers. Keep
+workflow-specific labels. A contextual paint prompt can remain a compact row.
+
+`StudioWorkflowProgress` owns the current mode's single step indicator. Completed
+repair stages are buttons routed through `PlateSurface.navigateStage`; generation
+stays on explicit actions. Keep Source at the right of the canvas header and the
+compact trim continuation above its timeline. Do not add a second progress row.

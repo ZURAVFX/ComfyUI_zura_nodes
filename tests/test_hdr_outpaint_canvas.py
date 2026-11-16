@@ -47,7 +47,7 @@ class HDRCanvasTests(unittest.TestCase):
         self.assertEqual(final['hdr_delivery_hold']['inputs']['stride'], 8)
         self.assertEqual(final['original_audio']['inputs']['start_seconds'], .517)
         self.assertEqual(final['hdr_audio_hold']['inputs']['frames'], ['hdr_delivery_hold', 1])
-        self.assertEqual(final['zura_hdr_hlg']['inputs']['image'], ['hdr_delivery_hold', 0])
+        self.assertEqual(final['zura_hdr_save_video']['inputs']['images'], ['hdr_delivery_hold', 0])
         self.assertEqual(final['zura_hdr_archive']['inputs']['images'], ['hdr_delivery_hold', 0])
         for graph in (stage, final):
             for node in graph.values():
@@ -83,7 +83,7 @@ class HDRCanvasTests(unittest.TestCase):
             self.assertEqual(review['hdr_preview'], {'class_type':'ZuraHDRSDRPreview','inputs':{'image':['canvas',0]}})
             self.assertEqual(graph['hdr_preview']['class_type'],'ZuraHDRSDRPreview')
             self.assertEqual(graph['hdr_experiment_exr']['inputs']['images'], ['hdr_unpad', 0])
-            self.assertEqual(graph['hdr_experiment_hlg']['inputs']['image'], ['hdr_unpad', 0])
+            self.assertEqual(graph['hdr_experiment_save']['inputs']['images'], ['hdr_unpad', 0])
             if audio:
                 self.assertEqual(graph['hdr_audio']['inputs']['start_seconds'], .5)
                 self.assertEqual(graph['audio_encoded']['inputs']['audio'], ['hdr_audio_hold', 1])
@@ -119,7 +119,7 @@ class HDRCanvasTests(unittest.TestCase):
         self.assertEqual(graph['final_hdr_composite']['inputs']['source'], ['native_canvas', 0])
         self.assertEqual(graph['final_hdr_composite']['inputs']['mask'], ['native_canvas', 1])
         self.assertEqual(graph['final_hdr_composite']['inputs']['colour_match'], 1.0)
-        self.assertEqual(graph['zura_hdr_hlg']['inputs']['image'], ['final_hdr_composite', 0])
+        self.assertEqual(graph['zura_hdr_save_video']['inputs']['images'], ['final_hdr_composite', 0])
         self.assertEqual(graph['zura_hdr_archive']['inputs']['images'], ['final_hdr_composite', 0])
         timed = experiment.build_sdr_first_hdr_composite('/native-pq.mp4', '/intermediate.mp4',
             **{**params, 'start_frame': 15}, source_fps=30., has_audio=True)
@@ -135,7 +135,7 @@ class HDRCanvasTests(unittest.TestCase):
         for invalid in (-1, float('nan'), True):
             with self.assertRaisesRegex(ValueError, 'start time'):
                 experiment.build_sdr_first_stage('/native-pq.mp4', **{**params, 'start_seconds': invalid})
-        self.assertEqual(timed['zura_hdr_video']['inputs']['audio'], ['original_audio', 0])
+        self.assertEqual(timed['zura_hdr_save_video']['inputs']['audio'], ['original_audio', 0])
         self.assertEqual(timed['zura_hdr_preview_video']['inputs']['audio'], ['original_audio', 0])
         self.assertFalse(any(node['class_type'].startswith('H3') for node in graph.values()))
         with self.assertRaisesRegex(ValueError, 'HDR video colour'):
@@ -222,10 +222,9 @@ class HDRCanvasTests(unittest.TestCase):
             has_audio=True)
         self.assertEqual(candidate['hdr_experiment_exr']['inputs']['images'], ['hdr_composite', 0])
         self.assertTrue(candidate['hdr_experiment_exr']['inputs']['prefix'].startswith('unverified_outpaint_'))
-        self.assertEqual(candidate['hdr_experiment_hlg']['inputs'], {'image':['hdr_composite',0],
-                         'source':'HDR ACEScct','destination':'HDR'})
-        self.assertEqual(candidate['hdr_experiment_video']['inputs']['bit_depth'], 10)
-        self.assertEqual(candidate['hdr_experiment_video']['inputs']['audio'], ['hdr_audio',0])
+        self.assertEqual(candidate['hdr_experiment_save']['inputs']['images'],['hdr_composite',0]);self.assertEqual(candidate['hdr_experiment_save']['inputs']['source_space'],'acescct')
+        self.assertEqual(candidate['hdr_experiment_save']['class_type'],'ZuraHDRSaveProRes4444')
+        self.assertEqual(candidate['hdr_experiment_save']['inputs']['audio'], ['hdr_audio',0])
         self.assertEqual(candidate['hdr_experiment_save']['inputs']['fps'], ['hdr_source',1])
         self.assertIn('unverified', candidate['hdr_experiment_save']['inputs']['filename_prefix'])
         for node in candidate.values():

@@ -1,7 +1,9 @@
 @import url('./studio_comfylink.css');
-#genj-studio .zc-display-trigger{height:30px;max-width:240px;overflow:hidden;text-overflow:ellipsis;padding:4px 10px;border:1px solid var(--gs-line);border-radius:6px;background:transparent;color:var(--zc-text);font:inherit;font-size:12px;white-space:nowrap;cursor:pointer}
-#genj-studio .zc-display-trigger:hover{background:var(--zc-hover)}
-#genj-studio .zc-display-trigger:focus-visible{outline:2px solid var(--gs-accent);outline-offset:2px}
+#genj-studio .zc-global-colour-transform{display:inline-flex;align-items:center;gap:6px;max-width:100%;white-space:nowrap;color:var(--gs-muted)}
+#genj-studio .zc-global-colour-transform select{width:min(280px,35vw);min-width:120px;max-width:100%;overflow:hidden;text-overflow:ellipsis}
+#genj-studio .zc-global-colour-transform select:focus-visible{outline:2px solid var(--gs-accent);outline-offset:2px}
+#genj-studio .zc-global-colour-status{max-width:240px;white-space:normal;font-size:11px;line-height:1.3;color:var(--gs-muted)}
+@media(max-width:700px){#genj-studio .zc-global-colour-transform{width:100%}#genj-studio .zc-global-colour-transform select{width:100%;min-width:0}}
 .zc-studio-display .zc-display-source-choice{display:flex;align-items:center;gap:8px;margin-top:16px;color:inherit}
 .zc-studio-display .zc-display-source-choice select{min-width:160px}
 

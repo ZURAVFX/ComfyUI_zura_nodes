@@ -62,6 +62,42 @@ class PaintoutDecodeTests(unittest.TestCase):
         self.assertEqual(reported, [1])
         torch.testing.assert_close(image[0, :66, :70], torch.from_numpy(pixels), rtol=0, atol=0)
 
+    @unittest.skipUnless(shutil.which('ffmpeg') and shutil.which('ffprobe'), 'Requires FFmpeg')
+    def test_lossless_rgb_video_uses_normal_sdr_loader_without_added_colour(self):
+        y, x = np.indices((64, 64), dtype=np.uint8)
+        first = np.stack((x * 3, y * 2, (x + y) * 2), axis=-1)
+        second = np.stack((255 - x * 2, x + y, 40 + y * 3), axis=-1)
+        source_rgb = np.stack((first, second)).astype(np.uint8)
+        source_bgra = np.concatenate((source_rgb[..., [2, 1, 0]],
+                                      np.full((2, 64, 64, 1), 255, dtype=np.uint8)), axis=-1)
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / 'source.mkv'
+            subprocess.run(['ffmpeg', '-v', 'error', '-f', 'rawvideo', '-pix_fmt', 'bgra',
+                            '-s', '64x64', '-r', '30000/1001', '-i', 'pipe:0',
+                            '-frames:v', '2', '-c:v', 'ffv1', '-level', '3',
+                            '-pix_fmt', 'bgra', str(path)],
+                           input=source_bgra.tobytes(), check=True, capture_output=True)
+            source = native.describe(path)
+            self.assertEqual(source['fps_rational'], '30000/1001')
+            self.assertEqual(native.selected_space(source, 'srgb_display'), 'srgb_display')
+            mask = {'kind': 'rectangle', 'width': 64, 'height': 64,
+                    'count': 1, 'rect': [10, 10, 20, 20]}
+            with patch.object(native.tempfile, 'gettempdir', return_value=temporary):
+                decoded = list(native.frames(source, 0, 2))
+                for actual, expected in zip(decoded, source_rgb):
+                    np.testing.assert_array_equal((actual * 255).round().astype(np.uint8), expected)
+                images, masks, plate, *_ = native.ZuraPaintoutCrop().prepare(
+                    str(path), mask, 'srgb_display', 0, 2, 30000 / 1001,
+                    128, 768, 0, 0, 'SDR (sRGB)',
+                    'Source resolution (pad, no resize)', 64, 64)
+            self.assertEqual(plate['count'], 2)
+            self.assertEqual(plate['fps_rational'], '30000/1001')
+            for index in range(2):
+                torch.testing.assert_close(images[index, :64, :64],
+                                           torch.from_numpy(source_rgb[index].astype(np.float32) / 255),
+                                           rtol=0, atol=0)
+            self.assertEqual((masks[0, 15, 15].item(), masks[0, 0, 0].item()), (1., 0.))
+
 
 if __name__ == '__main__':
     unittest.main()

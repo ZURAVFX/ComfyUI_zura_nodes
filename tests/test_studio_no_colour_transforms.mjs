@@ -1,0 +1,12 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import {studioDisplayTransform} from '../web/studio_display_state.js';
+const before=studioDisplayTransform.get();
+const preset={config:'legacy',display:'Legacy display',view:'Rec.709'};
+studioDisplayTransform.registerCatalogue([preset]);
+assert.equal(studioDisplayTransform.choose(preset),false);
+assert.deepEqual(studioDisplayTransform.get(),before,'Old saved settings and catalogue registration cannot turn preview transforms back on');
+assert.equal(studioDisplayTransform.get().selection,null);
+const settings=fs.readFileSync(new URL('../web/studio_output_settings.js',import.meta.url),'utf8');
+assert.doesNotMatch(settings,/new StudioDisplaySettings/,'Studio must not install transform controls, context menus or media overlay bindings');
+console.log('Studio transform removal: no controls/menu installation and immutable untransformed preview state pass.');

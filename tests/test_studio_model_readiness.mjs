@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
 
-const code=fs.readFileSync(new URL('../web/studio.js',import.meta.url),'utf8')
+const code=fs.readFileSync(new URL('../web/studio_core.js',import.meta.url),'utf8')
   .replace(/^import .*;\r?\n/gm,'').replace(/^export /gm,'').split('app.registerExtension({')[0];
 const context={};vm.createContext(context);
 runStudioVMInContext(code+'\nthis.Studio=ArtistStudio;',context);

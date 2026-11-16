@@ -1,6 +1,8 @@
 import {workspaceStorage} from './studio_storage.js';
 import {activeStudioMode,studioModeAdapter} from './studio_mode_adapters.js';
-import {LTXHDRDelivery} from './studio_ltx_delivery.js';
+import {LTXHDRDelivery,hdrDeliveryProgress} from './studio_ltx_delivery.js';
+import {nativeHDRRoute} from './studio_hdr_capabilities.js';
+import {deliveryVideoColour} from './studio_delivery_formats.js';
 
 const KEY='zura-studio-colour-delivery-v1',RECORDS='zura-studio-hdr-deliveries-v1';
 const HDR_SPACES=new Set(['acescg','acescct','linear_rec709','hlg_rec2020','pq_rec2020','pq_display_p3']);
@@ -26,7 +28,7 @@ export function studioHDRDescriptor(raw,record){
   const files=record.take?.hdrFiles||[],master=files.find(f=>/\.(zip|exr)$/i.test(f.filename||''))||files.find(f=>/\.(mov|mp4)$/i.test(f.filename||''));
   if(!isFile(master))return null;
   return {kind:/\.(zip|exr)$/i.test(master.filename)?'hdr_sequence':'video',master,
-    preview:record.take.original?.preview||raw.preview||raw.original||raw.master,colour:/\.(zip|exr)$/i.test(master.filename)?{encoding:'acescg',sceneLinear:true}:{encoding:'hlg_rec2020',sceneLinear:false},
+    preview:record.take.original?.preview||raw.preview||raw.original||raw.master,colour:/\.(zip|exr)$/i.test(master.filename)?{encoding:'acescg',sceneLinear:true}:deliveryVideoColour(master,record.take),
     ...(record.take.alphaAssociation==='straight'?{alpha:'straight'}:{}),
     ...(record.take.config?.ae_frame_contract?{fps:record.take.config.ae_frame_contract.frameRate.numerator/record.take.config.ae_frame_contract.frameRate.denominator}:{})};
 }
@@ -40,22 +42,46 @@ export class StudioDeliveryControls {
     const doc=root.ownerDocument,style=doc.createElement('link');style.rel='stylesheet';style.href=new URL('./studio_delivery_controls.css',import.meta.url).href;doc.head.append(style);
     this.element=doc.createElement('section');this.element.className='zc-delivery-controls';this.element.setAttribute('aria-label','Input and output colour');
     this.element.innerHTML='<label>Input:<select data-delivery-input aria-label="Input range"><option value="sdr">SDR</option><option value="hdr">HDR</option></select></label><label>Output:<select data-delivery-output aria-label="Output range"><option value="sdr">SDR</option><option value="hdr">HDR</option></select></label><details data-delivery-space-wrap hidden><summary>Source colour</summary><label>Colour space<select data-delivery-space aria-label="Actual source colour space"><option value="">Choose source colour space</option><option value="srgb_display">sRGB</option><option value="rec709_oetf">Rec.709</option><option value="rec709_gamma24">Rec.709 gamma 2.4</option><option value="acescg">ACEScg</option><option value="acescct">ACEScct</option><option value="linear_rec709">Linear Rec.709</option><option value="hlg_rec2020">Rec.2020 HLG</option><option value="pq_rec2020">Rec.2020 PQ</option></select></label></details><span data-delivery-display></span><span data-delivery-status role="status" aria-live="polite"></span><button type="button" data-delivery-cancel hidden>Cancel HDR</button><span data-delivery-files></span>';
-    root.querySelector('.gs-top').after(this.element);this.$=key=>this.element.querySelector('[data-delivery-'+key+']');this.displayHost=this.$('display');
+    root.querySelector('.gs-top').after(this.element);const fields=new Map([...this.element.querySelectorAll('*')].flatMap(node=>[...node.attributes].filter(attribute=>attribute.name.startsWith('data-delivery-')).map(attribute=>[attribute.name.slice(14),node])));this.$=key=>fields.get(key)||null;this.displayHost=this.$('display');
+    this.outputChoice=this.$('output').closest('label');this.outputChoice.classList.add('zc-output-choice');
     const p3=doc.createElement('option');p3.value='pq_display_p3';p3.textContent='Display P3 PQ';this.$('space').append(p3);
     this.$('space-wrap').querySelector('summary').textContent='Advanced';this.sourceSpaceRow=this.$('space').closest('label');
     this.advancedPanel=doc.createElement('div');this.advancedPanel.className='zc-delivery-advanced-panel';this.$('space-wrap').append(this.advancedPanel);this.advancedPanel.append(this.sourceSpaceRow);
     this.$('input').onchange=()=>this.changeInput(this.$('input').value);
     this.$('space').onchange=()=>this.changeInput(this.$('input').value,this.$('space').value);
-    this.$('output').value=this.output;this.$('output').onchange=()=>{this.output=this.$('output').value;this.save();this.sync();if(this.output==='hdr')void this.convertCurrent();};
+    this.$('output').value=this.output;this.$('output').onchange=()=>{if(this.aeTransfer){this.$('output').value=this.output;return;}this.output=this.$('output').value;this.save();this.sync();if(this.output==='hdr')void this.convertCurrent();};
     this.$('cancel').onclick=()=>this.cancel();
+    this.progressHost=doc.createElement('div');this.progressHost.dataset.deliveryProgress='';this.progressHost.hidden=true;
+    this.progressHost.innerHTML='<ol data-delivery-stages aria-label="HDR conversion stages"></ol><progress data-delivery-bar aria-label="HDR conversion progress"></progress><span data-delivery-detail role="status" aria-live="polite"></span>';this.element.append(this.progressHost);
+    // Source interpretation is automatic. Export options live in Output settings.
+    this.$('input').closest('label').remove();this.$('space-wrap').remove();
     this.delivery=new LTXHDRDelivery(api,{storage:this.storage,key:'zura-shared-hdr-delivery',onUpdate:job=>this.onUpdate(job),onComplete:take=>this.onComplete(take)});
     const show=owner.show;owner.show=(...args)=>{const result=show.apply(owner,args);this.sync();return result;};
     const close=owner.close;if(typeof close==='function')owner.close=(...args)=>{this.close();return close.apply(owner,args);};
     queueMicrotask(()=>{if(!this.closed){this.sync();this.delivery.resume();}});
   }
   save(){try{this.storage.setItem(KEY,JSON.stringify({output:this.output,hdrFormat:this.hdrFormat,inputs:this.inputOverrides}));this.storage.setItem(RECORDS,JSON.stringify(Object.fromEntries(Object.entries(this.records).slice(-40))));}catch{}}
-  setHDRFormat(value){if(!FORMATS.has(value))return;this.hdrFormat=value;this.save();this.sync();}
-  mountAdvanced(exrLabel,formatLabel,note){this.advancedPanel.append(exrLabel,formatLabel);if(note)this.advancedPanel.append(note);this.hasExportAdvanced=true;this.$('space-wrap').hidden=false;}
+  setHDRFormat(value){if(!FORMATS.has(value)||this.aeTransfer==='float32'&&value!=='acescg_exr')return;this.hdrFormat=value;this.save();this.sync();}
+  setAETransfer(precision){
+    if(!['sdr8','prores12','float32'].includes(precision))throw Error('The AE transfer precision is unavailable.');
+    if(!this.aeTransfer)this.aePreviousOutput={output:this.output,hdrFormat:this.hdrFormat};
+    this.aeTransfer=precision;
+    this.output=precision==='float32'?'hdr':'sdr';
+    if(precision==='float32')this.hdrFormat='acescg_exr';
+    if(this.settings.exrSelect){this.settings.exrSelect.value=this.settings.exrStorage('acescg_exr');this.settings.exrSelect.disabled=precision==='float32';}
+    if(this.settings.hdrFormatSelect){this.settings.hdrFormatSelect.value=this.hdrFormat;this.settings.hdrFormatSelect.disabled=precision==='float32';}
+    this.sync();
+  }
+  endAETransfer(){
+    if(!this.aeTransfer)return;
+    this.aeTransfer=null;
+    if(this.aePreviousOutput){this.output=this.aePreviousOutput.output;this.hdrFormat=this.aePreviousOutput.hdrFormat;}
+    this.aePreviousOutput=null;
+    if(this.settings.exrSelect){this.settings.exrSelect.value=this.settings.exrStorage('acescg_exr');this.settings.exrSelect.disabled=false;}
+    if(this.settings.hdrFormatSelect){this.settings.hdrFormatSelect.value=this.hdrFormat;this.settings.hdrFormatSelect.disabled=false;}
+    this.sync();
+  }
+  mountAdvanced(exrLabel,formatLabel,note){const doc=this.root.ownerDocument,details=doc.createElement('details'),summary=doc.createElement('summary');summary.textContent='File settings';details.append(summary,exrLabel,formatLabel);if(note)details.append(note);this.settings.form.querySelector('.zc-output-actions').before(details);this.hasExportAdvanced=true;}
   workspace(mode=activeStudioMode(this.owner)){return studioModeAdapter(mode)?.resolveWorkspace(this.owner);}
   source(w){
     const ae=this.owner.studio?.aeBridge?.source;if(ae)return ae;
@@ -84,7 +110,8 @@ export class StudioDeliveryControls {
   }
   configure(w,config,mode){
     const input=this.input(w);
-    const inferenceView=mode!=='hdr'&&(this.owner.studio?.aeBridge?.source?.processingInput?.precision?.sourceBitDepth===8||config.processingView?.kind==='sdr8_inference'||mode==='image'&&w?.references?.[0]?.processingView?.kind==='sdr8_inference');
+    const native=this.usesNativeHDR(mode,w,config);
+    const inferenceView=!native&&mode!=='hdr'&&(this.owner.studio?.aeBridge?.source?.processingInput?.precision?.sourceBitDepth===8||config.processingView?.kind==='sdr8_inference'||mode==='image'&&w?.references?.[0]?.processingView?.kind==='sdr8_inference');
     const result={...config,studioDelivery:{schemaVersion:1,input:input.input,inputColourSpace:input.space,output:this.output,hdrFormat:this.hdrFormat,...(inferenceView?{processingColourSpace:'srgb_display'}:{})},exr_storage:this.settings.exrStorage(this.hdrFormat)};
     if(!inferenceView&&input.space&&'sourceColour' in result)result.sourceColour=input.space;
     if(mode==='frames')result.hdrOutput=this.output==='hdr'||input.input==='hdr'?this.hdrFormat:'sdr';
@@ -92,6 +119,7 @@ export class StudioDeliveryControls {
     // separate delivery after the complete SDR repair, rather than a tag.
     if((mode==='paintout'&&!this.owner.plate?.propagation()||mode==='watermark')&&(input.input==='sdr'||inferenceView))Object.assign(result,{colourPipeline:'sdr_sdr',processingSpace:'SDR (sRGB)',outputMode:'SDR video'});
     if((mode==='paintout'&&!this.owner.plate?.propagation()||mode==='watermark')&&input.input==='hdr'&&!inferenceView)Object.assign(result,{colourPipeline:'hdr_hdr',processingSpace:'HDR (ACEScct)',outputMode:'EXR + HLG video',exrPrecision:result.exr_storage==='float32'?'float32':'float16'});
+    if(native&&(mode==='paintout'||mode==='watermark'))Object.assign(result,{colourPipeline:'hdr_hdr',processingSpace:'HDR (ACEScct)',outputMode:({'acescg_exr':'EXR sequence','hlg_video':'HLG video'})[this.hdrFormat]||'EXR + HLG video',exrPrecision:result.exr_storage==='float32'?'float32':'float16'});
     return result;
   }
   bindConfig(target,mode,workspace=target){
@@ -100,7 +128,7 @@ export class StudioDeliveryControls {
   }
   raw(mode){const adapter=studioModeAdapter(mode);if(!adapter)return null;this.readingOutput=true;try{return adapter.getSelectedOutput(this.owner);}finally{this.readingOutput=false;}}
   resultKey(mode,raw,format=this.hdrFormat){return raw?.master?`${mode}:${fileKey(raw.master)}:${format}`:'';}
-  recordFor(mode,raw){const exact=this.records[this.resultKey(mode,raw)];if(exact)return exact;const prefix=`${mode}:${fileKey(raw?.master)}:`;return Object.entries(this.records).find(([key,record])=>key.startsWith(prefix)&&record.state==='complete')?.[1];}
+  recordFor(mode,raw){const key=this.resultKey(mode,raw);if(this.aeTransfer==='float32')return this.records[key+':float32'];const exact=this.records[key];if(exact)return exact;const prefix=`${mode}:${fileKey(raw?.master)}:`;return Object.entries(this.records).find(([key,record])=>key.startsWith(prefix)&&record.state==='complete')?.[1];}
   alreadyHDR(raw){return raw?.kind==='hdr_sequence'||hdrSpace(raw?.colour?.encoding)||raw?.colour?.sceneLinear===true||hdrSpace(raw?.colour?.ocioWorkingSpace);}
   isBusyFor(mode){return this.activeMode===mode&&!!(this.preparing||this.delivery?.busy);}
   outputFor(mode,raw){
@@ -118,8 +146,9 @@ export class StudioDeliveryControls {
   bind(w,mode){
     if(!w)return;this.bindConfig(w,mode);
     if(this.bound.has(w))return;this.bound.add(w);
+    if(mode==='hdr'&&typeof w.longUpdate==='function'){const update=w.longUpdate;w.longUpdate=job=>{const result=update.call(w,job);this.nativeProgress={job,workspace:w};this.sync();return result;};}
     if(mode==='hdr'&&typeof w.start==='function'){
-      const start=w.start;w.start=(...args)=>this.output==='hdr'?start.apply(w,args):this.message('Choose HDR output to convert this source');
+      const start=w.start;w.start=(...args)=>{this.output='hdr';this.$('output').value='hdr';this.save();this.sync();return start.apply(w,args);};
     }
     for(const method of ['render','paint'])if(typeof w[method]==='function'){
       const original=w[method];w[method]=(...args)=>{const value=original.apply(w,args);this.sync();return value;};
@@ -149,20 +178,21 @@ export class StudioDeliveryControls {
     }
   }
   nativeDelivery(mode,w){return mode==='hdr'||w?.hdrOutput?.busy||w?.hdrDelivery?.busy||w?.hdrSubmitting||w===this.owner.studio&&(this.owner.videoComposer?.ltxOutput?.delivery?.busy||this.owner.videoComposer?.ltxOutput?.submitting);}
+  usesNativeHDR(mode,w,config={}){return this.output==='hdr'&&!!nativeHDRRoute(this.owner,mode,w,config);}
   async completed(mode,w,raw,config){
     const intent=config.studioDelivery||{output:this.output,hdrFormat:this.hdrFormat};
-    if(intent.output!=='hdr'||this.nativeDelivery(mode,w)||this.alreadyHDR(raw))return;
+    if(intent.output!=='hdr'||this.nativeDelivery(mode,w)||this.alreadyHDR(raw)||this.usesNativeHDR(mode,w,config))return;
     return this.convert(mode,w,raw,{...config,...(intent.hdrFormat?{hdrOutput:intent.hdrFormat}:{})});
   }
   async convertCurrent(){const mode=activeStudioMode(this.owner),w=this.workspace(mode),raw=this.raw(mode);if(raw&&!activeJob(w)&&!this.nativeDelivery(mode,w))return this.convert(mode,w,raw,typeof w.config==='function'?w.config():w.config||{});}
   async convert(mode,w,raw,config={}){
-    if(this.closed||this.preparing||this.delivery.busy||this.alreadyHDR(raw))return;
+    if(this.closed||this.preparing||this.delivery.busy||this.alreadyHDR(raw)||this.usesNativeHDR(mode,w,config))return;
     const alphaRef=raw.alpha_ref||(raw.kind==='alpha_extract'?raw.master:null),rgbMaster=raw.kind==='alpha_extract'?raw.original:raw.master;
     if(mode==='alpha'&&!alphaRef)return this.message('This take has no retained FLOAT alpha master. Regenerate its alpha to create HDR with the original precision.');
     const image=raw.kind==='image';if(!image&&!/\.(mp4|mov|mkv|webm)$/i.test(rgbMaster?.filename||''))return this.message('This master needs a native HDR delivery route. Your original is retained.');
     let format=FORMATS.has(config.hdrOutput)?config.hdrOutput:this.hdrFormat;
     if(alphaRef&&format==='hlg_video')format='hlg_and_exr';
-    const key=this.resultKey(mode,raw,format);
+    const key=this.resultKey(mode,raw,format)+(this.aeTransfer==='float32'?':float32':'');
     if(this.records[key]?.state==='complete')return this.sync();
     if(['unknown','preparing'].includes(this.records[key]?.state))return this.message('Check the saved HDR job before starting another conversion. Your original master is retained.');
     this.activeMode=mode;this.preparing=true;this.preparationCancelled=false;this.message('Checking HDR delivery…');this.sync();
@@ -180,17 +210,38 @@ export class StudioDeliveryControls {
     finally{this.preparing=false;this.sync();}
   }
   message(text){this.$('status').textContent=text||'';}
-  cancel(){if(this.preparing&&!this.delivery.busy){this.preparationCancelled=true;this.message('Cancelling HDR preparation…');return;}return this.delivery.cancel();}
+  cancel(){if(this.preparing&&!this.delivery.busy){this.preparationCancelled=true;this.message('Cancelling HDR preparation…');this.sync();return;}if(this.nativeProgress?.workspace?.busy&&!this.delivery.busy)return this.nativeProgress.workspace.cancel();return this.delivery.cancel();}
+  renderProgress(){
+    const native=this.nativeProgress,job=this.preparing?{state:this.preparationCancelled?'cancelling':'preparing'}:this.delivery.busy||!native?this.delivery.lastJob:native.job;
+    const host=this.progressHost;host.hidden=!job;if(!job){clearInterval(this.progressTimer);this.progressTimer=null;return;}const view=hdrDeliveryProgress(job),doc=this.root.ownerDocument,stages=host.querySelector('[data-delivery-stages]');stages.replaceChildren();
+    if(!view.terminal&&!this.progressTimer){this.progressStarted=Date.now();this.progressTimer=setInterval(()=>this.renderProgress(),1000);this.progressTimer?.unref?.();}
+    if(view.terminal&&this.progressTimer){clearInterval(this.progressTimer);this.progressTimer=null;}
+    view.labels.forEach((label,index)=>{const item=doc.createElement('li');item.textContent=label;item.className=index<view.phase?'done':index===view.phase?'current':'';if(index===view.phase)item.setAttribute('aria-current','step');stages.append(item);});
+    host.dataset.state=view.state;host.querySelector('[data-delivery-detail]').textContent=view.detail+(!view.terminal&&this.progressStarted?` ${Math.floor((Date.now()-this.progressStarted)/1000)}s elapsed.`:'');const bar=host.querySelector('progress');bar.hidden=view.terminal;if(view.value!==null){bar.max=view.max;bar.value=view.value;}else bar.removeAttribute('value');
+  }
+  observeNativeDeliveries(){
+    const candidates=[this.owner.videoComposer?.ltxOutput?.delivery];
+    for(const candidate of candidates){if(!candidate||candidate===this.delivery||candidate.sharedProgressObserver===this)continue;candidate.sharedProgressObserver=this;const update=candidate.onUpdate;candidate.onUpdate=job=>{update?.(job);this.nativeProgress={job,workspace:candidate};this.sync();};if(candidate.lastJob)this.nativeProgress={job:candidate.lastJob,workspace:candidate};}
+  }
   onUpdate(job){
     const take=this.delivery.take;this.activeMode=take?.studioMode||this.activeMode;
     if(take&&['failed','cancelled','unknown'].includes(job.state)){this.records[take.resultKey]={state:job.state,take,error:job.error};this.save();}
     this.message(({preparing:'Preparing HDR conversion…',queued:'HDR conversion queued',rendering:'Converting to HDR…',saving:'Saving HDR masters…',reconnecting:'Reconnecting to HDR conversion…',cancelling:'Cancelling HDR conversion…',complete:'HDR masters ready',cancelled:'HDR conversion cancelled. Your original master is retained.'})[job.state]||job.error||'Preparing HDR delivery…');this.sync();
   }
   onComplete(take){this.records[take.resultKey]={state:'complete',take};this.save();this.message(take.alphaAssociation==='straight'?'HDR with alpha ready · FLOAT EXR · Preview is SDR':'HDR masters ready · Preview is SDR');this.sync();this.owner.studio?.aeBridge?.updateMeta?.();}
+  mountOutputChoice(mode,w){
+    const page=w?.page||w?.root||this.root;
+    const selectors={image:'.zc-image-composer .zc-prompt-tools',video:'.gs-composer .zc-prompt-tools',swap:'.gs-composer .zc-prompt-tools',viewport:'.gs-composer .zc-prompt-tools',hdr:'.zh-footer',paint_vfx:'.zvfx-settings',paintout:'.zpx-properties',watermark:'.zf-composer .zc-prompt-tools',outpaint:'.zo-action',ripple:'.zru-tools',relight:'.zru-tools',camera:'.zpc-composer .zc-prompt-tools',panorama:'.zpc-composer .zc-prompt-tools',frames:'.zf-composer .zc-prompt-tools',references:'.zf-composer .zc-prompt-tools',alpha:'.zc-prompt-tools',director:'.zdir-composer-row'};
+    const selector=this.owner.plate?.inline?'.zpx-properties':w===this.owner.studio?'.gs-composer .zc-prompt-tools':selectors[mode],host=selector&&(page.querySelector?.(selector)||this.root.querySelector(selector));
+    this.outputChoice.hidden=!host;if(host){const primary=host.querySelector(':scope > button.gs-primary');if(primary){if(this.outputChoice.nextSibling!==primary)host.insertBefore(this.outputChoice,primary);}else if(this.outputChoice.parentElement!==host)host.append(this.outputChoice);}
+  }
   sync(){
     if(this.closed||this.syncing)return;this.syncing=true;
     try{
+      this.observeNativeDeliveries();
       const mode=activeStudioMode(this.owner),w=this.workspace(mode);this.bind(w,mode);
+      if(mode==='hdr'&&this.output!=='hdr'){this.output='hdr';this.save();}
+      this.mountOutputChoice(mode,w);
       if(w===this.owner.studio&&w.config){w.config.ltx_output=this.output==='hdr'||this.input(w).input==='hdr'?this.hdrFormat:'sdr';w.config.studioDelivery={schemaVersion:1,output:this.output,hdrFormat:this.hdrFormat};}
       if(mode==='frames'){
         const control=w?.$?.('output-control');if(control)control.hidden=true;
@@ -209,16 +260,17 @@ export class StudioDeliveryControls {
       }
       if(this.owner.plate&&this.owner.paintout){this.bindConfig(this.owner.plate,'paintout',this.owner.paintout);if(this.owner.plate.runner)this.bind(this.owner.plate.runner,'paintout');}
       const input=this.input(w),busy=activeJob(w)||this.isBusyFor(mode);
-      const aeSource=!!this.owner.studio?.aeBridge?.source;
+      const aeSource=!!(this.owner.studio?.aeSession||this.owner.studio?.aeBridge&&!this.owner.studio.aeBridge.closed);
       this.$('input').value=input.input;this.$('input').disabled=!this.sourceKey(w)||busy||aeSource;this.$('input').title=aeSource?'Verified After Effects source interpretation':input.detected?'Detected from source metadata':'SDR is assumed until source metadata or an override is available';
-      this.$('output').value=this.output;this.$('output').disabled=busy;
+      this.$('output').value=this.output;this.$('output').disabled=mode==='hdr'||busy||!!this.aeTransfer;
       this.$('space').value=input.space||'';this.$('space').disabled=busy||aeSource;this.sourceSpaceRow.hidden=!this.sourceKey(w)||aeSource;this.$('space-wrap').hidden=!this.hasExportAdvanced&&this.sourceSpaceRow.hidden;this.$('space-wrap').classList.toggle('needs-choice',input.input==='hdr'&&!input.space);
       if(input.input==='hdr'&&!input.space&&!busy&&!aeSource)this.message('Choose the actual HDR source colour space');
-      this.$('cancel').hidden=!this.isBusyFor(mode);this.$('files').replaceChildren();
+      this.$('cancel').hidden=!(this.preparing||this.delivery.busy||this.nativeProgress?.workspace?.busy);this.renderProgress();this.$('files').replaceChildren();
       const raw=this.raw(mode),record=raw&&this.recordFor(mode,raw);
       const availableFiles=record?.state==='complete'?record.take.hdrFiles||[]:this.alreadyHDR(raw)&&isFile(raw?.master)?[raw.master]:[];
       if(this.output==='hdr')for(const file of availableFiles){const a=this.root.ownerDocument.createElement('a');a.textContent=/\.(zip|exr)$/i.test(file.filename)?'EXR':'HDR video';a.href=this.api.apiURL('/view?'+new URLSearchParams(file));a.download=file.filename;this.$('files').append(a);}
+      this.sourceControls?.sync();
     }finally{this.syncing=false;}
   }
-  close(){this.closed=true;this.delivery.close();this.save();}
+  close(){this.closed=true;clearInterval(this.progressTimer);this.progressTimer=null;this.sourceControls?.close();this.delivery.close();this.save();}
 }

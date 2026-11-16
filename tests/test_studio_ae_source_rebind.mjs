@@ -46,6 +46,44 @@ assert.deepEqual(imageDimensions({model:'flux3edit',shape:image.$('shape').value
 
 const single={...source,frameCount:1,manifest:{...source.manifest,frames:[{}]}};
 {
+  const colour={encoding:'ae_project_icc',management:'icc',sceneLinear:true,profileSha256:'a'.repeat(64)};
+  const rawStill={width:512,height:512,frameCount:1,alpha:'straight',colour,
+    precision:{sampleType:'float32',sourceBitDepth:32},
+    manifest:{sampleType:'float32',sourceBitDepth:32,alphaAssociation:'straight',colour,
+      frameRate:{numerator:24,denominator:1},frames:[{}]},
+    processingInput:{schemaVersion:1,conversion:'raw_numeric_to_sdr8',precision:{sampleType:'uint8',sourceBitDepth:8},
+      sourceProcessingPrecision:'sdr8',samplePolicy:'clamp_round_unorm8',colourAssignment:'numeric_sdr8_code_values',
+      sourceManifestSha256:'b'.repeat(64),sourceColour:colour,colour:{encoding:'srgb_display',sceneLinear:false},
+      alphaAssociation:'straight',studioAsset:{id:'model'},stills:{first:{file:'model.png',width:512,height:512}}},
+    sourceTransfer:{kind:'native_still',profile:'png16'}};
+  const c=creative();await studioModeAdapter('image').acceptInput(c,rawStill,{sessionId:'a'.repeat(32)});
+  assert.equal(c.aeFrameBase,undefined,'Unqualified raw numeric inputs retain normal local editing');
+  const {b,c:qualified}=bridgeFixture();qualified.mode='image';b.source=b.originalSource=null;b.loaded.clear();
+  b.session={id:'a'.repeat(32),context:{capabilities:{nativeStillReturn:true},range:{mode:'frame'},transferPrecision:'prores12'}};
+  b.request=async()=>rawStill;
+  await b.loadSource();
+  assert.equal(qualified.aeFrameMode,'image','Qualified one-frame Image source binds AE timing');
+  assert.equal(qualified.config().ae_frame_contract.frameCount,1);
+  assert.equal(qualified.config().ae_frame_contract.sessionId,'a'.repeat(32));
+  assert.equal(b.source.processingInput.sourceManifestSha256,'b'.repeat(64),'Captured source lineage remains on the broker source');
+  for(const [profile,sampleType,bits,transfer] of [['png8','uint8',8,'sdr8'],['png16','uint16_png',16,'prores12']]){
+    const rendered={...rawStill,manifest:{...rawStill.manifest,width:512,height:512},
+      precision:{sampleType,sourceBitDepth:32,transferBitDepth:bits,storageBitDepth:bits},
+      sourceTransfer:{schemaVersion:2,kind:'native_still',profile,width:512,height:512,sourceColour:colour,
+        sourceBitDepth:32,transferBitDepth:bits,storageBitDepth:bits}};
+    const {b:live,c:workspace}=bridgeFixture();workspace.mode='image';live.source=live.originalSource=null;live.loaded.clear();
+    live.session={id:'a'.repeat(32),context:{capabilities:{nativeStillReturn:true},range:{mode:'frame'},transferPrecision:transfer}};
+    live.request=async()=>rendered;await live.loadSource();
+    assert.equal(workspace.references[0].file,'model.png',profile+' real RQ storage metadata loads the model still');
+    assert.equal(workspace.config().ae_frame_contract.frameCount,1);
+    for(const altered of [
+      {...rendered,precision:{...rendered.precision,storageBitDepth:32}},
+      {...rendered,sourceTransfer:{...rendered.sourceTransfer,sourceColour:{encoding:'unknown'}}},
+      {...rendered,sourceTransfer:{...rendered.sourceTransfer,width:1024}},
+    ])await assert.rejects(()=>studioModeAdapter('image').acceptInput(creative(),altered),/no longer matches/);
+  }
+}
+{
   // The real 32-bit AE handoff supplies raster metadata on the source descriptor,
   // while its derived 8-bit still records can contain file identities only.
   const broker={...single,processingInput:{...single.processingInput,stills:{first:{file:'ae-view.png'},last:{file:'ae-last.png'}}}};
@@ -68,6 +106,13 @@ const single={...source,frameCount:1,manifest:{...source.manifest,frames:[{}]}};
   const c=creative(),user={file:'user-reference.png',name:'My reference'},same={file:'first.png',name:'User-supplied source',custom:'preserved'};
   c.references=[user,same];await studioModeAdapter('image').acceptInput(c,single);await studioModeAdapter('image').acceptInput(c,single);
   assert.deepEqual(c.references.map(item=>item.file),['first.png','user-reference.png']);assert.equal(c.references[0].custom,'preserved');assert.equal(c.references[1],user);
+  const originalReferences=c.references.slice();
+  c.items=[{file:{filename:'preview.png',subfolder:'',type:'output'},master:{filename:'master.png',subfolder:'',type:'output'},image_layers:{schemaVersion:1,source:{file:'first.png',type:'input'},conditioningInput:{filename:'current-composite.png',subfolder:'zura_images/layers',type:'input'},layers:[{id:'layer-one'}]}}];
+  c.selectedImage=0;c.references[0]={filename:'current-composite.png',subfolder:'zura_images/layers',type:'input'};
+  assert.equal(studioModeAdapter('image').matchesInput(c,single),true,'A verified layered composite keeps the original AE still bound');
+  const changedSource={...single,processingInput:{...single.processingInput,stills:{first:{file:'other-ae-source.png'}}}};
+  assert.equal(studioModeAdapter('image').matchesInput(c,changedSource),false,'A different AE still cannot inherit the previous composite');
+  c.items=[];c.selectedImage=-1;c.references=originalReferences;
   const replaced={...single,processingInput:{...single.processingInput,stills:{first:{file:'replacement.png',width:512,height:512}}}};
   await studioModeAdapter('image').acceptInput(c,replaced);assert.deepEqual(c.references.map(item=>item.file),['replacement.png','first.png','user-reference.png'],'User-added references remain when the source changes');
   await studioModeAdapter('image').acceptInput(c,single);assert.deepEqual(c.references.map(item=>item.file),['first.png','user-reference.png'],'Only the previous source-owned entry is replaced');
@@ -101,7 +146,7 @@ const single={...source,frameCount:1,manifest:{...source.manifest,frames:[{}]}};
 
 function bridgeFixture(){
   const c=creative(),w=c.ripple;c.mode='ripple';c.relightEngine='ltx';w.intent='relight';w.source=media;w.state.engine='ltx';w.state.startFrame=2;w.state.frameCount=3;w.state.anchors=[{id:'edited',file:'edited.png',frame:2}];w.result={file:{filename:'previous.mp4'}};
-  const b=Object.create(StudioAEBridge.prototype);Object.assign(b,{studio:c.studio,session:{id:'a'.repeat(32)},closed:false,revision:0,loaded:new Map([['relight',c.studio]]),source,
+  const b=Object.create(StudioAEBridge.prototype);Object.assign(b,{studio:c.studio,session:{id:'a'.repeat(32)},closed:false,revision:0,loaded:new Map([['relight',c.studio]]),source,originalSource:source,
     sourceButton:{},send:{},status:{},message(value){StudioAEBridge.prototype.message.call(this,value);this.lastMessage=value;},updateMeta(){},request(){throw Error('Source is already cached');}});
   c.studio.creative=c;c.studio.aeBridge=b;return {b,c,w};
 }

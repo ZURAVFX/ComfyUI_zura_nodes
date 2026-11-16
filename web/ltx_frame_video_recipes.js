@@ -23,7 +23,7 @@ export const LTX_FRAME_VIDEO_CAPABILITIES=Object.freeze({
     'LTXVConditioning','LTXVImgToVideoInplace','EmptyLTXVLatentVideo','LTXVPreprocess','LTXVAddGuide','LTXVCropGuides','LTXVEmptyLatentAudio',
     'LoadAudio','TrimAudioDuration','EmptyAudio','AudioConcat','LTXVAudioVAEEncode','SolidMask','SetLatentNoiseMask','LTXVConcatAVLatent',
     'CFGGuider','KSamplerSelect','RandomNoise','ManualSigmas','SamplerCustomAdvanced','LTXVSeparateAVLatent',
-    'VAEDecodeTiled','LTXVAudioVAEDecode','CreateVideo','SaveVideo',
+    'VAEDecodeTiled','LTXVAudioVAEDecode','CreateVideo','ZuraSaveProRes4444',
     'LatentUpscaleModelLoader','LTXVLatentUpsampler','ImagePadForOutpaint','ImageCrop'],
 });
 const ref=(id,index=0)=>[id,index];
@@ -154,7 +154,7 @@ export function buildLtxFrameVideoGraph(c,info){
   }
   if(!c.audioEnabled)node('decode_audio','LTXVAudioVAEDecode',{samples:ref(separated[0],1),audio_vae:ref('audio_vae')},'Decode generated soundtrack');
   node('video','CreateVideo',{images:videoImages,audio:ref(c.audioEnabled?'trim_audio':'decode_audio'),fps:24,bit_depth:8,color_space:'sRGB',codec:'none'});
-  node('save','SaveVideo',{video:ref('video'),filename_prefix:'zura/first_last/ltx/result',format:'mp4','format.codec':'h264','format.codec.encoding':'auto'},'Save LTX video');
+  node('save','ZuraSaveProRes4444',{video:ref('video'),filename_prefix:'zura/first_last/ltx/result'},'Save LTX video');
   return applyAvailableAttention(g,info);
 }
 export const LTX_FRAME_VIDEO_FAST_NODES=Object.freeze(['LatentUpscaleModelLoader','LTXVLatentUpsampler','ImagePadForOutpaint','ImageCrop']);

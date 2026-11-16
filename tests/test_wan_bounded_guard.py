@@ -249,7 +249,7 @@ class BoundedSpeechGuardTests(unittest.TestCase):
         def ffmpeg(*args):
             subprocess.run([FFMPEG, "-hide_banner", "-loglevel", "error", "-y", *map(str,args)],
                            capture_output=True, text=True, check=True)
-        namespace = {"CATEGORY":"Zura/Artist Studio", "Path":Path, "InputImpl":media.InputImpl,
+        namespace = {"__name__":"ComfyUI_zura_nodes.artist_studio.guard_fixture","__package__":"ComfyUI_zura_nodes.artist_studio","CATEGORY":"Zura/Artist Studio", "Path":Path, "InputImpl":media.InputImpl,
                      "av":media.av, "digest_file":io.file_digest, "ffmpeg":ffmpeg,
                      "verify_review":lambda _shot:(directory, manifest)}
         exec(compile(ast.Module(body=[definition],type_ignores=[]),str(path),"exec"), namespace)
@@ -283,7 +283,7 @@ class BoundedSpeechGuardTests(unittest.TestCase):
                 details = {"source": str(source), "source_hash": io.file_digest(source), "start": .21,
                            "duration": 1.25, "frames": 30, "fps": 24}
                 manifest = {"clip": details, "files": {}}
-                namespace = {"CATEGORY":"Zura/Artist Studio", "Path":Path, "InputImpl":media.InputImpl,
+                namespace = {"__name__":"ComfyUI_zura_nodes.artist_studio.guard_fixture","__package__":"ComfyUI_zura_nodes.artist_studio","CATEGORY":"Zura/Artist Studio", "Path":Path, "InputImpl":media.InputImpl,
                              "av":media.av, "digest_file":io.file_digest, "ffmpeg":ffmpeg,
                              "verify_review":lambda _shot:(directory, manifest)}
                 exec(compile(ast.Module(body=[definition],type_ignores=[]),str(path),"exec"), namespace)
@@ -313,13 +313,14 @@ class BoundedSpeechGuardTests(unittest.TestCase):
                 raise RuntimeError(completed.stderr)
         output_root = self.fixture.base/"output"/"genj"
         output_root.mkdir(parents=True,exist_ok=True)
-        namespace = {"CATEGORY":"Zura/Artist Studio","Path":Path,"re":re,"av":media.av,
+        namespace = {"__name__":"ComfyUI_zura_nodes.artist_studio.guard_fixture","__package__":"ComfyUI_zura_nodes.artist_studio","CATEGORY":"Zura/Artist Studio","Path":Path,"re":re,"av":media.av,
             "InputImpl":media.InputImpl,"digest_file":io.file_digest,"source_path":lambda v:Path(v.get_stream_source()),
             "root":lambda:output_root,"ffmpeg":ffmpeg,"np":np,
             "Fraction":__import__('fractions').Fraction}
         exec(compile(ast.Module(body=[definition],type_ignores=[]),str(path),"exec"),namespace)
         generated = media.NativeFile(str(media.write_video(self.fixture.base/"neutral-generated.mov",count=24)))
-        result = namespace["GenjRestoreSoundtrack"]().restore(generated,{**self.details,"full_source":False},"neutral_take")
+        with patch.object(shutil,"which",return_value=FFMPEG):
+            result = namespace["GenjRestoreSoundtrack"]().restore(generated,{**self.details,"full_source":False},"neutral_take")
         restored = result["result"][0]
         command = calls[0]
         self.assertEqual(command[command.index("-ss")+1],0)

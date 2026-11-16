@@ -72,9 +72,9 @@ class FakeStudio{
   close(){this.container.isConnected=false;this.onClosed?.();}
 }
 const doc={documentElement:{classList:{add(){}}}};
-const make=new Function('createStudioSession','api','ArtistStudio','studioLaunchStorage','StudioAEBridge','document','openZuraStudio',
+const make=new Function('createStudioSession','api','mountStudio','comfyHost','studioLaunchStorage','StudioAEBridge','document','openZuraStudio',
   `let registeredStudio;${source.slice(start,end).replaceAll('import.meta.url',JSON.stringify(import.meta.url))};return {open:openDesktopAESession,set:value=>registeredStudio=value,get:()=>registeredStudio};`);
-const harness=make(async()=>({...session}),api,FakeStudio,value=>({id:value.id}),class{constructor(){this.source=null;}},doc,()=>{});
+const harness=make(async()=>({...session}),api,options=>new FakeStudio({aeSession:options.session}),{},value=>({id:value.id}),class{constructor(){this.source=null;}},doc,()=>{});
 const normalStudio={container:{isConnected:false},draft:normal};
 const old={aeSession:{id:'old'},container:{isConnected:true},creative:{items:[{file:'old-selected.png'}]},aeBridge:{async cancelAndLeave(){restored++;harness.set(normalStudio);}}};
 harness.set(old);assert.equal(await harness.open({}),true);assert.equal(constructed.length,1);

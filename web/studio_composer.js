@@ -20,7 +20,7 @@ export const composerIcons={
   takes:svg('<rect x="3" y="7" width="18" height="14" rx="2"/><path d="M7 3h10m-8 9 6 3-6 3z"/>'),
   download:svg('<path d="M12 3v12m-4-4 4 4 4-4M4 17v4h16v-4"/>'),
 };
-export const VIDEO_WORKFLOWS=[['swap','Character replacement'],['plate','Add, remove & replace'],['viewport','Viewport to final'],['camera','Change camera angle'],['relight','Relight'],['watermark','Watermark removal'],['alpha','Extract alpha'],['outpaint','Frame extension · preview'],['hdr','Convert to HDR'],['director','Director'],['frames','First & last frame'],['references','Reference to video']];
+export const VIDEO_WORKFLOWS=[['swap','Character replacement'],['plate','Add, remove & replace'],['viewport','Viewport to final'],['camera','Change camera angle'],['relight','Relight'],['watermark','Watermark removal'],['alpha','Extract alpha'],['outpaint','Frame extension · preview'],['hdr','Convert to HDR'],['paint_vfx','Paint VFX'],['director','Director'],['frames','First & last frame'],['references','Reference to video']];
 
 // Navigation describes the artist's task; model choices stay with generation controls.
 const MODE_DETAILS={
@@ -34,6 +34,7 @@ const MODE_DETAILS={
  alpha:['Finish footage','<path d="M3 3h18v18H3zM3 9h18M3 15h18M9 3v18M15 3v18"/>','Generate transparency for compositing'],
  outpaint:['Edit footage','<rect x="7" y="7" width="10" height="10" rx="1"/><path d="M3 8V3h5m8 0h5v5m0 8v5h-5M8 21H3v-5"/>','Expand the scene beyond the original frame'],
  hdr:['Finish footage','<path d="M3 5h18v14H3zM12 5v14"/><path d="m7 9-2 3 2 3m10-6 2 3-2 3"/>','Convert SDR footage to HDR'],
+ paint_vfx:['Create a shot','<path d="m4 20 4-1 12-12-3-3L5 16zM12 5l4 4M3 21h18"/>','Paint keyframes to create smoke, fire, explosions or liquid'],
  director:['Create a shot','<path d="M3 5h18v4H3zM3 13h7v6H3zm11 0h7v6h-7M7 3l2 6m6-6 2 6"/>','Direct images, motion and audio on a timeline'],
  frames:['Create a shot','<rect x="2" y="5" width="7" height="14" rx="1"/><rect x="15" y="5" width="7" height="14" rx="1"/><path d="M10 12h4m-2-2 2 2-2 2"/>','Animate between a starting and ending image'],
  references:['Create a shot','<rect x="3" y="3" width="12" height="12" rx="2"/><path d="M9 15v6h12V9h-6m-2 7 4 2-4 2z"/>','Generate a shot guided by images, video or audio'],
@@ -82,10 +83,46 @@ export class VideoComposer {
       const button=document.createElement('button');button.type='button';button.setAttribute('role','menuitemradio');button.setAttribute('aria-checked','false');button.dataset.openingModel=id;button.textContent=label+' · browser sign-in';imageModel.querySelector('[data-opening-status]').before(button);
     }
     imageModel.querySelector('select').onchange=e=>studio.changeOpeningModel(e.target.value);
-    imageModel.addEventListener('click',e=>{if(studio.busy||studio.project?.phase==='working'){e.preventDefault();return;}const option=e.target.closest('[data-opening-model]');if(option&&!option.disabled){imageModel.open=false;studio.changeOpeningModel(option.dataset.openingModel);}const ready=e.target.closest('[data-use-finished-image]');if(ready&&!ready.disabled){imageModel.open=false;const input=this.root.querySelector('input[name="gs-look"][value="ready"]');if(input&&!input.disabled){input.checked=true;input.dispatchEvent(new this.root.ownerDocument.defaultView.Event('change',{bubbles:true}));studio.$('ready').click();}}});
+    imageModel.addEventListener('click',e=>{
+      if(studio.busy||studio.project?.phase==='working'){e.preventDefault();return;}
+      const installBadge=e.target.closest('[data-setup-needed]');
+      const option=e.target.closest('[data-opening-model]');
+      if(installBadge&&option&&!option.disabled){
+        e.preventDefault();e.stopPropagation();
+        const id=option.dataset.openingModel;
+        studio.changeOpeningModel(id);
+        const key=id==='klein9b'?'klein9b_start':id;
+        void studio.modelDownloads?.installOption?.(key,{statusFiles:studio.modelStatus?.opening_models?.[id]?.model_files});
+        return;
+      }
+      if(option&&!option.disabled){imageModel.open=false;studio.changeOpeningModel(option.dataset.openingModel);}
+      const ready=e.target.closest('[data-use-finished-image]');
+      if(ready&&!ready.disabled){imageModel.open=false;const input=this.root.querySelector('input[name="gs-look"][value="ready"]');if(input&&!input.disabled){input.checked=true;input.dispatchEvent(new this.root.ownerDocument.defaultView.Event('change',{bubbles:true}));studio.$('ready').click();}}
+    });
     imageModel.addEventListener('keydown',e=>{if(!['ArrowDown','ArrowUp','Home','End'].includes(e.key)||studio.busy||studio.project?.phase==='working')return;e.preventDefault();imageModel.open=true;const items=[...imageModel.querySelectorAll('[role="menuitemradio"]')].filter(b=>!b.disabled&&!b.hidden),index=items.indexOf(this.root.ownerDocument.activeElement),next=e.key==='Home'?0:e.key==='End'?items.length-1:index<0?0:(index+(e.key==='ArrowUp'?-1:1)+items.length)%items.length;items[next]?.focus({preventScroll:true});});
     recipeTools.classList.add('zc-workflow-controls');
     recipeTools.append(imageModel);this.imageModel=imageModel;this.model=model;
+    this.videoModelPicker=studio.modelDownloads?.attachPicker?.(model.querySelector('#zc-video-model'),{
+      resolveOption:val=>{
+        const ms=studio.modelStatus;
+        if(val==='seedance')return {key:'seedance',provider:true,readyOverride:true};
+        if(val==='relight-ltx')return {key:'ltx_ripple'};
+        if(val==='relight-h3')return {key:'h3_ripple'};
+        if(val==='wan21')return {key:'wan21_relight',statusFiles:ms?.wan21_relight?.model_files,readyOverride:ms?.engine_ready?.wan21_relight};
+        if(val==='wan2')return {key:'wan2',statusFiles:ms?.model_files?.wan2,readyOverride:ms?.engine_ready?.wan2};
+        if(val==='wan')return {key:'wan',statusFiles:ms?.model_files?.wan,readyOverride:ms?.engine_ready?.wan};
+        if(val==='local'){
+          const route=studio.config.workflow_mode==='viewport'?'local_viewport':studio.config.edit_area==='scene'?'local_scene':'local';
+          return {key:route,statusFiles:ms?.model_files?.[route],readyOverride:ms?.engine_ready?.[route]??(route==='local'&&ms?.ready)};
+        }
+        if(val==='h3'){
+          const route=studio.openjutsu?.()?'openjutsu':studio.config.workflow_mode==='camera'?'h3_camera':studio.headSwap?.()?'h3_head_swap':studio.config.workflow_mode==='viewport'?'h3_viewport':'h3';
+          const statusFiles=route==='h3_camera'?ms?.h3_camera?.video?.model_files:route==='h3_head_swap'?ms?.h3_head_swap?.model_files:ms?.model_files?.[route];
+          return {key:route,statusFiles,readyOverride:ms?.engine_ready?.[route]};
+        }
+        return {key:val};
+      }
+    });
     this.openingLoras=new OpeningLoraControl(studio,tools);
     const outputTools=document.createElement('div');outputTools.className='zc-tool-group';outputTools.setAttribute('role','group');outputTools.setAttribute('aria-label','Video size and length');tools.append(outputTools);
     const nativeQuality=studio.$('quality-setting');
@@ -132,7 +169,7 @@ export class VideoComposer {
     if(value==='relight'&&this.workspace.selectRelightEngine){void this.workspace.selectRelightEngine(this.workspace.relightEngine||'wan21');return;}
     if(['objects','ripple','inpaint'].includes(value)){this.workspace.ensureRippleWorkspace?.('edit');this.workspace.show('ripple');return;}
     if(value==='paintout'&&['inpaint','ripple'].includes(this.workspace.paintout?.state.mode)){this.workspace.show('paintout');this.workspace.paintout.setMode('targeted');this.syncWorkflow();return;}
-    if(['director','frames','references','paintout','watermark','outpaint','alpha'].includes(value)){this.workspace.show(value);return;}
+    if(['paint_vfx','director','frames','references','paintout','watermark','outpaint','alpha'].includes(value)){this.workspace.show(value);return;}
     if(!VIDEO_WORKFLOWS.some(([id])=>id===value))return;
     const input=this.root.querySelector(`input[name="gs-workflow"][value="${value}"]`);
     if(input&&!input.disabled){
@@ -151,7 +188,7 @@ export class VideoComposer {
     this.syncWorkflow();
   }
   syncWorkflow(){
-    const independent=['director','frames','references','paintout','watermark','outpaint','ripple','alpha','panorama','hdr'].includes(this.workspace.mode),select=this.task.querySelector('select');
+    const independent=['paint_vfx','director','frames','references','paintout','watermark','outpaint','ripple','alpha','panorama','hdr'].includes(this.workspace.mode),select=this.task.querySelector('select');
     select.value=independent?this.workspace.mode:this.studio.config.workflow_mode==='motion'?'swap':this.studio.config.workflow_mode;
     if(this.workspace.mode==='panorama')select.value='camera';if(this.workspace.mode==='ripple'&&this.workspace.ripple?.intent==='relight')select.value='relight';
     if(this.workspace.mode==='paintout'&&this.workspace.paintout?.state.mode==='ripple')select.value='ripple';
@@ -177,12 +214,17 @@ export class VideoComposer {
     this.imageModel.querySelector('[data-opening-model-label]').textContent=ready?'Finished image':names[chosen]||names.klein9b;
     this.imageModel.querySelector('summary').setAttribute('aria-disabled',String(working));
     for(const option of this.imageModel.querySelectorAll('[data-opening-model]')){
-      option.hidden=camera&&!['flux3','chatgpt','gemini'].includes(option.dataset.openingModel);
-      const model=status?.[option.dataset.openingModel],needsRestart=!model&&option.dataset.openingModel!=='klein9b';option.disabled=working||needsRestart;
-      let badge=option.querySelector('[data-setup-needed]');if(!badge){badge=this.root.ownerDocument.createElement('small');badge.dataset.setupNeeded='';badge.textContent='Setup needed';option.append(badge);}badge.hidden=!model||model.ready!==false;
-      option.setAttribute('aria-checked',String(!ready&&chosen===option.dataset.openingModel));
+      const id=option.dataset.openingModel;
+      option.hidden=camera&&!['flux3','chatgpt','gemini'].includes(id);
+      const model=status?.[id],needsRestart=!model&&id!=='klein9b';option.disabled=working||needsRestart;
+      let badge=option.querySelector('[data-setup-needed]');if(!badge){badge=this.root.ownerDocument.createElement('small');badge.dataset.setupNeeded='';badge.className='zura-picker-install-btn';option.append(badge);}
+      const plan=this.studio.modelDownloads?.planForOption?.(id==='klein9b'?'klein9b_start':id,{statusFiles:model?.model_files,readyOverride:model?.ready,provider:!!model?.provider});
+      const sizeStr=plan?.bytes?` · ${(plan.bytes/1e9).toFixed(1)} GB`:'';
+      badge.textContent=this.studio.modelDownloads?.job&&chosen===id?'Installing…':`Install${sizeStr}`;
+      badge.hidden=!model||model.ready!==false;
+      option.setAttribute('aria-checked',String(!ready&&chosen===id));
       if(model?.provider){option.title='Browser sign-in · no API credits. The original frame and references are uploaded to your account.';continue;}
-      option.title=needsRestart?'Restart ComfyUI to enable the new image models.':model?.ready===false?'Select to see missing models and install them for this workflow.':option.dataset.openingModel==='flux3'?'16-step INT8 edit · original frame + up to 9 references':option.dataset.openingModel==='ph3'?'8-step edit · original frame + up to 7 references · may offload to RAM':option.dataset.openingModel==='qwen21'?'Experimental base model - 40 steps, INT8, up to 9 references':option.dataset.openingModel==='qwen2511'?'4-step INT8 edit · original frame + up to 2 references':'4-step FP8 edit · original frame + up to 3 references';
+      option.title=needsRestart?'Restart ComfyUI to enable the new image models.':model?.ready===false?'Click Install to automatically download the missing models for this generator.':id==='flux3'?'16-step INT8 edit · original frame + up to 9 references':id==='ph3'?'8-step edit · original frame + up to 7 references · may offload to RAM':id==='qwen21'?'Experimental base model - 40 steps, INT8, up to 9 references':id==='qwen2511'?'4-step INT8 edit · original frame + up to 2 references':'4-step FP8 edit · original frame + up to 3 references';
     }
     const note=this.imageModel.querySelector('[data-opening-status]'),missing=status&&Object.values(status).some(m=>!m.ready);note.hidden=!missing&&chosen!=='qwen21';note.textContent=chosen==='qwen21'?'Qwen Image 2.1 is experimental and has not been render-tested here.':missing?'Select a generator marked Setup needed to install its missing models.':'';
     const finished=this.imageModel.querySelector('[data-use-finished-image]'),input=this.root.querySelector('input[name="gs-look"][value="ready"]');finished.disabled=working||!!input?.disabled;finished.setAttribute('aria-checked',String(ready));
@@ -212,6 +254,7 @@ export class VideoComposer {
     // Choosing a video engine can return the shot to its starting-image step.
     // Keep that engine selector mounted so the artist can always switch back.
     this.model.hidden=false;this.model.title='Video model · available throughout this workflow';this.imageModel.hidden=stage==='video';
+    this.videoModelPicker?.sync();
     this.syncOpeningModel(working);
     const openingStatus=s.openingModelStatus?.(),browserImage=openingStatus?.provider&&s.lookMode!=='ready'&&stage!=='video'&&this.workspace.mode==='video';
     this.browserConnection?.sync(browserImage?{...openingStatus,name:openingStatus.provider==='chatgpt'?'ChatGPT Image':'Gemini Image'}:null);

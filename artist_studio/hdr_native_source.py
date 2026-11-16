@@ -93,7 +93,7 @@ def resample_native_hdr_frames(path, start_seconds, frame_count, output_fps=24,
     if colour_space == 'pq_display_p3' and (info.get('transfer') != 'smpte2084' or info.get('primaries') != 'smpte432'):
         raise ValueError('Display-P3 PQ requires matching source transfer and primaries tags.')
     selected = selected_space(info, colour_space)
-    if selected not in (HDR_VIDEO_SPACES if info['kind'] == 'video' else HDR_SEQUENCE_SPACES):
+    if selected not in ((HDR_VIDEO_SPACES+HDR_SEQUENCE_SPACES if info.get('working_space') else HDR_VIDEO_SPACES) if info['kind'] == 'video' else HDR_SEQUENCE_SPACES):
         raise ValueError('Choose a supported HDR video or EXR colour space.')
     if isinstance(sequence_fps, bool) or not isinstance(sequence_fps, (int, float)) or not math.isfinite(sequence_fps) or not 1 <= sequence_fps <= 120:
         raise ValueError('Choose a valid sequence frame rate.')
@@ -170,7 +170,7 @@ def load_native_hdr_frames(path, start_frame, frame_count, colour_space='auto', 
     if colour_space == 'pq_display_p3' and (info.get('transfer') != 'smpte2084' or info.get('primaries') != 'smpte432'):
         raise ValueError('Display-P3 PQ requires matching source transfer and primaries tags.')
     selected = selected_space(info, colour_space)
-    supported = HDR_VIDEO_SPACES if info['kind'] == 'video' else HDR_SEQUENCE_SPACES
+    supported = (HDR_VIDEO_SPACES+HDR_SEQUENCE_SPACES if info.get('working_space') else HDR_VIDEO_SPACES) if info['kind'] == 'video' else HDR_SEQUENCE_SPACES
     if selected not in supported:
         raise ValueError('Choose a supported HDR video or EXR colour space.')
     fps = info.get('fps', sequence_fps)

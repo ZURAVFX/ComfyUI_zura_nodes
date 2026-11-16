@@ -2,8 +2,9 @@ import {runStudioVMInContext} from './studio_vm_fixture.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
+import {createComfyGraphHost} from '../web/studio_host_adapters.js';
 
-const source=fs.readFileSync(new URL('../web/studio.js',import.meta.url),'utf8')
+const source=fs.readFileSync(new URL('../web/studio_core.js',import.meta.url),'utf8')
   .replace(/^import .*;\r?\n/gm,'').replace(/^export /gm,'')
   .replaceAll('await import("./vendor/elk.bundled.js");','')
   .split('app.registerExtension({')[0];
@@ -15,7 +16,8 @@ const context={crypto:{randomUUID:()=> 'copy'},window:{ELK:class {}},
   tidyArtistGraph:async()=>{throw new Error('Routing failed');},attachWanGraphControls(){},tidyWanStage(){}};
 vm.createContext(context);runStudioVMInContext(source+'\nthis.Studio=ArtistStudio;',context);
 const ui=Object.create(context.Studio.prototype);
-Object.assign(ui,{project:{id:'project',phase:'working'},resetEpoch:0,readConfig:()=>({}),$:()=>({value:'animate'}),perform:fn=>fn(0),close(){this.closed=true;}});
+Object.assign(ui,{project:{id:'project',phase:'working'},resetEpoch:0,readConfig:()=>({}),$:()=>({value:'animate'}),perform:fn=>fn(0),request:async()=>exported,close(){this.closed=true;},
+  graph:createComfyGraphHost(context.app,{request:async()=>exported,tidy:(...args)=>context.tidyArtistGraph(...args),attach:()=>{}})});
 await assert.rejects(()=>ui.graphView(),/previous workflow has been restored.*Routing failed/);
 assert.equal(loaded.length,1,'Never reload the raw export as a silent fallback');
 assert.equal(restored[0],original,'Recover the user workflow, including native layout');

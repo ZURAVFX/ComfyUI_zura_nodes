@@ -2,18 +2,20 @@ const ROOT='/zura/comfylink/v1/studio/sessions';
 
 // Each AE workspace owns a proxy. The normal Studio keeps the original API,
 // event listeners and storage, so ending AE mode cannot stop its work.
-export function scopedStudioAPI(api,session){
+export function scopedStudioAPI(api,session,{uiOrigin=session?.comfyOrigin}={}){
   if(!session||session.error)return {api,end(){}};
   const origin=new URL(session.comfyOrigin);
   if(origin.protocol!=='http:'||origin.hostname!=='127.0.0.1'||!origin.port||origin.origin!==session.comfyOrigin)throw new Error('The AE link has no verified local ComfyUI origin');
+  const ui=new URL(uiOrigin);
+  if(ui.protocol!=='http:'||ui.hostname!=='127.0.0.1'||!ui.port||ui.origin!==uiOrigin)throw new Error('The AE Studio UI has no verified local origin');
   let closed=false;
   const ended=()=>Object.assign(new Error('This AE shot has ended'),{name:'AbortError',status:410});
   const fetchApi=async(path,options={})=>{
     if(closed)throw ended();
     if(typeof path!=='string'||!path.startsWith('/')||path.startsWith('//')||/[\\\x00-\x20\x7f]/.test(path))throw new Error('AE work must use this local ComfyUI server');
-    const resolved=new URL(path,origin),actual=new URL(typeof api.apiURL==='function'?api.apiURL(path):path,origin);
+    const resolved=new URL(path,origin),actual=new URL(typeof api.apiURL==='function'?api.apiURL(path):path,ui);
     const allowed=/^\/(?:api\/)?(?:zura\/|genj\/|upload\/|prompt(?:$|\/)|queue(?:$|\/)|interrupt(?:$|\/)|history(?:$|\/)|object_info(?:$|\/)|view$|system_stats$|models(?:$|\/)|embeddings$)/;
-    if(resolved.origin!==origin.origin||actual.origin!==origin.origin||!allowed.test(resolved.pathname)||!allowed.test(actual.pathname))throw new Error('AE work must use this local ComfyUI server');
+    if(resolved.origin!==origin.origin||actual.origin!==ui.origin||!allowed.test(resolved.pathname)||!allowed.test(actual.pathname))throw new Error('AE work must use this local ComfyUI server');
     const headers=new Headers(options.headers||{});
     headers.set('X-ComfyLink-Studio-Id',session.id);
     headers.set('X-ComfyLink-Studio-Session',session.capability);

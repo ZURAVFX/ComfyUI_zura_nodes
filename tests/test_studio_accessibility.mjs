@@ -40,7 +40,7 @@ const api={apiURL:p=>p,addEventListener(name,handler){const previous=apiEvents.g
 const app={};
 const context={HDRSourceTool,installStudioRestartNavigation,document,window,localStorage,api,app,CreativeWorkspace,ContentDetection,ClipTrimmer,clipLength,recoverClipLength,stageProgress,setTimeout,clearTimeout,setInterval,clearInterval,crypto:globalThis.crypto,URLSearchParams,AbortController,FormData};
 vm.createContext(context);
-const source=fs.readFileSync(new URL('../web/studio.js',import.meta.url),'utf8').replace(/^import .*;\r?\n/gm,'').replace(/^export /gm,'').split('app.registerExtension({')[0];
+const source=fs.readFileSync(new URL('../web/studio_core.js',import.meta.url),'utf8').replace(/^import .*;\r?\n/gm,'').replace(/^export /gm,'').split('app.registerExtension({')[0];
 runStudioVMInContext(source+'\nthis.Studio=ArtistStudio;',context);
 const studio=new context.Studio(),ui=studio.creative;
 const issues=[],counts={};

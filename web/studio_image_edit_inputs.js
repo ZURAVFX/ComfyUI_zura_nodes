@@ -39,8 +39,11 @@ export class ImageEditInputs {
     this.heading.textContent=edit?'Edit your image':'Create an image';
     o.root.querySelector('.zc-image-heading h2').textContent=edit?'Edit image':'Create image';
     const key=main?JSON.stringify([main.file||main.filename,main.subfolder||'']):'',item=o.items[o.selectedImage||0],resultKey=JSON.stringify(item?.file||null);
-    if(key!==this.key){this.key=key;this.showSource=!!main;this.resultKey=resultKey;}
-    else if(resultKey!==this.resultKey){this.resultKey=resultKey;this.showSource=!item&&!!main;}
+    const composite=item?.image_layers?.conditioningInput;
+    const currentComposite=!!(main&&composite&&main.filename===composite.filename&&
+      (main.subfolder||'')===(composite.subfolder||'')&&(main.type||'input')===(composite.type||'input'));
+    if(key!==this.key){this.key=key;this.showSource=!!main&&!currentComposite;this.resultKey=resultKey;}
+    else if(resultKey!==this.resultKey){this.resultKey=resultKey;this.showSource=o.imageArea?.editing?!!main:!item&&!!main;}
     const list=o.$('reference-list');list.classList.toggle('zc-edit-inputs',edit);this.addHome.hidden=edit;
     let groups=list.querySelector('.zc-edit-main');
     if(edit){
@@ -72,7 +75,7 @@ export class ImageEditInputs {
       picker.querySelector('[data-clear-images]').disabled=busy||!o.references.length;
       picker.querySelector('summary').setAttribute('aria-label',`${refs.children.length} edit reference images`);
       picker.querySelector('summary span').textContent=refs.children.length?`References · ${refs.children.length}`:'References';
-      if(!main)o.$('generate').disabled=true;
+      if(!main&&o.imageIntent!=='hdri')o.$('generate').disabled=true;
     }else{
       this.addHome.prepend(this.addReferences);this.addReferences.innerHTML=this.addLabel;this.addReferences.classList.add('zc-attachment');
       if(groups){const cards=[...list.querySelectorAll('.zc-reference')];list.replaceChildren(...cards);o.referenceFingerprint=null;}
@@ -88,5 +91,8 @@ export class ImageEditInputs {
       this.sourceZoom?.update(key);
       o.$('gallery').hidden=true;o.$('image-empty').hidden=true;if(o.imageComparison?.host)o.imageComparison.host.hidden=true;
     }else{ o.imageComparison?.render();o.$('image-empty').hidden=!!item; }
+    // Source/result toggles call this controller directly, so refresh the saved
+    // selection preview as well as during a full workspace render.
+    o.imageArea?.sync();
   }
 }

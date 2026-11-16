@@ -10,6 +10,6 @@ image.outputSettings={delivery:{outputFor:()=>({kind:'hdr_sequence',master:{...r
 assert.deepEqual(studioModeAdapter('image').getSelectedOutput(image),{kind:'hdr_sequence',master:{...expected,filename:'converted.zip'},preview:expected},'Post-converted HDR masters pass through the same strict file-ref adapter');
 const master={...record,filename:'master.zip',role:'hdr_archive'},preview={...record,filename:'preview.mp4'};
 const video={studio:{},paintout:{result:{master,file:preview}}};
-assert.deepEqual(studioModeAdapter('paintout').getSelectedOutput(video),{kind:'hdr_sequence',master:{...expected,filename:'master.zip'},preview:{...expected,filename:'preview.mp4'}});
+assert.deepEqual(studioModeAdapter('paintout').getSelectedOutput(video),{kind:'hdr_sequence',master:{...expected,filename:'master.zip'},preview:{...expected,filename:'preview.mp4'},colour:{encoding:'acescg',sceneLinear:true}},'An EXR archive retains its explicit scene-linear ACEScg identity');
 assert.equal(studioModeAdapter('image').getSelectedOutput({studio:{},items:[{file:{...record,type:'input'}}],selectedImage:0}),null,'Input files cannot be selected as output masters');
 console.log('ComfyUI asset metadata and IDs remain in history but never enter strict AE file references');

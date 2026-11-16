@@ -1,12 +1,14 @@
 // The AE range is an output contract. Model padding never changes its duration.
 const whole=(value,min=1,max=10000)=>Number.isSafeInteger(value)&&value>=min&&value<=max;
 export function sourceAEFrameContract(source,sessionId){
-  const manifest=source?.manifest,rate=manifest?.frameRate,count=manifest?.frames?.length??source?.frameCount;
+  const manifest=source?.manifest,rate=manifest?.frameRate??source?.sourceTransfer?.frameRate,count=manifest?.frames?.length??source?.frameCount;
   if(!whole(count)||!rate||!whole(rate.numerator,1,1000000000)||!whole(rate.denominator,1,1000000000)||rate.numerator/rate.denominator>240||![source.width,source.height].every(v=>whole(v,1,16384))||typeof sessionId!=='string'||!/^[a-zA-Z0-9_-]{1,128}$/.test(sessionId))throw Error('The AE source has no valid frame count, rational frame rate or raster');
   return Object.freeze({schemaVersion:1,frameCount:count,frameRate:Object.freeze({numerator:rate.numerator,denominator:rate.denominator}),width:source.width,height:source.height,modelFrames:count,trimFrames:count,sessionId});
 }
 export const aeFrameDuration=contract=>contract.frameCount*contract.frameRate.denominator/contract.frameRate.numerator;
 export const aeFrameRate=contract=>contract.frameRate.numerator/contract.frameRate.denominator;
+export const aeModelFrameRate=contract=>{const rate=contract.modelFrameRate||contract.frameRate;return rate.numerator/rate.denominator;};
+export const aeModelDuration=contract=>contract.frameCount/aeModelFrameRate(contract);
 export const aeFrameLabel=contract=>contract?`${contract.frameCount} frames @ ${contract.frameRate.denominator===1?contract.frameRate.numerator:contract.frameRate.numerator+'/'+contract.frameRate.denominator} fps`:'';
 export function aeFrameOwner(owner){return owner?.aeFrameBase?owner:owner?.owner?.aeFrameBase?owner.owner:owner?.studio?.aeFrameBase?owner.studio:null;}
 export function aeFramePolicy(mode,config={},owner={}){
@@ -23,15 +25,15 @@ export function aeFramePolicy(mode,config={},owner={}){
   if(mode==='outpaint')return {stride:8,offset:1,min:9,max:10000,sections:true};
   if(mode==='camera')return {stride:8,offset:1,min:9,max:121,maxSourceFrames:120};
   if(engine==='local'||engine==='ltx')return {stride:8,offset:1,min:9,max:mode==='viewport'?361:121};
-  return {stride:1,offset:0,min:1,max:engine==='wan2'?81:120,...(engine==='h3'?{nativeFPS:24}:{})};
+  return {stride:1,offset:0,min:1,max:engine==='wan2'?81:120,...(['h3','wan','wan2'].includes(engine)?{nativeFPS:24}:{})};
 }
 export function modelAEFrameContract(base,policy){
   if(policy.singleFrame&&base.frameCount!==1)throw Error('Image mode produces one frame. Choose Current frame in After Effects or use a video mode for this range');
-  if(policy.nativeFPS&&base.frameRate.numerator!==policy.nativeFPS*base.frameRate.denominator)throw Error(`This native model generates at ${policy.nativeFPS} fps and cannot match the AE source frame rate. Choose another Studio mode`);
+
   if(policy.minSeconds!==undefined&&(aeFrameDuration(base)<policy.minSeconds||aeFrameDuration(base)>policy.maxSeconds))throw Error(`This mode needs an AE range between ${policy.minSeconds} and ${policy.maxSeconds} seconds`);
   const modelFrames=Math.max(policy.min,Math.ceil((base.frameCount-policy.offset)/policy.stride)*policy.stride+policy.offset);
   if(base.frameCount>(policy.maxSourceFrames??policy.max)||!policy.sections&&modelFrames>policy.max)throw Error(`This mode cannot generate the AE range of ${base.frameCount} frames. Choose a mode with longer sections or a shorter AE range`);
-  return {...base,modelFrames,trimFrames:base.frameCount};
+  return {...base,modelFrames,trimFrames:base.frameCount,...(policy.nativeFPS?{modelFrameRate:{numerator:policy.nativeFPS,denominator:1}}:{})};
 }
 // A painted keyframe is an intermediate image. It never changes the source
 // interval which the completed video must return to After Effects.
@@ -54,18 +56,29 @@ export function aeFrameContract(owner,config={}){
 export function aeFrameConfig(owner,config){
   if(!aeFrameOwner(owner))return config;
   let contract;try{contract=aeFrameContract(owner,config);}catch(error){owner.aeFrameError=error.message;return {...config,ae_frame_contract:{...aeFrameOwner(owner).aeFrameBase},ae_frame_error:error.message};}
-  owner.aeFrameError=null;const fps=aeFrameRate(contract),mode=owner.aeFrameMode||aeFrameOwner(owner).aeFrameMode;
-  return {...config,start:0,startFrame:0,duration:aeFrameDuration(contract),length_mode:'custom',frameCount:contract.frameCount,sequenceFps:fps,fps,
+  owner.aeFrameError=null;const fps=aeModelFrameRate(contract),mode=owner.aeFrameMode||aeFrameOwner(owner).aeFrameMode;
+  return {...config,start:0,startFrame:0,duration:aeModelDuration(contract),length_mode:'custom',frameCount:contract.frameCount,sequenceFps:fps,fps,
     ...(mode==='relight'&&config.relight_engine==='wan21'?{relight_shape:'source_size'}:{}),
     ...(['frames','references','director'].includes(mode)?{frames:contract.modelFrames}:{}),ae_frame_contract:contract};
 }
 export function assertAEFrameConfig(owner,config={}){const contract=aeFrameContract(owner,config);if(config.ae_frame_error)throw Error(config.ae_frame_error);return contract;}
 export function aeFrameRequest(owner,body={}){const contract=assertAEFrameConfig(owner,body.config||body);return contract?{...body,ae_frame_contract:contract}:body;}
+// A normal processing clip whose return is not qualified must remain a normal
+// mode input. Its captured AE timing/lineage stays on StudioAEBridge; it must
+// not impose a final-output contract on local editing or native model work.
+export function clearAEFrameWorkspace(creative,workspace){
+  for(const target of new Set([creative,creative?.studio,workspace])){
+    if(!target)continue;
+    if(typeof target.aeOriginalConfig==='function'){target.config=target.aeOriginalConfig;delete target.aeOriginalConfig;}
+    delete target.aeFrameBase;delete target.aeFrameMode;delete target.aeFrameError;
+    if(target.config&&typeof target.config==='object'){delete target.config.ae_frame_contract;delete target.config.ae_frame_error;}
+  }
+}
 export function bindAEFrameWorkspace(creative,mode,workspace,base){
   creative.aeFrameBase=base;creative.studio.aeFrameBase=base;workspace.aeFrameBase=base;workspace.aeFrameMode=mode;
   if(typeof workspace.config==='function'&&!workspace.aeOriginalConfig){workspace.aeOriginalConfig=workspace.config;workspace.config=function(...args){return aeFrameConfig(this,this.aeOriginalConfig(...args));};}
-  const contract=assertAEFrameConfig(workspace,typeof workspace.config==='function'?workspace.config():workspace.config||{}),fps=aeFrameRate(contract);
-  if(workspace===creative.studio)Object.assign(workspace.config,{start:0,duration:aeFrameDuration(base),length_mode:'custom',fps,ae_frame_contract:contract,...(mode==='relight'&&workspace.config.relight_engine==='wan21'?{relight_shape:'source_size'}:{})});
+  const contract=assertAEFrameConfig(workspace,typeof workspace.config==='function'?workspace.config():workspace.config||{}),fps=aeModelFrameRate(contract);
+  if(workspace===creative.studio)Object.assign(workspace.config,{start:0,duration:aeModelDuration(contract),length_mode:'custom',fps,ae_frame_contract:contract,...(mode==='relight'&&workspace.config.relight_engine==='wan21'?{relight_shape:'source_size'}:{})});
   if(workspace.state)Object.assign(workspace.state,{startFrame:0,frameCount:base.frameCount});
   if(mode==='camera')workspace.state.config={...workspace.state.config,start:0,duration:aeFrameDuration(base)};
   if(mode==='director')workspace.draft.frames=base.frameCount;
@@ -79,6 +92,8 @@ export function bindAEFrameWorkspace(creative,mode,workspace,base){
 }
 export function aeBridgeFor(owner){return owner?.studio?.aeBridge||owner?.owner?.studio?.aeBridge||owner?.aeBridge;}
 export async function prepareAEFrameGraph(owner,graph,config={}){
+  if(owner.independentAsset===true)return {graph,config};
+  if(owner.independentAsset===true)return {graph,config};
   const contract=assertAEFrameConfig(owner,config);if(!contract)return {graph,config};
   const intermediate=aeIntermediateImage(owner,config);
   const mode=intermediate?'image':owner.aeFrameMode||aeFrameOwner(owner).aeFrameMode;

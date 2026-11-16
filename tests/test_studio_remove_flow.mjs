@@ -110,6 +110,8 @@ try{
   assert.equal(ui.state.anchors[0].status,'accepted');assert.equal(editor.$('render-next').disabled,false);
   assert.ok(visible(editor.$('render-next')),'A completed clean frame exposes Review & render');
   await editor.$('render-next').onclick();await settle();assert.equal(editor.stage,'render');
+  assert.equal(editor.timeline.cleanLane.hidden,false,'Clean frame cards remain visible in the timeline when progressing to Review & render');
+  assert.equal(editor.timeline.cards.querySelectorAll('.zp-editor-frame-card').length,1,'Accepted clean frame card stays rendered in the timeline on the render stage');
   assert.equal(surface.$('prompt').value,'Remove only the bollard','Review and render keeps the accepted clean-frame instruction');
   assert.ok(visible(editor.maskSummary),'Render includes a reachable mask summary/review action');
   assert.ok(visible(surface.$('run')));assert.equal(surface.$('run').disabled,false);

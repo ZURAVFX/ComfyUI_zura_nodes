@@ -15,7 +15,7 @@ assert.equal(config().retain_layer_context,undefined,'Ordinary Ripple edits reta
 owner.rippleImage.request.workspace.platePrimary={};owner.mode='paintout';
 assert.equal(config().retain_layer_context,undefined,'The image handoff must be active');owner.mode='image';
 owner.rippleImage.stored=owner.rippleImage.request;owner.rippleImage.request=null;
-assert.equal(config().retain_layer_context,undefined,'A stored guide alone cannot enable layer context');
+assert.equal(config().retain_layer_context,false,'A stored guide alone cannot enable layer context');
 owner.rippleImage.request=owner.rippleImage.stored;
 const paint=config();
 for(const recipe of IMAGE_MODELS.filter(model=>model.edit)){

@@ -50,12 +50,14 @@ class StudioHTTPTest(unittest.IsolatedAsyncioTestCase):
         _, self.manifest = float_io.write_transfer(source_root, "ComfyLink/" + "c" * 32, self.payload,
             colour={"encoding": "unknown", "sceneLinear": False}, frame_rate={"numerator": 24, "denominator": 1})
         self.source_bytes = self.payload.astype("<f4").tobytes()
+        self.profile_bytes = None
         self.broker_calls, self.received = [], []
         self.received_originals = []
         self.grant_override = {}
         self.result_status = 'sent'
         self.redirect_grant = False
         self.source_override = None
+        self.broker_http_status = {}
         self.pause_result = False
         self.result_entered, self.release_result = asyncio.Event(), asyncio.Event()
         self.broker_revoked, self.native_applied = False, False
@@ -77,12 +79,18 @@ class StudioHTTPTest(unittest.IsolatedAsyncioTestCase):
         async def source(request):
             self.assertEqual(request.headers.get(TOKEN_HEADER), self.token)
             self.broker_calls.append("source")
+            if '/source' in self.broker_http_status:
+                return web.Response(status=self.broker_http_status['/source'], text='Private broker route unavailable')
             return web.json_response(self.source_override or {"manifest": self.manifest, "files": [
                 {key: frame[key] for key in ("filename", "byteLength", "sha256")} for frame in self.manifest["frames"]]})
 
         @broker_routes.get('/studio-bridge/{id}/source/{filename}')
         async def blob(request):
             self.assertEqual(request.headers.get(TOKEN_HEADER), self.token)
+            if request.match_info['filename'] == 'source.icc':
+                self.assertIsNotNone(self.profile_bytes)
+                self.broker_calls.append('profile')
+                return web.Response(body=self.profile_bytes)
             self.assertEqual(request.match_info["filename"], "000001.rgba32f")
             self.broker_calls.append("blob")
             return web.Response(body=self.source_bytes)
@@ -90,6 +98,8 @@ class StudioHTTPTest(unittest.IsolatedAsyncioTestCase):
         @broker_routes.post('/studio-bridge/{id}/result')
         async def result(request):
             self.assertEqual(request.headers.get(TOKEN_HEADER), self.token)
+            if '/result' in self.broker_http_status:
+                return web.Response(status=self.broker_http_status['/result'], text='Private broker route unavailable')
             body = await request.json()
             self.received.append(body)
             self.result_entered.set()
@@ -118,6 +128,8 @@ class StudioHTTPTest(unittest.IsolatedAsyncioTestCase):
         async def status(request):
             self.assertEqual(request.headers.get(TOKEN_HEADER), self.token)
             self.broker_calls.append("status")
+            if '/status' in self.broker_http_status:
+                return web.Response(status=self.broker_http_status['/status'], text='Private broker route unavailable')
             return web.json_response({"ready": True, "importPending": self.result_status == 'import_pending',
                 "status": self.result_status, "downloadCapability": "never echo", "personalPath": "never echo"})
 
@@ -240,6 +252,32 @@ class StudioHTTPTest(unittest.IsolatedAsyncioTestCase):
         session, headers = await self.create()
         response = await self.client.get(self.route(session, '/display-config?config=file%3A%2F%2F%2Fsecret'), headers=headers)
         self.assertEqual(response.status, 400)
+        response = await self.client.get(self.route(session, '/display-frame?index=0'), headers=headers)
+        self.assertEqual(response.status, 422)
+
+    async def test_display_uses_only_the_scoped_hash_checked_linear_icc_profile(self):
+        from test_studio_icc_display import linear_srgb_profile
+        self.profile_bytes = linear_srgb_profile()
+        profile_hash = hashlib.sha256(self.profile_bytes).hexdigest()
+        self.manifest['colour'] = {'management':'icc','encoding':'ae_project_icc','sceneLinear':True,'profileSha256':profile_hash}
+        self.source_override = {'manifest':self.manifest,
+            'files':[{key:frame[key] for key in ('filename','byteLength','sha256')} for frame in self.manifest['frames']],
+            'profile':{'filename':'source.icc','byteLength':len(self.profile_bytes),'sha256':profile_hash}}
+        original = self.source_bytes
+        session, headers = await self.create()
+        response = await self.client.get(self.route(session, '/display-frame?index=0'))
+        self.assertEqual(response.status, 403)
+        response = await self.client.get(self.route(session, '/display-frame?index=0'), headers=headers)
+        self.assertEqual(response.status, 200, await response.text() if response.status != 200 else '')
+        self.assertTrue((await response.read()).startswith(b'\x89PNG'))
+        self.assertIn('captured linear ICC', response.headers['X-ComfyLink-Preview-Note'])
+        self.assertEqual(self.broker_calls.count('profile'), 1)
+        self.assertEqual(self.source_bytes, original)
+        self.assertEqual(self.manifest['sourceBitDepth'], 32)
+        self.profile_bytes = self.profile_bytes[:-1] + bytes([self.profile_bytes[-1] ^ 1])
+        response = await self.client.get(self.route(session, '/display-frame?index=0'), headers=headers)
+        self.assertEqual(response.status, 422, 'Changed profile bytes must never be displayed under the old identity')
+        self.source_override['profile']['filename'] = 'other.icc'
         response = await self.client.get(self.route(session, '/display-frame?index=0'), headers=headers)
         self.assertEqual(response.status, 422)
 
@@ -439,6 +477,52 @@ class StudioHTTPTest(unittest.IsolatedAsyncioTestCase):
         if self.service._revocations:
             await asyncio.gather(*self.service._revocations)
         self.assertEqual(self.broker_calls.count('leave'), 2)
+
+    async def test_broker_http_missing_or_revoked_authority_maps_to_gone(self):
+        session, headers = await self.create()
+        for status in (401, 403, 404, 410):
+            with self.subTest(status=status):
+                self.broker_http_status['/source'] = status
+                response = await self.client.post(self.route(session, '/source'), headers=headers, json={})
+                self.assertEqual(response.status, 410)
+                self.assertNotIn('Private broker', await response.text())
+        self.broker_http_status['/source'] = 500
+        response = await self.client.post(self.route(session, '/source'), headers=headers, json={})
+        self.assertEqual(response.status, 502, 'A server fault must not be classified as ended authority')
+        self.assertEqual(self.broker_calls.count('grant'), 1, 'No automatic reauthorisation')
+
+    async def test_broker_restart_retains_result_and_revokes_ended_session(self):
+        from PIL import Image
+        master = self.outputs / 'retained.png'
+        Image.new('RGB', (1, 1), (40, 80, 120)).save(master)
+        original = master.read_bytes()
+        session, headers = await self.create()
+        authority = self.service.sessions[session['id']]
+        body = {'kind': 'image', 'master': {'filename': master.name, 'subfolder': '', 'type': 'output'}}
+        self.broker_http_status['/source'] = 404
+        response = await self.client.post(self.route(session, '/result'), headers=headers, json=body)
+        self.assertEqual(response.status, 410, 'A missing source grant is not a malformed image/422')
+        self.assertEqual(self.received, [])
+        del self.broker_http_status['/source']
+        authority.source = {'manifest': self.manifest}
+        self.broker_http_status['/result'] = 404
+        response = await self.client.post(self.route(session, '/result'), headers=headers, json=body)
+        self.assertEqual(response.status, 410)
+        self.assertEqual(authority.download_capability, '')
+        self.assertEqual(authority.result_files, [])
+        self.assertEqual(authority.original_files, [])
+        self.assertFalse(self.native_applied)
+        self.broker_http_status['/status'] = 404
+        response = await self.client.get(self.route(session, '/status'), headers=headers)
+        self.assertEqual(await response.json(), {'ok': True, 'status': 'cancelled', 'ready': False})
+        self.assertTrue(authority.closed)
+        self.assertNotIn(session['id'], self.service.sessions)
+        self.assertEqual(authority.token, '')
+        response = await self.client.post(self.route(session, '/result'), headers=headers, json=body)
+        self.assertEqual(response.status, 410)
+        self.assertEqual(master.read_bytes(), original, 'The user result survives loss of broker authority')
+        self.assertEqual(self.broker_calls.count('grant'), 1)
+        self.assertEqual(self.received, [], 'No result is applied or resent after authority disappears')
 
     async def test_leave_revokes_before_an_inflight_result_is_released(self):
         self.pause_result = True
@@ -938,6 +1022,47 @@ class StudioHTTPTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.received[-1]['provenance']['validatedFrameCount'], 2)
         self.assertEqual(self.received[-1]['provenance']['originalSha256'], original['sha256'])
 
+    async def test_old_helper_float_image_return_requires_update_without_preview_fallback(self):
+        session,headers=await self.create()
+        response=await self.client.post(self.route(session,'/result'),headers=headers,json={'kind':'hdr_sequence','master':{'filename':'master.exr','subfolder':'ZURA STUDIO/image-layers/'+'a'*32,'type':'output'},'colour':{'encoding':'srgb_display','sceneLinear':False}})
+        self.assertEqual(response.status,409)
+        self.assertIn('Update ComfyLink',(await response.json())['diagnostic'])
+        self.assertEqual(self.received,[])
+
+    async def test_tampered_product_receipt_is_rejected_by_actual_result_route(self):
+        from PIL import Image
+        from test_studio_image_layers import layers
+        self.grant_override={'capabilities':{'source':True,'transfer':True,'sdr32ImageReturn':True}}
+        Image.fromarray(np.array([[[16,32,48]]],dtype=np.uint8)).save(self.inputs/'receipt-source.png')
+        result=layers.compose({'schemaVersion':1,'source':{'filename':'receipt-source.png','subfolder':'','type':'input'},'source_colour':'srgb_display','width':1,'height':1,'layers':[]},{'input':self.inputs,'output':self.outputs})
+        master={k:result['master'][k] for k in ('filename','subfolder','type')};receipt=self.outputs/master['subfolder']/'image-layers.json';value=json.loads(receipt.read_text());value['colour']={'encoding':'acescg','sceneLinear':True};receipt.write_text(json.dumps(value),encoding='utf-8')
+        session,headers=await self.create();count=len(self.received)
+        response=await self.client.post(self.route(session,'/result'),headers=headers,json={'kind':'hdr_sequence','master':master,'colour':{'encoding':'srgb_display','sceneLinear':False}})
+        self.assertEqual(response.status,422);self.assertIn('Recompose',(await response.json())['diagnostic']);self.assertEqual(len(self.received),count)
+
+    async def test_receipted_sdr32_rgb_layers_return_without_quantization(self):
+        self.grant_override={'capabilities':{'source':True,'transfer':True,'sdr32ImageReturn':True}}
+        self.manifest['colour']={'encoding':'acescg','sceneLinear':True}
+        import OpenImageIO as oiio
+        from PIL import Image
+        from test_studio_image_layers import layers
+        Image.fromarray(np.array([[[16,32,48]]],dtype=np.uint8)).save(self.inputs/'layer-source.png')
+        raw=np.array([[[-.25,.12345679,1.75]]],dtype=np.float32)
+        layers._write_master(self.outputs/'layer-context.exr',raw)
+        result=layers.compose({'schemaVersion':1,'source':{'filename':'layer-source.png','subfolder':'','type':'input'},'source_colour':'srgb_display','width':1,'height':1,'layers':[{'id':'float-layer','file':{'filename':'layer-context.exr','subfolder':'','type':'output'},'mask':None,'colour_space':'srgb_display','enabled':True}]},{'input':self.inputs,'output':self.outputs})
+        master={k:result['master'][k] for k in ('filename','subfolder','type')};path=self.outputs/master['subfolder']/master['filename'];original=path.read_bytes()
+        session,headers=await self.create()
+        response=await self.client.post(self.route(session,'/result'),headers=headers,json={'kind':'hdr_sequence','master':master,'colour':{'encoding':'srgb_display','sceneLinear':False}})
+        self.assertEqual(response.status,200,await response.text())
+        descriptor=self.received[-1];manifest=descriptor['manifest'];proof=descriptor['provenance']
+        self.assertEqual(manifest['sourceBitDepth'],32);self.assertEqual(manifest['colour'],{'encoding':'unknown','sceneLinear':False});self.assertEqual(manifest['frameRate'],self.manifest['frameRate'])
+        pixels,_=float_io.load_transfer(self.outputs,descriptor['master']['subfolder']+'/manifest.json')
+        self.assertTrue(np.array_equal(pixels[0,...,:3],raw));self.assertTrue(np.array_equal(pixels[0,...,3],np.ones((1,1),np.float32)))
+        self.assertEqual(proof['kind'],'sdr32_image');self.assertEqual(proof['sourceManifestSha256'],hashlib.sha256(float_io.canonical_manifest_bytes(self.manifest)).hexdigest())
+        receipt=json.loads(proof['productReceipt']);self.assertEqual(proof['receiptSha256'],hashlib.sha256(proof['productReceipt'].encode()).hexdigest());self.assertEqual(proof['sourceImageSha256'],receipt['source']['sha256'])
+        self.assertEqual(proof['originalSha256'],hashlib.sha256(original).hexdigest());self.assertEqual(path.read_bytes(),original)
+        reader=oiio.ImageInput.open(str(path));self.assertEqual(reader.spec().nchannels,3);reader.close()
+
     async def test_10bit_sdr_video_decode_keeps_more_than_eight_bit_precision(self):
         import av
         from fractions import Fraction
@@ -1178,6 +1303,38 @@ class StudioHTTPTest(unittest.IsolatedAsyncioTestCase):
         with self.assertRaises(ValueError):validate_processing_input(tampered,self.manifest)
         tampered=copy.deepcopy(authority);tampered['sourceManifestSha256']='0'*64
         with self.assertRaises(ValueError):validate_processing_input(tampered,self.manifest)
+
+    async def test_linear_srgb_icc_source_requires_matching_physical_profile(self):
+        from test_comfylink_icc_processing import linear_srgb_icc
+        profile=linear_srgb_icc()
+        colour={'encoding':'ae_project_icc','sceneLinear':True,'management':'icc',
+                'profileSha256':hashlib.sha256(profile).hexdigest()}
+        self.manifest['colour']=colour
+        authority={**processing_authority(self.manifest),'conversion':'verified_icc_to_sdr8',
+                   'sourceProfileSha256':colour['profileSha256'],'sourceEncoding':'scene_linear_rec709'}
+        self.profile_bytes=profile
+        self.source_override={'manifest':self.manifest,'processingInput':authority,
+                              'profile':{'filename':'source.icc','byteLength':len(profile),'sha256':colour['profileSha256']}}
+        session,headers=await self.create()
+        response=await self.client.post(self.route(session,'/source'),json={},headers=headers)
+        self.assertEqual(response.status,200,await response.text())
+        loaded=await response.json()
+        self.assertEqual(loaded['processingInput']['conversion'],'verified_icc_to_sdr8')
+        self.assertEqual(loaded['manifest']['colour'],colour)
+
+    async def test_linear_srgb_icc_rejects_changed_curve_even_with_matching_hash(self):
+        from test_comfylink_icc_processing import linear_srgb_icc
+        altered=bytearray(linear_srgb_icc());altered[-1]^=1;self.profile_bytes=bytes(altered)
+        colour={'encoding':'ae_project_icc','sceneLinear':True,'management':'icc',
+                'profileSha256':hashlib.sha256(self.profile_bytes).hexdigest()}
+        self.manifest['colour']=colour
+        authority={**processing_authority(self.manifest),'conversion':'verified_icc_to_sdr8',
+                   'sourceProfileSha256':colour['profileSha256'],'sourceEncoding':'scene_linear_rec709'}
+        self.source_override={'manifest':self.manifest,'processingInput':authority,
+                              'profile':{'filename':'source.icc','byteLength':len(self.profile_bytes),'sha256':colour['profileSha256']}}
+        session,headers=await self.create()
+        response=await self.client.post(self.route(session,'/source'),json={},headers=headers)
+        self.assertEqual(response.status,422,'A changed gamma curve must fail despite a newly matching profile hash')
 
     async def test_bounded_and_duplicate_json_rejected(self):
         response = await self.client.post(PREFIX + '/sessions', data=b'{' + b' ' * 5000 + b'}')

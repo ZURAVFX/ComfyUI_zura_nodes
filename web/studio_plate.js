@@ -1,3 +1,4 @@
+import {selectionPreviewPixels,installShotSelectionPreview,shotSelectionSourceVisible} from './studio_image_area_preview.js';
 import {PlateSurface} from './studio_plate_surface.js';
 import {aeFrameConfig} from './studio_ae_frame_contract.js';
 import {workspaceStorage} from './studio_storage.js';
@@ -17,6 +18,7 @@ export class PlateWorkspace{
   current(){return this.owner.paintout;}
   active(){return this.owner.mode==='paintout';}
   propagation(){return this.action!=='remove';}
+  jobBusy(){const w=this.primary;return !!(w&&(w.job||w.submitting||w.picking||w.exporting||w.editor?.toolJob||w.editor?.maskStarting||w.editor?.submitting||w.editor?.importing||w.editor?.referenceUploading)||this.inline&&(this.owner.job||this.owner.pendingSubmission||this.owner.submitting||this.owner.uploading)||this.runner&&(this.runner.job||this.runner.pendingSubmission||this.runner.submitting));}
   // Explicit compatibility modes retain their own saved instruction. Merely
   // restoring one must not classify it as a new Remove/Add/Replace draft.
   legacyPromptMode(){const mode=this.primary?.state.mode;return ['inpaint','ripple'].includes(mode)?mode:null;}
@@ -24,7 +26,7 @@ export class PlateWorkspace{
   applyPrompt(){const w=this.primary;if(!w)return;const legacy=this.legacyPromptMode(),value=legacy?w.$('prompt').value:platePrompt(w.state,this.action);w.$('prompt').value=value;if(legacy||this.action==='remove'){w.cleanupPrompt=value;if(w.editor?.$?.('instruction'))w.editor.$('instruction').value=value;}this.promptDraft=platePromptDrafts(w.state);}
   async select(action=this.action){
     if(!actions.some(([id])=>id===action)||this.switching)return;
-    const o=this.owner,w=o.paintout;if(w?.busy())return;if(o.rippleImage?.request?.workspace?.platePrimary){await o.rippleImage.leave();if(o.rippleImage.request)return;}
+    const o=this.owner,w=o.paintout;if(w?.editor?.loadingProject)await w.editor.ensureProject();if(w?.busy())return;if(o.rippleImage?.request?.workspace?.platePrimary){await o.rippleImage.leave();if(o.rippleImage.request)return;}
     this.switching=true;
     try{
       if(w?.editor){await w.editor.flushManual();await w.editor.persist();}
@@ -32,6 +34,7 @@ export class PlateWorkspace{
       if(w&&this.promptDraft&&this.promptDraft===w.state.platePrompts)this.rememberPrompt(w.$('prompt').value,previousAction);
       this.action=action;this.storage.setItem(KEY,action);o.show('paintout');this.attach(o.paintout);this.action=action;
       const primary=o.paintout;primary.state.plateAction=action;
+      this.paintAutoOpen=this.propagation();
       // Never change conditioning or discard anchors when choosing an operation.
       const enteringRemove=previousAction!=='remove'&&action==='remove',staleFull=enteringRemove&&primary.state.mode==='full';
       if(staleFull){const removalPrompt=primary.$('prompt').value;primary.setMode('targeted');primary.$('prompt').value=removalPrompt;}
@@ -49,11 +52,24 @@ export class PlateWorkspace{
     if(w.state.plateAction&&actions.some(([id])=>id===w.state.plateAction))this.action=w.state.plateAction;
     w.state.plateEngine=['ltx','h3'].includes(w.state.plateEngine)?w.state.plateEngine:'ltx';w.state.plateScale=Number(w.state.plateScale)||1;
     const doc=w.page.ownerDocument;
+    installShotSelectionPreview(w.editor.viewer,()=>{
+      const e=w.editor,a=e.selected(),area=a?.edit_area;
+      if(this.inline||!this.active()||!this.propagation()||e.stage!=='clean'||e.frameLoading||e.candidate||!shotSelectionSourceVisible(a,e.showOriginal)||a.frame!==w.playhead||a.frame!==e.viewer.frame||!area?.enabled||!area.mask?.filename)return null;
+      return {key:JSON.stringify([w.state.source,a.id,a.frame,area.source_key,area.mask.file,area.mask.filename,area.mask.subfolder,area.sketch]),mask:area.mask,sketch:area.sketch};
+    },async(mask,state)=>{
+      const load=async ref=>{
+        const image=new Image();await new Promise((resolve,reject)=>{image.onload=resolve;image.onerror=reject;image.src=this.owner.api.apiURL('/view?'+new URLSearchParams({filename:ref.filename,subfolder:ref.subfolder||'',type:'input'}));});return image;
+      };
+      const [image,sketch]=await Promise.all([load(mask),state.sketch?.filename?load(state.sketch):null]);
+      const canvas=doc.createElement('canvas');canvas.width=image.naturalWidth;canvas.height=image.naturalHeight;
+      const ctx=canvas.getContext('2d',{willReadFrequently:true});ctx.drawImage(image,0,0);const pixels=ctx.getImageData(0,0,canvas.width,canvas.height);
+      pixels.data.set(selectionPreviewPixels(pixels.data,canvas.width,canvas.height));ctx.putImageData(pixels,0,0);return {selection:canvas,sketch};
+    });
     this.strip=doc.createElement('nav');this.strip.className='zplate-actions';this.strip.setAttribute('aria-label','Edit operation');
     for(const [id,label,title]of actions){const b=doc.createElement('button');b.type='button';b.textContent=label;b.title=title;b.dataset.plateAction=id;b.onclick=()=>void this.select(id);this.strip.append(b);}
     w.page.querySelector('.zf-heading').after(this.strip);
     const viewer=w.page.querySelector('.zf-viewer');this.canvasShell=doc.createElement('div');this.canvasShell.className='zplate-canvas-shell';viewer.before(this.canvasShell);this.canvasShell.append(viewer);this.sidebar=doc.createElement('aside');this.sidebar.className='zplate-sidebar';this.sidebar.setAttribute('aria-label','Edits and layers');this.sidebar.append(w.editor.layersPanel,w.editor.tools);w.page.append(this.sidebar);this.canvasShell.after(w.$('message'));w.$('message').classList.add('zplate-feedback');
-    this.frameToolbar=doc.createElement('div');this.frameToolbar.className='zplate-frame-toolbar';this.frameButton=doc.createElement('button');this.frameButton.type='button';this.frameButton.className='gs-primary';this.frameButton.onclick=()=>this.editFrame();this.newEditButton=doc.createElement('button');this.newEditButton.type='button';this.newEditButton.textContent='New edit';this.newEditButton.title='Start another edit while keeping the existing layers';this.newEditButton.onclick=()=>{const anchor=w.editor.selected();if(!anchor||w.busy())return;anchor.plateEditLayerId=null;anchor.edit_area=null;w.editor.newPaintArea();w.save();void this.editFrame();};this.frameToolbar.append(this.frameButton,this.newEditButton);w.editor.viewerHost.prepend(this.frameToolbar);
+    this.frameToolbar=doc.createElement('div');this.frameToolbar.className='zplate-frame-toolbar';this.frameButton=doc.createElement('button');this.frameButton.type='button';this.frameButton.className='gs-primary';this.frameButton.onclick=()=>this.editFrame();this.newEditButton=doc.createElement('button');this.newEditButton.type='button';this.newEditButton.textContent='New edit';this.newEditButton.title='Start another edit while keeping the existing layers';this.newEditButton.onclick=async()=>{const anchor=w.editor.selected();if(!anchor||this.jobBusy())return;if(w.editor.loadingProject)await w.editor.ensureProject();if(w.playhead!==anchor.frame){w.playhead=anchor.frame;w.updatePlayhead?.();}anchor.plateEditLayerId=null;anchor.edit_area=null;if(w.editor.stage==='clean')w.editor.newPaintArea();w.save();await this.editFrame();};this.frameToolbar.append(this.frameButton,this.newEditButton);w.editor.viewerHost.prepend(this.frameToolbar);
     w.$('prompt').addEventListener('input',()=>{this.rememberPrompt(w.$('prompt').value);w.save();});
     this.trimButton=doc.createElement('button');this.trimButton.type='button';this.trimButton.textContent='Trim clip';this.trimButton.onclick=()=>w.editor.setStage('trim');w.page.querySelector('.zf-heading').append(this.trimButton);
     this.engine=doc.createElement('label');this.engine.className='zc-tool zplate-engine';this.engine.innerHTML='<span>Video model</span><select aria-label="Video processing model"><option value="ltx">LTX 2.5</option><option value="h3">MiniMax H3</option></select>';
@@ -73,7 +89,7 @@ export class PlateWorkspace{
     this.nativeEditorUpdate=update;
     editor.updateControls=(...args)=>{const result=update(...args);this.syncControls();return result;};
     editor.$('clean').onclick=event=>this.propagation()?this.editFrame():clean(event);
-    editor.confirmClipTrim=async()=>{await confirm();if(this.propagation()&&w.state.clipTrimConfirmed&&!w.busy())await editor.setStage('clean');};
+    editor.confirmClipTrim=async()=>{if(editor.loadingProject)await editor.ensureProject();this.paintAutoOpen=this.propagation();await confirm();if(this.propagation()&&w.state.clipTrimConfirmed&&!w.busy()){if(editor.stage!=='clean')await editor.setStage('clean');this.syncControls();}};
     const setMode=w.setMode.bind(w);w.setMode=(...args)=>{const result=setMode(...args);this.applyPrompt();w.save();return result;};
     const reset=w.resetSource.bind(w);w.resetSource=async()=>{if(this.inline){await this.owner.rippleImage.leave();if(this.inline)return false;}const success=await reset();if(success!==false){delete w.state.platePrompts;this.applyPrompt();this.revision++;if(this.runner&&!this.runner.busy())this.runner.reset();w.save();}return success;};
     for(const key of ['onSeek','onCreate','onSelect','onRemove']){
@@ -82,8 +98,15 @@ export class PlateWorkspace{
         if(this.timelineSwitch||w.busy()||this.owner.rippleImage?.importing)return;
         this.timelineSwitch=true;
         try{if(this.inline){await this.owner.rippleImage.leave();if(this.inline)return;}
-          await callback(...args);
-          if(this.propagation()&&['onCreate','onSelect'].includes(key)){await editor.frameChanged(true);if(!w.busy())await this.editFrame();}
+          const loaded=await callback(...args);
+          if(this.propagation()&&['onCreate','onSelect'].includes(key)){
+            // The frame must be visible before opening the inline Image editor.
+            // createFrame/selectFrame already start this load; do not race it
+            // with a second request for the same 4K source frame.
+            if(loaded===false)return;
+            if(loaded!==true&&(await editor.frameChanged(true))===false)return;
+            if(!w.busy())await this.editFrame();
+          }
         }catch(error){w.message(error.message);}finally{this.timelineSwitch=false;}
       };
     }
@@ -93,12 +116,13 @@ export class PlateWorkspace{
   sync(){if(this.active()){this.attach(this.owner.paintout);this.syncControls();}}
   syncControls(){
     const w=this.primary;if(!w)return;const propagation=this.propagation(),e=w.editor,busy=w.busy();
+    e.viewer?.draw();
     if(this.promptDraft!==platePromptDrafts(w.state))this.applyPrompt();
     if(this.lastPropagation===true&&!propagation)this.nativeEditorUpdate?.();this.lastPropagation=propagation;
     w.page.classList.add('zplate-page');w.page.dataset.plateAction=this.action;
     w.page.querySelector('h2').textContent='Add, remove & replace';w.$('new').textContent='Start over';
     for(const b of this.strip.querySelectorAll('button')){b.disabled=this.switching||busy;b.setAttribute('aria-pressed',String(b.dataset.plateAction===this.action));}
-    if(this.frameActions){const host=propagation?this.frameToolbar:this.frameActionsHome;if(this.frameActions.parentElement!==host)host.append(this.frameActions);}
+    if(this.frameActions){const host=!this.surface&&propagation?this.frameToolbar:this.frameActionsHome;if(host&&this.frameActions.parentElement!==host)host.append(this.frameActions);}
     this.frameToolbar.hidden=!(propagation&&e.stage==='clean');this.frameButton.textContent=this.action==='paint'?'Draw / edit frame':'Edit frame';this.frameButton.disabled=busy||!e.selected();this.newEditButton.disabled=busy||!e.selected();this.newEditButton.hidden=!e.selected()?.layers?.length;e.viewerToolbar.hidden=propagation;
     this.trimButton.disabled=busy||!w.state.source;this.trimButton.hidden=!w.state.source;
     this.engine.hidden=this.scale.hidden=!propagation;this.engine.querySelector('select').disabled=this.scale.querySelector('select').disabled=busy;
@@ -118,7 +142,7 @@ export class PlateWorkspace{
     if(propagation){
       e.$('clean').textContent=this.action==='paint'?'Draw / edit frame':'Edit frame';e.$('clean').disabled=busy||!e.selected();
       e.objectReferenceTools.hidden=true;e.guideTitle.textContent=this.action==='paint'?'Add to your frame':'Edit your frame';
-      e.$('tool-help').textContent='Add an edited frame on the timeline. Area selection and drawing are optional.';
+      e.$('tool-help').textContent=this.action==='paint'?'Paint an addition on the frame, then generate.':'Add an edited frame on the timeline. Area selection and drawing are optional.';
       e.maskSummary.hidden=true;e.maskReview.hidden=true;
       w.$('title').textContent=this.action==='paint'?'Add to your shot':'Replace or edit';
       w.$('prompt').placeholder='Describe the change and how it should move';
@@ -130,6 +154,15 @@ export class PlateWorkspace{
     }
     if(this.runner?.job||this.runner?.pendingSubmission||this.runner?.submitting)this.progress(this.lastProgress||{title:'Starting video edit',detail:'Preparing'});
     this.surface?.sync();
+    if(this.paintAutoOpen&&this.propagation()&&this.active()&&w.state.source&&w.state.clipTrimConfirmed&&!this.jobBusy()&&!this.inline&&!this.switching&&!this.paintAutoOpening&&typeof e.selected==='function'){
+      this.paintAutoOpening=true;queueMicrotask(async()=>{try{if(!e.selected())await e.createFrame(w.playhead);if(this.propagation()&&this.active()&&!this.jobBusy()){this.paintAutoOpen=false;await this.editFrame();}}catch(error){this.paintAutoOpen=false;w.message(error.message);}finally{this.paintAutoOpening=false;}});
+    }
+  }
+  async usePaintResult(request){
+    if(this.paintAccepting||!this.propagation()||this.owner.rippleImage.request!==request)return;
+    this.paintAccepting=true;this.paintGenerateRequested=false;
+    try{await this.owner.rippleImage.useResult();if(!this.owner.rippleImage.request)this.primary.message('Frame edit saved. Review the frame, add another edit, or choose Generate video.');}
+    catch(error){this.primary.message(error.message);}finally{this.paintAccepting=false;}
   }
   config(){
     const w=this.primary,s=w?.sourceInfo;if(!w)return{};
@@ -196,27 +229,46 @@ export class PlateWorkspace{
   syncInlineImage(request){
     const o=this.owner,w=this.primary;
     if(o.mode!=='image'||!request?.workspace?.platePrimary){this.exitInlineImage();return;}
-    if(!this.inline){
-      const doc=w.page.ownerDocument,host=doc.createElement('div');host.className='zplate-inline-image';w.page.querySelector('.zf-viewer').append(host);
-      this.inline={host,moved:[]};o.imageArea.inline=true;
-      const move=(node,target)=>{if(!node)return;const marker=doc.createComment('plate-image-home');node.before(marker);this.inline.moved.push({node,marker});target.append(node);};
-      if(!this.surface)move(o.rippleImage.banner,host);if(o.imageComparison?.button)move(o.imageComparison.button,this.surface?.root.querySelector('.zpx-header')||o.rippleImage.banner);move(o.editInputs.source,host);move(o.$('gallery'),host);move(o.imageComparison?.host,host);move(o.imageArea.host,host);move(o.imageArea.tools,this.surface?.$('brushes')||this.strip);
-      this.inline.composer=o.root.querySelector('.zc-image-composer');if(!this.surface){move(this.inline.composer,w.page);this.inline.composer.classList.add('zplate-inline-composer');}else{move(o.$('progress'),this.surface.root.querySelector('.zpx-stage'));move(o.browserConnection?.host,this.surface.$('account'));move(o.root.querySelector('.zc-image-settings'),this.surface.$('image-settings-body'));}
-      w.page.classList.add('is-editing-image');w.page.querySelector('.zf-composer').hidden=true;
-    }
+    if(!this.inline){this.inline=this.surface.inlineEditor.mount();o.imageArea.inline=true;w.page.classList.add('is-editing-image');w.page.querySelector('.zf-composer').hidden=true;}
     w.page.hidden=false;o.root.querySelector('.zc-image-page').hidden=true;o.root.dataset.workspace='paintout';o.videoComposer.task.hidden=false;o.imageTask.hidden=true;
     for(const b of o.root.querySelectorAll('.zc-nav [data-space]'))b.setAttribute('aria-current',b.dataset.space==='video'?'page':'false');
     o.imageArea.refreshTools();o.videoComposer.syncWorkflow();this.surface?.sync();
   }
   exitInlineImage(){
-    if(!this.inline)return;this.owner.imageArea.inline=false;const {host,moved,composer}=this.inline;this.inline=null;
-    for(const {node,marker}of moved)if(marker.parentNode)marker.replaceWith(node);
-    composer.classList.remove('zplate-inline-composer');host.remove();this.primary.page.classList.remove('is-editing-image');this.primary.page.querySelector('.zf-composer').hidden=false;
+    if(!this.inline)return;this.paintGenerateRequested=false;this.surface.inlineEditor.restore();this.inline=null;
     this.owner.root.dataset.workspace=this.owner.mode;
   }
+  async backToShot(timeout=3000){
+    if(this.backPromise)return this.backPromise;
+    const o=this.owner;if(o.rippleImage.imageBusy()||o.rippleImage.importing)return;
+    this.backPromise=(async()=>{let timer;try{
+      await Promise.race([o.rippleImage.leave(),new Promise(resolve=>{timer=setTimeout(resolve,timeout);})]);
+    }catch(error){this.primary.message(error.message);}finally{
+      clearTimeout(timer);if(this.inline){o.rippleImage.clear();this.exitInlineImage();o.show('paintout');this.primary.render();}
+      this.backPromise=null;
+    }})();return this.backPromise;
+  }
+  async refreshInlineSource(anchor=this.primary?.editor?.selected()){
+    const o=this.owner,req=o.rippleImage?.request;
+    if(!this.inline||!req||req.anchor!==anchor||o.rippleImage.imageBusy()||o.rippleImage.importing)return;
+    try{
+      const exported=await this.imageWorkspace().prepareAnchor(anchor);
+      const response=await o.api.fetchApi(exported.url);if(!response.ok)return;
+      const blob=await response.blob(),form=new FormData();form.append('image',blob,`ripple_frame_${anchor.frame}.png`);form.append('subfolder','zura_images/ripple');form.append('type','input');
+      const upload=await o.api.fetchApi('/upload/image',{method:'POST',body:form}),image=await upload.json();if(!upload.ok||!image.name)return;
+      const file=(image.subfolder?image.subfolder+'/':'')+image.name;
+      o.references=[{file,filename:image.name,subfolder:image.subfolder||'',name:`Source frame ${anchor.frame}`,width:req.width,height:req.height},...o.references.slice(1)];
+      if(o.imageArea){o.imageArea.state.source_key=file;o.imageArea.disposeViewer();o.imageArea.sync();}
+      o.save();o.render();
+    }catch{}
+  }
   async editFrame(){
-    const w=this.primary,anchor=w.editor.selected();if(!anchor||w.busy())return;
+    const w=this.primary;if(w?.editor?.loadingProject)await w.editor.ensureProject();
+    const anchor=w?.editor?.selected();if(!anchor||this.jobBusy())return;
     if(['acescg','acescct','linear_rec709','hlg_rec2020','pq_rec2020','pq_display_p3'].includes(w.state.sourceColour)||['acescg','acescct','linear_rec709','hlg_rec2020','pq_rec2020','pq_display_p3'].includes(w.sourceInfo?.resolved_colour)){w.message('Paint and Replace currently use SDR image guides. Use Remove for the native HDR Paintout workflow. Your original float source is retained.');return;}
+    if(w.playhead!==anchor.frame){w.playhead=anchor.frame;w.updatePlayhead?.();}
+    if(w.editor.stage!=='clean')await w.editor.setStage('clean');
     await this.owner.rippleImage.edit(this.imageWorkspace(),anchor);
+    if(this.owner.rippleImage.request?.anchor===anchor){const area=this.owner.imageArea;area.sync();area.openEditor(this.action==='paint'?'draw':'brush');if(area.load)await area.load;this.surface.inlineEditor.sync();}
   }
 }

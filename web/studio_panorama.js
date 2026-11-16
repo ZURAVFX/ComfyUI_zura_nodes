@@ -1,3 +1,4 @@
+import {playbackFile} from './studio_delivery_formats.js';
 import {workspaceStorage} from './studio_storage.js';
 import {frameSourceResolution} from './frame_source_resolution.js';
 import {resolutionSize} from './studio_resolution.js';
@@ -94,7 +95,14 @@ export class PanoramaCameraWorkspace{
     }catch(error){this.status=null;this.message('Could not check camera setup. Restart ComfyUI and choose Check setup. '+error.message);}
     this.render();
   }
-  async upload(slot,file){if(!file||this.busy())return;this.uploading=true;this.render();this.message('Loading '+file.name+'…');try{const form=new FormData();form.append('file',file);const r=await this.api.fetchApi('/zura/studio/upload?kind='+(slot==='source'?'video':'image'),{method:'POST',body:form,timeoutMs:null});const asset=await r.json();if(!r.ok)throw new Error(asset.error||'Upload failed.');this.state[slot]=asset;if(slot==='source'){this.state.config={start:0,duration:Math.min(2,asset.duration)};if(this.$('size').value==='source')this.state.sourceSize=true;delete this.state.geometry;delete this.state.camera;delete this.state.cameraReviewed;delete this.state.warp;delete this.state.result;delete this.state.selection;delete this.state.look;delete this.state.opening;delete this.state.sourceOpening;delete this.state.guidePreview;}else delete this.state.result;this.message('');this.save();if(slot==='source')this.showMedia('source');}catch(error){this.message(error.message);}finally{this.uploading=false;this.$(slot+'-file').value='';this.render();}}
+  acceptSourceAsset(asset){
+    if(!asset?.id||typeof asset.file!=='string'||!asset.file||!Number.isFinite(asset.duration)||asset.duration<=0)throw Error('Choose a valid uploaded video.');
+    this.state.source=asset;this.state.config={start:0,duration:Math.min(2,asset.duration)};
+    if(this.$('size').value==='source')this.state.sourceSize=true;
+    for(const key of ['geometry','camera','cameraReviewed','warp','result','selection','look','opening','sourceOpening','guidePreview'])delete this.state[key];
+    this.message('');this.save();this.showMedia('source');this.render();
+  }
+  async upload(slot,file){if(!file||this.busy())return;this.uploading=true;this.render();this.message('Loading '+file.name+'…');try{const form=new FormData();form.append('file',file);const r=await this.api.fetchApi('/zura/studio/upload?kind='+(slot==='source'?'video':'image'),{method:'POST',body:form,timeoutMs:null});const asset=await r.json();if(!r.ok)throw new Error(asset.error||'Upload failed.');if(slot==='source')this.acceptSourceAsset(asset);else{this.state[slot]=asset;delete this.state.result;this.message('');this.save();}}catch(error){this.message(error.message);}finally{this.uploading=false;this.$(slot+'-file').value='';this.render();}}
   render(){
     const busy=this.busy(),s=this.state,stage=!s.geometry?'geometry':!s.warp?'warp':'render';
     this.$('source').textContent=s.source?.name||'Add source video';this.$('look').textContent=s.look?.name||'Look image · optional';this.$('remove-look').hidden=!s.look;
@@ -115,7 +123,7 @@ export class PanoramaCameraWorkspace{
   async requestGraph(stage,state=this.state.camera){return this.fetch('/zura/studio/panorama/graph',{source_id:this.state.source?.id,config:this.config(),state,stage,warp:mediaRef(this.state.warp),look_id:this.state.look?.id,prompt:this.$('prompt').value,seed:1052});}
   async generate(){if(this.busy())return;const stage=!this.state.geometry?'geometry':!this.state.warp?'warp':'render';if(stage==='warp'&&!this.state.cameraReviewed){await this.editCamera();return;}this.submitting=true;this.render();this.message('');try{const prepared=await this.requestGraph(stage);this.state.selection=prepared.selection;this.state.camera=prepared.state;await submitOwnedGraph(this,prepared.graph,{stage,selection:prepared.selection,state:prepared.state},'auto',{zura_panorama:true});}catch(error){this.message(error.message);}finally{this.submitting=false;this.render();}}
   async editCamera(){if(this.busy()||!this.state.geometry)return;try{this.editor=await openPanoramaEditor({app:this.app,state:this.state.camera,geometryKey:this.state.selection.key,output:this.state.geometry,source:{url:sourceView(this.state.source),start:this.config().start,duration:this.config().duration,fps:this.state.selection?.fps||this.state.source?.fps||24,stillScene:false},onCancel:()=>{this.editor=null;this.render();},onError:error=>{this.editor=null;this.message(error.message);this.render();},onApply:async state=>{this.editor=null;this.state.camera=state;this.state.cameraReviewed=true;delete this.state.warp;delete this.state.result;delete this.state.opening;delete this.state.look;this.save();this.render();await this.generate();}});this.render();}catch(error){this.editor=null;this.message(error.message);this.render();}}
-  showMedia(kind){const ref=this.state[kind];if(!ref)return;const video=this.$('result');video.pause();video.poster=kind==='source'?(ref.thumbnail_url||''):'';video.src=kind==='source'?sourceView(ref):view(ref);video.hidden=false;this.$('empty').hidden=true;this.$('media-label').hidden=false;this.$('media-label').textContent=kind==='source'?`Source · ${ref.name||'Imported clip'}`:kind==='result'?'Finished take':'Camera guide';this.viewing=kind;}
+  showMedia(kind){const ref=this.state[kind];if(!ref)return;const video=this.$('result');video.pause();video.poster=kind==='source'?(ref.thumbnail_url||''):'';video.src=kind==='source'?sourceView(ref):view(playbackFile(ref));video.hidden=false;this.$('empty').hidden=true;this.$('media-label').hidden=false;this.$('media-label').textContent=kind==='source'?`Source · ${ref.name||'Imported clip'}`:kind==='result'?'Finished take':'Camera guide';this.viewing=kind;}
   elapsed(){return Math.floor((Date.now()-(this.job?.started||Date.now()))/1000)+'s elapsed';}
   startPolling(){if(!this.timer)this.timer=setInterval(()=>this.poll(),1500);this.poll();}
   stopPolling(){clearInterval(this.timer);this.timer=null;}

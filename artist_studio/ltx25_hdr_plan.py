@@ -158,7 +158,7 @@ def build_native_hdr_plan(project, *, hdr_endpoint, hdr_source=None, output="hlg
     titles = {"opening": "Read original HDR appearance reference",
         "video_vae_load": "Load full HDR VAE", "video_vae": "Prepare float32 HDR VAE",
         "sample": "Generate HDR performance", "decode": "Decode HDR performance",
-        "save_preview": "Save SDR viewing preview", "zura_hdr_save_video": "Save HLG master",
+        "save_preview": "Save SDR viewing preview", "zura_hdr_save_video": "Save ProRes 4444 master",
         "zura_hdr_archive": "Package ACEScg EXR frames"}
     for graph in phases.values():
         for name, title in titles.items():

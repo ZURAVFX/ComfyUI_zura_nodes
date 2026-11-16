@@ -2,9 +2,10 @@
 @import url('./studio_ripple_preview.css');
 /* Ripple keeps Studio's existing charcoal surfaces, lime selection and media-first layout.
    Craft guidance: Unslop by Damir Sokolovsky (@heydamir), CC BY 4.0. */
-.zru-page{box-sizing:border-box;display:flex;flex-direction:column;gap:12px;width:100%;max-width:1200px;margin:0 auto;padding:16px 0 32px;color:var(--zc-text,#eee)}
+.zru-page{box-sizing:border-box;display:flex;flex-direction:column;gap:12px;width:calc(100% - 48px);max-width:1200px;margin:0 auto;padding:16px 0 32px;color:var(--zc-text,#eee)}
 #genj-studio .zru-page{flex:1 1 auto;min-height:0;overflow:auto;overscroll-behavior:contain;scrollbar-width:thin}
 #genj-studio .zru-page>*{flex-shrink:0}
+@media(max-width:700px){#genj-studio .zru-page{width:100%}}
 .zru-page[hidden],.zru-page [hidden]{display:none!important}
 .zru-heading{display:flex;align-items:center;justify-content:space-between;min-height:40px;gap:16px}
 .zru-heading h2{font-size:16px;line-height:24px;font-weight:600;margin:0}

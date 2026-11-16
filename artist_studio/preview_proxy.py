@@ -4,8 +4,9 @@ from functools import lru_cache
 
 
 def needs_proxy(codec_name):
-    # ProRes is commonly readable by FFmpeg but not by the embedded browser.
-    return str(codec_name or "").lower() == "prores"
+    # These lossless/editing codecs are readable by FFmpeg, but not by the
+    # embedded browser. The registered original remains the processing asset.
+    return str(codec_name or "").lower() in {"prores", "ffv1"}
 
 
 @lru_cache(maxsize=64)
@@ -16,8 +17,8 @@ def _codec(path, mtime_ns, size):
 
 
 def describe_existing(asset, input_root):
-    """Find ProRes in older saved projects that predate codec metadata."""
-    if asset.get("asset_kind") != "video" or asset.get("preview_file") or Path(asset.get("file", "")).suffix.lower() != ".mov":
+    """Find editing codecs in saved projects that predate preview metadata."""
+    if asset.get("asset_kind") != "video" or asset.get("preview_file") or Path(asset.get("file", "")).suffix.lower() not in {".mov", ".mkv"}:
         return
     root = (Path(input_root) / "genj_studio").resolve()
     source = (Path(input_root) / asset["file"]).resolve()

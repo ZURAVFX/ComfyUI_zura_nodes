@@ -182,7 +182,7 @@ function addOutputGraph(g,node,output,decodeRef,decodeSize,fps,engine,audioRef){
     images=ref('restore_output');
   }
   node('video','CreateVideo',{images,audio:audioRef,fps,bit_depth:8,color_space:'sRGB',codec:'none'},'Assemble Director video');
-  node('save','SaveVideo',{video:ref('video'),filename_prefix:`zura/director/${engine.id}/result`,format:'mp4','format.codec':'h264','format.codec.encoding':'auto'},`Save ${engine.label}`);
+  node('save','ZuraSaveProRes4444',{video:ref('video'),filename_prefix:`zura/director/${engine.id}/result`},`Save ${engine.label}`);
 }
 
 function buildH3(c,info,engine){
@@ -317,7 +317,7 @@ function nodeOptions(info,node,key){
   return Array.isArray(field?.[0])?field[0]:[];
 }
 
-const COMMON_NODES=['RandomNoise','SamplerCustomAdvanced','CreateVideo','SaveVideo'];
+const COMMON_NODES=['RandomNoise','SamplerCustomAdvanced','CreateVideo','ZuraSaveProRes4444'];
 const H3_NODES=['UNETLoader','LoraLoaderModelOnly','CLIPLoader','VAELoader','MiniMaxH3DirectorCS',
   'BasicGuider','BasicScheduler','KSamplerSelect','VAEDecode','VAEDecodeAudio',...COMMON_NODES];
 const LTX_NODES=['UNETLoader','CLIPLoader','VAELoader','CLIPTextEncode','LTXDirector','LTXDirectorGuide',

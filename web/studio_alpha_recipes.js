@@ -69,7 +69,7 @@ export function buildAlphaVideoGraph(c,info){
 
 export function alphaVideoOutput(entry,config){
   const output=entry?.outputs?.save||{},files=[...(output.images||[]),...(output.files||[])].filter(f=>f?.filename),find=(role,pattern)=>files.find(f=>f.role===role)||files.find(f=>pattern.test(f.filename));
-  const matte=find('matte',/matte.*\.mp4$/i),preview=find('preview',/(checker|preview).*\.mp4$/i),alpha=find('alpha',/\.mov$/i),sequence=find('sequence',/\.zip$/i),ae_float=files.find(f=>f.role==='ae_float'&&f.filename==='manifest.json'),alpha_float=files.find(f=>f.role==='alpha_float'&&f.filename==='alpha_manifest.json');
+  const matteFile=find('matte',/matte.*\.(mp4|mov)$/i),mattePreview=files.find(f=>f.role==='matte_preview'),matte=matteFile&&!matteFile.preview&&mattePreview?{...matteFile,preview:mattePreview}:matteFile,preview=files.find(f=>f.role==='preview')||files.find(f=>f.role!=='matte_preview'&&/(checker|preview).*\.mp4$/i.test(f.filename)),alpha=find('alpha',/(alpha|transparent).*\.mov$/i),sequence=find('sequence',/\.zip$/i),ae_float=files.find(f=>f.role==='ae_float'&&f.filename==='manifest.json'),alpha_float=files.find(f=>f.role==='alpha_float'&&f.filename==='alpha_manifest.json');
   if(!matte||!preview||!alpha)return null;
   const native_hdr=files.find(f=>f.role==='native_hdr'&&/\.zip$/i.test(f.filename));
   return {matte,preview,alpha,...(sequence?{sequence}:{}),...(ae_float?{ae_float}:{}),...(alpha_float?{alpha_float}:{}),...(native_hdr?{native_hdr}:{}),config};

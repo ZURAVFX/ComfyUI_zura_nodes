@@ -1,0 +1,22 @@
+import assert from 'node:assert/strict';
+import {parseHTML} from '../../ui-check/node_modules/linkedom/esm/index.js';
+import {installPanoramaAppearance,installSourcePreview} from '../web/studio_panorama_editor.js';
+
+const {document,window}=parseHTML('<html><body><main id="genj-studio" data-theme="dark"></main><div class="pano-studio-backdrop"><div class="pano-studio pano-studio-editor"><div class="pano-studio-main"><div class="pano-studio-stage"></div><div class="pano-studio-splitter"></div><div class="pano-studio-timeline"><span class="pano-studio-tl-frame">0 / 48</span></div></div><aside class="pano-studio-inspector"></aside></div></div></body></html>');
+Object.assign(globalThis,{document,window,MutationObserver:window.MutationObserver});
+const root=document.querySelector('.pano-studio-backdrop'),owner=document.querySelector('#genj-studio'),editor=root.querySelector('.pano-studio');
+const timeline=root.querySelector('.pano-studio-timeline'),inspector=root.querySelector('.pano-studio-inspector');
+const dispose=installPanoramaAppearance(root),disposeSource=installSourcePreview(root,{url:'/source.mp4',fps:24,duration:2});
+assert.equal(root.dataset.zuraCameraTheme,'dark');assert.equal(editor.classList.contains('dark-theme'),true);
+assert.equal(editor.style.getPropertyValue('--studio-panel'),'#1b1b1b');assert.equal(editor.style.colorScheme,'dark');
+assert.equal(root.querySelector('.pano-studio-timeline'),timeline);assert.equal(root.querySelector('.pano-studio-inspector'),inspector);
+assert.equal(timeline.parentElement.classList.contains('zc-camera-with-source'),true,'Native timeline remains alongside stage and source reference, preserving its controller');
+owner.dataset.theme='light';await new Promise(resolve=>setTimeout(resolve,0));
+assert.equal(root.dataset.zuraCameraTheme,'light');assert.equal(editor.classList.contains('dark-theme'),false);
+assert.equal(editor.style.getPropertyValue('--studio-panel'),'#ffffff');assert.equal(editor.style.colorScheme,'light');
+owner.dataset.theme='dark';await new Promise(resolve=>setTimeout(resolve,0));
+assert.equal(editor.style.getPropertyValue('--studio-fg'),'#f2f2f2');
+disposeSource();dispose();assert.equal(root.classList.contains('zc-camera-themed'),false);
+owner.dataset.theme='light';await new Promise(resolve=>setTimeout(resolve,0));
+assert.equal(editor.style.getPropertyValue('--studio-panel'),'#1b1b1b','Disposal disconnects the theme observer');
+console.log('Camera modal presentation: independent Studio dark/light theme, source/timeline identity and observer cleanup pass.');

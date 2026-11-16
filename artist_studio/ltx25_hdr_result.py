@@ -90,7 +90,7 @@ def _colour_metadata(path):
         if len(videos) != 1:
             raise ValueError("The native HDR output needs exactly one video stream.")
         codec = videos[0].codec_context
-        return {"pixel_format": getattr(codec.format, "name", ""),
+        return {"pixel_format": getattr(codec.format, "name", ""),'codec':codec.name,'tag':codec.codec_tag,
                 "transfer": int(codec.color_trc or 2),
                 "primaries": int(codec.color_primaries or 2),
                 "matrix": int(codec.colorspace or 2)}
@@ -204,17 +204,16 @@ def collect_native_delivery(plan, submitted_graph, frozen_history, output_direct
     if info["video_node"]:
         video_node = submitted_graph["zura_hdr_save_video"]
         video_prefix = "genj/hdr/" + prefix
-        if (video_node.get("class_type") != "ZuraHDRSaveExactRate" or
+        if (video_node.get("class_type") != "ZuraHDRSaveProRes4444" or
                 video_node.get("inputs", {}).get("filename_prefix") != video_prefix):
             raise ValueError("The native HDR video prefix changed.")
         reference, path = _source_ref(frozen_history, "zura_hdr_save_video", "images",
-                                      video_prefix, ".mp4", output_directory, counter=True)
+                                      video_prefix, ".mov", output_directory, counter=True)
         inspect_video(path, **inspect)
         colour = _colour_metadata(path)
-        if (colour["pixel_format"] not in ("yuv420p10le", "yuv422p10le", "yuv444p10le") or
-                (colour["transfer"], colour["primaries"], colour["matrix"]) != (18, 9, 9)):
-            raise ValueError("The delivered HDR video is not 10-bit BT.2020 HLG.")
-        files.append({**reference, "label": "HDR video"})
+        if colour.get('codec')!='prores' or colour.get('tag') not in ('ap4h','ap4x') or '444' not in colour['pixel_format'] or colour['transfer']==18:
+            raise ValueError('The delivered movie is not working-RGB ProRes 4444.')
+        files.append({**reference,'label':'ProRes 4444 MOV','colour':{'encoding':'acescct','sceneLinear':False}})
     if info["archive_node"]:
         archive_node = submitted_graph["zura_hdr_archive"]
         if (archive_node.get("class_type") != "ZuraHDRPackageACEScct" or
@@ -226,4 +225,4 @@ def collect_native_delivery(plan, submitted_graph, frozen_history, output_direct
         _check_archive(path, frames, *size, exr_storage=storage)
         files.append({**reference, "label": "ACEScg EXR sequence"})
     return {"asset": asset, "hdr_files": files, "output_raster": raster,
-            "sha256": ltx25.file_digest(preview), "native_hdr": True, "hdr_output": output, 'exr_storage': storage}
+            "sha256": ltx25.file_digest(preview), "native_hdr": True, "hdr_output": output, 'exr_storage': storage,'videoColour':{'encoding':'acescct','sceneLinear':False}}

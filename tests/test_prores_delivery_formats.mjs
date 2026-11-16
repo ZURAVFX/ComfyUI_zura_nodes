@@ -1,0 +1,27 @@
+import assert from 'node:assert/strict';
+import {deliveryFormatLabel,deliveryVideoColour,deliveryVideoFile} from '../web/studio_delivery_formats.js';
+import {studioHDRDescriptor} from '../web/studio_delivery_controls.js';
+import {paintoutOutputDescriptor} from '../web/paintout_studio/paintout_outputs.js';
+import {LTXHDRDelivery} from '../web/studio_ltx_delivery.js';
+import {memoryStorage} from '../web/studio_storage.js';
+
+const mov={filename:'master.mov',subfolder:'genj/hdr',type:'output'};
+const old={...mov,filename:'legacy.mp4'};
+const colour={encoding:'acescg',sceneLinear:true};
+assert.equal(deliveryFormatLabel('HLG video'),'ProRes 4444 MOV');
+assert.equal(deliveryFormatLabel('EXR + HLG video'),'EXR + ProRes 4444');
+assert.equal(deliveryVideoFile([old,mov]),mov,'Prefer the ProRes master when a legacy MP4 is retained');
+assert.deepEqual(deliveryVideoColour(mov,{colour}),colour);
+assert.deepEqual(deliveryVideoColour(mov),{encoding:'unknown',sceneLinear:false},'MOV alone cannot prove a working colour space');
+assert.deepEqual(deliveryVideoColour(old),{encoding:'hlg_rec2020',sceneLinear:false},'Existing HLG MP4 records remain readable');
+const result=studioHDRDescriptor({master:old},{state:'complete',take:{hdrFiles:[mov],colour}});
+assert.equal(result.master.filename,'master.mov');assert.deepEqual(result.colour,colour);
+const painted=paintoutOutputDescriptor({hdrFiles:[mov],colour:{encoding:'acescct',sceneLinear:false},config:{outputMode:'HLG video'}});
+assert.equal(painted.master.filename,'master.mov');assert.deepEqual(painted.colour,{encoding:'acescct',sceneLinear:false},'Working RGB is not relabelled as HLG');
+assert.equal(paintoutOutputDescriptor({files:[mov],config:{outputMode:'HLG video'},colour}).master.filename,'master.mov','Native Paintout history discovers its returned MOV without an inferred companion filename');
+let completed;
+const delivery=new LTXHDRDelivery({}, {key:'prores-fixture',storage:memoryStorage(),onUpdate(){},onComplete:take=>completed=take});
+delivery.take={file:old,config:{hdrOutput:'hlg_video'}};
+delivery.update({state:'complete',result:{preview:old,files:[mov],colour}});
+assert.equal(completed.hdrFiles[0],mov);assert.deepEqual(completed.colour,colour,'Completion preserves backend working RGB metadata');delivery.close();
+console.log('ProRes delivery: legacy values, MOV master selection, working RGB descriptors and completion metadata pass.');

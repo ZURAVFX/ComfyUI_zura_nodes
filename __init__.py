@@ -68,7 +68,7 @@ NODE_DISPLAY_NAME_MAPPINGS.update(QWEN_DESIGN_NAMES)
 
 WEB_DIRECTORY = "./web"
 PACKAGE_ROOT = Path(__file__).resolve().parent
-__version__ = "1.3.65"
+__version__ = "1.3.66"
 
 
 def _register_routes():
@@ -236,6 +236,11 @@ from .artist_studio.image_edit_area import NODE_CLASS_MAPPINGS as IMAGE_EDIT_ARE
 NODE_CLASS_MAPPINGS.update(IMAGE_EDIT_AREA_NODES)
 NODE_DISPLAY_NAME_MAPPINGS.update(IMAGE_EDIT_AREA_NAMES)
 
+# Sparse painted controls; the fluid model, LoRA loading and sampler stay native.
+from .artist_studio.paint_vfx import NODE_CLASS_MAPPINGS as PAINT_VFX_NODES, NODE_DISPLAY_NAME_MAPPINGS as PAINT_VFX_NAMES
+NODE_CLASS_MAPPINGS.update(PAINT_VFX_NODES)
+NODE_DISPLAY_NAME_MAPPINGS.update(PAINT_VFX_NAMES)
+
 # Alpha inference remains native LTX; these adapters preserve source timing and RGBA delivery.
 from .artist_studio.alpha_video import NODE_CLASS_MAPPINGS as ALPHA_VIDEO_NODES, NODE_DISPLAY_NAME_MAPPINGS as ALPHA_VIDEO_NAMES
 NODE_CLASS_MAPPINGS.update(ALPHA_VIDEO_NODES)
@@ -276,7 +281,9 @@ NODE_DISPLAY_NAME_MAPPINGS.update(COMFYLINK_FLOAT_NAMES)
 from .comfylink.ltx_colour import NODE_CLASS_MAPPINGS as COMFYLINK_LTX_NODES, NODE_DISPLAY_NAME_MAPPINGS as COMFYLINK_LTX_NAMES
 NODE_CLASS_MAPPINGS.update(COMFYLINK_LTX_NODES)
 NODE_DISPLAY_NAME_MAPPINGS.update(COMFYLINK_LTX_NAMES)
-from .comfylink.frame_nodes import ZuraComfyLinkMatchFrames
+from .comfylink.frame_nodes import ZuraComfyLinkMatchFrames, ZuraComfyLinkRateAudio
+NODE_CLASS_MAPPINGS["ZuraComfyLinkRateAudio"] = ZuraComfyLinkRateAudio
+NODE_DISPLAY_NAME_MAPPINGS["ZuraComfyLinkRateAudio"] = "Zura ComfyLink Restore Audio Timing"
 NODE_CLASS_MAPPINGS["ZuraComfyLinkMatchFrames"] = ZuraComfyLinkMatchFrames
 NODE_DISPLAY_NAME_MAPPINGS["ZuraComfyLinkMatchFrames"] = "Zura ComfyLink Match Frames"
 from .artist_studio.qwen_edit_canvas import ZuraQwenEditLatent

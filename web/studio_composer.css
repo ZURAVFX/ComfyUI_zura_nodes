@@ -241,7 +241,7 @@
 #genj-studio .zc-workflow-menu>button{display:flex;align-items:center;justify-content:space-between;gap:16px;width:100%;min-height:42px;padding:10px 12px;border:0;border-radius:6px;background:transparent;color:var(--zc-text);font-family:inherit;font-size:14px;font-weight:450;line-height:22px;text-align:left}
 #genj-studio .zc-workflow-menu>button:hover:not(:disabled),#genj-studio .zc-workflow-menu>button:focus-visible{background:var(--zc-hover)}
 #genj-studio .zc-workflow-menu>button[aria-checked=true]{background:var(--zc-hover);font-weight:650}
-#genj-studio .zc-workflow-menu>button[aria-checked=true]>span{width:7px;height:7px;border-radius:50%;background:var(--gs-accent)}
+#genj-studio .zc-workflow-menu>button[aria-checked=true]>span:empty{width:7px;height:7px;border-radius:50%;background:var(--gs-accent)}
 #genj-studio .zc-task-control>summary[aria-disabled=true]{opacity:.5;cursor:not-allowed}
 /* The open workflow chooser is one connected control. The selected name
    appears in the menu, while the accessible trigger remains available to close it. */
@@ -386,6 +386,7 @@
 #genj-studio .zc-mode-no-results{padding:24px;text-align:center;font-size:13px;color:var(--gs-muted)}
 #genj-studio .zc-mode-host .zc-image-operation>.zc-workflow-menu{width:340px;bottom:auto;border-radius:12px}
 #genj-studio .zc-image-operation>.zc-workflow-menu>button{justify-content:flex-start;gap:12px;min-height:68px}
+#genj-studio .zc-image-operation>.zc-workflow-menu>button>svg{width:16px;height:16px;flex:none}
 #genj-studio .zc-image-operation .zc-mode-copy small{background:none!important;width:auto!important;height:auto!important;border-radius:0!important}
 @media(max-width:1000px){#genj-studio .zc-mode-host{flex-basis:220px}#genj-studio .gs-top{gap:10px!important}#genj-studio .gs-top .gs-status{display:none}}
 @media(max-width:760px){#genj-studio .gs-brand strong{display:none}#genj-studio .gs-top .zc-nav button{padding-inline:10px}#genj-studio .zc-mode-host{flex:1 1 160px}#genj-studio .gs-top-actions{gap:4px!important}#genj-studio .gs-top-actions #gs-exit{font-size:0;padding:4px}#genj-studio .gs-top-actions #gs-exit svg{font-size:14px}#genj-studio .zc-mode-search>span{display:none}}

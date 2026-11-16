@@ -4,6 +4,7 @@ import {buildFrameVideoGraph,frameVideoDimensions,frameVideoPresetSize,FRAME_MEG
 import {FrameVideoWorkspace} from '../web/studio_frames.js';
 const config={first:{file:'first.png'},last:{file:'last.png'},audio:{file:'reference.wav'},prompt:'A smooth transition through the scene.',width:1344,height:768,frames:73,seed:42,steps:8};
 const off=buildFrameVideoGraph({...config,audioEnabled:false});
+assert.equal(off.save.class_type,'ZuraSaveProRes4444');assert.deepEqual(Object.keys(off.save.inputs).sort(),['filename_prefix','video'],'Final H3 output uses the ProRes saver without MP4 options');
 assert.equal(off.endpoints.class_type,'MiniMaxH3ImageToVideo');assert.deepEqual(off.endpoints.inputs.first_frame,['fit_first',0]);assert.deepEqual(off.endpoints.inputs.last_frame,['fit_last',0]);
 for(const slot of ['first','last'])assert.deepEqual(off['fit_'+slot].inputs,{image:[slot,0],upscale_method:'lanczos',width:1344,height:768,crop:'center'},'Both endpoints preserve proportions and use centred cover cropping');
 assert.equal(off.model.inputs.unet_name,FRAME_VIDEO_MODELS.model);assert.equal(off.attention.inputs.attention,'comfy kitchen attention');assert.equal(off.turbo.inputs.strength_model,1);assert.equal(off.scheduler.inputs.steps,8);assert.equal(off.scheduler.inputs.scheduler,'simple');assert.equal(off.sampler.inputs.sampler_name,'res_multistep');

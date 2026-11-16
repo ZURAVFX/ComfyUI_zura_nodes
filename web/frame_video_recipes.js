@@ -74,7 +74,7 @@ export function buildFrameVideoGraph(c,info){
     videoImages=ref('restore_output');
   }
   node('video','CreateVideo',{images:videoImages,audio:ref('decode_audio'),fps:24,bit_depth:8,color_space:'sRGB',codec:'none'});
-  node('save','SaveVideo',{video:ref('video'),filename_prefix:'zura/first_last/result',format:'mp4','format.codec':'h264','format.codec.encoding':'auto'});
+  node('save','ZuraSaveProRes4444',{video:ref('video'),filename_prefix:'zura/first_last/result'});
   return applyAvailableAttention(g,info);
 }
 export function frameVideoAvailability(info){
@@ -83,6 +83,6 @@ export function frameVideoAvailability(info){
   const missing=[];
   for(const [node,[key,file]] of Object.entries(names))if(!options(node,key).includes(file))missing.push(file);
   for(const file of [FRAME_VIDEO_MODELS.videoVae,FRAME_VIDEO_MODELS.audioVae])if(!options('VAELoader','vae_name').includes(file))missing.push(file);
-  for(const node of ['MiniMaxH3ImageToVideo','MiniMaxH3AddGuide','LoadAudio','LoadImage','ImageScale','BasicGuider','BasicScheduler','KSamplerSelect','RandomNoise','SamplerCustomAdvanced','VAEDecode','VAEDecodeAudio','CreateVideo','SaveVideo'])if(!info[node])missing.push(node);
+  for(const node of ['MiniMaxH3ImageToVideo','MiniMaxH3AddGuide','LoadAudio','LoadImage','ImageScale','BasicGuider','BasicScheduler','KSamplerSelect','RandomNoise','SamplerCustomAdvanced','VAEDecode','VAEDecodeAudio','CreateVideo','ZuraSaveProRes4444'])if(!info[node])missing.push(node);
   return {ready:!missing.length,missing};
 }

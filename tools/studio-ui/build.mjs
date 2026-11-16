@@ -27,3 +27,4 @@ bundle=bundle.replace(parserAttributeSpace,"[^ \\t\\n\\f\\r");
 await fs.writeFile(bundlePath,bundle);
 await fs.rm('components.raw.css');
 console.log('Local Studio component bundles built.');
+await import('./build-manifest.mjs');

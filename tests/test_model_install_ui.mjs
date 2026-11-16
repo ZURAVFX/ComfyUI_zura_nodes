@@ -65,4 +65,45 @@ await refreshFailure.add();
 assert.equal(refreshFailure.target,'/saved/models');
 assert.equal(refreshFailure.$('path').value,'','A saved folder is not reported as a failed save when the status refresh fails');
 assert.match(refreshFailure.$('status').textContent,/Folder saved.*Check setup/);
-console.log('One-click exact-file workflow install, shared-file deduplication, storage choice and readiness refresh passed.');
+
+const pickerHost=document.createElement('label');pickerHost.className='zc-model-control';
+pickerHost.innerHTML='<select id="picker-select"><option value="h3">MiniMax H3</option><option value="wan2">Wan Animate 2</option></select>';
+document.body.append(pickerHost);
+const wanFile={folder:'diffusion_models',filename:'wan2.safetensors',size_bytes:2000000000,installed:false,repo:'test/wan'};
+const h3ReadyFile={folder:'diffusion_models',filename:'h3.safetensors',size_bytes:1000000000,installed:true,repo:'test/h3'};
+const pickerPacks=[
+  {id:'h3_reference_core',name:'H3',remaining_bytes:0,files:[h3ReadyFile]},
+  {id:'h3_dmd_ref2va',name:'H3 DMD',remaining_bytes:0,files:[h3ReadyFile]},
+  {id:'wan_animate_2',name:'Wan Animate 2',remaining_bytes:2000000000,files:[wanFile]},
+];
+const pickerJobs=[];
+const pickerDownloads=new StudioModelDownloads(document.querySelector('#models'),async(path,body)=>{
+  if(path==='/model-downloads'&&!body)return {models:pickerPacks};
+  if(path==='/model-downloads'&&body){pickerJobs.push(body);return {id:'picker-job'};}
+  if(path==='/model-downloads/picker-job'){wanFile.installed=true;return {phase:'done',total_bytes:2000000000,done_bytes:2000000000};}
+  throw Error(path);
+},()=>{});
+pickerDownloads.setCatalogue(pickerPacks);
+const picker=pickerDownloads.attachPicker(pickerHost.querySelector('#picker-select'));
+picker.open();
+assert.equal(picker.menu.hidden,false,'Opening the model picker reveals the per-model menu');
+assert.ok(picker.menu.querySelector('[data-model-option="h3"] .zura-picker-ready-badge'),'Installed model shows Ready badge');
+const wanInstallBtn=picker.menu.querySelector('[data-install-model="wan2"]');
+assert.ok(wanInstallBtn,'Missing model in the picker menu shows an inline Install button next to the model');
+assert.match(wanInstallBtn.textContent,/Install · 2\.0 GB/);
+await picker.installOption('wan2');
+assert.equal(pickerJobs.length,1,'Clicking Install in the model picker starts the model download directly');
+assert.deepEqual(pickerJobs[0],{model_ids:['wan_animate_2'],file_keys:['diffusion_models/wan2.safetensors']});
+pickerDownloads.dispose();
+console.log('One-click exact-file workflow install, model-picker inline Install buttons, shared-file deduplication, storage choice and readiness refresh passed.');
+
+// Fixed-model workflows must not send their Install UI into a hidden video page.
+for(const [pageClass,composerClass]of [['zvfx-page','zvfx-composer'],['zalpha-page','zalpha-composer'],['zo-page','zo-composer'],['zh-page','zc-prompt-card'],['zpc-page','zc-prompt-card'],['zf-page','zc-prompt-card'],['zc-image-page','zc-image-composer']]){
+ const page=document.createElement('section');page.className=pageClass;page.innerHTML=`<div class="${composerClass}"><details class="models"></details></div>`;document.body.append(page);
+ const missing={folder:'vae',filename:'fixture.safetensors',installed:false,size_bytes:32};
+ const manager=new StudioModelDownloads(page.querySelector('details'),async()=>({models:[]}),()=>{});
+ manager.setCatalogue([{id:'ltx25_core',name:'Fixture',files:[missing]}]);manager.setContext({route:pageClass,files:[{...missing,ready:false}],missingNodes:[]});
+ assert.equal(manager.quick.parentElement,page.querySelector('.'+composerClass),pageClass+' keeps Install in its own composer');
+ assert.equal(manager.quick.querySelector('[data-quick-install]').disabled,false,pageClass+' offers the same direct Install action');
+ manager.dispose();page.remove();
+}

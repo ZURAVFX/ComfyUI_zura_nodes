@@ -40,8 +40,10 @@ export async function recoverOwnedSubmission(ui) {
   }finally{ui.polling=false;}
 }
 
-export async function submitOwnedGraph(ui, graph, config, previewMethod, extra) {
+export async function submitOwnedGraph(ui, graph, config, previewMethod, extra, {assertCurrent}={}) {
+  assertCurrent?.();
   const prepared=await prepareAEFrameGraph(ui,graph,config);graph=prepared.graph;config=prepared.config;
+  assertCurrent?.();
   if(ui.aeSessionEnded)throw Object.assign(new Error('This AE shot has ended'),{name:'AbortError'});
   const pending={requestId:crypto.randomUUID(),started:Date.now(),config,previewMethod,
     stages:Object.fromEntries(Object.entries(graph).map(([id,node])=>[id,node._meta?.title]).filter(([,title])=>title))};
@@ -51,6 +53,7 @@ export async function submitOwnedGraph(ui, graph, config, previewMethod, extra) 
   ui.$('progress-detail').textContent='Checking the ComfyUI queue…';
   ui.startPolling();
   try{
+    assertCurrent?.();
     const response=await ui.fetch('/prompt',{prompt:graph,client_id:ui.api.clientId,
       extra_data:{...extra,...(config.ae_frame_contract?{ae_frame_contract:config.ae_frame_contract}:{}),...(config.ae_intermediate_image?{ae_intermediate_image:config.ae_intermediate_image}:{}),preview_method:previewMethod,zura_studio_request:pending.requestId}});
     if(response.prompt_id)adoptOwnedSubmission(ui,pending,response.prompt_id);

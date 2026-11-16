@@ -6,7 +6,7 @@ import {buildLtxFrameVideoGraph,ltxFrameVideoAvailability,LTX_FRAME_VIDEO_CAPABI
 const h3={id:'h3',label:'MiniMax H3',fps:24,dimensionStep:32,...VIDEO_CANVAS_LIMITS,
   minFrames:22,maxFrames:362,frameStep:17,frameOffset:5,defaultFrames:73,defaultSteps:8,minSteps:4,maxSteps:40,
   supportsAudioReference:true,generatesAudio:true,precision:'INT8',
-  nodeTypes:['UNETLoader','CLIPLoader','VAELoader','LoraLoaderModelOnly','ModelAttentionBackend','MiniMaxH3ImageToVideo','MiniMaxH3AddGuide','LoadAudio','LoadImage','ImageScale','BasicGuider','BasicScheduler','KSamplerSelect','RandomNoise','SamplerCustomAdvanced','VAEDecode','VAEDecodeAudio','CreateVideo','SaveVideo']};
+  nodeTypes:['UNETLoader','CLIPLoader','VAELoader','LoraLoaderModelOnly','ModelAttentionBackend','MiniMaxH3ImageToVideo','MiniMaxH3AddGuide','LoadAudio','LoadImage','ImageScale','BasicGuider','BasicScheduler','KSamplerSelect','RandomNoise','SamplerCustomAdvanced','VAEDecode','VAEDecodeAudio','CreateVideo','ZuraSaveProRes4444']};
 export const ENDPOINT_RECIPES=[
   {...h3,build:buildFrameVideoGraph,availability:frameVideoAvailability,hint:'INT8 · Turbo 8-step'},
   {...WAN_FRAME_VIDEO_CAPABILITIES,build:buildWanFrameVideoGraph,availability:wanFrameVideoAvailability,hint:'FP8 · Lightx2v 4-step · Silent video'},

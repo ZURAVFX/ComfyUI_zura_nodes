@@ -52,7 +52,7 @@ class SubtitleCropTests(unittest.TestCase):
         # still receive the generated result. Held tail frames are discarded.
         original=np.full((72,72,3),.2,dtype=np.float32)
         selected=np.zeros((72,72),dtype=np.float32);selected[30,30]=1
-        plate={'source':{'kind':'sequence'},'mask':{'kind':'rectangle','width':72,'height':72,'count':2,'rect':[30,30,1,1]},
+        plate={'source':{'kind':'sequence','width':72,'height':72},'mask':{'kind':'rectangle','width':72,'height':72,'count':2,'rect':[30,30,1,1]},
                'padded':[64,64],'resized':[64,64],'rect':[4,4,64,64],'count':2,'start':0,'fps':25,
                'fps_rational':'25','space':'srgb_display','processing':'SDR (sRGB)','grow':0,'feather':0,
                'subtitle_full_crop':True,'subtitle_feather':4}

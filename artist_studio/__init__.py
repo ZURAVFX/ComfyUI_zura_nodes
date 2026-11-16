@@ -697,11 +697,13 @@ class GenjRestoreSoundtrack:
                else Fraction(str(clip_details.get('fps', 24))))
         if not 0 < fps <= 240:
             raise ValueError('The selected video frame rate is invalid.')
+        model_fps=fps
+        contract=None
         with av.open(str(generated)) as c:
             vs = c.streams.video[0]
             duration = float(vs.duration * vs.time_base) if vs.duration else float(c.duration / av.time_base)
             if ae_frame_contract:
-                from ..comfylink.frame_contract import validate_interval, normalise_frame_contract
+                from ..comfylink.frame_contract import validate_interval, normalise_frame_contract, contract_rate
                 contract=normalise_frame_contract(json.loads(ae_frame_contract))
                 validate_interval(contract,frames=clip_details['frames'],fps=fps,
                     width=output_width or vs.width,height=output_height or vs.height)
@@ -709,6 +711,7 @@ class GenjRestoreSoundtrack:
                 if generated_count < contract['frameCount']:
                     raise ValueError('The generated clip is shorter than the AE source. Missing frames cannot be repeated.')
                 target_frames,model_stride=contract['frameCount'],0
+                fps=contract_rate(contract)
         original_frames = clip_details["frames"]
         if type(target_frames) is not int or target_frames < 0 or (target_frames and not original_frames <= target_frames <= original_frames + 16):
             raise ValueError("The padded output must retain the selected clip and add at most sixteen held frames.")
@@ -717,13 +720,15 @@ class GenjRestoreSoundtrack:
         final_frames = (original_frames + (1 - original_frames) % model_stride) if model_stride else (target_frames or original_frames)
         target_duration = float(final_frames / fps) if target_frames or model_stride else clip_details["duration"]
         required_duration = float(original_frames / fps) if model_stride else target_duration
-        if duration + float(1 / fps) < required_duration:
+        if contract is None and duration + float(1 / fps) < required_duration:
             raise ValueError(f"Generated video is too short ({duration:.3f}s for {target_duration:.3f}s). The source soundtrack will not be shortened to hide this.")
         destination = root() / output_subfolder
         destination.mkdir(exist_ok=True)
-        existing = list(destination.glob(take_name + "_*.mp4"))
+        professional = output_subfolder == "final"
+        extension = ".mov" if professional else ".mp4"
+        existing = list(destination.glob(take_name + "_*" + extension))
         number = max([int(p.stem.rsplit("_", 1)[1]) for p in existing if p.stem.rsplit("_", 1)[1].isdigit()], default=0) + 1
-        path = destination / f"{take_name}_{number:05d}.mp4"
+        path = destination / f"{take_name}_{number:05d}{extension}"
         external = clip_details.get("audio_source")
         if external and digest_file(external) != clip_details["audio_hash"]:
             raise ValueError("The reference audio changed after review.")
@@ -736,7 +741,11 @@ class GenjRestoreSoundtrack:
             raise ValueError("The selected audio duration must be positive and finite.")
         extend_audio = bool(audio_codec_name) and (final_frames > original_frames or selected_audio_duration < target_duration - 1e-6)
         audio = ["-c:a", "copy"] if clip_details["full_source"] and not external and audio_codec_name == "aac" and not extend_audio else ["-c:a", "aac", "-b:a", "256k"]
-        if extend_audio:
+        if professional:audio=["-c:a","pcm_s24le"]
+        if contract is not None and fps!=model_fps:
+            from ..comfylink.studio_rate import tempo_filter
+            audio += ['-af',tempo_filter(fps/model_fps)+f',apad,atrim=duration={target_duration:.12f}']
+        elif extend_audio:
             # Do not play later source audio underneath the held final frames.
             audio += ["-af", f"atrim=duration={selected_audio_duration:.9f},asetpts=PTS-STARTPTS,apad"]
         # Model decoding can end up one frame short after timebase rounding.
@@ -744,6 +753,8 @@ class GenjRestoreSoundtrack:
         # one frame gives the selected soundtrack an exact frame-aligned end.
         vf = (f"fps={fps},trim=end_frame={original_frames},tpad=stop_mode=clone:stop={final_frames - original_frames + 1}"
               if model_stride else f"fps={fps},tpad=stop_mode=clone:stop=1")
+        if contract is not None:
+            vf=f"trim=end_frame={final_frames},setpts=N/({fps}*TB)"
         if output_width or output_height:
             if any(type(v) is not int or v < 2 or v > 16384 or v % 2 for v in (output_width, output_height)):
                 raise ValueError("Output width and height must be even numbers from 2 to 16384.")
@@ -752,9 +763,14 @@ class GenjRestoreSoundtrack:
             vf += f",scale={clip_details['export_width']}:{clip_details['export_height']}:flags=lanczos"
         ffmpeg("-i", generated, "-ss", offset, "-i", soundtrack, "-map", "0:v:0", "-map", "1:a:0?",
                "-t", target_duration, "-vf", vf, "-frames:v", final_frames,
-               "-c:v", "libx264", "-crf", 16, "-pix_fmt", "yuv420p", *audio, "-movflags", "+faststart", path)
+               *(["-r",str(fps),"-fps_mode","passthrough"] if contract is not None else []),
+               *(["-c:v","prores_ks","-profile:v","4","-pix_fmt","yuv444p10le","-tag:v","ap4h"] if professional else ["-c:v","libx264","-crf",16,"-pix_fmt","yuv420p"]), *audio, *(["-metadata","comment=Zura working RGB: srgb_display"] if professional else []), "-movflags", "+faststart+write_colr", path)
         preview = {"filename": path.name, "subfolder": "genj/" + output_subfolder,
-                   "type": "output", "format": "video/mp4"}
+                   "type": "output", "format": "video/quicktime" if professional else "video/mp4"}
+        if professional:
+            from .hdr_prores import make_sdr_preview
+            viewing=make_sdr_preview(path);preview["preview"]={"filename":viewing.name,"subfolder":preview["subfolder"],"type":"output"}
+            preview["colour"]={"encoding":"srgb_display","sceneLinear":False}
         return {"ui": {"gifs": [preview], "text": [f"Saved {path.name} with the selected soundtrack."]},
                 "result": (InputImpl.VideoFromFile(str(path)),)}
 
@@ -820,3 +836,7 @@ NODE_DISPLAY_NAME_MAPPINGS.update({
 WEB_DIRECTORY = "./web"
 from .studio import register
 register()
+
+from .character_mask import NODE_CLASS_MAPPINGS as CHARACTER_MASK_NODES, NODE_DISPLAY_NAME_MAPPINGS as CHARACTER_MASK_NAMES
+NODE_CLASS_MAPPINGS.update(CHARACTER_MASK_NODES)
+NODE_DISPLAY_NAME_MAPPINGS.update(CHARACTER_MASK_NAMES)

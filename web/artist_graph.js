@@ -90,7 +90,7 @@ export function expandStageSignals(prompt) {
 }
 
 function role(n) {
-  if(["GenjRestoreSoundtrack","GenjSaveReview","SaveImage","PreviewImage","SaveVideo","GenjRecordDraft","VHS_VideoCombine","GenjVHSVideoFromFilenames","ZuraWanSpeechSaveGuide","ZuraWanSavePreparationPart","ZuraWanMergePreparation","ZuraPaintoutUncrop"].includes(n.type))return "save";
+  if(["GenjRestoreSoundtrack","GenjSaveReview","SaveImage","PreviewImage","SaveVideo","ZuraSaveProRes4444","GenjRecordDraft","VHS_VideoCombine","GenjVHSVideoFromFilenames","ZuraWanSpeechSaveGuide","ZuraWanSavePreparationPart","ZuraWanMergePreparation","ZuraPaintoutUncrop"].includes(n.type))return "save";
   if(n.type?.startsWith("ZuraSpeech")||String(n.id).startsWith("zura_speech_"))return "speech";
   if(["LoadImage","LoadVideo","LoadAudio","GenjLoadReviewedShot","GenjApplyReferenceAudio","ZuraApplyBoundedReferenceAudio","VHS_LoadVideoFFmpegPath","VHS_LoadVideoPath","VHS_BatchManager","ZuraPaintoutCrop","ZuraPaintoutFullFrame","ZuraPaintoutAnchors"].includes(n.type)||n.type?.startsWith("Primitive"))return "inputs";
   return "process";

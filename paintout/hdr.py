@@ -185,6 +185,9 @@ class ZuraPaintoutHDRPrepare:
         if plate.get('processing') != 'SDR (sRGB)' or is_hdr(plate.get('space')):
             raise ValueError('SDR to HDR conversion expects an SDR paintout result.')
         source = describe(saved_sequence)
+        from .mask_exports import retained_mask_exports
+        mask_exports=retained_mask_exports(saved_sequence)
+
         count = plate['count']
         if source['count'] != count or (source['width'], source['height']) != (plate['source']['width'], plate['source']['height']):
             raise ValueError('The repaired sequence does not match the original plate raster and frame count.')
@@ -210,7 +213,7 @@ class ZuraPaintoutHDRPrepare:
         if length > count:
             guide[count:].copy_(guide[count-1:count].expand(length-count, -1, -1, -1))
         # Official 2.5 SDR-to-HDR conditioning uses ACEScct, never JPEG/CRF.
-        take = dict(plate=plate, width=source['width'], height=source['height'], count=count,
+        take = dict(plate=plate, mask_exports=mask_exports, width=source['width'], height=source['height'], count=count,
                     padded=[ph, pw], padded_count=length, sampling_mode=sampling_mode, tile_frames=window)
         # The official conversion schedule conditions high-rate sources at 60;
         # delivery retains the original rational clock in the untouched take.
@@ -266,7 +269,9 @@ class ZuraPaintoutHDRSave:
             progress(index+1)
         (target/'paintout.json').write_text(json.dumps(dict(pipeline='sdr_hdr', plate={k:v for k,v in plate.items() if not k.startswith('_')},
             notes='Official LTX SDR-to-HDR conversion after SDR repair. Full-frame generative conversion can change unmasked pixels. Original raster, frame count, rate and source audio restored.'), indent=2), encoding='utf-8')
-        return {'ui': {'text': [f"Saved {take['count']} HDR frames: {target}"], **delivery.finish()}, 'result': (str(target),)}
+        from .mask_exports import sequence_exports
+        exports=take.get('mask_exports',[])+sequence_exports(target,base)
+        return {'ui': {'text': [f"Saved {take['count']} HDR frames: {target}"],'zura_exports':exports, **delivery.finish()}, 'result': (str(target),)}
 
 
 NODE_CLASS_MAPPINGS = {c.__name__: c for c in (ZuraPaintoutColourCheck, ZuraPaintoutHDRResume, ZuraPaintoutHDRPrepare, ZuraPaintoutHDRSave)}

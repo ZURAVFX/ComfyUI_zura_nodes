@@ -1,0 +1,7 @@
+/* Image history and edit layers are separate: this is the selected result's stack. */
+#genj-studio .zi-image-layers{grid-area:auto;box-sizing:border-box;max-width:1200px;width:100%;margin:8px auto;padding:12px 16px;border:1px solid var(--gs-line);border-radius:8px;background:var(--gs-panel)}
+#genj-studio .zi-image-layers[hidden]{display:none!important}
+#genj-studio .zi-image-layers .zp-editor-paint-layers>ol{list-style:none;padding:0;margin:8px 0 0;display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:8px 16px}
+#genj-studio .zi-image-layers .zp-editor-paint-layers li{min-width:0;border-bottom:1px solid var(--gs-line)}
+#genj-studio .zc-image-scroll:has(>.zi-image-layers:not([hidden])){grid-template-rows:auto minmax(256px,1fr) auto;overflow:visible}
+#genj-studio .zc-image-scroll>.zi-image-layers{grid-row:3;grid-column:1}

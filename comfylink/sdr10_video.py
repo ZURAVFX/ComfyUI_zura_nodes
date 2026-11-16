@@ -90,7 +90,10 @@ def decode_sdr10(path):
                 if instant != first + Fraction(index, 1) / rate:
                     raise ValueError('Video frame timestamps are not the declared constant cadence')
                 if (frame.width,frame.height)!=(width,height): raise ValueError('Video frame raster changed')
-                rgb=frame.reformat(format='rgb48le',src_colorspace='ITU709',dst_colorspace='ITU709',
+                # PyAV 17's packed RGB48 swscale path corrupts 10-bit YUV colours.
+                # Planar GBR16 uses the same 16-bit swscale conversion; PyAV
+                # exposes its ndarray in RGB channel order.
+                rgb=frame.reformat(format='gbrp16le',src_colorspace='ITU709',dst_colorspace='ITU709',
                                    src_color_range='MPEG',dst_color_range='JPEG').to_ndarray()
                 if rgb.shape!=(height,width,3) or rgb.dtype!=np.uint16: raise ValueError('Unexpected video decode')
                 rgba=np.empty((height,width,4),dtype=np.float32)

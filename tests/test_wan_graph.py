@@ -76,6 +76,7 @@ class WanGraphTests(unittest.TestCase):
                        "prompt": "Keep the movement"},
             "audio": None,
         }
+        self.project["config"] = studio.clean_config(self.project["config"])
         self.project["approval"] = studio.prep_key(self.project)
         studio_dir = self.root / "genj" / "studio"
         studio_dir.mkdir(parents=True)

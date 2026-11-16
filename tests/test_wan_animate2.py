@@ -62,7 +62,7 @@ class WanAnimate2GraphTests(unittest.TestCase):
         self.assertEqual(node_inputs(graph, "animate2_sample")["cfg"], 1.0)
         self.assertEqual(node_inputs(graph, "animate2_pose_cache")["dtype"], "int8")
         self.assertEqual(node_inputs(graph, "animate2_pose_cache")["device"], "cpu")
-        self.assertEqual(by_type["SaveVideo"]["inputs"]["filename_prefix"], "zura_dev/wan_animate2")
+        self.assertEqual(by_type["ZuraSaveProRes4444"]["inputs"]["filename_prefix"], "zura_dev/wan_animate2")
 
     def test_connects_reference_and_raw_driver_frames_to_native_character_transfer(self):
         graph = self.build(frame_count=13)

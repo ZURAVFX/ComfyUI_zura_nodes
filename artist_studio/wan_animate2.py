@@ -95,6 +95,7 @@ NATIVE_NODE_INPUTS = {
     "VAEDecode": {"samples", "vae"},
     "CreateVideo": {"images", "fps"},
     "SaveVideo": {"video", "filename_prefix", "format"},
+    "ZuraSaveProRes4444": {"video", "filename_prefix"},
 }
 
 
@@ -275,8 +276,8 @@ def build_animate2_graph(
         graph, "animate2_video", "CreateVideo", images=decoded, fps=OUTPUT_FPS
     )
     _node(
-        graph, "animate2_save", "SaveVideo", video=video,
-        filename_prefix="zura_dev/wan_animate2", format="auto",
+        graph, "animate2_save", "ZuraSaveProRes4444", video=video,
+        filename_prefix="zura_dev/wan_animate2",
     )
     return graph
 
@@ -311,7 +312,7 @@ MODEL_FOLDERS = {"diffusion": "diffusion_models", "text_encoder": "text_encoders
                  "clip_vision": "clip_vision", "vae": "vae"}
 MODEL_DOWNLOADS = {key: ("https://huggingface.co/Comfy-Org/Wan-Animate-2/resolve/main/"
                          + MODEL_FOLDERS[key] + "/" + name) for key, name in MODEL_FILES.items()}
-STUDIO_NODES = {"GenjSelectClip", "GenjLTXFramePad", "GenjHoldToModelLength", "GetImageRangeFromBatch", "GenjRestoreSoundtrack"}
+STUDIO_NODES = {"ZuraSaveProRes4444", "GenjSelectClip", "GenjLTXFramePad", "GenjHoldToModelLength", "GetImageRangeFromBatch", "GenjRestoreSoundtrack"}
 
 
 def _studio_selection(project, check_asset):

@@ -39,7 +39,7 @@ view.show('original.mp4','finished.mp4',1);assert.equal(view.resultImage.hidden,
 const compareCss=fs.readFileSync(new URL('../web/studio.css',import.meta.url),'utf8');
 assert.match(compareCss,/\.gs-compare-stage :is\(video,img\)\{[^}]*width:100%;height:100%;object-fit:contain/,'Both comparison rasters fill the same viewport without cropping');
 assert.match(compareCss,/\.gs-compare-stage :is\(\[data-source\],\[data-source-image\]\)\{clip-path:inset\(0 0 0 var\(--gs-wipe\)\)\}/,'The wipe clips the source layer at the divider without rescaling it');
-const studio=fs.readFileSync(new URL('../web/studio.js',import.meta.url),'utf8');
+const studio=fs.readFileSync(new URL('../web/studio_core.js',import.meta.url),'utf8');
 assert.ok(studio.includes('this.compareProject!==p?.id'),'Project changes cannot retain another shot comparison');
 assert.ok(studio.includes('p?.selected_url || this.sourcePlayback()'),'Prefer exact trimmed source, with a playable proxy fallback');
 runStudioVMInContext(studio.replace(/^import .*;\r?\n/gm,'').replace(/^export /gm,'').split('app.registerExtension({')[0]+'\nthis.Studio=ArtistStudio;',context);

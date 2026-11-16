@@ -28,13 +28,20 @@ def normalise_frame_contract(value):
     if not isinstance(rate, dict) or any(type(rate.get(k)) is not int or rate[k] < 1 for k in ('numerator', 'denominator')):
         raise ValueError('The AE frame rate must be an exact positive rational.')
     fps = Fraction(rate['numerator'], rate['denominator'])
-    if not 1 <= fps <= 120:
-        raise ValueError('This Studio route supports AE frame rates from 1 to 120 fps.')
+    if not 1 <= fps <= 240:
+        raise ValueError('This Studio route supports AE frame rates from 1 to 240 fps.')
     if value['trimFrames'] != value['frameCount'] or value['modelFrames'] < value['frameCount']:
         raise ValueError('AE delivery must retain the exact source frame count.')
     if not isinstance(value.get('sessionId'), str) or not re.fullmatch('[a-f0-9]{32}', value['sessionId']):
         raise ValueError('The AE frame contract needs its active session ID.')
     result['frameRate'] = {'numerator': fps.numerator, 'denominator': fps.denominator}
+    if 'modelFrameRate' in value:
+        model=value['modelFrameRate']
+        if not isinstance(model,dict) or any(type(model.get(k)) is not int or model[k]<1 for k in ('numerator','denominator')):
+            raise ValueError('Choose an exact model frame rate.')
+        model_fps=Fraction(model['numerator'],model['denominator'])
+        if not 1<=model_fps<=240:raise ValueError('The model frame rate is unsupported.')
+        result['modelFrameRate']={'numerator':model_fps.numerator,'denominator':model_fps.denominator}
     return result
 
 
@@ -43,12 +50,17 @@ def contract_rate(contract):
     return Fraction(rate['numerator'], rate['denominator'])
 
 
+def contract_model_rate(contract):
+    rate=contract.get('modelFrameRate',contract['frameRate'])
+    return Fraction(rate['numerator'],rate['denominator'])
+
+
 def validate_interval(contract, *, frames, fps, width=None, height=None):
     """Verify the actual prepared source interval, never a display label."""
     if contract is None:
         return None
     contract = normalise_frame_contract(contract)
-    if frames != contract['frameCount'] or abs(float(fps) - float(contract_rate(contract))) > 1e-9:
+    if frames != contract['frameCount'] or abs(float(fps) - float(contract_model_rate(contract))) > 1e-9:
         raise ValueError('The prepared clip must match all AE source frames at their original frame rate. Prepare the complete AE interval again.')
     if width is not None and height is not None and (width, height) != (contract['width'], contract['height']):
         raise ValueError('This mode changes the source raster and cannot return a strictly matching AE layer. Use the AE source dimensions.')
@@ -163,9 +175,9 @@ def _known_h3_reference_decode(graph, source):
 # traversed through VIDEO to CreateVideo rather than treating VIDEO as IMAGE.
 IMAGE_SAVERS = {'SaveImage': 'images', 'PreviewImage': 'images',
     'VHS_VideoCombine': 'images', 'ZuraHDRPackageACEScct': 'images', 'ZuraHDRPackageACEScg': 'images',
-    'ZuraHDRPackage': 'images'}
+    'ZuraHDRPackage': 'images','ZuraHDRSaveProRes4444':'images'}
 NATIVE_SAVERS = {'ZuraPaintoutUncrop', 'ZuraAlphaVideoOutput'}
-VIDEO_SAVERS = {'SaveVideo', 'ZuraHDRSaveExactRate', 'GenjRestoreSoundtrack', 'GenjRecordDraft'}
+VIDEO_SAVERS = {'ZuraSaveProRes4444','SaveVideo', 'ZuraHDRSaveExactRate', 'GenjRestoreSoundtrack', 'GenjRecordDraft'}
 
 
 def intermediate_image_contract(parent, value):
@@ -299,8 +311,9 @@ def apply_frame_contract(graph, contract, descriptor):
     reachable = _ancestors(graph, roots)
     fps = contract_rate(contract)
     native_fps = descriptor.get('native_fps')
-    if native_fps is not None and Fraction(str(native_fps)) != fps:
-        raise ValueError('This native model route requires ' + str(native_fps) + ' fps and cannot preserve this AE source cadence.')
+    if native_fps is not None:
+        model_fps=Fraction(str(native_fps))
+        contract['modelFrameRate']={'numerator':model_fps.numerator,'denominator':model_fps.denominator}
     count = contract['frameCount']
     family = descriptor.get('family')
     model_frames = contract['modelFrames']
@@ -411,11 +424,17 @@ def apply_frame_contract(graph, contract, descriptor):
             inputs['fps_num'], inputs['fps_den'] = fps.numerator, fps.denominator
         if 'audio' in inputs and _link(inputs['audio'], result):
             audio_name = name + '_audio'
+            audio_source=inputs['audio']
+            speed=float(fps/contract_model_rate(contract))
+            if abs(speed-1)>1e-9:
+                rate_name=audio_name+'_rate'
+                result[rate_name]={'class_type':'ZuraComfyLinkRateAudio','inputs':{'audio':audio_source,'speed':speed}}
+                audio_source=[rate_name,0]
             result[audio_name] = {'class_type': 'TrimAudioDuration', 'inputs': {
-                'audio': inputs['audio'], 'start_index': 0.0, 'duration': float(count / fps)}}
+                'audio': audio_source, 'start_index': 0.0, 'duration': float(count / fps)}}
             inputs['audio'] = [audio_name, 0]
     for identity in roots:
-        if result[identity].get('class_type') == 'ZuraHDRSaveExactRate':
+        if result[identity].get('class_type') in ('ZuraHDRSaveExactRate','ZuraHDRSaveProRes4444'):
             result[identity]['inputs']['fps'] = float(fps)
     return result
 
@@ -441,6 +460,12 @@ def prepare_frame_contract_graph(graph, contract, mode, *, output_nodes=None):
         'zura_hdr_save_video', 'save_alpha', 'save_matte', 'save_sequence')
     roots = output_nodes or [key for key in canonical_roots if key in graph and
         graph[key].get('class_type') in set(IMAGE_SAVERS) | VIDEO_SAVERS | NATIVE_SAVERS]
+    # The pinned Character Replacement recipe uses numeric upstream IDs.
+    if (output_nodes is None and graph.get('807',{}).get('class_type')=='H3CharacterSwapAssemble'
+            and graph.get('808',{}).get('class_type')=='CreateVideo'
+            and graph.get('809',{}).get('class_type')=='SaveVideo'
+            and graph['809']['inputs'].get('video')==['808',0]):
+        roots=['809']
     kinds = {node.get('class_type') for node in graph.values()}
     family = 'ltx' if kinds & {'EmptyLTXVLatentVideo', 'LTXDirector'} else 'wan' if kinds & {'WanFirstLastFrameToVideo', 'WanImageToVideo'} else 'native'
     descriptor = {'family': family, 'output_nodes': roots,

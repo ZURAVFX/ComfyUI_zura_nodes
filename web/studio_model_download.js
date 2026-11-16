@@ -2,7 +2,7 @@ import {groupMissingNodes} from './studio_node_setup.js';
 import {ModelStorage} from './studio_model_storage.js';
 import {ModelAccess,importModelFile} from './studio_model_access.js';
 // Model packages are allowlisted by the backend. Fetching the list never starts a download.
-const PACKAGE_IDS=['panorama_hdri','ltx25_camera','panorama_geometry','openjutsu_h3','sam31','fasth3_draft','h3_reference_core','wan_animate_2','wan21_relight','wan22_animate_core','wan22_pose','wan22_style','wan22_first_last','h3_birefnet','h3_head_acceleration','h3_head_adapters','h3_taomate','h3_dmd_ref2va','h3_int8_vae','h3_control','h3_crossview','h3_first_last','h3_ripple','ltx_ripple','ltx_alpha','ltx25_core','ltx25_full_vae','ltx25_refine','ltx25_sdr_hdr','ltx25_text_encoder','ltx25_text_int8','ltx25_clean_plate','ltx25_outpaint','ltx25_in_outpaint','ltx_control','flux2_klein_start','flux2_klein_9b','flux2_klein_9b_bf16','flux3_klein','flux3_klein_bf16','zimage_turbo','qwen2511','qwen21','flux2_dev','ph3_image_edit'];
+const PACKAGE_IDS=['ltx_paint_vfx','panorama_hdri','ltx25_camera','panorama_geometry','openjutsu_h3','sam31','fasth3_draft','h3_reference_core','wan_animate_2','wan21_relight','wan22_animate_core','wan22_pose','wan22_style','wan22_first_last','h3_birefnet','h3_head_acceleration','h3_head_adapters','h3_taomate','h3_dmd_ref2va','h3_int8_vae','h3_control','h3_crossview','h3_first_last','h3_ripple','ltx_ripple','ltx_alpha','ltx25_core','ltx25_full_vae','ltx25_refine','ltx25_sdr_hdr','ltx25_text_encoder','ltx25_text_int8','ltx25_clean_plate','ltx25_outpaint','ltx25_in_outpaint','ltx_control','flux2_klein_start','flux2_klein_9b','flux2_klein_9b_bf16','flux3_klein','flux3_klein_bf16','zimage_turbo','qwen2511','qwen21','flux2_dev','ph3_image_edit'];
 const ROUTE_NAMES={panorama:'Change camera angle',openjutsu:'OpenJutsu character replacement',wan2:'Wan Animate 2',wan:'Wan 2.2 character replacement',wan21_relight:'Wan 2.1 relight',h3_camera:'H3 camera angle',h3_head_swap:'H3 head swap',h3_viewport:'H3 viewport to final',h3:'MiniMax H3',local:'LTX 2.5',local_scene:'LTX 2.5 whole scene',h3_first_last:'H3 first & last frame',ltx_first_last:'LTX first & last frame',wan_first_last:'Wan first & last frame',h3_reference:'H3 reference video',ltx_outpaint_hdr_long:'LTX long HDR frame extension',ltx_outpaint_hdr:'LTX HDR frame extension',ltx_outpaint_expand:'LTX frame extension',ltx_outpaint_black:'LTX black-area fill',ltx_outpaint_long:'LTX long frame extension',paintout_targeted:'Targeted paintout',paintout_full:'Full-scene clean plate',hdr_sdr:'SDR to HDR',hdr_native:'HDR to HDR',ltx_hdr_endpoints:'LTX native HDR first and last frame'};
 
 const MANUAL_SOURCES={
@@ -13,7 +13,55 @@ const MANUAL_SOURCES={
   'minimax_h3_dmd_ref2va_8step_turbo_pruned.safetensors':{url:'https://huggingface.co/RunningHubAI/rh-minimax-h3-dmd-ref2va-8step-turbo-pruned.safetensors-lora',note:'The publisher does not state a licence. Review its terms before use.'},
 };
 const gb=n=>`${(Number(n||0)/1e9).toFixed(2)} GB`;
+const shortGb=n=>{const v=Number(n||0);return v>=1e9?`${(v/1e9).toFixed(1)} GB`:v>=1e6?`${Math.ceil(v/1e6)} MB`:'';};
 const fileKey=file=>`${file.folder||''}/${file.filename||''}`.replaceAll('\\','/').toLowerCase();
+const leafKey=file=>String(file?.filename||file||'').replaceAll('\\','/').split('/').pop().toLowerCase();
+const downloadSvg='<svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 2.5v7.5m-3-3 3 3 3-3M3 13h10"/></svg>';
+
+export const MODEL_OPTION_PACKAGES={
+  local:['ltx25_core','ltx25_text_int8'],
+  local_scene:['ltx25_core','ltx25_text_int8'],
+  local_viewport:['ltx25_core','ltx25_text_int8','ltx_control'],
+  ltx:['ltx25_core','ltx25_text_int8'],
+  ltx_first_last:['ltx25_core','ltx25_text_int8'],
+  ltx_director:['ltx25_core','ltx25_text_int8','ltx_control'],
+  ltx_ripple:['ltx_ripple'],
+  'relight-ltx':['ltx_ripple'],
+  h3:['h3_reference_core','h3_dmd_ref2va'],
+  openjutsu:['openjutsu_h3'],
+  h3_viewport:['h3_reference_core','h3_dmd_ref2va','h3_control'],
+  h3_camera:['h3_reference_core','h3_dmd_ref2va','h3_crossview','flux3_klein'],
+  h3_head_swap:['h3_reference_core','h3_control','h3_birefnet','h3_head_acceleration','h3_head_adapters','h3_taomate'],
+  h3_first_last:['h3_first_last','h3_dmd_ref2va'],
+  h3_director:['h3_reference_core','h3_dmd_ref2va'],
+  h3_reference:['h3_reference_core','h3_dmd_ref2va'],
+  ref2va:['h3_reference_core','h3_dmd_ref2va'],
+  viggle:['h3_reference_core'],
+  fasth3_draft:['fasth3_draft'],
+  h3_ripple:['h3_ripple'],
+  'relight-h3':['h3_ripple'],
+  wan:['wan22_animate_core','wan22_pose','wan22_style','sam31'],
+  wan_first_last:['wan22_first_last'],
+  wan2:['wan_animate_2','sam31'],
+  wan21:['wan21_relight'],
+  wan21_relight:['wan21_relight'],
+  flux2:['flux2_klein_9b'],
+  flux2bf16:['flux2_klein_9b_bf16'],
+  klein9b:['flux2_klein_9b'],
+  klein9b_start:['flux2_klein_start'],
+  klein9bbf16:['flux2_klein_9b_bf16'],
+  flux3:['flux3_klein'],
+  flux3bf16:['flux3_klein_bf16'],
+  flux3edit:['flux3_klein'],
+  flux3editbf16:['flux3_klein_bf16'],
+  zimage:['zimage_turbo'],
+  qwen2511:['qwen2511'],
+  qwen21:['qwen21'],
+  qwen21edit:['qwen21'],
+  flux2devedit:['flux2_dev'],
+  ph3:['ph3_image_edit'],
+  ph3edit:['ph3_image_edit'],
+};
 ROUTE_NAMES.image='Image generation';
 ROUTE_NAMES.ltx_director='LTX 2.5 · Director';
 ROUTE_NAMES.h3_director='MiniMax H3 · Director';
@@ -21,10 +69,12 @@ ROUTE_NAMES.ltx_performance_hdr='LTX performance + HDR delivery';
 ROUTE_NAMES.h3_ripple='H3 Ripple';
 ROUTE_NAMES.ltx_ripple='LTX Ripple';
 ROUTE_NAMES.ltx_alpha='Extract alpha';
+ROUTE_NAMES.ltx_paint_vfx='Paint VFX';
+ROUTE_NAMES.paint_vfx='Paint VFX';
 
 export class StudioModelDownloads {
   constructor(panel, request, onInstalled) {
-    this.panel=panel;this.request=request;this.onInstalled=onInstalled;this.packages=[];this.job=null;this.closed=false;this.context=null;this.uncertain=false;this.starting=false;
+    this.panel=panel;this.request=request;this.onInstalled=onInstalled;this.packages=[];this.job=null;this.closed=false;this.context=null;this.uncertain=false;this.starting=false;this.pickers=new Set();
     const floating=panel.classList.contains('zc-tool-popup');panel.classList.add('gs-model-downloads');
     panel.innerHTML=`<summary>${floating?'Models':'Download models'}</summary><div class="gs-advanced-body${floating?' zc-tool-panel':''}"><label>Model package <select data-model-package aria-label="Model package"></select></label><div data-model-files></div><div data-model-actions></div><p data-model-progress role="status" aria-live="polite"></p></div>`;
     this.select=panel.querySelector('[data-model-package]');this.files=panel.querySelector('[data-model-files]');this.actions=panel.querySelector('[data-model-actions]');this.progress=panel.querySelector('[data-model-progress]');
@@ -88,7 +138,7 @@ export class StudioModelDownloads {
   mountQuick(host){
     if(!host)return;
     if(!this.quick){
-      this.quick=this.el('section','');this.quick.className='gs-model-quick';this.quick.setAttribute('aria-label','Workflow model setup');
+      this.quick=this.el('section','');this.quick.className='gs-model-quick';this.quick.hidden=true;this.quick.setAttribute('aria-label','Workflow model setup');
       this.quick.innerHTML='<div class="gs-model-quick-copy"><strong data-quick-title></strong><small data-quick-size></small></div><button type="button" data-quick-install></button><button type="button" data-quick-details>Setup details</button><button type="button" data-quick-refresh>Check setup</button><button type="button" data-quick-cancel hidden>Cancel install</button><progress hidden aria-label="Model installation progress"></progress><p data-quick-status role="status" aria-live="polite"></p>';
       this.quick.querySelector('[data-quick-install]').onclick=()=>this.workflowPlan().files.length?this.startWorkflow():this.onInstalled?.();
       this.quick.querySelector('[data-quick-details]').onclick=()=>{for(let parent=this.panel;parent;parent=parent.parentElement)if(parent.tagName==='DETAILS')parent.open=true;this.select.value='__workflow__';this.render();};
@@ -100,7 +150,7 @@ export class StudioModelDownloads {
     if(this.quick.parentNode!==host)host.prepend(this.quick);
   }
   renderQuick(){
-    if(!this.quick){const owner=this.panel.closest('.zf-page,.zo-page,.zh-page,.zpc-page')||this.panel.closest('#genj-studio')?.querySelector('.gs-workspace');this.mountQuick(owner?.querySelector('.zc-prompt-card,.zo-composer,.gs-composer')||owner);}
+    if(!this.quick){const owner=this.panel.closest('.zf-page,.zo-page,.zh-page,.zpc-page,.zvfx-page,.zalpha-page,.zc-image-page')||this.panel.closest('#genj-studio')?.querySelector('.gs-workspace');this.mountQuick(owner?.querySelector('.zc-prompt-card,.zo-composer,.gs-composer,.zvfx-composer,.zalpha-composer,.zc-image-composer')||owner);}
     if(!this.quick)return;
     const plan=this.workflowPlan(),missing=this.context?.files?.some(f=>f.ready===false),nodes=this.context?.missingNodes?.length||0;
     this.quick.hidden=!this.job&&!this.starting&&!missing&&!nodes;
@@ -116,8 +166,57 @@ export class StudioModelDownloads {
     this.quickAccess.hidden=!this.accessFailure&&!plan.files.some(file=>file.gated);
     this.quick.querySelector('[data-quick-status]').textContent=this.progress.textContent;
     const bar=this.quick.querySelector('progress');bar.hidden=!this.job;if(this.downloadTotal){bar.max=this.downloadTotal;bar.value=this.downloadDone||0;}else bar.removeAttribute('value');
+    this.syncPickers();
   }
-  showAccess(){for(let parent=this.panel;parent;parent=parent.parentElement)if(parent.tagName==='DETAILS')parent.open=true;this.access.root.open=true;void this.access.load();}
+  setCatalogue(models){
+    if(!Array.isArray(models))return;
+    this.packages=models.filter(p=>PACKAGE_IDS.includes(p.id));
+    if(this.missingContext)this.applyMissingContext();
+    this.syncPickers();
+  }
+  planForOption(optionKey,{statusFiles,readyOverride,provider}={}){
+    if(provider||['seedance','chatgpt','gemini'].includes(optionKey))return {provider:true,loaded:true,ready:true,packs:[],files:[],keys:[],bytes:0,blocked:false,gated:false};
+    const ids=Array.isArray(optionKey)?optionKey:(MODEL_OPTION_PACKAGES[optionKey]||[optionKey]);
+    const packs=ids.map(id=>this.packages.find(p=>p.id===id&&!p.error)).filter(Boolean);
+    const statusMap=new Map();
+    if(Array.isArray(statusFiles)){
+      for(const sf of statusFiles)if(sf&&sf.filename)statusMap.set(leafKey(sf),sf.ready===true);
+      const missingLeaves=new Set(statusFiles.filter(sf=>sf&&sf.ready===false).map(leafKey));
+      for(const pack of this.packages){
+        if(!pack.error&&!packs.includes(pack)&&(pack.files||[]).some(f=>missingLeaves.has(leafKey(f))))packs.push(pack);
+      }
+    }
+    const filesMap=new Map(),activePacks=[];
+    for(const pack of packs){
+      let used=false;
+      for(const file of pack.files||[]){
+        const key=fileKey(file),leaf=leafKey(file);
+        const alreadyReady=file.installed===true||statusMap.get(leaf)===true;
+        if(!alreadyReady&&!filesMap.has(key)){filesMap.set(key,file);used=true;}
+      }
+      if(used)activePacks.push(pack);
+    }
+    const files=readyOverride===true?[]:[...filesMap.values()];
+    const blocked=files.some(f=>f.incomplete);
+    const loaded=this.packages.length>0||readyOverride===true;
+    const ready=readyOverride===true||(loaded&&packs.length>0&&files.length===0&&!blocked);
+    return {loaded,ready,packs:activePacks,files,keys:files.map(fileKey),bytes:files.reduce((sum,f)=>sum+Number(f.size_bytes||0),0),blocked,gated:files.some(f=>f.gated)};
+  }
+  async installOption(optionKey,opts={}){
+    if(!this.packages.length&&!this.loadingCatalogue)await this.load();
+    const plan=this.planForOption(optionKey,opts);
+    if(!plan.files.length||plan.blocked)return;
+    return this.start({model_ids:plan.packs.map(p=>p.id),file_keys:plan.keys});
+  }
+  attachPicker(select,options={}){
+    if(!select)return null;
+    for(const existing of this.pickers)if(existing.select===select)return existing;
+    const picker=new StudioModelPicker(this,select,options);
+    this.pickers.add(picker);
+    return picker;
+  }
+  syncPickers(){for(const picker of this.pickers)picker.sync();}
+  showAccess(){this.panel.hidden=false;for(let parent=this.panel;parent;parent=parent.parentElement){parent.hidden=false;if(parent.tagName==='DETAILS')parent.open=true;}this.access.root.open=true;void this.access.load();}
   browserActions(pack,file){
     if(file.installed||!file.browser_url||!file.gated&&!this.accessFailure)return null;
     const row=this.el('div','');row.className='zura-browser-model-actions';row.append(this.link('Download in browser',file.browser_url));
@@ -189,9 +288,11 @@ export class StudioModelDownloads {
     const intent={};this.startIntent=intent;this.retryRequest=id;this.accessFailure=null;this.closed=false;this.starting=true;this.render();
     const ids=typeof id==='object'?id.model_ids:[id],keys=typeof id==='object'?id.file_keys:null;
     const selected=this.packages.filter(pack=>ids?.includes(pack.id)).flatMap(pack=>pack.files).filter(file=>!keys||keys.includes(fileKey(file)));
-    const allowed=await this.access.check(selected);
+    const popup=this.access.reservePopup(selected);
+    const allowed=await this.access.check(selected,{interactive:true,popup});
     if(this.startIntent!==intent){this.starting=false;this.render();return;}
-    if(!allowed){this.starting=false;this.render();for(let parent=this.panel;parent;parent=parent.parentElement)if(parent.tagName==='DETAILS')parent.open=true;this.access.root.open=true;return;}
+    if(!allowed){this.starting=false;this.render();this.panel.hidden=false;for(let parent=this.panel;parent;parent=parent.parentElement){parent.hidden=false;if(parent.tagName==='DETAILS')parent.open=true;}this.access.root.open=true;return;}
+    if(this.access?.root)this.access.root.open=false;
     const token=this.token?.value.trim();if(this.token)this.token.value='';
     try{this.progress.textContent='Starting download…';const result=await this.request('/model-downloads',{...(typeof id==='object'?id:{model_id:id}),...(token?{token}:{})});if(!result.id)throw new Error('Could not confirm the download started. Refresh setup before retrying.');this.job=result.id;this.starting=false;this.select.disabled=true;this.render();await this.poll();
     }catch(e){this.starting=false;this.job=null;this.uncertain=true;this.select.disabled=false;this.progress.textContent='Checking whether the download started…';this.render();await this.load();if(!this.job&&!this.uncertain)this.progress.textContent=e.message||'The download did not start. Try again.';}
@@ -218,6 +319,224 @@ export class StudioModelDownloads {
     finally{this.polling=false;}
   }
   resume(){this.closed=false;if(this.job)void this.poll();}
-  close(){this.closed=true;this.panel.open=false;}
-  dispose(){this.access.dispose();this.close();this.panel.ontoggle=null;}
+  close(){this.closed=true;this.panel.open=false;for(const picker of this.pickers)picker.close();}
+  dispose(){for(const picker of this.pickers)picker.dispose();this.pickers.clear();this.access.dispose();this.close();this.panel.ontoggle=null;}
+}
+
+export class StudioModelPicker {
+  constructor(downloads,select,options={}){
+    this.downloads=downloads;this.select=select;this.options=options;
+    this.doc=select.ownerDocument||globalThis.document;this.win=this.doc.defaultView||globalThis.window;
+    this.host=select.closest('.zc-model-control,.zdir-model,label')||select.parentElement;
+    if(!this.host)return;
+    this.host.classList.add('zura-has-model-picker');
+    this.inlineBtn=this.doc.createElement('span');
+    this.inlineBtn.className='zura-inline-install-btn';
+    this.inlineBtn.setAttribute('role','button');
+    this.inlineBtn.setAttribute('tabindex','0');
+    this.inlineBtn.dataset.inlineInstall='';
+    this.inlineBtn.hidden=true;
+    this.menu=this.doc.createElement('div');
+    this.menu.className='zura-model-picker-menu zc-tool-panel zc-workflow-menu';
+    this.menu.setAttribute('role','menu');
+    this.menu.setAttribute('aria-label',select.getAttribute('aria-label')||'Choose model');
+    this.menu.hidden=true;
+    this.host.append(this.inlineBtn,this.menu);
+    this.onHostClick=event=>{
+      if(this.menu.contains(event.target))return;
+      if(this.inlineBtn.contains(event.target)){
+        event.preventDefault();event.stopPropagation();
+        void this.installOption(this.select.value);
+        return;
+      }
+      if(this.select.disabled||this.select.hidden)return;
+      event.preventDefault();event.stopPropagation();
+      this.toggle();
+    };
+    this.onMenuClick=event=>{
+      event.stopPropagation();
+      const install=event.target.closest('[data-install-model]');
+      if(install){
+        event.preventDefault();
+        const val=install.dataset.installModel;
+        this.pickOption(val,false);
+        void this.installOption(val);
+        return;
+      }
+      const cancel=event.target.closest('[data-cancel-model]');
+      if(cancel){
+        event.preventDefault();
+        const dl=this.activeDownloads();
+        if(dl?.job)void dl.request(`/model-downloads/${dl.job}/cancel`,{}).catch(()=>{});
+        return;
+      }
+      const choice=event.target.closest('[data-pick-model]');
+      if(choice&&choice.getAttribute('aria-disabled')!=='true'){
+        event.preventDefault();
+        this.pickOption(choice.dataset.pickModel,true);
+      }
+    };
+    this.onOutside=event=>{
+      if(this.menu.hidden)return;
+      const path=event.composedPath?.()||[event.target];
+      if(!path.some(node=>node===this.host||(node?.nodeType&&this.host.contains(node))))this.close();
+    };
+    this.onKeyDown=event=>{
+      const target=event.target;
+      if((event.key==='Enter'||event.key===' ')&&this.host.contains(target)&&target.matches?.('[role=button],[data-pick-model]')){event.preventDefault();event.stopPropagation();target.click();return;}
+      if(target===this.select&&['Enter',' ','ArrowDown'].includes(event.key)){event.preventDefault();event.stopPropagation();this.open();this.menu.querySelector('[data-pick-model]:not([aria-disabled=true])')?.focus();return;}
+      if(!this.menu.hidden&&this.menu.contains(target)&&['ArrowDown','ArrowUp','Home','End'].includes(event.key)){event.preventDefault();event.stopPropagation();const items=[...this.menu.querySelectorAll('[data-pick-model]:not([aria-disabled=true])')],index=items.indexOf(target),next=event.key==='Home'?0:event.key==='End'?items.length-1:(index+(event.key==='ArrowUp'?-1:1)+items.length)%items.length;items[next]?.focus();return;}
+      if(event.key==='Escape'&&!this.menu.hidden){
+        this.close();this.select.focus();event.preventDefault();event.stopPropagation();
+      }
+    };
+    this.host.addEventListener('click',this.onHostClick);
+    this.menu.addEventListener('click',this.onMenuClick);
+    this.doc.addEventListener('pointerdown',this.onOutside,true);
+    this.doc.addEventListener('keydown',this.onKeyDown,true);
+    this.sync();
+  }
+  activeDownloads(){return this.options.getDownloads?this.options.getDownloads():this.downloads;}
+  resolve(value){
+    const raw=this.options.resolveOption?this.options.resolveOption(value):{key:value};
+    return typeof raw==='string'?{key:raw}:(raw||{key:value});
+  }
+  pickOption(value,closeMenu=true){
+    if(this.select.disabled)return;
+    if(this.select.value!==value){
+      this.select.value=value;
+      const Evt=this.win?.Event||globalThis.Event;
+      if(Evt)this.select.dispatchEvent(new Evt('change',{bubbles:true}));
+      else this.select.onchange?.({target:this.select});
+    }
+    if(closeMenu)this.close();
+    else this.sync();
+  }
+  async installOption(value){
+    const dl=this.activeDownloads();if(!dl)return;
+    const info=this.resolve(value);
+    if(typeof info.customInstall==='function'){await info.customInstall();this.sync();return;}
+    await dl.installOption(info.key,info);
+    this.sync();
+  }
+  toggle(){if(this.menu.hidden)this.open();else this.close();}
+  open(){
+    if(this.select.disabled)return;
+    const dl=this.activeDownloads();
+    if(dl&&!dl.packages.length&&!dl.loadingCatalogue)void dl.load().then(()=>this.sync());
+    this.menu.hidden=false;
+    this.host.classList.add('is-picker-open');
+    this.sync();
+    this.position();
+  }
+  close(){
+    if(!this.menu)return;
+    this.menu.hidden=true;
+    this.host?.classList.remove('is-picker-open');
+  }
+  position(){
+    if(this.menu.hidden||!this.host?.getBoundingClientRect||!this.win?.innerWidth)return;
+    const anchor=this.host.getBoundingClientRect();
+    const width=Math.min(316,this.win.innerWidth-24);
+    const left=Math.max(12,Math.min(anchor.left,this.win.innerWidth-width-12));
+    const spaceAbove=anchor.top-16,spaceBelow=this.win.innerHeight-anchor.bottom-16;
+    const preferAbove=spaceBelow<220&&spaceAbove>spaceBelow;
+    const maxH=Math.max(140,Math.min(340,preferAbove?spaceAbove:spaceBelow));
+    Object.assign(this.menu.style,{
+      position:'fixed',
+      inset:'auto',
+      left:`${left}px`,
+      width:`${width}px`,
+      maxHeight:`${maxH}px`,
+      top:preferAbove?'auto':`${anchor.bottom+6}px`,
+      bottom:preferAbove?`${this.win.innerHeight-anchor.top+6}px`:'auto',
+      zIndex:'400',
+    });
+  }
+  sync(){
+    if(!this.host||!this.select)return;
+    const dl=this.activeDownloads();
+    const activeJob=!!(dl?.job||dl?.starting);
+    const pct=dl?.downloadTotal?Math.floor((dl.downloadDone||0)/dl.downloadTotal*100):0;
+    const selectedVal=this.select.value;
+    const selectedInfo=selectedVal?this.resolve(selectedVal):null;
+    const selectedPlan=selectedInfo&&dl?dl.planForOption(selectedInfo.key,selectedInfo):null;
+    if(activeJob){
+      this.inlineBtn.hidden=false;
+      this.inlineBtn.className='zura-inline-install-btn is-installing';
+      this.inlineBtn.textContent=pct>0?`Installing ${pct}%`:'Installing…';
+      this.inlineBtn.title='Model download in progress';
+    }else if(selectedPlan&&!selectedPlan.ready&&(selectedPlan.files.length>0||typeof selectedInfo.customInstall==='function')){
+      this.inlineBtn.hidden=false;
+      this.inlineBtn.className='zura-inline-install-btn';
+      this.inlineBtn.innerHTML=`${downloadSvg}<span>Install${selectedPlan.bytes?' · '+shortGb(selectedPlan.bytes):''}</span>`;
+      this.inlineBtn.title=`Install missing models for the selected option (${gb(selectedPlan.bytes)})`;
+    }else{
+      this.inlineBtn.hidden=true;
+    }
+    if(this.menu.hidden)return;
+    this.menu.replaceChildren();
+    const options=[...this.select.querySelectorAll('option')].filter(o=>!o.hidden);
+    for(const opt of options){
+      const val=opt.value;if(!val)continue;
+      const cleanLabel=String(opt.textContent||val).replace(/\s*·\s*Setup needed\s*$/i,'').trim();
+      const info=this.resolve(val);
+      const plan=dl?dl.planForOption(info.key,info):{loaded:false,ready:false,files:[],bytes:0};
+      const row=this.doc.createElement('div');
+      row.className='zura-model-picker-row';
+      row.dataset.modelOption=val;
+      const choice=this.doc.createElement('div');
+      choice.className='zura-model-picker-choice';
+      choice.setAttribute('role','menuitemradio');
+      choice.setAttribute('tabindex',opt.disabled?'-1':'0');
+      choice.setAttribute('aria-checked',String(val===selectedVal));
+      if(opt.disabled)choice.setAttribute('aria-disabled','true');
+      choice.dataset.pickModel=val;
+      const nameSpan=this.doc.createElement('span');
+      nameSpan.className='zura-model-picker-label';
+      nameSpan.textContent=cleanLabel;
+      const dot=this.doc.createElement('span');
+      dot.className='zura-model-picker-dot';
+      dot.setAttribute('aria-hidden','true');
+      choice.append(dot,nameSpan);
+      row.append(choice);
+      const actionWrap=this.doc.createElement('div');
+      actionWrap.className='zura-model-picker-action';
+      if(activeJob&&val===selectedVal){
+        const cancel=this.doc.createElement('span');
+        cancel.className='zura-picker-install-btn is-installing';
+        cancel.setAttribute('role','button');
+        cancel.setAttribute('tabindex','0');
+        cancel.dataset.cancelModel=val;
+        cancel.textContent=pct>0?`Installing ${pct}%`:'Installing…';
+        cancel.title='Click to cancel download';
+        actionWrap.append(cancel);
+      }else if(!plan.ready&&(plan.files.length>0||typeof info.customInstall==='function')){
+        const btn=this.doc.createElement('span');
+        btn.className='zura-picker-install-btn';
+        btn.setAttribute('role','button');
+        btn.setAttribute('tabindex','0');
+        btn.dataset.installModel=val;
+        const sizeText=shortGb(plan.bytes);
+        btn.innerHTML=`${downloadSvg}<span>Install${sizeText?' · '+sizeText:''}</span>`;
+        btn.title=`Install missing ${cleanLabel} models (${gb(plan.bytes)}) to ComfyUI's default models folder`;
+        actionWrap.append(btn);
+      }else if(plan.ready){
+        const ready=this.doc.createElement('span');
+        ready.className='zura-picker-ready-badge';
+        ready.textContent=plan.provider?'Account':'Ready';
+        actionWrap.append(ready);
+      }
+      row.append(actionWrap);
+      this.menu.append(row);
+    }
+  }
+  dispose(){
+    this.close();
+    this.host?.removeEventListener('click',this.onHostClick);
+    this.doc?.removeEventListener('pointerdown',this.onOutside,true);
+    this.doc?.removeEventListener('keydown',this.onKeyDown,true);
+    this.inlineBtn?.remove();
+    this.menu?.remove();
+  }
 }

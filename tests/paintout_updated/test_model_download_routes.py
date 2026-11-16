@@ -142,7 +142,7 @@ class ModelDownloadRouteTests(unittest.IsolatedAsyncioTestCase):
         status = await self.wait_for_job(identity)
         self.assertEqual(status['phase'], 'done', status)
         self.assertEqual(status['done_bytes'], len(self.data))
-        self.assertEqual((self.root / 'route-fixture.safetensors').read_bytes(), self.data)
+        self.assertEqual((self.root / 'vae' / 'route-fixture.safetensors').read_bytes(), self.data)
         self.assertNotIn('vae', self.folder_paths.filename_list_cache)
         catalogue = await (await self.client.get(self.base)).json()
         self.assertTrue(catalogue['models'][0]['files'][0]['installed'])
@@ -162,7 +162,7 @@ class ModelDownloadRouteTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(await response.json(), {'ok': True})
         status = await self.wait_for_job(identity)
         self.assertEqual(status['phase'], 'cancelled', status)
-        self.assertFalse((self.root / 'route-fixture.safetensors').exists())
+        self.assertFalse((self.root / 'vae' / 'route-fixture.safetensors').exists())
         self.assertEqual(len(self.weight_requests), 1)
 
     async def test_invalid_json_catalogue_token_and_unknown_job(self):
@@ -207,7 +207,7 @@ class ModelDownloadRouteTests(unittest.IsolatedAsyncioTestCase):
                 if status['phase'] in ('done','failed','cancelled'):break
                 await asyncio.sleep(.01)
             self.assertEqual(status['phase'],'done',status)
-            self.assertEqual((self.root/payload['filename']).read_bytes(),self.data)
+            self.assertEqual((self.root/'vae'/payload['filename']).read_bytes(),self.data)
             self.assertTrue(source.exists())
 
 if __name__ == '__main__':

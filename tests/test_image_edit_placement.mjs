@@ -24,13 +24,10 @@ for(const recipe of IMAGE_MODELS.filter(m=>m.edit)){
   assert.equal(graph.zura_drawing_crop.inputs.context_padding,graph.zura_area_crop.inputs.context_padding);
   assert.deepEqual(graph.zura_area_stitch.inputs.original_image,['reference_1',0]);
   if(!recipe.provider){
-    assert.deepEqual(graph.sample.inputs.latent_image,['zura_area_masked_latent',0],recipe.id);
-    assert.deepEqual(graph.zura_area_masked_latent.inputs.samples,['zura_area_latent',0]);
-    assert.deepEqual(graph.zura_area_latent.inputs.pixels,['zura_area_clean',0]);
-    assert.deepEqual(graph.zura_area_clean.inputs.image,['zura_area_crop',0],'No guide pixels become the latent start image');
-    assert.deepEqual(graph.zura_area_mask_pixels.inputs.mask,['zura_area_crop',1]);
-    assert.deepEqual(graph.zura_area_mask_size.inputs.width,graph.zura_area_clean.inputs.width);
-    assert.deepEqual(graph.zura_area_mask_size.inputs.height,graph.zura_area_clean.inputs.height);
+    const native=buildImageGraph({model:recipe.id,operation:'edit',prompt:'add a fire hydrant',shape:'auto',references:[source]});
+    assert.deepEqual(graph.sample.inputs.latent_image,native.sample.inputs.latent_image,recipe.id+' retains its model-owned latent interface');
+    assert.equal(graph.zura_area_masked_latent,undefined,'The edit area must not replace a model-specific latent structure');
+    assert.deepEqual(graph.zura_area_result.inputs.reference,['zura_area_working',0]);
   }else assert.equal(graph.zura_area_masked_latent,undefined,'Browser providers expose no native latent/mask API');
 }
 if(process.argv.includes('--fixture'))console.log(JSON.stringify(cases));

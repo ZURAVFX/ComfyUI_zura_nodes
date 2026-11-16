@@ -1,0 +1,11 @@
+import assert from 'node:assert/strict';
+import {parseHTML} from '../../ui-check/node_modules/linkedom/esm/index.js';
+import {ImageEditInputs} from '../web/studio_image_edit_inputs.js';
+const {document}=parseHTML('<html><body><main><div class="zc-image-heading"><h2></h2></div><div id="refs"></div><div id="gallery"></div><div id="empty"></div></main></body></html>');
+const root=document.querySelector('main');let calls=0;
+const controller=Object.create(ImageEditInputs.prototype);
+const owner={root,imageOperation:'create',references:[],items:[],selectedImage:-1,imageArea:{sync(){calls++;}},$(id){return root.querySelector({ 'reference-list':'#refs',gallery:'#gallery','image-empty':'#empty'}[id]);}};
+controller.owner=owner;controller.heading=document.createElement('strong');controller.addHome=document.createElement('div');controller.addReferences=document.createElement('button');controller.addLabel='Add';controller.clear=document.createElement('button');controller.toggle=document.createElement('button');controller.source=document.createElement('div');
+controller.sync();assert.equal(calls,1,'Direct input sync refreshes the closed selection preview exactly once');
+controller.showSource=true;controller.sync();assert.equal(calls,2,'Source/result toggles keep selection visibility synchronised');
+console.log('Direct Image Edit input sync refreshes saved ROI without recursive renders.');

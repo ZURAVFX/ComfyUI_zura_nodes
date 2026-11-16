@@ -71,7 +71,7 @@ async def export_long_hdr_outpaint(staged, output_root, prefix, *, source_path, 
             fps=24., audio_source=source_path if has_audio else None,
             audio_start_seconds=start_seconds, audio_duration_seconds=source_duration, ffmpeg=ffmpeg)
         if staged.cancelled.is_set(): raise HDRChunkCancelled('HDR conversion cancelled.')
-        return {'files':[str(paths[0]),str(paths[1])], 'preview':str(paths[2]), 'frames':held.total, 'fps':24., 'exr_storage':exr_storage}
+        return {'files':[str(paths[0]),str(paths[1])], 'preview':str(paths[2]), 'frames':held.total, 'fps':24., 'exr_storage':exr_storage,'videoColour':{'encoding':'acescct','sceneLinear':False}}
     except BaseException:
         # Each exporter exclusively creates its result; remove only paths this
         # call successfully published, never a pre-existing file.

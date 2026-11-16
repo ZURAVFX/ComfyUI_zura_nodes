@@ -51,8 +51,8 @@ const api={apiURL:p=>p,addEventListener(name,handler){const previous=apiEvents.g
 const app={};
 const context={installStudioRestartNavigation,document,window,localStorage,api,app,CreativeWorkspace,ContentDetection,ClipTrimmer,clipLength,recoverClipLength,stageProgress,setTimeout,clearTimeout,setInterval,clearInterval,crypto:globalThis.crypto,URLSearchParams,AbortController,FormData};
 vm.createContext(context);
-const source=fs.readFileSync(new URL('../web/studio.js',import.meta.url),'utf8').replace(/^import .*;\r?\n/gm,'').replace(/^export /gm,'').split('app.registerExtension({')[0];
-runStudioVMInContext(source+'\nthis.Studio=ArtistStudio;',context);
+const source=fs.readFileSync(new URL('../web/studio_core.js',import.meta.url),'utf8').replace(/^import .*;\r?\n/gm,'').replace(/^export /gm,'');
+runStudioVMInContext(source+'\nthis.Studio=class extends ArtistStudio { constructor(options={}) { super({host:{api,graph:{available:true,app}},...options}); } };',context);
 const studio=new context.Studio(),ui=studio.creative;
 assert.equal(ui.$('model').getAttribute('aria-label'),'Image model','The native model selector keeps its accessible label');
 assert.ok(ui.imageModelName.textContent.trim(),'The composer has a visible model label before discovery finishes');
@@ -111,7 +111,8 @@ assert.equal(ui.imageTask.parentElement,ui.videoComposer.modeHost,'Image mode sh
 const workflowMenu=ui.videoComposer.task;
 assert.equal(workflowMenu.tagName,'DETAILS');
 assert.equal(workflowMenu.querySelector('select').hidden,true,'OS-native workflow dropdown is hidden behind the styled menu');
-assert.equal(workflowMenu.querySelectorAll('[role="menuitemradio"]').length,12);
+assert.equal(workflowMenu.querySelectorAll('[role="menuitemradio"]').length,13);
+assert.equal(workflowMenu.querySelector('[data-workflow="paint_vfx"]').closest('.zc-mode-group').getAttribute('aria-label'),'Create a shot','Paint VFX is a separate creation mode');
 assert.ok(workflowMenu.querySelector('[data-workflow="director"]'),'Director shares the persistent video workflow selector');
 assert.equal(workflowMenu.querySelector('[data-workflow="inpaint"]'),null,'Edited-frame work has one Ripple route, without a duplicate Inpaint preview');
 assert.ok(workflowMenu.querySelector('[data-workflow="outpaint"]'),'Frame extension is available as a preview workflow');
@@ -121,7 +122,7 @@ for(const button of workflowMenu.querySelectorAll('[data-workflow]')){assert.ok(
 const modeSearch=workflowMenu.querySelector('input[type=search]');modeSearch.value='lighting';modeSearch.oninput({target:modeSearch});
 assert.deepEqual([...workflowMenu.querySelectorAll('[data-workflow]')].filter(button=>!button.hidden).map(button=>button.dataset.workflow),['relight']);
 modeSearch.value='no such mode';modeSearch.oninput({target:modeSearch});assert.equal(workflowMenu.querySelector('.zc-mode-no-results').hidden,false);
-modeSearch.value='';modeSearch.oninput({target:modeSearch});assert.equal([...workflowMenu.querySelectorAll('[data-workflow]')].filter(button=>!button.hidden).length,12);
+modeSearch.value='';modeSearch.oninput({target:modeSearch});assert.equal([...workflowMenu.querySelectorAll('[data-workflow]')].filter(button=>!button.hidden).length,13);
 
 const removedInputs=[],savedRemoveInput=studio.removeInput;studio.removeInput=type=>removedInputs.push(type);
 for(const id of ['source','refs','frame'])studio.container.querySelector('#zc-remove-'+id).onclick();
@@ -303,6 +304,20 @@ ui.setImageOperation('edit');assert.equal(ui.$('model').value,'qwen2511');assert
 assert.equal(ui.$('model').querySelector('option[value="flux3"]').hidden,true);
 ui.references=[{file:'edit-source.png',name:'source.png',width:1024,height:1024}];ui.editMainMissing=false;ui.$('prompt').value='Make the wall blue';ui.render();assert.equal(ui.$('generate').disabled,false);
 assert.match(ui.$('generate').textContent,/Apply edit/);assert.match(ui.$('reference-hint').textContent,/Image 1: source/);
+{
+  const saved={references:ui.references,width:ui.$('width').value,height:ui.$('height').value,shape:ui.$('shape').value,processing:ui.imageProcessingResolution,delivery:ui.imageDeliveryResolution};
+  ui.references=[{file:'large-source.png',width:3264,height:1632}];ui.render();
+  const popup=ui.$('quick-settings').closest('details'),slider=ui.$('image-megapixels');popup.open=true;
+  slider.value=1;slider.oninput();
+  const original=ui.config(),graph=buildImageGraph(original);
+  assert.equal(original.processingResolution,'manual');assert.ok(graph.source_size.inputs.width<3264);
+  assert.match(ui.$('quick-settings').textContent,/Original/);assert.ok(ui.$('quick-settings').textContent.includes(String(graph.source_size.inputs.width)));
+  assert.equal(popup.open,true);assert.equal(ui.$('image-megapixels'),slider,'Slider changes keep the same open control');
+  ui.$('image-delivery-resolution').value='processing';ui.$('image-delivery-resolution').onchange();
+  const small=buildImageGraph(ui.config());assert.equal(small.delivery_size.inputs.width,small.source_size.inputs.width);assert.doesNotMatch(ui.$('quick-settings').textContent,/Original/);
+  ui.$('image-delivery-resolution').value='original';ui.$('image-delivery-resolution').onchange();assert.deepEqual([buildImageGraph(ui.config()).output_size.inputs.width,buildImageGraph(ui.config()).output_size.inputs.height],[3264,1632]);
+  ui.references=saved.references;ui.$('width').value=saved.width;ui.$('height').value=saved.height;ui.$('shape').value=saved.shape;ui.imageProcessingResolution=saved.processing;ui.imageDeliveryResolution=saved.delivery;ui.render();ui.save();
+}
 // The edited plate is a separate slot; references cannot silently replace it.
 {
   const savedRefs=ui.references,savedItems=ui.items;
@@ -354,7 +369,7 @@ assert.match(ui.$('generate').textContent,/Apply edit/);assert.match(ui.$('refer
   ui.imageComparison.active=false;
   await ui.setImageOperation('create',{useCanvas:false});
   assert.equal(ui.$('reference-list').querySelector('.zc-edit-main'),null);
-  assert.equal(ui.$('add-references').parentElement,inputs.addHome,'Create mode restores the ordinary reference toolbar');
+  assert.equal(ui.$('add-references').closest('.zc-reference-toolbar'),inputs.addHome,'Create mode restores the original reference toolbar around the integrated import control');
   assert.match(ui.$('add-references').textContent,/Add reference images/);
   ui.references=savedRefs;ui.items=savedItems;ui.editMainMissing=false;await ui.setImageOperation('edit',{useCanvas:false});ui.renderGallery();ui.render();
 }

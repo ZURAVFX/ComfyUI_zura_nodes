@@ -36,6 +36,9 @@ await editor.selectVersion('composite-3.exr');assert.equal(anchor.layers[0].expa
 anchor.layers.push({id:'two',file:'other.exr',layer_mask:'other-mask',expand_pixels:7,blend_pixels:4});
 await editor.movePaintLayer('two',-1);assert.deepEqual(calls.at(-1).body.layers.map(l=>l.expand_pixels),[7,24]);
 await editor.removePaintLayer('two');assert.deepEqual(calls.at(-1).body.layers.map(l=>l.expand_pixels),[24]);
+anchor.layers.push({id:'three',file:'third.exr',layer_mask:'third-mask'},{id:'four',file:'fourth.exr',layer_mask:'fourth-mask'});
+await editor.movePaintLayer('one',2);assert.deepEqual(anchor.layers.map(layer=>layer.id),['three','four','one'],'Dragging past several layers inserts without swapping the endpoint');assert.deepEqual(calls.at(-1).body.layers.map(layer=>layer.file),['third.exr','fourth.exr',anchor.layers[2].file],'The backend receives the new compositing order');
+await editor.movePaintLayer('one',-2);assert.deepEqual(anchor.layers.map(layer=>layer.id),['one','three','four']);anchor.layers.splice(1);
 editor.layerPanelKey=null;editor.renderLayers(anchor,true,false);
 export const fixtureHTML=document.body.innerHTML;
 

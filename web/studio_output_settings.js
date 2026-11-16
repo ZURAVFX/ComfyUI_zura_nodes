@@ -1,7 +1,6 @@
 import {workspaceStorage} from './studio_storage.js';
-import {EXRExportPreference} from './studio_exr_precision.js';
+import {EXRExportPreference,hasEXROutput} from './studio_exr_precision.js';
 import {StudioDeliveryControls} from './studio_delivery_controls.js';
-import {StudioDisplaySettings} from './studio_display_settings.js';
 import {installStudioModelViews} from './studio_model_view.js';
 import {StudioMediaImport} from './studio_media_import.js';
 /** One saved delivery folder for the whole Studio, independent of each model. */
@@ -15,22 +14,21 @@ export class StudioOutputSettings {
     const advanced=document.createElement('details');advanced.className='zc-output-advanced';
     advanced.innerHTML='<summary>Advanced export settings</summary><label>EXR precision<select aria-label="EXR precision"><option value="half">HALF · 16-bit float</option><option value="float32">FLOAT · 32-bit float</option></select></label><p>Controls saved EXR files. Model processing precision is separate.</p>';
     this.form.querySelector('.zc-output-actions').before(advanced);this.exrSelect=advanced.querySelector('select');this.exrSelect.value=this.exrStorage('acescg_exr');
-    this.exrSelect.onchange=()=>{this.precision.set(this.exrSelect.value);this.exrSelect.value=this.exrStorage('acescg_exr');this.owner?.studio?.aeBridge?.updateMeta();};
+    this.exrSelect.onchange=()=>{if(this.delivery?.aeTransfer==='float32'){this.exrSelect.value='float32';return;}this.precision.set(this.exrSelect.value);this.exrSelect.value=this.exrStorage('acescg_exr');this.owner?.studio?.aeBridge?.updateMeta();};
     if(owner?.studio?.hdrTool)owner.studio.hdrTool.outputSettings=this;
     root.querySelector('.gs-top-actions').prepend(panel);
     panel.addEventListener('toggle',()=>{if(panel.open)void this.load();});
     this.form.onsubmit=event=>{event.preventDefault();void this.save(this.input.value);};
     panel.querySelector('[data-default]').onclick=()=>void this.save('');
     this.delivery=new StudioDeliveryControls(root,api,owner,this);
-    this.display=new StudioDisplaySettings(root,api,owner,this.delivery);
     installStudioModelViews(this.delivery,api);
     this.mediaImport=new StudioMediaImport(this.delivery,api);
-    const format=document.createElement('label');format.innerHTML='HDR files<select aria-label="HDR delivery files"><option value="hlg_and_exr">HLG video + EXR</option><option value="acescg_exr">EXR</option><option value="hlg_video">HLG video</option></select>';
+    const format=document.createElement('label');format.innerHTML='HDR files<select aria-label="HDR delivery files"><option value="hlg_and_exr">ProRes 4444 MOV + EXR</option><option value="acescg_exr">EXR</option><option value="hlg_video">ProRes 4444 MOV</option></select>';
     advanced.append(format);this.hdrFormatSelect=format.querySelector('select');this.hdrFormatSelect.value=this.delivery.hdrFormat;this.hdrFormatSelect.onchange=()=>this.delivery.setHDRFormat(this.hdrFormatSelect.value);
     this.delivery.mountAdvanced(this.exrSelect.closest('label'),format,advanced.querySelector('p'));advanced.remove();
     void this.load();
   }
-  exrStorage(output){return this.precision.value(output);}
+  exrStorage(output){return this.delivery?.aeTransfer==='float32'&&hasEXROutput(output)?'float32':this.precision.value(output);}
   preferSourcePrecision(bitDepth){this.precision.preferSource(bitDepth);this.exrSelect.value=this.exrStorage('acescg_exr');}
   exrLabel(){return 'EXR export '+(this.exrStorage('acescg_exr')==='float32'?'FLOAT':'HALF');}
   async request(path, data){

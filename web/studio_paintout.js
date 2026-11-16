@@ -1,3 +1,7 @@
+import {paintoutOutputRoles} from './paintout_studio/paintout_outputs.js';
+import {captureResultExports,createResultExportRow,renderPaintoutResultExports} from './studio_result_exports.js';
+import {playbackFile} from './studio_delivery_formats.js';
+import {deliveryFormatLabel} from './studio_delivery_formats.js';
 import {workspaceStorage} from './studio_storage.js';
 import {megapixelSlider,selectNumberOnFocus} from './studio_resolution.js';
 import {buildPaintoutGraph,paintoutValidation,paintoutAvailability,PAINTOUT_DEFAULT_PROMPTS,PAINTOUT_OUTPUT_MODES,PAINTOUT_SIZE_PRESETS,paintoutPresetSize,paintoutRangeFix} from './paintout_recipes.js';
@@ -12,7 +16,7 @@ const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&
 const name=p=>String(p||'').split(/[\\/]/).pop();
 const closeIcon='<svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="m4 4 8 8M12 4l-8 8"/></svg>';
 const colours=[['srgb_display','sRGB / standard images'],['auto','Detect video tags'],['rec709_gamma24','Rec.709 gamma 2.4'],['rec709_oetf','Rec.709 camera'],['acescg','ACEScg'],['acescct','ACEScct'],['hlg_rec2020','HLG Rec.2020'],['pq_rec2020','PQ Rec.2020'],['linear_rec709','Linear Rec.709']];
-const options=(items,value)=>items.map(([id,label])=>`<option value="${id}" ${id===value?'selected':''}>${label}</option>`).join('');
+const options=(items,value)=>items.map(([id,label])=>`<option value="${id}" ${id===value?'selected':''}>${deliveryFormatLabel(label)}</option>`).join('');
 
 /** Whole-shot native paintout. Painted anchors always use original source frame IDs. */
 export class PaintoutWorkspace{
@@ -51,6 +55,7 @@ export class PaintoutWorkspace{
         <p id="zps-note" aria-live="polite"></p>
       </form>`;
     owner.root.append(this.page);
+    this.resultExportsRow=createResultExportRow(this.page.ownerDocument);this.page.querySelector('.zf-composer').append(this.resultExportsRow);
     this.$('prompt').value=this.prompts[this.state.mode]||PAINTOUT_DEFAULT_PROMPTS[this.state.mode];
     for(const [id,key] of Object.entries({start:'startFrame',count:'frameCount',fps:'sequenceFps',colour:'sourceColour',processing:'processingSpace',width:'width',height:'height',output:'outputMode',seed:'seed'}))this.$(id).value=this.state[key];
     this.$('source').onclick=this.$('begin').onclick=()=>this.pickSource('footage');this.$('sequence').onclick=()=>this.pickSource('sequence');this.$('mask').onclick=()=>this.pickMask();this.$('add-anchor').onclick=()=>this.pickAnchors();
@@ -147,7 +152,7 @@ export class PaintoutWorkspace{
   preview(kind=this.view){
     if(kind==='result'&&!this.result||kind==='anchor'&&!this.state.anchors[this.selected]||kind==='mask'&&!this.state.mask)kind='source';this.view=kind;this.comparison?.hide();this.$('comparison').hidden=true;this.$('video').pause();this.$('video').hidden=true;this.$('image-slot').hidden=true;this.$('empty').hidden=!!this.state.source||kind==='result';
     let src='',video=false;
-    if(kind==='result'){this.nativeSamplePreview?.clear();src=this.outputURL(this.result.file);video=true;this.$('history').open=false;for(const popup of this.page.querySelectorAll('form details[open]'))popup.open=false;}
+    if(kind==='result'){this.nativeSamplePreview?.clear();const display=playbackFile(this.result.file);src=this.outputURL(display);video=!/\.(png|tiff?|jpe?g|webp)$/i.test(display.filename);this.$('history').open=false;for(const popup of this.page.querySelectorAll('form details[open]'))popup.open=false;}
     else if(kind==='anchor'){const a=this.state.anchors[this.selected];src=this.thumbnail(a.file,0,a.colour_space,1280);}
     else if(kind==='mask'&&this.maskInfo){video=!!this.maskInfo.media_url&&!this.videoFallback?.has(this.state.mask);src=video?this.url(this.maskInfo.media_url):this.thumbnail(this.state.mask,Math.min(this.playhead,this.maskInfo.frames-1),'srgb_display',1280);}
     else if(this.sourceInfo&&this.state.source){video=!!this.sourceInfo.media_url&&!this.videoFallback?.has(this.state.source);src=video?this.url(this.sourceInfo.media_url):this.thumbnail(this.state.source,this.playhead,this.state.sourceColour,1280);}
@@ -164,6 +169,7 @@ export class PaintoutWorkspace{
   async loadModels(){if(this.loading)return;this.loading=true;this.render();try{this.modelInfo=await this.fetch('/object_info');this.modelError='';}catch(e){this.modelError=e.message;}finally{this.loading=false;this.render();}}
   async open(){attachWorkspaceSamplePreview(this);if(!this.modelInfo)this.loadModels();if(this.state.source){try{this.sourceInfo=await this.info(this.state.source);if(this.state.mask)this.maskInfo=await this.info(this.state.mask);}catch(e){this.message(this.requestError(e));}}this.preview(this.result?'result':'source');if(this.job)this.startPolling();}
   render(){
+    renderPaintoutResultExports(this.resultExportsRow,this.api,this.result);
     const busy=this.busy(),targeted=this.state.mode==='targeted',availability=this.modelInfo?paintoutAvailability(this.modelInfo,this.state.mode):null,c=this.config();let error=[...this.page.querySelectorAll('[data-input-error]')].find(input=>!input.disabled)?.dataset.inputError||paintoutValidation(c);
     if(!error&&this.sourceInfo&&c.startFrame+c.frameCount>this.sourceInfo.frames)error='The selected frame range exceeds your footage.';
     if(!error&&targeted&&this.maskInfo&&this.maskInfo.frames>1&&this.maskInfo.frames<c.startFrame+c.frameCount)error='The mask does not cover the selected source range.';
@@ -241,11 +247,11 @@ export class PaintoutWorkspace{
   startPolling(){if(this.timer)return;this.timer=setInterval(()=>this.poll(),1500);this.poll();}
   stopPolling(){clearInterval(this.timer);this.timer=null;}
   async poll(){if(!this.job||this.polling)return;const job=this.job;this.polling=true;try{const history=await this.fetch('/history/'+encodeURIComponent(job.id)),entry=history[job.id];if(this.job!==job)return;if(this.connectionLost){this.message('');this.connectionLost=false;}if(entry?.status?.completed||entry?.status?.status_str==='error'){
-      const files=entry.outputs?.save?.images||[],file=files.find(f=>/motion_preview/.test(f.filename))||files.find(f=>/SDR/.test(f.filename))||files[0];this.job=null;this.nativeSamplePreview?.clear();this.stopPolling();if(file){this.result={file,master:files.find(f=>! /motion_preview/.test(f.filename))||file,config:job.config,saved:entry.outputs?.save?.text?.join('\n')||''};this.items.unshift(this.result);this.items=this.items.slice(0,12);this.preview('result');this.message(job.config.outputMode.includes('EXR')?this.result.saved:'');}else {const failure=entry.status.messages?.find(m=>m[0]==='execution_error')?.[1],interrupted=entry.status.messages?.some(m=>m[0]==='execution_interrupted');this.message(interrupted?'Paintout cancelled. Your previous results are safe.':failure?'Paintout stopped · '+(job.stages?.[failure.node_id]||failure.node_type||'Processing')+': '+failure.exception_message:'No motion preview was saved. Check ComfyUI for the export details.');}this.save();this.render();
+      const files=(entry.outputs?.save?.images||[]).map(file=>file?.type?file:{...file,type:'output'}),roles=paintoutOutputRoles({files,exports:captureResultExports(entry.outputs?.save),config:job.config}),file=roles.preview||roles.sdrMaster||roles.master;this.job=null;this.nativeSamplePreview?.clear();this.stopPolling();if(file){this.result={...roles,file,config:job.config,exports:captureResultExports(entry.outputs?.save),saved:entry.outputs?.save?.text?.join('\n')||''};this.items.unshift(this.result);this.items=this.items.slice(0,12);this.preview('result');this.message(job.config.outputMode.includes('EXR')?this.result.saved:'');}else {const failure=entry.status.messages?.find(m=>m[0]==='execution_error')?.[1],interrupted=entry.status.messages?.some(m=>m[0]==='execution_interrupted');this.message(interrupted?'Paintout cancelled. Your previous results are safe.':failure?'Paintout stopped · '+(job.stages?.[failure.node_id]||failure.node_type||'Processing')+': '+failure.exception_message:'No motion preview was saved. Check ComfyUI for the export details.');}this.save();this.render();
     }else{const queue=await this.fetch('/queue');if(this.job!==job)return;const running=queue.queue_running?.some(r=>r[1]===job.id),pending=queue.queue_pending?.some(r=>r[1]===job.id);if(!running&&!pending){this.job=null;this.nativeSamplePreview?.clear();this.stopPolling();this.save();this.message('This run is no longer in ComfyUI’s queue. It has not been resubmitted.');this.render();}else {if(running&&this.$('progress-title').textContent==='Queued')this.$('progress-title').textContent=this.job.stages?.[this.job.currentNode]||'Starting paintout';const position=queue.queue_pending?.findIndex(r=>r[1]===job.id);this.$('progress-detail').textContent=running?this.elapsed():`Queue position ${(position??0)+1} · Waiting for ComfyUI · ${this.elapsed()}`;}}}
     catch{this.connectionLost=true;this.message('Connection interrupted. Reconnecting to your saved run…');}finally{this.polling=false;}}
   async cancel(){if(!this.job)return;try{const id=this.job.id;await this.fetch('/queue',{delete:[id]});await this.fetch('/interrupt',{prompt_id:id});this.message('Cancellation requested.');await this.poll();}catch(e){this.message(e.message);}}
-  compare(){if(!this.result||this.result.config.source!==this.state.source||!this.sourceInfo?.media_url)return;this.$('video').pause();this.comparison??=new ShotComparison(this.$('comparison'));this.$('comparison').hidden=false;this.comparison.onClose=()=>{this.$('comparison').hidden=true;};const c=this.result.config;this.comparison.show(this.url(this.sourceInfo.media_url),this.outputURL(this.result.file),c.startFrame/(this.sourceInfo.kind==='video'?this.sourceInfo.fps:c.sequenceFps),{resultLabel:'Clean plate'});}
+  compare(){if(!this.result||this.result.config.source!==this.state.source||!this.sourceInfo?.media_url)return;this.$('video').pause();this.comparison??=new ShotComparison(this.$('comparison'));this.$('comparison').hidden=false;this.comparison.onClose=()=>{this.$('comparison').hidden=true;};const c=this.result.config;this.comparison.show(this.url(this.sourceInfo.media_url),this.outputURL(playbackFile(this.result.file)),c.startFrame/(this.sourceInfo.kind==='video'?this.sourceInfo.fps:c.sequenceFps),{resultLabel:'Clean plate'});}
   async graph(){try{const graph=buildPaintoutGraph(this.job?.config||this.config()),original=(this.app.rootGraph||this.app.graph)?.serialize?.();if(!original||typeof this.app.loadApiJson!=='function')throw new Error('Update ComfyUI to open this editable graph.');try{await this.app.loadApiJson(graph,`Zura Paintout · ${Date.now()}.json`);await import('./vendor/elk.bundled.js');await tidyArtistGraph(this.app,graph,'paintout',window.ELK);}catch(e){await this.app.loadGraphData(original);throw e;}this.studio.close();}catch(e){this.message(e.message);}}
   close(){this.save();this.stopPolling();this.nativeSamplePreview?.dispose();this.nativeSamplePreview=null;this.comparison?.hide();this.$('video').pause();}
 }

@@ -46,7 +46,7 @@ def checked_delivery(root, outputs, identity, *, width, height, frames, has_audi
         if not isinstance(entries, list) or len(entries) != 1:
             raise ValueError('The HDR render did not return its expected deliverables.')
         return entries[0]
-    hlg = _owned_file(root, ref('zura_hdr_save_video', 'images'), 'genj/hdr', re.escape(prefix) + r'_\d{5}_\.mp4')
+    hlg = _owned_file(root, ref('zura_hdr_save_video', 'images'), 'genj/hdr', re.escape(prefix) + r'_\d{5}_\.mov')
     preview = _owned_file(root, ref('zura_hdr_save_preview', 'images'), 'genj/hdr', re.escape(prefix) + r'_preview_\d{5}_\.mp4')
     archive = _owned_file(root, ref('zura_hdr_archive', 'files'), 'genj/hdr', re.escape(prefix) + r'\.zip')
     _check_media(hlg, preview, archive, width=width, height=height, frames=frames, has_audio=has_audio)
@@ -77,7 +77,7 @@ def checked_long_delivery(root, result, identity, *, width, height, frames, has_
         return _owned_file(root_path, {'type': 'output', 'subfolder': 'genj/hdr', 'filename': expected},
                            'genj/hdr', re.escape(expected))
     exr = owned(files[0], prefix + '.zip')
-    hlg = owned(files[1], prefix + '.mp4')
+    hlg = owned(files[1], prefix + '.mov')
     preview = owned(preview_path, prefix + '_preview.mp4')
     _check_media(hlg, preview, exr, width=width, height=height, frames=frames, has_audio=has_audio)
     if exr_storage == 'float32':
@@ -92,18 +92,12 @@ def _check_media(hlg, preview, archive, *, width, height, frames, has_audio):
     for path in (hlg, preview):
         inspect_video(path, expected_width=width, expected_height=height, expected_frames=frames,
                       expected_fps=24, expected_audio_tracks=int(has_audio))
-    executable = shutil.which('ffprobe')
-    if not executable:
-        raise ValueError('FFprobe is required to verify the HDR video.')
-    try:
-        result = subprocess.run([executable, '-v', 'error', '-select_streams', 'v:0', '-show_entries',
-            'stream=pix_fmt,color_space,color_transfer,color_primaries', '-of', 'json', str(hlg)],
-            capture_output=True, text=True, check=True, timeout=30)
-        streams = json.loads(result.stdout)['streams']
-    except (OSError, subprocess.SubprocessError, ValueError, KeyError) as exc:
-        raise ValueError('Could not verify the HDR video colour metadata.') from exc
-    if len(streams) != 1 or streams[0].get('color_transfer') != 'arib-std-b67' or streams[0].get('color_primaries') != 'bt2020' or streams[0].get('color_space') != 'bt2020nc' or '10' not in streams[0].get('pix_fmt', ''):
-        raise ValueError('The video is not tagged as 10-bit Rec.2020 HLG.')
+    executable=shutil.which('ffprobe')
+    if not executable:raise ValueError('FFprobe is required to verify the ProRes movie.')
+    result=subprocess.run([executable,'-v','error','-select_streams','v:0','-show_entries','stream=codec_name,codec_tag_string,pix_fmt,color_transfer','-of','json',str(hlg)],capture_output=True,text=True,check=True,timeout=30)
+    streams=json.loads(result.stdout).get('streams',[])
+    if len(streams)!=1 or streams[0].get('codec_name')!='prores' or streams[0].get('codec_tag_string') not in ('ap4h','ap4x') or '444' not in streams[0].get('pix_fmt','') or streams[0].get('color_transfer')=='arib-std-b67':
+        raise ValueError('The video is not working-RGB ProRes 4444.')
     try:
         with zipfile.ZipFile(archive) as z:
             expected = [f'frame_{i:05d}.exr' for i in range(frames)]

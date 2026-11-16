@@ -1,4 +1,4 @@
-"""One-frame, capability-scoped FLOAT staging for a local Comfy server.
+"""Capability-scoped, streamed FLOAT staging for a local Comfy server.
 
 The caller supplies bytes, never a server filesystem path. Each completed
 manifest is immutable and is published only after byte and sample validation.
@@ -69,6 +69,16 @@ class FloatStaging:
         self.roots = roots or _input_root
         self.pending = {}
 
+    async def capabilities(self, request):
+        require_local(request)
+        if os.name != "nt":
+            raise web.HTTPNotImplemented(text="FLOAT staging is available on Windows")
+        return web.json_response({"schemaVersion": 1, "sequence": True, "indexBase": 0,
+                                  "maxFrames": float_io.MAX_FRAMES,
+                                  "maxBytes": float_io.MAX_TRANSFER_BYTES,
+                                  "maxFrameBytes": min(float_io.MAX_FRAME_FILE_BYTES, float_io.MAX_PIXELS * 16)},
+                                 headers={"Cache-Control": "no-store"})
+
     @staticmethod
     def discard(session, folder):
         # Only remove our exact directory and exact regular owned leaves.
@@ -103,7 +113,7 @@ class FloatStaging:
                     self.discard(session, session["temp"])
         if len(self.pending) >= MAX_PENDING:
             raise web.HTTPServiceUnavailable(text="Too many pending float transfers")
-        body = await _bounded_json(request.content, 65536)
+        body = await _bounded_json(request.content, float_io.MAX_MANIFEST_BYTES)
         # Other requests may have filled the slots while the body was read.
         if len(self.pending) >= MAX_PENDING:
             raise web.HTTPServiceUnavailable(text="Too many pending float transfers")
@@ -111,14 +121,15 @@ class FloatStaging:
             if set(body) != {"manifest"}:
                 raise ValueError("Invalid staging request")
             manifest = float_io.validate_manifest(body["manifest"])
-            if len(manifest["frames"]) != 1 or manifest["sampleType"] != "float32":
-                raise ValueError("Only one FLOAT frame may be staged at a time")
+            if manifest["sampleType"] != "float32":
+                raise ValueError("Only FLOAT32 frames may be staged")
             if manifest["colour"]["encoding"] == "ae_project_icc":
                 raise ValueError("This staging route requires a separately verified ICC transport")
             root = self.roots().absolute()
             parent = root / "ComfyLink"
-            reserved = sum(item["manifest"]["frames"][0]["byteLength"] for item in self.pending.values())
-            if shutil.disk_usage(root).free < reserved + manifest["frames"][0]["byteLength"] + 4 * 1024**3:
+            transfer_bytes = sum(frame["byteLength"] for frame in manifest["frames"])
+            reserved = sum(item["bytes"] for item in self.pending.values())
+            if shutil.disk_usage(root).free < reserved + transfer_bytes + 4 * 1024**3:
                 raise ValueError("Not enough free storage for float staging")
             with float_io._locked_parents(root):
                 parent.mkdir(exist_ok=True)
@@ -129,7 +140,8 @@ class FloatStaging:
                 stamp = float_io._identity(float_io._safe_stat(temporary, directory=True))
             self.pending[ident] = {"secret": secret, "manifest": manifest, "root": root,
                                    "parent": parent, "temp": temporary, "identity": stamp,
-                                   "expires": time.monotonic() + TTL, "busy": False, "leaves": {}}
+                                   "expires": time.monotonic() + TTL, "busy": False, "leaves": {},
+                                   "bytes": transfer_bytes, "received": set()}
         except (ValueError, OSError):
             raise web.HTTPBadRequest(text="FLOAT staging could not be prepared")
         return web.json_response({"id": ident, "capability": secret}, headers={"Cache-Control": "no-store"})
@@ -144,8 +156,22 @@ class FloatStaging:
             raise web.HTTPForbidden(text="FLOAT transfer is unavailable")
         if session["expires"] < time.monotonic() or session["busy"] or session.get("ready"):
             raise web.HTTPConflict(text="FLOAT transfer expired or is already active")
+        raw_index = request.match_info.get("index")
+        if raw_index is None:
+            if len(session["manifest"]["frames"]) != 1:
+                raise web.HTTPBadRequest(text="A sequence upload requires a frame index")
+            index = 0
+        else:
+            # A canonical, bounded integer is never interpreted as a pathname.
+            if not raw_index.isascii() or not raw_index.isdecimal() or len(raw_index) > 5 or str(int(raw_index)) != raw_index:
+                raise web.HTTPBadRequest(text="Invalid FLOAT frame index")
+            index = int(raw_index)
+        if index >= len(session["manifest"]["frames"]):
+            raise web.HTTPBadRequest(text="Invalid FLOAT frame index")
+        if index in session["received"]:
+            raise web.HTTPConflict(text="FLOAT frame was already received")
         session["busy"] = True
-        frame = session["manifest"]["frames"][0]
+        frame = session["manifest"]["frames"][index]
         if request.content_length is not None and request.content_length != frame["byteLength"]:
             self.pending.pop(ident, None)
             self.discard(session, session["temp"])
@@ -176,12 +202,36 @@ class FloatStaging:
                             output.write(chunk)
                     await asyncio.wait_for(receive(), timeout=TTL)
                     output.flush()
+                    os.fsync(output.fileno())
                 if tail or total != frame["byteLength"] or not secrets.compare_digest(digest.hexdigest(), frame["sha256"]):
                     raise ValueError("FLOAT frame checksum mismatch")
+                session["received"].add(index)
+            if len(session["received"]) != len(session["manifest"]["frames"]):
+                session["busy"] = False
+                session["expires"] = time.monotonic() + TTL
+                return web.json_response({"complete": False}, headers={"Cache-Control": "no-store"})
+            # Earlier uploads are checked again before publication. A changed
+            # accepted leaf cannot be hidden by completing a different frame.
+            check = asyncio.create_task(asyncio.to_thread(self._verify_received, session))
+            try:
+                await asyncio.shield(check)
+            except asyncio.CancelledError:
+                # The verifier owns read handles until it exits. Do not race
+                # cancellation cleanup against that worker's active reads.
+                try:
+                    await check
+                except Exception:
+                    pass
+                raise
+            with float_io._locked_parents(temporary):
+                if float_io._identity(float_io._safe_stat(temporary, directory=True)) != session["identity"]:
+                    raise ValueError("FLOAT staging directory changed")
                 manifest_path = temporary / "manifest.json"
                 with manifest_path.open("xb") as manifest_file:
                     session["leaves"][manifest_path.name] = float_io._identity(os.fstat(manifest_file.fileno()))
                     manifest_file.write(float_io.canonical_manifest_bytes(session["manifest"]))
+                    manifest_file.flush()
+                    os.fsync(manifest_file.fileno())
             # Move into the final server-owned UUID folder only after upload.
             # Consumers cannot discover a completed manifest before validation.
             with float_io._locked_parents(parent):
@@ -216,7 +266,45 @@ class FloatStaging:
         session["busy"] = False
         session["ready"] = True
         session["expires"] = time.monotonic() + READY_TTL
-        return web.json_response({"manifest": relative}, headers={"Cache-Control": "no-store"})
+        return web.json_response({"complete": True, "manifest": relative}, headers={"Cache-Control": "no-store"})
+
+    @staticmethod
+    def _verify_received(session):
+        """Revalidate all accepted bytes in bounded blocks before publication."""
+        import numpy as np
+        folder = session["temp"]
+        with float_io._locked_parents(folder):
+            if float_io._identity(float_io._safe_stat(folder, directory=True)) != session["identity"]:
+                raise ValueError("FLOAT staging directory changed")
+            if {entry.name for entry in folder.iterdir()} != set(session["leaves"]):
+                raise ValueError("Unexpected FLOAT staging leaf")
+            for frame in session["manifest"]["frames"]:
+                path = folder / frame["filename"]
+                before = float_io._safe_stat(path)
+                identity = session["leaves"].get(path.name)
+                if float_io._identity(before) != identity or before.st_size != frame["byteLength"]:
+                    raise ValueError("FLOAT staging leaf changed")
+                digest, total, tail = hashlib.sha256(), 0, b""
+                with path.open("rb") as source:
+                    opened = os.fstat(source.fileno())
+                    if float_io._identity(opened) != identity or opened.st_nlink != 1:
+                        raise ValueError("FLOAT staging leaf changed")
+                    while chunk := source.read(1024 * 1024):
+                        total += len(chunk)
+                        if total > frame["byteLength"]:
+                            raise ValueError("FLOAT staging leaf changed")
+                        digest.update(chunk)
+                        samples = tail + chunk
+                        aligned = len(samples) - len(samples) % 4
+                        if not np.isfinite(np.frombuffer(samples[:aligned], dtype="<f4")).all():
+                            raise ValueError("Nonfinite FLOAT samples")
+                        tail = samples[aligned:]
+                    after = os.fstat(source.fileno())
+                    if (float_io._identity(float_io._safe_stat(path)) != identity
+                            or before.st_size != after.st_size or before.st_mtime_ns != after.st_mtime_ns):
+                        raise ValueError("FLOAT staging leaf changed")
+                if tail or total != frame["byteLength"] or not secrets.compare_digest(digest.hexdigest(), frame["sha256"]):
+                    raise ValueError("FLOAT staging leaf checksum mismatch")
 
     async def release(self, request):
         require_local(request)
@@ -235,7 +323,9 @@ class FloatStaging:
 
 def register(server):
     service = FloatStaging()
+    server.routes.get(PREFIX + "/capabilities")(service.capabilities)
     server.routes.post(PREFIX)(service.create)
     server.routes.post(PREFIX + "/{id}/frame")(service.frame)
+    server.routes.post(PREFIX + "/{id}/frame/{index}")(service.frame)
     server.routes.post(PREFIX + "/{id}/release")(service.release)
     return service

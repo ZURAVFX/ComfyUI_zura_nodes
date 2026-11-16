@@ -43,7 +43,7 @@ class DeliveryTests(unittest.TestCase):
     def colour(path):
         if '_preview_' in Path(path).name:
             return {'pixel_format':'yuv420p','transfer':13,'primaries':1,'matrix':1}
-        return {'pixel_format':'yuv420p10le','transfer':18,'primaries':9,'matrix':9}
+        return {'pixel_format':'yuv444p12le','transfer':2,'primaries':2,'matrix':1,'codec':'prores','tag':'ap4h'}
 
     def fixture(self, output='hlg_and_exr', scenario='original'):
         project, kwargs = inputs(scenario)
@@ -61,8 +61,8 @@ class DeliveryTests(unittest.TestCase):
         outputs = {'save_preview': {'images': [{'filename':prefix+'_preview_00001_.mp4',
                       'subfolder':r'genj\hdr','type':'output'}]}}
         if output != 'acescg_exr':
-            (parent/(prefix+'_00001_.mp4')).write_bytes(b'hdr')
-            outputs['zura_hdr_save_video'] = {'images':[{'filename':prefix+'_00001_.mp4',
+            (parent/(prefix+'_00001_.mov')).write_bytes(b'hdr')
+            outputs['zura_hdr_save_video'] = {'images':[{'filename':prefix+'_00001_.mov',
                 'subfolder':'genj/hdr','type':'output'}]}
         if output != 'hlg_video':
             image = self.exr_bytes()
@@ -117,7 +117,7 @@ class DeliveryTests(unittest.TestCase):
                     self.assertTrue(result['asset']['filename'].endswith('_preview_00001_.mp4'))
                     self.assertEqual(result['asset']['subfolder'],'genj/hdr')
                     self.assertEqual([f['label'] for f in result['hdr_files']],
-                        (['HDR video'] if output!='acescg_exr' else [])+
+                        (['ProRes 4444 MOV'] if output!='acescg_exr' else [])+
                         (['ACEScg EXR sequence'] if output!='hlg_video' else []))
                     self.assertEqual(result['sha256'],builder.ltx25.file_digest(
                         self.root/result['asset']['subfolder']/result['asset']['filename']))
@@ -186,7 +186,7 @@ class DeliveryTests(unittest.TestCase):
 
     def test_missing_master_or_raster_failure_is_not_published(self):
         fixture=self.fixture()
-        path=self.root/'genj'/'hdr'/(fixture[0]['hdr_delivery']['prefix']+'_00001_.mp4')
+        path=self.root/'genj'/'hdr'/(fixture[0]['hdr_delivery']['prefix']+'_00001_.mov')
         path.unlink()
         with self.assertRaisesRegex(ValueError,'missing'): self.collect(fixture)
         fixture=self.fixture()

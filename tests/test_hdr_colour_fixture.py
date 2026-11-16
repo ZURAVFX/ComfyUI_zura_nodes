@@ -137,8 +137,8 @@ class HDRSwatchFixtureTests(unittest.TestCase):
                         with patch.object(folder_paths,'get_output_directory',return_value=str(directory),create=True):
                             result=paintout.ZuraPaintoutUncrop().save(image,plate,'handoff-check','float32',False,export_format='EXR + HLG video',motion_preview=False)
                         target=Path(result['result'][0]);self.assertEqual(len(list(target.glob('frame_*.exr'))),2)
-                        delivered=paintout.describe(str(target/'paintout_HLG_10bit.mp4'))
-                        self.assertEqual((delivered['transfer'],delivered['primaries'],delivered['count']),('arib-std-b67','bt2020',2))
+                        delivered=paintout.describe(str(target/'paintout_ProRes4444.mov'))
+                        self.assertEqual((delivered['transfer'],delivered['primaries'],delivered['count']),(None,None,2))
                     encoded, fps = native.load_native_hdr_frames(str(output), 0, 2)
                     self.assertEqual(fps, 24)
                     linear = paintout.decode_ct(encoded).cpu().numpy()
@@ -158,14 +158,14 @@ class HDRSwatchFixtureTests(unittest.TestCase):
                         delivered = paintout.describe(str(result))
                         self.assertEqual((delivered['primaries'], delivered['transfer'], delivered['matrix'],
                                           delivered['range'], delivered['pixel_format'], delivered['count']),
-                                         ('bt2020', 'arib-std-b67', 'bt2020nc', 'tv', 'yuv420p10le', 2))
+                                         (None, None, 'bt709', 'tv', 'yuv444p12le', 2))
                         roundtrip, _ = native.load_native_hdr_frames(str(result), 0, 2)
                         output_linear = paintout.decode_ct(roundtrip).cpu().numpy()
                         for index, code in enumerate(codes):
                             expected = expected_linear((code - 64) / 876, transfer)
                             for value in output_linear[0, 16, 8 + index * 16]:
                                 self.assertAlmostEqual(float(value), expected, delta=max(.035, expected * .08),
-                                                       msg=f'HLG delivery, code {code}')
+                                                       msg=f'Working RGB ProRes delivery, code {code}')
                         self.assertGreater(float(output_linear[0, 16, 88, 0]), 1.0)
 
 

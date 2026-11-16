@@ -32,9 +32,9 @@ Use your own ComfyUI host and port if they differ.
 
 ## Current release
 
-**1.3.65** adds PyAV 19 compatibility for exact 10-bit video clocks and includes the 1.3.64 improvements to shared SDR/HDR controls, high-depth source import, display-only OCIO views, source-sized image editing and the native ComfyLink handoff. It fixes LTX edit propagation and Camera source cadence while retaining the original guided removal flow and ordinary Studio drafts. Normal Studio remains free and independent of the separate native AE plug-in. Mode-specific GPU and AE acceptance is still in progress. See the [release notes](CHANGELOG.md) for tested scope and limits.
+**1.3.66** unifies Studio's painting and prompt controls, clarifies multi-stage workflows and improves model setup. It includes frame-preserving AE/model timing, ProRes 4444 video delivery, PNG/EXR still returns, native HDR Paintout fixes and processing-mask exports. Character Replacement now reviews the mask and reference frame before generating video. Normal Studio remains free and independent of the separate native AE plug-in. See the [release notes](CHANGELOG.md) for scope and tested limits.
 
-Zura Studio remains free to open and use normally, without a ComfyLink licence. The separate ComfyLink After Effects extension is optional and is not bundled here. Existing [Relight](docs/RELIGHT_MODELS.md), [Director](docs/DIRECTOR_STUDIO.md), [Paintout](PAINTOUT.md), [alpha extraction](docs/LTX_ALPHA.md), [Ripple editing](docs/RIPPLE_STUDIO.md) and [painted image edits](docs/IMAGE_EDIT_AREA.md) remain available.
+Zura Studio remains free to open and use normally, without a ComfyLink licence. The separate native ComfyLink After Effects plug-in is optional and is not bundled here. Existing [Relight](docs/RELIGHT_MODELS.md), [Director](docs/DIRECTOR_STUDIO.md), [Paintout](PAINTOUT.md), [alpha extraction](docs/LTX_ALPHA.md), [Ripple editing](docs/RIPPLE_STUDIO.md) and [painted image edits](docs/IMAGE_EDIT_AREA.md) remain available.
 
 The previous update adds complete camera-angle model setup, including MoGe 3, and checks gated-model access before large downloads. Choose a mode to see its missing files and extension guidance. Restart ComfyUI and refresh Studio after updating. See the [model setup notes](docs/STUDIO_1348_VALIDATION.md).
 

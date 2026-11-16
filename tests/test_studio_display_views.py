@@ -57,6 +57,18 @@ class OriginalDisplayTests(unittest.TestCase):
         self.assertEqual(config['display'], 'sRGB - Display')
         self.assertEqual(config['view'], 'Un-tone-mapped')
 
+    def test_adobe_rec709_limited_view_accepts_srgb_result_and_linear_ae_source(self):
+        from ComfyUI_zura_nodes.comfylink import display_view
+        preset = next((item for item in display_view.adobe_view_presets()
+                       if item['view'] == 'P3D65 Rec.709 Limited' and item['config'].startswith('adobe-ae://')), None)
+        if preset is None:
+            self.skipTest('Adobe AE display configuration is not installed')
+        pixels = np.array([[[.12, .35, .72, 1.]]], dtype=np.float32)
+        for source in ('srgb_display', 'linear_rec709'):
+            shown = views.render_pixels(pixels, source, preset['config'], preset['display'], preset['view'])
+            self.assertEqual(np.array(Image.open(io.BytesIO(shown))).shape, (1, 1, 4))
+        np.testing.assert_array_equal(pixels, np.array([[[.12, .35, .72, 1.]]], dtype=np.float32))
+
     def test_actual_float_exr_survives_preview_and_changes_view(self):
         path = self.roots['output']/'source.exr'
         pixels = np.array([[[-.25, .18, 4., 1.], [1.234567, .03, .4, .33333334]]], dtype=np.float32)

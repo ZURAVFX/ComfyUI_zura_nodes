@@ -1,3 +1,4 @@
+import {imageDimensions} from './image_recipes.js';
 import {workspaceStorage} from './studio_storage.js';
 import {openPanoramaEditor} from './studio_panorama_editor.js';
 import {StudioModelDownloads} from './studio_model_download.js';
@@ -12,6 +13,21 @@ export function environmentGeneration(config){
   const height=Math.max(256,Math.min(2048,Math.round(Math.sqrt(area/2)/32)*32));
   return {...config,image_intent:'hdri',shape:'landscape',width:height*2,height,
     prompt:'Create a seamless 360-degree equirectangular environment panorama, full sphere, 2:1 aspect ratio, level horizon, matching left and right edges. Fill any green missing regions from the surrounding scene. Do not draw a border or labels. '+config.prompt};
+}
+
+export function panoramaGenerationBlocker({busy,canvasBusy,model,connected,prompt,references=[],dimensionError}){
+  if(busy)return 'Finish or cancel the current operation before generating a panorama.';
+  if(canvasBusy)return 'The 360° canvas is opening. Generation will be available when it is ready.';
+  if(!model?.ready)return 'Set up the selected image model, then refresh models.';
+  if(!connected)return 'Sign in to the selected browser account before generating.';
+  if(!String(prompt||'').trim())return 'Describe the environment below to generate a panorama.';
+  if(dimensionError)return dimensionError;
+  // The 360° canvas supplies Image 1; additional references retain their slots.
+  const count=Math.max(1,references.length);
+  if(!model.referenceReady)return 'Choose an image model with reference-image support for the panorama canvas.';
+  if(count<(model.minReferences||0))return `Add ${model.minReferences-count} more reference image${model.minReferences-count===1?'':'s'} for this model.`;
+  if(count>(model.maxReferences||0))return `This model supports at most ${model.maxReferences||0} reference images. Remove extra references or choose another model.`;
+  return '';
 }
 
 /** Environment tools share the ordinary image canvas, providers and history. */
@@ -58,9 +74,19 @@ export class HDRIBuilder{
     const image=o.$('gallery').querySelector('figure');if(this.previewURL&&image?.querySelector('img'))image.querySelector('img').src=this.previewURL;const save=image?.querySelector('[data-save-image]');if(save)save.hidden=true;
     const download=image?.querySelector('figcaption a[download]');if(download)download.textContent='Download preview';
     if(!this.editor&&!this.composing)void this.compose();
-    this.renderLights();
+    this.renderLights();this.syncGenerate();
   }
   renderLights(){const selected=this.light();this.$('light-row').hidden=!selected;this.$('light').innerHTML=this.state.lights.map((light,index)=>`<option value="${escape(light.id)}" ${light===selected?'selected':''}>Light ${index+1}</option>`).join('');if(!selected)return;for(const key of ['stops','radius','azimuth','elevation'])if(this.$(key)!==document.activeElement)this.$(key).value=selected[key];this.$('color').value='#'+selected.color.map(c=>Math.round(c*255).toString(16).padStart(2,'0')).join('');}
+  syncGenerate(){
+    if(!this.active())return;
+    const o=this.owner,config=o.config(),model=o.models.find(item=>item.id===config.model);let dimensionError='';
+    try{imageDimensions(config);}catch(error){dimensionError=error.message;}
+    const reason=panoramaGenerationBlocker({canvasBusy:!!(this.loading||this.composing),busy:!!(o.job||o.pendingSubmission||o.submitting||o.uploading||o.rippleImage?.importing),model,connected:o.browserConnection.connected(model),prompt:config.prompt,references:config.references,dimensionError});
+    const button=o.$('generate');button.disabled=!!reason;button.title=reason||'Generate the composed 360° panorama';
+    let status=this.root.querySelector('[data-hdri-generation-status]');
+    if(!status){status=this.root.ownerDocument.createElement('span');status.dataset.hdriGenerationStatus='';status.setAttribute('role','status');this.root.querySelector('.zhe-feedback').prepend(status);}
+    status.textContent=reason;status.hidden=!reason;
+  }
   async preview(){
     if(!this.active()||!this.source())return;if(this.previewing){this.pending=true;return;}
     this.previewing=true;const revision=this.serial,source=this.source();
@@ -95,7 +121,7 @@ export class HDRIBuilder{
       const updateScene=()=>{if(!this.editor)return;const state=JSON.parse(this.editor.snapshot());this.viewport.classList.toggle('is-empty',!this.compositionSource&&!state.stickers?.length);this.rememberScene();};updateScene();clearInterval(this.scenePoll);this.scenePoll=setInterval(updateScene,500);
       this.message('');
     }catch(error){this.message(error.message);this.viewport.textContent=error.message;}
-    finally{this.composing=false;if(this.pendingVisual){this.pendingVisual=false;void this.compose(true);}}
+    finally{this.composing=false;this.syncGenerate();if(this.pendingVisual){this.pendingVisual=false;void this.compose(true);}}
   }
   rememberScene(){if(!this.editor)return;const text=this.editor.snapshot(),sourceKey=JSON.stringify(this.source());if(this.state.scene?.text!==text||this.state.scene?.sourceKey!==sourceKey){this.state.scene={sourceKey,text};this.save();}}
   async composeForGeneration(config){

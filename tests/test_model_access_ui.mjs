@@ -71,7 +71,7 @@ await browserAccess.pollBrowser();assert.equal(resumed,1);assert.equal(browserAc
 assert.deepEqual(browserCalls[1],{action:'browser_poll',id:'device-session'});
 let termsPrevented=false;
 browserAccess.setFiles([file],{access_repo:'Example/gated',access_reason:'terms'});
-browserAccess.request=async()=>({connected:true,name:'artist'});
+browserAccess.request=async(path,body)=>body?.action==='check_files'?{allowed:true}:{connected:true,name:'artist'};
 browserAccess.$('terms').querySelector('a').onclick({preventDefault(){termsPrevented=true;}});
 assert.equal(termsPrevented,true,'A working popup does not also open a duplicate tab');
 await browserAccess.onTermsReturn();assert.equal(resumed,2,'Returning from model terms resumes the requested download');
@@ -85,3 +85,21 @@ const starting=interrupted.startBrowser();interrupted.dispose();resolveStart({id
 assert.equal(interrupted.login,null);assert.equal(scheduled,null,'Closing a workspace cannot leave browser sign-in polling');
 globalThis.setTimeout=nativeTimeout;globalThis.clearTimeout=nativeClear;
 console.log('Browser sign-in, blocked-popup fallback, automatic retry and cancellation races passed.');
+
+let granted=false,resumeCount=0,deviceStarts=0;
+const popup={closed:false,opener:{},location:{},close(){this.closed=true;}};
+window.open=()=>popup;
+const automatic=new ModelAccess(document.querySelector('#access'),async(path,body)=>{
+ if(body?.action==='check_files')return {allowed:granted,auth_required:true,access_reason:'connect',access_repo:'Example/gated'};
+ if(body?.action==='browser_start'){deviceStarts++;return {id:'auto',url:'https://huggingface.co/oauth/device',interval:5};}
+ if(body?.action==='browser_cancel')return {};
+ return {connected:deviceStarts>0,browser_signin_available:true};
+},()=>resumeCount++);
+const missingFile={...file,installed:false,revision:'a'.repeat(40),remote_path:'model.safetensors'};
+const reserved=automatic.reservePopup([missingFile]);
+await automatic.check([missingFile],{interactive:true,popup:reserved});
+assert.equal(deviceStarts,1,'Install automatically starts browser sign-in using the reserved popup');
+assert.equal(popup.location.href,'https://huggingface.co/oauth/device');
+await automatic.cancelBrowser();
+await automatic.onTermsReturn();assert.equal(resumeCount,0,'Returning to Studio without accepting terms never resumes download');
+granted=true;await automatic.onTermsReturn();assert.equal(resumeCount,1,'Approved access resumes the retained install intent');automatic.dispose();

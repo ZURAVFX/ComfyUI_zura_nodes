@@ -1,0 +1,58 @@
+/* Allocate the remaining window height to media, not to a second page. */
+#genj-studio[data-workspace]{--zs-preview-min:0px}
+#genj-studio[data-workspace] :is(.zf-page,.zo-page){flex:1 1 0;min-height:0;overflow:hidden}
+#genj-studio[data-workspace] :is(.zf-viewer,.zo-stage,.zpc-viewer){flex:1 1 0;min-height:0}
+#genj-studio[data-workspace=video] .gs-workspace{overflow:hidden}
+#genj-studio[data-workspace=video] .gs-main{display:grid;grid-template-rows:minmax(0,1fr) auto;min-height:0;overflow:hidden}
+#genj-studio[data-workspace=video] .gs-preview-scroll{min-height:0;overflow:hidden}
+#genj-studio[data-workspace=video] .gs-canvas{flex:1 1 0;min-height:0}
+#genj-studio[data-workspace] :is(.zvfx-page,.zalpha-page,.zru-page,.zpc-page,.zdir-page){flex:1 1 0;min-height:0;overflow:hidden}
+#genj-studio[data-workspace] .zdir-page{height:auto;grid-template-rows:auto minmax(0,1fr) auto auto}
+#genj-studio[data-workspace] :is(.zalpha-viewer,.zpc-viewer,.zdir-stage){min-height:0}
+#genj-studio[data-workspace] .zru-page>.zru-viewer{flex:1 1 0;height:auto;min-height:0}
+#genj-studio[data-workspace] .zru-relight-frames{flex:1 1 0;min-height:0}
+#genj-studio[data-workspace] .zru-relight-frames :is(.zru-viewer,.zru-lighting-preview){flex:1 1 0;height:auto;min-height:0}
+#genj-studio[data-workspace] .zvfx-page .zvfx-workbench{flex:1 1 0;min-height:0}
+#genj-studio[data-workspace] .zvfx-page .zvfx-stage{height:100%;min-height:0}
+#genj-studio[data-workspace] .zvfx-frame-actions{display:inline-flex;flex-wrap:nowrap;gap:0;align-items:stretch;border:1px solid var(--gs-line);border-radius:6px;background:var(--gs-input);flex:none}
+#genj-studio[data-workspace] .zvfx-frame-actions select{border:0;border-radius:6px 0 0 6px;background:transparent;min-width:90px}
+#genj-studio[data-workspace] .zvfx-frame-actions button{border:0;border-left:1px solid var(--gs-line);border-radius:0 6px 6px 0;background:transparent;white-space:nowrap}
+#genj-studio[data-workspace] .zvfx-key-card{position:relative;flex:none}
+#genj-studio[data-workspace] .zvfx-key-select{display:flex;align-items:center;gap:6px;max-width:150px;padding:5px 10px;min-height:38px}
+#genj-studio[data-workspace] .zvfx-key-select img{width:36px;height:28px;object-fit:cover;border-radius:3px}
+#genj-studio[data-workspace] .zvfx-key-remove{position:absolute;top:-5px;right:-5px;display:grid;place-items:center;width:22px;height:22px;min-height:22px;padding:0;border-radius:50%;background:var(--gs-panel);font-size:16px;line-height:1}
+#genj-studio[data-workspace] .zvfx-timeline>[data-vfx=keys]{flex:1;min-width:0;flex-wrap:nowrap;overflow-x:auto;padding:5px}
+#genj-studio[data-workspace] .zvfx-timeline [data-vfx=key-status]{flex:0 0 auto;margin-left:auto;font-size:11px}
+@media(max-height:1000px){
+ #genj-studio[data-workspace] :is(.gs-composer,.zf-composer){padding:10px 14px;gap:8px}
+ #genj-studio[data-workspace] :is(.gs-composer,.zf-composer) textarea{height:48px;min-height:48px!important;max-height:64px;resize:none}
+ #genj-studio[data-workspace] .zc-workflow-progress{min-height:38px;padding-block:7px}
+ #genj-studio[data-workspace] :is(.zvfx-page,.zalpha-page,.zru-page,.zpc-page){gap:8px;padding-top:8px;padding-bottom:8px}
+ #genj-studio[data-workspace] :is(.zvfx-composer,.zru-composer,.zpc-composer,.zalpha-composer){padding:10px 14px;gap:8px}
+ #genj-studio[data-workspace] :is(.zvfx-composer,.zru-composer,.zpc-composer,.zalpha-composer) textarea{min-height:40px;height:48px;max-height:72px;resize:none;margin-block:4px}
+ #genj-studio[data-workspace] .zvfx-heading h2{font-size:17px}
+ #genj-studio[data-workspace] .zvfx-heading p{font-size:12px}
+ #genj-studio[data-workspace] .zvfx-workbench:not(.is-review){grid-template-columns:minmax(0,1fr);grid-template-rows:auto minmax(0,1fr)}
+ #genj-studio[data-workspace] .zvfx-tools{display:flex;flex-direction:row;align-items:center;justify-content:center;flex-wrap:wrap;gap:8px 14px;padding:6px 10px;border-right:0;border-bottom:1px solid var(--gs-line);overflow:visible}
+ #genj-studio[data-workspace] .zvfx-tool-group{display:flex;gap:4px}
+ #genj-studio[data-workspace] .zvfx-tool-group button{flex-direction:row;gap:5px;padding:5px 8px;font-size:11px}
+ #genj-studio[data-workspace] :is(.zvfx-brush-controls,.zvfx-colour-controls){display:flex;flex-direction:row;align-items:center;gap:8px;border:0;padding:0}
+ #genj-studio[data-workspace] .zvfx-brush-controls>span,#genj-studio[data-workspace] .zvfx-colour-controls>span{display:none}
+ #genj-studio[data-workspace] .zvfx-brush-controls>input{width:130px}
+ #genj-studio[data-workspace] .zvfx-swatches{grid-template-columns:repeat(5,22px);gap:4px}
+ #genj-studio[data-workspace] .zvfx-tools .zvfx-swatches button{width:22px;min-height:22px;height:22px}
+ #genj-studio[data-workspace] .zvfx-tools .zvfx-colour-picker{width:42px}
+ #genj-studio[data-workspace] .zvfx-colour-picker span{display:none}
+ #genj-studio[data-workspace] .zvfx-history-tools{display:flex;padding:0;border:0;gap:4px}
+ #genj-studio[data-workspace] .zvfx-history-tools button{min-width:36px;padding:4px;font-size:10px}
+ #genj-studio[data-workspace] .zvfx-timeline{padding:5px 10px;gap:6px}
+ #genj-studio[data-workspace] .zvfx-composer .zvfx-note{margin:4px 0 0;font-size:10px;line-height:1.3}
+ #genj-studio[data-workspace] .zvfx-composer :is([data-vfx=readiness],[data-vfx=message]):empty{display:none}
+}
+@media(max-height:800px){
+ #genj-studio[data-workspace] .gs-top{min-height:48px}
+ #genj-studio[data-workspace] .zvfx-heading p{display:none}
+ #genj-studio[data-workspace] .zvfx-composer .zvfx-note{display:none}
+ #genj-studio[data-workspace] .zvfx-history-tools button span{display:none}
+ #genj-studio[data-workspace] :is(.zpc-composer,.zru-composer) textarea{height:40px;min-height:40px}
+}

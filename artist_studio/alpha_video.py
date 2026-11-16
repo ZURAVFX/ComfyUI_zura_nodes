@@ -297,11 +297,12 @@ class ZuraAlphaVideoOutput:
         fps = str(rate)
         count, width, height = info["frame_count"], info["width"], info["height"]
         names = {"alpha": target.with_name(target.name + "_alpha.mov"),
-                 "matte": target.with_name(target.name + "_matte.mp4"),
+                 "matte": target.with_name(target.name + "_matte.mov"),
+                 "matte_preview": target.with_name(target.name + "_matte_preview.mp4"),
                  "preview": target.with_name(target.name + "_preview.mp4"),
                  "sequence": target.with_name(target.name + "_matte_png16.zip")}
         temporary_outputs = {role: path.with_name(path.stem + ".partial" + path.suffix) for role, path in names.items()}
-        update = _progress(count + 3)
+        update = _progress(count + 4)
         float_writer=AlphaFloatWriter(output,info)
         try:
             with tempfile.TemporaryDirectory(prefix="zura_alpha_") as temporary:
@@ -344,8 +345,11 @@ class ZuraAlphaVideoOutput:
                 # the MOV and PNG sequence retain the exact source raster.
                 _run([_tool("ffmpeg"), "-v", "error", "-y", "-framerate", fps, "-start_number", "0", "-i", str(sequence),
                       "-vf", "pad=ceil(iw/2)*2:ceil(ih/2)*2:0:0:color=black", "-frames:v", str(count), "-an", "-c:v", "libx264",
-                      "-preset", "fast", "-crf", "10", "-pix_fmt", "yuv420p", "-video_track_timescale", str(rate.numerator), "-movflags", "+faststart", str(temporary_outputs["matte"])])
-                update(count + 2)
+                      "-preset", "fast", "-crf", "10", "-pix_fmt", "yuv420p", "-video_track_timescale", str(rate.numerator), "-movflags", "+faststart", str(temporary_outputs["matte_preview"])])
+                _run([_tool("ffmpeg"),"-v","error","-y","-framerate",fps,"-start_number","0","-i",str(sequence),
+                      "-frames:v",str(count),"-an","-c:v","prores_ks","-profile:v","4","-pix_fmt","yuv444p10le","-tag:v","ap4h",
+                      "-video_track_timescale",str(rate.numerator),"-movflags","+faststart+write_colr",str(temporary_outputs["matte"])])
+                update(count + 3)
                 checker = np.full((height, width), 96, dtype=np.uint8)
                 yy, xx = np.ogrid[:height, :width]
                 checker[(xx // 24 + yy // 24) % 2 == 0] = 160
@@ -356,7 +360,7 @@ class ZuraAlphaVideoOutput:
                       "-filter_complex", preview_filters, "-map", "[preview]", "-frames:v", str(count), "-r", fps, "-fps_mode", "cfr",
                                "-an", "-c:v", "libx264", "-preset", "fast", "-crf", "18", "-pix_fmt", "yuv420p",
                                "-video_track_timescale", str(rate.numerator), "-movflags", "+faststart", str(temporary_outputs["preview"])])
-                update(count + 3)
+                update(count + 4)
             if _pin(source) != info["source_pin"]:
                 raise ValueError("The source changed while saving. Generate its alpha again.")
             for role, file in temporary_outputs.items():
@@ -387,7 +391,9 @@ class ZuraAlphaVideoOutput:
             ae_files.append({'filename': master.name, 'subfolder': master.parent.as_posix(), 'type': 'output', 'role': 'ae_float', 'colour': manifest['colour']})
         for role in ("preview", "matte", "alpha", "sequence"):
             relative = names[role].relative_to(output)
-            files.append({"filename": relative.name, "subfolder": relative.parent.as_posix(), "type": "output", "role": role})
+            file={"filename":relative.name,"subfolder":relative.parent.as_posix(),"type":"output","role":role}
+            if role=='matte':file['preview']={'filename':names['matte_preview'].name,'subfolder':relative.parent.as_posix(),'type':'output'}
+            files.append(file)
         return {"ui": {"images": files, "animated": (True,), **({'files': ae_files} if ae_files else {})}}
 
 

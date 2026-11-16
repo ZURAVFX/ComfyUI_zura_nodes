@@ -48,6 +48,9 @@ delete info.ZuraAlphaVideoOutput;assert.ok(alphaVideoAvailability(info).missing.
 const files=['matte','preview','alpha'].map(role=>({role,filename:role+(role==='alpha'?'.mov':'.mp4'),type:'output',subfolder:'ZURA STUDIO/alpha'}));
 const output=alphaVideoOutput({outputs:{save:{images:files}}},config);
 assert.equal(output.alpha.filename,'alpha.mov');assert.equal(output.preview.filename,'preview.mp4');assert.equal(output.config,config);
+const matteMOV={...files[0],filename:'matte.mov'},mattePreview={...files[0],role:'matte_preview',filename:'matte_preview.mp4'};
+const movOutput=alphaVideoOutput({outputs:{save:{images:[matteMOV,mattePreview,...files.slice(1)]}}},config);
+assert.equal(movOutput.matte.filename,'matte.mov');assert.equal(movOutput.matte.preview,mattePreview);assert.equal(movOutput.alpha.filename,'alpha.mov');assert.equal(movOutput.preview.filename,'preview.mp4','Matte playback is not confused with the checkerboard composite');
 assert.equal(alphaVideoOutput({outputs:{save:{images:files.slice(0,2)}}},config),null,'A matte preview cannot be passed off as a transparent master');
 assert.equal(alphaVideoOutput({outputs:{save:{files:[...files,{role:'sequence',filename:'matte.zip'}]}}},config).sequence.filename,'matte.zip');
 const floatMaster={role:'ae_float',filename:'manifest.json',subfolder:'ComfyLink/'+'a'.repeat(32),type:'output'};

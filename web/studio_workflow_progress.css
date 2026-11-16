@@ -1,0 +1,20 @@
+/* The same numbered-circle and connector pattern as the native relight flow. */
+#genj-studio .zc-workflow-progress{box-sizing:border-box;flex:none;width:100%;min-height:52px;padding:12px 24px;color:var(--gs-muted);overflow-x:auto;scrollbar-width:thin}
+#genj-studio .zc-workflow-progress[hidden]{display:none!important}
+#genj-studio .zc-workflow-progress ol{display:flex;align-items:center;justify-content:center;gap:0;list-style:none;margin:0 auto;padding:0;min-width:max-content}
+#genj-studio .zc-workflow-progress li{display:flex;align-items:center;gap:8px;margin:0;padding:0;font-size:12px;line-height:1.4;white-space:nowrap}
+#genj-studio .zc-workflow-number{display:grid;place-items:center;flex:none;width:24px;height:24px;border-radius:50%;background:var(--gs-line);color:var(--gs-muted);font-size:12px;font-variant-numeric:tabular-nums}
+#genj-studio .zc-workflow-progress li:not(:last-child)::after{content:'';display:block;flex:none;width:40px;height:1px;margin:0 16px 0 8px;background:var(--gs-line)}
+#genj-studio .zc-workflow-progress .active{color:var(--zc-text)}
+#genj-studio .zc-workflow-progress .active .zc-workflow-number{background:var(--gs-accent);color:var(--gs-ink)}
+#genj-studio .zc-workflow-progress .complete .zc-workflow-number{background:var(--gs-selected);color:var(--gs-accent-soft,var(--gs-accent))}
+#genj-studio .zc-workflow-progress :is(.complete,.active)::after{background:var(--gs-accent-soft,var(--gs-accent))}
+@media(max-width:700px){#genj-studio .zc-workflow-progress{padding:10px 12px;min-height:44px}#genj-studio .zc-workflow-progress ol{justify-content:flex-start}#genj-studio .zc-workflow-progress li{font-size:11px;gap:6px}#genj-studio .zc-workflow-progress li:not(:last-child)::after{width:16px;margin:0 8px 0 2px}#genj-studio .zc-workflow-number{width:22px;height:22px;font-size:11px}}
+
+#genj-studio .zc-workflow-progress li>button{display:flex;align-items:center;gap:8px;min-height:32px;padding:0;border:0;background:transparent;color:inherit;font:inherit;white-space:nowrap;cursor:pointer}
+#genj-studio .zc-workflow-progress li>button:disabled{opacity:.6;cursor:default}
+#genj-studio .zc-workflow-progress li>button:not(:disabled):hover .zc-workflow-label{text-decoration:underline;text-underline-offset:4px}
+#genj-studio .zc-workflow-progress li>button:focus-visible{outline:2px solid var(--gs-focus,var(--gs-accent));outline-offset:5px;border-radius:4px}
+
+@media(max-width:1100px){#genj-studio .zc-workflow-progress li:not(:last-child)::after{width:24px;margin:0 10px 0 4px}}
+@media(max-width:700px){#genj-studio .zc-workflow-progress li:not(.active) .zc-workflow-label{display:none}#genj-studio .zc-workflow-progress li:not(:last-child)::after{width:12px;margin:0 6px 0 2px}}

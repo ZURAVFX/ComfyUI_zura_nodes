@@ -1,0 +1,9 @@
+/* One compact group for actual saved result files in Alpha and Paintout. */
+#genj-studio :is(.zc-result-exports,.zalpha-exports.zc-result-exports){box-sizing:border-box;display:flex;align-items:center;flex-wrap:wrap;gap:6px 8px;flex:none;min-width:0;border-top:1px solid var(--gs-line);padding:9px 0 0;margin:9px 0 0;font-size:12px}
+#genj-studio .zc-result-exports[hidden]{display:none!important}
+#genj-studio .zc-result-exports a{display:inline-flex;align-items:center;justify-content:center;gap:6px;box-sizing:border-box;min-height:34px;padding:6px 10px;border:1px solid var(--gs-line);border-radius:5px;background:var(--gs-input);color:var(--zc-text);font:inherit;line-height:1.4;text-decoration:none;white-space:nowrap}
+#genj-studio .zc-result-exports a:hover{background:var(--zc-hover);border-color:var(--gs-muted)}
+#genj-studio .zc-result-exports a:focus-visible{outline:2px solid var(--gs-focus);outline-offset:2px}
+#genj-studio .zc-result-exports>span{margin-left:auto;min-width:0;color:var(--gs-muted);font-size:11px}
+#genj-studio .zpx-stage>.zc-result-exports{padding:8px 12px;margin:0;border-top:1px solid var(--gs-line);background:var(--gs-panel)}
+@media(max-width:700px){#genj-studio .zc-result-exports a{min-height:36px}#genj-studio .zc-result-exports>span{flex:1 0 100%;margin:0}}

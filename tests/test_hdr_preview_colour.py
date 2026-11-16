@@ -98,8 +98,8 @@ class HDRPreviewGraphTests(unittest.TestCase):
                             self.assertEqual(master['images'], original)
                             self.assertEqual(master.get('exr_storage', 'half'), precision)
                         if output != 'acescg_exr':
-                            self.assertEqual(graph['zura_hdr_hlg']['inputs'], {'image': original, 'source': 'linear ACEScg' if mode=='sdr' else 'HDR ACEScct', 'destination': 'HDR'})
-                            self.assertEqual(graph['zura_hdr_video']['inputs']['bit_depth'], 10)
+                            self.assertEqual(graph['zura_hdr_save_video']['inputs']['images'],original);self.assertEqual(graph['zura_hdr_save_video']['inputs']['source_space'],'acescg' if mode=='sdr' else 'acescct')
+                            self.assertEqual(graph['zura_hdr_save_video']['class_type'],'ZuraHDRSaveProRes4444')
 
 
 if __name__ == '__main__':

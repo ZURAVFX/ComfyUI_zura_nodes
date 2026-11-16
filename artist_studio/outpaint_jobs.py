@@ -71,7 +71,7 @@ def inspect_sdr_delivery(job):
     if (asset.get('type') != 'output' or not isinstance(subfolder, str)
             or subfolder.replace('\\', '/') != 'genj/outpaint'
             or not isinstance(name, str) or '/' in name or '\\' in name
-            or not name.startswith(job['id'] + '_') or not name.lower().endswith('.mp4')):
+            or not name.startswith(job['id'] + '_') or not name.lower().endswith(('.mov','.mp4'))):
         raise ValueError('The completed frame-extension output is invalid.')
     root = (Path(folder_paths.get_output_directory()) / 'genj' / 'outpaint').resolve()
     path = (root / name).resolve(strict=True)
@@ -263,7 +263,7 @@ class OutpaintJobs:
             video = next((f for f in files if f.get('type') == 'output' and
                           f.get('subfolder', '').replace('\\', '/') == folder and
                           Path(f.get('filename', '')).name.startswith(expected_prefix) and
-                          f.get('filename', '').lower().endswith('.mp4')), None)
+                          f.get('filename', '').lower().endswith(('.mov','.mp4'))), None)
             if video is None:
                 job.update(state='failed', error='The render did not return its expected video.')
             else:

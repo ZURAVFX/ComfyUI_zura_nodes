@@ -1,0 +1,46 @@
+import assert from 'node:assert/strict';
+import {nativeHDRRoute,preferNativeHDRSource} from '../web/studio_hdr_capabilities.js';
+import {StudioDeliveryControls} from '../web/studio_delivery_controls.js';
+import {studioModeAdapter,studioProcessingInput} from '../web/studio_mode_adapters.js';
+import {workflowProgress} from '../web/studio_workflow_progress.js';
+import {buildPaintoutGraph,PAINTOUT_MODELS} from '../web/paintout_studio/paintout_recipes.js';
+
+const owner={plate:{propagation:()=>false}},repair={state:{sourceColour:'linear_rec709'},sourceInfo:{resolved_colour:'linear_rec709'}};
+assert.equal(nativeHDRRoute(owner,'paintout',repair,{}),'ltx-hdr-repair');
+assert.equal(nativeHDRRoute(owner,'watermark',repair,{}),'ltx-hdr-repair');
+owner.plate.propagation=()=>true;assert.equal(nativeHDRRoute(owner,'paintout',repair,{engine:'ltx'}),null,'LTX Ripple does not inherit native HDR from the model name');owner.plate.propagation=()=>false;
+assert.equal(nativeHDRRoute(owner,'relight',repair,{engine:'ltx'}),null);
+assert.equal(nativeHDRRoute(owner,'image',repair,{model:'qwen2511'}),null);
+assert.equal(nativeHDRRoute(owner,'paint_vfx',repair,{engine:'ltx'}),null);
+assert.equal(nativeHDRRoute(owner,'frames',{assets:{first:{asset_kind:'hdr_endpoint'}},state:{engine:'ltx'}},{}),'ltx-hdr-endpoints');
+assert.equal(nativeHDRRoute(owner,'frames',{assets:{first:{}},state:{engine:'ltx'}},{}),null,'SDR endpoint generation needs the HDR post-pass');
+const studio={config:{engine:'local',edit_area:'scene'},lookMode:'ready',readyAsset:{native_hdr:{colour_space:'acescg'}}};
+assert.equal(nativeHDRRoute({studio},'swap',studio,{}),'ltx-hdr-performance');
+assert.equal(nativeHDRRoute(owner,'outpaint',{isHDRSource:true,mode:'expand',capabilities:{hdr_expand_experiment:true}},{}),'ltx-hdr-frame-extension');
+
+let converted=0;const delivery={owner,output:'hdr',hdrFormat:'acescg_exr',settings:{exrStorage:()=> 'float32'},input:()=>({input:'hdr',space:'linear_rec709'}),nativeDelivery:()=>false,alreadyHDR:()=>false,convert(){converted++;}};
+delivery.usesNativeHDR=(...args)=>StudioDeliveryControls.prototype.usesNativeHDR.call(delivery,...args);
+const configured=StudioDeliveryControls.prototype.configure.call(delivery,repair,{sourceColour:'linear_rec709'},'paintout');
+assert.equal(configured.colourPipeline,'hdr_hdr');assert.equal(configured.outputMode,'EXR sequence');assert.equal(configured.exr_storage,'float32');
+const nativeGraph=buildPaintoutGraph({...configured,mode:'full',source:'C:/native/frames',frameCount:17,width:512,height:320,sequenceFps:30,savePrefix:'native-hdr'});
+assert.equal(nativeGraph.video_vae.inputs.vae_name,PAINTOUT_MODELS.hdrVideoVae);assert.equal(nativeGraph.float_vae.class_type,'LTXVVAEForceFloat32');assert.equal(nativeGraph.save.inputs.precision,'float32');assert.equal(nativeGraph.hdr_sample,undefined,'Native HDR graph has no second reconstruction sampler');
+await StudioDeliveryControls.prototype.completed.call(delivery,'paintout',repair,{kind:'video',master:{filename:'preview.mp4',type:'output'}},configured);assert.equal(converted,0,'Native render never queues SDR-to-HDR reconstruction');
+await StudioDeliveryControls.prototype.completed.call(delivery,'relight',{state:{engine:'h3'}},{kind:'video'},{});assert.equal(converted,1,'Other models retain the conversion pass');
+
+const hdrColour={encoding:'ae_project_icc',management:'icc',sceneLinear:true},info={path:'native-exr-sequence',resolved_colour:'linear_rec709',fps:24,frames:17};
+const source={width:512,height:320,frameCount:17,fps:30,alpha:'straight',colour:hdrColour,precision:{sourceBitDepth:32,sampleType:'float32'},manifest:{frames:[{}]},studioAsset:{id:'hdr',asset_kind:'hdr_sequence'},processingInput:{conversion:'verified_icc_to_sdr8',precision:{sourceBitDepth:8},studioAsset:{id:'sdr'},mediaInfo:{path:'SDR-copy',fps:30,frames:17}}};
+const fields=new Map(),workspace={state:{},busy:()=>false,$:key=>{if(!fields.has(key))fields.set(key,{});return fields.get(key);},applySourceInfo(value){this.sourceInfo=value;this.state.source=value.path;},save(){},render(){}};
+const creative={mode:'watermark',studio:{},watermark:workspace,outputSettings:{delivery:{output:'hdr'}},show(mode){this.mode=mode;},async fetch(path){assert(path.endsWith('/hdr/paintout'));return info;}};
+assert.equal(preferNativeHDRSource(creative,'watermark',source),true);assert.equal(studioProcessingInput(source,'watermark',creative),source);
+await studioModeAdapter('watermark').acceptInput(creative,source);
+assert.equal(workspace.sourceInfo.path,'native-exr-sequence');assert.equal(workspace.sourceInfo.fps,30);assert.equal(workspace.state.frameCount,17);assert.equal(workspace.state.colourPipeline,'hdr_hdr');
+creative.outputSettings.delivery.output='sdr';assert.equal(studioProcessingInput(source,'watermark',creative),source.processingInput);
+const stages=workflowProgress({mode:'watermark',watermark:{state:{source:'native',sourceColour:'linear_rec709'}},outputSettings:{delivery:{output:'hdr'}}});
+assert(!stages.labels.includes('Convert HDR'),'Native workflows omit the extra HDR stage');
+creative.outputSettings.delivery.output='hdr';let endpoints=0;
+creative.frames={assets:{},nativeHDR:{info:{enabled:true},async upload(file){assert(file.name.endsWith('.exr'));return {id:'native-'+(++endpoints),asset_kind:'hdr_endpoint',file:'preview-'+endpoints+'.png'};}},$:()=>({value:'ltx'}),selectAvailability(){},save(){},preview(){},render(){}};
+creative.api={fetchApi:async()=>({ok:true,blob:async()=>new Blob(['EXR'])})};
+const nativeSource={...source,stills:{first:{filename:'first.exr',subfolder:'native',file:'native/first.exr',type:'input'},last:{filename:'last.exr',subfolder:'native',file:'native/last.exr',type:'input'}}};
+await studioModeAdapter('frames').acceptInput(creative,nativeSource);
+assert.equal(endpoints,2);assert.equal(creative.frames.assets.first.asset_kind,'hdr_endpoint');assert.equal(studioModeAdapter('frames').matchesInput(creative,nativeSource),true,'The same native endpoints are reused');
+console.log('HDR routing: native LTX inputs and direct EXR output, no redundant post-pass; SDR-only LTX/H3/image modes still convert.');

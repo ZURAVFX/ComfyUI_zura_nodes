@@ -6,7 +6,7 @@ export function outpaintHDRTake(state, output, seed=42){
      !['hlg_video','hlg_and_exr','acescg_exr'].includes(output))return null;
   const file=state.artifact, raster=state.output_raster;
   if(file?.type!=='output'||file.subfolder?.replaceAll('\\','/')!=='genj/outpaint'||
-     typeof file.filename!=='string'||!file.filename.toLowerCase().endsWith('.mp4')||
+     typeof file.filename!=='string'||!/\.(mp4|mov)$/i.test(file.filename)||
      /[\\/]/.test(file.filename)||file.filename==='..'||
      !raster||![raster.width,raster.height,raster.frames].every(v=>Number.isInteger(v)&&v>0)||
      raster.fps!==24||typeof raster.has_audio!=='boolean')return null;

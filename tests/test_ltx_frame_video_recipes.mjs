@@ -6,6 +6,7 @@ assert.equal(caps.twoStageDefault,false);
 assert.match(caps.twoStageDescription,/latent upscale and refinement/i);
 assert.equal(twoStageNodes,stageNodes);
 const g=build({...base,last:{file:'last.png'}});
+assert.equal(g.save.class_type,'ZuraSaveProRes4444');assert.deepEqual(Object.keys(g.save.inputs).sort(),['filename_prefix','video'],'Final LTX output uses the ProRes saver without MP4 options');
 assert.equal(g.guide_first.class_type,'LTXVImgToVideoInplace');
 assert.deepEqual(g.guide_first.inputs,{vae:['video_vae',0],image:['preprocess_first',0],latent:['empty_video',0],strength:0.7,bypass:false});
 assert.equal(g.guide_last.inputs.frame_idx,48);

@@ -463,8 +463,7 @@ def build_plan(project, *, scenario, timeline, models, text_encoder_inputs,
         components = node(g, "source_components", "GetVideoComponents", video=src)
         inputs["audio"] = node(g, "trim_audio", "TrimAudioDuration", audio=[components[0], 1], start_index=0., duration=seconds)
     video = node(g, "create_video", "CreateVideo", **inputs)
-    node(g, "save_video", "SaveVideo", video=video, filename_prefix="zura/ltx25/" + key + "/result",
-         format="mp4", **{"format.codec": "h264", "format.codec.encoding": "re-encode", "format.codec.encoding.crf": 16.})
+    node(g, "save_video", "ZuraSaveProRes4444", video=video, filename_prefix="zura/ltx25/" + key + "/result")
     if c.get('ae_frame_contract') is not None:
         from ..comfylink.frame_contract import apply_frame_contract
         phases['decode'] = apply_frame_contract(g, c['ae_frame_contract'],
@@ -668,8 +667,7 @@ def build_viewport_plan(project, *, scenario, timeline, models, text_encoder_inp
         audio = node(g, "trim_audio", "TrimAudioDuration", audio=[components[0], 1], start_index=0., duration=source_frames / fps)
         args["audio"] = node(g, "hold_audio", "GenjPadAudioToFrames", audio=audio, frames=["hold_output", 1], fps=fps)
     video = node(g, "create_video", "CreateVideo", **args)
-    node(g, "save_video", "SaveVideo", video=video, filename_prefix="zura/ltx25/" + key + "/result",
-         format="mp4", **{"format.codec": "h264", "format.codec.encoding": "re-encode", "format.codec.encoding.crf": 16.})
+    node(g, "save_video", "ZuraSaveProRes4444", video=video, filename_prefix="zura/ltx25/" + key + "/result")
     if c.get('ae_frame_contract') is not None:
         from ..comfylink.frame_contract import apply_frame_contract
         phases['decode'] = apply_frame_contract(g, c['ae_frame_contract'],

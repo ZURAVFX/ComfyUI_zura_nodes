@@ -22,6 +22,18 @@ class Response:
 
 
 class ModelDownloadTest(unittest.TestCase):
+    def test_paint_vfx_pinned_adapter_and_shared_model_package(self):
+        package = downloads.CATALOG['ltx_paint_vfx']
+        adapter = package['files'][-1]
+        self.assertEqual(adapter['repo'], 'AInVFX/ainvfx-fluid')
+        self.assertEqual(adapter['revision'], '6acb88df82c38a1f288a8f94fbd8b70eb5f975fb')
+        self.assertEqual(adapter['sha256'], '167b4ccfd3ed5e95c7973a0233f8fbd8edb5e9182ecb3998bd972661c861ebaa')
+        self.assertEqual(adapter['size_bytes'], 654446320)
+        self.assertEqual(adapter['remote_path'], 'ltx-2.5/ainvfx-fluid.safetensors')
+        self.assertFalse(adapter['gated'])
+        self.assertEqual(package['files'][:4], [downloads.CATALOG['ltx25_core']['files'][0], downloads.CATALOG['ltx25_text_int8']['files'][0], downloads.CATALOG['ltx25_core']['files'][1], downloads.CATALOG['ltx25_core']['files'][2]])
+        self.assertIn('alpha and HDR conversion are separate', package['note'])
+
     def test_alpha_package_reuses_ltx_files_and_only_offers_missing_adapter(self):
         package = downloads.CATALOG['ltx_alpha']
         self.assertEqual(package['files'][:4], downloads.CATALOG['ltx_ripple']['files'][:4])

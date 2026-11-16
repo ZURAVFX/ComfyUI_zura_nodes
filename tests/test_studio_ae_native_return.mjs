@@ -1,0 +1,40 @@
+import assert from 'node:assert/strict';
+import {aeReturnBody,StudioAEBridge} from '../web/studio_comfylink.js';
+
+const master={filename:'paintout_SDR_10bit.mp4',subfolder:'ZURA STUDIO/plate_0003',type:'output'};
+const selected={kind:'video',master,preview:{filename:'paintout_preview.mp4',subfolder:master.subfolder,type:'output'},
+  colour:{encoding:'srgb_display',sceneLinear:false},width:512,height:320,frameCount:17,fps:30000/1001};
+assert.deepEqual(aeReturnBody(selected,true),{kind:'native_video',master});
+assert.equal(aeReturnBody(selected,false),selected,'Ordinary sessions retain the existing transfer path');
+assert.equal(aeReturnBody({...selected,kind:'hdr_sequence'},true).kind,'hdr_sequence');
+assert.equal(aeReturnBody({...selected,master:selected.preview},true),null,'A preview is not a physical master');
+assert.equal(aeReturnBody({...selected,master:{...master,filename:'paintout_proxy.mov'}},true),null);
+assert.equal(aeReturnBody({...selected,master:{...master,type:'temp'}},true).kind,'video');
+assert.equal(aeReturnBody({...selected,master:{...master,filename:'paintout.exr'}},true).kind,'video');
+assert.equal(aeReturnBody({...selected,preview:master},true),null);
+const sent=[];
+const bridge=Object.create(StudioAEBridge.prototype);
+bridge.studio={creative:{mode:'paintout',studio:{},paintout:{result:{files:[master,selected.preview],master,preview:selected.preview,
+  config:{outputMode:'SDR video'}}}}};
+bridge.session={context:{capabilities:{nativeVideoReturn:true}}};
+bridge.source={processingInput:{conversion:'raw_numeric_to_sdr8'}};
+bridge.send={disabled:false};
+bridge.message=()=>{};
+bridge.request=async(suffix,body)=>{sent.push({suffix,body});return {status:'sent'};};
+await bridge.sendResult();
+assert.deepEqual(sent,[{suffix:'/result',body:{kind:'native_video',master}}]);
+assert.equal(bridge.send.disabled,false);
+bridge.session.context.capabilities.nativeVideoReturn=false;
+await bridge.sendResult();
+assert.equal(sent.length,1,'Raw numeric return without the broker gate remains held');
+bridge.session.context.capabilities.jsxNumericReturn=true;
+await bridge.sendResult();
+const normalVideo={kind:'video',master,preview:selected.preview};
+assert.deepEqual(sent[1],{suffix:'/result',body:normalVideo},'JSX numeric return sends the normal, source-bound video descriptor');
+bridge.session.context.capabilities.nativeVideoReturn=true;
+await bridge.sendResult();
+assert.deepEqual(sent[2],{suffix:'/result',body:normalVideo},'JSX numeric return takes precedence over the movie-only fallback');
+bridge.session.context.capabilities.jsxNumericReturn=false;
+await bridge.sendResult();
+assert.deepEqual(sent[3],{suffix:'/result',body:{kind:'native_video',master}},'Disabling JSX restores the native movie fallback');
+console.log('AE return selection: distinct broker gates for native movie and unchanged numeric JSX');

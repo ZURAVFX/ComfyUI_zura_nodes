@@ -1,6 +1,7 @@
 import {buildRippleStudioGraph, rippleStudioAvailability, rippleStudioValidation} from './studio_ripple_recipes.js';
 import {submitOwnedGraph, recoverOwnedSubmission, cancelOwnedJob} from './studio_owned_jobs.js';
 import {durationLabel, installOwnedExecuting} from './studio_progress.js';
+import {captureResultExports} from './studio_result_exports.js';
 
 const elapsed=job=>`${durationLabel((Date.now()-(job?.started||Date.now()))/1000)} elapsed`;
 
@@ -11,7 +12,7 @@ export function rippleOutput(entry, config) {
   const master=files.find(file=>!/motion_preview/i.test(file.filename))||files[0];
   const file=files.find(file=>/motion_preview/i.test(file.filename))||master;
   if(!file)return null;
-  return {file,master,config,saved:(output.text||[]).join('\n')};
+  return {file,master,config,exports:captureResultExports(output),saved:(output.text||[]).join('\n')};
 }
 
 /** Attach ownership-aware submission and progress to the dedicated workspace. */

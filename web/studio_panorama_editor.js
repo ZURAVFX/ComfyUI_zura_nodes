@@ -1,5 +1,35 @@
 import {cameraOnlyControls} from './studio_panorama_controls.js';
 
+/** Panorama's modal is mounted under body, outside Studio's theme inheritance. */
+export function installPanoramaAppearance(root,themeRoot=root.ownerDocument?.querySelector('#genj-studio')){
+  const doc=root.ownerDocument||document,editor=root.querySelector('.pano-studio');
+  if(!editor)return()=>{};
+  const sync=()=>{
+    const light=themeRoot?.dataset?.theme==='light',computed=doc.defaultView?.getComputedStyle?.(themeRoot||root);
+    const value=(name,fallback)=>computed?.getPropertyValue(name)?.trim()||fallback;
+    root.classList.add('zc-camera-themed');root.dataset.zuraCameraTheme=light?'light':'dark';
+    editor.classList.toggle('dark-theme',!light);editor.style.colorScheme=light?'light':'dark';
+    const colours={
+      '--studio-frame':value('--gs-bg',light?'#f5f5f1':'#111111'),
+      '--studio-panel':value('--gs-panel',light?'#ffffff':'#1b1b1b'),
+      '--studio-fill':value('--gs-input',light?'#f0f0eb':'#222222'),
+      '--studio-fill-hover':value('--zc-hover',light?'#e8e8e3':'#303030'),
+      '--studio-fill-active':value('--gs-selected',light?'#e3e3dc':'#292a21'),
+      '--studio-line':value('--gs-line',light?'#dcdcd5':'#383838'),
+      '--studio-line-strong':value('--gs-line',light?'#c8c8c0':'#484848'),
+      '--studio-fg-2':value('--gs-muted',light?'#686861':'#ababab'),
+      '--studio-fg':value('--zc-text',light?'#202019':'#f2f2f2'),
+      '--studio-strong':value('--gs-accent','#caff00'),
+      '--studio-on-strong':value('--gs-ink','#111111'),
+    };
+    for(const [name,colour]of Object.entries(colours))editor.style.setProperty(name,colour);
+  };
+  sync();const Observer=doc.defaultView?.MutationObserver||globalThis.MutationObserver;
+  const observer=themeRoot&&Observer?new Observer(sync):null;
+  observer?.observe(themeRoot,{attributes:true,attributeFilter:['data-theme','class','style']});
+  return()=>{observer?.disconnect();root.classList.remove('zc-camera-themed');delete root.dataset.zuraCameraTheme;};
+}
+
 export function installSourcePreview(root,source){
   if(!source?.url)return()=>{};
   const main=root.querySelector('.pano-studio-main');if(!main)return()=>{};
@@ -13,6 +43,27 @@ export function installSourcePreview(root,source){
   video.ontimeupdate=()=>{if(!follow.checked&&video.currentTime>=start+duration){video.pause?.();video.currentTime=start;}};
   const observer=new MutationObserver(sync);observer.observe(root,{childList:true,subtree:true,characterData:true,attributes:true,attributeFilter:['aria-label']});sync();
   return()=>{observer.disconnect();video.pause?.();video.removeAttribute('src');video.load?.();panel.remove();main.classList.remove('zc-camera-with-source');};
+}
+
+/** Reuse the native image picker; resizing never recreates the scene. */
+export function installEnvironmentWorkspace(root,host,{resize=()=>globalThis.window?.dispatchEvent(new Event('resize'))}={}){
+  const doc=host.ownerDocument,bar=doc.createElement('div');bar.className='zc-environment-actions';
+  bar.innerHTML='<button type="button" data-environment-add>Add image / sticker</button><span>Add images one at a time, then place them in the scene.</span><button type="button" data-environment-expand aria-expanded="false">Expand workspace</button>';
+  host.append(bar);const add=bar.querySelector('[data-environment-add]'),expand=bar.querySelector('[data-environment-expand]');let previousFocus=null;
+  add.onclick=()=>{const picker=root.querySelector('[data-add-picker]');if(picker&&!picker.disabled){picker.value='';picker.click();}};
+  add.disabled=!root.querySelector('[data-add-picker]');
+  const setExpanded=value=>{
+    if(value===host.classList.contains('is-expanded'))return;
+    if(value)previousFocus=doc.activeElement;
+    host.classList.toggle('is-expanded',value);expand.setAttribute('aria-expanded',String(value));expand.textContent=value?'Exit expanded view (Esc)':'Expand workspace';
+    if(value)expand.focus({preventScroll:true});else(previousFocus?.isConnected?previousFocus:expand)?.focus?.({preventScroll:true});resize();
+  };
+  expand.onclick=()=>setExpanded(!host.classList.contains('is-expanded'));
+  return {onKeyDown(event){
+    if(event.key!=='Escape'||!host.classList.contains('is-expanded'))return;
+    if([...root.querySelectorAll('[role="alertdialog"],.pano-studio-place-layer,[role="menu"],details[open]')].some(element=>!element.closest('[hidden],[aria-hidden="true"]')&&(!element.getClientRects||element.getClientRects().length)))return;
+    event.preventDefault();event.stopImmediatePropagation();setExpanded(false);
+  },dispose(){setExpanded(false);bar.remove();}};
 }
 
 /** Open the installed Panorama editor on an isolated native graph.
@@ -46,11 +97,14 @@ export async function openPanoramaEditor({app,state,geometryKey,output,source,sk
   controls.setAttribute('role','group');controls.setAttribute('aria-label',environment?'Panorama changes':'Camera changes');
   controls.innerHTML='<span>Review the camera move, then apply.</span><button type="button" data-cancel>Cancel</button><button type="button" class="zc-panorama-apply" data-apply>Apply camera</button>';
   if(environment){controls.querySelector('span').textContent='Compose a still panorama. AI fills the missing areas afterwards.';controls.querySelector('[data-apply]').textContent='Use panorama';}
-  let handle,editorRoot,disposeCamera,disposeSource,done=false,applying=false;
+  let handle,editorRoot,disposeCamera,disposeSource,disposeAppearance,environmentControls,done=false,applying=false;
+  // Capture before the vendor listener: expanded Escape restores this layout.
+  const environmentKey=event=>environmentControls?.onKeyDown(event);
+  if(environment&&host)window.addEventListener('keydown',environmentKey,true);
   const snapshot=()=>handle?.session?.stateText?.(node,widget.value)||widget.value;
   const previousCallback=widget.callback;
   const cleanup=()=>{
-    if(done)return;done=true;observer.disconnect();disposeSource?.();disposeCamera?.();controls.remove();widget.callback=previousCallback;
+    if(done)return;done=true;observer.disconnect();disposeSource?.();disposeCamera?.();disposeAppearance?.();environmentControls?.dispose();window.removeEventListener('keydown',environmentKey,true);controls.remove();widget.callback=previousCallback;
     if(outputs instanceof Map)outputs.delete(node.id);else delete outputs[node.id];
     graph.clear();document.body.classList.remove('zura-camera-editor-open');
   };
@@ -70,7 +124,7 @@ export async function openPanoramaEditor({app,state,geometryKey,output,source,sk
     if(!host)document.body.classList.add('zura-camera-editor-open');
     handle=await button.callback();
     if(!handle?.close)throw new Error('Panorama did not open its camera editor. Enable its new editor and retry.');
-    const root=editorRoot=document.querySelector('.pano-studio-backdrop');if(host){host.replaceChildren(root);root.classList.add('zc-panorama-inline');const dialog=root.querySelector('[role=dialog]');if(dialog){dialog.setAttribute('role','region');dialog.setAttribute('aria-modal','false');}}if(environment){root.classList.add('zc-hdri-editor');root.querySelector('.pano-studio-tabs [data-value="sky"]')?.click();}else{disposeCamera=cameraOnlyControls(handle,root);disposeSource=installSourcePreview(root,source);}
+    const root=editorRoot=document.querySelector('.pano-studio-backdrop');disposeAppearance=installPanoramaAppearance(root);if(host){host.replaceChildren(root);root.classList.add('zc-panorama-inline');const dialog=root.querySelector('[role=dialog]');if(dialog){dialog.setAttribute('role','region');dialog.setAttribute('aria-modal','false');}}if(environment){root.classList.add('zc-hdri-editor');if(host)environmentControls=installEnvironmentWorkspace(root,host);root.querySelector('.pano-studio-tabs [data-value="sky"]')?.click();}else{disposeCamera=cameraOnlyControls(handle,root);disposeSource=installSourcePreview(root,source);}
     if(!host){document.body.append(controls);controls.querySelector('[data-apply]').focus({preventScroll:true});}
     observer.observe(document.body,{childList:true,subtree:true});
     return {cancel,snapshot,root,dispose:()=>{applying=true;handle?.close();cleanup();}};

@@ -12,6 +12,74 @@ CATEGORIES = ('diffusion_models', 'text_encoders', 'vae', 'loras', 'checkpoints'
               'detection', 'background_removal', 'upscale_models', 'geometry_estimation')
 
 
+def default_models_dir(folders, ignore=()):
+    fallback = str(getattr(folders, 'models_dir', '') or '')
+    registry = getattr(folders, 'folder_names_and_paths', None)
+    ignored = {(category, str(Path(path))) for category, path in ignore}
+    for category in ('checkpoints', 'vae', 'loras', 'diffusion_models', 'text_encoders'):
+        paths = list(registry.get(category, ([],))[0]) if isinstance(registry, dict) else []
+        if not paths and hasattr(folders, 'get_folder_paths'):
+            try:
+                paths = list(folders.get_folder_paths(category))
+            except KeyError:
+                paths = []
+        for path in paths:
+            if (category, str(Path(path))) in ignored:
+                continue
+            candidate = Path(path)
+            if candidate.name.lower() in (category, 'unet', 'clip'):
+                parent = candidate.parent
+                if fallback and parent == Path(fallback):
+                    return fallback
+                return str(parent)
+    return fallback
+
+
+def preferred_category_roots(folders, category, roots=None):
+    if roots is None:
+        try:
+            roots = list(folders.get_folder_paths(category))
+        except KeyError:
+            roots = []
+    else:
+        roots = list(roots)
+    base = default_models_dir(folders)
+    if base and category in CATEGORIES:
+        canonical = str(Path(base) / category)
+        # The Downloads root is already selected by ComfyUI's is_default path
+        # ordering. A missing category directory is created by the downloader.
+        if Path(base).is_dir() or canonical in roots:
+            roots = [canonical] + [root for root in roots if str(Path(root)) != canonical]
+            if hasattr(folders, 'add_model_folder_path'):
+                folders.add_model_folder_path(category, canonical, is_default=True)
+    if not roots and category == 'embeddings' and base:
+        roots = [str(Path(base) / 'embeddings')]
+    if not roots:
+        return roots
+    if base:
+        base_path = Path(base)
+        if Path(roots[0]).parent != base_path:
+            for index, candidate in enumerate(roots):
+                if Path(candidate).parent == base_path:
+                    roots.insert(0, roots.pop(index))
+                    break
+            else:
+                target_dir = base_path / category
+                if base_path.is_dir() and target_dir.is_dir():
+                    if hasattr(folders, 'add_model_folder_path'):
+                        folders.add_model_folder_path(category, str(target_dir), is_default=True)
+                    roots.insert(0, str(target_dir))
+    if category in ('diffusion_models', 'text_encoders'):
+        first = Path(roots[0])
+        if first.name.lower() != category:
+            canonical = first.parent / category
+            for index, candidate in enumerate(roots):
+                if Path(candidate) == canonical:
+                    roots.insert(0, roots.pop(index))
+                    break
+    return roots
+
+
 class ModelFolders:
     def __init__(self, folders, config):
         self.folders, self.config = folders, Path(config)
@@ -21,8 +89,9 @@ class ModelFolders:
         self._lock = threading.RLock()
 
     def info(self):
-        return {'external': self.root, 'folders': list(self.roots), 'default': str(self.folders.models_dir),
-                'download_to': self.root or str(self.folders.models_dir)}
+        default = default_models_dir(self.folders, [(category, path) for category, path, previous in self._added if previous is None])
+        return {'external': self.root, 'folders': list(self.roots), 'default': default,
+                'download_to': self.root or default}
 
     def _apply(self, roots, target):
         registry = self.folders.folder_names_and_paths

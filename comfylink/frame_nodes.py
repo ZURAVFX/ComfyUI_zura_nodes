@@ -31,3 +31,31 @@ class ZuraComfyLinkMatchFrames:
                 raise ValueError('The generated alpha/mask batch does not match the AE frame contract.')
             mask = mask[:frame_count]
         return images[:frame_count], mask, metadata
+
+
+class ZuraComfyLinkRateAudio:
+    CATEGORY='Zura/ComfyLink'
+    FUNCTION='reinterpret'
+    RETURN_TYPES=('AUDIO',)
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {'required':{'audio':('AUDIO',),'speed':('FLOAT',{'default':1,'min':.01,'max':240})}}
+    def reinterpret(self,audio,speed=1):
+        import numpy as np
+        import torch
+        import subprocess,shutil
+        from .studio_rate import tempo_filter
+        if audio is None or abs(speed-1)<1e-9:return (audio,)
+        executable=shutil.which('ffmpeg')
+        if not executable:raise ValueError('FFmpeg is required to restore the audio clock.')
+        waves=audio['waveform'];rate=audio['sample_rate'];result=[]
+        for wave in waves:
+            samples=wave.detach().cpu().float().numpy().T.copy()
+            command=[executable,'-v','error','-f','f32le','-ar',str(rate),'-ac',str(wave.shape[0]),'-i','pipe:0',
+                '-af',tempo_filter(speed),'-f','f32le','-acodec','pcm_f32le','pipe:1']
+            changed=subprocess.run(command,input=samples.tobytes(),capture_output=True,timeout=120)
+            if changed.returncode:raise ValueError('The source audio clock could not be restored.')
+            output=np.frombuffer(changed.stdout,dtype=np.float32).reshape(-1,wave.shape[0]).T.copy()
+            result.append(torch.from_numpy(output).to(device=waves.device,dtype=waves.dtype))
+        length=min(w.shape[-1] for w in result)
+        return ({**audio,'waveform':torch.stack([w[...,:length] for w in result])},)

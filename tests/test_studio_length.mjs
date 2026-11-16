@@ -21,7 +21,7 @@ const legacyRelight={...original,workflow_mode:'relight',relight_engine:'h3'};
 assert.equal(clipLength(legacyRelight,15).invalid,false,'Legacy relight settings must not apply the H3 five-second limit');
 assert.equal(clipLength(legacyRelight,15).maximum,null,'Wan relight supports chained source-length clips');
 // Execute the actual CTA handler without browser APIs or any Comfy queue.
-const source=fs.readFileSync(new URL('../web/studio.js',import.meta.url),'utf8').replace(/^import .*;\r?\n/gm,'').replace(/^export /gm,'').split('app.registerExtension({')[0];
+const source=fs.readFileSync(new URL('../web/studio_core.js',import.meta.url),'utf8').replace(/^import .*;\r?\n/gm,'').replace(/^export /gm,'').split('app.registerExtension({')[0];
 const context={app:{registerExtension(){}},clipLength,recoverClipLength};
 vm.createContext(context);runStudioVMInContext(source+'\nthis.Studio=ArtistStudio;',context);
 const studio=Object.create(context.Studio.prototype),events=[];

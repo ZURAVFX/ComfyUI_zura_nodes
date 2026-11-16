@@ -41,6 +41,8 @@ def register(server, package_version):
         return web.json_response({"protocol_version": PROTOCOL_VERSION,
                                   "adapter_version": ADAPTER_VERSION,
                                   "zura_version": package_version,
+                                  "studio_host": {"hostSchema": 1, "prefix": PREFIX + "/studio-host/",
+                                                  "manifest": PREFIX + "/studio-host/studio_host_manifest.json"},
                                   "pairing_configured": bool(token and instance_id and fingerprint),
                                   "features": ["identity", "presets", "graph_preflight", "studio_sessions", "studio_desktop_handoff", "studio_source_float32", "studio_result_float32", "float_frames_v1"] + (["float_frame_staging_v1"] if os.name == "nt" else []),
                                   "studio": {"schemaVersion": 1, "instanceId": studio_instance_id, "prefix": PREFIX + "/studio",
@@ -150,4 +152,6 @@ def register(server, package_version):
     register_native_float_staging(server)
     from .studio_sessions import register as register_studio_sessions
     register_studio_sessions(server, instance_id=studio_instance_id)
+    from .studio_host import register as register_studio_host
+    register_studio_host(server, package_version)
     server._zura_comfylink_registered = True

@@ -126,5 +126,37 @@ class ExternalStorageTests(unittest.TestCase):
                 with self.assertRaises(ValueError):setting.set(path)
             self.assertFalse(config.exists());self.assertEqual(folders.folder_names_and_paths['vae'][0],['/comfy/models/vae'])
 
+    def test_comfy_desktop_default_downloads_folder_and_canonical_subfolders_are_preferred(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            desktop_models = root / 'desktop_downloads' / 'models'
+            instance_models = root / 'instance' / 'models'
+            for sub in ('checkpoints', 'vae', 'diffusion_models', 'unet', 'text_encoders', 'clip', 'latent_upscale_models'):
+                (desktop_models / sub).mkdir(parents=True, exist_ok=True)
+                (instance_models / sub).mkdir(parents=True, exist_ok=True)
+            folders = Folders()
+            folders.models_dir = str(instance_models)
+            folders.folder_names_and_paths = {
+                'checkpoints': ([str(desktop_models / 'checkpoints'), str(instance_models / 'checkpoints')], {'.safetensors'}),
+                'vae': ([str(desktop_models / 'vae'), str(instance_models / 'vae')], {'.safetensors'}),
+                'diffusion_models': ([str(desktop_models / 'unet'), str(desktop_models / 'diffusion_models'), str(instance_models / 'diffusion_models')], {'.safetensors'}),
+                'text_encoders': ([str(desktop_models / 'clip'), str(desktop_models / 'text_encoders'), str(instance_models / 'text_encoders')], {'.safetensors'}),
+                'latent_upscale_models': ([str(instance_models / 'latent_upscale_models')], {'.safetensors'}),
+            }
+            folders.get_folder_paths = lambda name: list(folders.folder_names_and_paths[name][0])
+            setting = storage.ModelFolders(folders, root / 'storage.json')
+            self.assertEqual(setting.info()['default'], str(desktop_models))
+            self.assertEqual(setting.info()['download_to'], str(desktop_models))
+            locations = downloads.folder_locations(folders, {'diffusion_models', 'text_encoders', 'latent_upscale_models', 'vae'})
+            self.assertEqual(locations['diffusion_models'][0], str(desktop_models / 'diffusion_models'))
+            self.assertEqual(locations['text_encoders'][0], str(desktop_models / 'text_encoders'))
+            # Categories absent from the instance registry still download under
+            # Desktop's chosen root, without creating directories during lookup.
+            for category in storage.CATEGORIES:
+                preferred = storage.preferred_category_roots(folders, category)
+                self.assertEqual(preferred[0], str(desktop_models / category))
+            self.assertFalse((desktop_models / 'geometry_estimation').exists())
+            self.assertEqual(locations['latent_upscale_models'][0], str(desktop_models / 'latent_upscale_models'))
+
 
 if __name__ == '__main__': unittest.main()

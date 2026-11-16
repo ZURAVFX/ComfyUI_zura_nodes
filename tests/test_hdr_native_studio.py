@@ -26,7 +26,7 @@ class NativeStudioTests(unittest.TestCase):
         self.assertEqual((details['frames'],details['width'],details['height']),(9,384,224))
         self.assertEqual(graph['native_audio']['inputs']['start_frame'],5)
         self.assertEqual(graph['trim_raster']['inputs']['width'],384)
-        self.assertEqual(graph['zura_hdr_video']['inputs']['audio'],['native_audio',0])
+        self.assertEqual(graph['zura_hdr_save_video']['inputs']['audio'],['native_audio',0])
 
     def test_pq_uses_native_route_and_rejects_wrong_override(self):
         info={'kind':'video','count':25,'width':384,'height':224,'fps':24,'transfer':'smpte2084'}

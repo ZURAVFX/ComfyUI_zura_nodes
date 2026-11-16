@@ -20,7 +20,7 @@ export const WAN_FRAME_VIDEO_CAPABILITIES=Object.freeze({
   precision:'FP8 scaled',attention:'comfy kitchen attention',
   nodeTypes:['LoadImage','ImageScale','UNETLoader','LoraLoaderModelOnly','ModelSamplingSD3',
     'ModelAttentionBackend','CLIPLoader','CLIPTextEncode','VAELoader',
-    'WanFirstLastFrameToVideo','KSamplerAdvanced','VAEDecode','CreateVideo','SaveVideo'],
+    'WanFirstLastFrameToVideo','KSamplerAdvanced','VAEDecode','CreateVideo','ZuraSaveProRes4444'],
 });
 const negative='Overexposed, blurry, low quality, JPEG artefacts, unwanted text, watermark, distorted anatomy, malformed hands, extra limbs, frozen motion.';
 const ref=(id,output=0)=>[id,output];
@@ -79,7 +79,7 @@ export function buildWanFrameVideoGraph(c,info){
     videoImages=ref('restore_output');
   }
   node('video','CreateVideo',{images:videoImages,fps:cap.fps,bit_depth:8,color_space:'sRGB',codec:'none'},'Assemble silent video');
-  node('save','SaveVideo',{video:ref('video'),filename_prefix:'zura/first_last/wan',format:'mp4','format.codec':'h264','format.codec.encoding':'auto'},'Save Wan video');
+  node('save','ZuraSaveProRes4444',{video:ref('video'),filename_prefix:'zura/first_last/wan'},'Save Wan video');
   return applyAvailableAttention(g,info);
 }
 export function wanFrameVideoAvailability(info,c={}){

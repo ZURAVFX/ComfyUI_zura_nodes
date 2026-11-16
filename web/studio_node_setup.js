@@ -25,7 +25,7 @@ export const NODE_PACKS=[
 ];
 
 NODE_PACKS.find(pack=>pack.name==='ComfyUI').nodes.push('ResizeImageMaskNode','LTXVPreprocess','LatentUpscaleModelLoader','ManualSigmas');
-NODE_PACKS.find(pack=>pack.name==='Zura Nodes').nodes.push('ZuraSaveVideoLatentData','ZuraLoadVideoLatentData');
+NODE_PACKS.find(pack=>pack.name==='Zura Nodes').nodes.push('ZuraSaveVideoLatentData','ZuraLoadVideoLatentData','ZuraSaveProRes4444');
 NODE_PACKS.push({name:'ComfyUI-VideoHelperSuite',url:'https://github.com/Kosinkadink/ComfyUI-VideoHelperSuite',nodes:['VHS_LoadImagesPath']});
 
 // These image recipe classes ship in ComfyUI/comfy_extras. They require a

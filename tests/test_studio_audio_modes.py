@@ -265,7 +265,7 @@ assert(html.includes('Original audio + performance'));assert(html.includes('Refe
 console.log('Frontend original/reference/soundtrack contracts passed for four engines.');
 '''
         result = subprocess.run([shutil.which('node'), '--input-type=module', '-e', script,
-            str(v2_bootstrap.ROOT / 'web/studio.js')], capture_output=True, text=True)
+            str(v2_bootstrap.ROOT / 'web/studio_core.js')], capture_output=True, text=True)
         self.assertEqual(result.returncode, 0, result.stderr)
 
 

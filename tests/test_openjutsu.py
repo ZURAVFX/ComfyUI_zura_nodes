@@ -79,12 +79,12 @@ class OpenJutsuTests(unittest.TestCase):
                 if isinstance(value, list) and len(value) == 2:
                     self.assertIn(value[0], g)
 
-    def test_direct_character_route_ignores_previous_generated_frame(self):
+    def test_remembered_direct_flag_cannot_skip_reviewed_starting_frame(self):
         p = self.project()
         p['config']['openjutsu_direct'] = True
-        p['opening_input'] = {'file': 'stale_generation.png'}
+        p['opening_input'] = {'file': 'reviewed_generation.png'}
         g = module.build_graph(p)
-        self.assertFalse(g['803']['inputs']['use_anchor'])
+        self.assertTrue(g['803']['inputs']['use_anchor'])
         self.assertTrue(g['803']['inputs']['use_mask'])
 
     def test_uploaded_frame_is_honoured_even_if_direct_flag_was_remembered(self):

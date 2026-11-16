@@ -57,9 +57,16 @@
 @media(max-width:900px){.zc-camera-toolbar{flex-wrap:wrap;padding:12px}.zc-camera-toolbar>div{flex-basis:100%}.zc-camera-toolbar [data-camera-status]{max-width:none}}
 @media(max-width:760px){#genj-studio .zpc-page{width:calc(100% - 24px)}#genj-studio .zpc-heading [data-steps],.zc-panorama-actions span{display:none}#genj-studio .zpc-composer{padding:16px}#genj-studio .zpc-page .zc-prompt-bottom{flex-wrap:wrap}}
 
-.zc-camera-only .pano-studio-main.zc-camera-with-source{display:grid;grid-template-columns:minmax(0,1fr) clamp(180px,22vw,280px);grid-template-rows:auto minmax(0,1fr);gap:12px}
+.zc-camera-only .pano-studio-main.zc-camera-with-source{display:grid;grid-template-columns:minmax(0,1fr) clamp(180px,22vw,280px);grid-template-rows:auto minmax(0,1fr) var(--studio-window-gap,8px) auto;gap:8px 12px}
 .zc-camera-with-source>.zc-camera-toolbar{grid-column:1/-1;grid-row:1}
-.zc-camera-with-source>.pano-studio-stage{grid-column:1;grid-row:2;min-height:220px}
+.zc-camera-with-source>.pano-studio-stage{grid-column:1;grid-row:2;min-height:0}
+.zc-camera-with-source>.pano-studio-splitter{grid-column:1/-1;grid-row:3;min-width:0;width:100%}
+.zc-camera-with-source>.pano-studio-timeline{grid-column:1/-1;grid-row:4;min-width:0;width:100%}
+.zc-camera-with-source>.zc-camera-source{box-sizing:border-box;min-height:0;max-height:100%;overflow:auto}
+.zc-camera-themed .zc-camera-toolbar,.zc-camera-themed .zc-camera-navigation-panel,.zc-camera-themed .zc-camera-navigation dl,.zc-camera-themed .zc-camera-source{background:var(--studio-panel);color:var(--studio-fg);border-color:var(--studio-line)}
+.zc-camera-themed .zc-camera-toolbar button,.zc-camera-themed .zc-camera-navigation dd{color:var(--studio-fg);border-color:var(--studio-line)}
+.zc-camera-themed .zc-camera-toolbar>div span,.zc-camera-themed .zc-camera-toolbar [data-camera-status],.zc-camera-themed .zc-camera-navigation dt,.zc-camera-themed .zc-camera-navigation p,.zc-camera-themed .zc-camera-source p{color:var(--studio-fg-2)}
+.zc-camera-themed .zc-camera-toolbar [data-key-camera]{background:var(--studio-strong);color:var(--studio-on-strong)}
 .zc-camera-source{grid-column:2;grid-row:2;display:flex;flex-direction:column;align-self:start;min-width:0;gap:12px;padding:12px;border:1px solid #383838;border-radius:8px;background:#202020;color:#eee;font:13px/1.5 Manrope,system-ui,sans-serif}
 .zc-camera-source strong{font-weight:500}
 .zc-camera-source video{display:block;width:100%;height:clamp(120px,24vh,260px);object-fit:contain;background:#090909;border-radius:6px}
@@ -75,3 +82,17 @@
 #genj-studio .zpc-resolution output{color:var(--gs-muted);font-variant-numeric:tabular-nums}
 #genj-studio .zpc-resolution small{color:var(--gs-muted);font-size:11px;line-height:1.5}
 #genj-studio .zpc-resolution [data-dimensions] input{width:100%;min-width:0;box-sizing:border-box}
+
+/* Override Studio's button reset only for vendor strong selected controls. */
+#genj-studio .zc-hdri-editor .pano-studio-seg-item.is-active,
+#genj-studio .zc-hdri-editor .pano-studio-icon-btn.is-active,
+#genj-studio .zc-hdri-editor .pano-studio-icon-btn.is-lit,
+#genj-studio .zc-hdri-editor .pano-studio-confirm-btn.is-strong{color:var(--studio-on-strong,#fff)}
+#genj-studio .zc-environment-actions{position:absolute;inset:0 0 auto;z-index:30;min-height:48px;box-sizing:border-box;display:flex;align-items:center;gap:12px;padding:6px 12px;background:var(--gs-panel,#222);border-bottom:1px solid var(--gs-line,#383838);color:var(--zc-text,#eee);font:13px/1.4 Manrope,system-ui,sans-serif}
+#genj-studio .zc-environment-actions button{min-height:36px;padding:6px 12px;white-space:nowrap;color:var(--zc-text,#eee);background:transparent;border:1px solid var(--gs-line,#383838);border-radius:6px;cursor:pointer}
+#genj-studio .zc-environment-actions button:last-child{margin-left:auto}
+#genj-studio .zc-environment-actions button:focus-visible{outline:2px solid var(--gs-focus,#caff00);outline-offset:2px}
+#genj-studio .zc-environment-actions span{color:var(--gs-muted,#ababab);font-size:12px}
+#genj-studio .zhe-viewport .zc-panorama-inline{top:48px!important;height:calc(100% - 48px)!important}
+#genj-studio .zhe-viewport.is-expanded{position:fixed!important;inset:20px!important;z-index:2147482000!important;width:auto!important;height:auto!important;min-height:0!important;max-width:none!important;max-height:none!important;box-shadow:0 0 0 20px #0009}
+@media(max-width:760px){#genj-studio .zc-environment-actions{gap:6px;padding-inline:8px}#genj-studio .zc-environment-actions span{display:none}#genj-studio .zhe-viewport.is-expanded{inset:12px!important}}

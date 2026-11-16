@@ -1,20 +1,21 @@
 {
   "id": "02-invert",
   "name": "02 - Invert colours (no model)",
-  "description": "A visible test of the whole bridge using ComfyUI ImageInvert. This is not a generative AI preset.",
-  "mode": "frames",
+  "description": "Inverts the selected frames in bounded image batches using ComfyUI ImageInvert. No model downloads required.",
+  "mode": "batch",
   "input": {
     "node": "1",
-    "field": "image"
+    "field": "folder"
   },
   "output": {
     "node": "3"
   },
   "workflow": {
     "1": {
-      "class_type": "LoadImage",
+      "class_type": "ComfyLinkLoadFrames",
       "inputs": {
-        "image": "placeholder.png"
+        "folder": "ComfyLink/00000000000000000000000000000000",
+        "fps": 25.0
       },
       "_meta": {
         "title": "AE_INPUT"
@@ -42,5 +43,7 @@
         ]
       }
     }
-  }
+  },
+  "revision": "batch-elementwise-v1",
+  "batchPolicy": "elementwise-v1"
 }

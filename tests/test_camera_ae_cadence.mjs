@@ -30,5 +30,5 @@ for(const [numerator,denominator] of [[24,1],[25,1],[30000,1001]])for(const coun
  const ordinary=call(source,{width:512,height:512,start:0,duration:count/fps});assert.equal(ordinary.ok,true);assert.equal(ordinary.frames,count);assert.equal(ordinary.fps,fps);
 }
 assert.throws(()=>modelAEFrameContract(base(25,1,121),aeFramePolicy('camera',{})),/range of 121 frames/,'The existing120-source-frame cap remains even though native model padding can reach121');
-for(const mode of ['swap','viewport','director','frames','references'])assert.throws(()=>modelAEFrameContract(base(25),aeFramePolicy(mode,{engine:'h3'})),/24 fps/,mode);
+for(const mode of ['swap','viewport','director','frames','references']){const clock=modelAEFrameContract(base(25),aeFramePolicy(mode,{engine:'h3'}));assert.deepEqual(clock.frameRate,{numerator:25,denominator:1});assert.deepEqual(clock.modelFrameRate,{numerator:24,denominator:1});assert.equal(clock.frameCount,base(25).frameCount);}
 console.log('Camera AE cadence: real Python planner/LTX graph preserve 25 and 30000/1001 source clocks; count/raster/rate guards and H3 restrictions remain.');

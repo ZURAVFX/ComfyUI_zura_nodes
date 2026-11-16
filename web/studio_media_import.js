@@ -28,8 +28,8 @@ export class StudioMediaImport {
   constructor(delivery,api){
     this.delivery=delivery;this.api=api;this.owner=delivery.owner;this.root=delivery.root;
     const doc=this.root.ownerDocument;
-    this.button=doc.createElement('button');this.button.type='button';this.button.textContent='Add media';this.button.dataset.studioImport='';
-    delivery.element.append(this.button);this.button.onclick=()=>this.choose();
+    this.button=doc.createElement('button');this.button.type='button';this.button.textContent='Import media or EXR sequence…';this.button.dataset.studioImport='';
+    delivery.settings.form.querySelector('.zc-output-actions').before(this.button);this.button.onclick=()=>this.choose();
     this.picker=doc.createElement('input');this.picker.type='file';this.picker.multiple=true;this.picker.accept='.mp4,.mov,.mxf,.avi,.mkv,.webm,.png,.jpg,.jpeg,.webp,.tif,.tiff,.exr';this.picker.hidden=true;this.root.append(this.picker);
     this.picker.onchange=()=>{const files=[...this.picker.files];this.picker.value='';if(files.length)void this.upload(files);};
     this.dialog=doc.createElement('dialog');this.dialog.className='zc-media-import';
@@ -46,7 +46,7 @@ export class StudioMediaImport {
     const close=delivery.close;delivery.close=(...args)=>{this.closed=true;this.abandon();this.picker.remove();this.dialog.remove();link.remove();return close.apply(delivery,args);};
     delivery.sync();
   }
-  choose(){if(studioImportAEActive(this.owner))return this.delivery.message('Leave After Effects mode before replacing its source.');this.picker.click();}
+  choose(){if(studioImportAEActive(this.owner))return this.delivery.message('Leave After Effects mode before replacing its source.');this.delivery.sourceControls?.hide();this.picker.click();}
   current(controller){return !this.closed&&controller===this.controller&&!controller.signal.aborted&&!studioImportAEActive(this.owner);}
   assertCurrent(controller){if(!this.current(controller)){const error=Error('This normal import was cancelled or replaced by After Effects.');error.name='AbortError';throw error;}}
   abandon(){clearTimeout(this.previewTimer);this.controller?.abort();this.controller=null;this.asset=null;this.setBusy(false);this.dialog.close();}

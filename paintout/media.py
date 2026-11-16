@@ -10,7 +10,7 @@ from .paintout import encode_ct, native_colour, resize, sdr_view
 
 def correct_video_clock(path,fps,hdr=False):
     rate=Fraction(str(fps)).limit_denominator(100000)
-    temp=path.with_name(path.stem+'_clock.mp4')
+    temp=path.with_name(path.stem+'_clock'+path.suffix)
     ticks=rate.denominator;timescale=rate.numerator
     # Native encoded chunks use millisecond clocks. Rebuild the continuous
     # source clock after concatenation, without re-encoding image samples.
@@ -29,15 +29,15 @@ def copy_source_audio(path,plate):
     if source.get('kind')!='video':return False
     probe=subprocess.run([find_media_tool('ffprobe'),'-v','error','-select_streams','a:0','-show_entries','stream=index','-of','csv=p=0',source['path']],check=True,capture_output=True,text=True)
     if not probe.stdout.strip():return False
-    temporary=path.with_name(path.stem+'_audio.mp4')
+    temporary=path.with_name(path.stem+'_audio'+path.suffix)
     start=plate['start']/plate['fps'];duration=plate['count']/plate['fps']
-    subprocess.run([find_media_tool('ffmpeg'),'-v','error','-i',str(path),'-ss',str(start),'-i',source['path'],'-map','0:v:0','-map','1:a:0','-c:v','copy','-c:a','aac','-b:a','192k','-af','asetpts=PTS-STARTPTS','-t',str(duration),'-movflags','+faststart','-y',str(temporary)],check=True,capture_output=True)
+    subprocess.run([find_media_tool('ffmpeg'),'-v','error','-i',str(path),'-ss',str(start),'-i',source['path'],'-map','0:v:0','-map','1:a:0','-c:v','copy','-c:a','pcm_s24le' if path.suffix.lower()=='.mov' else 'aac','-af','asetpts=PTS-STARTPTS','-t',str(duration),'-movflags','+faststart+write_colr','-y',str(temporary)],check=True,capture_output=True)
     temporary.replace(path)
     return True
 
 class Delivery:
     def __init__(self,target,plate,format,preview):
-        self.target=target;self.plate=plate;self.hdr='HLG' in format;self.sdr='SDR' in format;self.preview=preview
+        self.target=target;self.plate=plate;self.hdr='HLG' in format or 'ProRes' in format;self.sdr='SDR' in format;self.preview=preview
         self.hdr_chunks=[];self.sdr_chunks=[];self.preview_chunks=[];self.pending=[]
 
     def append(self,linear):
@@ -48,25 +48,23 @@ class Delivery:
 
     def flush(self):
         if not self.pending:return
-        from comfy_extras.nodes_video import CreateVideo
-        from comfy_api.latest import InputImpl, Types
+        if self.preview:
+            from comfy_extras.nodes_video import CreateVideo
         x=torch.stack(self.pending);self.pending=[]
         ct=encode_ct(x)
         if self.sdr:
             from .paintout import is_hdr
             sdr=sdr_view(x,is_hdr(self.plate['space']))
             h,w=sdr.shape[1:3]
-            if h%2 or w%2:self.sdr_chunks.append(self.encode_odd_chunk(sdr,False))
-            else:
-                video=CreateVideo.execute(sdr,self.plate['fps'],bit_depth=10,color_space='sRGB',codec='none')[0]
-                self.sdr_chunks.append(self.encode_chunk(video))
+            from ..artist_studio.hdr_prores import write_prores4444
+            part=self.target/f'.prores_sdr_part_{len(self.sdr_chunks):05d}.mov'
+            self.sdr_chunks.append(write_prores4444(sdr,part,width=w,height=h,count=len(sdr),fps=self.plate['fps'],source_space='srgb_display'))
         if self.hdr:
-            hlg=native_colour(ct,'HDR ACEScct','HDR')
-            h,w=hlg.shape[1:3]
-            if h%2 or w%2:self.hdr_chunks.append(self.encode_odd_chunk(hlg,True))
-            else:
-                video=CreateVideo.execute(hlg,self.plate['fps'],bit_depth=10,color_space='HDR',codec='none')[0]
-                self.hdr_chunks.append(self.encode_chunk(video))
+            from ..artist_studio.hdr_prores import write_prores4444
+            h,w=x.shape[1:3]
+            part=self.target/f'.prores_part_{len(self.hdr_chunks):05d}.mov'
+            self.hdr_chunks.append(write_prores4444(x,part,width=w,height=h,count=len(x),
+                fps=self.plate['fps'],source_space='linear_rec709' if self.plate.get('space')=='linear_rec709' else 'acescg'))
         if self.preview:
             h,w=ct.shape[1:3];scale=min(1,960/max(h,w))
             h=max(2,round(h*scale/2)*2);w=max(2,round(w*scale/2)*2)
@@ -99,18 +97,31 @@ class Delivery:
     def finish(self):
         self.flush()
         if not(self.hdr_chunks or self.sdr_chunks or self.preview_chunks):return {}
-        from comfy_api.latest import InputImpl, Types
         import folder_paths
         results=[]
-        for name,chunks in [('paintout_HLG_10bit.mp4',self.hdr_chunks),('paintout_SDR_10bit.mp4',self.sdr_chunks),('motion_preview_SDR.mp4',self.preview_chunks)]:
+        for name,chunks in [('paintout_ProRes4444.mov',self.hdr_chunks),('paintout_SDR_ProRes4444.mov',self.sdr_chunks),('motion_preview_SDR.mp4',self.preview_chunks)]:
             if not chunks:continue
             path=self.target/name
-            video=InputImpl.VideoFromList(chunks,codec=Types.VideoCodec.H264)
-            # Uses the same VIDEO implementation as native Create Video / Save Video.
-            video.save_to(str(path),format=Types.VideoContainer.MP4,codec=Types.VideoCodec.AUTO)
-            correct_video_clock(path,self.plate.get('fps_rational',self.plate['fps']),hdr=name=='paintout_HLG_10bit.mp4')
+            if name.endswith('.mov'):
+                import json
+                from ..artist_studio.model_downloads import _publish_verified
+                listing=self.target/'.prores_parts.txt';joined=self.target/'.prores_joined.mov'
+                listing.write_text(''.join("file '"+part.resolve().as_posix().replace("'","'\\''")+"'\n" for part in chunks),encoding='utf-8')
+                try:
+                    subprocess.run([find_media_tool('ffmpeg'),'-v','error','-nostdin','-f','concat','-safe','0','-i',str(listing),'-c','copy','-movflags','+faststart+write_colr','-n',str(joined)],check=True,capture_output=True)
+                    correct_video_clock(joined,self.plate.get('fps_rational',self.plate['fps']))
+                    _publish_verified(joined,path)
+                    path.with_suffix('.mov.json').write_text(json.dumps({'codec':'prores4444','colour':{'encoding':'srgb_display' if '_SDR_' in name else 'acescg','sceneLinear':'_SDR_' not in name},'samplePolicy':'working_rgb_no_transfer_or_gamut_transform'}),encoding='utf-8')
+                finally:
+                    listing.unlink(missing_ok=True);joined.unlink(missing_ok=True)
+                    for part in chunks:part.unlink(missing_ok=True);part.with_suffix('.mov.json').unlink(missing_ok=True)
+            else:
+                from comfy_api.latest import InputImpl, Types
+                video=InputImpl.VideoFromList(chunks,codec=Types.VideoCodec.H264)
+                video.save_to(str(path),format=Types.VideoContainer.MP4,codec=Types.VideoCodec.AUTO)
+                correct_video_clock(path,self.plate.get('fps_rational',self.plate['fps']))
             copy_source_audio(path,self.plate)
             rel=path.relative_to(Path(folder_paths.get_output_directory()))
-            results.append({'filename':rel.name,'subfolder':str(rel.parent).replace('\\','/'),'type':'output'})
+            results.append({'filename':rel.name,'subfolder':str(rel.parent).replace('\\','/'),'type':'output',**({'colour':{'encoding':'srgb_display' if '_SDR_' in name else 'acescg','sceneLinear':'_SDR_' not in name}} if name.endswith('.mov') else {})})
         # Comfy's standard video preview UI supports playback, seeking and looping.
         return {'images':results,'animated':(True,)} if results else {}

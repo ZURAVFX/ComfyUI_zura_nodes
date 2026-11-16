@@ -576,3 +576,95 @@ def read_exr(path):
         if hashlib.sha256(_read_private(path, MAX_FRAME_FILE_BYTES)).hexdigest() != side["sha256"]:
             raise ValueError("EXR changed during read")
         return rgba, side
+
+
+def read_image_layer_exr(path, output_root):
+    """Decode only a receipted product RGB FLOAT composite, never guess HDR.
+
+    Original EXR and preview files stay immutable. Alpha=1 exists only in the
+    internal RGBA wire raster; the product master remains genuine RGB.
+    """
+    import OpenImageIO as oiio
+    path, root = Path(path).absolute(), Path(output_root).absolute()
+    relative = path.relative_to(root)
+    if (len(relative.parts) != 4 or relative.parts[:2] != ('ZURA STUDIO', 'image-layers')
+            or not re.fullmatch(r'[a-f0-9]{32}', relative.parts[2]) or path.name not in {'master.exr', 'delivery.exr'}):
+        raise ValueError('Recompose this image with the image-layer controls before sending it to AE')
+    receipt_path = path.parent / 'image-layers.json'
+    with _locked_parents(path.parent):
+        receipt_bytes = _read_private(receipt_path, 1024*1024)
+        receipt = json.loads(receipt_bytes.decode('utf-8'), object_pairs_hook=_json_pairs)
+        keys = {'schemaVersion','owner','source','colour','sampleType','channels','hasAlpha','controls','artifacts'}
+        if (not isinstance(receipt, dict) or set(receipt) != keys or receipt['schemaVersion'] != 1
+                or receipt['owner'] != 'zura_image_layers' or receipt['colour'] != {'encoding':'srgb_display','sceneLinear':False}
+                or receipt['sampleType'] != 'float32' or receipt['channels'] != ['R','G','B'] or receipt['hasAlpha'] is not False
+                or not isinstance(receipt['controls'], list) or len(receipt['controls']) > 32):
+            raise ValueError('Invalid image-layer product receipt')
+        seen_controls=set()
+        for control in receipt['controls']:
+            if (not isinstance(control,dict) or set(control)!={'id','enabled','opacity','expand_pixels','blend_pixels','brightness_ev'}
+                    or not isinstance(control['id'],str) or not re.fullmatch(r'[A-Za-z0-9_-]{1,128}',control['id']) or control['id'] in seen_controls
+                    or type(control['enabled']) is not bool or type(control['opacity']) not in (int,float) or not np.isfinite(control['opacity']) or not 0<=control['opacity']<=1
+                    or type(control['brightness_ev']) not in (int,float) or not np.isfinite(control['brightness_ev']) or not -2<=control['brightness_ev']<=2
+                    or any(type(control[k]) is not int or not 0<=control[k]<=256 for k in ('expand_pixels','blend_pixels'))):
+                raise ValueError('Invalid image-layer control proof')
+            seen_controls.add(control['id'])
+        source = receipt['source']
+        if not isinstance(source, dict) or set(source) != {'sha256','width','height'} or not _SHA.fullmatch(source.get('sha256','')):
+            raise ValueError('Invalid image-layer original identity')
+        _integer(source['width'], 'source width', 1, MAX_DIMENSION); _integer(source['height'], 'source height', 1, MAX_DIMENSION)
+        if source['width']*source['height']>MAX_PIXELS:raise ValueError('Image-layer source exceeds raster limit')
+        artifacts = receipt['artifacts']
+        if not isinstance(artifacts, list) or not 2 <= len(artifacts) <= 4:
+            raise ValueError('Missing image-layer master and preview proof')
+        records, chosen = [], None
+        names=set()
+        for entry in artifacts:
+            if (not isinstance(entry, dict) or set(entry) != {'filename','role','sha256','byteLength','width','height'}
+                    or entry['filename'] not in {'master.exr','preview.png','delivery.exr','delivery.png'} or entry['filename'] in names
+                    or not _SHA.fullmatch(entry.get('sha256',''))):
+                raise ValueError('Invalid image-layer artifact receipt')
+            if entry['role'] not in {'master','preview','canonical_master','canonical_preview'}:raise ValueError('Invalid image-layer artifact role')
+            names.add(entry['filename']); aw=_integer(entry['width'],'artifact width',1,MAX_DIMENSION); ah=_integer(entry['height'],'artifact height',1,MAX_DIMENSION)
+            if aw*ah>MAX_PIXELS:raise ValueError('Image-layer artifact exceeds raster limit')
+            length=_integer(entry['byteLength'],'artifact byte length',1,MAX_FRAME_FILE_BYTES)
+            raw=_read_private(path.parent/entry['filename'],length)
+            if len(raw)!=length or hashlib.sha256(raw).hexdigest()!=entry['sha256']:raise ValueError('An image-layer master or preview changed')
+            records.append((path.parent/entry['filename'],entry.copy()))
+            if entry['filename']==path.name:chosen=entry
+        if chosen is None or not {'master.exr','preview.png'}<=names or (path.name=='delivery.exr' and 'delivery.png' not in names):
+            raise ValueError('The selected image-layer master has no complete receipt')
+        if names not in ({'master.exr','preview.png'},{'master.exr','preview.png','delivery.exr','delivery.png'}):
+            raise ValueError('Image-layer receipt must contain complete canonical and delivery pairs')
+        by_name={entry['filename']:entry for entry in artifacts}
+        for filename in ('master.exr','preview.png'):
+            if (by_name[filename]['width'],by_name[filename]['height'])!=(source['width'],source['height']):raise ValueError('Canonical image-layer raster differs from its source')
+        for exr,png in (('master.exr','preview.png'),('delivery.exr','delivery.png')):
+            if exr in by_name and (by_name[exr]['width'],by_name[exr]['height'])!=(by_name[png]['width'],by_name[png]['height']):raise ValueError('Image-layer master and preview rasters differ')
+        reader=oiio.ImageInput.open(str(path))
+        if reader is None:raise ValueError('Unreadable image-layer master')
+        try:
+            spec=reader.spec();formats=list(spec.channelformats) or [spec.format]*3
+            tag=str(spec.getattribute('oiio:ColorSpace') or '').lower().replace(' ','')
+            if (spec.deep or spec.depth!=1 or spec.nchannels!=3 or set(spec.channelnames)!={'R','G','B'} or spec.alpha_channel!=-1
+                    or any(fmt!=oiio.FLOAT for fmt in formats) or spec.width!=chosen['width'] or spec.height!=chosen['height']
+                    or spec.get_string_attribute('zura:encoding')!='srgb_display' or spec.get_string_attribute('zura:dynamicRange')!='SDR'
+                    or tag not in {'srgb','srgb_display','srgb_rec709_scene','srgbencodedrec.709(srgb)'}
+                    or any('icc' in attr.name.lower() or 'profile' in attr.name.lower() for attr in spec.extra_attribs)
+                    or spec.get_int_attribute('Orientation',1)!=1 or reader.seek_subimage(1,0)):
+                raise ValueError('Image-layer master is not verified opaque SDR RGB FLOAT')
+            chroma=spec.getattribute('chromaticities');rec709=(.64,.33,.30,.60,.15,.06,.3127,.3290)
+            if chroma is not None and (len(chroma)!=8 or any(not np.isfinite(float(a)) or abs(float(a)-b)>1e-5 for a,b in zip(chroma,rec709))):raise ValueError('Image-layer gamut metadata contradicts sRGB')
+            for tag_name in ('colorSpace','colorInteropID'):
+                value=str(spec.getattribute(tag_name) or '').lower().replace(' ','')
+                if value and value not in {'srgb','srgb_display','srgb_rec709_scene','srgbencodedrec.709(srgb)'}:raise ValueError('Image-layer colour metadata contradicts its receipt')
+            if spec.get_int_attribute('acesImageContainerFlag',0):raise ValueError('Image-layer SDR master cannot claim an ACES image container')
+            pixels=reader.read_image(format=oiio.FLOAT)
+            if pixels is None or pixels.shape!=(spec.height,spec.width,3) or not np.isfinite(pixels).all():raise ValueError('Invalid image-layer float samples')
+            rgb=np.ascontiguousarray(pixels[:,:,[list(spec.channelnames).index(c) for c in 'RGB']])
+        finally:reader.close()
+        for file, entry in records:
+            if hashlib.sha256(_read_private(file,entry['byteLength'])).hexdigest()!=entry['sha256']:raise ValueError('Image-layer artifacts changed during decode')
+        if _read_private(receipt_path,1024*1024)!=receipt_bytes:raise ValueError('Image-layer receipt changed during decode')
+        rgba=np.concatenate((rgb,np.ones((*rgb.shape[:2],1),dtype=np.float32)),axis=2)
+        return rgba, {'productReceipt':receipt_bytes.decode('utf-8'),'receiptSha256':hashlib.sha256(receipt_bytes).hexdigest(),'sourceImageSha256':source['sha256'],'storage':'float32','colour':{'encoding':'unknown','sceneLinear':False},'alphaAssociation':'straight'}

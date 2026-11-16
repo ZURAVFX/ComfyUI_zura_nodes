@@ -28,11 +28,13 @@ export function installStudioModelViews(delivery,api){
   const sourceFor=workspace=>{const primary=workspace.platePrimary||(output?.plate?.runner===workspace?output.paintout:workspace);return {primary,original:primary?.sourceInfo||workspace.sourceInfo||workspace.source};};
   // Readiness only: the real validator still runs after the actual view exists.
   delivery.modelInputValidationConfig=(workspace,config)=>{
+    if(delivery.usesNativeHDR?.(workspace.intent==='relight'?'relight':workspace===output.watermark?'watermark':workspace===output.paintout?'paintout':'ripple',workspace,config))return config;
     const colour=config.sourceColour&&config.sourceColour!=='auto'?config.sourceColour:config.detectedSourceColour;
     if(!HDR.has(colour)||!selector(sourceFor(workspace).original))return config;
     return {...config,sourceColour:'srgb_display',detectedSourceColour:'srgb_display',colourPipeline:'sdr_sdr',processingSpace:'SDR (sRGB)',outputMode:'SDR video'};
   };
   delivery.prepareInferenceView=async(workspace,mode,config)=>{
+    if(delivery.usesNativeHDR?.(mode,workspace,config))return config;
     // AE already provides a broker-authorised processingInput copy, whose
     // sourceColour is sRGB while the original FLOAT source remains separate.
     const colour=config.sourceColour&&config.sourceColour!=='auto'?config.sourceColour:config.detectedSourceColour;

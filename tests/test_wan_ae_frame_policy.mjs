@@ -15,7 +15,7 @@ assert.equal(contract.modelFrames,901);
 assert.deepEqual(contract.frameRate,ntsc.frameRate);
 assert.equal(contract.frameCount,899);
 assert.throws(()=>modelAEFrameContract(base(900,30000,1001),policy),/between 0.1 and 30 seconds/);
-assert.throws(()=>modelAEFrameContract(base(9),aeFramePolicy('swap',{engine:'h3'})),/24 fps/,'Other H3 routes retain their native rate');
+const h3=modelAEFrameContract(base(17,30000,1001),aeFramePolicy('swap',{engine:'h3'}));assert.deepEqual(h3.modelFrameRate,{numerator:24,denominator:1});assert.deepEqual(h3.frameRate,{numerator:30000,denominator:1001});assert.equal(h3.frameCount,17);
 assert.equal(aeFramePolicy('relight',{engine:'ltx'},{state:{engine:'ltx'}}).max,985,'Edited-frame LTX Relight keeps its own policy');
 const owner={aeFrameBase:base(9),aeFrameMode:'relight'};
 const resolved=aeFrameConfig(owner,config);

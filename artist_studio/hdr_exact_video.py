@@ -78,5 +78,7 @@ class ZuraHDRSaveExactRate:
         return {'ui':{'images':[result],'animated':[True]},'result':(InputImpl.VideoFromFile(str(destination)),)}
 
 
-NODE_CLASS_MAPPINGS={'ZuraHDRSaveExactRate':ZuraHDRSaveExactRate}
-NODE_DISPLAY_NAME_MAPPINGS={'ZuraHDRSaveExactRate':'Zura · Save HDR at Source Frame Rate'}
+from .hdr_prores import ZuraHDRSaveProRes4444,ZuraSaveProRes4444
+NODE_CLASS_MAPPINGS={'ZuraHDRSaveExactRate':ZuraHDRSaveExactRate,'ZuraHDRSaveProRes4444':ZuraHDRSaveProRes4444,'ZuraSaveProRes4444':ZuraSaveProRes4444}
+NODE_DISPLAY_NAME_MAPPINGS={'ZuraHDRSaveExactRate':'Zura · Save Preview at Source Frame Rate','ZuraHDRSaveProRes4444':'Zura · Save ProRes 4444 Working RGB'}
+NODE_DISPLAY_NAME_MAPPINGS['ZuraSaveProRes4444']='Zura · Save ProRes 4444 MOV'

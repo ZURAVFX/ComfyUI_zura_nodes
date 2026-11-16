@@ -9,12 +9,12 @@ export class PreviewZoom {
     this.toolbar.title='Scroll to zoom; drag to pan';canvas.append(this.toolbar);
     this.overlay=document.createElement('canvas');this.overlay.className='gs-zoom-video';this.overlay.hidden=true;canvas.append(this.overlay);
     this.click=e=>{const action=e.target.closest?.('[data-zoom]')?.dataset.zoom;if(!action)return;e.stopPropagation();if(action==='reset')this.reset();else this.setScale(this.scale*(action==='in'?1.25:.8));};
-    this.wheel=e=>{if(!this.active() || e.target.closest?.('.gs-zoom-tools, button, input'))return;e.preventDefault();this.setScale(this.scale*Math.exp(-e.deltaY*.0015));};
+    this.wheel=e=>{if(e.defaultPrevented||!this.active() || e.target.closest?.('.gs-zoom-tools, button, input'))return;e.preventDefault();e.stopPropagation?.();this.setScale(this.scale*Math.exp(-e.deltaY*.0015));};
     this.down=e=>{
-      const node=this.active();if(this.scale<=1 || !node || ![0,1].includes(e.button) || e.target.closest?.('.gs-zoom-tools,button,input'))return;
+      const node=this.active();if(e.defaultPrevented||this.scale<=1 || !node || ![0,1].includes(e.button) || e.target.closest?.('.gs-zoom-tools,button,input'))return;
       // Do not intercept the native video transport controls.
       if(node.tagName==='VIDEO' && e.clientY>node.getBoundingClientRect().bottom-55)return;
-      e.preventDefault();this.drag={id:e.pointerId,x:e.clientX,y:e.clientY,moved:false};
+      e.preventDefault();e.stopPropagation?.();this.drag={id:e.pointerId,x:e.clientX,y:e.clientY,moved:false};
       this.canvas.setPointerCapture?.(e.pointerId);this.canvas.classList.add('is-panning');
     };
     this.move=e=>{if(!this.drag || e.pointerId!==this.drag.id)return;const dx=e.clientX-this.drag.x,dy=e.clientY-this.drag.y;this.x+=dx;this.y+=dy;this.drag.x=e.clientX;this.drag.y=e.clientY;this.drag.moved ||= Math.abs(dx)+Math.abs(dy)>1;this.paint();};
@@ -25,18 +25,22 @@ export class PreviewZoom {
     canvas.addEventListener('wheel',this.wheel,{passive:false});canvas.addEventListener('pointerdown',this.down);
     canvas.addEventListener('pointermove',this.move);canvas.addEventListener('pointerup',this.up);canvas.addEventListener('pointercancel',this.up);
     canvas.addEventListener('click',this.cancelClick,true);this.toolbar.addEventListener('click',this.click);this.paint();
+    const Observer=canvas.ownerDocument.defaultView?.MutationObserver;
+    if(Observer){this.observer=new Observer(records=>{if(records.some(({target})=>target!==this.overlay&&!this.toolbar.contains(target)))this.paint();});this.observer.observe(canvas,{subtree:true,attributes:true,attributeFilter:['src','hidden']});}
   }
-  active(){const node=this.getMedia();return node && !node.hidden ? node : null;}
+  active(){const node=this.getMedia();return node&&this.canvas.contains(node)&&!node.closest?.('[hidden]')&&node.isConnected!==false?node:null;}
   observe(node){
     if(this.observedMedia===node)return;
-    for(const event of ['loadeddata','play','pause','seeked','timeupdate'])this.observedMedia?.removeEventListener(event,this.refresh);
+    for(const event of ['emptied','loadstart','loadeddata','play','pause','seeked','timeupdate'])this.observedMedia?.removeEventListener(event,this.refresh);
     this.observedMedia=node?.tagName==='VIDEO'?node:null;
-    for(const event of ['loadeddata','play','pause','seeked','timeupdate'])this.observedMedia?.addEventListener(event,this.refresh);
+    for(const event of ['emptied','loadstart','loadeddata','play','pause','seeked','timeupdate'])this.observedMedia?.addEventListener(event,this.refresh);
   }
   update(key){if(this.key!==key){this.key=key;this.reset();}else this.paint();}
   setScale(value){this.scale=Math.max(1,Math.min(5,value));if(this.scale===1){this.x=0;this.y=0;}this.paint();}
   paint(){
     const node=this.active(),rect=this.canvas.getBoundingClientRect();this.observe(node);
+    if(this.transformedMedia&&this.transformedMedia!==node)this.transformedMedia.style.transform='';
+    this.transformedMedia=node?.tagName!=='VIDEO'?node:null;
     const limitX=rect.width*(this.scale-1)/2,limitY=rect.height*(this.scale-1)/2;
     this.x=Math.max(-limitX,Math.min(limitX,this.x));this.y=Math.max(-limitY,Math.min(limitY,this.y));
     this.toolbar.hidden=!node;this.toolbar.querySelector('[data-zoom="reset"]').textContent=`${Math.round(this.scale*100)}%`;
@@ -45,6 +49,11 @@ export class PreviewZoom {
     if(node && node.tagName==='VIDEO' && this.scale>1){this.drawVideo(node);}else{this.overlay.hidden=true;this.stopDraw();}
   }
   drawVideo(video){
+    // Never leave the previous source's raster above a new or hidden source.
+    this.overlay.hidden=true;this.stopDraw();
+    if(this.active()!==video||this.scale<=1||video.readyState<2)return;
+    const requested=video.getAttribute('src'),decoded=video.currentSrc;
+    if(requested&&decoded&&new URL(requested,video.ownerDocument.baseURI).href!==new URL(decoded,video.ownerDocument.baseURI).href)return;
     const area=this.canvas.getBoundingClientRect(),bounds=video.getBoundingClientRect();
     if(!bounds.width || !bounds.height || !video.videoWidth || !video.videoHeight)return;
     const ratio=Math.min(globalThis.devicePixelRatio||1,2),width=Math.round(bounds.width*ratio),height=Math.round(bounds.height*ratio);
@@ -57,5 +66,5 @@ export class PreviewZoom {
     this.stopDraw();if(!video.paused && globalThis.requestAnimationFrame)this.raf=requestAnimationFrame(()=>{this.raf=0;if(this.active()===video && this.scale>1)this.drawVideo(video);});
   }
   stopDraw(){if(this.raf && globalThis.cancelAnimationFrame)cancelAnimationFrame(this.raf);this.raf=0;}
-  dispose(){this.stopDraw();this.observe(null);this.canvas.removeEventListener('wheel',this.wheel);this.canvas.removeEventListener('pointerdown',this.down);this.canvas.removeEventListener('pointermove',this.move);this.canvas.removeEventListener('pointerup',this.up);this.canvas.removeEventListener('pointercancel',this.up);this.canvas.removeEventListener('click',this.cancelClick,true);this.toolbar.removeEventListener('click',this.click);const node=this.active();if(node && node.tagName!=='VIDEO')node.style.transform='';this.toolbar.remove();this.overlay.remove();}
+  dispose(){this.observer?.disconnect();this.stopDraw();this.observe(null);this.canvas.removeEventListener('wheel',this.wheel);this.canvas.removeEventListener('pointerdown',this.down);this.canvas.removeEventListener('pointermove',this.move);this.canvas.removeEventListener('pointerup',this.up);this.canvas.removeEventListener('pointercancel',this.up);this.canvas.removeEventListener('click',this.cancelClick,true);this.toolbar.removeEventListener('click',this.click);if(this.transformedMedia)this.transformedMedia.style.transform='';this.toolbar.remove();this.overlay.remove();}
 }

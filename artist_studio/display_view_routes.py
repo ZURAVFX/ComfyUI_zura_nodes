@@ -28,10 +28,12 @@ SOURCE_TTL = 2 * 60 * 60
 _sources = OrderedDict()
 _source_lock = threading.RLock()
 _SPACES = {
-    'srgb_display': ('sRGB Encoded Rec.709 (sRGB)', 'srgb_tx', 'sRGB - Texture'),
+    'srgb_display': ('sRGB Encoded Rec.709 (sRGB)', 'srgb_tx', 'sRGB - Texture',
+                     'Utility - sRGB - Texture', 'srgb_texture'),
     'rec709_oetf': ('Camera Rec.709',),
     'rec709_gamma24': ('Gamma 2.4 Encoded Rec.709', 'Rec.1886 Rec.709 - Display'),
-    'linear_rec709': ('Linear Rec.709 (sRGB)', 'lin_rec709_srgb', 'Utility - Linear - sRGB'),
+    'linear_rec709': ('Linear Rec.709 (sRGB)', 'lin_rec709_srgb', 'Utility - Linear - sRGB',
+                      'lin_srgb', 'Utility - Linear - Rec.709', 'lin_rec709'),
     'acescg': ('ACEScg', 'lin_ap1', 'ACES - ACEScg'),
     'acescct': ('ACEScct', 'acescct_ap1', 'ACES - ACEScct'),
     'hlg_rec2020': ('Rec.2100-HLG - Display',),
@@ -437,7 +439,7 @@ def native_archive_metadata(studio,path,output_root):
 
 def register(studio, routes, response, check_asset):
     from .route_aliases import require_studio_alias_paths
-    require_studio_alias_paths(routes,(('GET','display/config'),('POST','display/frame'),('POST','display/info')))
+    require_studio_alias_paths(routes,(('GET','display/config'),('POST','display/frame'),('POST','display/info'),('POST','display/video'),('GET','display/video/{token}')))
     import folder_paths
     limit = asyncio.Semaphore(2)
 
@@ -494,3 +496,36 @@ def register(studio, routes, response, check_asset):
         result = await asyncio.to_thread(source_info, body, studio.store, check_asset, roots,
             archive_metadata=lambda path: native_archive_metadata(studio, path, roots['output']))
         return web.json_response(result, headers={'Cache-Control': 'no-store'})
+
+    @routes.post('/zura/studio/display/video')
+    @routes.post('/genj/studio/display/video')
+    @response
+    async def video(request):
+        from ..media_source import require_same_origin
+        from . import display_video_proxy
+        require_same_origin(request)
+        if request.content_length is not None and request.content_length > 4096:
+            raise ValueError('The display request is too large.')
+        parts, size = [], 0
+        async for part in request.content.iter_chunked(4096):
+            size += len(part)
+            if size > 4096: raise ValueError('The display request is too large.')
+            parts.append(part)
+        body = json.loads(b''.join(parts))
+        roots = {'input': folder_paths.get_input_directory(), 'output': folder_paths.get_output_directory(),
+                 'temp': folder_paths.get_temp_directory()}
+        async with limit:
+            result = await asyncio.to_thread(display_video_proxy.prepare, body, studio.store, check_asset, roots,
+                archive_metadata=lambda path: native_archive_metadata(studio, path, roots['output']))
+        return web.json_response(result, headers={'Cache-Control': 'no-store', 'X-Zura-Preview-Only': '1'})
+
+    @routes.get('/zura/studio/display/video/{token}')
+    @routes.get('/genj/studio/display/video/{token}')
+    @response
+    async def video_file(request):
+        from ..media_source import require_same_origin
+        from . import display_video_proxy
+        require_same_origin(request)
+        path = display_video_proxy.lookup(request.match_info['token'])
+        return web.FileResponse(path, headers={'Cache-Control': 'private, max-age=3600',
+                                               'X-Content-Type-Options': 'nosniff', 'X-Zura-Preview-Only': '1'})

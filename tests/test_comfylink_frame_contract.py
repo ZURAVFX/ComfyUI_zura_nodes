@@ -326,33 +326,49 @@ class FrameContractTests(unittest.TestCase):
         # not an output encoder. Its image branch must stay native.
         graph['audio_video'] = {'class_type': 'CreateVideo', 'inputs': {'images': ['source', 0], 'fps': 24}}
         graph['audio_components'] = {'class_type': 'GetVideoComponents', 'inputs': {'video': ['audio_video', 0]}}
-        graph['zura_hdr_video']['inputs']['audio'] = ['audio_components', 1]
+        graph['zura_hdr_save_video']['inputs']['audio'] = ['audio_components', 1]
         before = copy.deepcopy(graph)
         patched = apply_frame_contract(graph, contract(), {'family': 'ltx', 'output_nodes': ['zura_hdr_save_video']})
         self.assertEqual(graph, before)
         for name in ('other_save', 'other_latent', 'audio_video', 'zura_hdr_save_preview', 'zura_hdr_archive'):
             self.assertEqual(patched[name], before[name])
-        self.assertNotEqual(patched['zura_hdr_video']['inputs']['images'], before['zura_hdr_video']['inputs']['images'])
+        self.assertNotEqual(patched['zura_hdr_save_video']['inputs']['images'], before['zura_hdr_save_video']['inputs']['images'])
 
     def test_actual_encoder_rate_and_audio_trim_use_exact_interval(self):
         graph = native_module().build_native_video_graph(source='source.mov', start_frame=0,
             frame_count=50, fps=24, width=512, height=512, prefix='timing', has_audio=True)
         patched = prepare_frame_contract_graph(graph, contract(), 'hdr')
-        self.assertEqual(patched['zura_hdr_video']['inputs']['fps'], 30000/1001)
         self.assertEqual(patched['zura_hdr_save_video']['inputs']['fps'], 30000/1001)
-        audio = patched[patched['zura_hdr_video']['inputs']['audio'][0]]
+        self.assertEqual(patched['zura_hdr_save_video']['inputs']['fps'], 30000/1001)
+        audio = patched[patched['zura_hdr_save_video']['inputs']['audio'][0]]
         self.assertEqual(audio['class_type'], 'TrimAudioDuration')
         self.assertEqual(audio['inputs']['start_index'], 0)
         self.assertAlmostEqual(audio['inputs']['duration'], 50*1001/30000, places=15)
 
-    def test_native_h3_non_24_is_rejected_before_queue(self):
+    def test_native_h3_uses_working_rate_and_restores_ae_rate(self):
         graph = {'latent': {'class_type': 'EmptyMiniMaxH3LatentAV', 'inputs': {'length': 56}},
             'decode': {'class_type': 'VAEDecode', 'inputs': {'samples': ['latent', 0]}},
             'video': {'class_type': 'CreateVideo', 'inputs': {'images': ['decode', 0], 'fps': 24}},
             'save': {'class_type': 'SaveVideo', 'inputs': {'video': ['video', 0]}}}
         value={**contract(),'modelFrames':56}
-        with self.assertRaisesRegex(ValueError, 'cannot preserve'):
-            prepare_frame_contract_graph(graph, value, 'references')
+        result=prepare_frame_contract_graph(graph,value,'references')
+        self.assertEqual(result['video']['inputs']['fps'],30000/1001)
+        matched=result[result['video']['inputs']['images'][0]]
+        self.assertEqual(matched['inputs']['frame_count'],value['frameCount'])
+        self.assertEqual(json.loads(matched['inputs']['metadata'])['modelFrameRate'],{'numerator':24,'denominator':1})
+
+    def test_character_swap_keeps_17_frames_and_restores_original_clock(self):
+        import importlib.util
+        spec=importlib.util.spec_from_file_location('rate_openjutsu',Path(__file__).parents[1]/'artist_studio/openjutsu.py')
+        m=importlib.util.module_from_spec(spec);spec.loader.exec_module(m)
+        p={'id':'test123','source':{'file':'working.mkv','duration':17/24},'character':{'file':'reference.png'},
+           'config':{'engine':'h3','workflow_mode':'swap','duration':17/24,'start':0,'seed':42}}
+        c={**contract(17),'modelFrameRate':{'numerator':24,'denominator':1},'modelFrames':17}
+        g=prepare_frame_contract_graph(m.build_graph(p),c,'swap')
+        self.assertEqual(g['808']['inputs']['fps'],30000/1001)
+        matched=g[g['808']['inputs']['images'][0]]
+        self.assertEqual(matched['inputs']['frame_count'],17)
+        self.assertEqual(g['zura_ae_match_frames_0_audio_rate']['inputs']['speed'],30000/1001/24)
 
     def test_actual_outpaint_graph_preserves_rational_source_and_exact_delivery(self):
         native_module()

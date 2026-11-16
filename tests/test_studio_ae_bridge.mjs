@@ -14,11 +14,11 @@ let cleaned='';const credential={broker:'http://127.0.0.1:6553/studio-bridge/tes
 assert.deepEqual(consumeStudioFragment({hash:'#comfylink='+Buffer.from(JSON.stringify(credential)).toString('base64url'),pathname:'/',search:'?zura=1'},{replaceState:(_s,_t,path)=>cleaned=path}),credential);assert.equal(cleaned,'/?zura=1');
 assert.equal(consumeStudioFragment({hash:'',pathname:'/',search:''},{}),null);
 assert.match(consumeStudioFragment({hash:'#comfylink=broken',pathname:'/',search:''},{replaceState(){}}).error,/invalid/);
-assert.equal(STUDIO_MODE_ADAPTERS.length,14);assert.equal(new Set(STUDIO_MODE_ADAPTERS.map(a=>a.id)).size,14);
+assert.equal(STUDIO_MODE_ADAPTERS.length,15);assert.equal(new Set(STUDIO_MODE_ADAPTERS.map(a=>a.id)).size,15);
 const calls=[],w=()=>({assets:{images:[]},references:[],draft:{clips:[]},state:{},items:[],save(){},render(){},preview(){},showMedia(){},selectAvailability(){},setSource(v){this.source=v;},setSourceAsset(v){this.source=v;},applySourceInfo(v){this.source=v;},setOwnAsset(v){this.source=v;},setImageOperation(){},clearImageResult(){},syncForm(){}});
 const c={...w(),mode:'video',studio:{...w(),config:{workflow_mode:'swap'},hdrTool:w()},frames:w(),referencesVideo:w(),ripple:w(),alpha:w(),outpaint:w(),panorama:w(),paintout:w(),watermark:w(),director:w(),async show(id){this.mode=id;},videoComposer:{selectWorkflow(id){c.mode='video';c.studio.config.workflow_mode=id;}},openHDR(){this.mode='hdr';},selectRelightEngine(){this.mode='video';this.studio.config.workflow_mode='relight';},fetch:async path=>{calls.push(path);return {path:'native-source',frames:2};}};
 const source={width:512,height:512,precision:{sourceBitDepth:8},studioAsset:{id:'asset',duration:1},stills:{first:{file:'first.png'},last:{file:'last.png'}}};
-for(const adapter of STUDIO_MODE_ADAPTERS){await adapter.acceptInput(c,source);assert.equal(adapter.isBusy(c),false,adapter.id);assert.ok(adapter.resolveWorkspace(c),adapter.id);}
+for(const adapter of STUDIO_MODE_ADAPTERS){if(adapter.id==='paint_vfx'){await assert.rejects(adapter.acceptInput(c,source),/independent asset/);continue;}await adapter.acceptInput(c,source);assert.equal(adapter.isBusy(c),false,adapter.id);assert.ok(adapter.resolveWorkspace(c),adapter.id);}
 c.ripple.intent='relight';c.ensureRippleWorkspace=intent=>{c.ripple.intent=intent;};
 await navigateStudioMode(c,'ripple');assert.equal(c.ripple.intent,'edit','The AE Ripple adapter leaves a prior relight intent');
 assert.ok(calls.some(v=>v.endsWith('/ripple')));assert.ok(calls.every(v=>!v.endsWith('/paintout')),'SDR video uses the shared SDR inspection route, not the HDR-only Paintout endpoint');
@@ -47,9 +47,33 @@ const container=new Element();container.ownerDocument={createElement:()=>new Ele
 const api={fetchApi:async(path,options)=>{requests.push({path,options});if(path.endsWith('/source'))return new Promise(resolve=>resolveSource=resolve);return {ok:true,json:async()=>({status:'import_pending',diagnostic:'Import pending'})};}};
 const bridge=new StudioAEBridge({container,creative:c},api,{id:'session',capability:'b'.repeat(64),context:{target:{label:'Foreground'}}},()=>left++);
 assert.match(bridge.label.textContent,/Foreground/);assert.equal(bridge.status.textContent,'Choose a Studio mode');c.mode='alpha';const pending=bridge.loadSource();bridge.leave();assert.equal(left,1);assert.equal(bridge.session.capability,undefined);resolveSource({ok:true,json:async()=>source});await pending;assert.equal(bridge.source,null);assert.equal(requests.at(-1).path.endsWith('/cancel'),true);assert.ok(requests.every(r=>r.path.startsWith('/zura/comfylink/v1/studio/')));
-const bridge2=new StudioAEBridge({container,creative:{...c,mode:'home'}},api,{id:'session2',capability:'c'.repeat(64)},()=>{});bridge2.studio.creative.mode='alpha';await bridge2.sendResult();assert.equal(bridge2.status.textContent,'Import pending');bridge2.dispose();
+const bridge2=new StudioAEBridge({container,creative:{...c,mode:'home'}},api,{id:'session2',capability:'c'.repeat(64)},()=>{});bridge2.studio.creative.mode='alpha';bridge2.source=source;bridge2.loaded.set('alpha',bridge2.studio.creative.alpha);await bridge2.sendResult();assert.equal(bridge2.status.textContent,'Import pending');bridge2.dispose();
 let offlineExit=false;const offline=new StudioAEBridge({container,creative:{...c,mode:'home'}},{fetchApi(){throw Error('offline');}},{id:'offline',capability:'d'.repeat(64)},()=>offlineExit=true);offline.leave();assert.equal(offlineExit,true);
-for(const name of ['studio.js','studio_create.js','studio_alpha.js','studio_director.js','studio_frames.js','studio_hdr.js','studio_hdr_long.js','studio_ltx_delivery.js','studio_main_ltx_delivery.js','studio_outpaint.js','studio_panorama.js','studio_references.js','studio_relight.js','studio_restart.js','studio_ripple.js','studio_ripple_image.js','paintout_studio/studio_paintout.js','paintout_studio/watermark_workspace.js'])assert.equal(/\blocalStorage\./.test(fs.readFileSync(new URL('../web/'+name,import.meta.url),'utf8')),false,name);
-console.log('Studio AE bridge: 14 adapters, selected masters, scoped requests, pending transfer, immediate exit, fragment consumption and isolated storage passed');
+for(const name of ['studio.js','studio_core.js','studio_create.js','studio_alpha.js','studio_director.js','studio_frames.js','studio_hdr.js','studio_hdr_long.js','studio_ltx_delivery.js','studio_main_ltx_delivery.js','studio_outpaint.js','studio_panorama.js','studio_references.js','studio_relight.js','studio_restart.js','studio_ripple.js','studio_ripple_image.js','paintout_studio/studio_paintout.js','paintout_studio/watermark_workspace.js'])assert.equal(/\blocalStorage\./.test(fs.readFileSync(new URL('../web/'+name,import.meta.url),'utf8')),false,name);
+console.log('Studio AE bridge: 15 adapters, independent asset guard, selected masters, scoped requests, pending transfer, immediate exit, fragment consumption and isolated storage passed');
 
 assert.equal(activeStudioMode({mode:'image',rippleImage:{request:{workspace:{platePrimary:{}}}}}),'paintout','Editing a video keyframe must not expose an intermediate image as the AE final master');
+
+// A direct ProRes source has timing in its movie descriptor, not a float manifest.
+const nativeMovie={width:512,height:320,frameCount:17,fps:30000/1001,precision:{sourceBitDepth:32,transferBitDepth:12,sampleType:'video'},sourceTransfer:{schemaVersion:2,kind:'native_video',frameRate:{numerator:30000,denominator:1001}},studioAsset:{id:'prores-source',duration:17*1001/30000}};
+await studioModeAdapter('swap').acceptInput(c,nativeMovie,{sessionId:'native12'});
+assert.equal(c.studio.source.id,'prores-source');assert.equal(c.studio.aeFrameBase,undefined,'Native movie returns conform on delivery without imposing the AE clock on H3');
+const {sourceAEFrameContract}=await import('../web/studio_ae_frame_contract.js');
+assert.deepEqual(sourceAEFrameContract(nativeMovie,'native12').frameRate,{numerator:30000,denominator:1001});
+
+// A native float source must not pass through the SDR-copy metadata helper.
+const hdrSource={width:512,height:320,frameCount:17,fps:30000/1001,precision:{sourceBitDepth:32},resolved_colour:'linear_rec709',nativeInputColour:{encoding:'scene_linear_rec709'},studioAsset:{id:'hdr',native_hdr_video:true},mediaInfo:{path:'source.exr',kind:'sequence',resolved_colour:'linear_rec709',fps:25},processingInput:{precision:{sourceBitDepth:8},studioAsset:{id:'sdr-view'}}};
+c.outputSettings={delivery:{output:'hdr'}};c.plate={propagation:()=>false,select(){c.mode='paintout';}};
+await studioModeAdapter('paintout').acceptInput(c,hdrSource);
+assert.equal(c.paintout.state.sourceColour,'linear_rec709');assert.equal(c.paintout.state.colourPipeline,'hdr_hdr');assert.equal(c.paintout.state.sequenceFps,30000/1001);
+assert.equal(c.paintout.source.resolved_colour,'linear_rec709');
+const {studioSourceMediaInfo}=await import('../web/studio_mode_adapters.js');
+assert.equal(studioSourceMediaInfo(hdrSource,hdrSource,hdrSource.mediaInfo,true).resolved_colour,'linear_rec709');
+
+c.outputSettings=null;c.frames.selectedResult=file('old-take.mov');c.frames.$=id=>id==='result'?{hidden:true}:null;
+assert.equal(studioModeAdapter('frames').getSelectedOutput(c),null,'An old hidden take must not be returned instead of the visible input');
+
+c.mode='paintout';c.plate={propagation:()=>false};
+const clockOwner={studio:{creative:c}},repairKey=StudioAEBridge.prototype.sourceClockKey.call(clockOwner);
+c.plate.propagation=()=>true;
+assert.notEqual(StudioAEBridge.prototype.sourceClockKey.call(clockOwner),repairKey,'Native HDR repair and SDR guide editing rebind their appropriate source representations');

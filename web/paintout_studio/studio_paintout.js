@@ -1,4 +1,7 @@
+import {captureResultExports,createResultExportRow,renderPaintoutResultExports} from '../studio_result_exports.js';
+import {deliveryFormatLabel} from '../studio_delivery_formats.js';
 import {prepareAEFrameGraph} from '../studio_ae_frame_contract.js';
+import {paintoutOutputRoles} from './paintout_outputs.js';
 import {workspaceStorage} from '../studio_storage.js';
 import {megapixelSlider,resolutionSize} from '../studio_resolution.js';
 import {installOwnedExecuting} from './studio_progress.js';
@@ -22,6 +25,7 @@ import {tidyArtistGraph} from './artist_graph.js';
 
 import {PaintoutEditor,paintoutDraft} from './paintout_editor.js';
 import {DEFAULT_FRAME_EDIT_PROMPT} from './paintout_frame_recipes.js';
+import {PreviewZoom} from '../studio_preview_zoom.js';
 
 const KEY='zura-paintout-workspace-v1';
 
@@ -33,7 +37,7 @@ const closeIcon='<svg viewBox="0 0 16 16" width="12" height="12" fill="none" str
 
 const colours=[['srgb_display','sRGB / standard images'],['auto','Detect video tags'],['rec709_gamma24','Rec.709 gamma 2.4'],['rec709_oetf','Rec.709 camera'],['acescg','ACEScg'],['acescct','ACEScct'],['hlg_rec2020','HLG Rec.2020'],['pq_rec2020','PQ Rec.2020'],['linear_rec709','Linear Rec.709']];
 
-const options=(items,value)=>items.map(([id,label])=>`<option value="${id}" ${id===value?'selected':''}>${label}</option>`).join('');
+const options=(items,value)=>items.map(([id,label])=>`<option value="${id}" ${id===value?'selected':''}>${deliveryFormatLabel(label)}</option>`).join('');
 
 export async function findPaintoutSubmission(fetch, requestId){
   const match=item=>Array.isArray(item)&&typeof item[1]==='string'&&item[3]?.zura_paintout_request===requestId?item[1]:null;
@@ -130,6 +134,7 @@ export class PaintoutWorkspace{
       </form>`;
 
     owner.root.append(this.page);
+    this.resultExportsRow=createResultExportRow(this.page.ownerDocument);this.page.querySelector('.zf-composer').append(this.resultExportsRow);
 
     this.loras=new LTXLoras(this.page.querySelector('.zc-prompt-tools'),(path,body)=>this.fetch(path,body),()=>this.busy(),()=> 'ltx25',true);
     this.loras.setValue(saved.draft?.custom_loras);this.loras.onchange=()=>{this.state.custom_loras=this.loras.value();this.save();};
@@ -203,7 +208,6 @@ export class PaintoutWorkspace{
 
     this.$('video').ontimeupdate=()=>{if(!this.editor?.active&&this.view==='source'&&this.sourceInfo?.kind==='video'){this.playhead=Math.min(this.sourceInfo.frames-1,Math.floor(this.$('video').currentTime*this.fps()));this.updatePlayhead();}};
 
-    this.$('video').onerror=()=>{if(this.view==='source'||this.view==='mask'){this.videoFallback??=new Set();this.videoFallback.add(this.view==='source'?this.state.source:this.state.mask);this.preview(this.view);this.message('This codec cannot play in the browser. Use the frame slider to inspect the footage.');}else this.message('The result video could not load. Download it to play in your video editor.');};
 
     this.$('export').onclick=()=>this.exportFrame();this.$('expand').onclick=()=>this.page.querySelector('.zf-viewer').requestFullscreen?.();
 
@@ -226,6 +230,11 @@ export class PaintoutWorkspace{
     for(const type of ['execution_success','execution_error','execution_interrupted'])this.api.addEventListener?.(type,e=>{if(e.detail?.prompt_id===this.job?.id)this.poll();});
 
     this.editor=new PaintoutEditor(this);
+    this.$('video').setAttribute('NoVideoControl','true');
+    const viewerBox=this.page.querySelector('.zf-viewer');
+    if(viewerBox){
+      this.previewZoom=new PreviewZoom(viewerBox,()=>this.editor?.active||this.plate?.inline?null:!this.$('video').hidden?this.$('video'):!this.$('image-slot').hidden?this.$('image-slot').querySelector('img'):null);
+    }
     this.modelDownloads=new PaintoutModels(this);this.$('model-setup').onclick=()=>this.openModelSetup('video');
     this.page.querySelector('[data-project-menu]').append(this.modelDownloads.root);
     const renderPanel=this.$('render-settings').querySelector('.zc-tool-panel');
@@ -291,7 +300,9 @@ export class PaintoutWorkspace{
 
   changed(){this.message('');this.save();this.render();this.owner.videoComposer?.syncWorkflow();}
 
-  message(text){this.$('message').textContent=text||'';this.$('message').hidden=!text;}
+  message(text){this.messageRevision=(this.messageRevision||0)+1;this.previewError=null;this.$('message').textContent=text||'';this.$('message').hidden=!text;}
+  previewFailed(text){this.message(text);this.previewError=text;}
+  clearPreviewError(){if(this.previewError&&this.$('message').textContent===this.previewError)this.message('');else this.previewError=null;}
 
   url(path){return this.api.apiURL(path);}
 
@@ -324,16 +335,30 @@ export class PaintoutWorkspace{
     if(this.editor&&this.state.mode!=='full'){this.editor.tool='include';this.editor.viewer.setTool('include');await this.editor.setStage('trim');}
   }
 
-  async pickSource(kind){
-
-    if(this.busy())return;try{await this.editor?.flushManual();await this.editor?.persist();}catch(e){this.message(e.message);return;}let added=false;this.picking=true;this.render();
-
-    try{const [file]=await this.pick(kind);if(!file)return;const info=await this.info(file);this.state.source=file;this.state.activeMaskSegment=null;this.state.maskSegmentDraft=null;this.state.editorProject=null;this.state.maskProject=null;this.state.maskRevision=null;this.state.maskCoverage=null;this.state.editorStage='trim';this.state.clipTrimConfirmed=false;this.state.maskTrackStart=null;this.state.maskTrackEnd=null;this.sourceInfo=info;this.pendingHDR=null;this.state.sourceColourConfirmed=false;if(!info.resolved_colour){this.state.sourceColour="srgb_display";this.state.colourPipeline="sdr_sdr";this.state.processingSpace="SDR (sRGB)";this.state.outputMode="SDR video";this.$("colour").value=this.state.sourceColour;this.$("processing").value=this.state.processingSpace;this.$("output").value=this.state.outputMode;}if(info.resolved_colour){this.state.sourceColour=info.resolved_colour;this.$('colour').value=info.resolved_colour;this.state.colourPipeline=['acescg','acescct','hlg_rec2020','pq_rec2020','linear_rec709'].includes(info.resolved_colour)?'hdr_hdr':'sdr_sdr';this.state.processingSpace=this.state.colourPipeline==='hdr_hdr'?'HDR (ACEScct)':'SDR (sRGB)';this.state.outputMode=this.state.colourPipeline==='hdr_hdr'?'EXR + HLG video':'SDR video';this.$('processing').value=this.state.processingSpace;this.$('output').value=this.state.outputMode;}this.state.mask='';this.maskInfo=null;this.state.anchors=[];this.selected=-1;this.state.startFrame=0;this.state.frameCount=Math.min(81,info.frames);this.playhead=0;this.result=null;this.$('export-link').hidden=true;this.$('export-link').removeAttribute('href');this.$('start').value=0;this.$('count').value=this.state.frameCount;this.renderAnchors();this.changed();this.preview('source');this.state.editorStage='trim';this.state.clipTrimConfirmed=false;this.state.maskTrackStart=null;this.state.maskTrackEnd=null;added=true;}
-
-    catch(e){this.message(this.requestError(e));}finally{this.picking=false;this.save();this.render();}
-
-    if(added&&this.editor)await this.editor.setStage('trim');
-
+  async pickSource(kind,preparedInfo=null,{isActive=()=>true}={}){
+    if(this.busy())return false;
+    try{await this.editor?.flushManual();await this.editor?.persist();}catch(e){this.message(e.message);return false;}
+    if(!isActive())return false;
+    let added=false;this.picking=true;this.render();
+    try{
+      let info=preparedInfo,file=info?.path;
+      if(info){
+        if(typeof file!=='string'||!file||info.kind!=='video'||!Number.isSafeInteger(info.frames)||info.frames<1||![info.width,info.height].every(value=>Number.isSafeInteger(value)&&value>0))throw Error('Choose a supported video clip.');
+      }else{[file]=await this.pick(kind);if(!file)return false;info=await this.info(file);}
+      if(!isActive())return false;
+      this.state.source=file;this.state.activeMaskSegment=null;this.state.maskSegmentDraft=null;this.state.editorProject=null;this.state.maskProject=null;this.state.maskRevision=null;this.state.maskCoverage=null;this.state.editorStage='trim';this.state.clipTrimConfirmed=false;this.state.maskTrackStart=null;this.state.maskTrackEnd=null;this.sourceInfo=info;this.pendingHDR=null;
+      this.state.sourceColourConfirmed=false;
+      this.state.sourceColour=info.resolved_colour||'srgb_display';
+      this.state.colourPipeline=['acescg','acescct','hlg_rec2020','pq_rec2020','linear_rec709'].includes(this.state.sourceColour)?'hdr_hdr':'sdr_sdr';
+      this.state.processingSpace=this.state.colourPipeline==='hdr_hdr'?'HDR (ACEScct)':'SDR (sRGB)';this.state.outputMode=this.state.colourPipeline==='hdr_hdr'?'EXR + HLG video':'SDR video';
+      this.$('colour').value=this.state.sourceColour;this.$('processing').value=this.state.processingSpace;this.$('output').value=this.state.outputMode;
+      this.state.mask='';this.maskInfo=null;this.state.anchors=[];this.selected=-1;this.state.startFrame=0;this.state.frameCount=Math.min(81,info.frames);this.playhead=0;this.result=null;
+      this.$('export-link').hidden=true;this.$('export-link').removeAttribute('href');this.$('start').value=0;this.$('count').value=this.state.frameCount;
+      this.renderAnchors();this.changed();this.preview('source');this.state.editorStage='trim';this.state.clipTrimConfirmed=false;this.state.maskTrackStart=null;this.state.maskTrackEnd=null;added=true;
+    }catch(e){this.message(this.requestError(e));}
+    finally{this.picking=false;this.save();this.render();}
+    if(added&&isActive()&&this.editor)await this.editor.setStage('trim');
+    return added;
   }
 
   async pickMask(){
@@ -413,6 +438,8 @@ export class PaintoutWorkspace{
 
   preview(kind=this.view){
 
+    const request=this.previewRequest=(this.previewRequest||0)+1,source=this.state.source,mask=this.state.mask,colour=this.state.sourceColour,messageRevision=this.messageRevision;
+
     const projectMask=this.state.maskProject&&this.state.maskRevision!=null;
 
     if(kind==='result'&&!this.result||kind==='anchor'&&!this.state.anchors[this.selected]||kind==='mask'&&!this.state.mask&&!projectMask)kind='source';
@@ -433,7 +460,7 @@ export class PaintoutWorkspace{
 
     let src='',video=false;
 
-    if(kind==='result'){this.nativeSamplePreview?.clear();src=this.outputURL(this.result.file);video=true;this.$('history').open=false;for(const popup of this.page.querySelectorAll('form details[open]'))popup.open=false;}
+    if(kind==='result'){this.nativeSamplePreview?.clear();const preview=this.resultPreviewFile();src=preview?this.outputURL(preview):'';video=!!preview&&!/\.(png|tiff?|jpe?g|webp)$/i.test(preview.filename);this.$('history').open=false;for(const popup of this.page.querySelectorAll('form details[open]'))popup.open=false;}
 
     else if(kind==='anchor'){const a=this.state.anchors[this.selected];src=a.file?this.thumbnail(a.preview_file||a.file,0,a.preview_file?(a.preview_colour_space||'srgb_display'):a.colour_space,1280):this.thumbnail(this.state.source,a.frame,this.state.sourceColour,1280);}
 
@@ -441,15 +468,20 @@ export class PaintoutWorkspace{
 
     else if(this.sourceInfo&&this.state.source){video=!!this.sourceInfo.media_url&&!this.videoFallback?.has(this.state.source);src=video?this.url(this.sourceInfo.media_url):this.thumbnail(this.state.source,this.playhead,this.state.sourceColour,1280);}
 
-    if(src&&video){const el=this.$('video');if(el.getAttribute('src')!==src)el.src=src;el.hidden=false;el.currentTime=kind==='result'?0:this.playhead/this.fps();}
+    const current=()=>this.previewRequest===request&&this.state.source===source&&this.state.mask===mask&&this.state.sourceColour===colour&&this.view===kind&&!this.editor?.active;
+    const mayReport=()=>current()&&(this.messageRevision===messageRevision||!!this.previewError);
+    if(src&&video){const el=this.$('video');el.onerror=()=>{if(!mayReport())return;if(kind==='source'||kind==='mask'){this.videoFallback??=new Set();this.videoFallback.add(kind==='source'?source:mask);this.preview(kind);this.previewFailed('This codec cannot play in the browser. Use the frame slider to inspect the footage.');}else this.previewFailed('The result video could not load. Download it to play in your video editor.');};el.onloadeddata=()=>{if(current())this.clearPreviewError();};if(el.getAttribute('src')!==src)el.src=src;el.hidden=false;el.currentTime=kind==='result'?0:this.playhead/this.fps();}
 
-    else if(src){let image=this.$('image-slot').querySelector('img');if(!image){image=document.createElement('img');image.alt='Paintout preview';this.$('image-slot').append(image);}image.src=src;image.onerror=()=>this.message('Preview unavailable. Check the file and its colour space.');this.$('image-slot').hidden=false;}
+    else if(src){const image=document.createElement('img');image.alt='Paintout preview';image.onerror=()=>{if(mayReport())this.previewFailed('Preview unavailable. Check the file and its colour space.');};image.onload=()=>{if(current())this.clearPreviewError();};image.src=src;this.$('image-slot').replaceChildren(image);this.$('image-slot').hidden=false;}
 
+    this.previewZoom?.update(`${kind}:${src}`);
     this.render();
 
   }
 
   outputURL(file){return this.url('/view?'+new URLSearchParams({filename:file.filename,subfolder:file.subfolder||'',type:'output'}));}
+  resultPreviewFile(){const roles=paintoutOutputRoles(this.result);return roles.preview||roles.sdrMaster||roles.hlgMaster||(/\.(png|tiff?|jpe?g|webp)$/i.test(roles.master?.filename||'')?roles.master:null);}
+  resultMasterFile(){return this.result?paintoutOutputRoles(this.result).master:null;}
 
   async exportFrame(){
 
@@ -465,7 +497,14 @@ export class PaintoutWorkspace{
 
   async loadModels(){if(this.loading)return;this.loading=true;this.render();try{this.modelInfo=await this.fetch('/object_info');this.modelError='';}catch(e){this.modelError=e.message;}finally{this.loading=false;this.render();}}
 
-  async open(){attachWorkspaceSamplePreview(this);if(!this.modelInfo)this.loadModels();if(this.state.source){try{this.sourceInfo=await this.info(this.state.source);if(this.state.mask)this.maskInfo=await this.info(this.state.mask);}catch(e){this.message(this.requestError(e));}}const stage=this.state.editorStage;this.preview(this.result?'result':'source');if(this.job)this.startPolling();if(this.state.source)await this.editor?.setStage(stage==='trim'?'trim':this.state.mode==='full'||this.result?'render':stage||'mask');if(this.editor?.toolJob)this.editor.startPolling();}
+  async open(){
+    const request=this.openRequest=(this.openRequest||0)+1,source=this.state.source,mask=this.state.mask,colour=this.state.sourceColour;
+    let expectedInfo=this.sourceInfo;
+    const current=()=>this.openRequest===request&&this.state.source===source&&this.state.mask===mask&&this.state.sourceColour===colour&&this.sourceInfo===expectedInfo&&!this.exporting&&!this.plate?.inline&&this.owner?.mode!=='image';
+    attachWorkspaceSamplePreview(this);if(!this.modelInfo)this.loadModels();
+    if(source){try{const info=await this.info(source);if(!current())return;expectedInfo=this.sourceInfo=info;if(mask){const maskInfo=await this.info(mask);if(!current())return;this.maskInfo=maskInfo;}}catch(e){if(!current())return;this.message(this.requestError(e));}}
+    if(!current())return;const stage=this.state.editorStage,keepClean=stage==='clean'&&this.plate?.propagation()&&!!this.editor?.selected();if(!keepClean)this.preview(this.result?'result':'source');if(this.job)this.startPolling();if(source)await this.editor?.setStage(stage==='trim'?'trim':keepClean?'clean':this.state.mode==='full'||this.result?'render':stage||'mask');if(current()&&this.editor?.toolJob)this.editor.startPolling();
+  }
 
   renderColourStatus(config){
     const has=!!this.state.source,info=this.sourceInfo||{};
@@ -484,13 +523,14 @@ export class PaintoutWorkspace{
     const format=config.outputMode||'SDR video',pipeline=paintoutColourPipeline(config);
     const output=format.includes('HLG')?'HDR':format.includes('SDR')?'SDR':pipeline==='sdr_sdr'?'SDR':'HDR';
     this.$('output-range').textContent=`Output: ${output}`;
-    this.$('output-space').textContent=format;
-    this.$('input-range').title=this.$('input-space').textContent;this.$('output-range').title=format;
+    this.$('output-space').textContent=deliveryFormatLabel(format);
+    this.$('input-range').title=this.$('input-space').textContent;this.$('output-range').title=deliveryFormatLabel(format);
     this.$('input-range').setAttribute('aria-describedby','zps-input-space');this.$('output-range').setAttribute('aria-describedby','zps-output-space');
-    this.$('output-confirmation').textContent=`Will save ${output} · ${format}`;
+    this.$('output-confirmation').textContent=`Will save ${output} · ${deliveryFormatLabel(format)}`;
   }
 
   render(){
+    renderPaintoutResultExports(this.resultExportsRow,this.api,this.result);
 
     const busy=this.busy(),inpaint=this.state.mode==='inpaint',targeted=this.state.mode!=='full',c=this.config(),availability=this.modelInfo?(this.ripple?rippleAvailability(this.modelInfo):inpaint?inpaintAvailability(this.modelInfo,c):paintoutAvailability(this.modelInfo,this.state.mode,c)):null;let error=[...this.page.querySelectorAll('[data-input-error]')].find(input=>!input.disabled)?.dataset.inputError||(this.ripple?rippleValidation(c):inpaint?inpaintValidation(c):paintoutValidation(c));
 
@@ -574,9 +614,9 @@ export class PaintoutWorkspace{
 
     if(error&&rangeFix){const button=document.createElement('button');button.type='button';button.textContent='Adjust clip trim';button.disabled=busy;button.onclick=()=>this.editor?.setStage('trim');this.$('note').append(' ',button);}
 
-    this.$('compare').hidden=!this.result||this.result.config.source!==c.source||!this.sourceInfo?.media_url||this.view!=='result';
+    this.$('compare').hidden=!this.result||!this.resultPreviewFile()||this.result.config.source!==c.source||!this.sourceInfo?.media_url||this.view!=='result';
 
-    this.$('download').hidden=!this.result||this.view!=='result';if(this.result){this.$('download').href=this.outputURL(this.result.master||this.result.file);this.$('download').textContent=this.result.config.outputMode==='EXR sequence'?'Download preview':'Download video';}
+    const downloadMaster=this.resultMasterFile();this.$('download').hidden=!downloadMaster||this.view!=='result';if(downloadMaster){this.$('download').href=this.outputURL(downloadMaster);this.$('download').textContent=/\.(zip|exr)$/i.test(downloadMaster.filename)?'Download EXR':'Download video';}else this.$('download').removeAttribute('href');
 
     syncRippleWorkspace(this);
     this.$('takes').innerHTML=this.items.map((item,i)=>`<button type="button" data-take="${i}">${item.config.mode==='full'?'Clean plate':'Targeted repair'} · ${esc(name(item.config.source))}</button>`).join('');
@@ -689,17 +729,18 @@ export class PaintoutWorkspace{
 
   async poll(){if(!this.job||this.polling)return;const job=this.job;this.polling=true;try{const history=await this.fetch('/history/'+encodeURIComponent(job.id)),entry=history[job.id];if(this.job!==job)return;if(this.connectionLost){this.message('');this.connectionLost=false;}if(entry?.status?.completed||entry?.status?.status_str==='error'){
 
-      const repair=job.phase==='repair',output=entry.outputs?.[repair?'repair_save':'save']||{},files=output.images||[],file=files.find(f=>/motion_preview/.test(f.filename))||files.find(f=>/SDR/.test(f.filename))||files[0];
+      const repair=job.phase==='repair',output=entry.outputs?.[repair?'repair_save':'save']||{},files=output.images||[],roles=paintoutOutputRoles({files,exports:captureResultExports(output),config:job.config}),{preview,master}=roles,file=preview||roles.sdrMaster||master;
       const succeeded=entry.status.status_str==='success',checkpoint=output.zura_saved_sequence?.[0]||output.text?.map(text=>/^Saved \d+ frames: (.+)$/s.exec(text)?.[1]).find(Boolean);
+      const previousExports=job.phase==='hdr'&&this.result?.stage==='repair'&&this.pendingHDR?.savedSequence===job.savedSequence?this.result.exports:[];const resultExports=captureResultExports(output,previousExports);
       this.job=null;this.nativeSamplePreview?.clear();this.stopPolling();
       if(repair&&succeeded&&checkpoint){
         this.pendingHDR={config:job.config,savedSequence:checkpoint,failed:false};
-        if(file){this.result={file,master:files.find(f=>!/motion_preview/.test(f.filename))||file,config:job.config,saved:output.text?.join('\n')||'',stage:'repair'};this.items.unshift(this.result);this.items=this.items.slice(0,12);this.preview('result');}
+        if(file){this.result={...roles,file,config:job.config,exports:resultExports,saved:output.text?.join('\n')||'',stage:'repair'};this.items.unshift(this.result);this.items=this.items.slice(0,12);this.preview('result');}
         this.message('Repair saved. Next: convert to HDR.');
       }else if(file&&succeeded){
-        this.result={file,master:files.find(f=>!/motion_preview/.test(f.filename))||file,config:job.config,saved:output.text?.join('\n')||''};this.items.unshift(this.result);this.items=this.items.slice(0,12);this.preview('result');
+        this.result={...roles,file,config:job.config,exports:resultExports,saved:output.text?.join('\n')||''};this.items.unshift(this.result);this.items=this.items.slice(0,12);this.preview('result');
         if(job.phase==='hdr'&&this.pendingHDR?.savedSequence===job.savedSequence)this.pendingHDR=null;
-        this.message(job.config.outputMode.includes('EXR')?this.result.saved:'');
+        this.message(!master?'Preview ready, but the requested master was not returned. Your result is retained.':job.config.outputMode.includes('EXR')?this.result.saved:'');
       }else{
         const failure=entry.status.messages?.find(m=>m[0]==='execution_error')?.[1],interrupted=entry.status.messages?.some(m=>m[0]==='execution_interrupted');
         if(job.phase==='hdr'&&this.pendingHDR)this.pendingHDR.failed=true;
@@ -723,10 +764,10 @@ export class PaintoutWorkspace{
 
   async cancel(){if(!this.job||this.job.cancelPending)return;const job=this.job;job.cancelPending=true;this.progressSnapshot=null;this.$('bar').removeAttribute('value');this.$('progress-title').textContent='Cancelling paintout…';this.$('progress-detail').textContent='Waiting for ComfyUI to stop this run.';this.save();this.render();try{await this.fetch('/queue',{delete:[job.id]});await this.fetch('/interrupt',{prompt_id:job.id});await this.poll();}catch(e){if(this.job===job){job.cancelPending=false;this.save();this.render();this.message('Could not confirm cancellation. Try again.');}}}
 
-  compare(){if(!this.result||this.result.config.source!==this.state.source||!this.sourceInfo?.media_url)return;this.$('video').pause();this.comparison??=new ShotComparison(this.$('comparison'));this.$('comparison').hidden=false;this.comparison.onClose=()=>{this.$('comparison').hidden=true;};const c=this.result.config;this.comparison.show(this.url(this.sourceInfo.media_url),this.outputURL(this.result.file),c.startFrame/(this.sourceInfo.kind==='video'?this.sourceInfo.fps:c.sequenceFps),{resultLabel:'Clean plate'});}
+  compare(){if(!this.result||!this.resultPreviewFile()||this.result.config.source!==this.state.source||!this.sourceInfo?.media_url)return;this.$('video').pause();this.comparison??=new ShotComparison(this.$('comparison'));this.$('comparison').hidden=false;this.comparison.onClose=()=>{this.$('comparison').hidden=true;};const c=this.result.config;this.comparison.show(this.url(this.sourceInfo.media_url),this.outputURL(this.resultPreviewFile()),c.startFrame/(this.sourceInfo.kind==='video'?this.sourceInfo.fps:c.sequenceFps),{resultLabel:'Clean plate'});}
 
   async graph(){try{const config=this.job?.config||this.config(),base=config.mode==='ripple'?buildRippleGraph(config,this.modelInfo):config.mode==='inpaint'?buildInpaintRepairGraph(config,this.modelInfo):buildPaintoutGraph(config,this.modelInfo),graph=this.loras?.patch?await this.loras.patch(base,config.custom_loras||[]):base,original=(this.app.rootGraph||this.app.graph)?.serialize?.();if(!original||typeof this.app.loadApiJson!=='function')throw new Error('Update ComfyUI to open this editable graph.');try{await this.app.loadApiJson(graph,`Zura Paintout · ${Date.now()}.json`);await import('../vendor/elk.bundled.js');await tidyArtistGraph(this.app,graph,'paintout',window.ELK);}catch(e){await this.app.loadGraphData(original);throw e;}this.studio.close();}catch(e){this.message(e.message);}}
 
-  close(){this.modelDownloads?.close();this.editor?.close();this.save();this.stopPolling();this.nativeSamplePreview?.dispose();this.nativeSamplePreview=null;this.comparison?.hide();this.$('video').pause();}
+  close(){this.previewRequest=(this.previewRequest||0)+1;this.openRequest=(this.openRequest||0)+1;this.modelDownloads?.close();this.editor?.close();this.save();this.stopPolling();this.previewZoom?.stopDraw();this.nativeSamplePreview?.dispose();this.nativeSamplePreview=null;this.comparison?.hide();this.$('video').pause();}
 
 }

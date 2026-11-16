@@ -6,6 +6,11 @@ offline. Existing model readiness is a size/header check, not a full hash scan.
 """
 from __future__ import annotations
 
+try:
+    from ..model_folders import default_models_dir, preferred_category_roots
+except ImportError:  # Standalone catalogue tests and tools.
+    from model_folders import default_models_dir, preferred_category_roots
+
 from contextlib import contextmanager
 from functools import lru_cache
 import errno
@@ -816,16 +821,19 @@ class DownloadManager:
                     self._active = None
 
 
+def _default_models_root(folder_paths):
+    return default_models_dir(folder_paths)
+
+
 def _locations(folder_paths):
     locations, filenames = {}, {}
+    base = _default_models_root(folder_paths)
     for folder in {item['folder'] for recipe in CATALOG.values() for item in recipe['files']}:
         try:
             roots = list(folder_paths.get_folder_paths(folder))
         except KeyError:
             roots = []
-        # Embeddings may not yet be registered when an extension is imported.
-        if not roots and folder == 'embeddings' and getattr(folder_paths, 'models_dir', None):
-            roots = [str(Path(folder_paths.models_dir) / 'embeddings')]
+        roots = preferred_category_roots(folder_paths, folder, roots)
         locations[folder] = roots
         try:
             filenames[folder] = folder_paths.get_filename_list(folder)

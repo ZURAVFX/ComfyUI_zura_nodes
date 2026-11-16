@@ -9,5 +9,6 @@ await studioModeAdapter(mode).acceptInput(owner,source);
 const workspace=mode==='image'?owner:owner.ripple,ref=mode==='image'?owner.references[0]:workspace.source,selected=StudioDeliveryControls.prototype.source.call({owner},workspace),description=studioInputDescription(selected);
 const delivery={workspace:()=>workspace,source:()=>selected,input:()=>description,inputOverrides:{},sourceKey:()=>ref.filename||ref.path,raw:()=>null,outputFor:()=>null};
 const choices=StudioDisplaySettings.prototype.choices.call({owner,delivery});
-const config=StudioDeliveryControls.prototype.configure.call({owner,input:()=>description,settings:{exrStorage:()=> 'float32'},output:'sdr',hdrFormat:'acescg_exr'},workspace,{references:owner.references},mode);
+const deliveryControl=Object.assign(Object.create(StudioDeliveryControls.prototype),{owner,input:()=>description,settings:{exrStorage:()=> 'float32'},output:'sdr',hdrFormat:'acescg_exr'});
+const config=deliveryControl.configure(workspace,{references:owner.references},mode);
 process.stdout.write(JSON.stringify({reference:ref,description,selector:studioDisplaySource(selected),preview:choices.original,config}));

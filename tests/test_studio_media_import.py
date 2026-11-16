@@ -15,6 +15,7 @@ import unittest
 import uuid
 import zipfile
 from contextlib import ExitStack
+from urllib.parse import parse_qs,urlsplit
 from unittest.mock import patch
 from aiohttp import web,FormData
 from aiohttp.test_utils import TestClient,TestServer
@@ -86,7 +87,8 @@ class ImportTests(unittest.TestCase):
         self.register(identity,path,'video');before=path.read_bytes()
         result=media.prepare_import({'asset_id':identity,'frame':7},self.store,self.check,self.roots)
         self.assertEqual(result['precision']['decodedBitDepth'],8)
-        bridge=subprocess.run(['node',str(v2_bootstrap.ROOT/'tests'/'studio_import_binding_bridge.mjs')],input=json.dumps(result),capture_output=True,text=True,check=True)
+        bridge=subprocess.run(['node',str(v2_bootstrap.ROOT/'tests'/'studio_import_binding_bridge.mjs')],input=json.dumps(result),capture_output=True,text=True,check=False)
+        self.assertEqual(bridge.returncode,0,bridge.stderr)
         bound=json.loads(bridge.stdout);selector=bound['selector']
         self.assertEqual(selector,{'imported_frame':result['processingInput']['studioAsset']['id']})
         self.assertEqual(bound['preview']['count'],1)
@@ -181,6 +183,54 @@ class ImportTests(unittest.TestCase):
         self.assertIs(media.restore_model_info(str(foreign),plain,store=self.store,check_asset=self.check,roots=self.roots),plain,'Foreign paths never receive registered-source metadata')
         original_file=proxy['file'];self.assets[proxy['id']].update(file=path.relative_to(self.roots['input']).as_posix(),sha=hashlib.sha256(path.read_bytes()).hexdigest())
         with self.assertRaisesRegex(ValueError,'another source'):media.restore_model_info(str(self.roots['input']/original_file),plain,store=self.store,check_asset=self.check,roots=self.roots)
+
+    def test_registered_reference_video_reopens_with_owned_browser_preview(self):
+        identity,path=self.asset('reference.mkv','video');preview=path.with_name('preview.mp4')
+        subprocess.run([tools.find_media_tool('ffmpeg'),'-v','error','-f','lavfi','-i','testsrc=size=64x48:rate=25',
+            '-frames:v','2','-c:v','ffv1','-color_trc','iec61966-2-1','-color_primaries','bt709',
+            '-colorspace','bt709','-color_range','pc',str(path)],check=True)
+        subprocess.run([tools.find_media_tool('ffmpeg'),'-v','error','-i',str(path),'-c:v','libx264',
+            '-pix_fmt','yuv420p',str(preview)],check=True)
+        original=path.read_bytes();asset=self.register(identity,path,'video')
+        asset['preview_file']=preview.relative_to(self.roots['input']).as_posix()
+        described,first=media.describe_asset(asset,self.store,self.check,self.roots)
+        self.assets[identity]=described
+        self.assertNotIn('processingView',described)
+        reopened=media.restore_model_info(str(path),{'sentinel':True},store=self.store,check_asset=self.check,roots=self.roots)
+        self.assertEqual(reopened['path'],str(path.resolve()))
+        self.assertEqual(reopened['precision'],first['precision'])
+        self.assertEqual(reopened['frames'],2)
+        self.assertEqual(reopened['studioAssetId'],identity)
+        self.assertNotEqual(reopened['media_url'],first['media_url'])
+        browser=importlib.import_module('ComfyUI_zura_nodes.paintout.browser')
+        token=parse_qs(urlsplit(reopened['media_url']).query)['token'][0]
+        self.assertEqual(browser._media_grants[token][0],preview.resolve())
+        with av.open(str(preview)) as viewing:
+            self.assertEqual(viewing.streams.video[0].codec_context.name,'h264')
+        self.assertEqual(path.read_bytes(),original)
+        self.assertEqual(described['file'],path.relative_to(self.roots['input']).as_posix())
+
+        plain={'path':str(path),'sentinel':True}
+        foreign=self.roots['input']/'genj_studio'/uuid.uuid4().hex/'reference.mkv'
+        foreign.parent.mkdir();foreign.write_bytes(original)
+        self.assertIs(media.restore_model_info(str(foreign),plain,store=self.store,check_asset=self.check,roots=self.roots),plain)
+        changes=({'id':uuid.uuid4().hex}, {'file':preview.relative_to(self.roots['input']).as_posix()},
+                 {'sha':'0'*64})
+        for change in changes:
+            with self.subTest(change=change):
+                self.assets[identity]={**described,**change}
+                with self.assertRaises(ValueError):
+                    media.restore_model_info(str(path),plain,store=self.store,check_asset=self.check,roots=self.roots)
+        other=self.roots['input']/'genj_studio'/uuid.uuid4().hex/'preview.mp4'
+        other.parent.mkdir();other.write_bytes(preview.read_bytes())
+        self.assets[identity]={**described,'preview_file':other.relative_to(self.roots['input']).as_posix()}
+        with self.assertRaisesRegex(ValueError,'browser preview'):
+            media.restore_model_info(str(path),plain,store=self.store,check_asset=self.check,roots=self.roots)
+        _,untrusted=media.describe_asset(self.assets[identity],self.store,self.check,self.roots)
+        self.assertNotEqual(untrusted['media_url'],first['media_url'])
+        token=parse_qs(urlsplit(untrusted['media_url']).query)['token'][0]
+        self.assertEqual(browser._media_grants[token][0],path.resolve())
+
     def test_mp4_hdr10_is_detected_from_actual_transfer_not_extension(self):
         identity,path=self.asset('hdr10.mp4','video')
         subprocess.run([tools.find_media_tool('ffmpeg'),'-v','error','-f','lavfi','-i','testsrc=size=64x48:rate=25',

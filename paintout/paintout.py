@@ -98,8 +98,11 @@ def describe(path,cancel=None):
     if p.suffix.lower() in ('.exr','.png','.tif','.tiff','.jpg','.jpeg','.webp'):
         shape=read_image(p).shape
         return dict(kind='sequence',files=[str(p)],width=shape[1],height=shape[0],count=1)
-    payload=_media_probe([find_media_tool('ffprobe'),'-v','error','-select_streams','v:0','-show_streams','-of','json',str(p)],cancel)
-    s=json.loads(payload)['streams'][0]
+    payload=_media_probe([find_media_tool('ffprobe'),'-v','error','-select_streams','v:0','-show_streams','-show_format','-of','json',str(p)],cancel)
+    probe=json.loads(payload);s=probe['streams'][0]
+    comment=probe.get('format',{}).get('tags',{}).get('comment','')
+    working_space=comment.removeprefix('Zura working RGB: ') if comment.startswith('Zura working RGB: ') and s.get('codec_name')=='prores' and s.get('codec_tag_string') in ('ap4h','ap4x') else None
+    if working_space not in ('acescg','acescct','linear_rec709','srgb_display'):working_space=None
     rotations = [s.get('tags', {}).get('rotate', 0)] + [item.get('rotation', 0) for item in s.get('side_data_list', [])]
     if any(abs(float(value) % 360) > .01 for value in rotations):
         raise ValueError('Bake the video rotation into the pixels before importing this shot. Export a constant-frame-rate video with normal orientation.')
@@ -113,7 +116,7 @@ def describe(path,cancel=None):
             payload=_media_probe([find_media_tool('ffprobe'),'-v','error','-select_streams','v:0','-count_frames','-show_entries','stream=nb_read_frames','-of','json',str(p)],cancel)
             count=int(json.loads(payload)['streams'][0].get('nb_read_frames',0))
             if count<1:raise ValueError('The video contains no decodable frames.')
-    return dict(kind='video',path=str(p),width=int(s['width']),height=int(s['height']),fps=fps,fps_rational=str(Fraction(s['avg_frame_rate'])),transfer=s.get('color_transfer'),primaries=s.get('color_primaries'),matrix=s.get('color_space'),range=s.get('color_range'),pixel_format=s.get('pix_fmt'),count=int(count))
+    return dict(kind='video',path=str(p),width=int(s['width']),height=int(s['height']),fps=fps,fps_rational=str(Fraction(s['avg_frame_rate'])),transfer=s.get('color_transfer'),primaries=s.get('color_primaries'),matrix=s.get('color_space'),range=s.get('color_range'),pixel_format=s.get('pix_fmt'),count=int(count),**({'working_space':working_space,'resolved_colour':working_space} if working_space else {}))
 
 def resolve_input(path):
     p=Path(path).expanduser()
@@ -321,7 +324,7 @@ def selected_space(d,space):
             if d['kind']!='video' or d.get('transfer')!='smpte2084' or d.get('primaries')!='smpte432' or d.get('matrix') not in ('bt709','bt2020nc') or d.get('range') not in ('tv','pc'):
                 raise ValueError('Display-P3 PQ requires matching PQ transfer, P3-D65 primaries, a supported tagged YCbCr matrix and a tagged range.')
             return space
-        if d['kind']=='video' and space in ('acescg','acescct','linear_rec709'):
+        if d['kind']=='video' and space in ('acescg','acescct','linear_rec709') and d.get('working_space')!=space:
             raise ValueError('For MOV/video choose its encoded colour space: Rec.709, HLG or PQ. Camera log footage needs a colour transform first.')
         if d['kind']=='video' and space in ('hlg_rec2020','pq_rec2020'):
             primaries=d.get('primaries')
@@ -329,6 +332,7 @@ def selected_space(d,space):
                 raise ValueError(f'This video declares {primaries} colour primaries, which cannot be interpreted as Rec.2020. Convert it to Rec.2020 HDR before loading.')
         return video_space(space) if d['kind']=='video' else space
     if d['kind']=='video':
+        if d.get('working_space') in ('acescg','acescct','linear_rec709','srgb_display'):return video_space(d['working_space'])
         transfer=d.get('transfer'); primaries=d.get('primaries')
         if transfer in ('arib-std-b67','smpte2084'):
             if transfer=='smpte2084' and primaries=='smpte432':
@@ -676,15 +680,20 @@ class ZuraPaintoutVAE:
         vae.first_stage_model.to(dtype=torch.float32)
         return (vae,)
 
-def composite_crop(original,generated,mask,grow,feather,match,fit_override=None,protection=None):
+def repair_matte(mask,grow,feather,protection=None):
     binary=mask>.001
-    if not binary.any():return original.copy(),dict(gain=[1,1,1],offset=[0,0,0])
+    if not binary.any():return np.zeros_like(mask,dtype=np.float32),np.full(mask.shape,np.inf)
     expanded=maximum_filter(binary,size=2*grow+1) if grow else binary
-    # Outward feather, completely opaque over the original object.
     distance=distance_transform_edt(~expanded)
-    alpha=(np.clip(1-distance/max(feather,1),0,1) if feather else expanded.astype(np.float32))
+    alpha=np.clip(1-distance/max(feather,1),0,1) if feather else expanded.astype(np.float32)
     alpha[expanded]=1
     if protection is not None:alpha[np.asarray(protection)>.001]=0
+    return alpha,distance
+
+
+def composite_crop(original,generated,mask,grow,feather,match,fit_override=None,protection=None):
+    if not (mask>.001).any():return original.copy(),dict(gain=[1,1,1],offset=[0,0,0])
+    alpha,distance=repair_matte(mask,grow,feather,protection)
     gain=np.ones(3,dtype=np.float32);offset=np.zeros(3,dtype=np.float32)
     if match:
         # Only unchanged context outside the transition is eligible for colour fitting.
@@ -704,11 +713,8 @@ def composite_crop(original,generated,mask,grow,feather,match,fit_override=None,
     result[active]=original[active]*(1-alpha[active,None])+adjusted[active]*alpha[active,None]
     return result,dict(gain=gain.tolist(),offset=offset.tolist())
 
-def composite_subtitle_crop(original,generated,rect,source_size,feather):
-    """Blend a whole processed crop, fading only at edges inside the source."""
-    x,y,w,h=rect; source_width,source_height=source_size
-    if original.shape!=generated.shape or original.shape[:2]!=(h,w):
-        raise ValueError('The processed subtitle crop does not match its source.')
+def subtitle_matte(rect,source_size,feather):
+    x,y,w,h=rect;source_width,source_height=source_size
     distance=np.full((h,w),np.inf,dtype=np.float32)
     if x>0:distance=np.minimum(distance,np.arange(1,w+1,dtype=np.float32)[None,:])
     if x+w<source_width:distance=np.minimum(distance,np.arange(w,0,-1,dtype=np.float32)[None,:])
@@ -716,6 +722,13 @@ def composite_subtitle_crop(original,generated,rect,source_size,feather):
     if y+h<source_height:distance=np.minimum(distance,np.arange(h,0,-1,dtype=np.float32)[:,None])
     alpha=np.clip(distance/max(1,int(feather)),0,1) if feather else np.ones((h,w),dtype=np.float32)
     alpha=alpha*alpha*(3-2*alpha)
+    return alpha
+
+
+def composite_subtitle_crop(original,generated,rect,source_size,feather):
+    x,y,w,h=rect
+    if original.shape!=generated.shape or original.shape[:2]!=(h,w):raise ValueError('The processed subtitle crop does not match its source.')
+    alpha=subtitle_matte(rect,source_size,feather)
     return original*(1-alpha[...,None])+generated*alpha[...,None],alpha>0
 
 def save_exr(path,a,space,half):
@@ -767,52 +780,61 @@ class ZuraPaintoutUncrop:
         else:raise RuntimeError('No free output folder')
         from .media import Delivery
         delivery=Delivery(target,plate,export_format,motion_preview)
-        metrics=[]; shared_fit=None
-        if match_context and not plate.get('subtitle_full_crop'):
-            # One robust correction for the whole selected shot, avoiding framewise grade pumping.
-            fits=[]
-            fit_frames=set(np.linspace(0,plate['count']-1,min(12,plate['count']),dtype=int).tolist())
+        from .mask_exports import MaskExports,sequence_exports,save_still_png
+        mask_exports=MaskExports(target,plate,base)
+        try:
+            still_exports=[]
+            metrics=[]; shared_fit=None
+            if match_context and not plate.get('subtitle_full_crop'):
+                # One robust correction for the whole selected shot, avoiding framewise grade pumping.
+                fits=[]
+                fit_frames=set(np.linspace(0,plate['count']-1,min(12,plate['count']),dtype=int).tolist())
+                for i,(a,m) in enumerate(zip(frames(plate['source'],plate['start'],plate['count']),mask_frames(plate['mask'],plate['start'],plate['count']))):
+                    if i not in fit_frames:continue
+                    raw=decoded_crop[i:i+1,:rh,:rw,:3].detach().float().cpu()
+                    generated=resize(unworking(raw,plate['space'],plate.get('processing','HDR (ACEScct)')),h,w)[0].numpy()
+                    src=to_linear(torch.from_numpy(a[y:y+h,x:x+w].copy()),plate['space']).numpy()
+                    _,fit=composite_crop(src,generated,m[y:y+h,x:x+w],plate['grow'],plate['feather'],True,protection=protection_mask(plate['mask'],plate['start']+i)[y:y+h,x:x+w])
+                    fits.append(fit)
+                shared_fit={key:np.median([f[key] for f in fits],axis=0).tolist() for key in ('gain','offset')}
+            progress=frame_progress(plate['count'])
             for i,(a,m) in enumerate(zip(frames(plate['source'],plate['start'],plate['count']),mask_frames(plate['mask'],plate['start'],plate['count']))):
-                if i not in fit_frames:continue
                 raw=decoded_crop[i:i+1,:rh,:rw,:3].detach().float().cpu()
                 generated=resize(unworking(raw,plate['space'],plate.get('processing','HDR (ACEScct)')),h,w)[0].numpy()
                 src=to_linear(torch.from_numpy(a[y:y+h,x:x+w].copy()),plate['space']).numpy()
-                _,fit=composite_crop(src,generated,m[y:y+h,x:x+w],plate['grow'],plate['feather'],True,protection=protection_mask(plate['mask'],plate['start']+i)[y:y+h,x:x+w])
-                fits.append(fit)
-            shared_fit={key:np.median([f[key] for f in fits],axis=0).tolist() for key in ('gain','offset')}
-        progress=frame_progress(plate['count'])
-        for i,(a,m) in enumerate(zip(frames(plate['source'],plate['start'],plate['count']),mask_frames(plate['mask'],plate['start'],plate['count']))):
-            raw=decoded_crop[i:i+1,:rh,:rw,:3].detach().float().cpu()
-            generated=resize(unworking(raw,plate['space'],plate.get('processing','HDR (ACEScct)')),h,w)[0].numpy()
-            src=to_linear(torch.from_numpy(a[y:y+h,x:x+w].copy()),plate['space']).numpy()
-            protected=protection_mask(plate['mask'],plate['start']+i)[y:y+h,x:x+w]
-            if plate.get('subtitle_full_crop'):
-                result,support=composite_subtitle_crop(src,generated,plate['rect'],(a.shape[1],a.shape[0]),plate.get('subtitle_feather',16))
-                fit=dict(gain=[1,1,1],offset=[0,0,0])
-            else:
-                result,fit=composite_crop(src,generated,m[y:y+h,x:x+w],plate['grow'],plate['feather'],False,shared_fit,protection=protected)
-            encoded=from_linear(torch.from_numpy(result),plate['space']).numpy()
-            # Keep original encoded values outside the matte, including negatives and HDR highlights.
-            if not plate.get('subtitle_full_crop'):
-                matte=maximum_filter(m[y:y+h,x:x+w]>.001,size=2*plate['grow']+1)
-                support=distance_transform_edt(~matte)<plate['feather'] if plate['feather'] else matte
-                support|=matte
-                support[protected>.001]=False
-                if not matte.any():support[:]=False
-            region=a[y:y+h,x:x+w].copy();region[support]=encoded[support]
-            a[y:y+h,x:x+w]=region
-            linear=to_linear(torch.from_numpy(a),plate['space'])
-            if export_format not in ('HLG video','SDR video'):
-                # Preserve original ACEScg EXR pixels exactly. Other sources are delivered in ACEScg.
-                master=a if plate['space']=='acescg' else linear.numpy()
-                save_exr(target/f'frame_{plate["start"]+i:06d}.exr',master,'acescg',precision=='float16')
-            delivery.append(linear)
-            metrics.append(fit)
-            progress(i+1)
-        metadata=dict(plate={k:v for k,v in plate.items() if not k.startswith('_')},precision=precision,match_context=match_context,colour_fits=metrics,notes='RGB only. Source alpha/AOV/header metadata are not copied. Video exports copy source audio when present, trimmed to the selected range. Sequence fps is authoritative.')
-        (target/'paintout.json').write_text(json.dumps(metadata,indent=2),encoding='utf-8')
-        previews=delivery.finish()
-        return {'ui':{'text':[f'Saved {plate["count"]} frames: {target}'], 'zura_saved_sequence':[str(target)], **previews},'result':(str(target),)}
+                protected=protection_mask(plate['mask'],plate['start']+i)[y:y+h,x:x+w]
+                if plate.get('subtitle_full_crop'):
+                    result,support=composite_subtitle_crop(src,generated,plate['rect'],(a.shape[1],a.shape[0]),plate.get('subtitle_feather',16))
+                    fit=dict(gain=[1,1,1],offset=[0,0,0])
+                else:
+                    result,fit=composite_crop(src,generated,m[y:y+h,x:x+w],plate['grow'],plate['feather'],False,shared_fit,protection=protected)
+                matte=subtitle_matte(plate['rect'],(a.shape[1],a.shape[0]),plate.get('subtitle_feather',16)) if plate.get('subtitle_full_crop') else repair_matte(m[y:y+h,x:x+w],plate['grow'],plate['feather'],protected)[0]
+                full_matte=np.zeros(a.shape[:2],dtype=np.float32);full_matte[y:y+h,x:x+w]=matte;mask_exports.append(full_matte)
+                encoded=from_linear(torch.from_numpy(result),plate['space']).numpy()
+                # Keep original encoded values outside the matte, including negatives and HDR highlights.
+                if not plate.get('subtitle_full_crop'):
+                    matte=maximum_filter(m[y:y+h,x:x+w]>.001,size=2*plate['grow']+1)
+                    support=distance_transform_edt(~matte)<plate['feather'] if plate['feather'] else matte
+                    support|=matte
+                    support[protected>.001]=False
+                    if not matte.any():support[:]=False
+                region=a[y:y+h,x:x+w].copy();region[support]=encoded[support]
+                a[y:y+h,x:x+w]=region
+                linear=to_linear(torch.from_numpy(a),plate['space'])
+                if export_format not in ('HLG video','SDR video'):
+                    # Preserve original ACEScg EXR pixels exactly. Other sources are delivered in ACEScg.
+                    master=a if plate['space']=='acescg' else linear.numpy()
+                    save_exr(target/f'frame_{plate["start"]+i:06d}.exr',master,'acescg',precision=='float16')
+                if plate['count']==1 and not is_hdr(plate['space']) and export_format=='SDR video':still_exports.append(save_still_png(target,base,a))
+                delivery.append(linear)
+                metrics.append(fit)
+                progress(i+1)
+            exports=mask_exports.finish()+sequence_exports(target,base)+still_exports
+            metadata=dict(exports=exports,plate={k:v for k,v in plate.items() if not k.startswith('_')},precision=precision,match_context=match_context,colour_fits=metrics,notes='RGB only. Source alpha/AOV/header metadata are not copied. Video exports copy source audio when present, trimmed to the selected range. Sequence fps is authoritative.')
+            (target/'paintout.json').write_text(json.dumps(metadata,indent=2),encoding='utf-8')
+            previews=delivery.finish()
+            return {'ui':{'text':[f'Saved {plate["count"]} frames: {target}'], 'zura_saved_sequence':[str(target)],'zura_exports':exports, **previews},'result':(str(target),)}
+        finally:mask_exports.abort()
 
 class ZuraPaintoutExportFrames:
     @classmethod

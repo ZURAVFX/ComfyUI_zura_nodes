@@ -56,7 +56,7 @@ DEFAULTS = {"engine": "local", "background": "keep", "scope": "person", "prompt"
             "camera_preset": "Left three-quarter", "camera_prompt": "", "camera_width": 768, "camera_height": 448,
             "subject_mode": "auto", "preserve_people": False, "preserve_identity": False,
             "relight_engine": "wan21",
-            "workflow_mode": "swap", "edit_area": "mask", "mask_method": "auto", "mask_prompt": "person", "mask_points": []}
+            "workflow_mode": "swap", "edit_area": "mask", "mask_method": "auto", "mask_prompt": "person", "mask_video": "", "mask_points": []}
 PREP_KEYS = ("start", "duration", "size", "scope", "performer", "margin", "pitch")
 
 
@@ -104,7 +104,7 @@ def clean_config(value):
     c = {**DEFAULTS, **{k: v for k, v in value.items() if k in DEFAULTS}}
     contract = None
     if value.get('ae_frame_contract') is not None:
-        from ..comfylink.frame_contract import normalise_frame_contract, contract_rate
+        from ..comfylink.frame_contract import normalise_frame_contract, contract_model_rate
         contract = normalise_frame_contract(value['ae_frame_contract'])
     # Copy list-valued preferences: one shot must never mutate another shot's adapters.
     for key in ("custom_loras", "opening_loras"):
@@ -181,9 +181,7 @@ def clean_config(value):
         # review proxy. Other reviewed-source routes still use that proxy's
         # native cadence and must not acquire a label-only rate conversion.
         wan_relight = c['workflow_mode'] == 'relight' and c['relight_engine'] == 'wan21'
-        rate = contract_rate(contract)
-        if rate != 24 and not wan_relight:
-            raise ValueError('This native Studio project route requires 24 fps. Use a source-cadence mode for this AE clip.')
+        rate = contract_model_rate(contract)
         c.update(ae_frame_contract=contract, start=0.0,
                  duration=float(contract['frameCount'] / rate), length_mode='custom', pitch=False)
         if wan_relight:
@@ -194,7 +192,7 @@ def clean_config(value):
         raise ValueError("Keep original people currently supports H3 scene transformation only.")
     c["viewport_render"] = c["workflow_mode"] == "viewport"
     c["h3_viewport_direct"] = bool(c["h3_viewport_direct"])
-    c["openjutsu_direct"] = bool(c["openjutsu_direct"])
+    c["openjutsu_direct"] = bool(c["openjutsu_direct"]) if c.get("workflow_mode") != "swap" else False
     c["h3_head_swap"] = bool(c["h3_head_swap"])
     c["edit_area"] = "mask" if c["workflow_mode"] == "swap" or c["preserve_people"] else "scene"
     if c["h3_character_method"] == "openjutsu" and c["openjutsu_background"] == "replace":
@@ -250,6 +248,9 @@ def clean_config(value):
         if isinstance(raw, bool) or float(raw) != c[key] or not 128 <= c[key] <= 1280 or c[key] % 32:
             raise ValueError("Choose camera dimensions from 128 to 1280, in multiples of 32.")
     c["mask_prompt"] = str(c["mask_prompt"]).strip()[:500]
+    c["mask_video"] = str(c.get("mask_video", "")).strip()
+    if c["mask_video"] and not re.fullmatch(r"[a-f0-9]{32}", c["mask_video"]):
+        raise ValueError("Choose an uploaded black and white mask video.")
     from .mask_selection import clean_points
     c["mask_points"] = clean_points(c["mask_points"], require_positive=False)
     relight_large = c['workflow_mode'] == 'relight' and c['relight_engine'] == 'wan21'
@@ -302,10 +303,6 @@ def require_relight_direction(config, *, supplied_image=False):
 def h3_viewport_direct(project):
     """Use reviewed source motion and appearance images without inventing an opening."""
     c = project.get("config") or {}
-    if (c.get("engine") == "h3" and c.get("workflow_mode") == "swap"
-            and c.get("h3_character_method") == "openjutsu" and c.get("openjutsu_direct")
-            and c.get("openjutsu_background", "keep") == "keep" and project.get("look_mode") != "ready"):
-        return True
     return (c.get("workflow_mode") == "viewport" and c.get("engine") == "h3"
             and bool(c.get("h3_viewport_direct")) and project.get("look_mode") != "ready")
 
@@ -456,10 +453,10 @@ def paintout_hdr_asset_info(path, colour_space, describe, selected_space, descri
     return info
 
 
-def validate_selection(project):
+def validate_selection(project, stage=None):
     """Reject unsupported timelines before mask tracking or reference encoding."""
     c = project["config"]
-    if c.get("h3_character_method") == "openjutsu":
+    if c.get("h3_character_method") == "openjutsu" and stage not in ("prepare", "design"):
         from .openjutsu import build_graph as openjutsu_graph
         # Validate this narrower experiment before tracking or generating a look.
         probe = copy.deepcopy(project)
@@ -489,7 +486,7 @@ def validate_selection(project):
     seconds = available if c.get("length_mode") == "original" else c["duration"]
     if start >= available:
         raise ValueError("The start time is beyond the end of this video.")
-    if seconds > available - start + 1e-6:
+    if seconds > available - start + max(1e-6, 1/24 if c.get("ae_frame_contract") else 1e-6):
         raise ValueError("The selected range extends past the end of the source video. Choose Use source or a shorter range.")
     frames = max(1, math.ceil(seconds * 24 - 1e-6))
     if h3 and not 5 <= frames <= 120:
@@ -524,6 +521,9 @@ def prep_key(project):
     if project["config"].get("length_mode") == "original":
         settings["length_mode"] = "original"
     c = project["config"]
+    if c.get("workflow_mode") == "swap":
+        settings["subject_prompt"] = c.get("mask_prompt", "person")
+        settings["mask_video"] = c.get("mask_video", "")
     directed_subject = directed_source_subject(c)
     if directed_subject:
         settings["directed_source_subject"] = directed_subject
@@ -950,6 +950,8 @@ def _build_native_graph(project, stage, use_cache=True, run_id=None):
                 "_meta": {"title": "Reference audio · optional"}}
             graph["3"]["inputs"].update(audio=["zura_reference_audio", 0], audio_start_seconds=c["audio_start"])
         graph["7"]["inputs"]["text"] = c["scope"]
+        if c.get("workflow_mode") == "swap" and c.get("mask_method") == "auto":
+            graph["7"]["inputs"]["text"] = c.get("mask_prompt") or "person"
         graph["8"]["inputs"].pop("bboxes", None)  # Text detection over the entire source, at any aspect ratio.
         graph["9"]["inputs"]["performer"] = c["performer"]
         graph["12"]["inputs"]["expand"] = c["margin"]
@@ -1036,6 +1038,9 @@ def _build_native_graph(project, stage, use_cache=True, run_id=None):
                 "_meta": {"title": "Rejoin tracked shots · keep every source frame"}}
             graph["12"]["inputs"]["mask"] = ["zura_join_tracking_masks", 0]
             graph["20"]["inputs"]["tracking_coverage"] = ["zura_join_tracking_masks", 1]
+        if c.get("mask_video") and c.get("workflow_mode") == "swap":
+            from .character_mask import add_custom_mask
+            add_custom_mask(graph, project, check_asset)
         if c.get("preserve_people"):
             # Keep the complete tracked silhouette, including soft edge pixels,
             # without carrying a band of the old surroundings into the new look.
@@ -1540,6 +1545,7 @@ def graph_export_payload(project, stage="auto"):
 
 
 def media_url(asset):
+    asset = asset.get("preview") or asset
     return "/view?" + urlencode({k: asset[k] for k in ("filename", "subfolder", "type") if k in asset})
 
 
@@ -1835,7 +1841,7 @@ class Studio:
             prefix = Path(submitted["save_video"]["inputs"]["filename_prefix"])
             candidates = [asset for asset in assets if asset.get("type") == "output" and
                 Path(asset.get("subfolder", "")) == prefix.parent and
-                re.fullmatch(re.escape(prefix.name) + r"_\d+_\.mp4", asset.get("filename", ""))]
+                re.fullmatch(re.escape(prefix.name) + r"_\d+_\.(?:mov|mp4)", asset.get("filename", ""))]
             if len(candidates) != 1:
                 raise ValueError("LTX returned no unique matching final video.")
             asset = candidates[0]
@@ -2023,7 +2029,7 @@ class Studio:
             for asset in outputs.get("gifs", []):
                 if (asset.get("subfolder") == "genj/final" and asset.get("type") == "output"
                         and str(asset.get("filename", "")).startswith(take_name + "_")
-                        and str(asset.get("filename", "")).lower().endswith(".mp4")):
+                        and str(asset.get("filename", "")).lower().endswith((".mov",".mp4"))):
                     final_assets.append(asset)
         if len(final_assets) != 1:
             action["state"] = "failed"
@@ -2187,7 +2193,7 @@ class Studio:
                              for value in outputs.values() for a in value.get("images", [])
                              if a.get("type") == "output" and a.get("subfolder", "").replace("\\", "/") == "genj/final"
                              and a.get("filename", "").startswith("studio_" + p["id"] + "_openjutsu")
-                             and a["filename"].endswith(".mp4"))
+                             and a["filename"].endswith((".mov",".mp4")))
             else:
                 video = next(a for value in outputs.values() for a in value.get("gifs", []) if a.get("subfolder") == "genj/final")
             item = {"stage": stage, "url": media_url(video), "asset": video, "created": time.time(),
@@ -2247,6 +2253,15 @@ class Studio:
         if p["phase"] == "working":
             raise ValueError("Wait for the current job before changing its settings.")
         prior_value = dict(p["config"])
+        mask_id = value.get("mask_video", "")
+        if mask_id:
+            mask = self.store.load(mask_id)
+            if mask.get("asset_kind") != "video":
+                raise ValueError("Choose a black and white mask video.")
+            check_asset(mask)
+            p["selection_mask"] = mask
+        else:
+            p.pop("selection_mask", None)
         if "audio_id" not in prior_value and p.get("audio") and p["audio"].get("id"):
             prior_value["audio_id"] = p["audio"]["id"]
         old_key, prior = prep_key(p), clean_config(prior_value)
@@ -2407,7 +2422,7 @@ class Studio:
         if any(a.get("request_key") == request_key for a in p.get("actions", [])):
             return p
         if stage in ("prepare", "design", "h3", "wan", "wan2", "wan21_relight", "wan_speech"):
-            validate_selection(p)
+            validate_selection(p, stage=stage)
         if stage == "h3" and p["config"].get("delivery_mode") == "enhanced1080":
             from .enhancement import readiness as enhancement_readiness, SETUP_COMMAND, UPSCALE_MODEL
             available = enhancement_readiness()
@@ -2679,6 +2694,8 @@ def register():
     register_model_views(studio, routes, response, check_asset)
     from .media_import import register as register_media_import
     register_media_import(studio, routes, response, check_asset)
+    from .image_layers import register as register_image_layers
+    register_image_layers(routes)
     from .opening import register as register_opening
     register_opening(studio, routes, response)
     from .content import register as register_content
@@ -2970,6 +2987,12 @@ def register():
         body = await request.json()
         if not isinstance(body, dict):
             raise ValueError('Choose a valid HDR source colour.')
+        asset=studio.store.load(request.match_info['identity'])
+        if asset.get('asset_kind')=='hdr_sequence':
+            from .native_hdr_paintout import native_paintout_source_info
+            info=await asyncio.to_thread(native_paintout_source_info,asset,check_asset,describe_media,
+                colour_space=body.get('colour_space','auto'),fps=body.get('sequence_fps'))
+            return web.json_response(info)
         path = await asyncio.to_thread(paintout_asset_path, studio.store, request.match_info["identity"], check_asset)
         info = await asyncio.to_thread(paintout_hdr_asset_info, path, body.get('colour_space', 'auto'), describe, selected_space, describe_media)
         return web.json_response(info)

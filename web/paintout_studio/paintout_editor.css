@@ -100,7 +100,7 @@
 
 
 /* Mask tools sit directly above the frame; the mask stage has a compact review timeline. */
-.zp-page[data-editor-stage=mask] .zp-editor-timeline__clean-lane{display:none}
+.zp-page[data-editor-stage=mask] .zp-editor-timeline__clean-lane:not(:has(.zp-editor-frame-card)){display:none}
 .zp-page[data-editor-stage=mask] .zp-editor-timeline__hint{font-size:0}
 .zp-page[data-editor-stage=mask] .zp-editor-timeline__hint:after{content:'Scrub to any frame. Paint or erase to correct its mask.';font-size:11px}
 .zp-editor-mask-intro,.zp-editor-track-guide{display:flex;flex-wrap:wrap;align-items:baseline;gap:6px 14px}
@@ -398,7 +398,7 @@
 #genj-studio .zplate-frame-toolbar button{min-height:36px;padding:8px 16px;border:0;border-radius:8px;background:var(--gs-accent);color:var(--gs-ink);font:inherit;font-size:13px}
 #genj-studio .zplate-frame-toolbar button:disabled{background:var(--gs-input);color:var(--gs-muted)}
 #genj-studio :is(.zplate-canvas-shell,.zplate-sidebar) .zp-editor-paint-layers li{grid-template-rows:auto auto auto;align-items:center}
-#genj-studio :is(.zplate-canvas-shell,.zplate-sidebar) .zp-editor-paint-layers li>div{display:contents}
+#genj-studio :is(.zplate-canvas-shell,.zplate-sidebar:not(.zpx-side)) .zp-editor-paint-layers li>div{display:contents}
 #genj-studio :is(.zplate-canvas-shell,.zplate-sidebar) .zp-editor-paint-layers li>div>strong{grid-column:3;grid-row:1;font-size:12px}
 #genj-studio :is(.zplate-canvas-shell,.zplate-sidebar) .zp-editor-paint-layers li>div>span{grid-column:3;grid-row:2}
 #genj-studio :is(.zplate-canvas-shell,.zplate-sidebar) .zp-editor-paint-layers li>img{grid-column:2;grid-row:1/3}

@@ -11,6 +11,10 @@
 #genj-studio .zc-ae-actions button:focus-visible{outline:2px solid currentColor;outline-offset:2px}
 #genj-studio .zc-ae-actions [data-ae-send]{background:#ededed;color:#171717;border-color:#ededed}
 #genj-studio .zc-ae-actions [data-ae-send]:hover{background:#fff}
+#genj-studio .zc-ae-actions [data-ae-send][data-busy]{display:inline-flex;align-items:center;gap:7px}
+#genj-studio .zc-ae-actions [data-ae-send][data-busy]::before{content:'';width:12px;height:12px;box-sizing:border-box;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:zc-ae-send-spin .8s linear infinite}
+@keyframes zc-ae-send-spin{to{transform:rotate(360deg)}}
+@media(prefers-reduced-motion:reduce){#genj-studio .zc-ae-actions [data-ae-send][data-busy]::before{animation:none;border-right-color:currentColor;opacity:.6}}
 #genj-studio .zc-ae-actions button:disabled{opacity:.5;cursor:default}
 #genj-studio[data-theme=light] .zc-ae-session{background:#f4f4f5;color:#171717;border-color:#dedee0}
 #genj-studio[data-theme=light] .zc-ae-context>span,#genj-studio[data-theme=light] .zc-ae-status{color:#525252}
@@ -27,3 +31,10 @@
 .zc-display input[type=range]{accent-color:#ededed}.zc-display :focus-visible{outline:2px solid currentColor;outline-offset:2px}
 @media(max-width:900px){#genj-studio .zc-ae-session{flex-wrap:wrap;padding:8px 16px;gap:8px}#genj-studio .zc-ae-context{max-width:100%;flex:1}#genj-studio .zc-ae-status{flex-basis:100%;order:3}#genj-studio .zc-ae-actions{margin-left:auto}}
 @media(max-width:600px){#genj-studio .zc-ae-actions{width:100%;flex-wrap:wrap;justify-content:flex-start}.zc-display-controls label{min-width:0;flex-basis:100%}.zc-display-bottom{flex-wrap:wrap}.zc-display-bottom label{min-width:70%}}
+.zc-display.zc-display-inline{position:relative;inset:auto;width:100%;max-width:none;max-height:none;margin:0;border:0;border-radius:0;box-shadow:none;box-sizing:border-box;background:transparent;color:inherit}
+.zc-display-inline .zc-display-image{min-height:200px}
+.zc-display-inline .zc-display-image img{max-height:55vh;object-fit:contain}
+.zc-display-inline .zc-display-controls{padding-inline:12px}
+.zc-display-inline .zc-display-bottom{padding-inline:12px}
+.zc-display-controls .zc-colour-transform{flex:0 1 280px;min-width:min(100%,180px)}
+.zc-display-controls .zc-colour-transform select{min-height:36px;width:100%}

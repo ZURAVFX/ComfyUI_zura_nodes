@@ -41,7 +41,7 @@ def warp_path(asset, selection, state):
     filename = asset.get('filename', '')
     prefix = 'warp_' + digest([selection['key'], state])[:20] + '_'
     if (asset.get('type', 'output') != 'output' or asset.get('subfolder') != 'genj/panorama'
-            or '/' in filename or '\\' in filename or not filename.startswith(prefix) or not filename.endswith('.mp4')):
+            or '/' in filename or '\\' in filename or not filename.startswith(prefix) or not filename.endswith(('.mov','.mp4'))):
         raise ValueError('Camera changed. Review a new warp preview before rendering.')
     root = (Path(folder_paths.get_output_directory()) / 'genj' / 'panorama').resolve()
     path = (root / filename).resolve(strict=True)

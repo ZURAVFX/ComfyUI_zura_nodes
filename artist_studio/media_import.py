@@ -103,6 +103,20 @@ def _browser_preview(source,destination,cancel):
             if process.poll() is None:process.kill();process.wait()
 
 
+def _owned_preview(asset, source, input_root):
+    relative=asset.get('preview_file')
+    if not isinstance(relative,str) or not relative:return None
+    input_root=Path(input_root).resolve()
+    if Path(relative).is_absolute():return None
+    candidate=input_root/relative
+    preview=candidate.resolve()
+    if (preview.name!='preview.mp4' or preview.parent!=Path(source).resolve().parent
+            or relative!=preview.relative_to(input_root).as_posix()
+            or not preview.is_file() or model_view._linked(candidate)):
+        return None
+    return preview
+
+
 def describe_asset(asset, store, check_asset, roots,cancel=None):
     model_view._cancelled(cancel);check_asset=cancellation_checked_asset(check_asset,roots,cancel)
     pending = type('PendingStore', (), {'load': lambda _, identity: asset if identity == asset['id'] else store.load(identity)})()
@@ -129,10 +143,9 @@ def describe_asset(asset, store, check_asset, roots,cancel=None):
     media.update(precision=precision,studioAssetId=asset['id'])
     if asset.get('processingView'):
         media['processingView']=asset['processingView']
-        preview=Path(roots['input'])/asset.get('preview_file','')
-        if (asset.get('preview_file') and preview.is_file() and not model_view._linked(preview)
-                and preview.resolve().is_relative_to(path.parent.resolve())):
-            media['media_url']=describe_media(str(preview),cancel=cancel)['media_url']
+    preview=_owned_preview(asset,path,roots['input'])
+    if preview is not None:
+        media['media_url']=describe_media(str(preview),cancel=cancel)['media_url']
     if colour:media['resolved_colour']=colour
     resolved['revalidate']()
     return result,media
@@ -144,14 +157,22 @@ def restore_model_info(path,info,*,store=None,check_asset=None,roots=None):
         import folder_paths
         roots={key:getattr(folder_paths,f'get_{key}_directory')() for key in ('input','output','temp')}
     root=(Path(roots['input'])/'genj_studio').resolve();selected=Path(path).resolve()
-    if (selected.name not in {'model.mkv','model.png'} or selected.parent.parent!=root
+    if (selected.name not in {'model.mkv','model.png','reference.mkv'} or selected.parent.parent!=root
             or re.fullmatch(r'[a-f0-9]{32}',selected.parent.name) is None):return info
     if store is None or check_asset is None:
         from .studio import Store,check_asset as validate_asset
         store=store or Store();check_asset=check_asset or validate_asset
     try:asset=store.load(selected.parent.name)
     except (ValueError,KeyError,FileNotFoundError):return info
-    if asset.get('kind')!='asset' or asset.get('processingView',{}).get('kind')!='sdr8_inference':return info
+    if asset.get('id')!=selected.parent.name:raise ValueError('The registered model input belongs to another source. Import it again.')
+    if asset.get('kind')!='asset':return info
+    if selected.name=='reference.mkv':
+        relative=selected.relative_to(Path(roots['input']).resolve()).as_posix()
+        if asset.get('asset_kind')!='video' or asset.get('file')!=relative:
+            raise ValueError('The registered model input belongs to another source. Import it again.')
+        if _owned_preview(asset,selected,roots['input']) is None:
+            raise ValueError('The registered browser preview is missing or belongs to another source. Import it again.')
+    elif asset.get('processingView',{}).get('kind')!='sdr8_inference':return info
     if Path(check_asset(asset)).resolve()!=selected:raise ValueError('The registered model input belongs to another source. Import it again.')
     _,restored=describe_asset(asset,store,check_asset,roots)
     return restored

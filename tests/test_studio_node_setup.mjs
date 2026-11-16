@@ -42,6 +42,7 @@ const setup=groupMissingNodes(sceneRequired);
 assert.deepEqual(setup.unknown,[],'Every node in LTX whole-scene readiness needs a verified setup source');
 for(const node of ['LTXVPreprocess','LatentUpscaleModelLoader','ManualSigmas'])assert.equal(setup.packs.find(p=>p.missing.includes(node)).name,'ComfyUI');
 for(const node of ['ZuraSaveVideoLatentData','ZuraLoadVideoLatentData'])assert.equal(setup.packs.find(p=>p.missing.includes(node)).name,'Zura Nodes');
+assert.equal(groupMissingNodes(['ZuraSaveProRes4444']).packs[0].name,'Zura Nodes','ProRes output requires the installed Zura saver, not a missing Comfy core node');
 const alpha=groupMissingNodes(['ZuraAlphaVideoInput','ZuraAlphaVideoOutput','LTXICLoRALoaderModelOnly','LTXAddVideoICLoRAGuide','LTXVEmptyLatentAudio','LTXVConcatAVLatent','LTXVCropGuides','ImageToMask','InvertMask','JoinImageWithAlpha','SplitImageWithAlpha','SaveWEBM','CreateVideo','SaveVideo']);
 const flux3=groupMissingNodes(['TextGenerate','BatchImagesNode','ModelSamplingFlux','GetImageSize','ResizeAndPadImage']);
 assert.deepEqual(flux3.unknown,[],'Official Flux 3 prompt expansion and reference preparation have update guidance');

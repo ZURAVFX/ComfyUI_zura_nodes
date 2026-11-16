@@ -36,14 +36,14 @@ ui.job={id:'owned',started:Date.now(),config:ui.config(),stages:{sample:'Generat
 const progressEvent=(id,value)=>{const event=new Event('progress');event.detail={prompt_id:id,node:'sample',value,max:8};api.dispatchEvent(event);};
 progressEvent('foreign',7);assert.equal(ui.$('bar').value,30);progressEvent('owned',2);assert.equal(ui.$('bar').value,25);
 assert.equal(ui.reset(),false);assert.throws(()=>ui.setSource(source),/current alpha run/);
-const files=['matte','preview','alpha'].map(role=>({role,filename:role+(role==='alpha'?'.mov':'.mp4'),type:'output'}));
+const files=['matte','preview','alpha'].map(role=>({role,filename:role+(role==='preview'?'.mp4':'.mov'),type:'output',...(role==='matte'?{preview:{filename:'matte_preview.mp4',subfolder:'',type:'output'}}:{})}));
 history={owned:{status:{completed:true,status_str:'success'},outputs:{save:{images:files}}}};
 await ui.poll();assert.equal(ui.job,null);assert.equal(ui.state.view,'preview');assert.match(ui.video.src,/preview.mp4/);
-assert.match(ui.$('save-alpha').href,/alpha.mov/);assert.match(ui.$('save-matte').href,/matte.mp4/);
-ui.showView('source');assert.equal(ui.video.src,'/source');ui.showView('matte');assert.match(ui.video.src,/matte.mp4/);
+assert.match(ui.$('save-alpha').href,/alpha.mov/);assert.match(ui.$('save-matte').href,/matte.mov/);
+ui.showView('source');assert.equal(ui.video.src,'/source');ui.showView('matte');assert.match(ui.video.src,/matte_preview.mp4/);
 ui.close();ui.open();assert.equal(ui.disposed,false);assert.equal(ui.page.isConnected,true,'Closing and reopening Studio retains its reusable Alpha workspace');assert.equal(ui.page.hidden,false);
 ui.close();const restored=new AlphaWorkspace(owner);await restored.restoreSource();
-assert.equal(restored.state.startFrame,30);assert.equal(restored.state.frameCount,100);assert.equal(restored.state.view,'matte');assert.match(restored.video.src,/matte.mp4/);
+assert.equal(restored.state.startFrame,30);assert.equal(restored.state.frameCount,100);assert.equal(restored.state.view,'matte');assert.match(restored.video.src,/matte_preview.mp4/);
 restored.dispose();assert.equal(ui.reset(),true);assert.equal(ui.source,null);assert.equal(ui.result,null);assert.equal(ui.video.hidden,true);assert.equal(ui.$('trim').hidden,true);
 const imported={...source,path:'C:/input/genj_studio/proxy/model.mkv',studioAssetId:'proxy-id',media_url:'/browser-preview',processingView:{kind:'sdr8_inference',originalAssetId:'original-hdr',originalSource:{path:'C:/original.exr',resolved_colour:'acescg'}}};
 ui.setSource(imported);assert.deepEqual(ui.config().originalSource,{asset_id:'original-hdr',proxy_id:'proxy-id'});ui.close();

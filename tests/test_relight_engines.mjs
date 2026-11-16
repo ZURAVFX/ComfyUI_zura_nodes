@@ -26,10 +26,14 @@ assert.deepEqual(imageDraw.slice(1),[0,0,1920,1080],'A 720p Wan lighting image i
 assert.deepEqual([...lighting.$('engine').querySelectorAll('option')].map(o=>o.value),['wan21','h3','ltx']);
 assert.equal(lighting.config().sequenceFps,30);assert.equal(lighting.config().startFrame,15);assert.equal(lighting.config().frameCount,45);assert.equal(lighting.$('prompt').value,'Warm afternoon light');assert.equal(lighting.anchors().length,1);
 lighting.$('engine').value='h3';lighting.$('engine').onchange();lighting.addAnchor(30);lighting.selected().file='C:/second-light.png';lighting.state.prompt='Cool blue evening';lighting.$('prompt').value=lighting.state.prompt;lighting.save();
+assert.equal(lighting.simpleRelight.advanced.open,false,'LTX and H3 start with the simple relight flow');
+assert.equal(lighting.config().anchors.length,1,'Simple H3 relight uses one lighting reference');
+assert.equal(lighting.page.querySelector('[data-generate]').textContent,'2. Relight video');
+assert.equal(lighting.page.querySelector('[data-timeline]').parentElement,lighting.simpleRelight.advanced,'Timed lighting edits are kept under Advanced');
 const before=structuredClone(lighting.anchors());
 await owner.selectRelightEngine('wan21');assert.equal(owner.mode,'video');assert.equal(owner.studio.source.id,'shot-1');assert.equal(owner.studio.readyAsset.id,'returned-light');assert.equal(owner.studio.config.image_prompt,'Cool blue evening');
 await owner.selectRelightEngine('ltx');assert.equal(owner.ripple,lighting);assert.deepEqual(lighting.anchors(),before);assert.equal(lighting.config().anchors.length,1);assert.equal(lighting.config().anchors[0].frame,30,'LTX uses the selected lighting reference without discarding other edits');
-lighting.$('engine').value='h3';lighting.$('engine').onchange();assert.equal(lighting.config().anchors.length,2);
+lighting.$('engine').value='h3';lighting.$('engine').onchange();assert.equal(lighting.config().anchors.length,1,'Simple H3 relight uses one lighting frame');lighting.state.relightAdvanced=true;assert.equal(lighting.config().anchors.length,2,'Advanced H3 retains timed references');
 for(const engine of ['h3','ltx']){lighting.state.engine=engine;const graph=buildRippleStudioGraph(lighting.config());assert.ok(Object.values(graph).some(n=>n.inputs.output_name==='ZURA STUDIO/relight'||n.inputs.filename_prefix==='ZURA STUDIO/relight'));}
 assert.equal(original.anchors()[0].file,'C:/other.png');assert.ok(memory.has('zura-relight-workspace-v1'));assert.ok(memory.has('zura-ripple-workspace-v1'));
 const ids=[...document.querySelectorAll('[id]')].map(e=>e.id);assert.equal(new Set(ids).size,ids.length,'Separate drafts keep unique labelled controls');

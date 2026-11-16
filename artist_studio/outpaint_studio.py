@@ -322,7 +322,7 @@ def build_studio_graph(source, selection, *, review_key, prompt='', seed=42, out
         'crop_guides': n('LTXVCropGuides', positive=['guide', 0], negative=['guide', 1], latent=['split', 0]),
         'decode': n('VAEDecodeTiled', samples=['crop_guides', 2], vae=['video_vae', 0], tile_size=512, overlap=64, temporal_size=128, temporal_overlap=32),
         'assemble': n('ZuraOutpaintExactVideo', images=['trim_result', 0], fps_num=expected['fps_num'], fps_den=expected['fps_den'], audio=['components', 1]),
-        'save': n('SaveVideo', video=['assemble', 0], filename_prefix=output_prefix, format='mp4', **{'format.codec':'h264', 'format.codec.encoding':'re-encode', 'format.codec.encoding.crf':16.0}),
+        'save': n('ZuraSaveProRes4444', video=['assemble', 0], filename_prefix=output_prefix),
     }
     g['source_range'] = {'class_type': 'ZuraOutpaintSelectClip', 'inputs': {
         'video': ['source', 0], 'start_seconds': expected['start'],

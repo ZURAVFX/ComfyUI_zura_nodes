@@ -69,10 +69,10 @@ def build_native_hdr_outpaint_test(source, selection, *, review_key, colour_spac
     g['test_delivery_hold'] = {'class_type': 'GenjHoldImages', 'inputs': {
         'images': result, 'length': expected['padded_frames']}}
     for key, field in (('hdr_preview', 'image'), ('hdr_experiment_exr', 'images'),
-                       ('hdr_experiment_hlg', 'image')):
+                       ('hdr_experiment_save', 'images')):
         g[key]['inputs'][field] = ['test_delivery_hold', 0]
     if has_audio:
-        for key in ('hdr_preview_video', 'hdr_experiment_video'):
+        for key in ('hdr_preview_video', 'hdr_experiment_save'):
             g[key]['inputs']['audio'] = ['hdr_audio_hold', 1]
 
     return g

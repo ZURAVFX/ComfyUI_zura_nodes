@@ -108,8 +108,8 @@ def create_native_job(server, asset, body, check_asset, output_root, *, ffmpeg=N
         raise ValueError('FFmpeg could not be checked before HDR rendering.') from exc
     if result.returncode or 'libx264' not in result.stdout:
         raise ValueError('FFmpeg needs an H.264 encoder for the SDR preview.')
-    if output in ('hlg_video','hlg_and_exr') and 'libx265' not in result.stdout:
-        raise ValueError('FFmpeg needs a 10-bit HEVC encoder for HDR video.')
+    if output in ('hlg_video','hlg_and_exr') and 'prores_ks' not in result.stdout:
+        raise ValueError('FFmpeg needs the ProRes 4444 encoder for MOV delivery.')
     ffmpeg=str(executable)
     identity=uuid.uuid4().hex
     store=HDRChunkStore(staging,identity,plan,details['width'],details['height'],create=True,planning_mode=_planning_mode,**({'colour_space':'acescg'} if linear_rgb else {}))
@@ -132,7 +132,7 @@ def create_native_job(server, asset, body, check_asset, output_root, *, ffmpeg=N
             if output in ('hlg_video','hlg_and_exr'):
                 paths.append(await asyncio.to_thread(export_hlg_video,staged,output_root,_prefix+'_'+identity,
                     fps=details['fps'],audio_source=str(source) if details['has_audio'] else None,
-                    audio_start_frame=start,ffmpeg=ffmpeg,**({'linear_rgb':True} if linear_rgb else {})))
+                    audio_start_frame=start,ffmpeg=ffmpeg,**({'linear_rgb':True} if linear_rgb else {}),**({'alpha_source':alpha_source} if alpha_source is not None else {})))
             preview=await asyncio.to_thread(export_sdr_preview,staged,output_root,_prefix+'_'+identity,
                 fps=details['fps'],audio_source=str(source) if details['has_audio'] else None,
                 audio_start_frame=start,ffmpeg=ffmpeg,**({'linear_rgb':True} if linear_rgb else {}))
@@ -140,7 +140,7 @@ def create_native_job(server, asset, body, check_asset, output_root, *, ffmpeg=N
             if staged.cancelled.is_set():raise HDRChunkCancelled('HDR conversion cancelled.')
             if alpha_source is not None:alpha_source.verify()
             return {'files':[str(path) for path in paths if path!=preview],'preview':str(preview),
-                    'frames':count,'fps':details['fps'],'exr_storage':exr_storage,**({'colour':{'encoding':'acescg','sceneLinear':True},'reconstruction':'ltx_luminance_source_detail'} if linear_rgb else {}),**({'alphaAssociation':'straight','layout':'RGBA','frameRate':{'numerator':alpha_source.rate.numerator,'denominator':alpha_source.rate.denominator}} if alpha_source is not None else {})}
+                    'frames':count,'fps':details['fps'],'exr_storage':exr_storage,'videoColour':{'encoding':'acescg' if linear_rgb else 'acescct','sceneLinear':bool(linear_rgb)},**({'colour':{'encoding':'acescg','sceneLinear':True},'reconstruction':'ltx_luminance_source_detail'} if linear_rgb else {}),**({'alphaAssociation':'straight','layout':'RGBA','frameRate':{'numerator':alpha_source.rate.numerator,'denominator':alpha_source.rate.denominator}} if alpha_source is not None else {})}
         except Exception:
             # Both paths were created exclusively by this call. Never touch a
             # pre-existing deliverable if a subsequent export fails.

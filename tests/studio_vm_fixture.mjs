@@ -1,3 +1,4 @@
+import {CharacterSwapFlow} from '../web/studio_character_flow.js';
 import vm from 'node:vm';
 import {normalStudioStorage} from '../web/studio_storage.js';
 import {aeFrameConfig,assertAEFrameConfig} from '../web/studio_ae_frame_contract.js';
@@ -8,7 +9,7 @@ import {scopedStudioAPI} from '../web/studio_ae_lifecycle.js';
 // an isolated VM. Restore its real dependencies and resolve module-relative URLs
 // using the real source location; no application methods are replaced.
 export function runStudioVMInContext(source,context,...options){
-  Object.assign(context,{normalStudioStorage,aeFrameConfig,assertAEFrameConfig,navigateStudioMode,scopedStudioAPI});
+  Object.assign(context,{normalStudioStorage,aeFrameConfig,assertAEFrameConfig,navigateStudioMode,scopedStudioAPI,CharacterSwapFlow});
   // The real module imports Comfy's API. Import-stripped constructor fixtures
   // must supply one, but must never make an accidental real request.
   context.api??={fetchApi(){throw Error('Provide a fixture API before making requests');}};
@@ -31,6 +32,14 @@ export function runStudioVMInContext(source,context,...options){
     proto.showModal=function(){this.setAttribute('open','');};
   }
   if(context.localStorage)globalThis.localStorage=context.localStorage;
-  const moduleURL=JSON.stringify(new URL('../web/studio.js',import.meta.url).href);
-  return vm.runInContext(source.replaceAll('import.meta.url',moduleURL),context,...options);
+  const moduleURL=JSON.stringify(new URL('../web/studio_core.js',import.meta.url).href);
+  const result=vm.runInContext(source.replaceAll('import.meta.url',moduleURL),context,...options);
+  if(context.Studio){
+    const Base=context.Studio;
+    Base.prototype.host={kind:'comfy',get api(){return context.api;},graph:{available:true,app:context.app||{}}};
+    context.Studio=class extends Base{
+      constructor(options={}){super({host:{kind:'comfy',api:context.api,graph:{available:true,app:context.app||{}}},...options});}
+    };
+  }
+  return result;
 }

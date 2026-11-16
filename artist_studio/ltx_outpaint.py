@@ -321,6 +321,5 @@ def build_test_graph(source_file, output_prefix, frame_count, fps, width, height
     green2 = node('green_high', 'LTXVInpaintPreprocess', images=canvas, mask=port(canvas,1))
     final = node('blend_high', 'LTXVLaplacianPyramidBlend', image_a=decode2, image_b=green2, mask=port(canvas,1), trim_to_shortest=True, mask_low_res_dilation=6)
     video_out = node('assemble', 'CreateVideo', images=final, fps=float(fps), audio=port(components,1), bit_depth=8, color_space='sRGB', codec='none')
-    node('save', 'SaveVideo', video=video_out, filename_prefix=output_prefix, format='mp4',
-         **{'format.codec':'h264', 'format.codec.encoding':'re-encode', 'format.codec.encoding.crf':16.0})
+    node('save', 'ZuraSaveProRes4444', video=video_out, filename_prefix=output_prefix)
     return g

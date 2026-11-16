@@ -107,7 +107,7 @@ class HDRNativeLongJobTests(unittest.IsolatedAsyncioTestCase):
                  patch.object(sdr,'build_asset_graph',side_effect=graph), \
                  patch.object(paintout,'describe',return_value={'count':25,'width':1920,'height':1080}), \
                  patch.object(native.shutil,'disk_usage',return_value=types.SimpleNamespace(free=2**40,st_dev=1)), \
-                 patch.object(native.subprocess,'run',return_value=types.SimpleNamespace(returncode=0,stdout='libx264 libx265')), \
+                 patch.object(native.subprocess,'run',return_value=types.SimpleNamespace(returncode=0,stdout='libx264 prores_ks')), \
                  patch.object(importlib.import_module('ComfyUI_zura_nodes.artist_studio.hdr_package'),'preflight_archive'):
                 job,summary=native.create_sdr_job(server,{'asset_kind':'video'},
                     {'mode':'sdr','start_frame':0,'frame_count':25,'output':'hlg_video'},
@@ -156,7 +156,7 @@ class HDRNativeLongJobTests(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(sum(1 for _ in preview.decode(video=0)),122)
             with zipfile.ZipFile(next(path for path in paths if path.suffix=='.zip')) as archive:
                 self.assertEqual(len(archive.namelist()),122)
-            with av.open(str(next(path for path in paths if path.suffix=='.mp4'))) as container:
+            with av.open(str(next(path for path in paths if path.suffix=='.mov'))) as container:
                 self.assertEqual(sum(1 for _ in container.decode(video=0)),122)
 
 

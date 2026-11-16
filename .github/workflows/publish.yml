@@ -70,11 +70,22 @@ jobs:
           python -m unittest discover -s tests -p 'test_comfylink_studio.py'
           python -m unittest discover -s tests -p 'test_comfylink_studio_instance.py'
           python -m unittest discover -s tests -p 'test_hdr_exr_precision.py'
+          python -m unittest discover -s tests -p 'test_character_swap_masks.py'
+          python -m unittest discover -s tests -p 'test_studio_openjutsu.py'
+          python -m unittest discover -s tests -p 'test_comfylink_movie_rate.py'
+          node tests/test_studio_brush_size.mjs
+          node tests/test_studio_workflow_progress.mjs
+          node tests/test_studio_result_ownership.mjs
+          node tests/test_studio_plate_inline.mjs
+          node tests/test_studio_plate_compact.mjs
+          node tests/test_studio_paint_vfx_ui.mjs
           node tests/test_studio_ae_bridge.mjs
           node tests/test_studio_ae_display.mjs
           node tests/test_studio_desktop_handoff.mjs
           node tests/test_studio_desktop_restore.mjs
           node tests/test_studio_ae_frames.mjs
+          node tests/test_studio_ae_normal_clip.mjs
+          node tests/test_studio_ae_source_rebind.mjs
           node tests/test_studio_exr_precision.mjs
       - name: Run regression checks
         run: |
@@ -242,6 +253,8 @@ jobs:
           python -m unittest discover -s tests -p 'test_studio_image_edit_area.py'
           node tests/test_studio_image_area.mjs
           node tests/test_studio_image_area_graph.mjs
+          node tests/test_studio_image_area_submit.mjs
+          node tests/test_studio_image_area_mask_size.mjs
           python -m unittest discover -s tests -p 'test_subtitle_crop.py'
           node tests/test_subtitle_recipes.mjs
           python -m unittest discover -s tests -p 'test_attention_fallback.py'

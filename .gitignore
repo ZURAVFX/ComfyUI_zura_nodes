@@ -66,3 +66,6 @@ qwen_voice_design.local.json*
 
 # Local optional Parakeet interpreter and model paths.
 parakeet.local.json*
+
+# Local development and manual QA helpers are not release sources.
+/work/

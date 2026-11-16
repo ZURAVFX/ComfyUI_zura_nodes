@@ -25,7 +25,7 @@ Object.defineProperty(window.HTMLInputElement.prototype,'checked',{
   },
 });
 for(const method of ['load','pause','play'])window.HTMLElement.prototype[method]=()=>{};
-const source=fs.readFileSync(new URL('../web/studio.js',import.meta.url),'utf8').replace(/^import .*;\r?\n/gm,'').replace(/^export /gm,'').split('app.registerExtension({')[0];
+const source=fs.readFileSync(new URL('../web/studio_core.js',import.meta.url),'utf8').replace(/^import .*;\r?\n/gm,'').replace(/^export /gm,'').split('app.registerExtension({')[0];
 const status={engine_ready:{wan:true,h3:true,local_scene:true,h3_viewport:true},model_files:{wan:[{ready:true,path:'wan-test.safetensors'}],h3:[{ready:true,path:'h3-test.safetensors'}],local_scene:[{ready:true,path:'ltx-test.safetensors'}]}};
 const calls=[];let rejectUpload=false;
 const api={apiURL:path=>path,fetchApi:async(path,options)=>{
@@ -146,15 +146,15 @@ console.log('H3 head-swap actual-DOM opt-in, compatibility reset, audio/length g
 
 // The recommended character path does not demand an image model or generated
 // frame. Background replacement instead exposes the normal scene-image review.
-ui.project=null;ui.lookMode='build';
+ui.project=null;ui.lookMode='build';ui.creative={mode:'video',open(){},close(){}};
 Object.assign(ui.config,{engine:'h3',workflow_mode:'swap',scope:'person',h3_head_swap:false,h3_character_method:'openjutsu',openjutsu_background:'keep',openjutsu_direct:true,audio_id:'',lip_sync:false,edit_area:'mask',length_mode:'custom',duration:2});
 ui.modelStatus={...status,engine_ready:{...status.engine_ready,openjutsu:true}};
 ui.syncForm();ui.render();
-assert.equal(ui.directViewport(),true);
+assert.equal(ui.directViewport(),false);
 assert.equal(ui.$('image-editor').hidden,true);
-assert.equal(ui.$('video-options').hidden,false);
+assert.equal(ui.$('video-options').hidden,true);
 assert.equal(ui.$('primary').disabled,false);
-assert.match(ui.$('primary').textContent,/Review person/);
+assert.match(ui.$('primary').textContent,/Generate subject mask/);
 assert.match(ui.$('models').textContent,/OpenJutsu/);
 const dialogue=ui.referenceAudioConfig({id:'dialogue'});
 assert.equal(dialogue.h3_character_method,'control');
@@ -173,7 +173,7 @@ console.log('OpenJutsu direct reference, explicit background choice and separate
 // A single forward path: the image prompt stays in the bottom composer, and video tuning
 // appears only after an actual frame has been explicitly approved. Selection remains inspectable.
 Object.assign(ui.config,{engine:'wan',workflow_mode:'swap',scope:'person',edit_area:'mask',h3_head_swap:false});
-ui.project=null;ui.lookMode='build';ui.syncForm();ui.render();
+ui.project={id:'masked',phase:'approved',review:'mask',approval:'key',prepared_key:'key',actions:[]};ui.lookMode='build';ui.syncForm();ui.render();
 assert.ok(ui.$('image-editor').closest('.gs-composer'),'Image prompt belongs to the persistent composer');
 assert.equal(ui.$('image-editor').hidden,false);
 assert.equal(ui.$('redesign').hidden,true,'No duplicate first-frame action');

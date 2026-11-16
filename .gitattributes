@@ -1,0 +1,12 @@
+web/studio_ae.html text eol=lf
+web/studio_ae_probe.js text eol=lf
+web/studio_ae_entry.js text eol=lf
+web/studio_host_version.js text eol=lf
+web/studio_host_manifest.json text eol=lf
+web/vendor/*.js text eol=lf
+web/vendor/*.css text eol=lf
+web/paintout_studio/assets/icons/*.svg text eol=lf
+web/flux3_prompt_upsampling.json text eol=lf
+
+# Host-cache asset hashes must match Git bytes on every platform.
+web/vendor/** text eol=lf

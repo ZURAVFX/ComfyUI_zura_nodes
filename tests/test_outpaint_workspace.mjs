@@ -135,7 +135,7 @@ assert.equal(ui.$('review').disabled,true,'selection beyond HDR source budget ca
 ui.trim.commit({start:0,duration:1});ui.paint();assert.equal(ui.$('review').disabled,false,'trimming to the supported range restores review');
 let renderBody;ui.review={id:'hdr-review',hdr:true};ui.fetch=async(path,body)=>{if(path.endsWith('/approve'))return {approved:true};if(path.endsWith('/render')){renderBody=body;return {id:'hdr-render',kind:'render'};}if(path.endsWith('/hdr-render'))return {id:'hdr-render',kind:'render',state:'complete',hdr:true,url:'/preview',artifact:{type:'output',filename:'final.mp4',subfolder:'genj/hdr'},hdr_files:{hlg:{type:'output',filename:'final.mp4',subfolder:'genj/hdr'},exr:{type:'output',filename:'frames.zip',subfolder:'genj/hdr'}}};throw Error(path);};
 await ui.generate();await new Promise(r=>setTimeout(r,0));assert.deepEqual(renderBody.custom_loras,[],'unsupported custom LoRAs are not sent to the HDR route');
-assert.equal(ui.$('download').textContent,'Download HLG');assert.equal(ui.$('download-exr').hidden,false);assert.match(ui.$('status').textContent,/tone-mapped/);
+assert.equal(ui.$('download').textContent,'Download ProRes 4444');assert.equal(ui.$('download-exr').hidden,false);assert.match(ui.$('status').textContent,/tone-mapped/);
 ui.capabilities=null;ui.paint();assert.equal(ui.$('hdr-option').hidden,true,'normal Studio keeps the unverified control hidden');
 ui.capabilities={hdr_expand_experiment:true,hdr_expand_long_experiment:true,hdr_expand_long_dependencies:{missing_files:['long-hdr.safetensors'],missing_nodes:[]}};
 ui.$('hdr-output').checked=true;ui.source.duration=10;ui.trim.modeChanged();ui.trim.useSource();ui.paint();

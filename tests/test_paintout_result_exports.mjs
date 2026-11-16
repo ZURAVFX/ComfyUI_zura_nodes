@@ -1,0 +1,27 @@
+import assert from 'node:assert/strict';
+import {parseHTML} from '../../ui-check/node_modules/linkedom/esm/index.js';
+import {captureResultExports,createResultExportRow,paintoutExportLinks,renderPaintoutResultExports} from '../web/studio_result_exports.js';
+import {paintoutOutputRoles,paintoutOutputDescriptor} from '../web/paintout_studio/paintout_outputs.js';
+import {rippleOutput} from '../web/studio_ripple_jobs.js';
+
+const {document}=parseHTML('<html><head></head><body></body></html>');
+const file=filename=>({filename,subfolder:'paintout/take',type:'output'});
+const preview=file('motion_preview.mp4'),movie={...file('master.mov'),preview},mask=file('used_mask.mov'),maskFrames=file('used_mask_png16.zip'),exr=file('working_exr.zip'),image=file('frame.png');
+const exports=[{role:'mask',file:mask},{role:'mask_sequence',file:maskFrames},{role:'exr',file:exr},{role:'image',file:image}];
+const result={files:[movie],config:{outputMode:'SDR video'},exports:captureResultExports({zura_exports:exports})};
+const roles=paintoutOutputRoles(result);assert.equal(roles.master,movie);assert.equal(roles.preview,preview);assert.equal(roles.archiveMaster.filename,exr.filename,'Only EXR exports can supply an archive master');
+assert(!roles.files.some(entry=>entry.filename===mask.filename||entry.filename===maskFrames.filename),'Masks never enter result-master candidates');
+const noArchive=paintoutOutputRoles({...result,exports:exports.slice(0,2)});assert.equal(noArchive.archiveMaster,null,'A mask ZIP is not an EXR master');
+const links=paintoutExportLinks(result);assert.deepEqual(links.map(entry=>entry.role),['video','mask','mask_sequence','exr','image']);assert.equal(links[0].file.filename,'master.mov');assert.match(links[1].title,/expansion.*feathering.*protected/);
+const row=createResultExportRow(document);document.body.append(row);renderPaintoutResultExports(row,{apiURL:p=>p},result);
+assert.equal(row.hidden,false);assert.equal(row.querySelectorAll('a').length,5);assert.match(row.querySelector('[data-result-export=mask]').href,/used_mask.mov/);assert.equal(row.querySelector('[data-result-export=video]').download,'master.mov');
+assert(!row.textContent.includes('preview'),'Playback copies are not presented as saved masters');
+renderPaintoutResultExports(row,{apiURL:p=>p},{files:[movie],config:{outputMode:'SDR video'}});assert.equal(row.querySelectorAll('a').length,1,'Old results remain usable without invented auxiliary files');
+renderPaintoutResultExports(row,{apiURL:p=>p},null);assert.equal(row.hidden,true);
+assert.deepEqual(captureResultExports({zura_exports:[{role:'mask',file:{...mask,subfolder:'../outside'}},{role:'mask',file:{...mask,filename:'../wrong.mov'}},{role:'other',file:mask}]}),[]);
+assert.equal(captureResultExports({zura_exports:[{role:'mask',file:{...mask,subfolder:'paintout\\take'}}]})[0].file.subfolder,'paintout/take','Windows result paths are normalised');
+const nativeEXR=paintoutOutputDescriptor({files:[preview],exports:[{role:'exr',file:exr}],config:{outputMode:'EXR sequence'}});assert.equal(nativeEXR.master.filename,exr.filename);assert.equal(nativeEXR.kind,'hdr_sequence');
+const still=paintoutOutputDescriptor({exports:[{role:'image',file:image}],config:{outputMode:'SDR video'}});assert.equal(still.master.filename,image.filename);assert.equal(still.kind,'image');
+const handoff=rippleOutput({outputs:{save:{images:[movie],zura_exports:exports}}},{outputMode:'SDR video'});assert.equal(handoff.master.filename,movie.filename);assert.equal(handoff.exports.length,4,'Add/Replace runner retains the available save files');
+assert.deepEqual(JSON.parse(JSON.stringify(handoff)).exports,handoff.exports,'Auxiliary file refs survive saved history');
+console.log('Paintout exports: actual MOV/mask/PNG16/EXR/image links, mask isolation, still masters, legacy results, path validation and Add/Replace history pass.');

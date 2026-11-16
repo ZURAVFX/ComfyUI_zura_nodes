@@ -233,18 +233,18 @@ class HDRDetailTests(unittest.TestCase):
             if format!='hlg_video':
                 self.assertEqual(graph['zura_hdr_archive']['class_type'],'ZuraHDRPackageACEScg')
                 self.assertEqual(graph['zura_hdr_archive']['inputs']['images'],['hdr_detail',0])
-            if format!='acescg_exr':self.assertEqual(graph['zura_hdr_hlg']['inputs'],{'image':['hdr_detail',0],'source':'linear ACEScg','destination':'HDR'})
+            if format!='acescg_exr':self.assertEqual(graph['zura_hdr_save_video']['inputs']['images'],['hdr_detail',0]);self.assertEqual(graph['zura_hdr_save_video']['inputs']['source_space'],'acescg')
             store=types.SimpleNamespace(plan=[chunks.HDRChunk(0,1,0)],identity='a'*32,width=512,height=512)
             staged=adapter.chunk_graph(graph,store,0,'hdr_unpad_raster')
             self.assertEqual(staged['zura_hdr_stage_chunk']['inputs']['images'],['hdr_detail',0])
             self.assertEqual(staged['zura_hdr_stage_chunk']['inputs']['colour_space'],'acescg')
         creative=native.build_native_video_graph(source='native.mp4',start_frame=0,frame_count=9,fps=24,width=512,height=512,prefix='native')
         self.assertNotIn('hdr_detail',creative)
-        self.assertEqual(creative['zura_hdr_hlg']['inputs']['source'],'HDR ACEScct')
+        self.assertEqual(creative['zura_hdr_save_video']['inputs']['source_space'],'acescct')
         outpaint=sdr.build_hdr_graph(source='intermediate.mp4',start_frame=0,frame_count=9,fps=24,prefix='outpaint',_source_detail=False)
         self.assertNotIn('hdr_detail',outpaint)
         self.assertEqual(outpaint['zura_hdr_archive']['class_type'],'ZuraHDRPackageACEScct')
-        self.assertEqual(outpaint['zura_hdr_hlg']['inputs']['image'],['hdr_unpad_raster',0])
+        self.assertEqual(outpaint['zura_hdr_save_video']['inputs']['images'],['hdr_unpad_raster',0])
 
     def test_preview_uses_final_acescg_and_hlg_agrees_with_actual_colour_node(self):
         convert=actual_colour_math()

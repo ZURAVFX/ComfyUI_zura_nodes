@@ -45,7 +45,7 @@ export class RippleImageHandoff {
     if(this.request!==request||!this.current(request)||this.owner.mode!==mode||this.owner.root.isConnected===false)throw Error('The source, keyframe or workspace changed. Return to Ripple and choose the frame again.');
   }
   async edit(workspace,anchor){
-    const o=this.owner;if(this.imageBusy()||this.importing||workspace.busy()){workspace.message('Finish or cancel the current operation first.');return;}
+    const o=this.owner,busy=workspace.platePrimary?o.plate?.jobBusy():workspace.busy();if(this.imageBusy()||this.importing||busy){workspace.message('Finish or cancel the current operation first.');return;}
     if(o.outpaintGuide?.request){workspace.message('Return the current frame-extension image edit before editing a Ripple keyframe.');return;}
     if(this.request&&!this.current(this.request))this.clear();
     if(this.stored&&!this.request)await this.resume();
@@ -63,7 +63,7 @@ export class RippleImageHandoff {
       const previous={config:o.config(),selectedFile:o.items[o.selectedImage]?.file||null};
       this.request={id:crypto.randomUUID(),aeParent,workspace,anchor,key,width:workspace.source.width,height:workspace.source.height,previous};
       if(!this.persist(this.request)){this.clear();throw Error('Browser storage is unavailable. Free storage before editing a tracked keyframe.');}
-      const request=this.request;o.show('image');if(!o.models.length)await o.loadModels();this.check(request);
+      const request=this.request;o.show('image');if(!o.models.length)void o.loadModels();this.check(request);
       await o.setImageOperation('edit',{useCanvas:false});this.check(request);
       o.editMainMissing=false;o.autoCanvasSuppressed=true;
       o.imageArea?.reset();
@@ -85,10 +85,10 @@ export class RippleImageHandoff {
       o.root.querySelector('.zc-image-heading').after(this.banner);
       this.banner.querySelector('[data-ripple-return]').onclick=()=>this.leave();this.banner.querySelector('[data-ripple-use]').onclick=()=>this.useResult();
     }
-    const label=(request.workspace?.intent||request.intent)==='relight'?'Relight':this.owner.plate?'video edit':'Ripple';this.banner.querySelector('[data-ripple-return]').textContent='Back to '+label;this.banner.querySelector('span').textContent=label==='Relight'?'Adjust the lighting, then return to Relight. Painting an area is optional.':this.owner.plate?.action==='paint'?'Draw a guide, then describe how AI should refine it.':'Select an edit area or use the whole frame.';this.banner.hidden=o.mode!=='image';this.banner.querySelector('[data-ripple-image-title]').textContent=`Edit frame ${request.anchor?.frame??request.frame}`;
+    const label=(request.workspace?.intent||request.intent)==='relight'?'Relight':this.owner.plate?'video edit':'Ripple';this.banner.querySelector('[data-ripple-return]').textContent='Back to '+label;this.banner.querySelector('[data-ripple-use]').textContent=label==='Relight'?'Use lighting frame':'Use edited frame';this.banner.querySelector('span').textContent=label==='Relight'?'Adjust the lighting, then return to Relight. Painting an area is optional.':this.owner.plate?.action==='paint'?'Draw a guide, then describe how AI should refine it.':'Select an edit area or use the whole frame.';this.banner.hidden=o.mode!=='image';this.banner.querySelector('[data-ripple-image-title]').textContent=`Edit frame ${request.anchor?.frame??request.frame}`;
     const item=o.items[o.selectedImage],busy=this.importing||this.imageBusy();
     this.banner.querySelector('[data-ripple-return]').disabled=busy;
-    this.banner.querySelector('[data-ripple-use]').disabled=busy||!this.request||!this.current(this.request)||item?.ripple_guide!==request.id;this.owner.plate?.syncInlineImage(request);
+    this.banner.querySelector('[data-ripple-use]').textContent=label==='Relight'?'Use lighting frame':'Use edited frame';this.banner.querySelector('[data-ripple-use]').disabled=busy||!this.request||!this.current(this.request)||item?.ripple_guide!==request.id;this.owner.plate?.syncInlineImage(request);
   }
   async useResult(){
     await this.resume();
@@ -106,6 +106,7 @@ export class RippleImageHandoff {
       // Acceptance belongs to the generated image's selection, never a newer
       // brush draft made while reviewing it. Keep that newer draft for retries.
       const editArea=Object.hasOwn(item,'edit_area')?item.edit_area:o.imageArea?.config?.();
+      request.anchor.image_references=o.references.slice(1).map(ref=>({...ref}));
       await request.workspace.importAnchorFile(request.anchor,new File([exact],`ripple_frame_${request.anchor.frame}.png`,{type:'image/png'}),()=>this.check(request));this.check(request);
       request.anchor.edit_area=editArea;
       const prompt=o.$('prompt').value;request.workspace.state.prompt=prompt;request.workspace.$('prompt').value=prompt;request.workspace.save();
@@ -115,20 +116,22 @@ export class RippleImageHandoff {
   }
   async leave(accepted=false){
     const request=this.request||this.stored;
-    if(!request||(this.importing&&!accepted)||this.imageBusy())return;
+    if(!request){if(this.owner.plate?.inline){this.owner.plate.exitInlineImage();this.owner.show('paintout');}return;}if((this.importing&&!accepted)||this.imageBusy())return;
     const o=this.owner,c=request.previous.config;
     if(this.request&&this.current(this.request)){
-      try{await o.imageArea?.flush();}catch(error){o.message(error.message);return;}
+      try{await o.imageArea?.flush();}catch(error){o.message(error.message);if(!request.workspace?.platePrimary)return;}
       request.anchor.image_references=o.references.slice(1).map(ref=>({...ref}));if(!accepted)request.anchor.edit_area=o.imageArea?.config?.();request.workspace.state.prompt=o.$('prompt').value;request.workspace.$('prompt').value=o.$('prompt').value;request.workspace.save();
     }
-    await o.setImageOperation(c.operation,{useCanvas:false});if(this.request!==request&&this.stored!==request)return;
+    await o.setImageOperation(c.operation,{useCanvas:false});if(this.request!==request&&this.stored!==request){if(!this.request&&!this.stored&&o.plate?.inline){o.plate.exitInlineImage();o.show('paintout');}return;}
     o.references=(c.references||[]).map(r=>({...r}));o.imageLoras=c.loras||[];o.editMainMissing=!!c.editMainMissing;o.autoCanvasSuppressed=!!c.autoCanvasSuppressed;
     o.imageArea?.restore(c.edit_area||null);
     for(const id of ['model','shape','width','height','seed','prompt'])o.$(id).value=c[id]??'';o.$('random').checked=c.random;
     const previous=request.previous.selectedFile;
     o.selectedImage=previous?o.items.findIndex(item=>item.file?.filename===previous.filename&&(item.file?.subfolder||'')===(previous.subfolder||'')&&(item.file?.type||'output')===(previous.type||'output')):-1;
-    this.clear();o.imageIntent=c.image_intent||'standard';
-    o.save();o.render();o.renderGallery();if(request.workspace?.platePrimary||request.intent==='plate'){o.show('paintout');}else{o.ensureRippleWorkspace?.(request.workspace?.intent||request.intent||'edit');o.show('ripple');}
+    o.imageIntent=c.image_intent||'standard';o.save();
+    this.clear();
+    if(request.workspace?.platePrimary||request.intent==='plate'){o.show('paintout');}else{o.ensureRippleWorkspace?.(request.workspace?.intent||request.intent||'edit');o.show('ripple');}
+    o.render();o.renderGallery();
   }
   // Closing Studio is reversible: keep the current hand-off so a completed
   // image can still return when Studio reopens, but invalidate preparation.

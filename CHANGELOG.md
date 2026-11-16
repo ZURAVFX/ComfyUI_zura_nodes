@@ -1,5 +1,15 @@
 # Release notes
 
+## 1.3.66 - 16 November 2026
+
+- Make Studio feel consistent across workflows with shared brush sizing and palettes, prompt controls and precise keyboard input. Keep one progress indicator, make repair stages navigable and keep trim/source actions compact.
+- Separate Character Replacement mask review, reference-frame review and video generation. Let artists edit the subject prompt or supply a mask video; prepare the mask before requesting a character reference.
+- Keep the original ordered frames while reinterpreting AE footage at a supported model rate, then restore the exact original rational frame rate and audio timing on return. Trim model padding without dropping source frames.
+- Fix 12-bit ProRes source timing discovery, native HDR Paintout source interpretation and sequence timing. Keep the retained float source separate from its numeric SDR model copy.
+- Deliver ProRes 4444 MOV video masters and actual PNG/EXR stills, with MP4s for browser viewing. Expose repair masks and frame archives beside final Paintout and Alpha outputs.
+- Simplify model installation and account access, remove the unused global colour-transform UI and Source options panel, preserve completed takes when a new HDR submission fails, and prevent hidden old takes from being returned to AE.
+- Include the latest shared AE host, model recipes, image layers, camera/editor fixes and startup/preview ownership corrections. GPU acceptance remains workflow/model specific; browser, controller, media-clock and file-delivery regressions are checked separately.
+
 ## 1.3.65 - 13 November 2026
 
 - Accept PyAV 19's exact AVRational clocks alongside earlier Fraction clocks when decoding 10-bit SDR masters. Keep missing, floating-point, non-positive and irregular timestamps rejected; preserve rational frame rates and decode precision.

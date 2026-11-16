@@ -1,0 +1,11 @@
+/* Shared editor controls use the established Studio palette and composer layout. */
+#genj-studio{--zc-control-height:38px;--zc-primary-height:44px;--zc-prompt-min-height:56px}
+#genj-studio .zc-shared-composer textarea.zc-shared-prompt{box-sizing:border-box;min-height:var(--zc-prompt-min-height);max-height:144px;padding:10px 0;border:0;border-radius:0;background:transparent!important;color:var(--zc-text);font:inherit;line-height:1.5;resize:vertical}
+#genj-studio .zc-shared-composer textarea.zc-shared-prompt:focus-visible{outline:1px solid var(--gs-focus,var(--gs-accent));outline-offset:3px}
+#genj-studio .zc-shared-composer .gs-primary{min-height:var(--zc-primary-height);font-variant-numeric:tabular-nums}
+#genj-studio .zc-shared-inline-composer textarea{min-width:0}
+#genj-studio .zc-brush-control input[data-brush-size-slider]{writing-mode:horizontal-tb;direction:ltr;box-sizing:border-box;min-width:160px;min-height:32px;accent-color:var(--gs-accent);touch-action:none}
+#genj-studio .zc-brush-control .pap-brush-number{box-sizing:border-box;min-width:68px;width:68px;min-height:36px;padding:6px;text-align:center;font:inherit;font-variant-numeric:tabular-nums}
+#genj-studio .zia-toolbar .zia-brush-wide{grid-template-columns:auto minmax(160px,1fr) 68px}
+#genj-studio .zc-brush-control input:focus-visible{outline:2px solid var(--gs-focus,var(--gs-accent));outline-offset:3px}
+@media(max-height:850px){#genj-studio .zc-shared-composer textarea.zc-shared-prompt{min-height:48px;max-height:104px}#genj-studio .zc-workflow-progress{min-height:44px;padding-block:10px}}

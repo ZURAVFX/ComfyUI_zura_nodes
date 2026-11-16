@@ -1,10 +1,11 @@
 import {normaliseEXRStorage} from './studio_exr_precision.js';
+import {deliveryVideoFile} from './studio_delivery_formats.js';
 // The original HDR image or video frame is generation data. Its PNG is only a display proxy.
 export const nativePerformanceOpening=studio=>(studio.lookMode==='ready'?studio.readyAsset?.native_hdr:null)||studio.project?.opening_input?.native_hdr;
 
 export function preferredHDRFile(files){
   const valid=(files||[]).filter(file=>file?.type==='output'&&typeof file.filename==='string');
-  return valid.find(file=>/\.mp4$/i.test(file.filename))||valid.find(file=>/\.zip$/i.test(file.filename))||null;
+  return deliveryVideoFile(valid)||valid.find(file=>/\.zip$/i.test(file.filename))||null;
 }
 
 export function validateNativePerformance(config){
@@ -39,5 +40,5 @@ export function mainNativeLTXTake(project,result){
     ||!Array.isArray(result.hdr_files)||!result.hdr_files.length
     ||result.hdr_files.some(file=>file.type!=='output'||!file.filename))return null;
   return {projectId:project.id,resultKey:`${project.id}:${result.action_id||result.asset.filename}`,
-    file:result.asset,hdrFiles:result.hdr_files,nativeHDR:true,exr_storage:normaliseEXRStorage(result.exr_storage??project.config?.exr_storage)};
+    file:result.asset,hdrFiles:result.hdr_files,nativeHDR:true,...(result.colour?{colour:result.colour}:{}),exr_storage:normaliseEXRStorage(result.exr_storage??project.config?.exr_storage)};
 }

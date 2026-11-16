@@ -23,7 +23,7 @@ export class MainLTXDelivery {
     try{this.records=JSON.parse(this.storage.getItem(STORE))||{};}catch{}
     this.control=document.createElement('label');this.control.className='zc-tool zc-model-control';this.control.hidden=true;
     this.control.title='HDR adds an LTX conversion pass after generation. Your SDR master is retained.';
-    this.control.innerHTML='<span class="zc-sr-only">LTX output format</span><select aria-label="LTX output format"><option value="sdr">SDR</option><option value="hlg_video">HDR · HLG video</option><option value="hlg_and_exr">HDR · HLG + EXR</option><option value="acescg_exr">HDR · EXR</option></select>';
+    this.control.innerHTML='<span class="zc-sr-only">LTX output format</span><select aria-label="LTX output format"><option value="sdr">SDR</option><option value="hlg_video">HDR · ProRes 4444 MOV</option><option value="hlg_and_exr">HDR · ProRes 4444 + EXR</option><option value="acescg_exr">HDR · EXR</option></select>';
     tools.append(this.control);this.select=this.control.querySelector('select');
     this.sourceFrame=document.createElement('button');this.sourceFrame.type='button';this.sourceFrame.className='zc-tool';this.sourceFrame.hidden=true;this.sourceFrame.textContent='Use HDR source frame';this.sourceFrame.title='Use the selected source frame as native HDR appearance. Review it before animation.';tools.append(this.sourceFrame);
     this.sourceFrame.onclick=()=>void this.useSourceFrame();

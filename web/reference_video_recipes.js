@@ -46,7 +46,7 @@ export const REFERENCE_VIDEO_CAPABILITIES=Object.freeze({
     'CLIPLoader','VAELoader','MiniMaxH3ReferenceToVideo','MiniMaxH3SigmaShift',
     'ModelAttentionBackend','BasicGuider','BasicScheduler','KSamplerSelect',
     'RandomNoise','SamplerCustomAdvanced','VAEDecode','VAEDecodeAudio',
-    'CreateVideo','SaveVideo','MiniMaxH3AddGuide','EmptyAudio','AudioConcat',
+    'CreateVideo','ZuraSaveProRes4444','MiniMaxH3AddGuide','EmptyAudio','AudioConcat',
   ],
 });
 
@@ -358,7 +358,7 @@ export function buildReferenceVideoGraph(config={},info){
   const decoded=node('decode','VAEDecode',{samples,vae:videoVae},'Decode H3 video');
   const decodedAudio=followedAudio||node('decode_audio','VAEDecodeAudio',{samples,vae:audioVae},'Decode H3 audio');
   const video=node('video','CreateVideo',{images:decoded,audio:decodedAudio,fps:caps.fps,bit_depth:8,color_space:'sRGB',codec:'none'},'Assemble video with audio');
-  node('save','SaveVideo',{video,filename_prefix:fast?'zura/reference/fasth3_draft':'zura/reference/h3',format:'mp4','format.codec':'h264','format.codec.encoding':'auto'},'Save reference video');
+  node('save','ZuraSaveProRes4444',{video,filename_prefix:fast?'zura/reference/fasth3_draft':'zura/reference/h3'},'Save reference video');
   return applyAvailableAttention(graph,info);
 }
 
@@ -376,7 +376,7 @@ export function referenceVideoAvailability(info={},config={}){
   const requiredNodes=[
     'UNETLoader','CLIPLoader','VAELoader',
     'MiniMaxH3SigmaShift','MiniMaxH3ReferenceToVideo',
-    'BasicScheduler','KSamplerSelect','VAEDecode','CreateVideo','SaveVideo',
+    'BasicScheduler','KSamplerSelect','VAEDecode','CreateVideo','ZuraSaveProRes4444',
   ];
   if(fast)requiredNodes.push('SelfLiftH3Sampler','BlockSparseAttention','ConditioningZeroOut');
   else requiredNodes.push('BasicGuider','RandomNoise','SamplerCustomAdvanced');

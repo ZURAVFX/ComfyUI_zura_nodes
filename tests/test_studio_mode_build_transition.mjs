@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
 import {clipLength,recoverClipLength} from '../web/studio_length.js';
-const code=fs.readFileSync(new URL('../web/studio.js',import.meta.url),'utf8').replace(/^import .*;\r?\n/gm,'').replace(/^export /gm,'').split('app.registerExtension({')[0];
+const code=fs.readFileSync(new URL('../web/studio_core.js',import.meta.url),'utf8').replace(/^import .*;\r?\n/gm,'').replace(/^export /gm,'').split('app.registerExtension({')[0];
 const calls=[],removed=[];
 const context={clipLength,recoverClipLength,localStorage:{setItem(){},removeItem:key=>removed.push(key)},api:{fetchApi:async(path,options)=>{
   const body=JSON.parse(options.body);calls.push({path,body});return {ok:true,json:async()=>({id:'new-build-project',phase:'new',look_mode:body.look_mode,config:body.config})};

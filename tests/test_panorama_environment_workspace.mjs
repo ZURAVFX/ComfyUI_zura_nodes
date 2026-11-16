@@ -1,0 +1,18 @@
+import assert from 'node:assert/strict';
+import {parseHTML} from '../../ui-check/node_modules/linkedom/esm/index.js';
+import {installEnvironmentWorkspace} from '../web/studio_panorama_editor.js';
+const {document}=parseHTML('<html><body><button id="outside">Before</button><section><div class="pano-studio-backdrop"><input type="file" data-add-picker><canvas></canvas></div></section></body></html>');
+const host=document.querySelector('section'),root=host.firstElementChild,picker=root.querySelector('input'),canvas=root.querySelector('canvas');let picks=0,resizes=0,prevented=0,stopped=0;
+picker.click=()=>picks++;
+const workspace=installEnvironmentWorkspace(root,host,{resize:()=>resizes++}),add=host.querySelector('[data-environment-add]'),expand=host.querySelector('[data-environment-expand]');
+add.click();add.click();assert.equal(picks,2,'Repeated add uses the native picker for independent scene stickers');
+assert.equal(picker.multiple,undefined,'Do not advertise unsupported simultaneous placement');
+expand.click();assert.equal(host.classList.contains('is-expanded'),true);assert.equal(expand.getAttribute('aria-expanded'),'true');assert.match(expand.textContent,/Exit/);
+assert.equal(root.querySelector('canvas'),canvas,'Expansion preserves the actual scene/canvas identity');
+const escape=()=>({key:'Escape',preventDefault(){prevented++;},stopImmediatePropagation(){stopped++;}});
+const modal=document.createElement('div');modal.setAttribute('role','alertdialog');root.append(modal);workspace.onKeyDown(escape());assert.equal(host.classList.contains('is-expanded'),true,'Native dialogs take Escape first');modal.remove();const hiddenMenu=document.createElement('div');hiddenMenu.setAttribute('role','menu');hiddenMenu.hidden=true;root.append(hiddenMenu);
+workspace.onKeyDown(escape());assert.equal(host.classList.contains('is-expanded'),false);assert.equal(prevented,1);assert.equal(stopped,1,'Expanded Escape is consumed before the native close handler');assert.equal(resizes,2);
+assert.equal(root.querySelector('canvas'),canvas,'Exit preserves scene contents');
+expand.click();expand.click();assert.equal(host.classList.contains('is-expanded'),false,'Visible Exit restores the inline workspace');
+workspace.dispose();assert.equal(host.querySelector('.zc-environment-actions'),null);assert.equal(root.querySelector('canvas'),canvas);
+console.log('Compose360 toolbar: repeated native image picker, expand/exit/Escape, modal priority and scene identity pass.');

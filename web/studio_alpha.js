@@ -1,6 +1,8 @@
 import {workspaceStorage} from './studio_storage.js';
 import {ClipTrimmer} from './studio_trim.js';
 import {StudioModelDownloads} from './studio_model_download.js';
+import {playbackFile} from './studio_delivery_formats.js';
+import {installResultExportStyles} from './studio_result_exports.js';
 import {submitOwnedGraph,recoverOwnedSubmission,cancelOwnedJob} from './studio_owned_jobs.js';
 import {installOwnedExecuting,durationLabel} from './studio_progress.js';
 import {alphaProcessingSize,alphaVideoAvailability,alphaVideoValidation,alphaVideoOutput,buildAlphaVideoGraph} from './studio_alpha_recipes.js';
@@ -34,6 +36,7 @@ export class AlphaWorkspace {
         <div data-exports class="zalpha-exports" hidden><a data-save-alpha download>Save transparent MOV</a><a data-save-matte download>Save matte</a><a data-save-sequence download hidden>Save matte frames</a><span>Original size and frame rate</span></div>
       </div>`;
     this.root.append(this.page);this.video=this.$('video');this.still=this.$('still');
+    installResultExportStyles(this.page.ownerDocument);this.$('exports').classList.add('zc-result-exports');
     this.modelDownloads=new StudioModelDownloads(this.$('model-downloads'),(path,body)=>this.fetch('/zura/studio'+path,body),()=>this.checkModels());this.modelDownloads.mountQuick(this.page.querySelector('.zalpha-composer'));this.modelDownloads.renderQuick();
     this.trimmer=new ClipTrimmer(this.$('trimmer'),{onCommit:range=>this.setTrim(range),onSeek:seconds=>this.seek(seconds)});
     this.$('source').onclick=()=>this.$('source-file').click();
@@ -91,7 +94,7 @@ export class AlphaWorkspace {
   }
   showView(view='source'){
     if(!['source','matte','preview'].includes(view))view='source';if(view!=='source'&&!this.result?.[view])view='source';
-    this.state.view=view;this.$('view').value=view;const path=view==='source'?(this.source?.media_url||this.source?.thumbnail_url):this.fileURL(this.result[view]);
+    this.state.view=view;this.$('view').value=view;const path=view==='source'?(this.source?.media_url||this.source?.thumbnail_url):this.fileURL(playbackFile(this.result[view]));
     this.video.pause();this.still.hidden=true;
     if(path){const url=view==='source'?this.url(path):path;if(this.video.getAttribute('src')!==url){this.video.src=url;this.video.load();}this.video.hidden=false;this.$('empty').hidden=true;}else{this.video.removeAttribute('src');this.video.hidden=true;this.$('empty').hidden=false;}
     this.save();this.renderExports();
@@ -147,6 +150,7 @@ export class AlphaWorkspace {
   renderExports(){
     const result=this.result;this.$('exports').hidden=!result?.alpha;
     for(const [key,role] of [['save-alpha','alpha'],['save-matte','matte'],['save-sequence','sequence']]){const a=this.$(key),file=result?.[role];a.hidden=!file;if(file){a.href=this.fileURL(file);a.download=file.filename;}else a.removeAttribute('href');}
+    this.$('save-matte').textContent=/\.mov$/i.test(result?.matte?.filename||'')?'Save matte MOV':'Save matte';
   }
   render(){
     const has=!!this.source,busy=this.busy(),error=has?alphaVideoValidation(this.config()):'';

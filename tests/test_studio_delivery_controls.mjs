@@ -1,13 +1,19 @@
 import assert from 'node:assert/strict';
 import {parseHTML} from '../../ui-check/node_modules/linkedom/esm/index.js';
 import {StudioDeliveryControls,studioInputDescription} from '../web/studio_delivery_controls.js';
+import {StudioOutputSettings} from '../web/studio_output_settings.js';
 import {memoryStorage} from '../web/studio_storage.js';
+import {hdrDeliveryProgress} from '../web/studio_ltx_delivery.js';
 
 const {document,window}=parseHTML('<html><head></head><body></body></html>');
 Object.assign(globalThis,{document,window});
 Object.defineProperty(window.HTMLSelectElement.prototype,'value',{configurable:true,get(){return this.querySelector('option[selected]')?.value??this.querySelector('option')?.value??'';},set(value){for(const option of this.querySelectorAll('option'))option.toggleAttribute('selected',option.value===String(value));}});
 assert.equal(studioInputDescription({precision:{sourceBitDepth:32},colour:{encoding:'unknown',sceneLinear:false,ocioWorkingSpace:'Output - sRGB'}}).input,'sdr','FLOAT is precision, not a claim that footage is HDR');
 assert.deepEqual(studioInputDescription({resolved_colour:'hlg_rec2020'}),{input:'hdr',space:'hlg_rec2020',detected:true});
+const explicitHalf=Object.assign(Object.create(StudioOutputSettings.prototype),{precision:{value:()=> 'half'},delivery:{aeTransfer:'float32'}});
+assert.equal(explicitHalf.exrStorage('acescg_exr'),'float32','AE32 overrides a saved HALF preference for this transfer only');
+explicitHalf.delivery.aeTransfer=null;
+assert.equal(explicitHalf.exrStorage('acescg_exr'),'half','Leaving AE restores the saved preference');
 
 const preview={filename:'hdr-preview.mp4',subfolder:'hdr',type:'output'},zip={filename:'hdr.zip',subfolder:'hdr',type:'output'},video={filename:'hdr.mp4',subfolder:'hdr',type:'output'};
 function fixture(storage=memoryStorage()){
@@ -27,6 +33,33 @@ function fixture(storage=memoryStorage()){
   c.studio.creative=c;
   const settings={exrStorage:()=> 'float32'},controls=new StudioDeliveryControls(root,api,c,settings);c.outputSettings={delivery:controls};
   return {c,root,calls,api,controls,transparent(){imageHasAlpha=true;},complete(){state='complete';},close(){controls.close();root.remove();}};
+}
+{
+  const f=fixture();await Promise.resolve();
+  f.controls.setAETransfer('float32');
+  assert.equal(f.controls.output,'hdr','32-bit AE transfer requires HDR output');
+  assert.equal(f.controls.hdrFormat,'acescg_exr','32-bit AE transfer requires EXR, not an SDR or HLG-only movie');
+  assert.equal(f.controls.$('output').disabled,true);
+  const raw={kind:'image',master:{filename:'same.png',subfolder:'images',type:'output'}};
+  f.controls.records[f.controls.resultKey('image',raw)]={state:'complete',take:{hdrFiles:[zip],config:{exr_storage:'half'}}};
+  assert.equal(f.controls.outputFor('image',raw),null,'A saved HALF archive cannot satisfy AE32 FLOAT delivery');
+  f.controls.setHDRFormat('hlg_video');assert.equal(f.controls.hdrFormat,'acescg_exr','HDR master cannot be changed to HLG-only');
+  f.controls.setAETransfer('sdr8');assert.equal(f.controls.output,'sdr','8-bit transfer from a 32-bpc project remains SDR');
+  f.controls.setAETransfer('prores12');assert.equal(f.controls.output,'sdr','12-bit transfer uses the SDR model path');
+  f.controls.endAETransfer();assert.equal(f.controls.output,'sdr');assert.equal(f.controls.$('output').disabled,false);
+  f.close();
+}
+{
+ const f=fixture();await Promise.resolve();const controls=f.controls;
+ controls.delivery.take={studioMode:'image',resultKey:'progress-test'};controls.delivery.busy=true;
+ for(const [state,phase] of [['preparing',0],['rendering',1],['staging',1],['exporting',2],['reconnecting',0],['cancelling',0]]){controls.delivery.update({id:'progress',state,completed:1,total:3});assert.equal(controls.progressHost.hidden,false);assert.equal(controls.progressHost.querySelectorAll('li')[phase].getAttribute('aria-current'),'step');}
+ controls.delivery.update({id:'progress',state:'rendering',completed:1,total:3});assert.match(controls.progressHost.textContent,/1 of 3 sections converted/);assert.equal(controls.progressHost.querySelector('progress').value,1);assert.equal(controls.progressHost.querySelector('progress').max,3);
+ f.c.show('video');assert.equal(controls.$('cancel').hidden,false,'Active HDR cancellation remains available after a mode change');assert.equal(controls.progressHost.hidden,false);
+ controls.delivery.update({id:'progress',state:'exporting',completed:3,total:3});assert.equal(controls.progressHost.querySelector('progress').hasAttribute('value'),false,'Export has no invented percentage');assert.match(controls.progressHost.textContent,/Encoding HDR video and writing EXR masters/);
+ controls.delivery.update({id:'progress',state:'failed',error:'Encoder stopped'});assert.match(controls.progressHost.textContent,/Encoder stopped/);assert.equal(controls.progressHost.querySelector('progress').hidden,true);assert.equal(controls.$('cancel').hidden,true);
+ controls.delivery.update({id:'progress',state:'cancelled'});assert.match(controls.progressHost.textContent,/original master is retained/);
+ controls.delivery.update({id:'progress',state:'complete',result:{files:[]}});assert.equal(controls.progressHost.dataset.state,'failed','Incomplete masters never show Ready');
+ assert.equal(hdrDeliveryProgress({state:'rendering'}).value,null);assert.equal(hdrDeliveryProgress({state:'rendering',completed:2,total:2}).complete,false,'Completed sections are not completed delivery');f.close();
 }
 {
   const f=fixture();await Promise.resolve();f.controls.output='hdr';f.controls.save();
@@ -99,4 +132,19 @@ function fixture(storage=memoryStorage()){
   assert.equal(f.calls.filter(call=>call.path==='/zura/studio/hdr/jobs').length,0);
   const raw=f.controls.raw('alpha');f.controls.output='sdr';assert.equal(f.controls.outputFor('alpha',raw).master.filename,'transparent.mov','SDR output uses transparent media rather than the checkerboard UI preview');f.close();
 }
+{
+  const f=fixture();await Promise.resolve();const controls=f.controls,input=controls.$('input'),output=controls.$('output');
+  assert.equal(controls.root.querySelector('.zc-source-options-panel'),null);assert.equal(controls.root.querySelector('.zc-source-options'),null);assert.equal(output.closest('.zc-delivery-controls'),controls.element);
+  assert.equal(controls.element.querySelector('[data-delivery-input]'),null,'Top bar exposes only output choice');
+  controls.sync();assert.equal(controls.$('input'),input,'Live synchronisation retains relocated input identity');
+  f.c.studio.aeSession={id:'pending'};controls.sync();assert.equal(input.disabled,true,'AE input is locked before source preparation finishes');assert.equal(controls.$('space').disabled,true);f.close();
+}
 console.log('Shared delivery: persistent SDR/HDR controls, real non-LTX post-pass, retained SDR, N1 cadence, truthful masters, explicit source space, AE inference view and cancellation passed');
+
+{
+ const f=fixture();const page=document.createElement('section');page.innerHTML='<div class="zh-footer"></div><select data-source-kind><option value="upload">Source</option></select><label><select data-mode><option value="sdr">SDR</option></select></label><label><select data-output><option value="hlg_and_exr">HDR</option></select></label>';f.root.append(page);
+ let started=0;const tool={root:page,longUpdate(){},start(){started++;},getSource:()=>null,$:key=>page.querySelector('[data-'+key+']')};f.c.studio.hdrTool=tool;
+ f.c.show('hdr');assert.equal(f.controls.output,'hdr','Entering Convert to HDR selects HDR without a separate toggle');
+ assert.equal(f.controls.$('output').disabled,true);assert.equal(f.controls.outputChoice.parentElement,page.querySelector('.zh-footer'),'Output belongs to generation controls');
+ f.controls.output='sdr';tool.start();assert.equal(started,1,'Convert starts even if a stale global preference was SDR');assert.equal(f.controls.output,'hdr');f.close();
+}

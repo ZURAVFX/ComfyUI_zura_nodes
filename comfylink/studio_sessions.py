@@ -17,7 +17,7 @@ import shutil
 import stat
 import time
 import zipfile
-from urllib.parse import urlsplit
+from urllib.parse import parse_qs, urlsplit
 
 import aiohttp
 from aiohttp import web
@@ -53,6 +53,50 @@ _SDR_TRANSFERS = {2: "unspecified", 1: "bt709", 4: "gamma22", 5: "gamma28", 6: "
 _SDR_PRIMARIES = {2: "unspecified", 1: "bt709", 4: "bt470m", 5: "bt470bg", 6: "smpte170m", 7: "smpte240m", 22: "ebu3213"}
 _COLOUR_META = ("icc", "hdr", "exif", "xmp", "gamma", "chromatic", "cicp", "gainmap", "jumbf", "photoshop", "colour", "color", "profile")
 _HEX32 = re.compile(r"[0-9a-f]{32}\Z")
+
+
+def _require_raw_numeric_video_info(asset, info, manifest, input_root):
+    """Do not advertise a normal clip until its actual editor and player inputs exist."""
+    if not isinstance(asset, dict) or not isinstance(info, dict):
+        raise ValueError('The normal eight-bit clip could not be inspected')
+    relative = asset.get('file')
+    if not isinstance(relative, str) or not relative or Path(relative).is_absolute():
+        raise ValueError('The lossless processing clip has no registered file')
+    root = Path(input_root).resolve(strict=True)
+    source = root / relative
+    if source.is_symlink():
+        raise ValueError('The registered processing clip is a link')
+    path = source.resolve(strict=True)
+    if not path.is_relative_to(root) or not path.is_file() or path.suffix.lower() != '.mkv':
+        raise ValueError('The registered processing clip is unavailable')
+    if not isinstance(info.get('path'), str) or Path(info['path']).resolve(strict=True) != path:
+        raise ValueError('The native editor resolved a different processing clip')
+    preview_file = asset.get('preview_file')
+    if asset.get('preview_status') != 'ready' or not isinstance(preview_file, str) or not preview_file:
+        raise ValueError('The normal playback preview is not ready')
+    preview = asset.get('preview_url')
+    parsed = urlsplit(preview) if isinstance(preview, str) else None
+    query = parse_qs(parsed.query) if parsed else {}
+    preview_path = Path(preview_file)
+    if (not parsed or parsed.path != '/view' or parsed.netloc or not preview.startswith('/view?')
+            or preview_path.is_absolute() or query.get('filename') != [preview_path.name]
+            or query.get('subfolder') != [preview_path.parent.as_posix()] or query.get('type') != ['input']):
+        raise ValueError('The normal playback preview has no local URL')
+    if any(type(info.get(key)) is not int or info[key] != manifest[expected]
+           for key, expected in (('width', 'width'), ('height', 'height'))):
+        raise ValueError('The inspected processing clip has a different raster')
+    if type(info.get('frames')) is not int or info['frames'] != len(manifest['frames']) or info.get('kind') != 'video':
+        raise ValueError('The inspected processing clip has a different frame count')
+    fps = info.get('fps')
+    rate = manifest['frameRate']
+    expected_fps = rate['numerator'] / rate['denominator']
+    if type(fps) not in (int, float) or not math.isfinite(fps) or abs(fps - expected_fps) > .001:
+        raise ValueError('The inspected processing clip has a different frame rate')
+    duration = info.get('duration')
+    if duration is not None and (type(duration) not in (int, float) or not math.isfinite(duration)
+                                 or abs(duration - len(manifest['frames']) / expected_fps) > 1 / expected_fps + .002):
+        raise ValueError('The inspected processing clip has a different duration')
+    return info
 _HEX64 = re.compile(r"[0-9a-f]{64}\Z")
 _BROKER_PATH = re.compile(r"/studio-bridge/[0-9a-f]{32}\Z")
 
@@ -351,6 +395,23 @@ def _grant(value, origin, broker):
         "source": capabilities["source"], "transfer": capabilities["transfer"]}}
     if capabilities.get("renew") is True:
         context["capabilities"]["renew"] = True
+    if 'sdr32ImageReturn' in capabilities and type(capabilities['sdr32ImageReturn']) is not bool:
+        raise web.HTTPBadGateway(text='Invalid SDR float image capability')
+    if capabilities.get('sdr32ImageReturn') is True:
+        context['capabilities']['sdr32ImageReturn'] = True
+    if 'nativeVideoReturn' in capabilities and type(capabilities['nativeVideoReturn']) is not bool:
+        raise web.HTTPBadGateway(text='Invalid native video return capability')
+    if capabilities.get('nativeVideoReturn') is True:
+        context['capabilities']['nativeVideoReturn'] = True
+    if 'nativeStillReturn' in capabilities and type(capabilities['nativeStillReturn']) is not bool:
+        raise web.HTTPBadGateway(text='Invalid native still return capability')
+    if capabilities.get('nativeStillReturn') is True:
+        context['capabilities']['nativeStillReturn'] = True
+    transfer_precision = value.get('transferPrecision')
+    if transfer_precision is not None:
+        if type(transfer_precision) is not str or transfer_precision not in {'sdr8', 'prores12', 'float32'}:
+            raise web.HTTPBadGateway(text='Invalid AE transfer precision')
+        context['transferPrecision'] = transfer_precision
     for name in ("range", "source"):
         item = value.get(name)
         if isinstance(item, dict):
@@ -469,7 +530,7 @@ class StudioSessions:
                                           headers={TOKEN_HEADER: session.token}, json=body,
                                           allow_redirects=False) as response:
                     if response.status < 200 or response.status >= 300:
-                        if response.status in (401, 403, 410):
+                        if response.status in (401, 403, 404, 410):
                             raise web.HTTPGone(text="Broker authority is unavailable or expired")
                         raise web.HTTPBadGateway(text="Broker declined the Studio request")
                     return await _bounded_json(response.content)
@@ -588,13 +649,18 @@ class StudioSessions:
             raise web.HTTPBadGateway(text="Local Studio source transfer failed")
 
     async def stage_source(self, session, data):
+        if isinstance(data, dict) and "nativeVideo" in data:
+            return await self.stage_native_video(session, data)
         manifest = float_io.validate_manifest(data.get("manifest", data))
+        still = self.validate_native_still_descriptor(data["nativeStill"], manifest) if "nativeStill" in data else None
         input_root, _ = self.roots()
         wire_bytes = sum(frame["byteLength"] for frame in manifest["frames"])
         decoded_bytes = manifest["width"] * manifest["height"] * 16 * len(manifest["frames"])
         # Raw staging plus FLOAT EXR cache and the existing native uploader's
         # own copy. Admission counts unwritten reservations from other sessions.
         budget = wire_bytes + 2 * (decoded_bytes + SOURCE_FRAME_OVERHEAD * len(manifest["frames"])) + SOURCE_DISK_HEADROOM
+        if still:
+            budget += 2 * still["file"]["byteLength"]
         free = shutil.disk_usage(input_root).free
         if free < budget + sum(self._source_reservations.values()):
             raise web.HTTPInsufficientStorage(text=f"Studio source needs {budget / 2**30:.1f} GiB free input disk including native cache and safety headroom")
@@ -607,6 +673,239 @@ class StudioSessions:
             self._source_reservations.pop(session.id, None)
 
     @staticmethod
+    def validate_native_still_descriptor(value, manifest):
+        """Admit one hashed AE Render Queue still beside its captured FLOAT frame."""
+        from fractions import Fraction
+        fields={"schemaVersion","kind","profile","file","width","height","frameRate","sourceStart","sourceColour",
+                "sourceBitDepth","transferBitDepth","storageBitDepth","codec","hasAlpha","requestedPrecision","preserveRGBQualified"}
+        if not isinstance(value,dict) or set(value)!=fields or value.get('schemaVersion')!=2 or value.get('kind')!='native_still':
+            raise ValueError('Invalid native AE still descriptor')
+        file=value['file'];rate=value['frameRate'];start=value['sourceStart']
+        profiles={'png8':('sdr8',8,'png'),'png16':('prores12',16,'png'),'exr32':('float32',32,'exr')}
+        selected=profiles.get(value['profile']) if type(value['profile']) is str else None
+        if (selected is None or (value['requestedPrecision'],value['transferBitDepth'],value['codec'])!=selected
+                or value['storageBitDepth']!=selected[1] or value['hasAlpha'] is not True
+                or value['preserveRGBQualified'] is not False
+                or value['sourceBitDepth']!=manifest['sourceBitDepth'] or manifest['sampleType']!='float32'
+                or manifest['sourceBitDepth'] not in (16,32) or manifest['alphaAssociation']!='straight'
+                or len(manifest['frames'])!=1 or (value['width'],value['height'])!=(manifest['width'],manifest['height'])
+                or value['sourceColour']!=manifest['colour'] or rate!=manifest['frameRate']
+                or start!=manifest.get('sourceStart') or not isinstance(start,dict)
+                or set(start)!={'numerator','denominator'} or type(start['numerator']) is not int
+                or type(start['denominator']) is not int or start['denominator']<=0
+                or not isinstance(rate,dict) or set(rate)!={'numerator','denominator'}
+                or type(rate['numerator']) is not int or type(rate['denominator']) is not int
+                or rate['denominator']<=0 or not 0<Fraction(rate['numerator'],rate['denominator'])<=1000
+                or not isinstance(file,dict) or set(file)!={'filename','sha256','byteLength'}
+                or not re.fullmatch(r'native-still-'+value['profile']+r'_[0-9]{5,6}\.'+selected[2],str(file['filename']))
+                or not re.fullmatch(r'[0-9a-f]{64}',str(file['sha256']))
+                or type(file['byteLength']) is not int or not 64<=file['byteLength']<=512*1024**2):
+            raise ValueError('Native AE PNG16 source identity or precision changed')
+        return value
+
+    @staticmethod
+    def verify_native_png16(path, frame_path, manifest):
+        """Require AE's real PNG16 codes to match the selected numeric SDR view."""
+        import numpy as np
+        import OpenImageIO as oiio
+        from .studio_processing import encode_sdr8
+        with Path(path).open('rb') as stream:
+            header=stream.read(29)
+        if (header[:8]!=b'\x89PNG\r\n\x1a\n' or header[12:16]!=b'IHDR'
+                or int.from_bytes(header[8:12],'big')!=13
+                or (int.from_bytes(header[16:20],'big'),int.from_bytes(header[20:24],'big'))
+                    !=(manifest['width'],manifest['height']) or header[24:29]!=bytes((16,6,0,0,0))):
+            raise ValueError('AE did not render the requested RGBA PNG16')
+        reader=oiio.ImageInput.open(str(path))
+        if reader is None:raise ValueError('AE PNG16 could not be decoded')
+        try:
+            spec=reader.spec();actual=reader.read_image(format=oiio.UINT16)
+        finally:reader.close()
+        if (spec.format!=oiio.UINT16 or spec.nchannels!=4 or actual.shape!=(manifest['height'],manifest['width'],4)
+                or actual.dtype!=np.uint16):
+            raise ValueError('AE PNG16 storage or channel layout changed')
+        raw=np.fromfile(frame_path,dtype='<f4')
+        if raw.size!=manifest['width']*manifest['height']*4:raise ValueError('Captured FLOAT source changed size')
+        rgba=raw.reshape(manifest['height'],manifest['width'],4)
+        if not np.isfinite(rgba).all():raise ValueError('Captured FLOAT source has non-finite samples')
+        expected16=np.rint(np.clip(rgba.astype(np.float64),0,1)*65535).astype(np.uint16)
+        delta=np.abs(actual.astype(np.int32)-expected16.astype(np.int32))
+        if np.any(delta>2):raise ValueError('AE PNG16 differs from the selected eight-bit numeric source; Preserve RGB is not verified')
+        return encode_sdr8(rgba,derived=True,processor=None)
+
+    @staticmethod
+    def verify_native_still(path, frame_path, manifest, profile):
+        if profile=='png16':return StudioSessions.verify_native_png16(path,frame_path,manifest)
+        import numpy as np
+        import OpenImageIO as oiio
+        from .studio_processing import encode_sdr8
+        raw=np.fromfile(frame_path,dtype='<f4')
+        if raw.size!=manifest['width']*manifest['height']*4:raise ValueError('Captured AE FLOAT frame changed size')
+        rgba=raw.reshape(manifest['height'],manifest['width'],4)
+        if not np.isfinite(rgba).all():raise ValueError('Captured AE FLOAT frame has non-finite pixels')
+        reader=oiio.ImageInput.open(str(path))
+        if reader is None:raise ValueError('AE Render Queue still could not be decoded')
+        try:
+            spec=reader.spec()
+            if (spec.width,spec.height,spec.nchannels)!=(manifest['width'],manifest['height'],4):
+                raise ValueError('AE Render Queue still changed the source raster or channels')
+            if profile=='png8':
+                with Path(path).open('rb') as stream:header=stream.read(29)
+                if (header[:8]!=b'\x89PNG\r\n\x1a\n' or header[12:16]!=b'IHDR'
+                        or header[24:29]!=bytes((8,6,0,0,0)) or spec.format!=oiio.UINT8):
+                    raise ValueError('AE did not render an RGBA PNG8')
+                actual=reader.read_image(format=oiio.UINT8)
+            elif profile=='exr32':
+                if spec.format!=oiio.FLOAT or set(spec.channelnames)!={'R','G','B','A'}:
+                    raise ValueError('AE did not render an RGBA FLOAT32 EXR')
+                actual=reader.read_image(format=oiio.FLOAT)
+                actual=actual[..., [list(spec.channelnames).index(name) for name in ('R','G','B','A')]]
+            else:raise ValueError('Unknown AE still profile')
+        finally:reader.close()
+        if profile=='png8':
+            expected=encode_sdr8(rgba,derived=True,processor=None)
+            if actual.dtype!=np.uint8 or actual.shape!=expected.shape or np.any(
+                    np.abs(actual.astype(np.int16)-expected.astype(np.int16))>1):
+                raise ValueError('AE PNG8 differs from the selected eight-bit numeric source; Preserve RGB is not verified')
+            return expected
+        if actual.dtype!=np.float32 or actual.shape!=rgba.shape or not np.isfinite(actual).all():
+            raise ValueError('AE EXR32 has invalid FLOAT pixels')
+        return None
+
+    @staticmethod
+    def validate_native_video(path, descriptor):
+        """Verify the native ProRes storage and every frame timestamp."""
+        from fractions import Fraction
+        import av
+        rate = descriptor["frameRate"]
+        expected_rate = Fraction(rate["numerator"], rate["denominator"])
+        with av.open(str(path)) as movie:
+            if len(movie.streams.video) != 1:
+                raise ValueError("The native source has an unexpected video track count")
+            stream = movie.streams.video[0]
+            codec = stream.codec_context
+            if (codec.name != "prores" or codec.codec_tag not in {"ap4h", "ap4x"}
+                    or codec.profile not in {"4444", "XQ"} or stream.average_rate != expected_rate
+                    or (stream.width, stream.height) != (descriptor["width"], descriptor["height"])):
+                raise ValueError("The native source is not the requested ProRes4444 range")
+            first_time, count = None, 0
+            for frame in movie.decode(video=0):
+                if count >= descriptor["frameCount"] or frame.format.name not in {"yuv444p12le", "yuva444p12le"}:
+                    raise ValueError("The native source has extra frames or reduced precision")
+                if (frame.width, frame.height) != (descriptor["width"], descriptor["height"]):
+                    raise ValueError("The native source raster changed")
+                if type(frame.pts) is not int or frame.time_base is None:
+                    raise ValueError("The native source frame clock is missing")
+                instant = frame.pts * frame.time_base
+                if first_time is None:
+                    first_time = instant
+                if instant != first_time + Fraction(count, 1) / expected_rate:
+                    raise ValueError("The native source frame cadence changed")
+                count += 1
+            if count != descriptor["frameCount"]:
+                raise ValueError("The native source has missing frames")
+
+    async def stage_native_video(self, session, data):
+        """Keep the AE MOV as the registered processing original; preview separately."""
+        from fractions import Fraction
+        descriptor = data.get("nativeVideo")
+        if not isinstance(descriptor, dict) or set(descriptor) not in ({"schemaVersion", "kind", "file", "width", "height", "frameCount", "frameRate", "sourceColour", "sourceBitDepth", "transferBitDepth", "codec", "hasAlpha"}, {"schemaVersion", "kind", "file", "width", "height", "frameCount", "frameRate", "sourceStart", "sourceColour", "sourceBitDepth", "transferBitDepth", "codec", "hasAlpha"}):
+            raise ValueError("Invalid native source descriptor")
+        file = descriptor["file"]
+        rate = descriptor["frameRate"]
+        if (descriptor["schemaVersion"] != 2 or descriptor["kind"] != "native_video" or descriptor["codec"] != "prores4444"
+                or descriptor["transferBitDepth"] != 12 or descriptor["sourceBitDepth"] not in (16, 32)
+                or type(descriptor["hasAlpha"]) is not bool
+                or not isinstance(file, dict) or set(file) != {"filename", "byteLength", "sha256"}
+                or file["filename"] != "source.mov" or type(file["byteLength"]) is not int
+                or not 8 <= file["byteLength"] <= 2 * 1024**3 or not re.fullmatch(r"[0-9a-f]{64}", str(file["sha256"]))
+                or type(descriptor["width"]) is not int or type(descriptor["height"]) is not int
+                or not 1 <= descriptor["width"] <= 16384 or not 1 <= descriptor["height"] <= 16384
+                or descriptor["width"] * descriptor["height"] > 16777216
+                or type(descriptor["frameCount"]) is not int or not 1 <= descriptor["frameCount"] <= 10000
+                or not isinstance(rate, dict) or set(rate) != {"numerator", "denominator"}
+                or type(rate["numerator"]) is not int or type(rate["denominator"]) is not int or rate["denominator"] <= 0
+                or not 0 < Fraction(rate["numerator"], rate["denominator"]) <= 1000
+                or not isinstance(descriptor["sourceColour"], dict)):
+            raise ValueError("Invalid native ProRes range or file identity")
+        start = descriptor.get("sourceStart")
+        if start is not None and (not isinstance(start, dict) or set(start) != {"numerator", "denominator"}
+                                  or type(start["numerator"]) is not int or type(start["denominator"]) is not int
+                                  or start["denominator"] <= 0):
+            raise ValueError("Invalid native source start time")
+        profile = data.get("profile")
+        if descriptor["sourceColour"].get("encoding") == "ae_project_icc":
+            if (not isinstance(profile, dict) or set(profile) != {"filename", "byteLength", "sha256"}
+                    or profile.get("filename") != "source.icc" or profile.get("sha256") != descriptor["sourceColour"].get("profileSha256")
+                    or type(profile.get("byteLength")) is not int or not 128 <= profile["byteLength"] <= 1024*1024):
+                raise ValueError("Native source ICC profile is missing")
+        elif profile is not None:
+            raise ValueError("Unexpected native source ICC profile")
+        input_root, _ = self.roots()
+        budget = file["byteLength"] * 2 + SOURCE_DISK_HEADROOM
+        if shutil.disk_usage(input_root).free < budget + sum(self._source_reservations.values()):
+            raise web.HTTPInsufficientStorage(text="The native MOV needs space for its registered original and browser preview")
+        self._source_reservations[session.id] = budget
+        try:
+            parent = input_root.absolute() / "ComfyLink"
+            with float_io._locked_parents(input_root.absolute()):
+                parent.mkdir(exist_ok=True)
+            folder = parent / session.id
+            with float_io._locked_parents(parent):
+                folder.mkdir(exist_ok=False)
+            try:
+                movie = folder / "source.mov"
+                await self.download(session, "source.mov", movie, file)
+                if profile:
+                    await self.download(session, "source.icc", folder / "source.icc", profile)
+                await asyncio.to_thread(self.validate_native_video, movie, descriptor)
+                self.active(session)
+                form = aiohttp.FormData()
+                with movie.open("rb") as stream:
+                    form.add_field("file", stream, filename="source.mov", content_type="video/quicktime")
+                    timeout = min(1800, 180 + file["byteLength"] / (16 * 1024**2))
+                    async with aiohttp.ClientSession(trust_env=False, timeout=aiohttp.ClientTimeout(total=timeout, connect=3, sock_read=180)) as client:
+                        async with client.post(session.origin + "/zura/studio/upload?kind=video", data=form,
+                                               headers={"Origin": session.origin}, allow_redirects=False) as response:
+                            if response.status != 200:
+                                raise ValueError("Native Studio movie import unavailable")
+                            asset = await _bounded_json(response.content)
+                self.active(session)
+                if asset.get("sha") != file["sha256"] or not _HEX32.fullmatch(str(asset.get("id", ""))):
+                    raise ValueError("Studio registered different source movie bytes")
+                deadline = time.monotonic() + timeout
+                while asset.get("preview_status") != "ready":
+                    if asset.get("preview_status") == "error" or time.monotonic() >= deadline:
+                        raise ValueError("Native movie preview failed; the original remains registered")
+                    await asyncio.sleep(.1)
+                    async with aiohttp.ClientSession(trust_env=False, timeout=aiohttp.ClientTimeout(total=30, connect=3)) as client:
+                        async with client.get(session.origin + "/zura/studio/assets/" + asset["id"] + "/preview",
+                                              headers={"Origin": session.origin}, allow_redirects=False) as response:
+                            if response.status != 200:
+                                raise ValueError("Native movie preview status unavailable")
+                            asset = await _bounded_json(response.content)
+                async with aiohttp.ClientSession(trust_env=False, timeout=aiohttp.ClientTimeout(total=30, connect=3)) as client:
+                    async with client.post(session.origin + "/zura/studio/assets/" + asset["id"] + "/ripple",
+                                           json={}, headers={"Origin": session.origin}, allow_redirects=False) as response:
+                        if response.status != 200:
+                            raise ValueError("Native movie editor source unavailable")
+                        info = await _bounded_json(response.content)
+                if not isinstance(info, dict) or not isinstance(info.get("path"), str):
+                    raise ValueError("Native movie editor did not confirm its original")
+                info["media_url"] = asset["preview_url"]
+                return {"sourceTransfer": descriptor, "studioAsset": asset, "mediaInfo": info,
+                        "width": descriptor["width"], "height": descriptor["height"], "frameCount": descriptor["frameCount"],
+                        "fps": float(Fraction(rate["numerator"], rate["denominator"])),
+                        "precision": {"sampleType": "video", "sourceBitDepth": descriptor["sourceBitDepth"], "transferBitDepth": 12},
+                        "colour": descriptor["sourceColour"]}
+            except BaseException:
+                with float_io._locked_parents(parent):
+                    shutil.rmtree(folder)
+                raise
+        finally:
+            self._source_reservations.pop(session.id, None)
+
+    @staticmethod
     def check_stream_memory(frame_bytes):
         needed = max(2 * 1024**3, frame_bytes * 4) + SOURCE_SYSTEM_MEMORY_HEADROOM
         if float_io.available_memory_bytes() < needed:
@@ -614,10 +913,18 @@ class StudioSessions:
 
     async def _stage_source_reserved(self, session, data):
         manifest = float_io.validate_manifest(data.get("manifest", data))
+        native_still = self.validate_native_still_descriptor(data["nativeStill"], manifest) if "nativeStill" in data else None
+        if native_still and data.get('sourceTransfer')!=native_still:
+            raise ValueError('Native AE still transfer descriptor changed')
         # Only the authenticated local broker response supplies conversion
         # authority. Browser POST fields never enter this descriptor.
-        from .studio_processing import validate_processing_input
+        from .studio_processing import validate_processing_input, verified_linear_srgb_icc
         processing = validate_processing_input(data.get("processingInput"), manifest)
+        if native_still and native_still['codec']=='png' and (not processing or processing['conversion']!='raw_numeric_to_sdr8'):
+            raise ValueError('Native PNG source needs the verified eight-bit numeric model view')
+        if native_still and native_still['profile']=='exr32' and processing is not None and processing['conversion'] not in {
+                'verified_icc_to_sdr8','verified_icc_numeric_to_sdr8','verified_ocio_to_sdr8','verified_srgb_to_sdr8'}:
+            raise ValueError('The FLOAT32 AE source needs a separately verified SDR model view')
         expected = [{key: frame[key] for key in ("filename", "byteLength", "sha256")} for frame in manifest["frames"]]
         if "files" in data and data["files"] != expected:
             raise ValueError("Source file list differs from manifest")
@@ -635,6 +942,11 @@ class StudioSessions:
         with float_io._locked_parents(input_root.absolute()):
             parent.mkdir(exist_ok=True)
         folder = parent / session.id
+        if folder.exists() and not folder.is_symlink():
+            retained = float_io.validate_manifest(json.loads(float_io._read_private(folder / "manifest.json", 8*1024*1024)))
+            if retained != manifest:
+                raise ValueError("The staged source belongs to a different capture")
+            return await self.finish_staged_source(session, folder, manifest, native_still, processing)
         temporary = parent / (".studio-" + secrets.token_hex(16))
         with float_io._locked_parents(parent):
             if folder.exists() or folder.is_symlink():
@@ -646,12 +958,19 @@ class StudioSessions:
             with float_io._locked_parents(temporary):
                 for entry in expected:
                     await self.download(session, entry["filename"], temporary / entry["filename"], entry)
+                if native_still:
+                    await self.download(session,native_still['file']['filename'],temporary/native_still['file']['filename'],native_still['file'])
                 if profile:
                     await self.download(session, "source.icc", temporary / "source.icc", profile)
                     encoded_profile = float_io._read_private(temporary / "source.icc", 4 * 1024 * 1024)
                     if (encoded_profile[36:40] != b"acsp"
                             or int.from_bytes(encoded_profile[:4], "big") != len(encoded_profile)):
                         raise ValueError("Invalid project ICC profile header")
+                    if processing and processing['conversion'] in {'verified_icc_to_sdr8', 'verified_icc_numeric_to_sdr8'}:
+                        verified_linear_srgb_icc(encoded_profile)
+                if native_still:
+                    await asyncio.to_thread(self.verify_native_still,temporary/native_still['file']['filename'],
+                                            temporary/manifest['frames'][0]['filename'],manifest,native_still['profile'])
                 float_io._exclusive_write(temporary / "manifest.json", float_io.canonical_manifest_bytes(manifest))
                 if processing:
                     float_io._exclusive_write(temporary / "processing-input.json", float_io.canonical_manifest_bytes(processing))
@@ -675,6 +994,9 @@ class StudioSessions:
             if temporary.exists():
                 with float_io._locked_parents(parent):
                     shutil.rmtree(temporary)
+        return await self.finish_staged_source(session, folder, manifest, native_still, processing)
+
+    async def finish_staged_source(self, session, folder, manifest, native_still, processing):
         rate = manifest["frameRate"]
         result = {"floatManifest": {"filename": "manifest.json", "subfolder": "ComfyLink/" + session.id, "type": "input"},
                   "precision": {"sampleType": manifest["sampleType"], "sourceBitDepth": manifest["sourceBitDepth"]},
@@ -683,14 +1005,28 @@ class StudioSessions:
                   "fps": rate["numerator"] / rate["denominator"], "manifest": manifest}
         try:
             self.active(session)
-            imported = await (self.importer or self.native_import)(session, folder, manifest)
+            imported = await (self.native_still_import(session, folder, manifest, native_still, processing)
+                              if native_still else (self.importer or self.native_import)(session, folder, manifest))
             result.update({key: value for key, value in imported.items() if key in {"studioAsset", "mediaInfo", "stills", "nativeInputColour", "resolved_colour"}})
+            if native_still:
+                result["sourceTransfer"] = native_still
+                result["precision"] = {"sampleType": {'png8':'uint8','png16':'uint16_png','exr32':'float32'}[native_still['profile']],
+                                       "sourceBitDepth": manifest["sourceBitDepth"],
+                                       "transferBitDepth": native_still['transferBitDepth'],
+                                       "storageBitDepth": native_still['storageBitDepth']}
             if processing:
-                model_input = imported.get('processingInput', imported)
+                # The PNG16 remains the original. Models receive the separately
+                # verified SDR8 copy, never an implicit decode of PNG16.
+                model_imported = imported.get('processingInput', imported)
+                model_input = model_imported.get('processingInput', model_imported)
                 result["processingInput"] = {**processing,
                     "precision": {"sampleType": "uint8", "sourceBitDepth": 8},
                     **{key: value for key, value in model_input.items() if key in {"studioAsset", "mediaInfo", "stills"}}}
+                if processing['conversion'] == 'raw_numeric_to_sdr8':
+                    result['processingInput']['returnPolicy'] = 'unqualified_raw_numeric'
         except Exception:
+            if native_still:
+                raise
             # Media decoders use several library-specific exception classes.
             # Keep the verified raw source available without logging filenames.
             result["nativeImport"] = {"status": "unavailable", "diagnostic":
@@ -716,6 +1052,63 @@ class StudioSessions:
                 raise web.HTTPUnprocessableEntity(text="Source validation failed; the AE source is retained")
             self.active(session)
             return web.json_response(session.source)
+
+    async def model_source(self, request):
+        """Separate working movie; original source/return authority is unchanged."""
+        import copy
+        from .studio_rate import reinterpret_movie
+        session=self.authorize(request)
+        if not session.context.get('capabilities',{}).get('source'):raise web.HTTPForbidden(text='This session has no source authority')
+        body=await _bounded_json(request.content,4096)
+        if body != {"frameRate":24}:
+            raise web.HTTPBadRequest(text="Choose a supported native model frame rate")
+        async with session.lock:
+            self.active(session)
+            if not session.source:raise web.HTTPConflict(text="Load the AE source first")
+            cached=getattr(session,'model_sources',{})
+            if 24 in cached:return web.json_response(cached[24])
+            source=copy.deepcopy(session.source)
+            rate=(source.get('manifest') or source.get('sourceTransfer') or {}).get('frameRate')
+            if not rate:raise web.HTTPConflict(text="The original AE frame rate is unavailable")
+            if rate['numerator']==24*rate['denominator']:return web.json_response(source)
+            model=source.get('processingInput',source)
+            asset=model.get('studioAsset')
+            if not asset or not isinstance(asset.get('file'),str):raise web.HTTPConflict(text="The AE working movie is unavailable")
+            root,_=self.roots();root=root.absolute()
+            path=(root/asset['file']).resolve()
+            if not path.is_relative_to(root.resolve()) or not path.is_file():raise web.HTTPConflict(text="The working movie is unavailable")
+            folder=root/'ComfyLink'/session.id
+            movie=folder/'model-clock-24.mkv'
+            try:
+                await asyncio.to_thread(reinterpret_movie,path,movie,rate,24,source['frameCount'])
+                self.active(session)
+                form=aiohttp.FormData()
+                with movie.open('rb') as stream:
+                    form.add_field('file',stream,filename=movie.name,content_type='video/x-matroska')
+                    async with aiohttp.ClientSession(trust_env=False,timeout=aiohttp.ClientTimeout(total=600,connect=3)) as client:
+                        async with client.post(session.origin+'/zura/studio/upload?kind=video',data=form,headers={'Origin':session.origin},allow_redirects=False) as response:
+                            if response.status!=200:raise ValueError('Could not register the model-rate movie')
+                            prepared=await _bounded_json(response.content)
+                        if not _HEX32.fullmatch(str(prepared.get('id',''))):raise ValueError('Invalid working movie')
+                        deadline=time.monotonic()+300
+                        while prepared.get('preview_status')!='ready':
+                            if prepared.get('preview_status')=='error' or time.monotonic()>deadline:raise ValueError('The working movie preview could not be prepared')
+                            self.active(session);await asyncio.sleep(.2)
+                            async with client.get(session.origin+'/zura/studio/assets/'+prepared['id']+'/preview',headers={'Origin':session.origin},allow_redirects=False) as response:
+                                if response.status!=200:raise ValueError('Working movie preview unavailable')
+                                prepared=await _bounded_json(response.content)
+                        async with client.post(session.origin+'/zura/studio/assets/'+prepared['id']+'/ripple',json={},headers={'Origin':session.origin},allow_redirects=False) as response:
+                            if response.status!=200:raise ValueError('Working movie metadata unavailable')
+                            info=await _bounded_json(response.content)
+                info['media_url']=prepared.get('preview_url',prepared.get('url',''))
+                model.update(studioAsset=prepared,mediaInfo=info,fps=24)
+                source['modelFrameRate']={'numerator':24,'denominator':1}
+                source['fps']=24
+                self.active(session)
+                cached[24]=source;session.model_sources=cached
+                return web.json_response(source)
+            except (ValueError,OSError) as error:
+                raise web.HTTPUnprocessableEntity(text=str(error)) from None
 
     async def retained_images(self, request):
         from .studio_recovery import retained_images, MAX_HISTORY
@@ -753,7 +1146,12 @@ class StudioSessions:
         self.active(session)
         from . import display_view
         try:
-            result = await asyncio.to_thread(display_view.describe, request.query.get("config", ""))
+            colour = session.source.get('colour') if session.source else None
+            if colour is None:
+                data = await self.broker_json(session, '/source')
+                colour = float_io.validate_manifest(data.get('manifest', data))['colour']
+                self.active(session)
+            result = await asyncio.to_thread(display_view.describe, request.query.get("config", ""), source_colour=colour)
             self.active(session)
             return web.json_response(result, headers={"Cache-Control": "no-store"})
         except (ValueError, ImportError):
@@ -781,6 +1179,7 @@ class StudioSessions:
                     raise ValueError("Source file list differs from manifest")
                 payload = bytearray()
                 digest = hashlib.sha256()
+                profile_bytes = None
                 timeout = aiohttp.ClientTimeout(total=180, connect=3, sock_read=30)
                 async with aiohttp.ClientSession(trust_env=False, timeout=timeout) as client:
                     async with client.get(session.broker + "/source/" + expected["filename"],
@@ -793,22 +1192,142 @@ class StudioSessions:
                             if len(payload) > expected["byteLength"]:
                                 raise ValueError("Preview frame exceeds declared size")
                             digest.update(chunk)
+                    if manifest['colour']['encoding'] == 'ae_project_icc':
+                        profile = data.get('profile')
+                        if (not isinstance(profile, dict) or set(profile) != {'filename', 'byteLength', 'sha256'}
+                                or profile.get('filename') != 'source.icc' or type(profile.get('byteLength')) is not int
+                                or not 132 <= profile['byteLength'] <= 4 * 1024 * 1024
+                                or profile.get('sha256') != manifest['colour'].get('profileSha256')):
+                            raise ValueError('Captured ICC profile identity changed')
+                        async with client.get(session.broker + '/source/source.icc',
+                                              headers={TOKEN_HEADER: session.token}, allow_redirects=False) as response:
+                            if response.status != 200 or (response.content_length is not None and response.content_length != profile['byteLength']):
+                                raise ValueError('Captured ICC profile size changed')
+                            encoded = bytearray()
+                            async for chunk in response.content.iter_chunked(65536):
+                                self.active(session)
+                                encoded.extend(chunk)
+                                if len(encoded) > profile['byteLength']:
+                                    raise ValueError('Captured ICC profile exceeds its declared size')
+                        profile_bytes = bytes(encoded)
+                        if len(profile_bytes) != profile['byteLength'] or hashlib.sha256(profile_bytes).hexdigest() != profile['sha256']:
+                            raise ValueError('Captured ICC profile failed its integrity check')
                 if len(payload) != expected["byteLength"] or digest.hexdigest() != expected["sha256"]:
                     raise ValueError("Preview frame failed its integrity check")
                 from . import display_view
+                render_options = {'profile': profile_bytes} if profile_bytes is not None else {}
                 image = await asyncio.to_thread(display_view.render, payload, manifest,
-                    request.query.get("config", ""), request.query.get("display", ""), request.query.get("view", ""))
+                    request.query.get("config", ""), request.query.get("display", ""), request.query.get("view", ""), **render_options)
                 self.active(session)
                 headers = {"Cache-Control": "no-store", "X-Content-Type-Options": "nosniff"}
                 if manifest["sourceBitDepth"] == 8 and manifest["colour"]["encoding"] == "unknown":
                     headers["X-ComfyLink-Preview-Note"] = "Untagged 8-bit preview assumes sRGB"
                 elif manifest["colour"].get("management") == "ocio":
                     headers["X-ComfyLink-Preview-Note"] = "Preview uses the verified AE working space"
+                elif manifest['colour']['encoding'] == 'ae_project_icc':
+                    headers['X-ComfyLink-Preview-Note'] = 'Display-only preview uses the captured linear ICC profile'
                 return web.Response(body=image, content_type="image/png", headers=headers)
             except (ValueError, OSError, aiohttp.ClientError, asyncio.TimeoutError):
                 raise web.HTTPUnprocessableEntity(text="Display preview is unavailable for this source or colour space")
 
-    async def native_import(self, session, folder, manifest):
+    async def native_still_import(self, session, folder, manifest, descriptor, processing):
+        """Register the real AE still; numeric SDR copies remain separate."""
+        from PIL import Image
+        from importlib import import_module
+        original=folder/descriptor['file']['filename']
+        if hashlib.sha256(original.read_bytes()).hexdigest()!=descriptor['file']['sha256']:
+            raise ValueError('The AE Render Queue still changed after source verification')
+        if descriptor['profile']=='exr32':
+            await asyncio.to_thread(self.verify_native_still,original,folder/manifest['frames'][0]['filename'],manifest,'exr32')
+            # AE's EXR has no ComfyLink colour header. Keep its bytes as the
+            # original, then make a separately receipted FLOAT copy with only
+            # explicit interpretation metadata for the native HDR uploader.
+            colour=manifest['colour']
+            if colour.get('management')=='icc':
+                from .studio_processing import verified_linear_srgb_icc
+                profile=float_io._read_private(folder/'source.icc',4*1024*1024)
+                verified_linear_srgb_icc(profile)
+                upload_colour={'encoding':'scene_linear_rec709','sceneLinear':True}
+            else:
+                upload_colour=colour
+            tagged_dir=folder/('native-'+secrets.token_hex(16))
+            with float_io._locked_parents(folder):tagged_dir.mkdir()
+            tagged=tagged_dir/'000001.exr'
+            try:
+                import numpy as np
+                original_side={'schemaVersion':1,'storage':'float32','layout':'RGBA',
+                    'channelNames':['R','G','B','A'],'nonfinitePolicy':'reject',
+                    'colour':colour,'alphaAssociation':manifest['alphaAssociation'],
+                    'width':manifest['width'],'height':manifest['height'],
+                    'sha256':descriptor['file']['sha256']}
+                side_path=original.with_suffix(original.suffix+'.json')
+                if not side_path.exists():
+                    float_io._exclusive_write(side_path,float_io.canonical_manifest_bytes(original_side))
+                raw,_=await asyncio.to_thread(float_io.read_exr,original)
+                await asyncio.to_thread(float_io.write_exr,tagged,raw,colour=upload_colour,
+                                        storage='float32',alpha_association='straight')
+                decoded,_=await asyncio.to_thread(float_io.read_exr,tagged)
+                if not np.array_equal(decoded.view('<u4'),raw.view('<u4')):
+                    raise ValueError('The colour-tagged EXR changed the actual AE FLOAT pixels')
+                result=await self.native_import(session,folder,manifest,existing_exr=tagged)
+                if colour.get('management')=='icc':
+                    mapped=result['studioAsset'].get('nativeInputColour')
+                    if (not isinstance(mapped,dict) or mapped.get('encoding')!='scene_linear_rec709'
+                            or result['studioAsset'].get('resolved_colour')!='linear_rec709'):
+                        raise ValueError('The linear ICC EXR was registered with a different colour interpretation')
+                    result['nativeInputColour']=mapped;result['resolved_colour']='linear_rec709'
+                if processing is not None:
+                    result['processingInput']=await self.importer(session,folder,manifest) if self.importer else await self.native_import(session,folder,manifest,retain_source=False)
+                return result
+            except BaseException:
+                with float_io._locked_parents(folder):shutil.rmtree(tagged_dir,ignore_errors=True)
+                raise
+        model_pixels=await asyncio.to_thread(self.verify_native_still,original,
+            folder/manifest['frames'][0]['filename'],manifest,descriptor['profile'])
+        generated=folder/('native-'+secrets.token_hex(16)) if descriptor['profile']=='png16' else None
+        if generated:
+            with float_io._locked_parents(folder):generated.mkdir()
+        model=generated/'model-8bit.png' if generated else original
+        try:
+            if generated:await asyncio.to_thread(lambda:Image.fromarray(model_pixels,'RGBA').save(model))
+            async def upload(path):
+                self.active(session)
+                digest=hashlib.sha256(path.read_bytes()).hexdigest()
+                form=aiohttp.FormData()
+                with path.open('rb') as stream:
+                    form.add_field('file',stream,filename=path.name,content_type='image/png')
+                    timeout=min(1800,180+path.stat().st_size/(16*1024**2))
+                    async with aiohttp.ClientSession(trust_env=False,timeout=aiohttp.ClientTimeout(
+                            total=timeout,connect=3,sock_read=180)) as client:
+                        async with client.post(session.origin+'/zura/studio/upload?kind=image',data=form,
+                                               headers={'Origin':session.origin},allow_redirects=False) as response:
+                            if response.status!=200:raise ValueError('Native AE still upload unavailable')
+                            asset=await _bounded_json(response.content)
+                if (not isinstance(asset,dict) or asset.get('sha')!=digest or asset.get('asset_kind')!='image'
+                        or not _HEX32.fullmatch(str(asset.get('id','')))):
+                    raise ValueError('Studio registered different AE still bytes')
+                return asset
+            original_asset=await upload(original)
+            model_asset=await upload(model) if generated else original_asset
+            describe_media=import_module('..paintout.browser',__package__).describe_media
+            info=await asyncio.to_thread(describe_media,str(model.absolute()))
+            if (info.get('kind'),info.get('frames'),info.get('width'),info.get('height'))!=(
+                    'image',1,manifest['width'],manifest['height']):
+                raise ValueError('Studio model image changed the AE source raster')
+            input_root,_=self.roots()
+            def still(path):
+                relative=path.relative_to(Path(input_root).absolute())
+                return {'filename':path.name,'subfolder':relative.parent.as_posix(),'file':relative.as_posix(),
+                        'type':'input','width':manifest['width'],'height':manifest['height']}
+            return {'studioAsset':original_asset,'stills':{'first':still(original),'last':still(original)},
+                    'processingInput':{'studioAsset':model_asset,'mediaInfo':info,
+                                       'stills':{'first':still(model),'last':still(model)}}}
+        except BaseException:
+            if generated:
+                with float_io._locked_parents(folder):shutil.rmtree(generated,ignore_errors=True)
+            raise
+
+    async def native_import(self, session, folder, manifest, *, existing_exr=None, retain_source=True):
         """Use Studio's existing upload API; never manufacture asset records.
 
         Raw float authority is retained even when optional EXR support is absent.
@@ -824,13 +1343,21 @@ class StudioSessions:
         processing_path = folder / "processing-input.json"
         processing = validate_processing_input(json.loads(float_io._read_private(processing_path, 32768)), manifest) if processing_path.exists() else None
         processor = model_input_processor(processing)
-        retain_native = bool(processing and processing['conversion'] == 'verified_ocio_to_sdr8')
+        retain_native = bool(retain_source and existing_exr is None and processing and (processing['conversion'] == 'verified_ocio_to_sdr8' or processing['conversion'] in {'verified_icc_to_sdr8', 'verified_icc_numeric_to_sdr8'} and session.context.get('transferPrecision') == 'float32'))
         generated = folder / ("native-" + secrets.token_hex(16))
-        with float_io._locked_parents(folder):
-            generated.mkdir()
-        is_sdr8 = bool(processing) or (manifest["sourceBitDepth"] == 8 and manifest["colour"]["encoding"] == "unknown"
-                   and manifest["colour"]["sceneLinear"] is False and manifest["alphaAssociation"] == "straight")
+        if existing_exr is None:
+            with float_io._locked_parents(folder):
+                generated.mkdir()
+        is_sdr8 = existing_exr is None and (bool(processing) or (manifest["sourceBitDepth"] == 8 and manifest["colour"]["encoding"] == "unknown"
+                   and manifest["colour"]["sceneLinear"] is False and manifest["alphaAssociation"] == "straight"))
         native_colour=None
+        native_encoding_colour=manifest['colour']
+        if (not is_sdr8 or retain_native) and manifest['colour'].get('management')=='icc':
+            from .studio_processing import verified_linear_srgb_icc
+            verified_linear_srgb_icc(float_io._read_private(folder/'source.icc',4*1024*1024))
+            native_encoding_colour={'encoding':'scene_linear_rec709','sceneLinear':True}
+            native_colour={'encoding':'scene_linear_rec709','sceneLinear':True,'source':'declared_exr',
+                'sourceColourSha256':hashlib.sha256(float_io.canonical_manifest_bytes(native_encoding_colour)).hexdigest()}
         if (not is_sdr8 or retain_native) and manifest['colour'].get('management')=='ocio':
             from .display_view import _verified_ocio_source
             encoding=_verified_ocio_source(manifest['colour'])
@@ -864,6 +1391,7 @@ class StudioSessions:
                     stream.close()
 
         def encode(native=False):
+            if existing_exr is not None:return [existing_exr],None,None
             if is_sdr8 and not native:
                 from PIL import Image
                 from fractions import Fraction
@@ -881,6 +1409,16 @@ class StudioSessions:
                     with av.open(str(video), "w") as container:
                         stream = container.add_stream("ffv1", rate=rate)
                         stream.width, stream.height, stream.pix_fmt = manifest["width"], manifest["height"], "bgra"
+                        # Declare actual RGB packing and full numeric range,
+                        # not an inferred transfer function or colour gamut.
+                        stream.codec_context.colorspace = 0
+                        stream.codec_context.color_range = 2
+                        if processing and processing['conversion'] == 'raw_numeric_to_sdr8':
+                            # Define the explicitly chosen SDR8 copy's code-value
+                            # interpretation. This is not a source conversion:
+                            # encode_eight still receives no colour processor.
+                            stream.codec_context.color_trc = 13
+                            stream.codec_context.color_primaries = 1
                         for index, rgba in enumerate(float_io.iter_transfer(input_root, relative_manifest)):
                             self.active(session)
                             encoded = encode_eight(rgba)
@@ -904,7 +1442,7 @@ class StudioSessions:
                 if manifest["width"] * manifest["height"] * 16 * count > float_io.LEGACY_BATCH_BYTES:
                     self.check_stream_memory(rgba.nbytes)
                 path = generated / (f"{index + 1:06d}.exr")
-                float_io.write_exr(path, rgba, colour=manifest["colour"], storage="float32",
+                float_io.write_exr(path, rgba, colour=native_encoding_colour, storage="float32",
                                    alpha_association=manifest["alphaAssociation"])
                 paths.append(path)
             return paths, None, None
@@ -913,6 +1451,32 @@ class StudioSessions:
         self.active(session)
         asset = await upload(paths, "/zura/studio/upload?kind=" + ("video" if count > 1 else "image")
                              if is_sdr8 else "/zura/studio/hdr/exr-sequence")
+        if is_sdr8 and count > 1 and asset.get('preview_file'):
+            # Use the same registered browser-preview path as an ordinary
+            # uploaded editing codec. Never substitute that display-only
+            # derivative for the lossless source used by a model or editor.
+            original_identity = (asset.get('id'), asset.get('file'), asset.get('sha'))
+            if not _HEX32.fullmatch(str(asset.get('id', ''))):
+                raise ValueError('Normal playback preview has no registered asset identity')
+            deadline = time.monotonic() + min(1800, 180 + sum(path.stat().st_size for path in paths) / (16 * 1024**2))
+            while asset.get('preview_status') != 'ready':
+                self.active(session)
+                if asset.get('preview_status') == 'error' or time.monotonic() >= deadline:
+                    raise ValueError('The normal playback preview could not be prepared; lossless source retained')
+                await asyncio.sleep(.1)
+                endpoint = session.origin + '/zura/studio/assets/' + str(asset.get('id', '')) + '/preview'
+                async with aiohttp.ClientSession(trust_env=False, timeout=aiohttp.ClientTimeout(total=30, connect=3)) as client:
+                    async with client.get(endpoint, headers={'Origin': session.origin}, allow_redirects=False) as response:
+                        if response.status != 200:
+                            raise ValueError('Normal playback preview status is unavailable')
+                        refreshed = await _bounded_json(response.content)
+                if (refreshed.get('id'), refreshed.get('file'), refreshed.get('sha')) != original_identity:
+                    raise ValueError('Playback preview changed the registered processing asset')
+                asset = refreshed
+            preview_url = asset.get('preview_url')
+            if not isinstance(preview_url, str) or not preview_url.startswith('/') or preview_url.startswith('//'):
+                raise ValueError('Normal playback preview has no local display URL')
+            self.active(session)
         result = {"studioAsset": asset}
         if native_colour is not None and not retain_native:
             expected_space={'scene_linear_rec709':'linear_rec709'}.get(native_colour['encoding'],native_colour['encoding'])
@@ -926,6 +1490,7 @@ class StudioSessions:
                 stills[key] = {"filename": relative.name, "subfolder": relative.parent.as_posix(),
                                "file": relative.as_posix(), "type": "input", "width": manifest["width"], "height": manifest["height"]}
             result["stills"] = stills
+        raw_numeric_video = bool(processing and processing['conversion'] == 'raw_numeric_to_sdr8' and count > 1)
         try:
             if is_sdr8 and count > 1 and _HEX32.fullmatch(str(asset.get("id", ""))):
                 endpoint = session.origin + "/zura/studio/assets/" + asset["id"] + "/ripple"
@@ -941,8 +1506,15 @@ class StudioSessions:
                     describe_media = import_module("..paintout.browser", __package__).describe_media
                     result["mediaInfo"] = await asyncio.to_thread(describe_media,
                         str((first if first else paths[0].parent).absolute()))
-        except Exception:
-            pass
+        except Exception as error:
+            if raw_numeric_video:
+                raise ValueError('The normal eight-bit clip could not be inspected; the FLOAT source is retained') from error
+        if is_sdr8 and count > 1 and asset.get('preview_status') == 'ready' and asset.get('preview_url') and 'mediaInfo' in result:
+            # Paintout/camera read path from the lossless original, while their
+            # ordinary HTML video element plays the registered browser copy.
+            result['mediaInfo']['media_url'] = asset['preview_url']
+        if raw_numeric_video:
+            _require_raw_numeric_video_info(asset, result.get('mediaInfo'), manifest, input_root)
         if native_colour is not None and not retain_native and 'mediaInfo' in result:
             result['mediaInfo'].pop('colour_error',None)
             result['mediaInfo'].update(nativeInputColour=native_colour,resolved_colour=expected_space)
@@ -958,6 +1530,14 @@ class StudioSessions:
                 raise ValueError('The original EXR colour mapping differs from the captured AE identity.')
             result = {'studioAsset': native_asset, 'nativeInputColour': native_colour,
                       'resolved_colour': expected_space, 'processingInput': result}
+            def native_ref(path):
+                relative=path.relative_to(input_root.absolute())
+                return {'filename':path.name,'subfolder':relative.parent.as_posix(),'file':relative.as_posix(),'type':'input','width':manifest['width'],'height':manifest['height']}
+            result['stills']={'first':native_ref(native_paths[0]),'last':native_ref(native_paths[-1])}
+        if existing_exr is not None and not is_sdr8:
+            relative=existing_exr.relative_to(input_root.absolute())
+            frame={'filename':existing_exr.name,'subfolder':relative.parent.as_posix(),'file':relative.as_posix(),'type':'input','width':manifest['width'],'height':manifest['height']}
+            result['stills']={'first':frame,'last':frame}
         # Media-specific descriptors are obtained from the native API itself;
         # no fabricated duration or fake playable asset is returned.
         return result
@@ -984,6 +1564,8 @@ class StudioSessions:
         return path
 
     def prepare_result(self, session, body, *, source_manifest=None):
+        if body.get('kind') == 'native_video':
+            return self.prepare_direct_video_result(session, body, source_manifest=source_manifest)
         if set(body) - {"kind", "master", "preview", "original", "colour", "alpha", "width", "height", "frameCount", "fps", "precision"}:
             raise ValueError("Unsupported result descriptor fields")
         if not isinstance(body.get("kind", "float_sequence"), str) or body.get("kind", "float_sequence") not in {"image", "video", "float_sequence", "float_manifest", "hdr_sequence", "sequence", "alpha_extract"}:
@@ -1036,7 +1618,7 @@ class StudioSessions:
                 from fractions import Fraction
                 source = float_io.validate_manifest(source_manifest or session.source.get('manifest'))
                 frame_rate = Fraction(source['frameRate']['numerator'], source['frameRate']['denominator'])
-            path, storage, provenance = self.convert_master(path, body, frame_rate=frame_rate)
+            path, storage, provenance = self.convert_master(path, body, frame_rate=frame_rate, source_manifest=source if frame_rate is not None else None)
             if storage is not None:
                 original_descriptors[0]["storage"] = storage
         relative = path.relative_to(root.absolute()).as_posix()
@@ -1054,7 +1636,10 @@ class StudioSessions:
         for field_name, actual in (("width", manifest["width"]), ("height", manifest["height"]),
                                    ("frameCount", len(manifest["frames"])), ("colour", manifest["colour"]),
                                    ("alpha", manifest["alphaAssociation"])):
-            if field_name in body and body[field_name] != actual:
+            declared = body.get(field_name)
+            if field_name == 'colour' and provenance and provenance.get('kind') == 'sdr32_image' and declared == {'encoding':'srgb_display','sceneLinear':False}:
+                declared = {'encoding':'unknown','sceneLinear':False}
+            if field_name in body and declared != actual:
                 raise ValueError("Result declaration does not match actual master")
         rate = manifest["frameRate"]["numerator"] / manifest["frameRate"]["denominator"]
         if "fps" in body and body["fps"] != rate:
@@ -1085,7 +1670,43 @@ class StudioSessions:
                 "width": manifest["width"], "height": manifest["height"], "frameCount": len(files),
                 "fps": manifest["frameRate"]["numerator"] / manifest["frameRate"]["denominator"]}
 
-    def convert_master(self, path, body, *, frame_rate=None):
+    def prepare_direct_video_result(self, session, body, *, source_manifest=None):
+        """Publish the selected physical master without decoding into transfer frames."""
+        if session.context['capabilities'].get('nativeVideoReturn') is not True:
+            raise ValueError('Native video return is not available for this AE session')
+        if set(body) - {'kind', 'master'}:
+            raise ValueError('Native return takes only a selected output master')
+        path = self.resolve_master(body.get('master'))
+        source_video = session.source.get('sourceTransfer')
+        if isinstance(source_video, dict) and source_video.get('kind') == 'native_video':
+            source = source_video
+            source_hash = source['file']['sha256']
+            width, height, count, rate = source['width'], source['height'], source['frameCount'], source['frameRate']
+        else:
+            source = float_io.validate_manifest(source_manifest or session.source.get('manifest'))
+            source_hash = hashlib.sha256(float_io.canonical_manifest_bytes(source)).hexdigest()
+            width, height, count, rate = source['width'], source['height'], len(source['frames']), source['frameRate']
+        from .studio_direct_video import inspect_video_master, prepare_video_delivery
+        precision = session.context.get('transferPrecision')
+        if precision in {'sdr8', 'prores12'}:
+            _, output_root = self.roots()
+            path = prepare_video_delivery(path, output_root, precision=precision, width=width, height=height,
+                                          frame_count=count, frame_rate=rate)
+        first = _file_record(path, MAX_ORIGINAL_BYTES)
+        video = inspect_video_master(path, width=width, height=height, frame_count=count, frame_rate=rate)
+        if _file_record(path, MAX_ORIGINAL_BYTES, first[2])[1] != first[1]:
+            raise ValueError('Native video master changed during inspection')
+        session.result_files = [first]
+        session.original_files = []
+        session.download_capability = secrets.token_hex(32)
+        _, root = self.roots()
+        subfolder = path.parent.relative_to(root.absolute()).as_posix()
+        return {'schemaVersion': 2, 'instanceId': self.instance_id, 'adapterSessionId': session.id,
+                'downloadCapability': session.download_capability, 'kind': 'native_video',
+                'master': {'filename': path.name, 'subfolder': '' if subfolder == '.' else subfolder, 'type': 'output'},
+                'sourceSha256': source_hash, 'video': {**first[2], **video}}
+
+    def convert_master(self, path, body, *, frame_rate=None, source_manifest=None):
         """Decode a declared master and publish a separate verified float transfer.
 
         Only actual eight-bit SDR images/video enter the SDR decoder. A high
@@ -1118,7 +1739,22 @@ class StudioSessions:
                               "embeddedICC": False, "hdrMetadata": False, "transfer": transfer,
                               "primaries": "bt709" if transfer == "srgb" else "unspecified", "validatedFrameCount": 1}
             elif suffix == ".exr":
-                pixels, side = float_io.read_exr(path)
+                _, output_root = self.roots()
+                relative = path.relative_to(output_root.absolute())
+                product = len(relative.parts) >= 2 and relative.parts[:2] == ('ZURA STUDIO','image-layers')
+                if product:
+                    source = float_io.validate_manifest(source_manifest)
+                    pixels, side = float_io.read_image_layer_exr(path, output_root)
+                    if len(source['frames']) != 1 or (source['width'],source['height']) != (pixels.shape[1],pixels.shape[0]):
+                        raise ValueError('Use original image dimensions to return one frame to AE')
+                    if body.get('colour') != {'encoding':'srgb_display','sceneLinear':False}:
+                        raise ValueError('The image-layer colour declaration differs from its verified master')
+                    provenance = {'schemaVersion':1,'kind':'sdr32_image','sourceBitDepth':32,'embeddedICC':False,'hdrMetadata':False,
+                                  'transfer':'srgb','primaries':'bt709','validatedFrameCount':1,
+                                  'sourceManifestSha256':hashlib.sha256(float_io.canonical_manifest_bytes(source)).hexdigest(),
+                                  'receiptSha256':side['receiptSha256'],'sourceImageSha256':side['sourceImageSha256'],'productReceipt':side['productReceipt']}
+                else:
+                    pixels, side = float_io.read_exr(path)
                 pixels = pixels[None]
                 colour, alpha, depth = side["colour"], side["alphaAssociation"], 32
                 storage = side["storage"]
@@ -1400,6 +2036,9 @@ class StudioSessions:
         body = await _bounded_json(request.content, 65536)
         async with session.lock:
             self.active(session)
+            product = isinstance(body.get('master'),dict) and str(body['master'].get('subfolder','')).startswith('ZURA STUDIO/image-layers/')
+            if product and session.context['capabilities'].get('sdr32ImageReturn') is not True:
+                return web.json_response({'ok':False,'status':'pending','diagnostic':'Update ComfyLink to send float image-layer composites. Your result is retained.'},status=409)
             try:
                 source_manifest = session.source.get('manifest')
                 master = body.get('master')
@@ -1412,14 +2051,23 @@ class StudioSessions:
                     self.active(session)
                     source_manifest = float_io.validate_manifest(source_data.get('manifest', source_data))
                 descriptor = await asyncio.to_thread(self.prepare_result, session, body, source_manifest=source_manifest)
+            except web.HTTPGone:
+                # A restarted broker has lost this scoped authority. Do not
+                # misreport its missing source grant as invalid image pixels.
+                session.download_capability = ""
+                session.result_files.clear()
+                session.original_files.clear()
+                raise
             except Exception:
                 # Decode errors are returned without codec diagnostics, paths
                 # or capabilities; the original output is always retained.
                 session.download_capability = ""
                 session.result_files.clear()
                 session.original_files.clear()
-                return web.json_response({"ok": False, "status": "pending", "diagnostic":
-                    "Master validation failed or this format is unsupported. Save a ComfyLink float master; the result is retained."}, status=422)
+                product = isinstance(body.get('master'),dict) and str(body['master'].get('subfolder','')).startswith('ZURA STUDIO/image-layers/')
+                diagnostic = ('Image-layer master could not be verified. Recompose the layers after updating and choose original output dimensions before Send to AE. Your result is retained.' if product else
+                              'Master validation failed or this format is unsupported. Save a ComfyLink float master; the result is retained.')
+                return web.json_response({"ok": False, "status": "pending", "diagnostic":diagnostic}, status=422)
             try:
                 self.active(session)
                 response = await self.broker_json(session, "/result", descriptor)
@@ -1618,6 +2266,7 @@ def register(server, instance_id="", **options):
     server.routes.get(PREFIX + "/sessions/{id}")(service.get)
     server.routes.post(PREFIX + "/sessions/{id}/renew")(service.renew)
     server.routes.post(PREFIX + "/sessions/{id}/source")(service.source)
+    server.routes.post(PREFIX + "/sessions/{id}/model-source")(service.model_source)
     server.routes.post(PREFIX + "/sessions/{id}/retained-images")(service.retained_images)
     server.routes.get(PREFIX + "/sessions/{id}/display-config")(service.display_config)
     server.routes.get(PREFIX + "/sessions/{id}/display-frame")(service.display_frame)

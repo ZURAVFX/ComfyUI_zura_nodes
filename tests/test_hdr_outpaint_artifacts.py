@@ -17,7 +17,7 @@ class ArtifactTests(unittest.TestCase):
         self.root = Path(self.tmp.name)
         self.folder = self.root / 'genj' / 'hdr'
         self.folder.mkdir(parents=True)
-        self.hlg = self.folder / 'hdr_outpaint_abc_00001_.mp4'
+        self.hlg = self.folder / 'hdr_outpaint_abc_00001_.mov'
         self.preview = self.folder / 'hdr_outpaint_abc_preview_00001_.mp4'
         self.zip = self.folder / 'hdr_outpaint_abc.zip'
         self.hlg.write_bytes(b'video')
@@ -28,8 +28,7 @@ class ArtifactTests(unittest.TestCase):
         self.outputs = {'zura_hdr_save_video': {'images': [ref(self.hlg)]},
                         'zura_hdr_save_preview': {'images': [ref(self.preview)]},
                         'zura_hdr_archive': {'files': [ref(self.zip)]}}
-        self.metadata = {'streams': [{'pix_fmt': 'yuv420p10le', 'color_transfer': 'arib-std-b67',
-                                     'color_space': 'bt2020nc', 'color_primaries': 'bt2020'}]}
+        self.metadata = {'streams':[{'codec_name':'prores','codec_tag_string':'ap4h','pix_fmt':'yuv444p12le','color_transfer':'unknown'}]}
         self.video = patch.object(artifacts, 'inspect_video').start()
         self.probe = patch.object(artifacts.shutil, 'which', return_value='ffprobe').start()
         self.run = patch.object(artifacts.subprocess, 'run').start()
@@ -49,20 +48,20 @@ class ArtifactTests(unittest.TestCase):
         self.assertTrue(all(call.kwargs['expected_audio_tracks'] == 1 for call in self.video.call_args_list))
 
     def test_rejects_different_job_and_unexpected_path(self):
-        self.outputs['zura_hdr_save_video']['images'][0]['filename'] = '../hdr_outpaint_abc_00001_.mp4'
+        self.outputs['zura_hdr_save_video']['images'][0]['filename'] = '../hdr_outpaint_abc_00001_.mov'
         with self.assertRaisesRegex(ValueError, 'unexpected output path'): self.checked()
 
     def test_rejects_sdr_or_missing_exr(self):
-        self.metadata['streams'][0]['color_transfer'] = 'bt709'
-        self.run.return_value.stdout = json.dumps(self.metadata)
-        with self.assertRaisesRegex(ValueError, 'HLG'): self.checked()
         self.metadata['streams'][0]['color_transfer'] = 'arib-std-b67'
+        self.run.return_value.stdout = json.dumps(self.metadata)
+        with self.assertRaisesRegex(ValueError, 'ProRes'): self.checked()
+        self.metadata['streams'][0]['color_transfer'] = 'unknown'
         self.run.return_value.stdout = json.dumps(self.metadata)
         with zipfile.ZipFile(self.zip, 'w') as z: z.writestr('frame_00000.exr', b'frame')
         with self.assertRaisesRegex(ValueError, 'unexpected frame sequence'): self.checked()
 
     def test_long_delivery_checks_identity_and_media(self):
-        hlg = self.folder / 'hdr_outpaint_abc.mp4'
+        hlg = self.folder / 'hdr_outpaint_abc.mov'
         preview = self.folder / 'hdr_outpaint_abc_preview.mp4'
         self.hlg.rename(hlg); self.preview.rename(preview)
         result = {'files': [str(self.zip), str(hlg)], 'preview': str(preview)}

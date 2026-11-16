@@ -1,0 +1,31 @@
+/* Paint-a-Plate workbench: one centred canvas, a paint rail and edit history. */
+#genj-studio .zp-page.zplate-rebuilt[data-plate-action=paint]:not([hidden]),
+#genj-studio .zp-page.zplate-rebuilt[data-plate-action=replace]:not([hidden]){align-self:center!important;margin-inline:auto!important;width:calc(100% - 32px)!important;max-width:1800px!important;min-width:0}
+#genj-studio .zplate-surface[data-inline=image] .zpx-view{position:relative;min-width:0;min-height:0;overflow:hidden}
+#genj-studio .zplate-inline-image{position:absolute;inset:0;display:flex;flex-direction:column;align-items:stretch;min-width:0;min-height:0;overflow:hidden;background:var(--zc-canvas,var(--gs-bg))}
+#genj-studio .zplate-inline-image.is-painting>.zc-gallery,
+#genj-studio .zplate-inline-image.is-painting>.zc-image-source,
+#genj-studio .zplate-inline-image.is-painting>.zc-image-comparison{display:none!important}
+#genj-studio .zplate-inline-image>.zia-editor:not([hidden]){flex:1 1 0;min-height:0;width:100%;height:100%;grid-template-rows:minmax(0,1fr) auto auto;border-radius:0}
+#genj-studio .zplate-inline-image .zia-stage{min-height:0;border-radius:0}
+#genj-studio .zplate-inline-image>.zc-gallery{box-sizing:border-box;flex:1;min-width:0;min-height:0;width:100%;max-width:none;margin:0;display:flex;align-items:center;justify-content:center;overflow:hidden}
+#genj-studio .zplate-inline-image>.zc-gallery>figure{margin:auto;max-width:100%;max-height:100%}
+#genj-studio .zplate-inline-image>.zc-image-source{box-sizing:border-box;margin:auto;max-width:100%;max-height:100%}
+#genj-studio .zplate-inline-image .zia-toolbar{box-sizing:border-box;flex-wrap:wrap;min-height:40px;padding:4px 10px;background:var(--gs-panel);border-top:1px solid var(--gs-line)}
+#genj-studio .zplate-surface .pap-tools{display:flex;flex-direction:column;align-items:stretch;gap:8px;width:100%;max-width:none;flex-wrap:nowrap}
+#genj-studio .zplate-surface .pap-tools .zia-tool-group{display:flex;flex-direction:column;align-items:stretch;width:100%;gap:6px}
+#genj-studio .zplate-surface .pap-tools [data-area-tool]{display:flex;flex-direction:row;align-items:center;justify-content:center;gap:6px;min-height:44px;width:100%;padding:6px 4px;font-size:11px;line-height:1.3}
+#genj-studio .zplate-surface .pap-tools [data-area-tool][aria-pressed=true]{background:var(--gs-selected);border-color:var(--gs-focus);color:var(--gs-focus)}
+#genj-studio .zplate-surface .pap-tools svg{flex:none;width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+#genj-studio .zplate-surface .pap-tools [data-area-action]{display:flex;align-items:center;justify-content:center;gap:4px;min-height:32px;padding:4px;font-size:10px}
+#genj-studio .zplate-surface .pap-tools [data-area-action] svg{width:16px;height:16px}
+#genj-studio .zplate-surface .pap-tools .zia-brush{display:flex;flex-direction:column;align-items:center;gap:6px;width:100%;padding-top:10px;border-top:1px solid var(--gs-line)}
+#genj-studio .zplate-surface .pap-tools .pap-brush-number{box-sizing:border-box;width:62px;min-height:28px;padding:3px;text-align:center;background:var(--gs-input);border:1px solid var(--gs-line);border-radius:4px;color:var(--zc-text);font:inherit;font-variant-numeric:tabular-nums}
+#genj-studio .zplate-surface .pap-tools .pap-swatches{box-sizing:border-box;display:grid;grid-template-columns:repeat(3,22px);justify-content:center;gap:6px 4px;padding:10px 2px 2px;border-top:1px solid var(--gs-line)}
+#genj-studio .zplate-surface .pap-tools .pap-swatches button{box-sizing:border-box;width:22px!important;height:22px;min-height:22px;padding:0!important;border:2px solid var(--gs-line);border-radius:50%}
+#genj-studio .zplate-surface .pap-tools .pap-swatches button[aria-pressed=true]{outline:2px solid var(--gs-focus);outline-offset:0}
+#genj-studio .zplate-surface .pap-tools .zia-colour{display:flex;flex-direction:column;align-items:center;gap:4px;font-size:11px}
+#genj-studio .zplate-surface .pap-tools .zia-colour input[type=color]{width:48px;height:32px;min-height:32px}
+#genj-studio .zplate-surface .zi-image-layers{position:static;border:0;padding:0;width:100%;min-width:0;background:transparent}
+#genj-studio .zplate-surface[data-inline=image] [data-plate-layers]{pointer-events:auto}
+@media(max-width:700px){#genj-studio .zp-page.zplate-rebuilt[data-plate-action=paint]:not([hidden]),#genj-studio .zp-page.zplate-rebuilt[data-plate-action=replace]:not([hidden]){width:calc(100% - 12px)!important}}

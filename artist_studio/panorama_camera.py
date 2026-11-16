@@ -226,7 +226,7 @@ def build_graph(source, selection, state, stage, *, warp=None, look=None, prompt
     inputs={'images':decoded,'fps':p['fps']}
     if source.get('has_audio'):inputs['audio']=['source',2]
     video=n('video','CreateVideo',**inputs)
-    n('save','SaveVideo',video=video,filename_prefix='ZURA STUDIO/camera/take',format='mp4',**{'format.codec':'h264','format.codec.encoding':'auto'})
+    n('save','ZuraSaveProRes4444',video=video,filename_prefix='ZURA STUDIO/camera/take')
     if __package__:
         from .attention import adapt_attention
         return adapt_attention(g)

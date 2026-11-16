@@ -1,30 +1,41 @@
 import assert from 'node:assert/strict';
 import {parseHTML} from '../../ui-check/node_modules/linkedom/esm/index.js';
 import {AEFloatDisplay} from '../web/studio_ae_display.js';
-
-const {document,window}=parseHTML('<html><body><main id="studio"></main></body></html>');
-Object.defineProperty(window.HTMLSelectElement.prototype,'value',{
-  configurable:true,get(){return this.querySelector('option[selected]')?.value??this.querySelector('option')?.value??'';},
-  set(value){for(const option of this.querySelectorAll('option'))option.selected=option.value===String(value);},
-});
-const calls=[],revoked=[];let sequence=0;
-URL.createObjectURL=()=>`blob:preview-${++sequence}`;URL.revokeObjectURL=url=>revoked.push(url);
-const config={config:'ocio://studio-config-latest',configs:[{name:'ocio://studio-config-latest',label:'Studio'}],
-  displays:[{name:'sRGB - Display',views:['Un-tone-mapped','Raw']},{name:'P3',views:['Standard']}],display:'sRGB - Display',view:'Un-tone-mapped'};
-const bridge={closed:false,studio:{container:document.getElementById('studio')},session:{id:'a'.repeat(32),capability:'b'.repeat(64),context:{source:{frameCount:3}}},
-  api:{fetchApi:async(path,options)=>{calls.push({path,options});return path.includes('/display-config')?{ok:true,json:async()=>config}:{ok:true,blob:async()=>new Blob(['preview'],{type:'image/png'})};}}};
-const view=new AEFloatDisplay(bridge);await view.open();
-assert.equal(view.selectDisplay.value,'sRGB - Display');assert.equal(view.selectView.value,'Un-tone-mapped');
-assert.equal(view.slider.max,'2');assert.equal(view.image.hidden,false);assert.equal(view.image.src,'blob:preview-1');
-const first=calls.find(item=>item.path?.includes('/display-frame'));const query=new URL(first.path,'http://127.0.0.1').searchParams;
-assert.equal(query.get('index'),'0');assert.equal(query.get('display'),'sRGB - Display');assert.equal(query.get('view'),'Un-tone-mapped');
-assert.equal(first.options.headers['X-ComfyLink-Studio-Session'],bridge.session.capability);
-assert.equal(first.path.includes(bridge.session.capability),false,'capability must not be in the URL');
-view.selectView.value='Raw';await view.render();assert.equal(new URL(calls.at(-1).path,'http://127.0.0.1').searchParams.get('view'),'Raw');
-assert.deepEqual(revoked,['blob:preview-1']);
-bridge.api.fetchApi=async()=>({ok:false});await view.render();
-assert.equal(view.image.hidden,true,'a failed new transform must not show an old image under the new labels');
-assert.match(view.status.textContent,/not available/);
-view.close();assert.deepEqual(revoked,['blob:preview-1','blob:preview-2']);
-assert.equal(document.querySelector('.zc-display'),null);assert.equal(calls.some(item=>item.path?.includes('/result')),false);
-console.log('Scoped AE FLOAT display preview: sRGB default, view selection, capability header and cleanup passed');
+import {createDisplayTransformStore,displayPreviewOwner} from '../web/studio_display_state.js';
+const {document,window}=parseHTML('<html><body><main id="studio"></main><main id="moved"></main></body></html>');
+Object.defineProperty(window.HTMLSelectElement.prototype,'value',{configurable:true,get(){return this.querySelector('option[selected]')?.value??this.querySelector('option')?.value??'';},set(value){const options=[...this.querySelectorAll('option')];for(const option of options)option.removeAttribute('selected');options.find(option=>option.value===String(value))?.setAttribute('selected','');}});
+const values=new Map(),store=createDisplayTransformStore({getItem:key=>values.get(key)||null,setItem:(key,value)=>values.set(key,value)});
+const config={config:'adobe-ae://fixture',configs:[{name:'adobe-ae://fixture',label:'AE fixture'}],display:'ACES',view:'sRGB',displays:[{name:'ACES',views:['Raw','sRGB','Rec.709'],defaultView:'sRGB'}],adobePresets:['Raw','sRGB','Rec.709'].map(view=>({config:'adobe-ae://fixture',display:'ACES',view,label:view}))};
+const calls=[],frames=[],revoked=[];let serial=0,pending=null,fail=false,closed=0;
+URL.createObjectURL=()=>`blob:viewer-${++serial}`;URL.revokeObjectURL=url=>revoked.push(url);
+const bridge={closed:false,studio:{container:document.getElementById('studio')},source:{frameCount:17},session:{id:'a'.repeat(32),capability:'b'.repeat(64)},api:{fetchApi:async(path,options)=>{
+  calls.push({path,options});if(path.includes('/display-config'))return {ok:true,json:async()=>config};if(pending){const response=pending;pending=null;return response;}return fail?{ok:false}:{ok:true,blob:async()=>new Blob(['frame'],{type:'image/png'})};
+}}};
+const flush=async(ms=0)=>{await new Promise(resolve=>setTimeout(resolve,ms));await new Promise(resolve=>setImmediate(resolve));};
+const view=new AEFloatDisplay(bridge,{store,onFrame:frame=>frames.push(frame),onClose:()=>closed++});await view.open();
+assert.equal(view.selectView.value,'Raw','A source preview is always untransformed');assert.equal(view.root.querySelectorAll('.zc-display-controls select').length,0);assert.equal(view.root.querySelector('[data-view-transform]'),null);assert.equal(view.slider.max,'16');assert.equal(displayPreviewOwner(view.image),view);
+const frameCall=calls.find(call=>call.path.includes('/display-frame')),query=new URL(frameCall.path,'http://studio.invalid').searchParams;
+assert.equal(query.get('index'),'0');assert.equal(query.get('view'),'Raw');assert.equal(frameCall.options.headers['X-ComfyLink-Studio-Session'],bridge.session.capability);assert.equal(frameCall.path.includes(bridge.session.capability),false);
+store.choose(config.adobePresets.find(preset=>preset.view==='sRGB'));await flush();assert.equal(view.selectView.value,'Raw');view.slider.value='9';view.slider.oninput();await flush(170);assert.equal(frames.at(-1).index,9);
+// Resolve the previous frame inside the slider debounce: no stale pixels or
+// onFrame callback may be published under the new slider index.
+let release;pending=new Promise(resolve=>release=resolve);const old=view.render();await flush();const allocated=serial,callbacks=frames.length;
+view.slider.value='10';view.slider.oninput();release({ok:true,blob:async()=>new Blob(['old-frame-9'],{type:'image/png'})});await old;assert.equal(serial,allocated);assert.equal(frames.length,callbacks);assert.equal(view.image.hidden,true);
+await flush(170);assert.equal(frames.at(-1).index,10);assert.equal(new URL(calls.at(-1).path,'http://studio.invalid').searchParams.get('index'),'10');
+const current=view.root,image=view.image.src,count=calls.length;await view.openInline(document.getElementById('moved'));assert.equal(view.root,current);assert.equal(view.slider.value,'10');assert.equal(view.image.src,image);assert.equal(calls.length,count);
+fail=true;await view.render();assert.equal(view.image.hidden,true);assert.match(view.status.textContent,/not available/);fail=false;view.close();assert.equal(closed,1);assert.equal(store.subscriberCount,0);assert.equal(displayPreviewOwner(current),null);
+await view.open();assert.equal(view.slider.value,'10');assert.equal(view.selectView.value,'Raw','Reopening ignores retired saved transforms');view.close();assert.ok(revoked.length>=3);assert.ok(calls.every(call=>!/\/result|\/prompt/.test(call.path)));assert.equal(JSON.stringify([...values]).includes(bridge.session.capability),false);
+const playbackFrames=[];
+const playback=new AEFloatDisplay(bridge,{store,frameCount:3,frameRate:{numerator:100,denominator:1},onFrame:frame=>playbackFrames.push(frame.index)});
+await playback.openInline(document.getElementById('moved'));
+assert.equal(playback.playButton.getAttribute('aria-label'),'Play preview');assert.equal(playback.playButton.disabled,false);
+assert.equal(new AEFloatDisplay(bridge,{frameRate:{numerator:30000,denominator:1001}}).frameInterval(),1000*1001/30000,'Playback uses the exact AE rational rate');
+playback.playButton.click();assert.equal(playback.playButton.getAttribute('aria-label'),'Pause preview');
+await flush(100);assert.deepEqual(playbackFrames.slice(-2),[1,2]);assert.equal(playback.slider.value,'2');assert.equal(playback.playing,false,'Playback stops on the last frame');
+await playback.play();assert.equal(playback.slider.value,'0','Play from the end starts at the first frame');
+playback.slider.value='1';playback.slider.oninput();assert.equal(playback.playing,false,'Scrubbing stops playback');await flush(170);assert.equal(playbackFrames.at(-1),1);
+Object.defineProperty(document,'hidden',{configurable:true,value:true});await playback.play();document.dispatchEvent(new window.Event('visibilitychange'));assert.equal(playback.playing,false,'A hidden document stops playback');
+Object.defineProperty(document,'hidden',{configurable:true,value:false});playback.slider.value='0';await playback.play();playback.close();assert.equal(playback.playbackTimer,null,'Closing clears playback timer');
+const completed=playbackFrames.length;await flush(40);assert.equal(playbackFrames.length,completed,'Closed playback cannot publish more frames');
+const still=new AEFloatDisplay(bridge,{store,frameCount:1});await still.openInline(document.getElementById('moved'));assert.equal(still.playButton.disabled,true,'A single frame cannot play');still.close();
+console.log('Scoped AE preview: no transform controls, saved choices ignored, scrub fencing, exact frame, playback and cleanup pass');

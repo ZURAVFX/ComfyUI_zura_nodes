@@ -246,12 +246,13 @@ export class PaintoutEditor{
     if(commit)w.save();w.render();
   }
   async confirmClipTrim(){
+    if(this.loadingProject)await this.ensureProject();
     if(this.w.busy())return;const state=this.w.state;if(isRipple(this))for(const anchor of state.anchors)delete anchor.rippleReviewedFile;
     if(state.mode!=='full'){this.tool='include';this.viewer.setTool('include');}
     state.clipTrimConfirmed=true;state.maskTrackStart=state.startFrame;state.maskTrackEnd=state.startFrame+state.frameCount-1;
     this.customRange=false;this.$('range-start').value=state.maskTrackStart;this.$('range-end').value=state.maskTrackEnd;
     if(this.w.playhead<state.startFrame||this.w.playhead>state.maskTrackEnd)this.w.playhead=state.startFrame;
-    await this.setStage(state.mode==='full'?'render':'mask');
+    await this.setStage(this.w.plate?.propagation()?'clean':state.mode==='full'?'render':'mask');
   }
   async resetMaskFrame(){
     const active=this.activeMask();if(this.w.busy()||!active?.correction_frames?.includes(this.w.playhead))return;
@@ -472,13 +473,14 @@ export class PaintoutEditor{
       }
     }
     this.closed=false;this.stage=stage;this.w.state.editorStage=stage;if(stage==='clean')this.$('instruction').value=this.cleanupInstruction();this.active=['mask','clean'].includes(stage)&&!!this.w.state.source;this.candidate=stage==='clean'?this.selected()?.candidate||null:null;if(this.candidate&&!this.candidate.review){this.addPaintLayer(this.selected(),{...this.candidate,method:'flux3',layer_mask:this.candidate.layer_mask||this.candidate.effective_mask||this.candidate.target_mask});this.candidate=null;}
-    if(stage==='clean'&&(!this.selected()||isRipple(this)&&this.selected().frame!==this.w.state.startFrame)&&this.w.state.source)this.createFrame(this.w.playhead);
+    if(stage==='clean'&&(!this.selected()||isRipple(this)&&this.selected().frame!==this.w.state.startFrame)&&this.w.state.source)await this.createFrame(this.w.playhead);
     if(this.active){this.w.view=stage==='clean'?'anchor':'mask';this.w.comparison?.hide();if(this.w.$('comparison'))this.w.$('comparison').hidden=true;this.w.$('video').pause();this.w.$('video').hidden=true;this.w.$('image-slot').hidden=true;await this.frameChanged(true);}
     else this.w.preview(stage==='trim'?'source':this.w.result?'result':'source');
     this.update();this.w.save();
   }
   async frameChanged(force=false){
     if(!this.active||!this.w.sourceInfo)return;const w=this.w;if(isRipple(this))w.playhead=w.state.startFrame;
+    const previousFrame=this.viewer.frame;
     if(this.viewer.frame!==w.playhead){this.autoPreviewPending=false;clearTimeout(this.autoPreviewTimer);this.maskEditVersion++;}
     const accepted=this.stage==='clean'&&this.selected()?.frame===w.playhead?this.selected():null;
     const key=[w.state.source,w.playhead,w.state.maskRevision,w.state.mask,w.state.sourceColour,this.candidate?.file,accepted?.file,this.stage].join('|');
@@ -486,7 +488,18 @@ export class PaintoutEditor{
     try{await this.flushManual();if(seq!==this.sequence)return;this.frameKey=key;
       const candidate=accepted?this.candidate:null,info=w.sourceInfo,url=candidate?.file?w.thumbnail(candidate.png_file||candidate.file,0,candidate.png_file?(candidate.preview_colour_space||'srgb_display'):candidate.colour_space,1280):accepted?.file?w.thumbnail(accepted.preview_file||accepted.file,0,accepted.preview_file?(accepted.preview_colour_space||'srgb_display'):accepted.colour_space,1280):w.thumbnail(w.state.source,w.playhead,w.state.sourceColour,1280);
       this.showOriginal=false;
-      await this.viewer.setFrame(url,info.width,info.height,w.playhead);if(seq!==this.sequence)return;
+      const previewSource=w.state.source,previewColour=w.state.sourceColour;
+      try{await this.viewer.setFrame(url,info.width,info.height,w.playhead);}
+      catch(error){
+        if(seq!==this.sequence)return false;
+        // A 4K source can time out while decoding the large display preview.
+        // The editor still uses the full source dimensions for painting.
+        if(candidate?.file||accepted?.file)throw error;
+        await this.viewer.setFrame(w.thumbnail(w.state.source,w.playhead,w.state.sourceColour,512),info.width,info.height,w.playhead);
+        this.status('Showing a smaller display preview for this frame. Painting stays at source resolution.');
+      }
+      if(seq!==this.sequence)return false;
+      if(w.state.source===previewSource&&w.state.sourceColour===previewColour)w.clearPreviewError?.();
       this.selectionDirty=false;
       if(candidate?.review){await this.viewer.setMask(w.url(candidate.review.difference_url));}
       else if(this.stage==='clean'&&accepted?.editMask){await this.viewer.setMask(accepted.editMask);}
@@ -495,8 +508,9 @@ export class PaintoutEditor{
       else if(w.state.mask){await this.viewer.setMask(w.thumbnail(w.state.mask,w.playhead,'srgb_display',1280));}
       else await this.viewer.setMask(null);
       if(this.stage==='clean'&&accepted&&this.recoverFrameRetry(accepted,this.viewer.getSelection(false).hasMask))await this.viewer.setMask(accepted.editMask);
-      if(seq!==this.sequence)return;this.selectionDirty=false;this.$('grow').value=this.stage==='clean'?(accepted?.editGrow??w.state.maskGrow??0):(w.state.maskGrow??0);this.$('grow-value').textContent=this.$('grow').value+' px';this.viewer.setGrow(candidate?.review?0:Number(this.$('grow').value),0);this.viewer.setOpacity(!candidate?.review&&this.stage==='clean'&&accepted?.file?0:Number(this.$('opacity').value)/100);this.updateControls();this.authoritativePreview().catch(e=>{if(seq===this.sequence)this.status(e.message);});
-    }catch(e){if(seq===this.sequence){this.frameKey=null;if(this.manualDirty){w.playhead=this.viewer.frame;w.updatePlayhead();}this.status(e.message);}}finally{if(seq===this.sequence){this.frameLoading=false;this.w.render();}}
+      if(seq!==this.sequence)return false;this.selectionDirty=false;this.$('grow').value=this.stage==='clean'?(accepted?.editGrow??w.state.maskGrow??0):(w.state.maskGrow??0);this.$('grow-value').textContent=this.$('grow').value+' px';this.viewer.setGrow(candidate?.review?0:Number(this.$('grow').value),0);this.viewer.setOpacity(!candidate?.review&&this.stage==='clean'&&accepted?.file?0:Number(this.$('opacity').value)/100);this.updateControls();this.authoritativePreview().catch(e=>{if(seq===this.sequence)this.status(e.message);});
+      return true;
+    }catch(e){if(seq===this.sequence){this.frameKey=null;w.playhead=previousFrame>=0?previousFrame:w.playhead;w.selected=w.state.anchors.findIndex(a=>a.frame===w.playhead);w.syncAnchorControls?.(w.selected);w.updatePlayhead();this.active=false;w.preview('source');this.status('Could not load this frame preview. Your keyframe is kept; select it again to retry. '+e.message);}return false;}finally{if(seq===this.sequence){this.frameLoading=false;this.w.render();}}
   }
   update(){
     const w=this.w,has=!!w.state.source;
@@ -584,12 +598,13 @@ export class PaintoutEditor{
     if(outsideMask){for(const b of this.viewerToolbar.querySelectorAll('button'))b.disabled=true;this.$('selection').disabled=true;this.$('track').disabled=true;this.$('tool-help').textContent=`Outside ${selectedMask.name}. Select another mask bar, extend its ends, or choose Add mask.`;}
     this.$('track').classList.toggle('zp-editor-primary',!this.$('track').disabled);
     const a=this.selected();this.$('frame-label').textContent=a?`${inpaint?'Reference':'Clean'} frame ${a.frame} · ${a.frame<this.w.state.startFrame||a.frame>=this.w.state.startFrame+this.w.state.frameCount?'Outside trim. Extend the range to use this guide.':({needs_review:'Review',needs_edit:'Unpainted',draft:'Unpainted',accepted:'Painted'})[a.status]||'Unpainted'}`:`Add a ${inpaint?'reference':'clean'} frame on the timeline`;
-    const versions=this.frameVersions(a),versionSelect=this.$('version');this.$('version-control').hidden=!clean||a?.frame!==this.w.playhead||versions.length<2;
-    versionSelect.replaceChildren(...versions.map((version,index)=>{const option=el('option',`Result ${index+1}${version.method==='manual'?' · Imported':''}`);option.value=version.file;return option;}));versionSelect.value=a?.file||'';versionSelect.disabled=busy||!!this.candidate||a?.frame!==this.w.playhead;versionSelect.title=this.candidate?'Use or discard the current result before choosing a saved version.':'Choose the clean image used to guide this frame.';
-    const onFrame=a?.frame===this.w.playhead;this.$('reference').hidden=!clean||!onFrame||!a?.exportReference;
-    this.$('compare').hidden=!clean||!onFrame||!(a?.file||this.candidate);this.$('compare').textContent=this.showOriginal?'Show clean frame':'Show original';
+    const versions=this.frameVersions(a),versionSelect=this.$('version'),onFrame=a?.frame===this.w.playhead,showLayers=!!a&&(clean&&onFrame||(this.stage==='render'||!!this.w.plate?.propagation())&&!!a.layers?.length||!!this.w.plate?.inline);
+    this.$('version-control').hidden=!(clean&&onFrame||showLayers&&!this.w.plate?.inline)||versions.length<2;
+    versionSelect.replaceChildren(...versions.map((version,index)=>{const option=el('option',`Result ${index+1}${version.method==='manual'?' · Imported':''}`);option.value=version.file;return option;}));versionSelect.value=a?.file||'';versionSelect.disabled=busy||!!this.candidate||!(clean&&onFrame||showLayers);versionSelect.title=this.candidate?'Use or discard the current result before choosing a saved version.':'Choose the clean image used to guide this frame.';
+    this.$('reference').hidden=!clean||!onFrame||!a?.exportReference;
+    this.$('compare').hidden=!clean||!onFrame||!(a?.file||this.candidate);this.$('compare').textContent=this.showOriginal?(this.w.plate?.propagation()?'Show edited frame':'Show clean frame'):'Show original';
     this.$('reject').hidden=!clean||!onFrame||!(a?.file||this.candidate||a?.layers?.length);this.$('reject').disabled=busy;this.$('reject').title='Remove every paint layer on this frame and restore its original image. The video mask is kept.';
-    this.renderLayers(a,clean&&onFrame,busy);
+    this.renderLayers(a,showLayers,busy);this.w.plate?.surface?.syncLayerDisclosures?.();
     if(clean&&this.candidate)this.$('grow').disabled=true;
     const review=this.candidate?.review;this.importReview.hidden=!clean||!onFrame||!review;this.$('import-differences').textContent=review?`${review.outside_pixels.toLocaleString()} changed pixels lie outside your repair area. Red highlights those changes. Keep the current bounds or include the intended edits.`:'';
     this.$('import-current').disabled=this.$('import-include').disabled=busy||!onFrame;
@@ -663,15 +678,27 @@ export class PaintoutEditor{
     if(preview===this.previewSequence)this.status('');
   }
   createFrame(frame){
-    if(this.manualDirty||this.manualSaving){this.flushManual().then(()=>this.createFrame(frame)).catch(e=>this.status(e.message));return;}
+    if(this.manualDirty||this.manualSaving)return this.flushManual().then(()=>this.createFrame(frame)).catch(e=>this.status(e.message));
     if(this.w.busy()||!this.w.state.source)return;if(isRipple(this))frame=this.w.state.startFrame;frame=number(frame,0,(this.w.sourceInfo?.frames||1)-1);if(frame<this.w.state.startFrame||frame>=this.w.state.startFrame+this.w.state.frameCount){this.status('This frame is outside your clip. Open Trim clip to change the exported range.');return;}
-    const old=this.w.state.anchors.findIndex(a=>a.frame===frame);if(old>=0){this.selectFrame(old);return;}
+    const old=this.w.state.anchors.findIndex(a=>a.frame===frame);if(old>=0)return this.selectFrame(old);
     const rippleMask=isRipple(this)&&this.w.state.rippleSelection?.source===this.w.state.source&&this.w.state.rippleSelection.frame===frame?this.w.state.rippleSelection:null;
     this.w.state.anchors.push({...(rippleMask?{editMask:rippleMask.mask,editGrow:rippleMask.grow}:{}),id:crypto.randomUUID(),frame,file:'',strength:.75,enabled:true,status:'draft',colour_space:this.w.state.sourceColour,versions:[]});
-    this.selectFrame(this.w.state.anchors.length-1);this.w.save();
+    const loading=this.selectFrame(this.w.state.anchors.length-1);this.w.save();return loading;
   }
-  selectFrame(index){if(this.manualDirty||this.manualSaving){this.flushManual().then(()=>this.selectFrame(index)).catch(e=>this.status(e.message));return;}if(this.w.busy())return;const a=this.w.state.anchors[index];if(!a)return;if(isRipple(this)&&a.frame!==this.w.state.startFrame){this.status('Ripple edits only the first selected frame. Change the clip trim to use another frame.');return;}this.w.selected=index;this.w.syncAnchorControls?.(index);this.w.playhead=a.frame;this.stage='clean';this.$('instruction').value=this.cleanupInstruction();this.w.state.editorStage='clean';this.w.view='anchor';this.active=true;this.candidate=a.candidate||null;if(this.candidate&&!this.candidate.review){this.addPaintLayer(a,{...this.candidate,method:'flux3',layer_mask:this.candidate.layer_mask||this.candidate.effective_mask||this.candidate.target_mask});this.candidate=null;}this.tool=isRipple(this)?'pan':'brush';this.viewer.setTool(this.tool);this.w.comparison?.hide();if(this.w.$('comparison'))this.w.$('comparison').hidden=true;this.w.updatePlayhead();this.frameChanged(true);this.update();this.w.save();}
-  async compareFrame(){try{this.showOriginal=!this.showOriginal;const a=this.selected(),url=this.showOriginal?this.w.thumbnail(this.w.state.source,this.w.playhead,this.w.state.sourceColour,1280):this.candidate?.file?this.w.thumbnail(this.candidate.png_file||this.candidate.file,0,this.candidate.png_file?(this.candidate.preview_colour_space||'srgb_display'):this.candidate.colour_space,1280):this.w.thumbnail(a.preview_file||a.file,0,a.preview_file?(a.preview_colour_space||'srgb_display'):a.colour_space,1280);await this.viewer.setDisplayImage(url);this.viewer.setOpacity(0);this.updateControls();}catch(e){this.status(e.message);}}
+  selectFrame(index){if(this.manualDirty||this.manualSaving)return this.flushManual().then(()=>this.selectFrame(index)).catch(e=>this.status(e.message));if(this.w.busy())return;const a=this.w.state.anchors[index];if(!a)return;if(isRipple(this)&&a.frame!==this.w.state.startFrame){this.status('Ripple edits only the first selected frame. Change the clip trim to use another frame.');return;}this.w.selected=index;this.w.syncAnchorControls?.(index);this.w.playhead=a.frame;this.stage='clean';this.$('instruction').value=this.cleanupInstruction();this.w.state.editorStage='clean';this.w.view='anchor';this.active=true;this.candidate=a.candidate||null;if(this.candidate&&!this.candidate.review){this.addPaintLayer(a,{...this.candidate,method:'flux3',layer_mask:this.candidate.layer_mask||this.candidate.effective_mask||this.candidate.target_mask});this.candidate=null;}this.tool=isRipple(this)?'pan':'brush';this.viewer.setTool(this.tool);this.w.comparison?.hide();if(this.w.$('comparison'))this.w.$('comparison').hidden=true;this.w.updatePlayhead();const loading=this.frameChanged(true);this.update();this.w.save();return loading;}
+  async compareFrame(){
+    const source=this.w.state.source,frame=this.w.playhead,anchor=this.selected(),sequence=this.sequence,original=!this.showOriginal;
+    if(!anchor||anchor.frame!==frame)return;
+    this.showOriginal=original;
+    try{
+      const url=original?this.w.thumbnail(source,frame,this.w.state.sourceColour,1280):this.candidate?.file?this.w.thumbnail(this.candidate.png_file||this.candidate.file,0,this.candidate.png_file?(this.candidate.preview_colour_space||'srgb_display'):this.candidate.colour_space,1280):this.w.thumbnail(anchor.preview_file||anchor.file,0,anchor.preview_file?(anchor.preview_colour_space||'srgb_display'):anchor.colour_space,1280);
+      await this.viewer.setDisplayImage(url);
+      if(this.sequence!==sequence||this.w.state.source!==source||this.w.playhead!==frame||this.selected()!==anchor||this.showOriginal!==original)return;
+      // Source review retains the saved source-space repair selection. Keep the
+      // accepted clean image un-tinted so the actual generated repair is clear.
+      this.viewer.setOpacity(original?Number(this.$('opacity').value)/100:0);this.updateControls();
+    }catch(error){if(this.sequence===sequence&&this.w.state.source===source&&this.w.playhead===frame&&this.selected()===anchor)this.status(error.message);}
+  }
   removeFrame(index){if(this.w.busy())return;this.w.state.anchors.splice(index,1);this.w.selected=-1;this.candidate=null;this.w.changed();}
   async downloadFrame(){
     try{const a=this.selected();if(!a)return;await this.ensureProject();const result=await this.w.fetch('/zura/paintout/export-frame',{project:this.project,file:this.w.state.source,frame:a.frame,colour_space:this.w.state.sourceColour});if(result.reference){a.exportReference=result.reference;this.w.save();this.updateControls();}const link=el('a');link.href=this.w.url(result.url);link.download=result.download_name||`paint_${a.frame}.`+(result.path.endsWith('.exr')?'exr':'png');link.click();this.status('Original frame exported. Import the edited image into this same frame card.');}
@@ -911,8 +938,10 @@ export class PaintoutEditor{
   blendPaintLayer(id,width){return this.adjustPaintLayer(id,{blend_pixels:width});}
   brightnessPaintLayer(id,value){return this.adjustPaintLayer(id,{brightness_ev:value});}
   async adjustPaintLayer(id,change){
-    const anchor=this.selected();if(this.w.busy()||this.candidate||!anchor||anchor.frame!==this.w.playhead)return;
+    const anchor=this.selected();if(this.w.busy()||this.candidate||!anchor)return;
     const layers=this.ensureLayers(anchor),layer=layers.find(layer=>layer.id===id);if(!layer)return;
+    if(anchor.frame!==this.w.playhead){this.w.playhead=anchor.frame;this.w.updatePlayhead?.();}
+    if(this.stage==='render'&&!this.w.plate?.inline){this.stage='clean';this.w.state.editorStage='clean';this.active=true;this.w.view='anchor';}
     if('enabled' in change&&typeof change.enabled!=='boolean')return;
     if('opacity' in change&&(!Number.isFinite(change.opacity)||change.opacity<0||change.opacity>1))return;
     if('expand_pixels' in change&&(!Number.isInteger(change.expand_pixels)||change.expand_pixels<0||change.expand_pixels>256))return;
@@ -930,24 +959,28 @@ export class PaintoutEditor{
       if(('enabled' in change||'opacity' in change)&&(!Array.isArray(result.enabled_values)||!Array.isArray(result.opacity_values)))throw Error('Restart ComfyUI after updating to use layer visibility and opacity.');
       this.saveFrameVersion(anchor);Object.assign(layer,change);Object.assign(anchor,{file:result.file,preview_file:result.png_file||result.preview_file||'',preview_colour_space:result.preview_colour_space||'srgb_display',colour_space:result.colour_space,status:'accepted'});delete anchor.cleanAttempt;this.saveFrameVersion(anchor);
       this.showOriginal=false;this.frameKey=null;this.w.syncAnchorControls?.(this.w.selected);this.status('enabled' in change?(change.enabled?'Layer shown.':'Layer hidden.'):'opacity' in change?`Layer opacity ${Math.round(change.opacity*100)}%.`:'expand_pixels' in change?`Mask expanded by ${change.expand_pixels} source pixels.`:'brightness_ev' in change?`Brightness updated to ${brightnessLabel(change.brightness_ev)} stops.`:`Blend edge updated to ${change.blend_pixels} px.`);
-    }catch(error){this.status('Could not update this layer: '+error.message);}finally{this.importing=false;this.layerPanelKey=null;this.w.save();this.w.render();await this.frameChanged(true);}
+    }catch(error){this.status('Could not update this layer: '+error.message);}finally{this.importing=false;this.layerPanelKey=null;this.w.save();this.w.render();await this.frameChanged(true);await this.w.plate?.refreshInlineSource?.(anchor);}
   }
   async movePaintLayer(id,delta){
-    const anchor=this.selected();if(this.w.busy()||this.candidate||!anchor||anchor.frame!==this.w.playhead)return;
+    const anchor=this.selected();if(this.w.busy()||this.candidate||!anchor)return;
     const layers=this.ensureLayers(anchor),index=layers.findIndex(layer=>layer.id===id),nextIndex=index+delta;
     if(index<0||nextIndex<0||nextIndex>=layers.length)return;
-    const reordered=[...layers];[reordered[index],reordered[nextIndex]]=[reordered[nextIndex],reordered[index]];
+    if(anchor.frame!==this.w.playhead){this.w.playhead=anchor.frame;this.w.updatePlayhead?.();}
+    if(this.stage==='render'&&!this.w.plate?.inline){this.stage='clean';this.w.state.editorStage='clean';this.active=true;this.w.view='anchor';}
+    const reordered=[...layers],moved=reordered.splice(index,1)[0];reordered.splice(nextIndex,0,moved);
     const source=this.w.state.source,project=this.project;this.importing=true;this.updateControls();this.status('Updating layer order…');
     try{
       while(this.saving)await new Promise(resolve=>setTimeout(resolve,20));
       const result=await this.w.fetch(endpoint+'/compose-layers',{project,source,frame:anchor.frame,colour_space:this.w.state.sourceColour,expected_revision:this.revision,layers:reordered.map(paintLayerRequest)});
       if(this.project!==project||this.w.state.source!==source||this.selected()!==anchor||anchor.layers!==layers)throw Error('The selected frame changed. Reorder its layers again.');
       this.saveFrameVersion(anchor);anchor.layers=reordered;Object.assign(anchor,{file:result.file,preview_file:result.png_file||'',preview_colour_space:result.preview_colour_space||'srgb_display',colour_space:result.colour_space,status:'accepted'});delete anchor.cleanAttempt;this.saveFrameVersion(anchor);this.showOriginal=false;this.frameKey=null;this.status('Layer order updated.');
-    }catch(error){this.status('Could not reorder layers: '+error.message);}finally{this.importing=false;this.layerPanelKey=null;this.w.save();this.w.render();await this.frameChanged(true);}
+    }catch(error){this.status('Could not reorder layers: '+error.message);}finally{this.importing=false;this.layerPanelKey=null;this.w.save();this.w.render();await this.frameChanged(true);await this.w.plate?.refreshInlineSource?.(anchor);}
   }
   async removePaintLayer(id){
-    const anchor=this.selected();if(this.w.busy()||this.candidate||!anchor||anchor.frame!==this.w.playhead)return;
+    const anchor=this.selected();if(this.w.busy()||this.candidate||!anchor)return;
     const layers=this.ensureLayers(anchor),removed=layers.find(layer=>layer.id===id);if(!removed)return;
+    if(anchor.frame!==this.w.playhead){this.w.playhead=anchor.frame;this.w.updatePlayhead?.();}
+    if(this.stage==='render'&&!this.w.plate?.inline){this.stage='clean';this.w.state.editorStage='clean';this.active=true;this.w.view='anchor';}
     const remaining=layers.filter(layer=>layer.id!==id);
     this.importing=true;this.updateControls();this.status('Updating paint layers…');
     try{
@@ -960,10 +993,10 @@ export class PaintoutEditor{
         for(const key of ['file','preview_file','preview_colour_space','colour_space','candidate'])delete anchor[key];
         anchor.status='draft';
       }
-      anchor.layers=remaining;anchor.editMask=removed.layer_mask;anchor.editGrow=0;delete anchor.cleanAttempt;this.saveFrameVersion(anchor);
+      anchor.layers=remaining;if(anchor.plateEditLayerId===id)anchor.plateEditLayerId=null;anchor.editMask=removed.layer_mask;anchor.editGrow=0;delete anchor.cleanAttempt;this.saveFrameVersion(anchor);
       if(removed.method==='flux3'){anchor.editPrompt=this.w.cleanupPrompt??removed.prompt??DEFAULT_FRAME_EDIT_PROMPT;this.$('instruction').value=anchor.editPrompt;}
       this.showOriginal=false;this.frameKey=null;this.w.syncAnchorControls?.(this.w.selected);this.w.save();this.status('Layer deleted. Mask restored for retry.');
-    }catch(error){this.status('Could not delete this layer: '+error.message);}finally{this.importing=false;this.w.save();this.w.render();await this.frameChanged(true);}
+    }catch(error){this.status('Could not delete this layer: '+error.message);}finally{this.importing=false;this.layerPanelKey=null;this.w.save();this.w.render();await this.frameChanged(true);await this.w.plate?.refreshInlineSource?.(anchor);}
   }
   async discardFrame(){
     const anchor=this.selected();if(this.w.busy()||!anchor||anchor.frame!==this.w.playhead)return;

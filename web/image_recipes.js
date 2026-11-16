@@ -19,26 +19,41 @@ export const IMAGE_MODELS = [
   ...['chatgpt','gemini'].flatMap(provider=>[false,true].map(edit=>({id:provider+(edit?'edit':''),provider,edit,minReferences:edit?1:0,maxReferences:8,name:provider==='chatgpt'?'ChatGPT Image':'Gemini Image',node:provider==='chatgpt'?'ZuraChatGPTImage':'ZuraGeminiImage',hint:'Sign in through your browser. Uses your website account allowance, with no Zura or paid API credits. References are sent to the selected provider.',url:provider==='chatgpt'?'https://chatgpt.com':'https://gemini.google.com'}))),
 ];
 export const IMAGE_SIZES={auto:[1024,1024],square:[1024,1024],landscape:[1152,768],portrait:[768,1152]};
-export function imageDimensions({model,shape="square",width,height,references=[],edit_area}={}){
+const processingDelivery=(processing,original)=>{
+  const scale=Math.min(processing.width/original.width,processing.height/original.height);
+  return {width:Math.max(1,Math.round(original.width*scale)),height:Math.max(1,Math.round(original.height*scale))};
+};
+export function imageResolutionPlan({model,shape="square",width,height,references=[],edit_area,processingResolution,deliveryResolution,operation}={}){
   const preset=IMAGE_SIZES[shape];
   if(!preset)throw new Error("Choose an available image shape.");
   const recipe=IMAGE_MODELS.find(item=>item.id===model);
-  if(recipe?.edit&&!recipe.provider&&references[0]){
-    const raster=editSourceRaster(references,recipe,{editArea:!!edit_area?.enabled});
-    return [raster.width,raster.height];
+  const first=references[0],sourceEdit=!!first&&!recipe?.provider&&(recipe?.edit||operation==='edit');
+  if(sourceEdit){
+    const sourceWidth=Number(first.width),sourceHeight=Number(first.height),manual=processingResolution==='manual';
+    let raster;
+    if(manual){
+      if(!Number.isInteger(width)||!Number.isInteger(height)||width<1||height<1)throw Error('Choose a valid processing size.');
+      if(!Number.isInteger(sourceWidth)||!Number.isInteger(sourceHeight)||sourceWidth<1||sourceHeight<1)throw Error('Image 1 dimensions are missing. Re-upload it so Studio can read its actual size.');
+      const scale=Math.sqrt(width*height/(sourceWidth*sourceHeight));
+      raster=sourceModelRaster({width:Math.ceil(sourceWidth*scale),height:Math.ceil(sourceHeight*scale)},modelRasterOptions(recipe,{editArea:!!edit_area?.enabled}));
+    }else raster=editSourceRaster(references,recipe,{editArea:!!edit_area?.enabled});
+    const processing={width:raster.width,height:raster.height},original={width:sourceWidth,height:sourceHeight};
+    return {processing,output:deliveryResolution==='processing'?processingDelivery(processing,original):original,original,sourceEdit:true,auto:!manual,delivery:deliveryResolution==='processing'?'processing':'original'};
   }
-  const first=references[0];
-  if(shape==='auto'&&first?.width&&first?.height){
+  let size;
+  const auto=shape==='auto'&&processingResolution!=='manual';
+  if(auto&&first?.width&&first?.height){
     const raster=sourceModelRaster(first,modelRasterOptions(recipe));
-    return [raster.width,raster.height];
-  }
-  const size=shape==='auto'?[1024,1024]:[width??preset[0],height??preset[1]];
+    size=[raster.width,raster.height];
+  }else size=auto?[1024,1024]:[width??preset[0],height??preset[1]];
   if(size.some(v=>!Number.isInteger(v)))throw new Error("Width and height must be whole numbers.");
-  if(recipe?.provider)return size;
-  const raster=sourceModelRaster({width:size[0],height:size[1]},modelRasterOptions(recipe));
-  return [raster.width,raster.height];
+  if(!recipe?.provider){const raster=sourceModelRaster({width:size[0],height:size[1]},modelRasterOptions(recipe));size=[raster.width,raster.height];}
+  const processing={width:size[0],height:size[1]},original=Number.isInteger(first?.width)&&Number.isInteger(first?.height)?{width:first.width,height:first.height}:null;
+  const originalDelivery=deliveryResolution==='original'&&!!original&&(operation==='edit'||recipe?.edit);
+  return {processing,output:originalDelivery?original:processing,original,sourceEdit:false,auto,delivery:originalDelivery?'original':'processing'};
 }
-function buildImageGraphBase({model="flux3",prompt,shape="square",seed=42,width,height,references=[],loras=[],edit_area}={}){
+export function imageDimensions(config={}){const {processing}=imageResolutionPlan(config);return [processing.width,processing.height];}
+function buildImageGraphBase({model="flux3",prompt,shape="square",seed=42,width,height,references=[],loras=[],edit_area,processingResolution,deliveryResolution,operation}={}){
   const recipe=IMAGE_MODELS.find(m=>m.id===model);
   if(!recipe || !IMAGE_SIZES[shape])throw new Error("Choose an available model and image shape.");
   if(typeof prompt!=="string" || !prompt.trim())throw new Error("Describe the image you want to create.");
@@ -46,12 +61,12 @@ function buildImageGraphBase({model="flux3",prompt,shape="square",seed=42,width,
   if(!Array.isArray(references)||references.length>recipe.maxReferences)throw new Error(`${recipe.name} supports ${recipe.maxReferences} reference images in this workflow.`);
   if(references.length<(recipe.minReferences||0))throw new Error("Add the image you want to edit first. Extra images are optional references.");
   if(references.some(r=>!r||typeof r.file!=="string"||!r.file||r.file.includes("..")))throw new Error("Upload each reference image before generating.");
-  const sourceRaster=recipe.edit&&!recipe.provider?editSourceRaster(references,recipe,{editArea:!!edit_area?.enabled}):null;
-  [width,height]=sourceRaster?[sourceRaster.width,sourceRaster.height]:imageDimensions({model,shape,width,height,references});
-  const restoreSize=sourceRaster?{width:sourceRaster.sourceWidth,height:sourceRaster.sourceHeight}:{width,height};
+  const plan=imageResolutionPlan({model,shape,width,height,references,edit_area,processingResolution,deliveryResolution,operation}),sourceRaster=plan.sourceEdit?plan:null;
+  [width,height]=[plan.processing.width,plan.processing.height];
+  const restoreSize=sourceRaster?plan.original:{width,height};
   if(recipe.provider){
     if(loras.length)throw new Error('Custom LoRAs apply to local image models only.');
-    const inputs={prompt:prompt.trim(),size:shape==='auto'?'Auto':'Custom',custom_width:width,custom_height:height,timeout_seconds:300};
+    const inputs={prompt:prompt.trim(),size:plan.auto?'Auto':'Custom',custom_width:width,custom_height:height,timeout_seconds:300};
     const graph={};references.forEach((ref,i)=>{graph[`reference_${i+1}`]={class_type:'LoadImage',inputs:{image:ref.file}};inputs[`reference_${i+1}`]=[`reference_${i+1}`,0];});
     graph.browser_image={class_type:recipe.node,_meta:{title:`Generate with ${recipe.name} · browser account`},inputs};
     graph.save={class_type:'SaveImage',inputs:{images:['browser_image',0],filename_prefix:'zura_images/'+recipe.provider}};
@@ -60,7 +75,7 @@ function buildImageGraphBase({model="flux3",prompt,shape="square",seed=42,width,
   const graph={};
   const node=(id,type,title,inputs)=>{graph[id]={class_type:type,_meta:{title},inputs};return [id,0];};
   const sourcePixels=(id,image,title="Align Image 1 to the model grid")=>node(id,"ImageScale",title,{image,upscale_method:"lanczos",width,height,crop:"disabled"});
-  const restoreEdit=(id,image)=>recipe.edit?node(id,"ImageScale","Restore captured Image 1 size",{image,upscale_method:"lanczos",width:restoreSize.width,height:restoreSize.height,crop:"disabled"}):image;
+  const restoreEdit=(id,image)=>sourceRaster?node(id,"ImageScale","Restore captured Image 1 size",{image,upscale_method:"lanczos",width:restoreSize.width,height:restoreSize.height,crop:"disabled"}):image;
   let unet=node("model","UNETLoader",recipe.name,{unet_name:recipe.model,weight_dtype:"default"});
   if(!Array.isArray(loras)||loras.length>4)throw new Error("Choose up to four image LoRAs.");
   for(const [index,lora] of loras.entries()){
@@ -200,12 +215,35 @@ function buildImageGraphBase({model="flux3",prompt,shape="square",seed=42,width,
   return graph;
 }
 export function buildImageGraph(config={}){
-  const graph=buildImageGraphBase(config.edit_area?.guide?.file?{...config,prompt:'Replace the coloured painted guide itself with the requested object, at exactly the same position and scale. The guide is a placement instruction, not an object to keep. Remove all visible guide paint; do not put a second object beside it. Match the original scene, perspective and lighting. '+config.prompt}:config);
-  if(!config.edit_area?.enabled)return graph;
-  const model=config.model||'flux3',shape=config.shape||'square';
-  const recipe=IMAGE_MODELS.find(item=>item.id===model);
-  const [width,height]=imageDimensions({...config,model,shape});
-  return applyImageEditArea(graph,{...config,recipe,shape,width,height,references:config.references||[]});
+  const guide=config.edit_area?.guide?.file;
+  if(guide){
+    if(config.operation!=='edit'||config.edit_area.source_key!==config.references?.[0]?.file)throw Error('The painted guidance belongs to a different main image. Paint it again.');
+    if(typeof guide!=='string'||!guide||guide.includes('..'))throw Error('Choose a valid painted guidance image.');
+  }
+  const graph=buildImageGraphBase(guide?{...config,prompt:'Use the coloured paint as guidance for the requested change. Replace the visible paint with a finished result at that position and scale, matching the original scene. '+config.prompt}:config);
+  const model=config.model||'flux3',shape=config.shape||'square',plan=imageResolutionPlan({...config,model,shape});
+  if(guide&&!config.edit_area.enabled){
+    if(!IMAGE_MODELS.find(item=>item.id===model)?.edit||!graph.reference_1?.inputs)throw Error('This image model cannot use painted guidance. Choose an image editor.');
+    graph.reference_1.inputs.image=guide;
+  }
+  if(config.edit_area?.enabled){
+    const recipe=IMAGE_MODELS.find(item=>item.id===model);
+    applyImageEditArea(graph,{...config,recipe,shape:config.processingResolution==='manual'?'square':config.processingResolution==='auto'?'auto':shape,width:plan.processing.width,height:plan.processing.height,references:config.references||[]});
+  }
+  let canonical=graph.save.inputs.images;
+  const provider=!!IMAGE_MODELS.find(item=>item.id===model)?.provider;
+  if(config.retain_layer_context===true&&config.image_layer_base&&provider&&plan.original){
+    graph.canonical_layer_size={class_type:'ImageScale',_meta:{title:'Keep image layers in source coordinates'},inputs:{image:canonical,upscale_method:'lanczos',width:plan.original.width,height:plan.original.height,crop:'disabled'}};
+    canonical=['canonical_layer_size',0];
+  }
+  if(config.retain_layer_context===true&&config.image_layer_base)graph.save_layer={...graph.save,_meta:{title:'Retain source-sized image layer'},inputs:{...graph.save.inputs,images:canonical}};
+  const output=plan.output,needsDeliveryScale=plan.delivery==='processing'&&!!plan.original&&(config.operation==='edit'||IMAGE_MODELS.find(item=>item.id===model)?.edit)&&(!provider||config.deliveryResolution==='processing')||plan.delivery==='original'&&provider;
+  if(needsDeliveryScale){
+    const image=!config.edit_area?.enabled&&graph.output_size?.inputs?.image&&plan.delivery==='processing'?graph.output_size.inputs.image:canonical;
+    graph.delivery_size={class_type:'ImageScale',_meta:{title:plan.delivery==='original'?'Deliver original source dimensions':'Deliver processing dimensions'},inputs:{image,upscale_method:'lanczos',width:output.width,height:output.height,crop:'disabled'}};
+    graph.save.inputs.images=['delivery_size',0];
+  }
+  return graph;
 }
 export function imageAvailability(info){
   const files=(type,key)=>{const field=info[type]?.input?.required?.[key];return field?.[0]==="COMBO"?field[1]?.options||[]:Array.isArray(field?.[0])?field[0]:[];};

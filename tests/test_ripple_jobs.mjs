@@ -14,7 +14,7 @@ const config={engine:'h3',source:'clip.mp4',startFrame:3,frameCount:25,sequenceF
 const master={filename:'paintout_SDR_10bit.mp4',subfolder:'ZURA STUDIO/ripple',type:'output'};
 const preview={filename:'motion_preview_SDR.mp4',subfolder:'ZURA STUDIO/ripple',type:'output'};
 const done={status:{completed:true,status_str:'success'},outputs:{save:{images:[master,preview],text:['Saved 25 frames: output']}}};
-assert.deepEqual(rippleOutput(done,config),{file:preview,master,config,saved:'Saved 25 frames: output'});
+assert.deepEqual(rippleOutput(done,config),{file:preview,master,config,exports:[],saved:'Saved 25 frames: output'});
 assert.equal(rippleOutput({outputs:{save:{images:[{filename:'still.png'}]}}},config),null);
 
 function fixture(handler){

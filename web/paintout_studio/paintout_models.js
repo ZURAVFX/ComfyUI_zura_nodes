@@ -137,7 +137,8 @@ export class PaintoutModels{
     if(this.submissionUnknown){await this.load();return;}
     const model=this.modelForContext(this.$('package').value);if(!model)return;
     this.pendingInstall=model.id;const generation=this.generation;this.loading=true;this.render();
-    const allowed=await this.access.check(model.files||[]);this.loading=false;
+    const popup=this.access.reservePopup(model.files||[]);
+    const allowed=await this.access.check(model.files||[],{interactive:true,popup});this.loading=false;
     if(generation!==this.generation){this.render();return;}
     if(!allowed){this.root.open=true;this.positionPanel();this.render();this.access.root.open=true;return;}
     const token=this.$('token').value.trim();this.$('token').value='';this.error='';this.loading=true;this.render();

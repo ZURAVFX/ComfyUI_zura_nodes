@@ -477,7 +477,7 @@ class SharedEngineTests(unittest.TestCase):
             adapters.ZuraWanReviewedFrames().unpack(source, {**mask_video, 'images': masks[:47]})
 
     def test_ui_has_one_resolution_and_length_and_all_engines(self):
-        text = (v2_bootstrap.ROOT / 'web/studio.js').read_text(encoding='utf8')
+        text = (v2_bootstrap.ROOT / 'web/studio_core.js').read_text(encoding='utf8')
         self.assertEqual(text.count('id="gs-resolution"'), 1)
         self.assertEqual(text.count('id="gs-duration"'), 1)
         self.assertNotIn('id="gs-size"', text)
@@ -502,7 +502,9 @@ class SharedEngineTests(unittest.TestCase):
             branded = {(method, path.replace('/zura/studio', '/genj/studio'))
                 for method, path in routes if path.startswith('/zura/studio')}
             legacy = {(method, path) for method, path in routes if path.startswith('/genj/studio')}
-            self.assertEqual(branded, legacy)
+            current_only={('POST','/genj/studio/image-layers/compose')}
+            self.assertEqual(branded-current_only, legacy)
+            self.assertTrue(current_only <= branded)
             self.assertGreaterEqual(len(branded), 14)
             self.assertIn(('GET', '/zura/studio/status'), routes)
             self.assertIn(('GET', '/zura/studio/output-settings'), routes)

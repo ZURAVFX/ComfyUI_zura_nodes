@@ -93,7 +93,7 @@ export class PaintoutTimeline{
   onKeydown(event){
     if(this.state.busy)return;
     if(event.defaultPrevented||event.target.matches('input,textarea,select,[contenteditable=true]'))return;
-    if(this.state.stage==='clean'&&event.key.toLowerCase()==='k'&&!event.ctrlKey&&!event.metaKey&&!this.state.busy){event.preventDefault();this.callbacks.onCreate(this.state.playhead);return;}
+    if(['clean','render'].includes(this.state.stage)&&event.key.toLowerCase()==='k'&&!event.ctrlKey&&!event.metaKey&&!this.state.busy){event.preventDefault();this.callbacks.onCreate(this.state.playhead);return;}
     if(event.key==='ArrowLeft'||event.key==='ArrowRight'){event.preventDefault();this.seek(this.state.playhead+(event.key==='ArrowLeft'?-1:1));}
   }
   updateReadout(){
@@ -118,7 +118,8 @@ export class PaintoutTimeline{
   }
   renderMaskBars(){
     this.maskLanes.replaceChildren();this.addMask.hidden=this.state.stage!=='mask'||!(this.state.maskSegments||[]).some(s=>s.tracked);this.addMask.disabled=this.state.busy||this.state.newMaskPending;
-    this.cleanLane.hidden=this.state.stage!=='clean';this.addFrame.hidden=this.state.stage!=='clean';
+    const showClean=this.state.stage==='clean'||this.state.stage==='render'||!!(this.state.anchors?.length&&this.state.stage!=='trim');
+    this.cleanLane.hidden=!showClean;this.addFrame.hidden=!['clean','render'].includes(this.state.stage);
     if(this.state.stage!=='mask'){this.maskLanes.hidden=true;return;}
     this.maskLanes.hidden=false;
     const segments=(this.state.maskSegments||[]).filter(s=>s.tracked);
@@ -146,12 +147,13 @@ export class PaintoutTimeline{
     }
   }
   renderCards(){
+    const layout=typeof getComputedStyle==='function'?getComputedStyle(this.root):null,rowStep=Math.max(48,finite(parseFloat(layout?.getPropertyValue('--zp-card-row-step')),82)),laneBase=Math.max(rowStep+16,finite(parseFloat(layout?.getPropertyValue('--zp-card-lane-base')),108));
     this.cards.replaceChildren();const {anchors,selected,thumbnail,busy}=this.state,start=this.visibleStart(),end=this.visibleEnd(),rows=[];let tallest=0;
     anchors.forEach((anchor,index)=>{
       const frame=Math.trunc(finite(anchor.frame,0));if(frame<start||frame>=end)return;
       const position=this.position(frame),pixel=(this.cards.clientWidth||600)*position/100;let row=rows.findIndex(positions=>positions.every(last=>Math.abs(pixel-last)>=102));if(row<0){row=rows.length;rows.push([]);}rows[row].push(pixel);tallest=Math.max(tallest,row);
       const outsideTrim=frame<this.state.startFrame||frame>=this.state.startFrame+this.state.frameCount;
-      const card=el('article','zp-editor-frame-card');card.classList.toggle('is-outside-trim',outsideTrim);card.title=outsideTrim?'Outside trim. Kept for later; extend the In/Out range to use this guide.':'';card.style.left=`${position}%`;card.style.bottom=`${8+row*82}px`;card.classList.toggle('is-selected',index===selected);card.classList.toggle('is-disabled',anchor.enabled===false);card.classList.toggle('is-review',anchor.status==='needs_review'||anchor.status==='failed');
+      const card=el('article','zp-editor-frame-card');card.classList.toggle('is-outside-trim',outsideTrim);card.title=outsideTrim?'Outside trim. Kept for later; extend the In/Out range to use this guide.':'';card.style.left=`${position}%`;card.style.bottom=`${8+row*rowStep}px`;card.classList.toggle('is-selected',index===selected);card.classList.toggle('is-disabled',anchor.enabled===false);card.classList.toggle('is-review',anchor.status==='needs_review'||anchor.status==='failed');
       const pick=el('button','zp-editor-frame-card__select');pick.type='button';pick.disabled=busy;pick.setAttribute('aria-pressed',String(index===selected));pick.setAttribute('aria-label',`${anchor.status==='accepted'?'Accepted clean frame':'Clean frame'} at source frame ${frame}${outsideTrim?', outside trim, excluded from render':anchor.enabled===false?', disabled':''}`);
       const image=el('img','zp-editor-frame-card__image');image.alt='';image.loading='lazy';image.draggable=false;const src=typeof thumbnail==='function'?thumbnail(anchor):anchor.thumbnail||anchor.url||anchor.file;if(src)image.src=src;image.onerror=()=>{image.removeAttribute('src');image.classList.add('is-unavailable');};
       const state=outsideTrim?'Outside trim':anchor.enabled===false?'Disabled':anchor.status==='accepted'?'Ready':anchor.status==='needs_review'?'Review':anchor.status==='failed'?'Failed':anchor.status==='generating'?'Working':'Draft';
@@ -159,7 +161,7 @@ export class PaintoutTimeline{
       const remove=el('button','zp-editor-frame-card__remove');remove.innerHTML=maskIcons.x;remove.type='button';remove.disabled=busy;remove.setAttribute('aria-label',`Remove clean frame at source frame ${frame}`);remove.title=`Remove clean frame at source frame ${frame}`;remove.onclick=event=>{event.stopPropagation();this.callbacks.onRemove(index);};
       card.append(pick,remove);this.cards.append(card);
     });
-    this.cards.style.height=`${82*(tallest+1)}px`;this.cleanLane.style.minHeight=`${108+82*tallest}px`;
+    this.cards.style.height=`${rowStep*(tallest+1)}px`;this.cleanLane.style.minHeight=`${laneBase+rowStep*tallest}px`;
   }
   render(){
     this.root.style.setProperty('--zp-editor-timeline-zoom',String((this.domainFrames||this.totalFrames)/Math.max(1,this.windowSize)));

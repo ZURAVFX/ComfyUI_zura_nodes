@@ -67,8 +67,8 @@ class HDRLongService:
             path=selected_output(self.output_root,body.get('output_ref'))
             return {'asset_kind':'video',**({'hdr_alpha_ref':body['alpha_ref']} if body.get('alpha_ref') is not None else {})},lambda _:path
         if kind=='output_image':
-            from .hdr_output import selected_image_output
-            path=selected_image_output(self.output_root,body.get('output_ref'),allow_transparency=True)
+            from .hdr_output import selected_hdr_model_image
+            path=selected_hdr_model_image(self.output_root,body.get('output_ref'))
             from .hdr_alpha import image_has_alpha
             return {'asset_kind':'sdr_image',**({'hdr_alpha_image':body['output_ref']} if image_has_alpha(path) else {})},lambda _:path
         if kind=='result':

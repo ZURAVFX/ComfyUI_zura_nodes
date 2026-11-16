@@ -3,6 +3,7 @@ import {buildWanFrameVideoGraph,wanFrameVideoDimensions,wanFrameVideoAvailabilit
 
 const c={first:{file:'first.png'},last:{file:'last.png'},prompt:'A smooth camera move through the scene.',width:736,height:416,frames:49,steps:4,seed:42};
 const graph=buildWanFrameVideoGraph(c);
+assert.equal(graph.save.class_type,'ZuraSaveProRes4444');assert.deepEqual(Object.keys(graph.save.inputs).sort(),['filename_prefix','video'],'Final Wan output uses the ProRes saver without MP4 options');
 assert.equal(caps.fps,24);assert.equal(caps.supportsAudioReference,false);assert.equal(caps.generatesAudio,false);
 for(const slot of ['first','last'])assert.deepEqual(graph['fit_'+slot].inputs,{image:[slot,0],upscale_method:'lanczos',width:736,height:416,crop:'center'});
 assert.deepEqual(graph.endpoints.inputs.start_image,['fit_first',0]);assert.deepEqual(graph.endpoints.inputs.end_image,['fit_last',0]);

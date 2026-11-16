@@ -63,7 +63,7 @@ class HDRBlackTests(unittest.TestCase):
         self.assertEqual(final['native_source_crop']['inputs']['width'],190)
         self.assertEqual(final['native_source_crop']['inputs']['height'],130)
         self.assertEqual(final['hdr_original_length']['inputs']['image'],['final_hdr_composite',0])
-        self.assertEqual(final['zura_hdr_hlg']['inputs']['image'],['hdr_delivery_hold',0])
+        self.assertEqual(final['zura_hdr_save_video']['inputs']['images'],['hdr_delivery_hold',0])
         self.assertEqual(final['zura_hdr_archive']['inputs']['images'],['hdr_delivery_hold',0])
         for graph in (stage,final):
             for node in graph.values():

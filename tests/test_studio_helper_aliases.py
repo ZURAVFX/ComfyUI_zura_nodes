@@ -23,7 +23,7 @@ import test_artist_studio as fixture
 studio_module=fixture.studio
 modules={name:importlib.import_module(studio_module.__package__+'.'+name)
          for name in ('display_view_routes','model_view','media_import','hdri_routes')}
-PAIRS=[('GET','display/config'),('POST','display/frame'),('POST','display/info'),
+PAIRS=[('POST','display/video'),('GET','display/video/{token}'),('GET','display/config'),('POST','display/frame'),('POST','display/info'),
        ('POST','model-view'),('POST','media-import/upload'),('POST','media-import/describe'),
        ('POST','media-import/prepare'),('POST','hdri/import'),('POST','hdri/preview'),
        ('POST','hdri/export'),('POST','hdri/scene')]
@@ -109,11 +109,11 @@ class HelperAliasTests(unittest.IsolatedAsyncioTestCase):
             for method,suffix in PAIRS:
                 for prefix in ('zura','genj'):
                     with self.subTest(path=prefix+'/'+suffix):
-                        response=await client.request(method,'/'+prefix+'/studio/'+suffix,
+                        response=await client.request(method,'/'+prefix+'/studio/'+suffix.replace('{token}','a'*64),
                             headers={'Origin':'https://elsewhere.example'},data=b'{')
                         self.assertEqual(response.status,403)
                         if method=='GET':
-                            head=await client.head('/'+prefix+'/studio/'+suffix,headers={'Origin':'https://elsewhere.example'})
+                            head=await client.head('/'+prefix+'/studio/'+suffix.replace('{token}','a'*64),headers={'Origin':'https://elsewhere.example'})
                             self.assertEqual(head.status,403)
         self.studio.start_watcher.assert_not_called();self.outputs.start.assert_not_called()
         self.store.load.assert_not_called();self.store.save.assert_not_called()

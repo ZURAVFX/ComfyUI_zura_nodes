@@ -3,16 +3,41 @@ const el=(tag,text)=>{const node=document.createElement(tag);if(text)node.textCo
 export class ModelAccess {
   constructor(host,request,retry){
     this.window=host.ownerDocument?.defaultView||globalThis.window;this.request=request;this.retry=retry;this.root=el('details');this.root.className='zura-model-access';this.root.hidden=true;
-    this.root.innerHTML='<summary>Hugging Face access</summary><p>Sign in, allow Studio to download approved gated models, then accept the publisher’s terms below.</p><button type="button" data-access-browser disabled>Sign in with Hugging Face</button><a data-access-resume hidden target="_blank" rel="noopener noreferrer">Open sign-in window</a><p data-access-code hidden></p><button type="button" data-access-cancel hidden>Cancel sign-in</button><label class="zura-access-remember"><input data-access-remember type="checkbox" />Remember on this computer</label><div data-access-terms></div><p data-access-status role="status" aria-live="polite"></p><details data-access-form><summary>Advanced: use a read token</summary><a data-access-create target="_blank" rel="noopener noreferrer">Create a read token on Hugging Face</a><label>Read token<input data-access-token type="password" autocomplete="off" spellcheck="false" placeholder="hf_…" /></label><p>Use this only if browser sign-in is unavailable. Credentials stay on the ComfyUI computer.</p><button type="button" data-access-connect>Connect Hugging Face</button></details><div class="zura-access-actions"><button type="button" data-access-retry>Continue download</button><button type="button" data-access-disconnect hidden>Disconnect</button></div>';
+    this.root.innerHTML='<summary>Hugging Face access</summary><p class="zura-access-intro">Sign in with your Hugging Face account in a popout window and accept the model publisher’s terms. Studio will start the download automatically.</p><div class="zura-access-primary"><button type="button" class="gs-primary" data-access-browser disabled>Sign in with Hugging Face</button><a data-access-resume hidden target="_blank" rel="noopener noreferrer">Open sign-in window</a><button type="button" data-access-cancel hidden>Cancel sign-in</button></div><p data-access-code hidden></p><label class="zura-access-remember"><input data-access-remember type="checkbox" checked />Remember on this computer</label><div class="zura-access-terms-list" data-access-terms></div><p data-access-status role="status" aria-live="polite"></p><details data-access-form class="zura-access-token-fallback" hidden><summary>Advanced: use a read token</summary><a data-access-create target="_blank" rel="noopener noreferrer">Create a read token on Hugging Face</a><label>Read token<input data-access-token type="password" autocomplete="off" spellcheck="false" placeholder="hf_…" /></label><p>Use this only if browser sign-in is unavailable. Credentials stay on the ComfyUI computer.</p><button type="button" data-access-connect>Connect Hugging Face</button></details><div class="zura-access-actions"><button type="button" data-access-retry>Continue download</button><button type="button" data-access-disconnect hidden>Disconnect</button></div>';
     host.append(this.root);this.$=key=>this.root.querySelector(`[data-access-${key}]`);
     this.$('browser').onclick=()=>this.startBrowser();this.$('cancel').onclick=()=>this.cancelBrowser();
     this.$('create').href='https://huggingface.co/settings/tokens/new?tokenType=read';
     this.$('connect').onclick=()=>this.connect();this.$('disconnect').onclick=()=>this.disconnect();this.$('retry').onclick=()=>this.retry?.();
     this.$('token').addEventListener('keydown',event=>{if(event.key==='Enter'){event.preventDefault();void this.connect();}});
-    this.onTermsReturn=async()=>{this.window?.removeEventListener('focus',this.onTermsReturn);if(this.busy)return;try{const state=await this.request('/model-access');this.show(state);if(state.connected)await this.retry?.();}catch{this.$('status').textContent='Could not resume the download. Choose Continue download to try again.';}};
+    this.onTermsReturn=async()=>{if(this.busy||this.disposed||this.checkingTerms)return;this.checkingTerms=true;try{
+      const files=(this.currentFiles||[]).filter(file=>!file.installed&&file.gated&&file.repo&&file.revision&&file.remote_path);
+      if(files.length){const access=await this.request('/model-access',{action:'check_files',files:files.map(({repo,revision,remote_path})=>({repo,revision,remote_path}))});if(this.disposed)return;if(access.allowed!==true){this.$('status').textContent='Accept the model terms in the browser. Studio will continue when access is approved.';return;}}
+      this.stopTermsWatch();this.window?.removeEventListener('focus',this.onTermsReturn);const state=await this.request('/model-access');if(this.disposed)return;this.show(state);if(state.connected)await this.retry?.();
+    }catch{this.$('status').textContent='Could not resume the download. Choose Continue download to try again.';}finally{this.checkingTerms=false;}};
     this.root.ontoggle=()=>{if(this.root.open)void this.load();else this.$('token').value='';};
   }
+  stopTermsWatch(){if(this.termsTimer){clearTimeout(this.termsTimer);this.termsTimer=null;}this.termsPopup=null;}
+  watchTermsPopup(popup){
+    this.stopTermsWatch();
+    if(!popup||typeof popup.closed!=='boolean')return;
+    this.termsPopup=popup;
+    const poll=async()=>{
+      if(this.disposed||this.termsPopup!==popup)return;
+      if(popup.closed){void this.onTermsReturn();return;}
+      const gated=(this.currentFiles||[]).filter(file=>!file.installed&&file.gated&&file.repo&&file.revision&&file.remote_path);
+      if(gated.length){
+        try{
+          const res=await this.request('/model-access',{action:'check_files',files:gated.map(({repo,revision,remote_path})=>({repo,revision,remote_path}))});
+          if(this.disposed||this.termsPopup!==popup)return;
+          if(res?.allowed===true){try{popup.close();}catch{}void this.onTermsReturn();return;}
+        }catch{}
+      }
+      if(!this.disposed&&this.termsPopup===popup)this.termsTimer=setTimeout(poll,2500);
+    };
+    this.termsTimer=setTimeout(poll,2500);
+  }
   setFiles(files,failed){
+    this.currentFiles=files||[];
     const signature=JSON.stringify(files.filter(file=>!file.installed&&file.gated).map(file=>[file.repo,file.revision,file.remote_path]));
     if(signature!==this.fileSignature){this.blocked=null;this.fileSignature=signature;}
     failed=failed||this.blocked;
@@ -20,23 +45,39 @@ export class ModelAccess {
     this.$('terms').replaceChildren();
     const repos=[...new Set(files.filter(file=>!file.installed&&file.gated).map(file=>file.repo||(/^https:\/\/huggingface\.co\/([\w.-]+\/[\w.-]+)/.exec(file.model_card||'')||[])[1]).filter(Boolean))];
     for(const repo of failed?.access_repos||[failed?.access_repo])if(repo&&!repos.includes(repo))repos.unshift(repo);
-    for(const repo of repos){if(!/^[\w.-]+\/[\w.-]+$/.test(repo))continue;const link=el('a',`Review terms · ${repo}`);link.href=`https://huggingface.co/${repo}`;link.target='_blank';link.rel='noopener noreferrer';link.onclick=event=>{this.window?.removeEventListener('focus',this.onTermsReturn);this.window?.addEventListener('focus',this.onTermsReturn,{once:true});const popup=this.window?.open?.('about:blank','_blank','popup,width=960,height=760');if(popup){popup.opener=null;popup.location.href=link.href;event.preventDefault();}};this.$('terms').append(link);}
-    if(failed){this.root.open=true;this.$('status').textContent=failed.auth_required===false?'Access could not be checked. Check your connection and try Continue download. A model may be unavailable at its publisher.':failed.access_reason==='connect'?'Sign in with Hugging Face, review the model terms below, then continue the download.':'Review the model terms with the connected account. Return here to continue the download. Approval may be required by the publisher.';}
+    for(const repo of repos){if(!/^[\w.-]+\/[\w.-]+$/.test(repo))continue;const link=el('a',`Accept terms on Hugging Face · ${repo}`);link.className='zura-access-terms-btn';link.href=`https://huggingface.co/${repo}`;link.target='_blank';link.rel='noopener noreferrer';link.onclick=event=>{this.window?.removeEventListener('focus',this.onTermsReturn);this.window?.addEventListener('focus',this.onTermsReturn,{once:true});const popup=this.window?.open?.('about:blank','_blank','popup,width=960,height=760');if(popup){popup.opener=null;popup.location.href=link.href;event.preventDefault();this.watchTermsPopup(popup);}};this.$('terms').append(link);}
+    if(failed){this.root.open=true;this.$('status').textContent=failed.auth_required===false?'Access could not be checked. Check your connection and try Continue download. A model may be unavailable at its publisher.':failed.access_reason==='connect'?'Sign in with Hugging Face in the popout window, accept the model terms below, and the download will start automatically.':'Open the model page below in the popout window to accept its terms. The download will start automatically once accepted.';}
+  }
+  reservePopup(files){
+    if(!files?.some(file=>!file.installed&&file.gated))return null;
+    if(this.accessPopup&&this.accessPopup.closed===false)return this.accessPopup;
+    const popup=this.window?.open?.('about:blank','zura-huggingface-access','popup,width=960,height=760');
+    if(popup){popup.opener=null;this.accessPopup=popup;}return popup;
+  }
+  openTerms(url,popup){
+    popup=popup||this.window?.open?.('about:blank','zura-huggingface-access','popup,width=960,height=760');
+    if(!popup)return;
+    popup.opener=null;popup.location.href=url;this.accessPopup=popup;
+    this.window?.removeEventListener('focus',this.onTermsReturn);this.window?.addEventListener('focus',this.onTermsReturn,{once:true});this.watchTermsPopup(popup);
   }
   async load(){
     if(this.busy)return;
-    try{this.show(await this.request('/model-access'));}catch{this.$('status').textContent='Could not check the connection. You can connect below or download the files in your browser.';}
+    try{const state=await this.request('/model-access');this.show(state);return state;}catch{this.$('status').textContent='Could not check the connection. You can connect below or download the files in your browser.';}
   }
-  async check(files){
+  async check(files,{interactive=false,popup=null}={}){
     const gated=files.filter(file=>!file.installed&&file.gated);
     if(!gated.length)return true;
     this.setFiles(files);this.root.hidden=false;this.root.open=true;
     this.$('status').textContent='Checking access before downloading models…';
     try{
       const result=await this.request('/model-access',{action:'check_files',files:gated.map(({repo,revision,remote_path})=>({repo,revision,remote_path}))});
-      if(result.allowed===true){this.blocked=null;return true;}
+      if(result.allowed===true){popup?.close();this.blocked=null;return true;}
       this.blocked=result;this.setFiles(files,result);
-      await this.load();
+      const state=await this.load();
+      if(interactive&&!this.disposed){
+        if(!state?.connected&&state?.browser_signin_available===true){await this.startBrowser(popup);return false;}
+        if(state?.connected){const terms=this.$('terms').querySelector('a');if(terms)this.openTerms(terms.href,popup);return false;}
+      }
       this.$('status').textContent=result.auth_required?(result.access_reason==='connect'?'1. Sign in with Hugging Face. 2. Open the model terms below and accept or request access. 3. Continue download.':'Open the model terms below with the connected account, then continue. If approval is pending, return after the publisher grants access.'):'Access could not be checked. Check your connection and try Continue download. A model may be unavailable at its publisher.';
     }catch{this.$('status').textContent='Could not check model access. Check your connection, update Zura Studio if needed, and try Continue download.';}
     return false;
@@ -50,10 +91,11 @@ export class ModelAccess {
     // Let people replace an expired or insufficient cached credential.
     if(state.connected){this.change??=el('button','Switch account');this.change.type='button';this.change.disabled=state.browser_signin_available!==true;this.change.title=state.browser_signin_available===true?'Sign in with a different Hugging Face account':'Restart ComfyUI to enable browser sign-in';this.change.onclick=()=>this.startBrowser();this.$('disconnect').parentNode.append(this.change);}else this.change?.remove();
   }
-  async startBrowser(){
+  async startBrowser(reservedPopup=null){
     if(this.busy||this.disposed)return;
     const attempt={};this.attempt=attempt;
-    const popup=this.window?.open?.('about:blank','_blank','popup,width=620,height=760');
+    const popup=reservedPopup||this.window?.open?.('about:blank','zura-huggingface-access','popup,width=620,height=760');
+    if(popup)this.accessPopup=popup;
     if(popup)popup.opener=null;
     this.busy=true;for(const id of ['browser','retry','connect','remember'])this.$(id).disabled=true;this.$('cancel').hidden=false;this.$('status').textContent='Opening secure browser sign-in…';
     try{
@@ -80,7 +122,7 @@ export class ModelAccess {
   }
   finishBrowser(){this.attempt=null;clearTimeout(this.loginTimer);this.login=null;this.busy=false;for(const id of ['browser','retry','connect','remember'])this.$(id).disabled=false;for(const id of ['resume','code','cancel'])this.$(id).hidden=true;}
   async cancelBrowser(){const login=this.login;this.finishBrowser();this.$('status').textContent='Sign-in cancelled. Your models are unchanged.';if(login)try{await this.request('/model-access',{action:'browser_cancel',id:login.id});}catch{}}
-  dispose(){this.disposed=true;this.window?.removeEventListener('focus',this.onTermsReturn);void this.cancelBrowser();}
+  dispose(){this.disposed=true;this.stopTermsWatch();this.window?.removeEventListener('focus',this.onTermsReturn);void this.cancelBrowser();}
   async connect(){
     if(this.busy)return;const token=this.$('token').value.trim();if(!token){this.$('status').textContent='Create a read token using the link above, then paste it here.';this.$('token').focus();return;}
     this.busy=true;this.$('connect').disabled=true;this.$('retry').disabled=true;this.$('status').textContent='Checking Hugging Face access…';

@@ -17,7 +17,7 @@ class HDRDeliveryTest(unittest.TestCase):
         self.assertEqual(graph['hdr_condition']['inputs']['frame_rate'],59.94)
         self.assertEqual(graph['hdr_empty_audio']['inputs']['frame_rate'],59.94)
         self.assertEqual(graph['zura_hdr_trim_audio']['inputs']['fps'],59.94)
-        self.assertEqual(graph['zura_hdr_video']['inputs']['fps'],59.94)
+        self.assertEqual(graph['zura_hdr_save_video']['inputs']['fps'],59.94)
     def test_dynamic_graph_trims_model_padding_and_preserves_audio(self):
         graph = module.ltx25_sdr_to_hdr_dynamic_graph(['source', 0],fps=24,
                 model='model.safetensors',video_vae='video.safetensors',audio_vae='audio.safetensors',
@@ -27,16 +27,17 @@ class HDRDeliveryTest(unittest.TestCase):
         self.assertEqual(graph['hdr_empty_video']['inputs']['length'], ['zura_hdr_prepare',6])
         self.assertEqual(graph['hdr_unpad_frames']['inputs']['length'], ['zura_hdr_prepare',3])
         self.assertEqual(graph['hdr_unpad_raster']['inputs']['width'], ['zura_hdr_prepare',1])
-        self.assertEqual(graph['zura_hdr_video']['inputs']['audio'], ['zura_hdr_trim_audio',0])
+        self.assertEqual(graph['zura_hdr_save_video']['inputs']['audio'], ['zura_hdr_trim_audio',0])
         self.assertEqual(graph['zura_hdr_trim_audio']['inputs']['audio'], ['audio',0])
         self.assertEqual(graph['zura_hdr_trim_audio']['inputs']['frames'], ['zura_hdr_prepare',3])
     def test_combined_output_preserves_working_space_audio_and_bit_depth(self):
         graph = ltx_hdr_delivery(["decode", 0], 24, output="hlg_and_exr", prefix="shot_1",
                                  working_space="ltx25_acescct_qualified", audio=["audio", 0])
-        self.assertEqual(graph["zura_hdr_hlg"]["inputs"],
-                         {"image": ["decode", 0], "source": "HDR ACEScct", "destination": "HDR"})
-        self.assertEqual(graph["zura_hdr_video"]["inputs"]["bit_depth"], 10)
-        self.assertEqual(graph["zura_hdr_video"]["inputs"]["audio"], ["audio", 0])
+        self.assertNotIn('zura_hdr_hlg',graph)
+        self.assertEqual(graph['zura_hdr_save_video']['class_type'],'ZuraHDRSaveProRes4444')
+        self.assertEqual(graph['zura_hdr_save_video']['inputs']['images'],['decode',0])
+        self.assertEqual(graph['zura_hdr_save_video']['inputs']['source_space'],'acescct')
+        self.assertEqual(graph['zura_hdr_save_video']['inputs']['audio'],['audio',0])
         self.assertEqual(graph["zura_hdr_exr"], {"class_type":"ZuraHDRSDRPreview","inputs":{"image":["decode",0]}})
 
     def test_rejects_unqualified_source_and_unsafe_output_paths(self):
