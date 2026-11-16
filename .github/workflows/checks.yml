@@ -85,6 +85,7 @@ jobs:
           python -m unittest discover -s tests -p 'test_comfylink_studio.py'
           python -m unittest discover -s tests -p 'test_comfylink_studio_instance.py'
           python -m unittest discover -s tests -p 'test_comfylink_studio_host.py'
+          python -m unittest discover -s tests -p 'test_studio_media_import.py'
           python -m unittest discover -s tests -p 'test_hdr_exr_precision.py'
           python -m unittest discover -s tests -p 'test_character_swap_masks.py'
           python -m unittest discover -s tests -p 'test_studio_openjutsu.py'

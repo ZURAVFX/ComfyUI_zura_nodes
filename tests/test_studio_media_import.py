@@ -27,6 +27,7 @@ import torch
 from PIL import Image
 
 import v2_bootstrap
+from prores_fixture import declare_bt709_limited_mov
 if 'server' not in sys.modules:
     stub=types.ModuleType('server');stub.PromptServer=types.SimpleNamespace(instance=None);sys.modules['server']=stub
 if 'ComfyUI_zura_nodes.artist_studio' not in sys.modules:
@@ -126,6 +127,7 @@ class ImportTests(unittest.TestCase):
         subprocess.run([tools.find_media_tool('ffmpeg'),'-v','error','-f','lavfi','-i','testsrc=size=64x48:rate=25',
             '-frames:v','2','-c:v','prores_ks','-profile:v','4','-pix_fmt','yuv444p10le',
             '-color_trc','bt709','-color_primaries','bt709','-colorspace','bt709','-color_range','tv',str(path)],check=True)
+        declare_bt709_limited_mov(path)
         asset=self.register(identity,path,'video');before=path.read_bytes()
         described,_=media.describe_asset(asset,self.store,self.check,self.roots)
         self.assertEqual(described['precision']['decodedBitDepth'],12)
@@ -144,6 +146,7 @@ class ImportTests(unittest.TestCase):
         subprocess.run([tools.find_media_tool('ffmpeg'),'-v','error','-f','rawvideo','-pixel_format','rgba','-video_size','64x48','-framerate','25','-i','-',
             '-c:v','prores_ks','-profile:v','4','-pix_fmt','yuva444p10le','-alpha_bits','16',
             '-color_trc','bt709','-color_primaries','bt709','-colorspace','bt709','-color_range','tv',str(path)],input=pixels.tobytes(),check=True)
+        declare_bt709_limited_mov(path)
         asset=self.register(identity,path,'video');before=path.read_bytes()
         described,_=media.describe_asset(asset,self.store,self.check,self.roots)
         self.assertTrue(described['precision']['hasAlpha']);self.assertEqual(described['precision']['decodedBitDepth'],12)
@@ -349,6 +352,7 @@ class ImportHTTPTests(unittest.IsolatedAsyncioTestCase):
                         else:
                             codec=['-c:v','libx264','-x264-params','colorprim=bt709:transfer=bt709:colormatrix=bt709','-pix_fmt','yuv420p'] if suffix=='mp4' else ['-c:v','prores_ks','-profile:v','4','-pix_fmt','yuv444p10le']
                             subprocess.run([tools.find_media_tool('ffmpeg'),'-v','error','-f','lavfi','-i','testsrc=size=64x48:rate=25','-frames:v','3',*codec,'-color_trc','bt709','-color_primaries','bt709','-colorspace','bt709','-color_range','tv',str(path)],check=True)
+                            if suffix=='mov':declare_bt709_limited_mov(path)
                         form=FormData();form.add_field('file',path.read_bytes(),filename=path.name)
                         response_value=await client.post('/zura/studio/media-import/upload',data=form);self.assertEqual(response_value.status,200,await response_value.text())
                         uploaded=await response_value.json();identity=uploaded['asset']['id']
