@@ -15,6 +15,7 @@ def tempo_filter(speed):
 
 def reinterpret_movie(source, destination, source_rate, model_rate, frame_count):
     import av
+    from .sdr10_video import _positive_fraction
     source, destination=Path(source),Path(destination)
     original=Fraction(source_rate['numerator'],source_rate['denominator']);working=Fraction(model_rate)
     if not 1<=original<=240 or not 1<=working<=240 or not 1<=frame_count<=10000:
@@ -36,7 +37,23 @@ def reinterpret_movie(source, destination, source_rate, model_rate, frame_count)
         '-t',f'{duration:.12f}',str(temporary)]
     try:
         result=subprocess.run(command,capture_output=True,timeout=300)
-        if result.returncode or count(temporary)!=frame_count:
+        def complete():
+            try:
+                with av.open(str(temporary)) as movie:
+                    rate=_positive_fraction(movie.streams.video[0].average_rate,'Working frame rate is unavailable')
+                return rate==working and count(temporary)==frame_count
+            except (ValueError,OSError):return False
+        if result.returncode or not complete():
+            # Older FFmpeg keeps the source DefaultDuration on stream copy.
+            # Re-encode losslessly only when the fast remux cannot declare the
+            # requested clock. setpts reinterprets frames; it never resamples.
+            command=[executable,'-v','error','-y','-r',str(working),'-i',str(source),'-map','0:v:0','-map','0:a?',
+                '-vf',f'setpts=N/({working}*TB)','-c:v','ffv1','-level','3','-g','1',
+                '-fps_mode','passthrough','-c:a','pcm_s24le',
+                '-af',tempo_filter(working/original)+f',apad,atrim=duration={duration:.12f}',
+                '-t',f'{duration:.12f}',str(temporary)]
+            result=subprocess.run(command,capture_output=True,timeout=300)
+        if result.returncode or not complete():
             raise ValueError('Could not reinterpret every source frame at the model frame rate.')
         temporary.replace(destination)
         return destination

@@ -11,6 +11,7 @@ def prepare_video_delivery(path, output_root, *, precision, width, height, frame
     """Write an AE-timed ProRes 4444 MOV master; retain the model's original file."""
     import av
     from . import float_io
+    from .sdr10_video import _positive_fraction
 
     path, output_root = Path(path), Path(output_root).absolute()
     if precision not in {'sdr8', 'prores12'}:
@@ -46,7 +47,7 @@ def prepare_video_delivery(path, output_root, *, precision, width, height, frame
         duration=frame_count/float(rate)
         from .studio_rate import tempo_filter
         with av.open(str(path)) as source_movie:
-            source_rate=source_movie.streams.video[0].average_rate
+            source_rate=_positive_fraction(source_movie.streams.video[0].average_rate,'The generated movie frame rate is unavailable')
         if not source_rate:raise ValueError('The generated movie frame rate is unavailable')
         audio_clock=tempo_filter(rate/source_rate)+',' if rate!=source_rate else ''
         command=[executable,'-v','error','-r',f'{rate.numerator}/{rate.denominator}','-i',str(path),
@@ -70,6 +71,7 @@ def prepare_video_delivery(path, output_root, *, precision, width, height, frame
 
 def inspect_video_master(path, *, width, height, frame_count, frame_rate):
     import av
+    from .sdr10_video import _positive_fraction
 
     path = Path(path)
     if path.suffix.lower() not in {'.mp4', '.mov'}:
@@ -80,7 +82,7 @@ def inspect_video_master(path, *, width, height, frame_count, frame_rate):
             raise ValueError('Native return needs exactly one video track')
         video = movie.streams.video[0]
         codec = video.codec_context
-        if video.average_rate != expected_rate or (video.width, video.height) != (width, height):
+        if _positive_fraction(video.average_rate,'Native return clock is unavailable') != expected_rate or (video.width, video.height) != (width, height):
             raise ValueError('Native return clock or raster differs from the AE source')
         # These are the only opaque, directly importable contracts qualified for
         # this candidate. A ten-bit H.264 file keeps its actual precision label.
@@ -100,7 +102,7 @@ def inspect_video_master(path, *, width, height, frame_count, frame_rate):
                 raise ValueError('Native return raster changes between frames')
             if type(frame.pts) is not int or frame.time_base is None:
                 raise ValueError('Native return frame timestamp is unavailable')
-            instant = frame.pts * frame.time_base
+            instant = frame.pts * _positive_fraction(frame.time_base,'Native return frame timestamp is unavailable')
             if first is None:
                 first = instant
             if instant != first + Fraction(count, 1) / expected_rate:

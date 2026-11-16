@@ -1,6 +1,7 @@
 import shutil,subprocess,tempfile,unittest
 from pathlib import Path
 from fractions import Fraction
+from unittest.mock import patch
 import numpy as np
 import av
 from comfylink.studio_rate import reinterpret_movie
@@ -22,7 +23,7 @@ class MovieRateTests(unittest.TestCase):
                 subprocess.run(['ffmpeg','-v','error','-i',str(source),'-f','lavfi','-i',f'sine=frequency=1000:sample_rate=48000:duration={float(count/rate)}','-map','0:v','-map','1:a','-c:v','copy','-c:a','pcm_s16le',str(audio)],check=True)
                 model=reinterpret_movie(audio,root/'model.mkv',{'numerator':rate.numerator,'denominator':rate.denominator},24,count)
                 with av.open(str(model)) as c:
-                    self.assertEqual(c.streams.video[0].average_rate,24)
+                    self.assertEqual(Fraction(c.streams.video[0].average_rate.numerator,c.streams.video[0].average_rate.denominator),24)
                     frames=list(c.decode(video=0))
                     self.assertEqual([round(float(f.to_ndarray(format='rgb24').mean())/10) for f in frames],list(range(count)))
                 with av.open(str(model)) as c:
@@ -30,9 +31,20 @@ class MovieRateTests(unittest.TestCase):
                     self.assertAlmostEqual(len(samples)/48000,count/24,delta=.025)
                     frequency=np.argmax(abs(np.fft.rfft(samples)))*48000/len(samples)
                     self.assertAlmostEqual(frequency,1000,delta=5)
+                if rate==Fraction(30000,1001):
+                    run=subprocess.run
+                    def old_remux(command,**kwargs):
+                        if '-c:v' in command and command[command.index('-c:v')+1]=='copy':
+                            command=list(command);command[command.index('-r')+1]=str(rate)
+                        return run(command,**kwargs)
+                    with patch('comfylink.studio_rate.subprocess.run',side_effect=old_remux):
+                        fallback=reinterpret_movie(audio,root/'fallback.mkv',{'numerator':rate.numerator,'denominator':rate.denominator},24,count)
+                    with av.open(str(fallback)) as c:
+                        self.assertEqual(Fraction(c.streams.video[0].average_rate.numerator,c.streams.video[0].average_rate.denominator),24)
+                        self.assertEqual([round(float(f.to_ndarray(format='rgb24').mean())/10) for f in c.decode(video=0)],list(range(count)))
                 result=prepare_video_delivery(model,root,precision='prores12',width=64,height=48,frame_count=count,frame_rate={'numerator':rate.numerator,'denominator':rate.denominator})
                 with av.open(str(result)) as c:
-                    self.assertEqual(c.streams.video[0].average_rate,rate)
+                    self.assertEqual(Fraction(c.streams.video[0].average_rate.numerator,c.streams.video[0].average_rate.denominator),rate)
                     frames=list(c.decode(video=0));self.assertEqual(len(frames),count)
                     self.assertEqual([round(float(f.to_ndarray(format='rgb24').mean())/10) for f in frames],list(range(count)))
 
