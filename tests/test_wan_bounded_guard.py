@@ -299,6 +299,7 @@ class BoundedSpeechGuardTests(unittest.TestCase):
 
     @unittest.skipUnless(FFMPEG,"CPU FFmpeg executable unavailable")
     def test_real_final_soundtrack_restore_uses_normalized_wav_with_zero_offset(self):
+        media_tool=patch.object(shutil,"which",return_value=FFMPEG);media_tool.start();self.addCleanup(media_tool.stop)
         # Load the unchanged production export class without importing/registering
         # the whole Studio extension. Run its actual FFmpeg mux on tiny CPU media.
         path = fixtures.v2_bootstrap.ROOT/"artist_studio"/"__init__.py"
@@ -319,8 +320,7 @@ class BoundedSpeechGuardTests(unittest.TestCase):
             "Fraction":__import__('fractions').Fraction}
         exec(compile(ast.Module(body=[definition],type_ignores=[]),str(path),"exec"),namespace)
         generated = media.NativeFile(str(media.write_video(self.fixture.base/"neutral-generated.mov",count=24)))
-        with patch.object(shutil,"which",return_value=FFMPEG):
-            result = namespace["GenjRestoreSoundtrack"]().restore(generated,{**self.details,"full_source":False},"neutral_take")
+        result = namespace["GenjRestoreSoundtrack"]().restore(generated,{**self.details,"full_source":False},"neutral_take")
         restored = result["result"][0]
         command = calls[0]
         self.assertEqual(command[command.index("-ss")+1],0)

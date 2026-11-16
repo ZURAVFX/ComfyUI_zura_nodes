@@ -46,6 +46,29 @@ jobs:
           node-version: '24'
       - name: Install CPU media test dependencies
         run: |
+          if ! command -v ffmpeg >/dev/null || ! command -v ffprobe >/dev/null; then
+            if ! sudo timeout --kill-after=10s 120s apt-get \
+              -o APT::Update::Error-Mode=any \
+              -o Acquire::Retries=0 \
+              -o Acquire::http::Timeout=15 \
+              -o Acquire::https::Timeout=15 update; then
+              # Ubuntu's primary hosts can share a DNS outage. The fallback
+              # retains the existing Ubuntu signature keyring and source fields.
+              sudo python tools/ci_ubuntu_mirror.py
+              sudo timeout --kill-after=10s 120s apt-get \
+                -o APT::Update::Error-Mode=any \
+                -o Acquire::Retries=0 \
+                -o Acquire::http::Timeout=15 \
+                -o Acquire::https::Timeout=15 update
+            fi
+            sudo timeout --kill-after=10s 120s apt-get \
+              -o Acquire::Retries=0 \
+              -o Acquire::http::Timeout=15 \
+              -o Acquire::https::Timeout=15 \
+              install -y --no-install-recommends ffmpeg
+          fi
+          ffmpeg -version >/dev/null
+          ffprobe -version >/dev/null
           python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
           python -m pip install numpy scipy pillow aiohttp av OpenImageIO opencolorio
           npm install --prefix "$GITHUB_WORKSPACE/../ui-check" --ignore-scripts --no-audit --no-fund linkedom@0.18.13
