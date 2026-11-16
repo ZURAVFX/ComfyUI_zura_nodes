@@ -70,7 +70,7 @@ jobs:
           ffmpeg -version >/dev/null
           ffprobe -version >/dev/null
           python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
-          python -m pip install numpy scipy pillow aiohttp av OpenImageIO opencolorio
+          python -m pip install numpy scipy pillow requests soundfile aiohttp av opencv-python-headless safetensors OpenImageIO opencolorio psutil huggingface_hub
           npm install --prefix "$GITHUB_WORKSPACE/../ui-check" --ignore-scripts --no-audit --no-fund linkedom@0.18.13
       - name: Check local bridge, exact frames and real EXR precision
         run: |
