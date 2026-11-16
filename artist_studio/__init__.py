@@ -761,9 +761,9 @@ class GenjRestoreSoundtrack:
             vf += f",scale={output_width}:{output_height}:force_original_aspect_ratio=increase:flags=lanczos,crop={output_width}:{output_height}"
         elif clip_details.get("export_width") and clip_details.get("export_height"):
             vf += f",scale={clip_details['export_width']}:{clip_details['export_height']}:flags=lanczos"
-        ffmpeg("-i", generated, "-ss", offset, "-i", soundtrack, "-map", "0:v:0", "-map", "1:a:0?",
+        ffmpeg(*(["-r",str(fps)] if contract is not None else []),"-i", generated, "-ss", offset, "-i", soundtrack, "-map", "0:v:0", "-map", "1:a:0?",
                "-t", target_duration, "-vf", vf, "-frames:v", final_frames,
-               *(["-r",str(fps),"-fps_mode","passthrough"] if contract is not None else []),
+               *(["-fps_mode","passthrough"] if contract is not None else []),
                *(["-c:v","prores_ks","-profile:v","4","-pix_fmt","yuv444p10le","-tag:v","ap4h"] if professional else ["-c:v","libx264","-crf",16,"-pix_fmt","yuv420p"]), *audio, *(["-metadata","comment=Zura working RGB: srgb_display"] if professional else []), "-movflags", "+faststart+write_colr", path)
         preview = {"filename": path.name, "subfolder": "genj/" + output_subfolder,
                    "type": "output", "format": "video/quicktime" if professional else "video/mp4"}

@@ -32,7 +32,7 @@ Use your own ComfyUI host and port if they differ.
 
 ## Current release
 
-**1.3.66** unifies Studio's painting and prompt controls, clarifies multi-stage workflows and improves model setup. It includes frame-preserving AE/model timing, ProRes 4444 video delivery, PNG/EXR still returns, native HDR Paintout fixes and processing-mask exports. Character Replacement now reviews the mask and reference frame before generating video. Normal Studio remains free and independent of the separate native AE plug-in. See the [release notes](CHANGELOG.md) for scope and tested limits.
+**1.3.67** unifies Studio's painting and prompt controls, clarifies multi-stage workflows and improves model setup. It includes frame-preserving AE/model timing, ProRes 4444 video delivery, PNG/EXR still returns, native HDR Paintout fixes and processing-mask exports. Character Replacement now reviews the mask and reference frame before generating video. Normal Studio remains free and independent of the separate native AE plug-in. See the [release notes](CHANGELOG.md) for scope and tested limits.
 
 Zura Studio remains free to open and use normally, without a ComfyLink licence. The separate native ComfyLink After Effects plug-in is optional and is not bundled here. Existing [Relight](docs/RELIGHT_MODELS.md), [Director](docs/DIRECTOR_STUDIO.md), [Paintout](PAINTOUT.md), [alpha extraction](docs/LTX_ALPHA.md), [Ripple editing](docs/RIPPLE_STUDIO.md) and [painted image edits](docs/IMAGE_EDIT_AREA.md) remain available.
 

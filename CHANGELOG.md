@@ -1,5 +1,11 @@
 # Release notes
 
+## 1.3.67 - 16 November 2026
+
+- Restore AE clocks in the native soundtrack exporter using frame-preserving input reinterpretation. Avoid incompatible output frame-rate/passthrough options in current FFmpeg while retaining the exact source frame count and audio timing.
+- Read explicit MOV colour-range declarations when a decoder does not propagate them onto ProRes frames. Keep unknown or contradictory range declarations rejected, preserve encoded media and alpha, and verify the portable path with real ProRes fixtures.
+- Includes all Studio, ProRes delivery and ComfyLink improvements from 1.3.66.
+
 ## 1.3.66 - 16 November 2026
 
 - Make Studio feel consistent across workflows with shared brush sizing and palettes, prompt controls and precise keyboard input. Keep one progress indicator, make repair stages navigable and keep trim/source actions compact.

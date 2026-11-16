@@ -15,15 +15,124 @@ COEFFICIENTS = {1: (.2126, .0722), 5: (.299, .114), 6: (.299, .114), 9: (.2627, 
 _LOCAL = {'protocol_whitelist': 'file,pipe', 'format_whitelist': 'mov,matroska,webm,avi,mxf'}
 
 
-def frame_rgba(frame, *, max_pixels=16*1024*1024):
-    """Read decoded frame metadata, never the codec context's guessed matrix."""
+_MAX_MOOV = 16*1024*1024
+_MAX_BOXES = 4096
+_PRORES_TAGS = {b'ap4h', b'ap4x', b'apch', b'apcn', b'apcs', b'apco'}
+
+
+def _boxes(data):
+    """Walk one bounded in-memory MOV container; never search media payloads."""
+    import struct
+    offset = 0
+    for _ in range(_MAX_BOXES):
+        if offset == len(data):return
+        if len(data)-offset < 8:raise ValueError('The MOV colour metadata has an incomplete box.')
+        size, kind = struct.unpack_from('>I4s', data, offset);header = 8
+        if size == 1:
+            if len(data)-offset < 16:raise ValueError('The MOV colour metadata has an incomplete box.')
+            size = struct.unpack_from('>Q', data, offset+8)[0];header = 16
+        elif size == 0:size = len(data)-offset
+        if size < header or offset+size > len(data):raise ValueError('The MOV colour metadata box size is invalid.')
+        yield kind, data[offset+header:offset+size]
+        offset += size
+    raise ValueError('The MOV colour metadata has too many boxes.')
+
+
+def _single(data, kind):
+    matches = [body for name, body in _boxes(data) if name == kind]
+    if len(matches) > 1:raise ValueError('The MOV colour metadata is ambiguous.')
+    return matches[0] if matches else None
+
+
+def _video_colour(moov):
+    import struct
+    for kind, track in _boxes(moov):
+        if kind != b'trak':continue
+        media = _single(track, b'mdia')
+        if media is None:continue
+        handler = _single(media, b'hdlr')
+        if handler is None or len(handler) < 12 or handler[8:12] != b'vide':continue
+        # AV video stream zero is the first video track, not the first colr box.
+        info = _single(media, b'minf')
+        table = _single(info, b'stbl') if info is not None else None
+        sample = _single(table, b'stsd') if table is not None else None
+        if sample is None:return None
+        if len(sample) < 8:raise ValueError('The MOV sample descriptions are incomplete.')
+        count = struct.unpack_from('>I', sample, 4)[0]
+        if not 1 <= count <= 64:raise ValueError('The MOV has an unsupported sample description count.')
+        entries = list(_boxes(sample[8:]))
+        if len(entries) != count:raise ValueError('The MOV sample description count is invalid.')
+        declarations = []
+        for codec, body in entries:
+            if codec not in _PRORES_TAGS:return None
+            if len(body) < 78:raise ValueError('The ProRes sample description is incomplete.')
+            colour = _single(body[78:], b'colr')
+            # nclc has no full/limited-range flag and is never used to infer one.
+            if colour is None or colour[:4] != b'nclx':return None
+            if len(colour) < 11 or colour[10] & 0x7f:raise ValueError('The MOV nclx range declaration is invalid.')
+            matrix = struct.unpack_from('>H', colour, 8)[0]
+            code_range = 2 if colour[10] & 0x80 else 1
+            if matrix not in COEFFICIENTS:raise ValueError('The MOV nclx matrix is unsupported for ProRes RGB recovery.')
+            declarations.append((matrix, code_range))
+        if len(set(declarations)) != 1:raise ValueError('The ProRes MOV sample descriptions have conflicting colour declarations.')
+        return declarations[0]
+    return None
+
+
+def mov_colour_declaration(path):
+    """Read explicit video-zero ProRes nclx metadata, with bounded local I/O.
+
+    Non-MOV containers have no declaration here. Media data is skipped by seek;
+    only one moov box, capped at 16 MiB, is read into memory.
+    """
+    import struct
+    with open(path, 'rb') as stream:
+        stream.seek(0, 2);length = stream.tell();stream.seek(0)
+        offset = 0;moov = None
+        for _ in range(_MAX_BOXES):
+            if offset == length:return _video_colour(moov) if moov is not None else None
+            if length-offset < 8:raise ValueError('The MOV top-level box is incomplete.')
+            stream.seek(offset);head = stream.read(8)
+            if len(head) != 8:raise ValueError('The MOV top-level box is incomplete.')
+            size, kind = struct.unpack('>I4s', head);header = 8
+            if offset == 0 and kind not in {b'ftyp', b'moov', b'mdat', b'wide', b'free', b'skip'}:return None
+            if size == 1:
+                extended = stream.read(8)
+                if len(extended) != 8:raise ValueError('The MOV top-level box is incomplete.')
+                size = struct.unpack('>Q', extended)[0];header = 16
+            elif size == 0:size = length-offset
+            if size < header or offset+size > length:raise ValueError('The MOV top-level box size is invalid.')
+            if kind == b'moov':
+                if moov is not None:raise ValueError('The MOV has multiple movie metadata boxes.')
+                if size > _MAX_MOOV:raise ValueError('The MOV movie metadata exceeds the 16 MiB limit.')
+                moov = stream.read(size-header)
+                if len(moov) != size-header:raise ValueError('The MOV movie metadata is incomplete.')
+            offset += size
+        raise ValueError('The MOV has too many top-level boxes.')
+
+
+def frame_rgba(frame, *, declared=None, max_pixels=16*1024*1024):
+    """Use actual frame fields or explicit MOV nclx, never codec-context guesses."""
     count = FORMATS.get(frame.format.name)
     width, height = frame.width, frame.height
     if (count is None or type(width) is not int or type(height) is not int
             or min(width, height) < 1 or width*height > max_pixels or len(frame.planes) != count):
         raise ValueError('Choose a bounded twelve-bit ProRes 4:4:4 frame.')
-    try:matrix, code_range = int(frame.colorspace), int(frame.color_range)
-    except (TypeError,ValueError):raise ValueError('The ProRes frame matrix and range are missing.') from None
+    try:
+        matrix = int(frame.colorspace) if getattr(frame, 'colorspace', None) is not None else None
+        code_range = int(frame.color_range) if getattr(frame, 'color_range', None) is not None else None
+    except (TypeError, ValueError):raise ValueError('The ProRes frame matrix and range are missing.') from None
+    if declared is not None:
+        if (not isinstance(declared, tuple) or len(declared) != 2
+                or any(type(value) is not int for value in declared)
+                or declared[0] not in COEFFICIENTS or declared[1] not in {1, 2}):
+            raise ValueError('The explicit ProRes MOV matrix and range declaration is invalid.')
+        if matrix not in {None, 2} and matrix != declared[0]:
+            raise ValueError('The ProRes frame matrix conflicts with its explicit MOV declaration.')
+        if code_range not in {None, 0} and code_range != declared[1]:
+            raise ValueError('The ProRes frame range conflicts with its explicit MOV declaration.')
+        if matrix in {None, 2}:matrix = declared[0]
+        if code_range in {None, 0}:code_range = declared[1]
     if matrix not in COEFFICIENTS or code_range not in {1, 2}:
         raise ValueError('This ProRes frame needs a declared BT.601, BT.709 or non-constant BT.2020 matrix and limited or full range.')
     values=[]
@@ -74,6 +183,7 @@ def selected_frames(info, start, count, check_cancelled, *, max_pixels=16*1024*1
             raise ValueError('The original ProRes contains no readable frames.')
         if first.format.name not in FORMATS:
             clip.close();return None
+        declared = mov_colour_declaration(info['path'])
     except BaseException:
         clip.close();raise
 
@@ -88,7 +198,7 @@ def selected_frames(info, start, count, check_cancelled, *, max_pixels=16*1024*1
                 if index < start:continue
                 if (frame.width, frame.height) != (info['width'], info['height']):
                     raise ValueError('The ProRes raster changed during original-frame decoding.')
-                yield frame_rgba(frame, max_pixels=max_pixels)
+                yield frame_rgba(frame, declared=declared, max_pixels=max_pixels)
                 selected += 1
                 if selected == count:break
             if selected != count:

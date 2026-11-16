@@ -7,6 +7,8 @@ import subprocess
 import tempfile
 import threading
 import types
+import struct
+from unittest.mock import patch
 import unittest
 
 import av
@@ -64,14 +66,114 @@ class PlaneTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError,'bounded'):decoder.frame_rgba(frame([256,2048,2048]),max_pixels=5)
 
 
+def _box(kind,body):return struct.pack('>I4s',len(body)+8,kind)+body
+
+
+def _track(kind, *, matrix=1, full=False, declaration=b'nclx'):
+    colour=declaration+struct.pack('>HHH',1,1,matrix)+(bytes([128 if full else 0]) if declaration==b'nclx' else b'')
+    entry=_box(b'ap4h',b'\0'*78+_box(b'colr',colour))
+    samples=_box(b'stsd',b'\0'*4+struct.pack('>I',1)+entry)
+    handler=_box(b'hdlr',b'\0'*8+kind+b'\0'*12)
+    return _box(b'trak',_box(b'mdia',handler+_box(b'minf',_box(b'stbl',samples))))
+
+
+def _movie(path,*tracks,media_size=4):
+    path=Path(path)
+    with path.open('wb') as movie:
+        movie.write(_box(b'ftyp',b'qt  '+b'\0'*4));movie.write(struct.pack('>I4s',media_size+8,b'mdat'))
+        movie.seek(media_size,1);movie.write(_box(b'moov',b''.join(tracks)))
+    return path
+
+
+class ContainerDeclarationTests(unittest.TestCase):
+    def test_explicit_video_zero_declaration_recovers_unspecified_frame_fields(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path=_movie(Path(folder)/'declared.mov',_track(b'soun',matrix=6,full=True),_track(b'vide'),_track(b'vide',matrix=9,full=True))
+            declared=decoder.mov_colour_declaration(path)
+            self.assertEqual(declared,(1,1),'Only the first actual video track supplies pixel metadata')
+            unknown=frame([4095,2048,3000],matrix=2,code_range=0,alpha=0)
+            actual=decoder.frame_rgba(unknown,declared=declared)
+            expected=decoder.frame_rgba(frame([4095,2048,3000],matrix=1,code_range=1,alpha=0))
+            np.testing.assert_array_equal(actual,expected)
+            self.assertGreater(float(actual[...,0].min()),1,'Hidden extended RGB stays unclipped')
+            np.testing.assert_array_equal(actual[...,3],0)
+            partial=frame([2048,2048,2048],matrix=1,code_range=0,alpha=1001)
+            np.testing.assert_array_equal(decoder.frame_rgba(partial,declared=declared),decoder.frame_rgba(frame([2048,2048,2048],matrix=1,alpha=1001)))
+    def test_nclc_and_untagged_frames_do_not_gain_a_guessed_range(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path=_movie(Path(folder)/'nclc.mov',_track(b'vide',declaration=b'nclc'))
+            self.assertIsNone(decoder.mov_colour_declaration(path))
+            source=frame([2048,2048,2048],matrix=1,code_range=0)
+            source.codec_context=types.SimpleNamespace(colorspace=1,color_range=1)
+            with self.assertRaisesRegex(ValueError,'declared'):
+                decoder.frame_rgba(source,declared=decoder.mov_colour_declaration(path))
+            with self.assertRaisesRegex(ValueError,'declared'):decoder.frame_rgba(source)
+    def test_explicit_container_and_known_frame_conflicts_are_rejected(self):
+        for source in (frame([2048,2048,2048],matrix=6),frame([2048,2048,2048],matrix=1,code_range=2)):
+            with self.assertRaisesRegex(ValueError,'conflicts'):decoder.frame_rgba(source,declared=(1,1))
+        with self.assertRaisesRegex(ValueError,'declaration'):decoder.frame_rgba(frame([2048,2048,2048]),declared=(2,1))
+    def test_media_payload_is_skipped_and_movie_metadata_is_bounded(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path=_movie(Path(folder)/'large-media.mov',_track(b'vide'),media_size=2*1024*1024)
+            original_open=open;reads=[]
+            class Watched:
+                def __init__(self,stream):self.stream=stream
+                def __enter__(self):return self
+                def __exit__(self,*args):return self.stream.__exit__(*args)
+                def __getattr__(self,name):return getattr(self.stream,name)
+                def read(self,size=-1):reads.append(size);return self.stream.read(size)
+            with patch('builtins.open',side_effect=lambda *args,**kwargs:Watched(original_open(*args,**kwargs))):
+                self.assertEqual(decoder.mov_colour_declaration(path),(1,1))
+            self.assertLess(sum(reads),1024,'No mdat payload should be read')
+            oversized=Path(folder)/'oversized.mov'
+            with oversized.open('wb') as stream:
+                stream.write(struct.pack('>I4s',decoder._MAX_MOOV+9,b'moov'));stream.seek(decoder._MAX_MOOV+8);stream.write(b'\0')
+            with self.assertRaisesRegex(ValueError,'16 MiB'):decoder.mov_colour_declaration(oversized)
+    def test_selected_frames_reads_container_once_without_mutating_alpha_or_rgb(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path=_movie(Path(folder)/'input.mov',_track(b'vide'))
+            frames=[frame([256,2048,3000],matrix=2,code_range=0,alpha=0),frame([3760,2048,2048],matrix=1,code_range=0,alpha=1001)]
+            clip=types.SimpleNamespace(streams=types.SimpleNamespace(video=[types.SimpleNamespace(codec_context=types.SimpleNamespace(name='prores'))]),decode=lambda **kwargs:iter(frames),close=lambda:None)
+            with patch.object(av,'open',return_value=clip),patch.object(decoder,'mov_colour_declaration',wraps=decoder.mov_colour_declaration) as declaration:
+                result=list(decoder.selected_frames({'path':str(path),'width':3,'height':2},0,2,lambda:None))
+                declaration.assert_called_once_with(str(path))
+            np.testing.assert_array_equal(result[0],decoder.frame_rgba(frame([256,2048,3000],matrix=1,code_range=1,alpha=0)))
+            np.testing.assert_array_equal(result[1],decoder.frame_rgba(frame([3760,2048,2048],matrix=1,code_range=1,alpha=1001)))
+
+
 class FallbackTests(unittest.TestCase):
+    def test_real_alpha_planes_keep_pixels_when_decoder_omits_declared_range(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path=Path(folder)/'rgba.mov'
+            pixels=np.full((48,64,4),128,np.uint8);pixels[...,:3]=[200,70,30]
+            pixels[...,3]=np.tile(np.repeat([0,32,128,255],16),(48,1))
+            subprocess.run([fixture.tools.find_media_tool('ffmpeg'),'-v','error','-f','rawvideo','-pixel_format','rgba','-video_size','64x48','-framerate','25','-i','-',
+                '-c:v','prores_ks','-profile:v','4','-pix_fmt','yuva444p10le','-alpha_bits','16',
+                '-color_trc','bt709','-color_primaries','bt709','-colorspace','bt709','-color_range','tv',str(path)],input=pixels.tobytes(),check=True)
+            fixture.declare_bt709_limited_mov(path)
+            declared=decoder.mov_colour_declaration(path);self.assertEqual(declared,(1,1))
+            with av.open(str(path)) as movie:
+                decoded=next(movie.decode(video=0));expected=decoder.frame_rgba(decoded,declared=declared)
+                try:
+                    decoded.color_range=0
+                    missing=decoded
+                except (AttributeError,TypeError):
+                    missing=types.SimpleNamespace(format=decoded.format,width=decoded.width,height=decoded.height,
+                        planes=decoded.planes,colorspace=decoded.colorspace,color_range=0)
+                self.assertEqual(int(missing.color_range),0)
+                actual=decoder.frame_rgba(missing,declared=declared)
+            np.testing.assert_array_equal(actual,expected)
+            np.testing.assert_allclose(actual[...,3],pixels[...,3]/255,atol=.005)
+            self.assertGreater(float(actual[0,0,:3].max()),.5,'Decoded RGB under zero alpha remains unchanged')
+
     def test_prores_422_stays_on_the_existing_decoder_path(self):
         with tempfile.TemporaryDirectory() as temporary:
             path=Path(temporary)/'422.mov'
             subprocess.run([fixture.tools.find_media_tool('ffmpeg'),'-v','error','-f','lavfi','-i','testsrc=size=64x48:rate=25','-frames:v','2',
                 '-c:v','prores_ks','-profile:v','3','-pix_fmt','yuv422p10le','-color_trc','bt709','-color_primaries','bt709','-colorspace','bt709',str(path)],check=True)
             paint=fixture.importlib.import_module('ComfyUI_zura_nodes.paintout.paintout');info=paint.describe(str(path))
-            self.assertIsNone(decoder.selected_frames(info,0,1,lambda:None))
+            with patch.object(decoder,'mov_colour_declaration',side_effect=AssertionError('422 must retain its existing decoder path')):
+                self.assertIsNone(decoder.selected_frames(info,0,1,lambda:None))
             reader=fixture.media.model_view._video_frames(info,0,1,None)
             try:actual=next(reader)
             finally:reader.close()

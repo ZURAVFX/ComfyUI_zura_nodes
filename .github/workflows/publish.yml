@@ -349,6 +349,7 @@ jobs:
         run: |
           python -m unittest discover -s tests -p 'test_studio_linear_processing.py'
           python -m unittest discover -s tests -p 'test_studio_media_import.py'
+          python -m unittest discover -s tests -p 'test_prores444.py'
           python -m unittest discover -s tests -p 'test_hdr_detail.py'
           node tests/test_studio_media_import.mjs
           python -m unittest discover -s tests -p 'test_studio_helper_aliases.py'

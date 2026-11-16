@@ -73,7 +73,11 @@ def declare_bt709_limited_mov(path):
         raise AssertionError('Compressed fixture media changed during metadata declaration')
     path.write_bytes(after)
     if _packets(path)!=coded:raise AssertionError('Fixture compressed packet identity changed')
+    from importlib import import_module
+    decoder=import_module('ComfyUI_zura_nodes.artist_studio.prores444')
+    declared=decoder.mov_colour_declaration(path)
+    if declared!=(1,1):raise AssertionError('Fixture MOV did not retain explicit BT.709 limited range')
     with av.open(str(path)) as movie:
         frame=next(movie.decode(video=0))
-        if int(frame.colorspace)!=1 or int(frame.color_range)!=1:
-            raise AssertionError('Decoder did not receive explicit BT.709 limited range')
+        rgba=decoder.frame_rgba(frame,declared=declared)
+        if rgba.shape!=(frame.height,frame.width,4):raise AssertionError('Declared fixture decoding returned a different raster')

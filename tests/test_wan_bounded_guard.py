@@ -298,6 +298,51 @@ class BoundedSpeechGuardTests(unittest.TestCase):
                         namespace["GenjLoadReviewedShot"]().load("shot", "shot", render_long_edge=256, preserve_aspect=True)
 
     @unittest.skipUnless(FFMPEG,"CPU FFmpeg executable unavailable")
+    def test_real_ae_clock_restore_keeps_each_model_frame_and_audio_timing(self):
+        media_tool=patch.object(shutil,"which",return_value=FFMPEG);media_tool.start();self.addCleanup(media_tool.stop)
+        path=fixtures.v2_bootstrap.ROOT/"artist_studio"/"__init__.py"
+        definition=next(node for node in ast.parse(path.read_text(encoding="utf-8")).body
+                        if isinstance(node,ast.ClassDef) and node.name=="GenjRestoreSoundtrack")
+        def ffmpeg(*args):
+            completed=subprocess.run([FFMPEG,"-hide_banner","-loglevel","error","-y",*map(str,args)],capture_output=True,text=True)
+            if completed.returncode:raise RuntimeError(completed.stderr)
+        output_root=self.fixture.base/"output"/"genj";output_root.mkdir(parents=True,exist_ok=True)
+        namespace={"__name__":"ComfyUI_zura_nodes.artist_studio.clock_fixture","__package__":"ComfyUI_zura_nodes.artist_studio",
+                   "CATEGORY":"Zura/Artist Studio","Path":Path,"re":re,"av":media.av,"np":np,"json":json,
+                   "InputImpl":media.InputImpl,"digest_file":io.file_digest,"source_path":lambda v:Path(v.get_stream_source()),
+                   "root":lambda:output_root,"ffmpeg":ffmpeg,"Fraction":__import__('fractions').Fraction}
+        exec(compile(ast.Module(body=[definition],type_ignores=[]),str(path),"exec"),namespace)
+        generated=media.NativeFile(str(media.write_video(self.fixture.base/"clock-model.mov",count=24)))
+        with media.av.open(generated.get_stream_source()) as movie:
+            stream=movie.streams.video[0]
+            width,height=stream.width,stream.height
+            expected=[round(float(frame.to_ndarray(format="rgb24")[...,0].mean())/9) for frame in movie.decode(video=0)]
+        self.assertEqual(expected,list(range(24)),"Every generated frame has a distinct ordered marker")
+        contract={"schemaVersion":1,"sessionId":"a"*32,"width":width,"height":height,
+                  "frameCount":24,"modelFrames":24,"trimFrames":24,
+                  "frameRate":{"numerator":30,"denominator":1},"modelFrameRate":{"numerator":24,"denominator":1}}
+        returned=namespace['GenjRestoreSoundtrack']().restore(generated,{**self.details,"full_source":False},
+                    "ae_clock_take",ae_frame_contract=json.dumps(contract))['result'][0]
+        with media.av.open(returned.get_stream_source()) as movie:
+            self.assertEqual(movie.streams.video[0].average_rate,__import__('fractions').Fraction(30))
+            decoded=list(movie.decode(video=0))
+            self.assertEqual(len(decoded),24)
+            self.assertEqual([round(float(frame.to_ndarray(format="rgb24")[...,0].mean())/9) for frame in decoded],expected,
+                             "AE clock restoration must not drop, duplicate or reorder model frames")
+            self.assertEqual([frame.pts*frame.time_base for frame in decoded],
+                             [__import__('fractions').Fraction(index,30) for index in range(24)])
+        with media.av.open(returned.get_stream_source()) as movie:
+            stream=movie.streams.audio[0];sample_rate=stream.codec_context.sample_rate
+            resampler=media.av.AudioResampler(format='fltp',layout=stream.layout,rate=sample_rate)
+            buffers=[converted.to_ndarray() for frame in movie.decode(audio=0) for converted in resampler.resample(frame)]
+            buffers.extend(frame.to_ndarray() for frame in resampler.resample(None))
+            waveform=np.concatenate(buffers,axis=-1)[None]
+        self.assertEqual(sample_rate,24000)
+        self.assertEqual(tuple(waveform.shape),(1,1,19200),"24 frames at 30 fps must carry exactly 0.8 seconds of audio")
+        self.assertGreater(float(np.abs(waveform[...,:1000]).mean()),.02,"Retiming must retain the beginning of the selected line")
+        self.assertLess(float(np.abs(waveform[...,4800:]).max()),.001,"Retiming must not pull later source audio into the selected interval")
+
+    @unittest.skipUnless(FFMPEG,"CPU FFmpeg executable unavailable")
     def test_real_final_soundtrack_restore_uses_normalized_wav_with_zero_offset(self):
         media_tool=patch.object(shutil,"which",return_value=FFMPEG);media_tool.start();self.addCleanup(media_tool.stop)
         # Load the unchanged production export class without importing/registering
