@@ -55,3 +55,6 @@ NODE_PACKS.find(pack=>pack.name==='ComfyUI').nodes.push('LoadMoGeModel','MoGeInf
 NODE_PACKS.find(pack=>pack.name==='ComfyUI-VideoHelperSuite').nodes.push('VHS_LoadVideoPath');
 NODE_PACKS.find(pack=>pack.name==='ComfyUI ControlNet Aux').nodes.push('DepthAnythingV2Preprocessor');
 NODE_PACKS.find(pack=>pack.name==='ComfyUI').nodes.push('ImageToMask','JoinImageWithAlpha','SplitImageWithAlpha','SaveWEBM','ModelSamplingFlux');
+
+// Reference preparation ships with Studio; there is no separate Manager pack.
+NODE_PACKS.find(pack=>pack.name==='Zura Nodes').nodes.push('H3ReferenceVideo','H3ReferenceAudio');

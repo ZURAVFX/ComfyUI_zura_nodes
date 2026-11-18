@@ -293,3 +293,7 @@ NODE_DISPLAY_NAME_MAPPINGS["ZuraQwenEditLatent"] = "Qwen Edit Reference Canvas"
 if getattr(PromptServer, "instance", None) is not None:
     from .comfylink.routes import register as register_comfylink_routes
     register_comfylink_routes(PromptServer.instance, __version__)
+
+from .h3_reference_media import NODE_CLASS_MAPPINGS as H3_REFERENCE_MEDIA_NODES, NODE_DISPLAY_NAME_MAPPINGS as H3_REFERENCE_MEDIA_NAMES
+NODE_CLASS_MAPPINGS.update(H3_REFERENCE_MEDIA_NODES)
+NODE_DISPLAY_NAME_MAPPINGS.update(H3_REFERENCE_MEDIA_NAMES)

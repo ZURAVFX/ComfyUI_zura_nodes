@@ -52,3 +52,6 @@ assert.deepEqual(alpha.packs.find(p=>p.name==='Zura Nodes').missing,['ZuraAlphaV
 assert.deepEqual(alpha.packs.find(p=>p.name==='ComfyUI-LTXVideo').missing,['LTXICLoRALoaderModelOnly','LTXAddVideoICLoRAGuide']);
 for(const node of ['ImageToMask','InvertMask','JoinImageWithAlpha','SplitImageWithAlpha','SaveWEBM','CreateVideo','SaveVideo'])assert.equal(alpha.packs.find(p=>p.missing.includes(node)).name,'ComfyUI');
 console.log('Shared setup distinguishes Comfy core, Zura, KJ and LTX nodes, keeps pinned setup and reports unknown dependencies.');
+
+assert.deepEqual(groupMissingNodes(['H3ReferenceVideo','H3ReferenceAudio']).unknown,[]);
+assert.equal(groupMissingNodes(['H3ReferenceVideo','H3ReferenceAudio']).packs[0].name,'Zura Nodes');

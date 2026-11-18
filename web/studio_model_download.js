@@ -276,7 +276,7 @@ export class StudioModelDownloads {
       this.files.append(this.el('p','Required ComfyUI nodes:'));const grouped=groupMissingNodes(missingNodes);
       for(const pack of grouped.packs){const row=this.el('p','');row.append(this.link(pack.name,pack.registry||pack.url),' · '+pack.missing.join(', '));this.files.append(row);if(pack.note){const note=this.el('p',pack.note);if(pack.patch)note.append(' ',this.link('OpenJutsu compatibility patch',pack.patch));this.files.append(note);}}
       if(grouped.unknown.length)this.files.append(this.el('p',`Other nodes: ${grouped.unknown.join(', ')}. Check the workflow setup guide for their packs.`));
-      this.files.append(this.el('p','1. Open ComfyUI Manager and search for each extension above. 2. Install or update it. 3. Save your work and restart ComfyUI, return to this mode and choose Check setup.'));
+      this.files.append(this.el('p',grouped.packs.length&&grouped.packs.every(pack=>pack.name==='Zura Nodes')&&!grouped.unknown.length?'These helpers are included with Zura Nodes and load automatically at startup. Save your work and restart ComfyUI, then choose Check setup. If they are still missing, update Zura Nodes and restart again.':'1. Open ComfyUI Manager and search for each extension above. 2. Install or update it. 3. Save your work and restart ComfyUI, return to this mode and choose Check setup.'));
     }
   }
   render(){
