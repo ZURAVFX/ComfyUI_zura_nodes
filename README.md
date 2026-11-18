@@ -2,7 +2,7 @@
 
 Local video, image and audio tools, with a guided **Zura Studio** interface and editable native ComfyUI graphs.
 
-[Zura ComfyUI Studio on Zura](https://zuravfx.com/products/zura-comfyui-studio/)
+[Zura Nodes product page](https://zuravfx.com/products/zura-nodes/)
 
 For first-frame object edits, choose **Video > Object replacement · Ripple**. See the [Ripple guide](docs/RIPPLE_OBJECT_REPLACEMENT.md) for masking, image review and model setup.
 
