@@ -139,6 +139,9 @@ class ModelAccess:
             from urllib.parse import urlparse
             url = data.get('verification_uri_complete') or data['verification_uri']
             parsed = urlparse(url)
+            if parsed.scheme == 'https' and parsed.netloc == 'hf.co' and parsed.path == '/oauth/device':
+                url = parsed._replace(netloc='huggingface.co').geturl()
+                parsed = urlparse(url)
             if parsed.scheme != 'https' or parsed.netloc != 'huggingface.co':
                 raise ValueError('Unexpected sign-in destination.')
             interval = max(5, int(data.get('interval', 5)))

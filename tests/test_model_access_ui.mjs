@@ -57,7 +57,7 @@ console.log('Shared access, gated failure/reconnect/retry, secret clearing and s
 const nativeTimeout=globalThis.setTimeout,nativeClear=globalThis.clearTimeout;
 let scheduled,opened=0,resumed=0;
 globalThis.setTimeout=callback=>{scheduled=callback;return 1;};globalThis.clearTimeout=()=>{scheduled=null;};
-window.open=()=>{opened++;return {opener:{},location:{},close(){}};};
+window.open=url=>{assert.match(url,/^https:\/\/huggingface\.co\//);opened++;return {opener:{},location:{},close(){}};};
 const browserCalls=[];
 const browserAccess=new ModelAccess(document.querySelector('#access'),async(path,body)=>{
  browserCalls.push(body);

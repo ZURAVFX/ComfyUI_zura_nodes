@@ -86,6 +86,14 @@ class AccessTests(unittest.TestCase):
         self.assertEqual(login['code'], 'ABCD-EFGH')
         return login
 
+    def test_official_short_device_url_is_canonicalised(self):
+        payload = dict(device_code='server-only-device', user_code='ABCD-EFGH',
+                       verification_uri='https://hf.co/oauth/device', expires_in=300)
+        with patch('requests.post', return_value=self.device_reply(payload)):
+            login = self.manager.browser_start()
+        self.assertEqual(login['url'], 'https://huggingface.co/oauth/device')
+        self.assertEqual(login['code'], 'ABCD-EFGH')
+
     def test_browser_pending_slowdown_success_and_expiry(self):
         login = self.start_device()
         with patch('requests.post', return_value=self.device_reply({'error':'authorization_pending'})) as post:

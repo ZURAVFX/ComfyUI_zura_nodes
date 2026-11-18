@@ -45,17 +45,12 @@ export class ModelAccess {
     this.$('terms').replaceChildren();
     const repos=[...new Set(files.filter(file=>!file.installed&&file.gated).map(file=>file.repo||(/^https:\/\/huggingface\.co\/([\w.-]+\/[\w.-]+)/.exec(file.model_card||'')||[])[1]).filter(Boolean))];
     for(const repo of failed?.access_repos||[failed?.access_repo])if(repo&&!repos.includes(repo))repos.unshift(repo);
-    for(const repo of repos){if(!/^[\w.-]+\/[\w.-]+$/.test(repo))continue;const link=el('a',`Accept terms on Hugging Face · ${repo}`);link.className='zura-access-terms-btn';link.href=`https://huggingface.co/${repo}`;link.target='_blank';link.rel='noopener noreferrer';link.onclick=event=>{this.window?.removeEventListener('focus',this.onTermsReturn);this.window?.addEventListener('focus',this.onTermsReturn,{once:true});const popup=this.window?.open?.('about:blank','_blank','popup,width=960,height=760');if(popup){popup.opener=null;popup.location.href=link.href;event.preventDefault();this.watchTermsPopup(popup);}};this.$('terms').append(link);}
+    for(const repo of repos){if(!/^[\w.-]+\/[\w.-]+$/.test(repo))continue;const link=el('a',`Accept terms on Hugging Face · ${repo}`);link.className='zura-access-terms-btn';link.href=`https://huggingface.co/${repo}`;link.target='_blank';link.rel='noopener noreferrer';link.onclick=event=>{this.window?.removeEventListener('focus',this.onTermsReturn);this.window?.addEventListener('focus',this.onTermsReturn,{once:true});const popup=this.window?.open?.(link.href,'_blank','popup,width=960,height=760');if(popup){popup.opener=null;popup.location.href=link.href;event.preventDefault();this.watchTermsPopup(popup);}};this.$('terms').append(link);}
     if(failed){this.root.open=true;this.$('status').textContent=failed.auth_required===false?'Access could not be checked. Check your connection and try Continue download. A model may be unavailable at its publisher.':failed.access_reason==='connect'?'Sign in with Hugging Face in the popout window, accept the model terms below, and the download will start automatically.':'Open the model page below in the popout window to accept its terms. The download will start automatically once accepted.';}
   }
-  reservePopup(files){
-    if(!files?.some(file=>!file.installed&&file.gated))return null;
-    if(this.accessPopup&&this.accessPopup.closed===false)return this.accessPopup;
-    const popup=this.window?.open?.('about:blank','zura-huggingface-access','popup,width=960,height=760');
-    if(popup){popup.opener=null;this.accessPopup=popup;}return popup;
-  }
+  reservePopup(files){return null;}
   openTerms(url,popup){
-    popup=popup||this.window?.open?.('about:blank','zura-huggingface-access','popup,width=960,height=760');
+    popup=popup||this.window?.open?.(url,'zura-huggingface-access','popup,width=960,height=760');
     if(!popup)return;
     popup.opener=null;popup.location.href=url;this.accessPopup=popup;
     this.window?.removeEventListener('focus',this.onTermsReturn);this.window?.addEventListener('focus',this.onTermsReturn,{once:true});this.watchTermsPopup(popup);
@@ -94,7 +89,7 @@ export class ModelAccess {
   async startBrowser(reservedPopup=null){
     if(this.busy||this.disposed)return;
     const attempt={};this.attempt=attempt;
-    const popup=reservedPopup||this.window?.open?.('about:blank','zura-huggingface-access','popup,width=620,height=760');
+    let popup=reservedPopup;
     if(popup)this.accessPopup=popup;
     if(popup)popup.opener=null;
     this.busy=true;for(const id of ['browser','retry','connect','remember'])this.$(id).disabled=true;this.$('cancel').hidden=false;this.$('status').textContent='Opening secure browser sign-in…';
@@ -104,7 +99,7 @@ export class ModelAccess {
       const url=new URL(login.url);if(url.origin!=='https://huggingface.co')throw Error('Unexpected sign-in address.');
       this.login=login;this.$('resume').href=url.href;this.$('resume').hidden=false;
       this.$('code').textContent=login.code?`Enter this code if asked: ${login.code}`:'';this.$('code').hidden=!login.code;
-      this.$('cancel').hidden=false;if(popup)popup.location.href=url.href;
+      this.$('cancel').hidden=false;if(!popup)popup=this.window?.open?.(url.href,'zura-huggingface-access','popup,width=620,height=760');if(popup){popup.opener=null;this.accessPopup=popup;popup.location.href=url.href;}
       this.$('status').textContent='Complete sign-in in the browser. This page will continue automatically.';
       this.loginTimer=setTimeout(()=>this.pollBrowser(),Math.max(5,login.interval||5)*1000);
     }catch(error){popup?.close();if(this.attempt!==attempt||this.disposed)return;this.finishBrowser();this.$('status').textContent=error.message||'Could not start browser sign-in.';}
