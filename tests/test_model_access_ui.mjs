@@ -103,3 +103,11 @@ assert.equal(popup.location.href,'https://huggingface.co/oauth/device');
 await automatic.cancelBrowser();
 await automatic.onTermsReturn();assert.equal(resumeCount,0,'Returning to Studio without accepting terms never resumes download');
 granted=true;await automatic.onTermsReturn();assert.equal(resumeCount,1,'Approved access resumes the retained install intent');automatic.dispose();
+
+const ownership=Object.create(StudioModelDownloads.prototype);
+ownership.job='h3-job';ownership.jobState={model_ids:['openjutsu_h3','h3_reference_core']};
+ownership.packages=[{id:'openjutsu_h3',name:'OpenJutsu H3'},{id:'flux3_klein',name:'FLUX.3 Klein'}];
+assert.equal(ownership.jobMatchesPlan({packs:[ownership.packages[1]]}),false,'H3 progress must not label FLUX.3 as installing');
+assert.equal(ownership.jobMatchesPlan({packs:[ownership.packages[0]]}),true);
+assert.match(ownership.jobLabel(),/OpenJutsu H3/);
+console.log('Download package ownership passed.');

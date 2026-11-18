@@ -93,7 +93,7 @@ export class StudioModelDownloads {
     this.loadingCatalogue=true;
     try{const data=await this.request('/model-downloads');this.uncertain=false;this.packages=(data.models||[]).filter(p=>PACKAGE_IDS.includes(p.id));
       const previous=this.select.value;const overview=this.el('option','Current workflow');overview.value='__workflow__';this.select.replaceChildren(overview,...this.packages.map(p=>{const e=this.el('option',p.name);e.value=p.id;return e;}));if(previous==='__workflow__'||this.packages.some(p=>p.id===previous))this.select.value=previous;else if(!this.context&&this.packages.length)this.select.value=this.packages[0].id;if(this.missingContext)this.applyMissingContext();this.render();
-      if(data.active?.id&&!this.job&&!this.closed){this.job=data.active.id;this.select.disabled=true;this.progress.textContent='Reconnecting to the existing download…';this.render();void this.poll();}
+      if(data.active?.id&&!this.job&&!this.closed){this.job=data.active.id;this.jobState=data.active;this.select.disabled=true;this.progress.textContent='Reconnecting to the existing download…';this.render();void this.poll();}
     }catch(e){this.progress.textContent=this.uncertain?'Could not confirm whether the download started. Check its status before trying again.':e.message||'Could not load model packages.';this.render();}
     finally{this.loadingCatalogue=false;this.renderQuick();}
   }
@@ -149,12 +149,21 @@ export class StudioModelDownloads {
     }
     if(this.quick.parentNode!==host)host.prepend(this.quick);
   }
+  jobMatchesPlan(plan){
+    if(!this.job)return false;
+    const ids=this.jobState?.model_ids||[this.jobState?.model_id];
+    return !!plan?.packs?.some(pack=>ids.includes(pack.id));
+  }
+  jobLabel(){
+    const ids=this.jobState?.model_ids||[this.jobState?.model_id];
+    return ids.map(id=>this.packages.find(pack=>pack.id===id)?.name||id).filter(Boolean).join(' + ')||'Model download';
+  }
   renderQuick(){
     if(!this.quick){const owner=this.panel.closest('.zf-page,.zo-page,.zh-page,.zpc-page,.zvfx-page,.zalpha-page,.zc-image-page')||this.panel.closest('#genj-studio')?.querySelector('.gs-workspace');this.mountQuick(owner?.querySelector('.zc-prompt-card,.zo-composer,.gs-composer,.zvfx-composer,.zalpha-composer,.zc-image-composer')||owner);}
     if(!this.quick)return;
     const plan=this.workflowPlan(),missing=this.context?.files?.some(f=>f.ready===false),nodes=this.context?.missingNodes?.length||0;
     this.quick.hidden=!this.job&&!this.starting&&!missing&&!nodes;
-    this.quick.querySelector('[data-quick-title]').textContent=this.job?'Installing models':`${ROUTE_NAMES[this.context?.route]||'This mode'} · setup`;
+    this.quick.querySelector('[data-quick-title]').textContent=this.job?`Downloading ${this.jobLabel()}`:`${ROUTE_NAMES[this.context?.route]||'This mode'} · setup`;
     this.quick.querySelector('[data-quick-size]').textContent=!missing&&!this.job?'Open Setup details for the required extensions. After restarting ComfyUI, choose Check setup.':this.packages.length?`${plan.files.length} missing file${plan.files.length===1?'':'s'} · ${gb(plan.bytes)} to download${nodes?' · extensions also needed':''}${plan.manual.length?' · some files need manual setup':''}`:'Checking download sizes…';
     const button=this.quick.querySelector('[data-quick-install]');button.textContent=this.job||this.starting?'Installing…':this.loadingCatalogue&&!this.packages.length?'Checking models…':plan.blocked?'Check existing files':plan.files.length?`Install missing models · ${gb(plan.bytes)}`:'Refresh models';
     button.hidden=!missing&&!this.job;button.disabled=!!this.job||this.starting||this.uncertain||this.loadingCatalogue&&!this.packages.length||plan.blocked||!!plan.manual.length&&!plan.files.length;
@@ -164,7 +173,7 @@ export class StudioModelDownloads {
     this.quick.querySelector('[data-quick-refresh]').hidden=!button.hidden&&!plan.files.length&&!plan.manual.length;
     if(!this.quickAccess){this.quickAccess=this.el('button','Hugging Face access');this.quickAccess.type='button';this.quickAccess.onclick=()=>this.showAccess();this.quick.querySelector('[data-quick-status]').before(this.quickAccess);}
     this.quickAccess.hidden=!this.accessFailure&&!plan.files.some(file=>file.gated);
-    this.quick.querySelector('[data-quick-status]').textContent=this.progress.textContent;
+    this.quick.querySelector('[data-quick-status]').textContent=this.job&&!this.jobMatchesPlan(plan)?`${this.jobLabel()} � ${this.progress.textContent}. Cancel this download before installing the selected model.`:this.progress.textContent;
     const bar=this.quick.querySelector('progress');bar.hidden=!this.job;if(this.downloadTotal){bar.max=this.downloadTotal;bar.value=this.downloadDone||0;}else bar.removeAttribute('value');
     this.syncPickers();
   }
@@ -294,7 +303,7 @@ export class StudioModelDownloads {
     if(!allowed){this.starting=false;this.render();this.panel.hidden=false;for(let parent=this.panel;parent;parent=parent.parentElement){parent.hidden=false;if(parent.tagName==='DETAILS')parent.open=true;}this.access.root.open=true;return;}
     if(this.access?.root)this.access.root.open=false;
     const token=this.token?.value.trim();if(this.token)this.token.value='';
-    try{this.progress.textContent='Starting download…';const result=await this.request('/model-downloads',{...(typeof id==='object'?id:{model_id:id}),...(token?{token}:{})});if(!result.id)throw new Error('Could not confirm the download started. Refresh setup before retrying.');this.job=result.id;this.starting=false;this.select.disabled=true;this.render();await this.poll();
+    try{this.progress.textContent='Starting download…';const result=await this.request('/model-downloads',{...(typeof id==='object'?id:{model_id:id}),...(token?{token}:{})});if(!result.id)throw new Error('Could not confirm the download started. Refresh setup before retrying.');this.job=result.id;this.jobState={model_ids:ids};this.starting=false;this.select.disabled=true;this.render();await this.poll();
     }catch(e){this.starting=false;this.job=null;this.uncertain=true;this.select.disabled=false;this.progress.textContent='Checking whether the download started…';this.render();await this.load();if(!this.job&&!this.uncertain)this.progress.textContent=e.message||'The download did not start. Try again.';}
   }
   async poll(){
@@ -308,6 +317,7 @@ export class StudioModelDownloads {
           this.progress.textContent='Connection lost. Reconnecting to the existing download…';
           await new Promise(resolve=>setTimeout(resolve,1000));continue;
         }
+        this.jobState=state;
         const percent=state.total_bytes?Math.floor(state.done_bytes/state.total_bytes*100):0;
         this.downloadTotal=state.total_bytes;this.downloadDone=state.done_bytes;
         this.progress.textContent=state.phase==='done'?'Download complete.':state.phase==='failed'?state.error:state.phase==='cancelled'?'Download cancelled.':`${state.current_file||'Preparing download'} · ${percent}%`;
@@ -456,11 +466,12 @@ export class StudioModelPicker {
   sync(){
     if(!this.host||!this.select)return;
     const dl=this.activeDownloads();
-    const activeJob=!!(dl?.job||dl?.starting);
+
     const pct=dl?.downloadTotal?Math.floor((dl.downloadDone||0)/dl.downloadTotal*100):0;
     const selectedVal=this.select.value;
     const selectedInfo=selectedVal?this.resolve(selectedVal):null;
     const selectedPlan=selectedInfo&&dl?dl.planForOption(selectedInfo.key,selectedInfo):null;
+    const activeJob=!!(dl?.jobMatchesPlan(selectedPlan)||(dl?.starting&&!dl?.job));
     if(activeJob){
       this.inlineBtn.hidden=false;
       this.inlineBtn.className='zura-inline-install-btn is-installing';

@@ -557,6 +557,7 @@ export class CreativeWorkspace {
     finally{this.modelDownloadActive=false;this.modelDownloadJob=null;this.$('setup').querySelectorAll(`[data-download-cancel="${modelId}"]`).forEach(e=>e.hidden=true);}
   }
   render(){
+    for(const card of this.$('setup')?.querySelectorAll('[data-image-model]')||[])card.hidden=card.dataset.imageModel!==this.$('model').value;
     this.styleControls();
     if(this.$('image-lora-settings').open)this.renderImageLoras();
     const c=this.config(),m=this.models.find(m=>m.id===c.model),busy=!!this.job||!!this.pendingSubmission||this.submitting||this.uploading||!!this.rippleImage?.importing;

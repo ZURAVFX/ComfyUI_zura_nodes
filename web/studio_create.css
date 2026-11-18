@@ -475,3 +475,21 @@
 .zhe-viewport.is-empty .pano-studio-stage-canvas{opacity:0}
 .zhe-empty-hint{position:absolute;left:72px;right:320px;top:45%;text-align:center;color:var(--gs-muted,#aaa);font-size:14px;pointer-events:none;z-index:2}
 .zhe-viewport:not(.is-empty) .zhe-empty-hint{display:none}
+
+/* Keep setup in its own scrollable column at every desktop width. */
+#genj-studio[data-workspace=image] .zc-image-page.settings-open{display:grid;grid-template-columns:360px minmax(0,1fr);grid-template-rows:minmax(0,1fr);overflow:hidden}
+#genj-studio[data-workspace=image] .zc-image-page>.zc-image-settings:not([hidden]){position:relative;inset:auto;grid-column:1;grid-row:1;width:auto;min-width:0;max-height:100%;overflow-y:auto;box-sizing:border-box;padding:20px;gap:16px;background:var(--gs-panel);border:1px solid var(--gs-line);border-radius:12px;z-index:2}
+#genj-studio[data-workspace=image] .zc-image-page.settings-open>.zc-image-main{grid-column:2;grid-row:1;min-width:0;min-height:0;overflow:hidden}
+#genj-studio[data-workspace=image] .zc-image-settings #zc-settings-close{align-self:flex-end;width:auto;min-height:36px;padding:8px 14px;border:1px solid var(--gs-line);border-radius:8px}
+#genj-studio[data-workspace=image] .zc-image-composer{flex-shrink:0;max-height:55dvh;overflow-y:auto;box-sizing:border-box}
+#genj-studio .zc-image-settings .gs-model-downloads button{width:auto;max-width:100%;min-height:40px;padding:8px 12px;border:1px solid var(--gs-line);border-radius:8px;background:var(--gs-input);color:var(--zc-text);font:inherit;line-height:1.4;white-space:normal}
+#genj-studio .zc-image-settings .gs-model-downloads .gs-advanced-body{display:flex;flex-direction:column;gap:12px;padding-block:12px}
+#genj-studio .zc-image-settings [data-model-files]{min-width:0;overflow-wrap:anywhere}
+#genj-studio .zc-image-settings [data-model-files] p{margin:8px 0;line-height:1.5}
+#genj-studio .gs-model-quick{padding:12px 0;margin-bottom:8px;gap:8px;max-height:240px;overflow-y:auto;flex-shrink:0}
+@media(max-width:800px){#genj-studio[data-workspace=image] .zc-image-page.settings-open{grid-template-columns:minmax(0,1fr)}#genj-studio[data-workspace=image] .zc-image-page>.zc-image-settings:not([hidden]){position:absolute;inset:8px 8px 8px auto;width:min(360px,calc(100% - 16px));max-height:calc(100% - 16px);z-index:50;box-shadow:0 8px 32px #0008}#genj-studio[data-workspace=image] .zc-image-page.settings-open>.zc-image-main{grid-column:1}}
+
+#genj-studio .zc-model-setup[hidden]{display:none!important}
+#genj-studio .zc-image-settings .zc-field-label:has(+.zc-shapes[hidden]){display:none}
+#genj-studio .zc-image-settings .zc-model-setup{padding:16px 0;border-top:1px solid var(--gs-line);overflow-wrap:anywhere}
+#genj-studio .zc-image-settings .zc-model-setup p{font-size:13px;line-height:1.5;margin:8px 0}
