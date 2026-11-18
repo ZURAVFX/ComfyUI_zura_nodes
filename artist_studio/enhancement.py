@@ -96,8 +96,12 @@ def inspect_video(path, *, expected_frames=None, expected_width=None, expected_h
             "fps": fps, "audio_tracks": len(audios)}
 
 
-def h3_delivery_frames(selected_frames):
+def h3_delivery_frames(selected_frames, *, viewport=False):
     """Match GenjHoldToModelLength's 17k+5 H3 delivery, including held tails."""
+    if viewport:
+        if type(selected_frames) is not int or not 1 <= selected_frames <= 3592:
+            raise ValueError("Select 1 to 3592 source frames for H3 viewport rendering.")
+        return selected_frames
     if type(selected_frames) is not int or not 5 <= selected_frames <= 120:
         raise ValueError("Select 5 to 120 source frames for this H3 route.")
     return selected_frames + (5 - selected_frames) % 17
@@ -165,7 +169,7 @@ class GenjVHSVideoFromFilenames:
         return {"required": {
             "filenames": ("VHS_FILENAMES",),
             "filename_prefix": ("STRING", {"default": "genj/studio_h3_enhance"}),
-            "expected_frames": ("INT", {"default": 120, "min": 5, "max": 124}),
+            "expected_frames": ("INT", {"default": 120, "min": 1, "max": 3592}),
             "expected_width": ("INT", {"default": 1080, "min": 2, "max": 7680}),
             "expected_height": ("INT", {"default": 1920, "min": 2, "max": 7680}),
         }}

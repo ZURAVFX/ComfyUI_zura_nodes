@@ -21,7 +21,7 @@ class H3DeliveryContracts(fixtures.unittest.IsolatedAsyncioTestCase):
         head = __import__(s.__package__ + '.h3_head_swap', fromlist=['selected_frame_count'])
         review = sys.modules[s.__package__]
         for route in ('viewport', 'character', 'openjutsu', 'camera', 'head'):
-            for selected, expected in ((5, 5), (48, 56), (72, 73), (120, 124)):
+            for selected, expected in (((1, 1), (48, 48), (120, 120), (158, 158), (360, 360)) if route == "viewport" else ((5, 5), (48, 56), (72, 73), (120, 124))):
                 with self.subTest(route=route, selected=selected):
                     p = fixtures.SharedEngineTests().project()
                     p['config'].update(engine='h3', workflow_mode='viewport' if route == 'viewport' else 'motion',

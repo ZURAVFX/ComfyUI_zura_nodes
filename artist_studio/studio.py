@@ -2554,7 +2554,7 @@ class Studio:
                 action["generation_raster"] = generation_raster
                 action["base_output_raster"] = base_output_raster
                 selected_frames = verify_review(p["review"])[1]["clip"]["frames"]
-                action["expected_frames"] = h3_delivery_frames(selected_frames)
+                action["expected_frames"] = h3_delivery_frames(selected_frames, viewport=p["config"].get("workflow_mode") == "viewport" or bool(p.get("viewport_render")))
                 if action["delivery_mode"] == "enhanced1080":
                     action["next_stage"] = "wan_cleanup"
                     action["studio_action_tag"] = prompt_id
