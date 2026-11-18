@@ -91,13 +91,13 @@ class H3ViewportRenderTests(unittest.TestCase):
         self.assertEqual((crop_x, crop_y, crop_width, crop_height), (0, 14, 64, 36))
         for options, message in [
             ({"fps": 30}, "24 fps"),
-            ({"count": 121}, "0.21–5 seconds"),
+            ({"count": 3593}, "3592 frames"),
         ]:
             with self.subTest(options=options), self.assertRaisesRegex(ValueError, message):
                 data.prepare(Video(**options))
 
     def test_reference_padding_retains_every_real_frame_and_only_repeats_the_tail(self):
-        for count, expected in ((5, 5), (48, 56), (120, 124)):
+        for count, expected in ((1, 124), (5, 124), (48, 124), (120, 124), (241, 243), (360, 362)):
             with self.subTest(count=count):
                 video = Video(count=count, width=32, height=32)
                 source = torch.arange(count, dtype=torch.float32)[:, None, None, None].expand(count, 32, 32, 3)
@@ -146,13 +146,16 @@ class H3ViewportRenderTests(unittest.TestCase):
         self.assertEqual(graph["h3_crop"]["inputs"]["width"], ["h3_viewport_data", 7])
         self.assertEqual(graph["h3_crop"]["inputs"]["height"], ["h3_viewport_data", 8])
 
-    def test_original_length_over_five_seconds_is_rejected_before_queueing_video_nodes(self):
+    def test_full_source_over_five_seconds_is_preserved(self):
         project = self.project()
         project["config"]["length_mode"] = "original"
         with patch.object(studio, "assert_approved"), patch.object(studio, "check_asset"), \
                 patch("av.open", return_value=self.media_container(15)):
-            with self.assertRaisesRegex(ValueError, "0.21–5 seconds"):
-                h3.build_h3_graph(project, use_cache=False)
+            graph = h3.build_h3_graph(project, use_cache=False)
+        self.assertTrue(graph["h3_viewport_clip"]["inputs"]["use_original_length"])
+        self.assertEqual(graph["h3_export"]["inputs"]["target_frames"], ["h3_viewport_data", 4])
+        self.assertEqual(graph["h3_video"]["inputs"]["images"], ["h3_crop", 0])
+        self.assertNotIn("h3_hold_output", graph)
 
     def test_legacy_mode_without_viewport_flag_still_uses_reviewed_shot(self):
         project = self.project()

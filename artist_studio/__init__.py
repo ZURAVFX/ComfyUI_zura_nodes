@@ -153,7 +153,7 @@ class GenjSelectClip:
         return {"required": {
             "video": ("VIDEO",),
             "start_seconds": ("FLOAT", {"default": 0.0, "min": 0.0, "max": 86400.0, "step": 0.1}),
-            "duration_seconds": ("FLOAT", {"default": 4.0, "min": 0.1, "max": 30.0, "step": 0.1}),
+            "duration_seconds": ("FLOAT", {"default": 4.0, "min": 0.1, "max": 150.0, "step": 0.1}),
             "long_edge": ("INT", {"default": 768, "min": 256, "max": 1920, "step": 64}),
         }, "optional": {"audio": ("AUDIO",), "audio_start_seconds": ("FLOAT", {"default": 0, "min": 0, "max": 86400, "step": .1}),
                         "use_original_length": ("BOOLEAN", {"default": False, "tooltip": "Use the whole source video from the beginning."}),

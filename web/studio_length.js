@@ -7,12 +7,12 @@ export function clipLength(config,sourceDuration,sourceFps=24) {
   const viewport=config.workflow_mode==="viewport",scene=config.edit_area==="scene";
   // Saved H3 relight choices are migrated to Wan 2.1 before the next run.
   const chainedRelight=config.workflow_mode==="relight";
-  const modelMaximum=chainedRelight?null:config.engine==="wan2"?81/24:config.engine==="h3"?5:config.engine==="local"&&scene?(viewport?15:5):config.engine==="wan"&&config.audio_id&&config.lip_sync?30:null;
-  const maximum=original?modelMaximum:Math.min(modelMaximum??30,30);
-  const invalid=Number.isFinite(source)&&source>0&&(seconds<=0 || (!original&&Number(config.duration)>30) || (!chainedRelight&&["h3","wan2"].includes(config.engine)&&frames<5) || (maximum!==null&&frames>maximum*fps));
+  const modelMaximum=chainedRelight?null:config.engine==="wan2"?81/24:config.engine==="h3"?(viewport?3592/24:5):config.engine==="local"&&scene?(viewport?15:5):config.engine==="wan"&&config.audio_id&&config.lip_sync?30:null;
+  const maximum=original?modelMaximum:Math.min(modelMaximum??30,viewport&&config.engine==="h3"?3592/24:30);
+  const invalid=Number.isFinite(source)&&source>0&&(seconds<=0 || (!original&&Number(config.duration)>(viewport&&config.engine==="h3"?3592/24:30)) || (!chainedRelight&&["h3","wan2"].includes(config.engine)&&frames<(viewport&&config.engine==="h3"?1:5)) || (maximum!==null&&frames>maximum*fps));
   const h3Padded=config.engine==="h3"&&!chainedRelight;
   const stride=chainedRelight||config.engine==="wan2"||config.engine==="wan"?4:h3Padded?17:config.engine==="local"?8:0, remainder=stride===17?5:1;
-  const deliveryFrames=!chainedRelight&&stride&&Number.isFinite(frames)?frames+(remainder-frames%stride+stride)%stride:frames;
+  const deliveryFrames=!(viewport&&h3Padded)&&!chainedRelight&&stride&&Number.isFinite(frames)?frames+(remainder-frames%stride+stride)%stride:frames;
   return {seconds,frames,fps,outputSeconds:frames/fps,deliveryFrames,maximum,invalid};
 }
 

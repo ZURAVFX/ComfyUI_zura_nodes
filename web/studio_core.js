@@ -935,7 +935,7 @@ export class ArtistStudio {
     const helpKey=(relight?"relight:"+(this.config.relight_engine||"h3")+":":camera?"camera:":head?"head:":viewport?"viewport:":"character:")+this.config.engine+":"+(this.config.h3_character_method||"control");
     if(help && help.dataset.verified!==helpKey){
       const text=relight?(this.config.relight_engine==="wan21"?"Wan 2.1 keeps the original acting and soundtrack while applying your reviewed lighting frame. It follows the supplied chained 4-step recipe in 81-frame sections at 720p. Longer clips need more sections; inspect the joins on your shot.":"MiniMax H3 relights the full shot from your reviewed lighting frame. Describe the light, optionally add lighting references, then review the first frame before animating. Original audio is kept. Up to five seconds."):camera?"Preview mode based on your two-pass H3 workflow. Create and review a new camera still, then animate the original performance from that angle. Camera directions are approximate; check the middle and end for drift. Up to five seconds; requires original audio. Review the output for camera drift.":this.config.engine==="wan2"?"Transfer the original body, hands and facial performance. Keep background uses an expanded block mask to protect source latents; Replace background generates the whole scene. The masked preview is approved on one shot; inspect moving edges on your own footage. 10 distilled steps, up to 3.375 seconds at 480p-class output.":head?"Swap the head and face from your first portrait reference. Tracks a face crop, follows the original facial landmarks and audio, then blends it back into the source. Tested at two seconds, eight steps with Comfy Kitchen. Review identity and the blend on each shot.":viewport?(this.config.engine==="h3"
-        ?"Turn a grey viewport into a finished scene. H3 reads the camera move and animation from your video, with up to nine appearance references. Start with a two-second shot; maximum five seconds. Original audio is kept when present."
+        ?"Turn a grey viewport into a finished scene. H3 reads the camera move and animation from your video, with up to nine appearance references. Use the full source or choose your exact duration. Original audio is kept when present."
         :"LTX 2.5 Layout-to-Render uses the viewport for layout and a finished scene image for appearance. Preview route: check camera movement and body shapes before a longer render. Original audio is kept when present; new speech is not enabled here.")
         :this.config.engine==="h3"?"Guided character replacement with native audio-driven facial performance. Uses your reviewed selection and depth as guidance; surroundings may change. Original audio, new dialogue and silent footage use the approved pipeline. Short examples qualified at five seconds; Enhanced 1080p samples at 720p then enhances."
         :this.config.engine==="local"?"Recreate a character using source body motion and a finished starting look. LTX regenerates the whole frame: surroundings may change and there is no precise edit mask. Supports original performance, replacement dialogue and silent footage. Start with up to five seconds."
@@ -1338,7 +1338,7 @@ export class ArtistStudio {
     }[this.config.engine] || "";
     if(viewport)this.$("engine-hint").textContent={
       local:"Experimental for blockouts: may retain crude shapes or warp. Use H3 for the best tested result.",
-      h3:"Recommended for blockouts. Reads the video and up to nine look references directly; up to five seconds.",
+      h3:"Recommended for blockouts. Reads the video and up to nine look references directly; use the source length or a custom selection.",
       wan:"This saved shot used Wan, which is no longer available for viewport renders. Choose H3.",
       seedance:"Paid generation using Comfy credits."
     }[this.config.engine] || "";
@@ -1371,7 +1371,7 @@ export class ArtistStudio {
     if(guide){
       this.$("duration").max=String(guide.workflow_max_custom_seconds);
       const startSize=guide.start_resolution===1280?"720p":`${guide.start_resolution} px`;
-      const workflowLimit=viewport?(this.config.engine==="h3"?5:this.config.engine==="local"?15:30):guide.workflow_max_custom_seconds;
+      const workflowLimit=viewport?(this.config.engine==="h3"?3592/24:this.config.engine==="local"?15:30):guide.workflow_max_custom_seconds;
       this.$("duration").max=String(viewport?workflowLimit:guide.workflow_max_custom_seconds);
       this.$("limit-note").textContent=`Start with ${guide.start_seconds} seconds at ${startSize}. ${this.config.engine==="wan"?"Custom clips: up to 30 seconds; original length uses sections.":`Clip limit: ${workflowLimit} seconds, including Original clip length.`} Tested: ${guide.tested}.`;
       this.$("speed-note").textContent=this.config.engine==="h3" && this.config.h3_steps && this.config.h3_steps!==(this.config.quality==="fast"?8:40)
@@ -1505,14 +1505,14 @@ export class ArtistStudio {
     const selectedSeconds=this.config.length_mode==="original"?sourceSeconds:Math.min(Number(this.config.duration),sourceSeconds-start);
     const selectedFrames=Math.max(1,Math.floor(selectedSeconds*24+1e-6));
     const wan21Relight=relight;
-    const invalidH3Length=this.config.engine==="h3" && !wan21Relight && Number.isFinite(sourceSeconds) && sourceSeconds>0 && (selectedFrames<5 || selectedFrames>120);
+    const invalidH3Length=this.config.engine==="h3" && !wan21Relight && Number.isFinite(sourceSeconds) && sourceSeconds>0 && (selectedFrames<(viewport?1:5) || selectedFrames>(viewport?3592:120));
     const invalidWanSpeechLength=this.config.engine==="wan" && activeReference && this.config.lip_sync && selectedFrames>720;
     const invalidLtxLength=this.config.engine==="local"&&wholeScene&&Number.isFinite(sourceSeconds)&&sourceSeconds>0&&selectedFrames>(viewport?360:120);
-    const invalidCustomLength=this.config.length_mode!=="original" && Number(this.config.duration)>30;
+    const invalidCustomLength=this.config.length_mode!=="original" && Number(this.config.duration)>(viewport&&this.config.engine==="h3"?3592/24:30);
     const invalidLength=invalidCustomLength || invalidH3Length || invalidWanSpeechLength || invalidLtxLength || (this.config.engine==="wan2" && Number.isFinite(sourceSeconds) && (selectedFrames<5 || selectedFrames>81));
     const missingSelection=!wholeScene && !preservePeople && (method==="text"?!this.config.mask_prompt.trim():method==="points"?!points.some(p=>p.include):false);
     if(missingSelection && !working && !this.busy){label=method==="text"?"Describe the area":"Select on opening frame";note=method==="text"?"Describe the area to change before preparing the shot.":"Add at least one include point on the opening frame.";}
-    if(invalidLength && !working && !this.busy){label="Choose clip length";note=invalidCustomLength?"Custom selections support up to 30 seconds. Choose a shorter selection, or use the source length if this workflow supports it.":this.config.engine==="wan2"?"Wan Animate 2 supports 0.21 to 3.375 seconds. Choose a custom length.":invalidH3Length?(relight?"Relight supports up to 5 seconds. Choose clip length to trim your source.":viewport?"H3 viewport renders support 0.21 to 5 seconds. Choose a custom length.":"H3 currently supports 0.21 to 5 seconds. Choose a custom length, or switch to Wan."):invalidLtxLength?`LTX ${viewport?"viewport renders support up to 15 seconds":"whole-scene shots support up to 5 seconds"}. Choose a shorter length.`:"Wan replacement speech currently supports up to 30 seconds. Choose a custom length.";}
+    if(invalidLength && !working && !this.busy){label="Choose clip length";note=invalidCustomLength?"Custom selections support up to 30 seconds. Choose a shorter selection, or use the source length if this workflow supports it.":this.config.engine==="wan2"?"Wan Animate 2 supports 0.21 to 3.375 seconds. Choose a custom length.":invalidH3Length?(relight?"Relight supports up to 5 seconds. Choose clip length to trim your source.":viewport?"H3 viewport takes support up to 149.66 seconds. Choose a shorter selection.":"H3 currently supports 0.21 to 5 seconds. Choose a custom length, or switch to Wan."):invalidLtxLength?`LTX ${viewport?"viewport renders support up to 15 seconds":"whole-scene shots support up to 5 seconds"}. Choose a shorter length.`:"Wan replacement speech currently supports up to 30 seconds. Choose a custom length.";}
     const enhancementStatus=this.modelStatus?.h3_enhancement || {};
     const enhancementSetupCommand=enhancementStatus.setup_command || "Setup_H3_Enhancement_Windows.cmd";
     const enhancementUnavailable=this.config.engine==="h3"&&this.config.delivery_mode==="enhanced1080"&&this.modelStatus&&(!this.modelStatus.engine_ready?.h3||!enhancementStatus.ready);

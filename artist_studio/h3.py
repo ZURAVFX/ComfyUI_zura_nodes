@@ -437,8 +437,8 @@ class GenjH3ViewportFrameData:
         count, height, width = images.shape[:3]
         if abs(float(components.frame_rate) - 24) > 0.001:
             raise ValueError("Prepare the viewport clip at 24 fps before using H3.")
-        if not 5 <= count <= 120:
-            raise ValueError("Local H3 viewport renders currently support 0.21–5 seconds per take. Choose a section up to five seconds long.")
+        if not 1 <= count <= 3592:
+            raise ValueError("H3 viewport takes support up to 3592 frames at 24 fps.")
         # Preserve the full camera frame with a tiny replicated border rather
         # than cropping or stretching common 16:9 sizes such as 1280x720.
         target_width, target_height = ceil(width / 32) * 32, ceil(height / 32) * 32
@@ -446,7 +446,7 @@ class GenjH3ViewportFrameData:
         padded = F.pad(images.permute(0, 3, 1, 2),
                        (left, target_width - width - left, top, target_height - height - top),
                        mode="replicate").permute(0, 2, 3, 1)
-        reference_count = valid_length(count)
+        reference_count = max(124, valid_length(count))
         if reference_count > count:
             padded = torch.cat((padded, padded[-1:].expand(reference_count - count, -1, -1, -1)))
         return (padded, target_width, target_height, reference_count, count,
@@ -492,8 +492,8 @@ def build_h3_viewport_graph(project):
     if selected_seconds > available - start + 1e-6:
         raise ValueError("The selected range extends past the end of the source video. Choose a shorter range.")
     selected_frames = max(1, math.ceil(selected_seconds * 24 - 1e-6))
-    if not 5 <= selected_frames <= 120:
-        raise ValueError("Local H3 viewport renders currently support 0.21–5 seconds per take. Choose a section up to five seconds long.")
+    if not 1 <= selected_frames <= 3592:
+        raise ValueError("H3 viewport takes support up to 3592 frames at 24 fps.")
     references = list(project.get("viewport_references") or [])
     finished_frame_index = _finished_frame_index(project, selected_frames)
     finished_reference_index = None
@@ -622,12 +622,11 @@ def build_h3_viewport_graph(project):
     cropped = node("h3_crop", "ImageCrop", image=trimmed,
                    width=["h3_viewport_data", 7], height=["h3_viewport_data", 8],
                    x=["h3_viewport_data", 5], y=["h3_viewport_data", 6])
-    held = node("h3_hold_output", "GenjHoldToModelLength", images=cropped, stride=17, remainder=5)
-    video = node("h3_video", "CreateVideo", images=held, fps=24.0,
+    video = node("h3_video", "CreateVideo", images=cropped, fps=24.0,
                  **({"audio": selected_audio} if selected_audio else {}))
     enhanced_delivery = c.get("delivery_mode") == "enhanced1080"
     node("h3_export", "GenjRestoreSoundtrack", video=video,
-         clip_details=["h3_viewport_clip", 1], target_frames=["h3_hold_output", 1],
+         clip_details=["h3_viewport_clip", 1], target_frames=["h3_viewport_data", 4],
          take_name="studio_" + project["id"][:8] + ("_h3_base" if enhanced_delivery else "_h3_viewport"),
          **({"output_subfolder": "studio_intermediate"} if enhanced_delivery else {}))
     if __package__:

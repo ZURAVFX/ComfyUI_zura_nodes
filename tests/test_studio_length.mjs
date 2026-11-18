@@ -4,14 +4,14 @@ import vm from 'node:vm';
 import fs from 'node:fs';
 import {clipLength,recoverClipLength} from '../web/studio_length.js';
 const original={engine:'h3',length_mode:'original',duration:2,start:0,edit_area:'scene',workflow_mode:'viewport'};
-assert.equal(clipLength(original,15).invalid,true);
-assert.equal(recoverClipLength(original,15).duration,5);
+assert.equal(clipLength(original,15).invalid,false);
+assert.equal(recoverClipLength(original,15).duration,15);
 assert.equal(recoverClipLength({...original,engine:'local'},20).duration,15);
 assert.equal(recoverClipLength({...original,engine:'local',workflow_mode:'motion'},20).duration,5);
 assert.equal(recoverClipLength({...original,engine:'wan',audio_id:'speech',lip_sync:true},45).duration,30);
 assert.equal(clipLength({...original,length_mode:'custom',duration:5},15).invalid,false);
 assert.equal(clipLength({...original,length_mode:'custom',duration:2.1},15).frames,51, 'Custom selections keep the fractional end frame');
-assert.equal(clipLength({...original,length_mode:'custom',duration:2.1},15).deliveryFrames,56, 'H3 holds to its next supported length');
+assert.equal(clipLength({...original,length_mode:'custom',duration:2.1},15).deliveryFrames,51, 'Viewport delivery removes internal H3 frame padding');
 assert.equal(clipLength({...original,engine:'wan',workflow_mode:'relight',length_mode:'custom',duration:2.1},15).deliveryFrames,51, 'Wan relight removes internal model padding from delivery');
 assert.equal(clipLength({...original,workflow_mode:'relight',length_mode:'custom',duration:2},15,30).frames,60,'Relight counts original source frames');
 assert.equal(clipLength({...original,workflow_mode:'relight',length_mode:'custom',duration:2},15,30).outputSeconds,2);
@@ -25,7 +25,7 @@ const source=fs.readFileSync(new URL('../web/studio_core.js',import.meta.url),'u
 const context={app:{registerExtension(){}},clipLength,recoverClipLength};
 vm.createContext(context);runStudioVMInContext(source+'\nthis.Studio=ArtistStudio;',context);
 const studio=Object.create(context.Studio.prototype),events=[];
-Object.assign(studio,{busy:false,project:null,source:{duration:15},references:[],readConfig:()=>original,
+Object.assign(studio,{busy:false,project:null,source:{duration:15},references:[],readConfig:()=>({...original,workflow_mode:"motion"}),
   syncForm:()=>events.push('sync'),render:()=>events.push('render'),message:text=>events.push(text),
   revealControl:target=>target.focus({preventScroll:true}),
   $:()=>({scrollIntoView:()=>events.push('scroll'),focus:()=>events.push('focus'),select:()=>events.push('select')}),
@@ -54,3 +54,10 @@ assert.equal(clipLength({...relight,length_mode:'original'},45).invalid,false);
 assert.equal(clipLength({...relight,duration:31},45).invalid,true,'Custom durations beyond the backend limit are rejected before submission');
 assert.equal(clipLength({...relight,relight_engine:'h3'},15).invalid,false,'Saved legacy relight choices migrate to the Wan 2.1 route before generation');
 assert.equal(clipLength({...relight,engine:'wan2',workflow_mode:'motion',duration:4},15).invalid,true,'Wan Animate 2 retains its real 81-frame limit');
+
+const viewportH3={engine:"h3",workflow_mode:"viewport",length_mode:"original"};
+assert.equal(clipLength(viewportH3,12.125).invalid,false);
+assert.equal(clipLength(viewportH3,12.125).frames,291);
+assert.equal(clipLength(viewportH3,12.125).deliveryFrames,291);
+assert.equal(clipLength({...viewportH3,length_mode:"custom",duration:40},60).invalid,false);
+assert.equal(clipLength({...viewportH3,length_mode:"custom",duration:0.1},1).invalid,false);

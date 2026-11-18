@@ -208,8 +208,8 @@ def clean_config(value):
         c[key] = float(c[key])
         if not math.isfinite(c[key]):
             raise ValueError("Clip times must be finite numbers.")
-    if not 0 <= c["start"] <= 86400 or not 0.1 <= c["duration"] <= 30:
-        raise ValueError("Choose a start time and a duration between 0.1 and 30 seconds.")
+    if not 0 <= c["start"] <= 86400 or not 0.1 <= c["duration"] <= (3592/24 if c.get("workflow_mode") == "viewport" and c.get("engine") == "h3" else 30):
+        raise ValueError("Choose a valid start time and duration within this workflow’s clip limit.")
     if not 0 <= c["audio_start"] <= 86400:
         raise ValueError("Choose an audio start between 0 and 86400 seconds.")
     c["audio_id"] = str(c["audio_id"] or "")
@@ -489,8 +489,8 @@ def validate_selection(project, stage=None):
     if seconds > available - start + max(1e-6, 1/24 if c.get("ae_frame_contract") else 1e-6):
         raise ValueError("The selected range extends past the end of the source video. Choose Use source or a shorter range.")
     frames = max(1, math.ceil(seconds * 24 - 1e-6))
-    if h3 and not 5 <= frames <= 120:
-        raise ValueError("H3 currently supports 0.21 to 5 seconds. Choose a shorter custom clip, or use Wan for a longer take.")
+    if h3 and not (1 <= frames <= 3592 if c.get("workflow_mode") == "viewport" else 5 <= frames <= 120):
+        raise ValueError("H3 viewport takes support up to 3592 frames at 24 fps." if c.get("workflow_mode") == "viewport" else "H3 currently supports 0.21 to 5 seconds. Choose a shorter custom clip, or use Wan for a longer take.")
     if head_swap_setup(c):
         if frames > 48:
             raise ValueError("Head & face is approved for up to two seconds. Choose a shorter custom clip.")
