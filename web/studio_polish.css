@@ -378,3 +378,8 @@
 #genj-studio .zura-model-access .zura-access-terms-list{display:flex;flex-direction:column;gap:6px;margin:8px 0}
 #genj-studio .zura-model-access .zura-access-terms-btn{display:inline-flex;align-items:center;justify-content:center;padding:8px 12px;border-radius:8px;background:rgba(191,229,134,.16);border:1px solid rgba(191,229,134,.55);color:var(--gs-accent,#bfe586);font-weight:600;font-size:12.5px;text-decoration:none}
 #genj-studio .zura-model-access .zura-access-terms-btn:hover{background:var(--gs-accent,#bfe586);color:var(--gs-ink,#111314)}
+/* Reserve label space when the inline install action is present. */
+#genj-studio[data-workspace] .zc-model-control.zura-has-model-picker{flex:0 0 auto;width:max-content;max-width:100%;min-width:0;flex-wrap:wrap;padding-right:10px}
+#genj-studio[data-workspace] .zc-model-control.zura-has-model-picker>select{flex:0 0 auto;width:156px;min-width:120px;max-width:180px;padding-right:20px;color:var(--zc-text);-webkit-text-fill-color:var(--zc-text);opacity:1}
+#genj-studio[data-workspace] .zc-model-control.zura-has-model-picker>svg:last-of-type{position:static;flex:0 0 12px;width:12px}
+#genj-studio[data-workspace] .zc-model-control.zura-has-model-picker>.zura-inline-install-btn{flex:0 0 auto;margin-left:4px;min-height:28px;box-sizing:border-box}
