@@ -47,3 +47,16 @@
 .zura-model-access [data-access-form]>summary{cursor:pointer;padding-block:8px}
 .zura-model-access [data-access-code]{font-variant-numeric:tabular-nums;color:var(--zc-text,#eee);font-weight:600}
 .zura-model-access [data-access-resume]{display:inline-block;margin:8px 12px}
+
+/* Setup must stay within either the sidebar or the Models popover. */
+#genj-studio :is(.gs-model-downloads,.zura-model-access,.zura-model-storage){box-sizing:border-box;min-width:0;max-width:100%}
+#genj-studio .gs-model-downloads .gs-advanced-body{min-width:0;box-sizing:border-box}
+#genj-studio .gs-model-downloads label{display:grid;gap:8px}
+#genj-studio .gs-model-downloads select{width:100%;min-width:0;max-width:100%;box-sizing:border-box;min-height:40px;padding:8px;font:inherit;background:var(--gs-input,#262626);color:inherit;border:1px solid var(--gs-line,#444);border-radius:8px}
+#genj-studio .gs-model-downloads [data-model-actions]{display:flex;flex-wrap:wrap;gap:8px}
+#genj-studio .zura-model-access .zura-access-device{display:grid;gap:8px;padding:16px;margin:12px 0;border:1px solid var(--gs-accent,#caff00);border-radius:8px;background:var(--gs-input,#262626);font-size:12px;line-height:1.5}
+#genj-studio .zura-access-device strong{font:700 24px/1.3 ui-monospace,monospace;letter-spacing:.12em;user-select:all;overflow-wrap:anywhere;color:var(--zc-text,#eee)}
+#genj-studio .zura-model-access .zura-access-primary{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+#genj-studio .zura-model-access [data-access-resume]{margin:0;padding:8px 0}
+#genj-studio .zura-model-access .zura-access-terms-btn{max-width:100%;box-sizing:border-box;white-space:normal;text-align:left;justify-content:flex-start}
+#genj-studio .gs-model-quick:has(.zura-model-access[open]){max-height:none}

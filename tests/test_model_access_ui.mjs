@@ -66,7 +66,7 @@ const browserAccess=new ModelAccess(document.querySelector('#access'),async(path
  if(body.action==='browser_cancel')return {phase:'cancelled'};
 },()=>resumed++);
 await browserAccess.startBrowser();assert.equal(opened,1);assert.equal(browserAccess.$('cancel').hidden,false);
-assert.match(browserAccess.$('code').textContent,/TEST-CODE/);assert.equal(typeof scheduled,'function');
+assert.match(browserAccess.$('code').textContent,/TEST-CODE/);assert.equal(browserAccess.root.hidden,false);assert.equal(browserAccess.root.open,true);assert.equal(browserAccess.$('code').hidden,false);assert.equal(typeof scheduled,'function');
 await browserAccess.pollBrowser();assert.equal(resumed,1);assert.equal(browserAccess.$('browser').hidden,true);assert.equal(scheduled,null);
 assert.deepEqual(browserCalls[1],{action:'browser_poll',id:'device-session'});
 let termsPrevented=false;
