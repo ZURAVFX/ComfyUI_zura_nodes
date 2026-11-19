@@ -141,7 +141,7 @@ export class PlateWorkspace{
     w.$('empty').querySelector('.zps-start-mode').hidden=propagation;
     e.$('instruction').closest('label').hidden=propagation;
     if(w.modelDownloads?.quick&&propagation)w.modelDownloads.quick.hidden=true;
-    if(this.runnerPanel){this.runnerPanel.hidden=!propagation||this.runner.availability?.ready!==false;this.runner.modelDownloads.quick.hidden=!propagation||this.runner.availability?.ready!==false;}
+    if(!propagation&&this.runner?.modelDownloads.quick)this.runner.modelDownloads.quick.hidden=true;
     e.$('clean').hidden=propagation;
     if(propagation){
       e.$('clean').textContent=this.action==='paint'?'Draw / edit frame':'Edit frame';e.$('clean').disabled=busy||!e.selected();

@@ -39,6 +39,23 @@ assert.equal(surface.$('source').closest('.zpx-source-menu'),null,'The primary s
 const originalImportFrame=editor.importFrame;let importOptions;editor.importFrame=async options=>{importOptions=options;};
 for(const action of ['paint','remove','replace']){plate.action=action;editor.stage=action==='remove'?'mask':'clean';workspace.$('generate').disabled=true;surface.sync();assert.equal(surface.$('import').hidden,false);assert.equal(surface.$('import').disabled,false,'Manual import does not inherit AI-model readiness');assert.equal(surface.$('import').parentElement,surface.root.querySelector('.zpx-prompt'));assert.equal(surface.$('import').parentElement.hidden,false);surface.$('import').click();assert.deepEqual(importOptions,{atPlayhead:true});}
 editor.importFrame=originalImportFrame;plate.action=oldAction;editor.stage='clean';surface.sync();
+plate.action='replace';editor.stage='clean';const editedFile=anchor.file;anchor.file='';
+surface.sync();
+assert.equal(surface.$('run').textContent,'Edit keyframe','A draft frame offers a next step instead of a disabled render');
+assert.equal(surface.$('run').disabled,false);
+editor.candidate={review:{token:'manual-review',outside_pixels:7},anchor:anchor.id};
+surface.sync();
+assert.equal(editor.importReview.hidden,false);
+assert.equal(editor.importReview.parentElement,surface.root.querySelector('.zpx-stage'),'Import review is outside the hidden propagation tools');
+assert.equal(surface.$('run').textContent,'Use imported edit');
+const acceptImported=editor.acceptImported;
+let importedScope;editor.acceptImported=async scope=>{importedScope=scope;anchor.file=editedFile;editor.candidate=null;plate.syncControls();};
+await surface.$('run').onclick();
+assert.equal(importedScope,'include');
+assert.equal(surface.$('run').textContent,'Generate video');
+editor.acceptImported=acceptImported;
+plate.action=oldAction;surface.sync();
+
 const maskOptions=[...surface.root.querySelectorAll('.zp-editor-action-menu')].find(menu=>menu.querySelector('summary')?.textContent==='Mask options');assert.ok(maskOptions.matches('.zc-tool-popup'));assert.ok(maskOptions.querySelector(':scope > .zc-tool-panel'));
 const disposePopovers=installPopoverDismissal(owner.root);let focusedMaskOptions=0;maskOptions.querySelector('summary').focus=()=>focusedMaskOptions++;maskOptions.open=true;const escapeMenu=new window.Event('keydown',{bubbles:true,cancelable:true});escapeMenu.key='Escape';maskOptions.querySelector('button').dispatchEvent(escapeMenu);assert.equal(maskOptions.open,false);assert.equal(focusedMaskOptions,1,'Escape returns focus to the original Mask options summary');disposePopovers();
 const pickSource=workspace.pickSource;let pickerKind;workspace.pickSource=async kind=>{pickerKind=kind;};sourceMenu.open=true;surface.$('sequence').click();assert.equal(sourceMenu.open,false,'Choosing a source action closes its disclosure immediately');assert.equal(pickerKind,'sequence','Closing the disclosure preserves the existing picker handler');workspace.pickSource=pickSource;

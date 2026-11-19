@@ -71,5 +71,21 @@ assert.equal(ui.$('view-result').textContent,'View source');ui.$('view-result').
 ui.seek(20);assert.equal(ui.video.dataset.kind,'source','Editing another frame returns the viewer to source footage');
 ui.pendingSubmission={requestId:'pending'};assert.equal(ui.reset(),false,'Start over cannot discard an uncertain queued run');
 ui.pendingSubmission=null;assert.equal(ui.reset(),true);assert.equal(ui.source,null);assert.equal(ui.anchors().length,0);
-ui.dispose();
 console.log('Ripple timeline shares keyframes across models, preserves source timing, imports and stale-result safety.');
+
+const setup=ui.modelDownloads;
+ui.onCheckModels=async()=>{const status={ready:false,missing:['WN_RippleApply']};ui.setAvailability(status);return status;};
+ui.state.engine='h3';
+const checking=setup.checkSetup();
+assert.match(setup.quick.querySelector('[data-quick-status]').textContent,/Checking/);
+await checking;
+assert.match(setup.quick.querySelector('[data-quick-status]').textContent,/Still missing/);
+assert.match(setup.quick.querySelector('[data-quick-requirements]').textContent,/WepeNerd/);
+setup.installRippleExtension=async()=>{};
+await setup.installRippleNodes();
+assert.match(setup.quick.querySelector('[data-quick-status]').textContent,/restart ComfyUI/);
+ui.onCheckModels=async()=>{const status={ready:true,missing:[]};ui.setAvailability(status);return status;};
+await setup.checkSetup();
+assert.match(setup.quick.querySelector('[data-quick-status]').textContent,/Setup complete/);
+assert.equal(setup.quick.hidden,false);
+ui.dispose();

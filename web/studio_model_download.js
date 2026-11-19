@@ -102,7 +102,9 @@ export class StudioModelDownloads {
     const next=context&&Array.isArray(context.files)&&Array.isArray(context.missingNodes)?context:null;
     const changed=next?.route!==this.context?.route||JSON.stringify((next?.files||[]).map(fileKey))!==JSON.stringify((this.context?.files||[]).map(fileKey));
     if(changed&&!this.job){this.startIntent=null;this.retryRequest=null;this.accessFailure=null;this.progress.textContent='';}
-    const previousRoute=this.context?.route;this.context=next;
+    const previousRoute=this.context?.route;
+    if(previousRoute!==next?.route&&!this.checkingSetup){this.setupCheck='';this.detailsOpen=false;}
+    this.context=next;
     if(next&&!this.packages.length&&!this.loadingCatalogue)void this.load();
     if(next?.route!==previousRoute&&next&&this.packages.length&&!this.job)this.select.value='__workflow__';
     if(this.packages.length && this.select.value==='__workflow__')this.render();
@@ -139,10 +141,23 @@ export class StudioModelDownloads {
     if(!host)return;
     if(!this.quick){
       this.quick=this.el('section','');this.quick.className='gs-model-quick';this.quick.hidden=true;this.quick.setAttribute('aria-label','Workflow model setup');
-      this.quick.innerHTML='<div class="gs-model-quick-copy"><strong data-quick-title></strong><small data-quick-size></small></div><button type="button" data-quick-install></button><button type="button" data-quick-details>Setup details</button><button type="button" data-quick-refresh>Check setup</button><button type="button" data-quick-cancel hidden>Cancel install</button><progress hidden aria-label="Model installation progress"></progress><p data-quick-status role="status" aria-live="polite"></p>';
+      this.quick.innerHTML='<div class="gs-model-quick-copy"><strong data-quick-title></strong><small data-quick-size></small></div><button type="button" data-quick-install></button><button type="button" data-quick-details>Setup details</button><button type="button" data-quick-refresh>Check setup</button><button type="button" data-quick-cancel hidden>Cancel install</button><progress hidden aria-label="Model installation progress"></progress><p data-quick-status role="status" aria-live="polite"></p><div class="gs-model-setup-details" data-quick-requirements hidden></div>';
       this.quick.querySelector('[data-quick-install]').onclick=()=>this.workflowPlan().files.length?this.startWorkflow():this.onInstalled?.();
-      this.quick.querySelector('[data-quick-details]').onclick=()=>{for(let parent=this.panel;parent;parent=parent.parentElement)if(parent.tagName==='DETAILS')parent.open=true;this.select.value='__workflow__';this.render();};
-      this.quick.querySelector('[data-quick-refresh]').onclick=async()=>{await this.load();await this.onInstalled?.();};
+      this.quick.querySelector('[data-quick-details]').onclick=()=>{
+        if(this.inlineSetup){
+          this.detailsOpen=!this.detailsOpen;
+          this.renderQuick();
+          return;
+        }
+        for(let parent=this.panel;parent;parent=parent.parentElement)if(parent.tagName==='DETAILS')parent.open=true;
+        this.select.value='__workflow__';
+        this.render();
+      };
+      this.quick.querySelector('[data-quick-refresh]').onclick=async()=>{
+        if(this.inlineSetup)return this.checkSetup();
+        await this.load();
+        await this.onInstalled?.();
+      };
       this.quick.querySelector('[data-quick-cancel]').onclick=()=>this.request(`/model-downloads/${this.job}/cancel`,{}).catch(e=>{this.progress.textContent=e.message;this.renderQuick();});
       this.quickStorage=new ModelStorage(this.quick,this.request,async()=>{await this.load();await this.onInstalled?.();});
       this.quickStorage.root.querySelector('summary').textContent='Model folders';
@@ -162,20 +177,91 @@ export class StudioModelDownloads {
     if(!this.quick){const owner=this.panel.closest('.zf-page,.zo-page,.zh-page,.zpc-page,.zvfx-page,.zalpha-page,.zc-image-page')||this.panel.closest('#genj-studio')?.querySelector('.gs-workspace');this.mountQuick(owner?.querySelector('.zc-prompt-card,.zo-composer,.gs-composer,.zvfx-composer,.zalpha-composer,.zc-image-composer')||owner);}
     if(!this.quick)return;
     const plan=this.workflowPlan(),missing=this.context?.files?.some(f=>f.ready===false),nodes=this.context?.missingNodes?.length||0;
-    this.quick.hidden=!this.job&&!this.starting&&!missing&&!nodes;
+    this.quick.hidden=!this.job&&!this.starting&&!missing&&!nodes&&!this.setupCheck;
     this.quick.querySelector('[data-quick-title]').textContent=this.job?`Downloading ${this.jobLabel()}`:`${ROUTE_NAMES[this.context?.route]||'This mode'} · setup`;
-    this.quick.querySelector('[data-quick-size]').textContent=!missing&&!this.job?'Open Setup details for the required extensions. After restarting ComfyUI, choose Check setup.':this.packages.length?`${plan.files.length} missing file${plan.files.length===1?'':'s'} · ${gb(plan.bytes)} to download${nodes?' · extensions also needed':''}${plan.manual.length?' · some files need manual setup':''}`:'Checking download sizes…';
+    this.quick.querySelector('[data-quick-size]').textContent=!missing&&!this.job?(nodes?'Required extensions or features are missing.':'All required files and extensions are available.'):this.packages.length?`${plan.files.length} missing file${plan.files.length===1?'':'s'} · ${gb(plan.bytes)} to download${nodes?' · extensions also needed':''}${plan.manual.length?' · some files need manual setup':''}`:'Checking download sizes…';
     const button=this.quick.querySelector('[data-quick-install]');button.textContent=this.job||this.starting?'Installing…':this.loadingCatalogue&&!this.packages.length?'Checking models…':plan.blocked?'Check existing files':plan.files.length?`Install missing models · ${gb(plan.bytes)}`:'Refresh models';
     button.hidden=!missing&&!this.job;button.disabled=!!this.job||this.starting||this.uncertain||this.loadingCatalogue&&!this.packages.length||plan.blocked||!!plan.manual.length&&!plan.files.length;
     this.quickStorage.root.hidden=!missing;
     this.quick.querySelector('[data-quick-cancel]').hidden=!this.job;
-    this.quick.querySelector('[data-quick-refresh]').disabled=!!this.job||this.starting;
-    this.quick.querySelector('[data-quick-refresh]').hidden=!button.hidden&&!plan.files.length&&!plan.manual.length;
+    this.quick.querySelector('[data-quick-refresh]').disabled=!!this.job||this.starting||this.checkingSetup;
+    this.quick.querySelector('[data-quick-refresh]').textContent=this.checkingSetup?'Checking…':'Check setup';
+    this.renderQuickRequirements(plan);
     if(!this.quickAccess){this.quickAccess=this.el('button','Hugging Face access');this.quickAccess.type='button';this.quickAccess.onclick=()=>this.showAccess();this.quick.querySelector('[data-quick-status]').before(this.quickAccess);}
     this.quickAccess.hidden=!this.accessFailure&&!plan.files.some(file=>file.gated);
     this.quick.querySelector('[data-quick-status]').textContent=this.job&&!this.jobMatchesPlan(plan)?`${this.jobLabel()} � ${this.progress.textContent}. Cancel this download before installing the selected model.`:this.progress.textContent;
+    if(this.setupCheck&&!this.job&&!this.starting)this.quick.querySelector('[data-quick-status]').textContent=this.setupCheck;
     const bar=this.quick.querySelector('progress');bar.hidden=!this.job;if(this.downloadTotal){bar.max=this.downloadTotal;bar.value=this.downloadDone||0;}else bar.removeAttribute('value');
     this.syncPickers();
+  }
+  async checkSetup(){
+    if(this.checkingSetup)return;
+    this.checkingSetup=true;
+    const route=this.context?.route;
+    this.setupCheck='Checking files and extensions…';
+    this.progress.textContent='';
+    this.renderQuick();
+    try{
+      await this.load();
+      const result=await this.onInstalled?.();
+      if(route&&route!==this.context?.route){this.setupCheck='';return;}
+      if(result===null)throw Error('Could not check setup. Check the ComfyUI connection and try again.');
+      const files=this.context?.files.filter(file=>file.ready===false).length||0;
+      const nodes=this.context?.missingNodes.length||0;
+      const pending=[files&&`${files} model file${files===1?'':'s'}`,nodes&&`${nodes} required feature${nodes===1?'':'s'}`].filter(Boolean);
+      this.setupCheck=pending.length?`Still missing: ${pending.join(' and ')}.`:'Setup complete. This model is ready.';
+      this.detailsOpen=pending.length>0;
+      if(!nodes)this.rippleRestartNeeded=false;
+    }catch(error){this.setupCheck=error.message;}
+    finally{this.checkingSetup=false;this.renderQuick();}
+  }
+  renderQuickRequirements(plan){
+    const panel=this.quick.querySelector('[data-quick-requirements]');
+    const details=this.quick.querySelector('[data-quick-details]');
+    details.textContent=this.detailsOpen?'Hide setup details':'Setup details';
+    details.setAttribute('aria-expanded',String(!!this.detailsOpen));
+    panel.hidden=!this.inlineSetup||!this.detailsOpen;
+    if(panel.hidden)return;
+    const {packs,unknown}=groupMissingNodes(this.context?.missingNodes||[]);
+    panel.replaceChildren();
+    for(const pack of packs){
+      const row=this.el('div','');
+      row.append(this.link(pack.guide?`${pack.name} installation guide`:pack.name,pack.guide||pack.registry||pack.url),this.el('p',pack.missing.join(', ')));
+      if(pack.note)row.append(this.el('p',pack.note));
+      if(pack.patch)row.append(this.link('Compatibility patch',pack.patch));
+      if(pack.missing.includes('WN_RippleApply')&&this.installRippleExtension){
+        const button=this.el('button',this.installingExtension?'Installing extension…':'Install WepeNerd extension');
+        button.type='button';
+        button.disabled=!!this.installingExtension||this.rippleRestartNeeded;
+        button.onclick=()=>this.installRippleNodes();
+        row.append(button);
+      }
+      panel.append(row);
+    }
+    for(const name of unknown)panel.append(this.el('p',name));
+    for(const file of this.context?.files.filter(file=>file.ready===false)||[]){
+      const row=this.el('div',file.filename);
+      const pack=plan.packs.find(pack=>pack.files.some(item=>fileKey(item)===fileKey(file)));
+      const item=pack?.files.find(item=>fileKey(item)===fileKey(file));
+      if(item?.incomplete)row.append(this.el('p','An existing file differs from the published version. Check it in Model folders.'));
+      const actions=item&&this.browserActions(pack,item);
+      if(actions)row.append(actions);
+      panel.append(row);
+    }
+    if(!panel.childNodes.length)panel.append(this.el('p','All required files and extensions are available.'));
+  }
+  async installRippleNodes(){
+    if(this.installingExtension||this.rippleRestartNeeded)return;
+    this.installingExtension=true;
+    this.setupCheck='Installing the WepeNerd extension through ComfyUI Manager…';
+    this.progress.textContent='';
+    this.renderQuick();
+    try{
+      await this.installRippleExtension();
+      this.rippleRestartNeeded=true;
+      this.setupCheck='Extension installed. Save your work and restart ComfyUI, then choose Check setup.';
+    }catch(error){this.setupCheck=error.message;}
+    finally{this.installingExtension=false;this.renderQuick();}
   }
   setCatalogue(models){
     if(!Array.isArray(models))return;
@@ -225,7 +311,7 @@ export class StudioModelDownloads {
     return picker;
   }
   syncPickers(){for(const picker of this.pickers)picker.sync();}
-  showAccess(){this.panel.hidden=false;for(let parent=this.panel;parent;parent=parent.parentElement){parent.hidden=false;if(parent.tagName==='DETAILS')parent.open=true;}this.access.root.open=true;void this.access.load();}
+  showAccess(){this.revealPanel?.();this.panel.hidden=false;for(let parent=this.panel;parent;parent=parent.parentElement){parent.hidden=false;if(parent.tagName==='DETAILS')parent.open=true;}this.access.root.open=true;void this.access.load();}
   browserActions(pack,file){
     if(file.installed||!file.browser_url||!file.gated&&!this.accessFailure)return null;
     const row=this.el('div','');row.className='zura-browser-model-actions';row.append(this.link('Download in browser',file.browser_url));
@@ -294,13 +380,14 @@ export class StudioModelDownloads {
   }
   async start(id){
     if(this.job||this.starting||this.uncertain)return;
+    this.setupCheck='';
     const intent={};this.startIntent=intent;this.retryRequest=id;this.accessFailure=null;this.closed=false;this.starting=true;this.render();
     const ids=typeof id==='object'?id.model_ids:[id],keys=typeof id==='object'?id.file_keys:null;
     const selected=this.packages.filter(pack=>ids?.includes(pack.id)).flatMap(pack=>pack.files).filter(file=>!keys||keys.includes(fileKey(file)));
     const popup=this.access.reservePopup(selected);
     const allowed=await this.access.check(selected,{interactive:true,popup});
     if(this.startIntent!==intent){this.starting=false;this.render();return;}
-    if(!allowed){this.starting=false;this.render();this.panel.hidden=false;for(let parent=this.panel;parent;parent=parent.parentElement){parent.hidden=false;if(parent.tagName==='DETAILS')parent.open=true;}this.access.root.open=true;return;}
+    if(!allowed){this.starting=false;this.render();this.showAccess();return;}
     if(this.access?.root)this.access.root.open=false;
     const token=this.token?.value.trim();if(this.token)this.token.value='';
     try{this.progress.textContent='Starting download…';const result=await this.request('/model-downloads',{...(typeof id==='object'?id:{model_id:id}),...(token?{token}:{})});if(!result.id)throw new Error('Could not confirm the download started. Refresh setup before retrying.');this.job=result.id;this.jobState={model_ids:ids};this.starting=false;this.select.disabled=true;this.render();await this.poll();

@@ -67,6 +67,15 @@ export class RippleWorkspace {
     this.$('source-colour').onchange=()=>{if(this.busy())return;this.owner.rippleImage?.invalidate(this);this.state.sourceColour=this.$('source-colour').value;++this.revision;this.save();this.render();};
     this.$('prompt').value=this.state.prompt||'';this.$('engine').value=this.state.engine;this.$('scale').value=String(this.state.scale);
     this.modelDownloads=new StudioModelDownloads(this.$('model-downloads'),(path,body)=>this.fetch('/zura/studio'+path,body),()=>this.checkModels());this.modelDownloads.mountQuick(this.page.querySelector('.zru-composer'));
+    this.modelDownloads.inlineSetup=true;
+    this.modelDownloads.installRippleExtension=async()=>{
+      const response=await this.api.fetchApi('/v2/customnode/install/git_url',{
+        method:'POST',headers:{'Content-Type':'text/plain'},
+        body:'https://github.com/WepeNerd/ComfyUI-WepeNerd.git'
+      });
+      if([403,404,405].includes(response.status))throw Error('ComfyUI Manager does not allow Git installs here. Open the WepeNerd installation guide above, install the extension, then restart ComfyUI.');
+      if(!response.ok)throw Error('ComfyUI Manager could not install WepeNerd. Check the ComfyUI log or open the installation guide.');
+    };
     this.enginePicker=this.modelDownloads.attachPicker?.(this.$('engine'),{
       resolveOption:val=>({key:val==='wan21'?'wan21_relight':`${val}_ripple`,readyOverride:val===this.state.engine?this.availability?.ready:undefined})
     });
@@ -211,9 +220,27 @@ export class RippleWorkspace {
     this.showResult(result);this.message('Your finished video is ready.');this.save();this.render();
   }
   showResult(result){const output=file=>this.url('/view?'+new URLSearchParams({filename:file.filename,subfolder:file.subfolder||'',type:file.type||'output'}));this.video.dataset.kind='result';this.video.src=result.preview_url?this.url(result.preview_url):output(playbackFile(result.file));this.video.hidden=false;this.framePreview.hidden=true;this.$('empty').hidden=true;this.video.load();this.$('download').href=result.download_url?this.url(result.download_url):output(result.master||result.file);this.$('download').hidden=false;}
-  async checkModels(){if(typeof this.onCheckModels==='function')try{await this.onCheckModels(this.state.engine);}catch(error){this.message(error.message||'Could not check Ripple models.');}}
-  setAvailability(availability){this.availability=availability;const missing=availability?.missing||[];this.$('model-downloads').hidden=availability?.ready!==false;this.modelDownloads.setMissingContext(this.state.engine==='h3'?'h3_ripple':'ltx_ripple',missing);this.render();}
-  openModelSetup(engine,availability=this.availability){this.setAvailability(availability);this.$('model-downloads').hidden=false;this.$('model-downloads').open=true;this.modelDownloads.load();}
+  async checkModels(){return await this.onCheckModels?.(this.state.engine)??null;}
+  setAvailability(availability){
+    this.availability=availability;
+    const missing=availability?.missing||[];
+    const route=this.state.engine==='h3'?'h3_ripple':'ltx_ripple';
+    const previous=this.modelDownloads.missingContext;
+    this.$('model-downloads').hidden=availability?.ready!==false;
+    this.modelDownloads.setMissingContext(route,missing);
+    if(missing.includes('WN_RippleApply')&&(previous?.route!==route||!previous.missing.includes('WN_RippleApply'))){
+      this.modelDownloads.detailsOpen=true;
+      this.modelDownloads.renderQuick();
+    }
+    this.render();
+  }
+  openModelSetup(engine,availability=this.availability){
+    if(engine!==this.state.engine)return;
+    this.setAvailability(availability);
+    this.modelDownloads.detailsOpen=true;
+    this.modelDownloads.renderQuick();
+    void this.modelDownloads.load();
+  }
   render(){
     const has=!!this.source,busy=this.busy(),anchor=this.selected(),frames=this.source?.frames||0,start=this.state.startFrame,end=start+this.state.frameCount;
     this.$('timeline').hidden=!has;this.$('empty').hidden=has||!!this.result;this.$('source').textContent=has?'Replace video':'Add video';this.$('clear-source').hidden=!has;

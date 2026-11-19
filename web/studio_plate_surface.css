@@ -231,3 +231,6 @@
 #genj-studio .zpx-processing input[type=range]{width:100%;min-width:0;height:24px;margin:0;accent-color:var(--gs-accent)}
 #genj-studio .zpx-processing [data-plate-processing-native]{min-height:28px;padding:3px 8px;font-size:11px;white-space:nowrap}
 #genj-studio .zpx-processing [data-plate-processing-native][aria-pressed=true]{color:var(--gs-accent);background:var(--gs-selected)}
+
+#genj-studio .zpx-stage>.zp-editor-import-review{flex:none;margin:0;padding:10px 12px;font-size:13px}
+#genj-studio .zpx-stage>.zpx-status{flex:none;margin:0}

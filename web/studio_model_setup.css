@@ -60,3 +60,8 @@
 #genj-studio .zura-model-access [data-access-resume]{margin:0;padding:8px 0}
 #genj-studio .zura-model-access .zura-access-terms-btn{max-width:100%;box-sizing:border-box;white-space:normal;text-align:left;justify-content:flex-start}
 #genj-studio .gs-model-quick:has(.zura-model-access[open]){max-height:none}
+
+.gs-model-setup-details{flex:1 1 100%;min-width:0;overflow-wrap:anywhere;font-size:13px;line-height:1.5}
+.gs-model-setup-details[hidden]{display:none}
+.gs-model-setup-details>div{padding:8px 0;border-top:1px solid var(--gs-line,#383838)}
+.gs-model-setup-details p{margin:4px 0}

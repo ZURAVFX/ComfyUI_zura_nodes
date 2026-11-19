@@ -22,6 +22,9 @@ export class PlateSurface{
   for(const button of plate.strip.querySelectorAll('button')){const text=button.textContent;button.innerHTML='<svg viewBox="0 0 24 24" aria-hidden="true"><path d="'+toolIcons[button.dataset.plateAction]+'"/></svg><span>'+text+'</span>';}
   this.trimControls=d.createElement('div');this.trimControls.className='zpx-trim-controls';this.trimControls.hidden=true;const trimHelp=d.createElement('span');trimHelp.textContent='Choose the clip range below, then continue.';this.trimControls.append(trimHelp);
   this.$('operations').append(plate.strip);this.$('view').append(w.page.querySelector('.zf-viewer'));this.$('timeline').append(this.trimControls,w.editor.timelineHost);this.$('layers').append(w.editor.layersPanel);this.$('details').append(w.editor.tools);
+  const editorStatus=w.editor.tools.querySelector('[data-editor=status]');
+  editorStatus.classList.add('zpx-status');
+  this.$('status').after(w.editor.importReview,editorStatus);
   // Keep the native Remove controller's navigation and clean-frame actions
   // on the rebuilt surface, rather than in the hidden legacy composer.
   const cleanButton=w.editor.$('clean');
@@ -49,7 +52,15 @@ export class PlateSurface{
       plate.frameDraft=null;this.sync();return;
     }
     return plate.propagation()?plate.usePaintResult(request):this.o.rippleImage.useResult();
-  }if(plate.propagation()){plate.paintGenerateRequested=false;plate.rememberPrompt(this.o.$('prompt').value);}return this.o.generate();}return w.generate();};
+  }if(plate.propagation()){plate.paintGenerateRequested=false;plate.rememberPrompt(this.o.$('prompt').value);}return this.o.generate();}
+    if(plate.propagation()&&this.keyframeAction){
+      if(this.keyframeAction==='review')return w.editor.acceptImported('include');
+      if(this.keyframeAction==='setup')return this.openModelSetup();
+      if(this.keyframeAction==='trim')return w.editor.confirmClipTrim();
+      return this.editKeyframe();
+    }
+    return w.generate();
+  };
   this.$('new-edit').onclick=()=>plate.newEditButton.click();
   this.$('retry').onclick=()=>this.o.generate();this.$('stop').onclick=()=>plate.inline?this.o.cancel():w.editor.toolJob?w.editor.cancel():w.cancel();
   const closeSide=()=>{this.root.classList.remove('is-side-open');this.$('side-toggle').setAttribute('aria-expanded','false');};this.root.addEventListener('keydown',e=>{if(e.key==='Escape'&&this.sourceMenu.open){this.sourceMenu.open=false;this.sourceMenu.querySelector('summary').focus();e.stopPropagation();return;}if(e.key==='Escape'&&this.root.classList.contains('is-side-open')&&!e.target.closest('details[open]')){closeSide();this.$('side-toggle').focus();e.stopPropagation();}});this.root.addEventListener('pointerdown',e=>{if(this.sourceMenu.open&&!this.sourceMenu.contains(e.target))this.sourceMenu.open=false;if(this.root.classList.contains('is-side-open')&&!e.target.closest('.zpx-side,[data-plate-side-toggle]'))closeSide();});
@@ -87,6 +98,13 @@ export class PlateSurface{
    }
   });
   this.presentationReady=this.presentation.show();
+ }
+ async editKeyframe(){
+  const w=this.w;
+  try{
+   if(!w.editor.selected())await w.editor.createFrame(w.playhead);
+   await this.plate.editFrame();
+  }catch(error){w.message(error.message);}
  }
  async uploadPlateReferences(files){
   const p=this.plate,w=this.w,o=this.o;if(!files?.length||w.busy()||o.rippleImage?.importing)return;
@@ -180,10 +198,30 @@ export class PlateSurface{
   if(!models)return this.w.message('Model setup is still loading. Try again in a moment.');
   const panel=models.root||models.panel;
   if(!panel)return this.w.message('Model setup is unavailable. Refresh Studio and try again.');
-  this.modelSetupHost.replaceChildren(panel);this.modelSetupHost.hidden=false;this.modelSetupAction=this.plate.action;
-  if(models.open){models.open(scope);return;}
-  panel.classList.add('zc-tool-popup');panel.querySelector('.gs-advanced-body')?.classList.add('zc-tool-panel');panel.querySelector('summary').textContent='Models';panel.open=true;
-  await owner.checkModels?.();await models.load();models.select.value='__workflow__';models.render();
+  if(propagation){
+   this.root.classList.add('is-side-open');
+   this.$('side-toggle').setAttribute('aria-expanded','true');
+   const check=models.checkSetup();
+   models.quick?.scrollIntoView?.({block:'nearest'});
+   return check;
+  }
+  this.mountModelPanel(panel);
+  if(models.open)models.open(scope);
+  else{
+   panel.open=true;
+   await owner.checkModels?.();
+   await models.load();
+   models.select.value='__workflow__';
+   models.render();
+  }
+ }
+ mountModelPanel(panel){
+  this.modelSetupHost.replaceChildren(panel);
+  this.modelSetupHost.hidden=false;
+  this.modelSetupAction=this.plate.action;
+  panel.classList.add('zc-tool-popup');
+  panel.querySelector('.gs-advanced-body')?.classList.add('zc-tool-panel');
+  panel.querySelector('summary').textContent='Models';
  }
  syncVideoProcessing(busy){
   const p=this.plate,w=this.w,control=this.$('processing'),slider=this.$('megapixels');
@@ -232,6 +270,26 @@ export class PlateSurface{
   const draft=ready?p.syncFrameDraft(request,item):null;
   if(ready)this.$('run').disabled=busy||!!draft?.pending;this.$('retry').hidden=!ready;this.$('retry').disabled=busy||!!draft?.pending||o.$('generate').disabled;this.$('stop').hidden=!cancellable;this.$('stop').disabled=false;this.$('run').hidden=cancellable||removal&&w.editor.stage!=='render';
   this.$('run').textContent=busy?'Working…':ready?(draft?.error&&!draft.composed?'Retry layer setup':'Save frame edit'):editing?'Generate frame edit':w.$('generate').textContent;
+  const propagation=!editing&&p.propagation();
+  const pendingImport=propagation&&selectedAnchor?.frame===w.playhead&&!!w.editor.candidate?.review;
+  const hasEditedFrame=propagation&&p.config().anchors.length>0;
+  this.keyframeAction=null;
+  if(propagation&&source&&!busy){
+   if(!w.state.clipTrimConfirmed)this.keyframeAction='trim';
+   else if(pendingImport)this.keyframeAction='review';
+   else if(!hasEditedFrame)this.keyframeAction='edit';
+   else if(p.runner?.availability?.ready===false)this.keyframeAction='setup';
+  }
+  if(this.keyframeAction){
+   this.$('run').disabled=false;
+   this.$('run').textContent={trim:'Confirm clip range',review:'Use imported edit',edit:'Edit keyframe',setup:'Set up video model'}[this.keyframeAction];
+  }
+  const review=w.editor.importReview;
+  review.querySelector('strong').textContent=propagation?'Review imported frame':'Changes outside the repair area';
+  review.querySelector('small').hidden=propagation;
+  w.editor.$('import-current').hidden=propagation;
+  w.editor.$('import-include').textContent=propagation?'Use imported edit':'Include highlighted changes';
+  review.hidden=editing||propagation&&!pendingImport||w.editor.stage!=='clean'||!w.editor.candidate?.review;
   this.$('edit').textContent='Back to video';this.$('edit').title='Leave the frame editor without starting a video render';
   this.$('new-edit').textContent='Add another edit';this.$('new-edit').title='Create another image edit layer on the selected frame';
   const choices=editing?o.models.filter(m=>m.edit).map(m=>[m.id,m.provider?m.name+' · Browser sign-in':m.name]):p.propagation()?[['ltx','LTX 2.5'],['h3','MiniMax H3']]:[['remove','LTX 2.5 · Paintout']];
@@ -248,7 +306,10 @@ export class PlateSurface{
   this.$('prompt-reference').textContent=activeRefs.length?`References (${activeRefs.length})`:'Add reference';
   this.$('reference-count').textContent=showRefs?`${activeRefs.length} reference${activeRefs.length===1?'':'s'}`:'';
   const referenceKey=showRefs?JSON.stringify([editing,activeRefs]):'';if(referenceKey!==this.referenceKey){this.referenceKey=referenceKey;this.$('reference-list').replaceChildren();if(showRefs)activeRefs.forEach((ref,index)=>{const row=this.root.ownerDocument.createElement('div'),image=this.root.ownerDocument.createElement('img'),badge=this.root.ownerDocument.createElement('small'),remove=this.root.ownerDocument.createElement('button');image.src=o.api.apiURL('/view?'+new URLSearchParams({filename:ref.filename,subfolder:ref.subfolder||'',type:'input'}));image.alt=ref.name||'Reference '+(index+1);badge.textContent=`Image ${index+2}`;remove.type='button';remove.textContent='×';remove.setAttribute('aria-label','Remove reference '+(index+1));remove.onclick=()=>{if(w.busy())return;if(editing){o.references.splice(index+1,1);if(request?.anchor)request.anchor.image_references=o.references.slice(1).map(r=>({...r}));o.save();o.render();}else if(selectedAnchor?.image_references){selectedAnchor.image_references.splice(index,1);w.save();w.render();}};row.append(image,badge,remove);this.$('reference-list').append(row);});}
-  const quick=editing?o.imageModelSetup?.quick:p.propagation()?p.runner?.modelDownloads?.quick:w.modelDownloads?.quick;if(quick&&quick.parentElement!==this.$('setup'))this.$('setup').replaceChildren(quick);
+  const downloads=p.runner?.modelDownloads;
+  if(downloads)downloads.revealPanel=()=>this.mountModelPanel(downloads.panel);
+  const quick=editing?o.imageModelSetup?.quick:p.propagation()?downloads?.quick:w.modelDownloads?.quick;
+  if(quick&&quick.parentElement!==this.$('setup'))this.$('setup').replaceChildren(quick);
   this.$('references').querySelector('button').disabled=busy;this.$('scale').disabled=busy;w.editor.tools.hidden=!source||editing||p.propagation()||w.state.mode==='full'||!['mask','clean'].includes(w.editor.stage);p.frameToolbar.hidden=true;
   this.$('layers').style.pointerEvents='';this.$('layers').setAttribute('aria-disabled','false');w.editor.timeline.addFrame.querySelector('span').textContent=removal?'Add clean frame':'Add keyframe';w.editor.timeline.addFrame.title=removal?'Add a clean-frame guide at the playhead':'Add an edited frame at the playhead';w.editor.timeline.cleanLabel.textContent=removal?'Clean frames':'Edited frames';
   if(p.propagation()){
@@ -257,8 +318,15 @@ export class PlateSurface{
   }
   const draftEditor=this.syncDraftLayers(draft,busy);
   const status=editing?o.$('message').textContent:w.$('message').textContent;
+  const videoGuidance={
+   trim:'Confirm the clip range before editing a keyframe.',
+   review:'Confirm the imported image to use it as your video guide.',
+   edit:'Edit a keyframe or import a finished image, then save the edit to enable video generation.',
+   setup:'Complete the video model setup to generate the clip.'
+  }[this.keyframeAction]||(!editing&&this.$('run').disabled&&propagation&&!busy?w.$('note').textContent:'');
   const guidance=editing&&!busy?(ready?(draft?.error|| (draft?.pending?'Updating the layer preview…':'Adjust the layers, then choose Save frame edit.')):p.action==='replace'?'Select the area to replace (or paint a guide), optionally add a reference image, then generate an edited frame.':'Paint directly on the frame (or select an area), optionally add a reference image, then generate.'):'';
-  this.$('status').textContent=status||guidance;this.$('status').hidden=!status&&!guidance;
+  this.$('status').textContent=status||guidance||videoGuidance;
+  this.$('status').hidden=!this.$('status').textContent;
   this.inlineEditor?.sync();this.modelPicker?.sync();this.syncImageTools();this.syncLayerDisclosures(draftEditor||w.editor);
   const repaired=!!w.editor.selected()?.layers?.length;
   this.root.classList.toggle('has-clean-frame',repaired);this.root.dataset.stage=w.editor.stage;
