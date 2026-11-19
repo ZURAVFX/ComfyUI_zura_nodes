@@ -4,6 +4,11 @@ on:
   release:
     types: [published]
   workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Published release tag to retry
+        required: false
+        type: string
 
 permissions:
   contents: read
@@ -19,37 +24,35 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.release_tag || github.ref }}
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: '3.12'
       - name: Check release version and package assets
         env:
-          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          RELEASE_TAG: ${{ github.event.release.tag_name || inputs.release_tag }}
         run: python tools/check_package.py
       - name: Check Ubuntu mirror fallback
         run: python -m unittest discover -s tests -p 'test_ci_ubuntu_mirror.py'
       - name: Install test dependencies
         run: |
           if ! command -v ffmpeg >/dev/null || ! command -v ffprobe >/dev/null; then
-            if ! sudo timeout --kill-after=10s 120s apt-get \
-              -o APT::Update::Error-Mode=any \
-              -o Acquire::Retries=0 \
-              -o Acquire::http::Timeout=15 \
-              -o Acquire::https::Timeout=15 update; then
-              # Ubuntu's primary hosts can share a DNS outage. The fallback
-              # retains the existing Ubuntu signature keyring and source fields.
-              sudo python tools/ci_ubuntu_mirror.py
-              sudo timeout --kill-after=10s 540s apt-get \
-                -o APT::Update::Error-Mode=any \
+            apt_signed() {
+              local limit="$1"
+              shift
+              sudo timeout --kill-after=10s "$limit" apt-get \
                 -o Acquire::Retries=0 \
                 -o Acquire::http::Timeout=15 \
-                -o Acquire::https::Timeout=15 update
+                -o Acquire::https::Timeout=15 "$@"
+            }
+            if ! (apt_signed 120s -o APT::Update::Error-Mode=any update &&
+                  apt_signed 120s install -y --no-install-recommends ffmpeg); then
+              # Retry both stages with the existing Ubuntu archive keyring.
+              sudo python tools/ci_ubuntu_mirror.py
+              apt_signed 540s -o APT::Update::Error-Mode=any update
+              apt_signed 540s install -y --no-install-recommends ffmpeg
             fi
-            sudo timeout --kill-after=10s 120s apt-get \
-              -o Acquire::Retries=0 \
-              -o Acquire::http::Timeout=15 \
-              -o Acquire::https::Timeout=15 \
-              install -y --no-install-recommends ffmpeg
           fi
           ffmpeg -version >/dev/null
           ffprobe -version >/dev/null
