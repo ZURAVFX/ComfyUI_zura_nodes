@@ -11,15 +11,6 @@
 #genj-studio .zc-delivery-controls [data-delivery-files]{display:flex;gap:10px}
 #genj-studio .zc-delivery-controls button{min-height:28px;padding:4px 8px;font:inherit}
 #genj-studio .zc-delivery-controls [hidden]{display:none!important}
-#genj-studio [data-delivery-progress]{flex:1 0 100%;display:grid;grid-template-columns:minmax(180px,1fr) minmax(160px,2fr);gap:8px 20px;padding:10px 0 12px;border-top:1px solid var(--gs-line)}
-#genj-studio [data-delivery-stages]{grid-column:1/-1;display:flex;gap:20px;list-style:none;margin:0;padding:0;color:var(--gs-muted)}
-#genj-studio [data-delivery-stages] li{flex:1;padding-top:7px;border-top:2px solid var(--gs-line)}
-#genj-studio [data-delivery-stages] .current{color:var(--zc-text);border-color:var(--gs-focus)}
-#genj-studio [data-delivery-stages] .done{color:var(--zc-text)}
-#genj-studio [data-delivery-bar]{width:100%;height:8px;align-self:center;accent-color:var(--gs-focus)}
-#genj-studio [data-delivery-detail]{line-height:1.5}
-#genj-studio [data-delivery-progress][data-state=failed] [data-delivery-detail],#genj-studio [data-delivery-progress][data-state=unknown] [data-delivery-detail]{color:var(--zc-text)}
-@media(max-width:700px){#genj-studio [data-delivery-progress]{grid-template-columns:1fr}#genj-studio [data-delivery-stages]{gap:8px;font-size:11px}}
 @media(max-width:700px){#genj-studio .zc-delivery-controls{padding-inline:12px;gap:8px 12px}#genj-studio .zc-delivery-controls [data-delivery-status]{margin-left:0;flex-basis:100%}}
 /* The same Output choice travels with each workflow's generation settings. */
 #genj-studio .zc-output-choice{display:inline-flex;align-items:center;gap:6px;flex:none;white-space:nowrap;font-size:12px;color:var(--gs-muted);margin:0}
@@ -31,7 +22,32 @@
 #genj-studio .zc-source-colour-override[open]{display:grid;gap:12px}
 #genj-studio .zc-source-colour-override [data-delivery-space-wrap]>summary{display:none}
 #genj-studio .zc-source-colour-override>label{display:grid;gap:6px}
-#genj-studio .zc-delivery-controls:not(:has([data-delivery-status]:not(:empty),[data-delivery-files]:not(:empty),[data-delivery-progress]:not([hidden]),[data-delivery-cancel]:not([hidden])){display:none}
+#genj-studio .zc-delivery-controls:not(:has(>.zc-output-choice:not([hidden]),[data-delivery-status]:not(:empty),[data-delivery-files]:not(:empty),button:not([hidden]))){display:none}
+#genj-studio dialog[data-delivery-progress]{
+  position:fixed;inset:0;margin:auto;width:min(520px,calc(100vw - 32px));max-height:calc(100dvh - 32px);
+  box-sizing:border-box;overflow:auto;padding:20px;border:1px solid var(--gs-line);border-radius:12px;
+  background:var(--gs-panel);color:var(--zc-text);font-size:13px;line-height:1.45;box-shadow:0 14px 44px var(--gs-floating-shadow)
+}
+#genj-studio dialog[data-delivery-progress][open]{display:grid;gap:14px;z-index:190}
+#genj-studio dialog[data-delivery-progress]::backdrop{background:var(--gs-overlay-backdrop)}
+#genj-studio dialog[data-delivery-progress] [hidden]{display:none!important}
+#genj-studio .zc-hdr-progress-heading,#genj-studio .zc-hdr-progress-actions{display:flex;justify-content:space-between;align-items:center;gap:12px}
+#genj-studio .zc-hdr-progress-heading strong{font-size:17px}
+#genj-studio .zc-hdr-progress-actions{justify-content:flex-end}
+#genj-studio dialog[data-delivery-progress] button{min-height:34px;padding:6px 11px;border:1px solid var(--gs-line);border-radius:6px;background:var(--gs-input);color:inherit;font:inherit}
+#genj-studio dialog[data-delivery-progress] button:hover:not(:disabled){background:var(--zc-hover)}
+#genj-studio dialog[data-delivery-progress] button:focus-visible{outline:2px solid var(--gs-focus);outline-offset:2px}
+#genj-studio dialog[data-delivery-progress] button:disabled{opacity:.55}
+#genj-studio [data-delivery-result]{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--gs-muted)}
+#genj-studio [data-delivery-stages]{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;list-style:none;margin:0;padding:0;color:var(--gs-muted);font-size:11px}
+#genj-studio [data-delivery-stages] li{padding-top:7px;border-top:2px solid var(--gs-line)}
+#genj-studio [data-delivery-stages] .current{color:var(--zc-text);border-color:var(--gs-focus)}
+#genj-studio [data-delivery-stages] .done{color:var(--zc-text)}
+#genj-studio [data-hdr-elapsed]{color:var(--gs-muted);font-variant-numeric:tabular-nums}
+#genj-studio [data-delivery-bar]{width:100%;height:7px;accent-color:var(--gs-focus)}
+#genj-studio .zc-hdr-notice{position:fixed;z-index:190;left:50%;bottom:16px;transform:translateX(-50%);width:max-content;max-width:calc(100vw - 32px);box-sizing:border-box;margin:0;padding:10px 14px;background:var(--gs-panel);color:var(--zc-text);border:1px solid var(--gs-line);border-radius:8px;font-size:12px}
+#genj-studio .zc-hdr-notice[hidden]{display:none}
+@media(max-width:480px){#genj-studio dialog[data-delivery-progress]{padding:16px}#genj-studio [data-delivery-stages]{grid-template-columns:repeat(2,minmax(0,1fr))}}
 #genj-studio .zc-source-options{display:inline-flex!important;align-items:center;justify-content:center;gap:8px;flex:none;min-height:32px;padding:6px 10px;border:1px solid var(--gs-line);border-radius:8px;background:var(--gs-input);color:var(--gs-muted);font:inherit;cursor:pointer;line-height:1}
 #genj-studio .zc-source-options>svg{width:16px!important;height:16px!important;flex:none}
 #genj-studio .zc-source-options>svg[hidden]{display:none!important}

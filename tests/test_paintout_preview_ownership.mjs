@@ -33,6 +33,20 @@ function workspace(){
   failedVideo();assert.equal(w.$('message').textContent,'','A superseded video error cannot replace the successful frame fallback');
 }
 {
+  const w=workspace(),video=w.$('video'),slot=w.$('image-slot');
+  w.playhead=63;w.sourceInfo.media_url='/original.mov';w.preview();
+  video.videoWidth=0;video.videoHeight=0;video.onloadeddata();
+  assert.ok(video.hidden,'An audio-only decode must never show as playback');
+  assert.match(slot.firstElementChild.src,/frame=63/);
+  assert.equal(slot.hidden,false);
+  w.sourceInfo.playback_url='/original.mov?preview=1';w.preview();
+  assert.equal(video.getAttribute('src'),w.sourceInfo.playback_url);
+  assert.match(slot.firstElementChild.src,/frame=63/,'Show the selected frame while preparing playback');
+  video.videoWidth=1280;video.videoHeight=720;video.onloadeddata();
+  assert.equal(video.hidden,false);assert.equal(slot.hidden,true);
+  assert.equal(video.currentTime,63/w.fps());
+}
+{
   const w=workspace();w.state.sourceColour='srgb_display';w.info=async()=>({path:'old.mkv',width:512,height:320,resolved_colour:'auto'});await w.open();
   assert.deepEqual(w.stages,['trim']);assert.equal(w.state.sourceColour,'srgb_display');assert.match(w.$('image-slot').firstElementChild.src,/space=srgb_display/,'An explicit source interpretation survives raw inspection');
 }

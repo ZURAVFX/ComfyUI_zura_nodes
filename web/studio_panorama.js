@@ -1,8 +1,8 @@
+import {openStudioGraph} from './studio_graph_view.js';
 import {playbackFile} from './studio_delivery_formats.js';
 import {workspaceStorage} from './studio_storage.js';
 import {frameSourceResolution} from './frame_source_resolution.js';
 import {resolutionSize} from './studio_resolution.js';
-import {tidyArtistGraph} from './artist_graph.js';
 import {openPanoramaEditor} from './studio_panorama_editor.js';
 import {ClipTrimmer} from './studio_trim.js';
 import {installOwnedExecuting} from './studio_progress.js';
@@ -148,6 +148,6 @@ export class PanoramaCameraWorkspace{
     }catch(error){this.message(error.message);}
   }
   reset(){if(this.busy())return false;this.state={geometryMode:'temporal_scene',cameraRecipe:'temporal-scene-ltx25-v1',sourceSize:true,megapixels:1};this.$('prompt').value='';this.$('size').value='source';this.$('megapixels').value=1;this.$('geometry-mode').value='temporal_scene';this.$('two-stage').checked=false;this.save();this.render();this.$('result').pause();this.$('result').removeAttribute('src');this.$('result').poster='';this.$('result').hidden=true;this.$('media-label').hidden=true;this.$('empty').hidden=false;this.message('');return true;}
-  async graph(){try{const stage=this.state.warp?'render':this.state.geometry?'warp':'geometry',prepared=await this.requestGraph(stage),before=(this.app.rootGraph||this.app.graph)?.serialize?.();if(!before)throw new Error('Update ComfyUI to export an editable camera graph.');try{await this.app.loadApiJson(prepared.graph,'Zura Panorama Camera.json');await import('./vendor/elk.bundled.js');await tidyArtistGraph(this.app,prepared.graph,'camera',window.ELK);}catch(error){await this.app.loadGraphData(before);throw error;}this.studio.close();}catch(error){this.message(error.message);}}
+  async graph(){const stage=this.state.warp?'render':this.state.geometry?'warp':'geometry',prepared=await this.requestGraph(stage);await openStudioGraph(this.studio,prepared.graph,'Panorama camera · '+stage,'camera');}
   close(){this.modelDownloads?.close();this.editor?.cancel();this.editor=null;this.save();this.stopPolling();this.disposeExecuting?.();this.api.removeEventListener?.('progress',this.progress);}
 }

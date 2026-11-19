@@ -1,5 +1,14 @@
 # Release notes
 
+## 1.3.68 - 18 November 2026
+
+- Open the submitted ComfyUI graph from Studio, including during a run. Return to the same Studio session without submitting another render.
+- Review generated Add and Replace frames as draft layers. Adjust feathering, mask expansion, opacity and brightness before saving. Open frame editing, source-frame export and external edits from timeline thumbnails.
+- Restore paint swatches and tool labels, keep zoom tied to the selected media, and show browser-playable previews for locally selected ProRes footage.
+- Trim and play footage directly in Frame Extension and generate from the main preview. Keep the LTX output in SDR and HDR without the extra source-edge blend.
+- Skip redundant source decoding and compositing in full-frame Paintout delivery while retaining the original output dimensions, cadence, audio and mask exports.
+- Improve still and HDRI exports, HDR cancellation and progress, manual frame import, static mask editing, model setup, and After Effects hand-off. Preserve full viewport duration during H3 delivery.
+
 ## 1.3.67 - 16 November 2026
 
 - Restore AE clocks in the native soundtrack exporter using frame-preserving input reinterpretation. Avoid incompatible output frame-rate/passthrough options in current FFmpeg while retaining the exact source frame count and audio timing.

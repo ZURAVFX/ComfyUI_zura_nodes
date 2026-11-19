@@ -145,10 +145,23 @@ export class HDRIBuilder{
     }
     result.hdri_prepared=true;Object.assign(config,result);return config;
   }
+  async outputDescriptor(item=this.owner.items[this.owner.selectedImage]){
+    const sourceId=item?.hdri_source_id,serial=this.serial,state=JSON.stringify(this.state);
+    if(!sourceId||item.source_hdr!==true||this.closed||this.owner.items[this.owner.selectedImage]!==item)throw Error('Select the imported HDRI before exporting its native lighting master.');
+    if(this.loading||!this.editor)throw Error('Wait for the HDRI canvas to finish opening before exporting.');
+    if(JSON.parse(this.editor.snapshot()).stickers?.length)throw Error('Generate the composed panorama before exporting it. The imported HDR master is retained.');
+    const result=await this.owner.fetch('/zura/studio/hdri/export',{source_id:sourceId,...this.state,color_space:this.state.color_space});
+    if(this.closed||this.owner.items[this.owner.selectedImage]!==item||item.hdri_source_id!==sourceId||this.serial!==serial||JSON.stringify(this.state)!==state)throw Error('The environment changed during export. Export the intended lighting master again.');
+    if(result.source_id!==sourceId||result.source_hdr!==true||result.sampleType!=='float32'||result.bitDepth!==32||result.hasAlpha!==false||result.colour?.sceneLinear!==true||!['acescg','linear_rec709'].includes(result.colour.encoding)||result.file?.type!=='output'||!/^environment_[a-f0-9]{12}\.exr$/.test(result.file.filename||'')||result.file.subfolder!=='ZURA STUDIO/hdri'||!/^[a-f0-9]{64}$/.test(result.sha256||'')||!/^[a-f0-9]{64}$/.test(result.source_sha256||''))throw Error('The native HDRI export could not be verified. Its original is retained.');
+    const descriptor={kind:'image',master:result.file,colour:result.colour,sampleType:'float32',bitDepth:32,hasAlpha:false,sha256:result.sha256,sourceId,sourceSha256:result.source_sha256};
+    item.nativeHDRIOutput=descriptor;this.owner.save();return descriptor;
+  }
   async export(){
     if(this.loading||!this.editor)return;
     this.$('export').disabled=true;this.message('Saving float EXR…');
     try{
+      const selected=this.owner.items[this.owner.selectedImage];
+      if(selected?.hdri_source_id&&selected.source_hdr===true){const descriptor=await this.outputDescriptor(selected),saved=await this.owner.fetch('/zura/studio/save-output',{assets:[descriptor.master]});this.$('download').href=this.owner.api.apiURL(view(descriptor.master));this.$('download').download=descriptor.master.filename;this.$('download').hidden=false;this.message(saved.saved?.[0]?'Saved to '+saved.saved[0]:'EXR ready to download.');return;}
       let source=this.source();const state=this.editor.snapshot(),native=JSON.parse(state);
       if(this.meta?.source_hdr){
         if(native.stickers?.length)throw Error('Generate the composed panorama before exporting it. The imported HDR master is kept at its original range.');

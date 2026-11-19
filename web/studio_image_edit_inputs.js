@@ -15,7 +15,7 @@ export class ImageEditInputs {
     this.toggle.onclick=()=>{this.showSource=!this.showSource;this.sync();};
     this.clear=doc.createElement('button');this.clear.type='button';this.clear.textContent='Clear result';this.clear.title='Remove this generation from the canvas. It stays in History and on disk.';
     this.clear.onclick=()=>owner.clearImageResult();owner.root.querySelector('.zc-image-tools').prepend(this.clear);
-    this.file=doc.createElement('input');this.file.type='file';this.file.accept='image/png,image/jpeg,image/webp';this.file.hidden=true;owner.$('reference-drop').append(this.file);
+    this.file=doc.createElement('input');this.file.type='file';this.file.accept='image/png,image/jpeg,image/webp,.exr';this.file.hidden=true;owner.$('reference-drop').append(this.file);
     this.file.onchange=()=>{const file=this.file.files?.[0];this.file.value='';if(file)void owner.uploadReferences([file],{main:true});};
     this.addReferences=owner.$('add-references');this.addLabel=this.addReferences.innerHTML;this.addHome=this.addReferences.parentElement;
   }

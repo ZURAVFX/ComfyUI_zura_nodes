@@ -1,5 +1,5 @@
 // One owner mounts the shared Image Edit canvas on the video workbench.
-// Tool order, swatches and shortcuts follow AInVFX Paint a plate (Apache-2.0).
+// Tool icons and shortcuts follow AInVFX Paint a plate (Apache-2.0).
 import {paintToolIcon} from './studio_paint_toolbar.js';
 
 
@@ -12,11 +12,19 @@ export class PlateInlineEditor {
     if(this.record)return this.record;
     const s=this.surface,o=this.owner,w=s.w,doc=s.root.ownerDocument,host=doc.createElement('section');
     host.className='zplate-inline-image';host.setAttribute('aria-label','Edited frame canvas');
-    const record={host,moved:[],composer:o.root.querySelector('.zc-image-composer'),viewer:w.page.querySelector('.zf-viewer')};
-    this.record=record;record.viewerHidden=record.viewer.hidden;host.hidden=true;s.$('view').append(host);
+    const toolDock=doc.createElement('div'),colourDock=doc.createElement('div');
+    toolDock.className='zplate-tool-dock';colourDock.className='zplate-colour-dock';
+    const colourTitle=doc.createElement('p');colourTitle.className='zplate-colour-title';colourTitle.textContent='Paint colour';
+    colourDock.append(colourTitle);
+    const record={host,toolDock,colourDock,moved:[],composer:o.root.querySelector('.zc-image-composer'),viewer:w.page.querySelector('.zf-viewer')};
+    this.record=record;record.viewerHidden=record.viewer.hidden;host.hidden=true;s.$('view').append(toolDock,host,colourDock);
     const move=(node,target)=>{if(!node)return;const marker=doc.createComment('plate-inline-home');node.before(marker);record.moved.push({node,marker});target.append(node);};
     move(o.editInputs.source,host);move(o.$('gallery'),host);move(o.imageComparison?.host,host);move(o.imageArea.host,host);
-    move(o.imageArea.tools,s.$('brushes'));move(o.$('progress'),s.root.querySelector('.zpx-stage'));
+    const area=o.imageArea;
+    move(area.tools,toolDock);
+    move(area.paintPalette,colourDock);
+    move(area.colour.closest('label'),colourDock);
+    move(o.$('progress'),s.root.querySelector('.zpx-stage'));
     move(o.browserConnection?.host,s.$('account'));move(o.root.querySelector('.zc-image-settings'),s.$('image-settings-body'));
     if(o.imageComparison?.button)move(o.imageComparison.button,s.root.querySelector('.zpx-header'));
     record.oldLayers=s.w.editor.layersPanel;record.oldLayersHidden=record.oldLayers.hidden;
@@ -42,13 +50,9 @@ export class PlateInlineEditor {
       const names={draw:['Paint','Paint something new (B)'],brush:['Select area','Limit the editable area (M)'],protect:['Eraser','Rub out painted strokes (X)'],pan:['Pan','Pan the frame']};
       for(const [key,[label,title]]of Object.entries(names)){const button=tools.querySelector('[data-area-tool='+key+']');button.innerHTML=paintToolIcon(key)+'<span>'+label+'</span>';button.title=title;button.setAttribute('aria-label',label);}
       const light=doc.createElement('button');light.type='button';light.dataset.areaTool='light';light.innerHTML=paintToolIcon('light')+'<span>Light</span>';light.title='Paint a light source (L)';light.setAttribute('aria-pressed','false');light.onclick=()=>area.setTool('light');tools.querySelector('[data-area-tool=draw]').after(light);
-      const redo=doc.createElement('button');redo.type='button';redo.dataset.areaAction='redo';redo.innerHTML=paintToolIcon('redo')+'<span>Redo</span>';redo.title='Redo stroke (Ctrl+Shift+Z)';redo.onclick=()=>{area.viewer?.redo?.('paint');area.scheduleSave();area.refreshTools();};tools.append(redo);
+      const redo=doc.createElement('button');redo.type='button';redo.dataset.areaAction='redo';redo.innerHTML=paintToolIcon('redo')+'<span>Redo</span>';redo.title='Redo stroke (Ctrl+Shift+Z)';redo.onclick=()=>{area.viewer?.redo?.('paint');area.scheduleSave();area.refreshTools();};tools.querySelector('[data-area-action=undo]').after(redo);
       for(const [key,label]of [['undo','Undo'],['clear','Clear'],['fit','Fit']]){const button=tools.querySelector('[data-area-action='+key+']');if(button)button.innerHTML=paintToolIcon(key)+'<span>'+label+'</span>';}
       this.brushNumber=area.brushControl.number;
-    }
-    if(area.paintPalette&&area.paintPalette.parentElement!==tools){
-      const marker=doc.createComment('plate-palette-home');area.paintPalette.before(marker);
-      this.record.moved.push({node:area.paintPalette,marker});area.colour.parentElement.before(area.paintPalette);
     }
     const paintMode=this.plate.propagation?this.plate.propagation():this.plate.action!=='remove';
     this.brushNumber=area.brushControl.number;area.brushControl.sync();
@@ -70,7 +74,7 @@ export class PlateInlineEditor {
     this.surface.root.removeEventListener('keydown',this.keyHandler);
     for(const {node,marker}of record.moved)if(marker.parentNode)marker.replaceWith(node);
     record.viewer.hidden=record.viewerHidden;record.oldLayers.hidden=record.oldLayersHidden;
-    record.host.remove();delete this.surface.root.dataset.inline;
+    record.toolDock.remove();record.host.remove();record.colourDock.remove();delete this.surface.root.dataset.inline;
     this.surface.w.page.classList.remove('is-editing-image');this.surface.w.page.querySelector('.zf-composer').hidden=false;
   }
 }

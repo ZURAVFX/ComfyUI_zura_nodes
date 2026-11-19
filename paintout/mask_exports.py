@@ -2,6 +2,7 @@
 from fractions import Fraction
 import json
 from pathlib import Path
+import shutil
 import subprocess
 import tempfile
 import zipfile
@@ -24,6 +25,7 @@ class MaskExports:
         self.rate=Fraction(str(plate.get('fps_rational',plate['fps']))).limit_denominator(1_000_000)
         self.work=tempfile.TemporaryDirectory(prefix='.mask-',dir=self.target)
         self.folder=Path(self.work.name)
+        self.full_frame_png=None
 
     def append(self,matte):
         matte=np.asarray(matte,dtype=np.float32)
@@ -31,6 +33,15 @@ class MaskExports:
         path=self.folder/f'mask_{self.plate["start"]+self.count:06d}.png'
         Image.fromarray(np.rint(matte*65535).astype(np.uint16)).save(path,compress_level=1)
         self.count+=1
+
+    def append_full_frame(self):
+        if self.full_frame_png is None:
+            self.full_frame_png=self.folder/f'mask_{self.plate["start"]+self.count:06d}.png'
+            self.append(np.ones((self.height,self.width),dtype=np.float32))
+        else:
+            path=self.folder/f'mask_{self.plate["start"]+self.count:06d}.png'
+            shutil.copyfile(self.full_frame_png,path)
+            self.count+=1
 
     def finish(self):
         try:

@@ -1,3 +1,4 @@
+import {openStudioGraph,rememberStudioGraph,studioGraphScope} from '../studio_graph_view.js';
 import {paintoutOutputRoles} from './paintout_outputs.js';
 import {captureResultExports,createResultExportRow,renderPaintoutResultExports} from '../studio_result_exports.js';
 import {playbackFile} from '../studio_delivery_formats.js';
@@ -24,7 +25,6 @@ import {durationLabel} from './studio_progress.js';
 
 import {ShotComparison} from './studio_compare.js';
 
-import {tidyArtistGraph} from './artist_graph.js';
 
 import {PaintoutEditor,paintoutDraft} from './watermark_editor.js';
 import {DEFAULT_FRAME_EDIT_PROMPT} from './paintout_frame_recipes.js';
@@ -687,7 +687,9 @@ export class WatermarkWorkspace{
     graph=(await prepareAEFrameGraph(this,graph,this.config())).graph;
     const requestId=crypto.randomUUID();
     try{
+      const graphScope=studioGraphScope(this,'watermark');
       const response=await this.fetch('/prompt',{prompt:graph,client_id:this.api.clientId,extra_data:{...(this.config().ae_frame_contract?{ae_frame_contract:this.config().ae_frame_contract}:{}),zura_paintout:true,zura_paintout_request:requestId,preview_method:'auto'}});
+      rememberStudioGraph(this,'watermark',graph,response.prompt_id,graphScope);
       if(response.prompt_id)return response;
     }catch(error){
       if(error.status>=400&&error.status<500)throw error;
@@ -786,7 +788,7 @@ export class WatermarkWorkspace{
 
   compare(){if(!this.result||this.result.config.source!==this.state.source||!this.sourceInfo?.media_url)return;this.$('video').pause();this.comparison??=new ShotComparison(this.$('comparison'));this.$('comparison').hidden=false;this.comparison.onClose=()=>{this.$('comparison').hidden=true;};const c=this.result.config;this.comparison.show(this.url(this.sourceInfo.media_url),this.outputURL(playbackFile(this.result.file)),c.startFrame/(this.sourceInfo.kind==='video'?this.sourceInfo.fps:c.sequenceFps),{resultLabel:'Clean plate'});}
 
-  async graph(){try{const config=this.job?.config||this.config(),base=buildWatermarkWorkspaceGraph(config,this.modelInfo),graph=this.loras?.patch?await this.loras.patch(base,config.custom_loras||[]):base,original=(this.app.rootGraph||this.app.graph)?.serialize?.();if(!original||typeof this.app.loadApiJson!=='function')throw new Error('Update ComfyUI to open this editable graph.');try{await this.app.loadApiJson(graph,`Zura Paintout · ${Date.now()}.json`);await import('../vendor/elk.bundled.js');await tidyArtistGraph(this.app,graph,'paintout',window.ELK);}catch(e){await this.app.loadGraphData(original);throw e;}this.studio.close();}catch(e){this.message(e.message);}}
+  async graph(){const config=this.config(),base=buildWatermarkWorkspaceGraph(config,this.modelInfo),graph=this.loras?.patch?await this.loras.patch(base,config.custom_loras||[]):base;await openStudioGraph(this.studio,graph,'Remove watermark · Current settings','paintout');}
 
   close(){this.modelDownloads?.close();this.editor?.close();this.save();this.stopPolling();this.nativeSamplePreview?.dispose();this.nativeSamplePreview=null;this.comparison?.hide();this.$('video').pause();}
 

@@ -10,6 +10,7 @@ const owner={root:document.querySelector('main'),mode:'image',imageOperation:'ed
  $(id){return document.getElementById(id);},api:{apiURL:path=>path},message(value){this.lastMessage=value;},save(){},render(){},renderGallery(){},
  async fetch(path,body){calls.push({path,body});if(delay)await delay;if(fail)throw Error('compose failed');const id=++revision;return {master:file(`master${id}.exr`),preview:file(`preview${id}.png`),conditioningInput:{...file(`condition${id}.png`,'input'),file:`layers/condition${id}.png`},hasAlpha:false,source_sha256:'a'.repeat(64),width:body.delivery?.width||512,height:body.delivery?.height||320,sourceWidth:512,sourceHeight:320,canonicalMaster:file(`canonical${id}.exr`),canonicalPreview:file(`canonical${id}.png`),colour:{encoding:'srgb_display',sceneLinear:false},applied:body.layers.map(layer=>({...layer}))};}};
 const controller=new StudioImageLayers(owner);owner.imageLayers=controller;
+controller.sync();assert.equal(controller.host.hidden,false,'A normal edit source always exposes a Layers section');assert.match(controller.empty.textContent,/New edits appear/);assert.equal(calls.length,0,'Showing empty layers never fabricates a stack or composes pixels');
 const config={operation:'edit',image_intent:'standard',references:[source],width:512,height:320,prompt:'Add a hydrant',edit_area:{enabled:true,mask:{file:'masks/roi.png',filename:'roi.png',subfolder:'masks',type:'input'}}};config.image_layer_base=controller.generationBase(config);assert.equal(config.image_layer_base.layers.length,0);
 const first=await controller.accept(config,file('raw1.png'));owner.items=[first];controller.selectInput(first);controller.sync();assert.equal(first.master.filename,'master1.exr');assert.equal(first.file.filename,'preview1.png');assert.equal(first.image_layers.source.filename,'original.png');assert.equal(first.image_layers.layers[0].file.filename,'raw1.png');assert.equal(first.image_layers.layers[0].layer_mask.filename,'roi.png');
 const returnMaster=studioModeAdapter('image').getSelectedOutput({...owner,studio:{}});
@@ -38,6 +39,23 @@ const pollOwner={job,items:[prior],selectedImage:0,imageLayers:{async accept(con
 await CreativeWorkspace.prototype.poll.call(pollOwner);assert.equal(acceptedRaw,rawCanonical,'Real image polling sends canonical layer pixels, never scaled delivery, to composition');assert.equal(pollOwner.items[0].master,verified);assert.equal(pollOwner.activated,0);
 const failedJob={...job,id:'failed-compose'};pollOwner.job=failedJob;pollOwner.items=[prior];pollOwner.selectedImage=0;delete pollOwner.activated;pollOwner.fetch=async()=>({[failedJob.id]:{status:{completed:true,status_str:'success',messages:[]},outputs:{save_layer:{images:[rawCanonical]}}}});pollOwner.imageLayers.accept=async()=>{throw Error('unsafe composite');};await CreativeWorkspace.prototype.poll.call(pollOwner);assert.equal(pollOwner.items[pollOwner.selectedImage],prior,'A failed new composition leaves the previous result selected');assert.equal(pollOwner.activated,undefined);assert.equal(pollOwner.items[0].image_layer_error,'unsafe composite','Raw generated pixels remain retained without becoming current master');
 console.log('Normal image polling: canonical graph output reaches verified composition; failed composition retains prior selection and uncomposited asset.');
+
+// A frame guide gets the same verified layer stack, scoped to its handoff.
+owner.references=[source];owner.items=[first];owner.selectedImage=0;
+owner.outpaintGuide.request={id:'guide-a'};
+assert.equal(controller.current(),null,'A normal image stack cannot leak into the guide');
+const guideConfig={...config,outpaint_guide:'guide-a'};
+guideConfig.image_layer_base=controller.generationBase(guideConfig);
+assert.equal(guideConfig.image_layer_base.layers.length,0);
+const guideItem=await controller.accept(guideConfig,file('guide-layer.png'));
+owner.items=[guideItem];controller.selectInput(guideItem);controller.sync();
+assert.equal(controller.current(),guideItem);
+assert.equal(controller.host.hidden,false);
+assert.equal(guideItem.image_layers.layers.length,1);
+assert.equal(controller.generationBase({...guideConfig,references:owner.references}).layers.length,1);
+owner.outpaintGuide.request={id:'guide-b'};
+assert.equal(controller.current(),null,'A second guide cannot inherit the first guide’s layers');
+owner.outpaintGuide.request=null;owner.references=[source];
 
 // ComfyUI history can use Windows separators in a stored output subfolder.
 // The real accept/request path must send the backend's forward-slash form,

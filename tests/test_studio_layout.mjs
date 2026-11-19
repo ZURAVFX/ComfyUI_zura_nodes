@@ -20,7 +20,7 @@ assert.ok(ids.includes('gs-preserve_identity'),'Relight can optionally pass sour
 assert.ok(html.includes('Preserve face identity')&&html.includes('early, middle and late in the clip as H3 identity references')&&html.includes('guidance, not a hard lock'),'The relight identity option explains its source-frame guidance and limitation');
 assert.ok(ids.includes('gs-live-preview-image'),'The video canvas has a live H3 sample surface');
 assert.match(hostStyles,/['"]\.\/studio_image_area\.css['"]/,'The image paint editor styles are loaded in both Studio hosts');
-assert.match(imageAreaCss,/\.zc-edit-main>:is\(\.zia-open,\.zia-guide-open\)[^}]*border:1px solid var\(--gs-accent\)!important/,'The paint action is visually distinct from optional reference uploads');
+assert.match(imageAreaCss,/:is\(\.zia-open,\.zia-guide-open\)\.is-painted[^}]*background:var\(--gs-selected\)/,'A painted attachment is visually distinct from an empty one');
 assert.deepEqual([...html.matchAll(/data-step="(\d)"/g)].map(match=>match[1]),['0','1','2','3']);
 assert.ok(html.includes('<aside class="gs-controls">'));
 assert.ok(html.includes('<aside class="gs-settings">'));

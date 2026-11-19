@@ -1,5 +1,5 @@
 """Local Windows pickers and colour-managed thumbnails. No footage upload needed."""
-import asyncio,base64,io,json,os,secrets,subprocess,time
+import asyncio,base64,hashlib,io,json,os,secrets,subprocess,time
 from pathlib import Path
 from collections import OrderedDict
 from urllib.parse import urlencode
@@ -9,6 +9,8 @@ from server import PromptServer
 VIDEO_EXTENSIONS={'.mov','.mp4','.mxf','.mkv','.avi','.webm'}
 IMAGE_EXTENSIONS={'.exr','.png','.tif','.tiff','.jpg','.jpeg','.webp'}
 _media_grants=OrderedDict()
+_playback_jobs={}
+_playback_slots=asyncio.Semaphore(2)
 
 def checked_path(path):
     """Only probe supported local media, never a manifest or arbitrary file."""
@@ -43,7 +45,11 @@ def describe_media(path,cancel=None):
                 thumbnail_url='/zura/paintout/frame-preview?'+urlencode({'file':str(p),'space':'auto','frame':0,'size':1280}))
     try:result['resolved_colour']=selected_space(d,'auto')
     except (ValueError,OSError) as error:result['colour_error']=str(error)
-    if kind=='video':result['media_url']=grant(p)
+    if kind=='video':
+        from ..artist_studio.preview_proxy import needs_proxy
+        result['media_url']=grant(p)
+        if needs_proxy(d.get('video_codec')):
+            result['playback_url']=result['media_url']+'&preview=1'
     try:
         from ..artist_studio.display_view_routes import grant_source
         result['display_source']=grant_source(p,result.get('resolved_colour','auto'))
@@ -61,6 +67,33 @@ async def info(request):
         return web.json_response(await asyncio.to_thread(restore_model_info,path,described))
     except Exception as error:return web.json_response({'error':str(error)},status=400)
 
+def _build_playback(source,target):
+    from ..artist_studio.preview_proxy import build_proxy
+    from .media_tools import find_media_tool
+    def ffmpeg(*args):
+        subprocess.run([find_media_tool('ffmpeg'),'-nostdin','-hide_banner','-loglevel','error',
+                        '-y',*map(str,args)],capture_output=True,check=True,timeout=180,
+                       creationflags=getattr(subprocess,'CREATE_NO_WINDOW',0))
+    target.parent.mkdir(parents=True,exist_ok=True)
+    build_proxy(source,target,ffmpeg)
+
+async def _playback_file(source):
+    import folder_paths
+    stamp=source.stat()
+    key=hashlib.sha256(repr((str(source),stamp.st_size,stamp.st_mtime_ns)).encode()).hexdigest()
+    target=Path(folder_paths.get_temp_directory())/'zura-paintout-playback'/(key+'.mp4')
+    if target.is_file():return target
+    async def prepare():
+        try:
+            async with _playback_slots:
+                await asyncio.to_thread(_build_playback,source,target)
+            return target
+        finally:
+            _playback_jobs.pop(key,None)
+    if key not in _playback_jobs:
+        _playback_jobs[key]=asyncio.create_task(prepare())
+    return await asyncio.shield(_playback_jobs[key])
+
 async def media(request):
     from ..media_source import require_same_origin
     require_same_origin(request)
@@ -70,6 +103,11 @@ async def media(request):
     try:valid=checked_path(str(path))==path and path.is_file()
     except (ValueError,OSError):valid=False
     if not valid:raise web.HTTPNotFound(text='The selected file is no longer available.')
+    if request.query.get('preview')=='1':
+        if path.suffix.lower() not in VIDEO_EXTENSIONS:raise web.HTTPNotFound()
+        try:path=await _playback_file(path)
+        except (OSError,subprocess.SubprocessError):
+            raise web.HTTPUnprocessableEntity(text='Could not prepare browser playback. Scrub the source timeline to inspect individual frames.') from None
     response=web.FileResponse(path,headers={'Cache-Control':'private, no-store','X-Content-Type-Options':'nosniff'})
     if path.suffix.lower() in IMAGE_EXTENSIONS:
         # Exported EXRs are downloads, not browser-decoded colour previews.
@@ -82,8 +120,8 @@ def pick(kind):
     filters={
         'model':'Model files (*.safetensors;*.pt;*.pth;*.onnx;*.ckpt;*.bin)|*.safetensors;*.pt;*.pth;*.onnx;*.ckpt;*.bin',
         'footage':'Footage (*.mov;*.mp4;*.mxf;*.mkv;*.avi)|*.mov;*.mp4;*.mxf;*.mkv;*.avi|Images (*.exr;*.tif;*.tiff;*.png)|*.exr;*.tif;*.tiff;*.png',
-        'anchor':'Painted frames (*.exr;*.tif;*.tiff;*.png)|*.exr;*.tif;*.tiff;*.png',
-        'mask':'Mask (*.mov;*.mp4;*.mkv;*.exr;*.png;*.tif;*.tiff)|*.mov;*.mp4;*.mkv;*.exr;*.png;*.tif;*.tiff'}
+        'anchor':'Edited frames (*.png;*.jpg;*.jpeg;*.exr;*.tif;*.tiff)|*.png;*.jpg;*.jpeg;*.exr;*.tif;*.tiff',
+        'mask':'Grayscale mask image or video (*.png;*.jpg;*.jpeg;*.tif;*.tiff;*.mov;*.mp4;*.mkv)|*.png;*.jpg;*.jpeg;*.tif;*.tiff;*.mov;*.mp4;*.mkv'}
     if kind=='sequence':
         dialog="$d=New-Object System.Windows.Forms.FolderBrowserDialog; $d.Description='Select the frame sequence folder'; if($d.ShowDialog($owner) -eq 'OK') { ConvertTo-Json -InputObject @($d.SelectedPath) -Compress }"
     else:

@@ -259,7 +259,7 @@ class LocalEditedFrameTests(unittest.TestCase):
 
     def test_wrong_shot_frame_extension_or_size_are_rejected_without_mutation(self):
         other = self.root / 'other.mp4';other.write_bytes(b'other')
-        wrong = self.root / 'edited.jpg';Image.new('RGB', (5, 4)).save(wrong)
+        wrong = self.root / 'edited.gif';Image.new('RGB', (5, 4)).save(wrong)
         for change in ({'source': str(other)}, {'frame': -1}, {'frame': 6}, {'file': str(wrong)}):
             with self.assertRaises(ValueError):
                 routes.import_local_image(dict(self.body, **change))

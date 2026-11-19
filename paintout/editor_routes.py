@@ -73,8 +73,8 @@ def import_local_image(body):
     if not 0 <= frame < description['count']:
         raise ValueError('Choose a frame inside the original source.')
     original = checked_path(body['file'])
-    if not original.is_file() or original.suffix.lower() not in ('.png', '.tif', '.tiff', '.exr'):
-        raise ValueError('Choose an edited PNG, TIFF or EXR frame.')
+    if not original.is_file() or original.suffix.lower() not in ('.png', '.jpg', '.jpeg', '.tif', '.tiff', '.exr'):
+        raise ValueError('Choose an edited PNG, JPEG, TIFF or EXR frame.')
     limit = 100 * 1024 * 1024
     if original.stat().st_size > limit:
         raise ValueError('The edited frame exceeds 100 MB.')
@@ -124,8 +124,8 @@ async def import_frame(request):
         async for part in reader:
             if part.filename:
                 suffix = Path(part.filename).suffix.lower()
-                if suffix not in ('.png', '.exr', '.tif', '.tiff'):
-                    raise ValueError('Choose an edited PNG, TIFF or EXR frame.')
+                if suffix not in ('.png', '.jpg', '.jpeg', '.exr', '.tif', '.tiff'):
+                    raise ValueError('Choose an edited PNG, JPEG, TIFF or EXR frame.')
                 if upload is not None:
                     raise ValueError('Import one edited frame at a time.')
                 content = bytearray()
@@ -207,7 +207,7 @@ def _spool_mask_video(description, directory):
                     if not chunk:
                         raise ValueError('The mask video ended before all source frames were decoded.')
                     pixels.extend(chunk)
-                binary = (np.frombuffer(pixels, np.uint8).reshape(height, width) >= 128).astype(np.uint8) * 255
+                binary = np.frombuffer(pixels, np.uint8).reshape(height, width)
                 path = Path(directory) / f'{frame:08d}.png'
                 Image.fromarray(binary).save(path)
                 result[frame] = str(path)
@@ -233,11 +233,16 @@ def import_mask_video(body):
     draft = document.get('data', {}).get('draft', {})
     if not draft.get('source') or checked_path(draft['source']) != source:
         raise ValueError('Import the mask into its original shot project.')
-    description, mask_description = describe(str(source)), describe(str(mask))
+    description = describe(str(source))
+    if mask.is_file() and mask.suffix.lower() in {'.png','.jpg','.jpeg','.tif','.tiff','.webp'}:
+        from .mask_static import import_still
+        return import_still(body)
+    mask_description=describe(str(mask))
     if mask_description['kind'] != 'video':
-        raise ValueError('Choose a black-and-white mask video. White removes; black keeps.')
+        raise ValueError('Choose a grayscale still mask or a matching mask video. White removes; black keeps.')
     if (mask_description['width'], mask_description['height']) != (description['width'], description['height']):
         raise ValueError('The mask video dimensions must match the original source exactly.')
+    if description['count']>10000:raise ValueError('Choose at most 10000 mask frames.')
     if mask_description['count'] != description['count']:
         raise ValueError('The mask video must contain exactly the same number of frames as the source.')
     def clock(value, fallback):
@@ -253,9 +258,20 @@ def import_mask_video(body):
         masks = _spool_mask_video(mask_description, pending)
         if source_identity(str(source), describe(str(source))) != identity or source_identity(str(mask), describe(str(mask))) != mask_identity:
             raise ValueError('The footage or mask changed during import. Reload the files before importing again.')
-        commit_mask_pass(project, identity, masks, 'replace', int(expected),
-                         metadata={'method': 'import', 'mask_source': str(mask), 'segment_id': secrets.token_hex(12), 'tracked': True}, preserve_protection=True)
-    return project_response(load_project(project))
+        committed=commit_mask_pass(project, identity, masks, 'replace', int(expected),
+                         metadata={'method': 'import', 'mask_source': str(mask), 'segment_id': secrets.token_hex(12), 'tracked': False, 'ready': True}, preserve_protection=True)
+    return {**project_response(load_project(project)),'segment_id':committed['segment_id']}
+
+
+async def static_mask(request):
+    from ..media_source import require_same_origin
+    from .mask_static import save_static
+    require_same_origin(request)
+    try:
+        body=await request.json()
+        return web.json_response(await asyncio.to_thread(save_static,body))
+    except RevisionConflict as error:return web.json_response({'error':str(error)},status=409)
+    except (ValueError,KeyError,TypeError,OSError) as error:return web.json_response({'error':str(error)},status=400)
 
 
 async def import_mask(request):
@@ -422,7 +438,7 @@ def register_routes():
     existing = {(route.method, route.path) for route in server.routes}
     if ('GET','/zura/paintout/editor/watermark-mask-file') not in existing:
         server.routes.get('/zura/paintout/editor/watermark-mask-file')(watermark_mask_file)
-    for path, handler in (('/zura/paintout/editor/watermark-mask-export', watermark_mask_export), ('/zura/paintout/editor/watermark-layer', watermark_layer), ('/zura/paintout/editor/segment-range', segment_range), ('/zura/paintout/editor/select-mask-candidate', select_mask_candidate), ('/zura/paintout/editor/effective-mask', effective_preview), ('/zura/paintout/editor/import-frame', import_frame), ('/zura/paintout/editor/import-local-frame', import_local_frame), ('/zura/paintout/editor/paint-mask', paint_mask), ('/zura/paintout/editor/import-mask', import_mask)):
+    for path, handler in (('/zura/paintout/editor/watermark-mask-export', watermark_mask_export), ('/zura/paintout/editor/watermark-layer', watermark_layer), ('/zura/paintout/editor/segment-range', segment_range), ('/zura/paintout/editor/select-mask-candidate', select_mask_candidate), ('/zura/paintout/editor/effective-mask', effective_preview), ('/zura/paintout/editor/import-frame', import_frame), ('/zura/paintout/editor/import-local-frame', import_local_frame), ('/zura/paintout/editor/paint-mask', paint_mask), ('/zura/paintout/editor/import-mask', import_mask), ('/zura/paintout/editor/static-mask', static_mask)):
         if ('POST', path) not in existing:
             server.routes.post(path)(handler)
     from . import import_review

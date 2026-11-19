@@ -3,6 +3,15 @@ import {activeStudioMode,studioModeAdapter} from './studio_mode_adapters.js';
 const HDR=new Set(['acescg','acescct','linear_rec709','hlg_rec2020','pq_rec2020','pq_display_p3']);
 const VIDEO_MODES=new Set(['swap','viewport','camera','outpaint','alpha']);
 export const studioImportAEActive=owner=>!!(owner.studio?.aeSession||owner.studio?.aeBridge&&!owner.studio.aeBridge.closed);
+const referenceContext=owner=>JSON.stringify([owner.mode,owner.imageOperation,owner.imageIntent,!!owner.editMainMissing,owner.$?.('model')?.value,(owner.references||[]).map(ref=>[ref.type||'input',ref.file||'',ref.filename||'',ref.subfolder||''])]);
+/** The current reference is the verified model PNG, not the retained EXR. */
+export function importedImageReference(prepared,assetId){
+  const input=prepared?.processingInput,asset=input?.studioAsset,stills=input?.stills,ref=Array.isArray(stills)?stills[0]:stills?.first,view=ref?.processingView,original=view?.originalSource;
+  const file=ref?.file||[ref?.subfolder,ref?.filename].filter(Boolean).join('/');
+  if(prepared?.originalAssetId!==assetId||prepared.frameCount!==1||input?.precision?.sourceBitDepth!==8||asset?.asset_kind!=='image'||asset.resolved_colour!=='srgb_display'||!asset.id||asset.id===assetId||view?.kind!=='sdr8_inference'||!/^[a-f0-9]{64}$/.test(view.originalSourceSha256||'')||!ref?.filename||!/\.png$/i.test(ref.filename)||ref.type!=='input'||!file||file.startsWith('/')||file.includes('\\')||file.includes(':')||file.split('/').some(part=>!part||part==='.'||part==='..')||original?.studioAssetId!==assetId||original?.displaySelector?.imported_frame!==asset.id||ref.width!==prepared.width||ref.height!==prepared.height||!Number.isInteger(ref.width)||!Number.isInteger(ref.height))throw Error('The retained image and its model input could not be verified. Your existing references are unchanged.');
+  const originalMetadata={...structuredClone(original),master:original.master||{asset_id:assetId}};
+  return {...ref,file,processingView:{...view,originalSource:originalMetadata},studioAssetId:asset.id,colour:{encoding:'srgb_display',sceneLinear:false},resolved_colour:'srgb_display',precision:{sourceBitDepth:8,storageBitDepth:8,sampleType:'integer'},originalSourceMetadata:structuredClone(originalMetadata)};
+}
 export function importPrecisionLabel(precision={}){
   if(precision.storage==='video')return `${precision.codec||'Video'} · decoded ${precision.decodedBitDepth||'?'}-bit`;
   return `${precision.storageBitDepth||'?'}-bit ${precision.sampleType==='float'?'float':'image'}`;
@@ -42,28 +51,35 @@ export class StudioMediaImport {
     this.form.onsubmit=event=>{event.preventDefault();void this.apply();};this.dialog.querySelector('[data-cancel]').onclick=()=>this.cancel();
     this.dialog.addEventListener('cancel',()=>this.cancel());
     const link=doc.createElement('link');link.rel='stylesheet';link.href=new URL('./studio_media_import.css',import.meta.url).href;doc.head.append(link);
-    const sync=delivery.sync;delivery.sync=(...args)=>{const result=sync.apply(delivery,args);const bound=studioImportAEActive(this.owner);if(bound)this.abandon();this.button.hidden=bound;this.button.disabled=this.busy||bound||delivery.isBusyFor(activeStudioMode(this.owner));return result;};
+    const sync=delivery.sync;delivery.sync=(...args)=>{const result=sync.apply(delivery,args);const bound=studioImportAEActive(this.owner);if(bound&&!this.referenceAEAllowed(this.referenceIntent))this.abandon();this.button.hidden=bound;this.button.disabled=this.busy||bound||delivery.isBusyFor(activeStudioMode(this.owner));return result;};
     const close=delivery.close;delivery.close=(...args)=>{this.closed=true;this.abandon();this.picker.remove();this.dialog.remove();link.remove();return close.apply(delivery,args);};
     delivery.sync();
   }
   choose(){if(studioImportAEActive(this.owner))return this.delivery.message('Leave After Effects mode before replacing its source.');this.delivery.sourceControls?.hide();this.picker.click();}
-  current(controller){return !this.closed&&controller===this.controller&&!controller.signal.aborted&&!studioImportAEActive(this.owner);}
+  referenceAEAllowed(intent){const bridge=this.owner.studio?.aeBridge;return !!intent?.allowAE&&intent.ae.session===this.owner.studio?.aeSession&&intent.ae.bridge===bridge&&intent.ae.source===bridge?.source;}
+  current(controller){return !this.closed&&controller===this.controller&&!controller.signal.aborted&&(!studioImportAEActive(this.owner)||this.referenceAEAllowed(this.referenceIntent))&&(!this.referenceIntent||this.referenceIntent.context===referenceContext(this.owner));}
   assertCurrent(controller){if(!this.current(controller)){const error=Error('This normal import was cancelled or replaced by After Effects.');error.name='AbortError';throw error;}}
-  abandon(){clearTimeout(this.previewTimer);this.controller?.abort();this.controller=null;this.asset=null;this.setBusy(false);this.dialog.close();}
+  abandon(){clearTimeout(this.previewTimer);this.controller?.abort();this.controller=null;this.asset=null;this.referenceIntent=null;this.setBusy(false);this.dialog.close();}
   async request(path,options={}){
     const response=await this.api.fetchApi(path,options);let value;try{value=await response.json();}catch{throw Error('The import service is unavailable. Restart ComfyUI after updating the nodes.');}
     if(!response.ok)throw Error(value.error?.message||value.error||'Could not import this media.');return value;
   }
-  cancel(){clearTimeout(this.previewTimer);this.controller?.abort();if(!this.busy)this.dialog.close();else this.status.textContent='Cancelling input preparation. The original is retained.';}
+  cancel(){clearTimeout(this.previewTimer);this.controller?.abort();this.referenceIntent=null;if(!this.busy)this.dialog.close();else this.status.textContent='Cancelling input preparation. The original is retained.';}
   setBusy(value){this.busy=value;this.button.disabled=value;this.form.querySelector('[type="submit"]').disabled=value;}
-  async upload(files){
-    if(this.busy||this.closed||studioImportAEActive(this.owner))return;this.mode=activeStudioMode(this.owner);this.asset=null;const controller=this.controller=new AbortController();
+  async importImageReferences(files,{main=false}={}){
+    const pending=[...files];if(!pending.length)return;const bridge=this.owner.studio?.aeBridge,intent={pending,main,context:referenceContext(this.owner),allowAE:!!this.owner.references?.[0]&&!main&&!this.owner.editMainMissing,ae:{session:this.owner.studio?.aeSession,bridge,source:bridge?.source}};
+    if(this.busy||this.closed||this.referenceIntent||this.dialog.open||studioImportAEActive(this.owner)&&!this.referenceAEAllowed(intent))return this.delivery.message('Finish the current import, or leave the AE source session before replacing its main image.');
+    return this.upload([pending.shift()],{referenceIntent:intent});
+  }
+  async upload(files,{referenceIntent=null}={}){
+    if(this.busy||this.closed||studioImportAEActive(this.owner)&&!this.referenceAEAllowed(referenceIntent))return;this.referenceIntent=referenceIntent;this.mode=referenceIntent?'image':activeStudioMode(this.owner);this.asset=null;const controller=this.controller=new AbortController();
+    this.dialog.querySelector('h3').textContent=referenceIntent?'Import image reference':'Add media';
     this.dialog.querySelector('[data-name]').textContent=files.length===1?files[0].name:`${files.length} EXR frames`;
     for(const row of this.dialog.querySelectorAll('label,[data-range-row]'))row.hidden=true;
     this.preview.hidden=true;this.preview.removeAttribute('src');this.dialog.querySelector('[data-description]').textContent='';
     this.status.textContent='Retaining the original media…';this.dialog.showModal();this.setBusy(true);
     try{
-      const sequence=files.every(file=>/\.exr$/i.test(file.name));if(files.length>1&&!sequence)throw Error('Choose one movie or image, or select the frames of one EXR sequence.');
+      const sequence=!referenceIntent&&files.every(file=>/\.exr$/i.test(file.name));if(files.length>1&&!sequence)throw Error('Choose one movie or image, or select the frames of one EXR sequence.');
       const data=new FormData();for(const file of files)data.append(sequence?'frames':'file',file,file.name);
       let result=await this.request(sequence?'/zura/studio/hdr/exr-sequence':'/zura/studio/media-import/upload',{method:'POST',body:data,signal:this.controller.signal,timeoutMs:null});
       this.assertCurrent(controller);
@@ -71,7 +87,7 @@ export class StudioMediaImport {
       this.assertCurrent(controller);
       this.asset=result.asset;this.mediaInfo=result.mediaInfo;this.populate();
     }catch(error){if(controller===this.controller)this.status.textContent=error.name==='AbortError'?'Import cancelled.':error.message;}
-    finally{if(controller===this.controller){this.setBusy(false);if(!this.current(controller))this.dialog.close();}}
+    finally{if(controller===this.controller){this.setBusy(false);if(!this.current(controller)){this.referenceIntent=null;this.dialog.close();}}}
   }
   populate(){
     const asset=this.asset,n=asset.frameCount||asset.count||1;
@@ -97,9 +113,18 @@ export class StudioMediaImport {
     },120);
   }
   async apply(){
-    if(!this.asset||this.busy||this.closed||studioImportAEActive(this.owner))return;const controller=this.controller=new AbortController();this.setBusy(true);this.status.textContent='Preparing the model input…';
+    if(!this.asset||this.busy||this.closed||studioImportAEActive(this.owner)&&!this.referenceAEAllowed(this.referenceIntent))return;const controller=this.controller=new AbortController();this.setBusy(true);this.status.textContent='Preparing the model input…';
     try{
       this.assertCurrent(controller);
+      if(this.referenceIntent){
+        const intent=this.referenceIntent;
+        if(this.owner.mode!=='image'||this.owner.job||this.owner.pendingSubmission||this.owner.submitting||this.owner.uploading)throw Error('Finish the current image operation before importing a reference.');
+        const prepared=await this.request('/zura/studio/media-import/prepare',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(importRequest(this.asset,'image',{colour:this.form.elements.colour.value,frame:0})),signal:controller.signal,timeoutMs:null});
+        this.assertCurrent(controller);const ref=importedImageReference(prepared,this.asset.id);ref.name=this.asset.name;
+        this.owner.attachPreparedImageReference(ref,{main:intent.main});intent.main=false;intent.context=referenceContext(this.owner);
+        const next=intent.pending.shift();if(next){this.setBusy(false);await this.upload([next],{referenceIntent:intent});}else{this.referenceIntent=null;this.dialog.close();}
+        return;
+      }
       const adapter=studioModeAdapter(this.mode);if(!adapter)throw Error('Open a Studio image or video mode first.');
       if(adapter.isBusy(this.owner))throw Error('Finish the current operation before importing media.');
       const values=this.form.elements,request=importRequest(this.asset,this.mode,{colour:values.colour.value,frame:Number(values.frame.value),rate:Number(values.rate.value),start:Number(values.start.value),count:Number(values.count.value)});
@@ -120,6 +145,6 @@ export class StudioMediaImport {
       this.assertCurrent(controller);await adapter.acceptInput(this.owner,source,{isActive:()=>this.current(controller)});this.assertCurrent(controller);
       this.delivery.sync();this.dialog.close();this.delivery.message(`Media ready · ${importPrecisionLabel(source.precision)} original retained`);
     }catch(error){if(controller===this.controller)this.status.textContent=error.name==='AbortError'?'Input preparation cancelled. The original is retained.':error.message;}
-    finally{if(controller===this.controller){this.setBusy(false);if(!this.current(controller))this.dialog.close();}}
+    finally{if(controller===this.controller){this.setBusy(false);if(!this.current(controller)){this.referenceIntent=null;this.dialog.close();}}}
   }
 }

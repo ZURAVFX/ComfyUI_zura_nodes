@@ -1,5 +1,6 @@
 import {workspaceStorage} from './studio_storage.js';
 import {cancelOwnedJob} from './studio_owned_jobs.js';
+import {activeStudioMode} from './studio_mode_adapters.js';
 
 const STYLE_URL=new URL('./studio_restart.css',import.meta.url);
 const RESTART_LABEL='Start over';
@@ -13,6 +14,7 @@ function currentMode(creative){
 function workspaceFor(creative){
   switch(currentMode(creative)){
     case 'image': return creative;
+    case 'paint_vfx': return creative.paint_vfx;
     case 'frames': return creative.frames;
     case 'director': return creative.director;
     case 'references': return creative.referencesVideo;
@@ -39,7 +41,8 @@ export function studioWorkspaceBusy(creative){
     const studio=creative?.studio;
     return !!studio?.busy||studio?.project?.phase==='working'||!!studio?.resetting;
   }
-  if(mode==='image')return !!(workspace?.job||workspace?.pendingSubmission||workspace?.submitting||workspace?.uploading);
+  if(mode==='image')return !!(workspace?.job||workspace?.pendingSubmission||workspace?.submitting||workspace?.uploading||workspace?.imageLayers?.busy||creative.outpaintGuide?.importing||creative.rippleImage?.importing);
+  if(mode==='paint_vfx')return invokeBusy(workspace);
   if(mode==='frames'||mode==='references'||mode==='director')return !!(
     workspace?.job||workspace?.pendingSubmission||workspace?.submitting||workspace?.uploading||
     workspace?.hdrOutput?.busy||invokeBusy(workspace)
@@ -222,7 +225,13 @@ export async function resetStudioWorkspace(creative){
     if(creative?.studio?.config?.workflow_mode==='relight'){const lighting=creative.rippleWorkspaces?.get('relight');if(lighting?.busy())return false;lighting?.reset();}
     return resetVideoWorkspace(creative?.studio);
   }
-  if(mode==='image')return resetImageWorkspace(creative);
+  if(mode==='image'){
+    const handoff=creative.outpaintGuide?.request?creative.outpaintGuide:creative.rippleImage?.request?creative.rippleImage:null;
+    if(!handoff)return resetImageWorkspace(creative);
+    await handoff.leave();
+    return currentMode(creative)!=='image'&&resetStudioWorkspace(creative);
+  }
+  if(mode==='paint_vfx')return creative.paint_vfx?.reset?.()??false;
   if(mode==='frames')return resetFrameWorkspace(creative?.frames,creative);
   if(mode==='director'){
     const result=await creative?.director?.reset?.();
@@ -276,7 +285,8 @@ async function cancelStudioWorkspace(creative){
   const mode=currentMode(creative),workspace=workspaceFor(creative);
   if(mode==='video')return false;
   if(mode==='watermark'&&workspace?.editor?.busy())await workspace.editor.cancel?.();
-  if(mode==='hdr')await workspace?.cancel?.();
+  if(mode==='paint_vfx')await cancelOwnedJob(workspace);
+  else if(mode==='hdr')await workspace?.cancel?.();
   else if(mode==='panorama'&&typeof workspace?.cancel!=='function')await cancelOwnedJob(workspace);
   else await workspace?.cancel?.();
   return true;
@@ -306,16 +316,21 @@ function modeLabel(mode){
   return ({
     video:'this video workspace',
     image:'this image workspace',
+    swap:'Character replacement',
+    viewport:'Viewport to final',
+    relight:'Relight',
     frames:'First & last frame',
     director:'Director',
     references:'Reference to video',
-    paintout:'Paintout',
+    paintout:'Add, remove & replace',
+    paint_vfx:'Paint VFX',
     watermark:'Watermark removal',
     outpaint:'Frame extension',
     ripple:'Ripple editing',
     alpha:'Extract alpha',
     hdr:'HDR',
     panorama:'Camera angle',
+    camera:'Camera angle',
   })[mode]||'this workspace';
 }
 
@@ -365,93 +380,73 @@ export function installStudioRestartNavigation(studio,options={}){
   if(studio.restartNavigation?.dispose)studio.restartNavigation.dispose();
   const document=creative.root.ownerDocument;
   const style=installStyles(document);
-  const workspaceHeading=()=>{
-    const mode=currentMode(creative),workspace=workspaceFor(creative);
-    if(mode==='image')return creative.root.querySelector('.zc-image-heading');
-    if(mode==='video')return creative.root.querySelector('.gs-preview-heading');
-    const page=workspace?.page||workspace?.root;
-    return page?.querySelector('.zf-heading,.zdir-heading,.zpc-heading,.zru-heading,header');
-  };
-
+  const actions=creative.root.querySelector('.gs-top-actions')||creative.root;
   const wrap=document.createElement('div');
   wrap.className='zrn-restart-wrap';
-  wrap.innerHTML=`<button type="button" class="zrn-restart" data-zura-restart aria-label="${RESTART_LABEL}" title="${RESTART_LABEL}">${RESTART_LABEL}</button><div class="zrn-restart-confirm" role="status" hidden><p>This workspace has an active run. Nothing has been cleared.</p><div><button type="button" data-keep-run>Keep run</button><button type="button" data-cancel-reset>Cancel run and start over</button></div></div>`;
+  wrap.innerHTML=`<button type="button" class="zrn-restart" data-zura-restart aria-haspopup="dialog" aria-expanded="false">${RESTART_LABEL}</button><div class="zrn-restart-confirm" role="dialog" aria-label="Start over" aria-describedby="zrn-restart-message" hidden><p id="zrn-restart-message"></p><div><button type="button" data-keep-run>Keep working</button><button type="button" data-cancel-reset>Start over</button></div></div>`;
   const button=wrap.querySelector('[data-zura-restart]');
   const confirmation=wrap.querySelector('.zrn-restart-confirm');
   const cancelReset=wrap.querySelector('[data-cancel-reset]');
   const keepRun=wrap.querySelector('[data-keep-run]');
   const primary=studio.$?.('primary');
+  const graph=actions.querySelector('#gs-exit');
+  if(graph)graph.before(wrap);else actions.append(wrap);
 
-  let operationMode=null;
-  let working=false;
+  let pending=null,working=false;
+  const modeId=()=>creative.outpaintGuide?.request?'outpaint':creative.studio?.config?activeStudioMode(creative):currentMode(creative);
+  const snapshot=()=>({mode:currentMode(creative),id:modeId(),workspace:workspaceFor(creative),busy:studioWorkspaceBusy(creative)});
+  const isCurrent=state=>state.mode===currentMode(creative)&&state.id===modeId()&&state.workspace===workspaceFor(creative);
   const closeConfirmation=()=>{
-    confirmation.hidden=true;
-    button.setAttribute('aria-expanded','false');
+    pending=null;confirmation.hidden=true;button.setAttribute('aria-expanded','false');
   };
   const showConfirmation=(error='')=>{
-    const mode=currentMode(creative);
-    confirmation.querySelector('p').textContent=error||`${mode==='ripple'&&creative.ripple?.intent==='relight'?'Relight':modeLabel(mode)} has an active run. Nothing has been cleared.`;
-    cancelReset.textContent=error?'Try cancellation again':'Cancel run and start over';
+    pending=snapshot();
+    const label=modeLabel(pending.id);
+    const suffix=' Unsaved edits and loaded media will be cleared. Saved files are kept.';
+    confirmation.querySelector('p').textContent=error||(pending.busy?`Stop the current run and reset ${label}?`:`Reset ${label} to its first step?`)+suffix;
+    cancelReset.textContent=pending.busy?'Cancel run and start over':'Start over';
     confirmation.hidden=false;
     button.setAttribute('aria-expanded','true');
-    cancelReset.focus({preventScroll:true});
+    keepRun.focus({preventScroll:true});
   };
 
   const sync=()=>{
-    const mode=currentMode(creative);
-    const heading=workspaceHeading();
-    if(heading&&wrap.parentElement!==heading){heading.append(wrap);closeConfirmation();}
-    wrap.hidden=!heading;
-    if(operationMode&&operationMode!==mode)closeConfirmation();
+    if(pending&&!isCurrent(pending))closeConfirmation();
     button.disabled=working;
     button.textContent=working?'Starting over…':RESTART_LABEL;
-    button.title=studioWorkspaceBusy(creative)?`${mode==='ripple'&&creative.ripple?.intent==='relight'?'Relight':modeLabel(mode)} has an active run. Start over will ask before cancelling it.`:`Clear ${mode==='ripple'&&creative.ripple?.intent==='relight'?'Relight':modeLabel(mode)} inputs and return to its first step. Saved files and other workspaces stay intact.`;
   };
 
-  const resetWhenIdle=async mode=>{
-    if(currentMode(creative)!==mode)throw new Error('The workspace changed. Nothing was cleared.');
-    if(studioWorkspaceBusy(creative)){showConfirmation();return false;}
-    working=true;button.disabled=true;button.textContent='Starting over…';
-    try{
-      const cleared=await resetStudioWorkspace(creative);
-      if(!cleared)throw new Error('This workspace is not ready to reset yet.');
-      closeConfirmation();
-      sync();
-      return true;
-    }finally{
-      working=false;sync();
-    }
-  };
-
-  button.onclick=async()=>{
+  button.onclick=()=>{
     if(working)return;
-    const mode=currentMode(creative);
-    if(studioWorkspaceBusy(creative)){showConfirmation();return;}
-    try{await resetWhenIdle(mode);}catch(error){showConfirmation(error.message);}
+    if(confirmation.hidden)showConfirmation();else closeConfirmation();
+  };
+
+  const resetConfirmed=async(state)=>{
+    const bridge=studio.aeBridge;
+    if(bridge&&!bridge.closed&&(bridge.pending||bridge.sending||bridge.importPolling))throw Error('Wait for the After Effects transfer to finish, then try again.');
+    const rollback=bridge?.pauseAutomaticSourceForReset?.(state.id);
+    let cleared=false;
+    try{
+      if(studioWorkspaceBusy(creative)&&state.mode!=='video'){
+        await cancelStudioWorkspace(creative);
+        if(!await waitForIdle(creative,state.mode,options)||!isCurrent(state))throw Error('The current operation is still active. Try again when it finishes.');
+      }
+      if(!isCurrent(state))throw Error('The workspace changed. Try again in the current mode.');
+      cleared=await resetStudioWorkspace(creative);
+      if(!cleared)throw Error('This workspace is not ready to reset yet.');
+      closeConfirmation();
+    }finally{if(!cleared)rollback?.();}
   };
 
   cancelReset.onclick=async()=>{
-    if(working)return;
-    const mode=currentMode(creative);
-    operationMode=mode;working=true;button.disabled=true;cancelReset.disabled=true;
-    try{
-      if(mode==='video'){
-        // ArtistStudio.reset() owns this project's cancellation and only clears
-        // after ComfyUI confirms that the project is no longer working.
-        const cleared=await resetStudioWorkspace(creative);
-        if(!cleared)throw new Error('The current run is still active. Nothing was cleared.');
-      }else{
-        await cancelStudioWorkspace(creative);
-        const idle=await waitForIdle(creative,mode,options);
-        if(!idle)throw new Error('The current run is still active. Nothing was cleared.');
-        const cleared=await resetStudioWorkspace(creative);
-        if(!cleared)throw new Error('This workspace is not ready to reset yet.');
-      }
-      closeConfirmation();
-    }catch(error){
-      showConfirmation(error.message||'The current run could not be stopped. Nothing was cleared.');
-    }finally{
-      operationMode=null;working=false;cancelReset.disabled=false;sync();
+    if(working||!pending||!isCurrent(pending))return;
+    if(!pending.busy&&studioWorkspaceBusy(creative)){showConfirmation();return;}
+    const state=pending;working=true;cancelReset.disabled=keepRun.disabled=true;sync();
+    try{await resetConfirmed(state);}
+    catch(error){if(isCurrent(state))showConfirmation(error.message||'This workspace could not be reset.');}
+    finally{
+      working=false;cancelReset.disabled=keepRun.disabled=false;sync();
+      if(confirmation.hidden)button.focus({preventScroll:true});else keepRun.focus({preventScroll:true});
     }
   };
   keepRun.onclick=()=>{closeConfirmation();button.focus({preventScroll:true});};
@@ -490,7 +485,7 @@ export function installStudioRestartNavigation(studio,options={}){
       if(!Number.isInteger(target)||target<0||target>=current)return false;
       return navigateVideoStage(studio,target);
     },
-    async reset(){const mode=currentMode(creative);return resetWhenIdle(mode);},
+    reset(){if(!working)showConfirmation();},
     dispose(){
       document.removeEventListener('click',outside,true);
       document.removeEventListener('keydown',escape);

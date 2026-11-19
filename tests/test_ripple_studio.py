@@ -121,9 +121,13 @@ class RippleStudioTimingTests(unittest.TestCase):
             context, _, working_count = ripple.ZuraRippleH3Guide().prepare(
                 plate, [(3, plate['_work_images'][3:4].clone(), 1)])
             self.assertEqual(working_count, 5)
-            saved = native.ZuraPaintoutUncrop().save(context['window'], plate, 'ripple/test',
-                                                     'float32', False, 'SDR video', False)
+            with patch.object(native, 'frames', side_effect=AssertionError('A fully replaced source need not decode again')):
+                saved = native.ZuraPaintoutUncrop().save(context['window'], plate, 'ripple/test',
+                                                         'float32', False, 'SDR video', False)
             self.assertTrue(Path(saved['result'][0]).is_dir())
+            self.assertFalse(native._full_frame_delivery({**plate, 'feather': 1}, False))
+            self.assertFalse(native._full_frame_delivery({**plate, 'mask': {**plate['mask'], 'protection_files': ['keep.png']}}, False))
+            self.assertFalse(native._full_frame_delivery({**plate, 'rect': [0, 0, 128, 70]}, False))
         self.assertEqual(len(received), 4)
         self.assertEqual(tuple(received[0].shape), (70, 130, 3))
         self.assertEqual(plate['fps_rational'], '30000/1001')

@@ -115,6 +115,11 @@ def effective_mask(mask, grow=0, feather=0, protection=None):
     grow, feather = int(grow), int(feather)
     if not 0 <= grow <= 512 or not 0 <= feather <= 512:
         raise ValueError("Grow and edge softness must be between 0 and 512 source pixels.")
+    if not grow and not feather:
+        alpha=np.clip(np.asarray(mask,dtype=np.float32),0,1).copy()
+        if alpha.ndim!=2:raise ValueError('Expected one two-dimensional mask.')
+        if protection is not None:alpha[np.asarray(protection)>.001]=0
+        return alpha
     binary = np.asarray(mask) > .001
     if binary.ndim != 2:
         raise ValueError("Expected one two-dimensional mask.")

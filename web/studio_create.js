@@ -1,3 +1,4 @@
+import {inspectStudioGraph,openStudioGraph} from './studio_graph_view.js';
 import {PaintVFXWorkspace} from './studio_paint_vfx.js';
 import {StudioWorkflowProgress} from './studio_workflow_progress.js';
 import {StudioImageLayers} from './studio_image_layers.js';
@@ -163,6 +164,7 @@ export class CreativeWorkspace {
     this.$("settings-close").onclick=()=>toggleSettings(false);
     this.$("clear-history").onclick=()=>{this.clearedItems=this.items;this.items=[];this.save();this.renderGallery();this.render();this.$("undo-history").hidden=!this.clearedItems.length;};
     this.$("undo-history").onclick=()=>{this.items=[...this.items,...(this.clearedItems||[])].slice(0,30);this.clearedItems=[];this.$("undo-history").hidden=true;this.save();this.renderGallery();this.render();};
+    this.$('reference-files').accept='image/png,image/jpeg,image/webp,.exr';
     this.$("add-references").onclick=()=>this.$("reference-files").click();
     this.$("reference-files").onchange=e=>{const files=Array.from(e.target.files||[]);e.target.value="";this.uploadReferences(files);};
     const drop=this.$("reference-drop");
@@ -175,7 +177,7 @@ export class CreativeWorkspace {
     this.$("refresh").onclick=()=>this.loadModels();this.$("cancel").onclick=()=>this.cancel();
     this.$("new").onclick=()=>{this.$("prompt").value="";this.save();this.render();this.$("prompt").focus({preventScroll:true});};
     this.$("gallery").onclick=e=>{
-      const save=e.target.closest("[data-save-image]");if(save){if(this.imageLayers?.busy){this.message('Wait for the image layers to finish updating.');return;}void this.outputSettings.saveImage(this.items[Number(save.dataset.saveImage)].master||this.items[Number(save.dataset.saveImage)].file,save).then(path=>this.message("Saved to "+path)).catch(error=>this.message(error.message));return;}
+      const save=e.target.closest("[data-save-image]"),download=e.target.closest('[data-download-image]');if(save||download){if(this.imageLayers?.busy){this.message('Wait for the image layers to finish updating.');return;}const button=save||download,item=this.items[Number(save?.dataset.saveImage??download.dataset.downloadImage)];if(button.disabled)return;void (save?this.outputSettings.saveImageItem(item,button):this.outputSettings.downloadImageItem(item,button)).then(path=>{if(save)this.message("Saved to "+path);}).catch(error=>this.message(error.message));return;}
       if(this.job||this.pendingSubmission||this.submitting||this.uploading||this.rippleImage?.importing||this.imageLayers?.busy)return;
       const button=e.target.closest("[data-reuse]");if(!button)return;
       const item=this.items[Number(button.dataset.reuse)];
@@ -183,7 +185,7 @@ export class CreativeWorkspace {
       this.editMainMissing=false;this.references=(item.references||[]).map(ref=>({...ref}));this.$("prompt").value=item.prompt;this.$("model").value=item.model;this.$("shape").value=item.shape;
       const size=imageDimensions(item);this.$("width").value=size[0];this.$("height").value=size[1];this.$("seed").value=item.seed;this.$("random").checked=false;this.save();this.render();
     };
-    this.root.querySelector("#gs-exit").onclick=()=>this.mode==="image"?this.graph():this.mode==="director"?this.director.graph():this.mode==="paint_vfx"?this.paint_vfx.graph():this.mode==="frames"?this.frames.graph():this.mode==="references"?this.referencesVideo.graph():this.mode==="paintout"?this.paintout.graph():this.mode==="watermark"?this.watermark.graph():this.mode==="outpaint"?this.outpaint.graph():this.mode==="ripple"?this.ripple.graph():this.mode==="alpha"?this.alpha.graph():studio.graphView();
+    this.root.querySelector("#gs-exit").onclick=()=>inspectStudioGraph(this);
     this.api.addEventListener?.("progress",event=>{const d=event.detail;if(!this.job||this.job.cancelPending||d?.prompt_id!==this.job.id||!Number.isFinite(d.value)||!(d.max>0))return;const node=d.node||this.job.currentNode||"sample",sampling=node==="sample",names={text:"Loading text encoder",prompt:"Reading your prompt",model:"Loading image model",sample:"Generating image",decode:"Decoding image",save:"Saving image",browser_image:"Generating with your browser account"};this.$("bar").value=Math.max(0,Math.min(100,100*d.value/d.max));this.$("progress-title").textContent=`${names[node]||"Processing image"} · ${sampling?"Step":"Progress"} ${d.value} of ${d.max}`;this.$("progress-detail").textContent=this.elapsed();});
     installOwnedExecuting(this.api,event=>{const d=event.detail;if(!this.job||this.job.cancelPending||d?.prompt_id!==this.job.id||!d.node)return;this.job.currentNode=d.node;const names={text:"Loading text encoder",prompt:"Reading your prompt",model:"Loading image model",sample:"Generating image",decode:"Decoding image",save:"Saving image",browser_image:"Generating with your browser account"};this.$("bar").removeAttribute("value");this.$("progress-title").textContent=names[d.node]||"Preparing image";});
     for(const [id,hint] of [["zc-swap-size","Swap image width and height"],["zc-clear-history","Hide previous images from this workspace. Saved files stay on disk."],["zc-add-references","Upload reference images, or paste an image with Ctrl+V."],["zc-settings-toggle","Choose a model, exact dimensions and seed."],["gs-exit","Open the editable ComfyUI graph with your current media."]]){
@@ -326,7 +328,7 @@ export class CreativeWorkspace {
     if(!Array.isArray(result.loras)||result.loras.length!==config.loras.length)throw new Error('Could not validate the selected image LoRAs.');
     return buildImageGraph({...config,loras:result.loras});
   }
-  config(){const intermediate=aeIntermediateImage(this),request=this.rippleImage?.request,retainLayerContext=this.mode==='image'&&this.imageIntent!=='hdri'&&request?.workspace?.platePrimary&&this.rippleImage.current(request);const config={...(retainLayerContext?{retain_layer_context:true}:{}),...(intermediate?{ae_intermediate_image:intermediate}:{}),image_intent:this.imageIntent||'standard',...(this.rippleImage?.request||this.rippleImage?.stored?{ripple_guide:(this.rippleImage.request||this.rippleImage.stored).id}:{}),...(this.outpaintGuide?.request?{outpaint_guide:this.outpaintGuide.request.id}:{}),edit_area:this.imageArea?.config()||null,operation:this.imageOperation,editMainMissing:!!this.editMainMissing,autoCanvasSuppressed:!!this.autoCanvasSuppressed,model:this.$("model").value||(this.imageOperation==='edit'?'qwen2511':'flux2'),prompt:this.$("prompt").value,shape:this.$("shape").value,processingResolution:this.imageProcessingResolution,deliveryResolution:this.imageDeliveryResolution,references:this.references.map(r=>({...r})),loras:IMAGE_MODELS.find(model=>model.id===this.$('model').value)?.provider?[]:this.imageLoras.map(l=>({...l})),width:Number(this.$("width").value),height:Number(this.$("height").value),seed:Number(this.$("seed").value),random:this.$("random").checked};if(this.imageOperation==='edit'&&!request&&!this.outpaintGuide?.request&&this.imageIntent!=='hdri'){config.image_layer_base=this.imageLayers?.generationBase(config)||null;config.retain_layer_context=!!config.image_layer_base;}if(config.image_layer_base){try{config.image_delivery_size=imageResolutionPlan(config).output;}catch{}}return this.imageIntent==='hdri'?{...config,operation:'create',editMainMissing:false,edit_area:null,shape:'landscape',width:environmentGeneration(config).width,height:environmentGeneration(config).height}:config;}
+  config(){const intermediate=aeIntermediateImage(this),request=this.rippleImage?.request,retainLayerContext=this.mode==='image'&&this.imageIntent!=='hdri'&&request?.workspace?.platePrimary&&this.rippleImage.current(request);const config={...(retainLayerContext?{retain_layer_context:true}:{}),...(intermediate?{ae_intermediate_image:intermediate}:{}),image_intent:this.imageIntent||'standard',...(!this.outpaintGuide?.request&&(this.rippleImage?.request||this.rippleImage?.stored)?{ripple_guide:(this.rippleImage.request||this.rippleImage.stored).id}:{}),...(this.outpaintGuide?.request?{outpaint_guide:this.outpaintGuide.request.id}:{}),edit_area:this.imageArea?.config()||null,operation:this.imageOperation,editMainMissing:!!this.editMainMissing,autoCanvasSuppressed:!!this.autoCanvasSuppressed,model:this.$("model").value||(this.imageOperation==='edit'?'qwen2511':'flux2'),prompt:this.$("prompt").value,shape:this.$("shape").value,processingResolution:this.imageProcessingResolution,deliveryResolution:this.imageDeliveryResolution,references:this.references.map(r=>({...r})),loras:IMAGE_MODELS.find(model=>model.id===this.$('model').value)?.provider?[]:this.imageLoras.map(l=>({...l})),width:Number(this.$("width").value),height:Number(this.$("height").value),seed:Number(this.$("seed").value),random:this.$("random").checked};if(this.imageOperation==='edit'&&!request&&this.imageIntent!=='hdri'){config.image_layer_base=this.imageLayers?.generationBase(config)||null;config.retain_layer_context=!!config.image_layer_base;}if(config.image_layer_base){try{const guide=this.outpaintGuide?.request;config.image_delivery_size=guide?{width:guide.width,height:guide.height}:imageResolutionPlan(config).output;}catch{}}return this.imageIntent==='hdri'?{...config,operation:'create',editMainMissing:false,edit_area:null,shape:'landscape',width:environmentGeneration(config).width,height:environmentGeneration(config).height}:config;}
   async setImageOperation(operation,{useCanvas=true}={}){
     if(this.job||this.pendingSubmission||this.submitting||this.uploading||this.rippleImage?.importing||this.imageLayers?.busy)return;
     this.imageIntent='standard';this.imageOperation=operation;
@@ -617,9 +619,10 @@ export class CreativeWorkspace {
     if(this.$("history-menu")){const item=this.$("history-menu").querySelector('[value="clear-history"]');item?.toggleAttribute("disabled",!this.items.length);}
     this.$("recipe-label").textContent=m?`${m.name} · ${m.provider?'Browser account':m.steps+' steps'}`:"Local image generation";
     for(const b of this.root.querySelectorAll("[data-shape]")){b.setAttribute("aria-pressed",String(auto?b.dataset.shape==='auto':b.dataset.shape!=='auto'&&!!size&&IMAGE_SIZES[b.dataset.shape].every((v,i)=>v===size[i])));b.disabled=busy;}
-    this.imageComparison?.update(this.items[this.selectedImage||0],this.references);
+    const displayed=this.items[this.selectedImage||0];
+    this.imageComparison?.update(this.plate?.draftPreview(displayed)||displayed,this.references);
     this.editInputs?.sync();
-    this.imageArea?.sync();this.hdri?.sync();if(this.plate?.inline)this.plate.surface?.sync();
+    this.imageArea?.sync();this.imageLayers?.sync();this.outpaintGuide?.syncImageUI();this.hdri?.sync();if(this.plate?.inline)this.plate.surface?.sync();
     this.studio.aeBridge?.modeChanged();
   }
   activateImageResult(index=0){
@@ -630,17 +633,28 @@ export class CreativeWorkspace {
     if(this.imageComparison)this.imageComparison.active=false;
     this.save();this.renderGallery();this.render();
   }
+  updateDraftFramePreview(){
+    const item=this.items[this.selectedImage],preview=this.plate?.draftPreview(item);
+    const frame=this.$('gallery').querySelector('figure > a');
+    if(!frame||!preview?.file)return this.renderGallery();
+    const src=this.api.apiURL(view(preview.preview||preview.file));
+    frame.href=src;frame.querySelector('img').src=src;
+    this.imageComparison?.update(preview,this.references);
+    this.plate.surface.sync();
+  }
   renderGallery(){
     this.outpaintGuide?.syncImageUI();
     this.rippleImage?.syncImageUI();
     this.imageZoom?.dispose();this.imageZoom=null;
     this.selectedImage=Math.max(-1,Math.min(this.selectedImage??0,Math.max(0,this.items.length-1)));
     this.$("image-empty").hidden=!!this.items[this.selectedImage];
-    this.$("gallery").innerHTML=this.items.map((item,i)=>i!==this.selectedImage?'':`<figure><a href="${escape(this.api.apiURL(view(item.preview||item.file)))}" target="_blank" rel="noopener"><img src="${escape(this.api.apiURL(view(item.preview||item.file)))}" alt="${escape(item.prompt)}"/></a><figcaption><span>${escape(IMAGE_MODELS.find(m=>m.id===item.model)?.name||item.model)}${item.seconds?` · ${Math.round(item.seconds)}s`:""}</span><div><button type="button" data-save-image="${i}" title="Save to your Studio output folder">Save image</button><button type="button" data-reuse="${i}">Reuse prompt</button><a href="${escape(this.api.apiURL(view(item.master||item.file)))}" download="${escape((item.master||item.file).filename)}">Download</a></div></figcaption></figure>`).join("");
+    const displayed=this.items[this.selectedImage],preview=this.plate?.draftPreview(displayed)||displayed;
+    this.$("gallery").innerHTML=(preview?[preview]:[]).map(item=>`<figure><a href="${escape(this.api.apiURL(view(item.preview||item.file)))}" target="_blank" rel="noopener"><img src="${escape(this.api.apiURL(view(item.preview||item.file)))}" alt="${escape(item.prompt)}"/></a><figcaption><span>${escape(IMAGE_MODELS.find(m=>m.id===item.model)?.name||item.model)}${item.seconds?` · ${Math.round(item.seconds)}s`:""}</span><div><button type="button" data-save-image="${this.selectedImage}" title="Save to your Studio output folder">Save image</button><button type="button" data-reuse="${this.selectedImage}">Reuse prompt</button><button type="button" data-download-image="${this.selectedImage}">Download</button></div></figcaption></figure>`).join("");
+    this.outputSettings.syncImageExports();
     const frame=this.$("gallery").querySelector('figure');
     if(frame && typeof PreviewZoom!=="undefined"){this.imageZoom=new PreviewZoom(frame,()=>frame.querySelector('a>img'));this.imageZoom.update(String(this.selectedImage));}
     this.$('image-history').innerHTML=this.items.map((item,i)=>`<button type="button" data-view-image="${i}" aria-pressed="${i===this.selectedImage}"><img src="${escape(this.api.apiURL(view(item.preview||item.file)))}" alt="" loading="lazy"/><span>${escape(item.prompt)}</span></button>`).join('')||'<p>No saved images yet.</p>';
-    this.imageComparison?.update(this.items[this.selectedImage],this.references);
+    this.imageComparison?.update(preview,this.references);
     this.editInputs?.sync();
     this.imageArea?.sync();this.hdri?.sync();if(this.plate?.inline)this.plate.surface?.sync();
     this.studio.aeBridge?.modeChanged();
@@ -651,8 +665,9 @@ export class CreativeWorkspace {
     if(this.mode==='references')return this.referencesVideo.paste(event);
     if(!["image","video"].includes(this.mode))return;
     const clipboard=event.clipboardData;
-    let files=Array.from(clipboard?.items||[]).filter(item=>item.kind==="file"&&item.type.startsWith("image/")).map(item=>item.getAsFile()).filter(Boolean);
-    if(!files.length)files=Array.from(clipboard?.files||[]).filter(file=>file.type.startsWith("image/"));
+    const imageFile=file=>file&&(file.type.startsWith('image/')||this.mode==='image'&&/\.exr$/i.test(file.name||''));
+    let files=Array.from(clipboard?.items||[]).filter(item=>item.kind==='file').map(item=>item.getAsFile()).filter(imageFile);
+    if(!files.length)files=Array.from(clipboard?.files||[]).filter(imageFile);
     if(!files.length)return; // Leave normal prompt text pasting to the browser.
     event.preventDefault();event.stopPropagation();
     files=files.map(file=>{
@@ -668,13 +683,20 @@ export class CreativeWorkspace {
     const m=this.models.find(m=>m.id===this.config().model);
     if(!m?.maxReferences||!m.referenceReady){this.message("Choose an installed model with image reference support.");return;}
     if(files.length+this.references.length-(main&&this.imageOperation==='edit'&&!this.editMainMissing&&this.references.length?1:0)>m.maxReferences){this.message(`Choose up to ${m.maxReferences-this.references.length} more images for ${m.name}. Nothing was discarded.`);return;}
-    if(files.some(f=>!(/\.(png|jpe?g|webp)$/i.test(f.name))||f.size>64*1024*1024)){this.message("Use PNG, JPEG or WebP images under 64 MB each.");return;}
+    if(files.some(f=>!(/\.(png|jpe?g|webp|exr)$/i.test(f.name))||f.size>(/\.exr$/i.test(f.name)?512:64)*1024*1024)){this.message('Use PNG, JPEG or WebP images under 64 MB, or EXR images under 512 MB each.');return;}
+    if(files.some(file=>/\.exr$/i.test(file.name)))return this.outputSettings.mediaImport.importImageReferences(files,{main});
     this.uploading=true;this.message("");this.render();
     try{for(const file of files){
       const body=new FormData();body.append("image",file,crypto.randomUUID()+'.'+file.name.split('.').at(-1));body.append("subfolder","zura_images/references");body.append("type","input");
       const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),120000);
       try{const response=await this.api.fetchApi("/upload/image",{method:"POST",body,signal:controller.signal});if(!response.ok)throw new Error("Reference upload failed. You can retry the remaining images.");const asset=await response.json();if(!asset.name)throw new Error("ComfyUI did not return the uploaded image.");const ref={...await referenceDimensions(file),name:file.name,filename:asset.name,subfolder:asset.subfolder||"",file:(asset.subfolder?asset.subfolder+"/":"")+asset.name};if(this.imageOperation==='edit'&&(main||this.editMainMissing)){if(this.editMainMissing||!this.references.length)this.references.unshift(ref);else this.references[0]=ref;this.editMainMissing=false;}else this.references.push(ref);this.save();this.render();}finally{clearTimeout(timer);}
     }}catch(e){this.message(e.name==="AbortError"?"Upload timed out. Try the remaining images again.":e.message);}finally{this.uploading=false;this.render();}
+  }
+  attachPreparedImageReference(ref,{main=false}={}){
+    const model=this.models.find(value=>value.id===this.config().model),replace=this.imageOperation==='edit'&&(main||this.editMainMissing);
+    if(!model?.referenceReady||this.references.length+(replace&&!this.editMainMissing&&this.references.length?0:1)>model.maxReferences)throw Error('This model has no room for another reference. Your previous images are retained.');
+    if(replace){if(this.editMainMissing||!this.references.length)this.references.unshift(ref);else this.references[0]=ref;this.editMainMissing=false;}else this.references.push(ref);
+    this.save();this.message('Original retained. The model uses a separate 8-bit sRGB input.');this.render();
   }
   elapsed(){
     const elapsed=Math.max(0,Math.round((Date.now()-this.job.started)/1000)),config=this.job.config;
@@ -718,11 +740,11 @@ export class CreativeWorkspace {
         const messages=entry.status.messages||[],start=messages.find(m=>m[0]==="execution_start")?.[1]?.timestamp,end=messages.find(m=>m[0]==="execution_success")?.[1]?.timestamp;
         const previous=this.items[this.selectedImage];let ready=0,firstReady=null,layerError='';
         for(const file of files){
-          try{const item=await this.imageLayers.accept(job.config,file);if(this.job!==job)return;const saved={...item,seconds:start&&end?(end-start)/1000:null};this.items.unshift(saved);firstReady=saved;ready++;}
+          try{const item=await this.imageLayers.accept(job.config,file);if(this.job!==job)return;const saved={...item,studio_prompt_id:job.id,seconds:start&&end?(end-start)/1000:null};this.items.unshift(saved);firstReady=saved;ready++;}
           catch(error){if(this.job!==job)return;layerError=error.message;this.items.unshift({...job.config,file,image_layer_error:layerError,prompt:job.config.prompt+' · Uncomposited result retained'});}
         }
         this.items=this.items.slice(0,30);if(ready){this.selectedImage=this.items.indexOf(firstReady);this.autoCanvasSuppressed=false;}else this.selectedImage=this.items.indexOf(previous);
-        const error=messages.find(m=>m[0]==="execution_error")?.[1];this.message(layerError|| (ready?(job.cancelPending?"Image finished before cancellation. Your image is saved.":""):error?.exception_message||(job.cancelPending?"Run cancelled. Your previous images are safe.":"Generation stopped. Your previous images are safe.")));this.job=null;this.stopPolling();if(ready)this.activateImageResult(this.selectedImage);else{this.save();this.renderGallery();this.render();}
+        const error=messages.find(m=>m[0]==="execution_error")?.[1];this.message(layerError|| (ready?(job.cancelPending?"Image finished before cancellation. Your image is saved.":""):error?.exception_message||(job.cancelPending?"Run cancelled. Your previous images are safe.":"Generation stopped. Your previous images are safe.")));this.job=null;this.stopPolling();if(ready){this.activateImageResult(this.selectedImage);this.outputSettings?.imageCommitted?.(firstReady);}else{this.save();this.renderGallery();this.render();}
       }else{const queue=await this.fetch("/queue");if(this.job!==job)return;const running=queue.queue_running.some(r=>r[1]===job.id),pending=queue.queue_pending.some(r=>r[1]===job.id);if(!running&&!pending){const again=await this.fetch("/history/"+encodeURIComponent(job.id));if(this.job!==job)return;if(again[job.id])return;this.job=null;this.stopPolling();this.save();this.message(job.cancelPending?"Run cancelled. Your previous images are safe.":"This run is no longer in ComfyUI's queue. You can generate again.");this.render();}else if(job.cancelPending){this.$('progress-title').textContent='Cancelling…';this.$('progress-detail').textContent='Waiting for ComfyUI to stop this run.';}else this.$("progress-detail").textContent=running?this.elapsed():"Waiting for other ComfyUI jobs";}
     }catch(e){this.connectionLost=true;this.message("Connection interrupted. Reconnecting to your image run…");}finally{this.polling=false;}
   }
@@ -730,6 +752,6 @@ export class CreativeWorkspace {
   stopPolling(){clearInterval(this.timer);this.timer=null;}
   close(){this.workflowProgress?.close();for(const access of this.imageModelAccess?.values()||[])access.dispose();this.imageModelSetup?.close();this.modelDownloadClosed=true;this.browserConnection?.close();this.videoComposer?.browserConnection?.close();this.videoComposer?.ltxOutput?.close();void this.imageArea?.close();this.save();this.stopPolling();this.imageZoom?.stopDraw();this.paint_vfx?.close();this.frames?.close();this.director?.close();this.referencesVideo?.close();this.outpaint?.close();for(const workspace of new Set([this.ripple,...(this.rippleWorkspaces?.values()||[])]))workspace?.close();this.alpha?.close();this.rippleImage?.dispose();this.panorama?.close();this.hdri?.close();if(this.paintout?.owner===this)this.paintout.close();if(this.watermark?.owner===this)this.watermark.close();this.disposePopovers?.();}
   async graph(){
-    try{const graph=await this.imageGraph(this.job?.config||this.config());if(typeof this.app.loadApiJson!=="function")throw new Error("Update ComfyUI to open this image graph.");const original=(this.app.rootGraph||this.app.graph)?.serialize?.();if(!original)throw new Error("Your current graph could not be backed up.");try{await this.app.loadApiJson(graph,"Zura Image · "+Date.now()+".json");}catch(e){await this.app.loadGraphData(original);throw e;}this.studio.close();}catch(e){this.message(e.message);}
+    await openStudioGraph(this.studio,await this.imageGraph(this.config()),'Image · Current settings','image');
   }
 }

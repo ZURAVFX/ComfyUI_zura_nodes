@@ -33,8 +33,8 @@ class OutpaintLongPlanning(unittest.TestCase):
             self.assertAlmostEqual(sub['start'], part.start/30)
             self.assertEqual(sub['frames'], part.count)
             graph = masked_graph.build_masked_expand_graph(source, sub, review_key=sub['review_key'], output_prefix='genj/outpaint/nativefps')
-            self.assertEqual(graph['sampler']['inputs']['sampler_name'], 'euler_ancestral_cfg_pp')
-            self.assertEqual(graph['guide']['inputs']['image'], ['canvas', 0])
+            self.assertEqual(graph['sampler']['inputs']['sampler_name'], 'euler_ancestral')
+            self.assertEqual(graph['guide']['inputs']['image'], ['inpaint', 0])
             self.assertEqual(graph['assemble']['inputs']['fps_num'], 30)
 
     def test_fractional_full_clip_builds_every_review_and_render_window(self):
@@ -108,7 +108,7 @@ class OutpaintLongPlanning(unittest.TestCase):
         self.assertEqual(anchored['zura_anchor_i2v_high']['inputs']['latent'], ['encode_high', 0])
         self.assertEqual(anchored['guide']['inputs']['image'], graph['guide']['inputs']['image'])
         self.assertEqual(anchored['low_mask']['inputs'], graph['low_mask']['inputs'])
-        self.assertEqual(anchored['blend_high']['inputs'], graph['blend_high']['inputs'])
+        self.assertEqual(anchored['decode_high']['inputs'], graph['decode_high']['inputs'])
         self.assertEqual(graph['guide']['inputs']['latent'], ['empty', 0])
         with self.assertRaises(ValueError):
             anchor_module.attach_first_frame(graph, '../outside.png')
@@ -124,9 +124,9 @@ class OutpaintLongPlanning(unittest.TestCase):
             output_prefix='genj/outpaint/test')
         self.assertEqual(graph['source_range']['inputs']['start_seconds'], sub['start'])
         self.assertEqual(graph['canvas']['inputs']['left'], sub['left'])
-        self.assertEqual(graph['guide']['inputs']['image'], ['canvas', 0])
-        self.assertEqual(graph['adapter']['inputs']['lora_name'], 'ltx-2.3-22b-ic-lora-outpaint.safetensors')
-        self.assertNotIn('sample_high', graph)
+        self.assertEqual(graph['guide']['inputs']['image'], ['inpaint', 0])
+        self.assertEqual(graph['adapter']['inputs']['lora_name'], 'ltx-2.3-22b-ic-lora-in-outpainting-0.9.safetensors')
+        self.assertEqual(graph['trim_result']['inputs']['image'], ['decode_high', 0])
         self.assertEqual(graph['trim_result']['inputs']['length'], sub['frames'])
         self.assertEqual(graph['assemble']['inputs']['audio'], ['components', 1])
         with self.assertRaisesRegex(ValueError, 'Review'):
@@ -135,15 +135,20 @@ class OutpaintLongPlanning(unittest.TestCase):
     def test_dependency_preflight_reports_specific_files_and_nodes(self):
         import folder_paths
         import nodes
-        available = {name: object() for name in jobs_module.LONG_REQUIRED_NODES}
-        missing_name = jobs_module.LONG_REQUIRED_FILES[-1][1]
+        with patch.dict(nodes.NODE_CLASS_MAPPINGS, {}, clear=True), \
+             patch.object(folder_paths, 'get_full_path', return_value=None):
+            uninstalled = jobs_module.long_dependencies()
+        self.assertIn('LTXVImgToVideoInplace', uninstalled['missing_nodes'])
+        self.assertIn('LTXVInpaintPreprocess', uninstalled['missing_nodes'])
+        available = {name: object() for name in uninstalled['missing_nodes']}
+        missing_name = 'ltx-2.3-22b-ic-lora-in-outpainting-0.9.safetensors'
         with patch.dict(nodes.NODE_CLASS_MAPPINGS, available, clear=True), \
              patch.object(folder_paths, 'get_full_path', side_effect=lambda folder, name: None if name == missing_name else name):
             result = jobs_module.long_dependencies()
         self.assertFalse(result['ready'])
         self.assertEqual(result['missing_files'], [missing_name])
         self.assertEqual(result['missing_nodes'], [])
-        self.assertIn('ltx25_outpaint', result['packages'])
+        self.assertIn('ltx25_in_outpaint', result['packages'])
 
     def test_short_methods_check_their_actual_adapter_and_nodes(self):
         import folder_paths
@@ -153,8 +158,8 @@ class OutpaintLongPlanning(unittest.TestCase):
             expand = jobs_module.short_dependencies('expand')
             black = jobs_module.short_dependencies('black')
         for result in (expand, black):
-            self.assertIn('ltx-2.3-22b-ic-lora-outpaint.safetensors', result['missing_files'])
-            self.assertNotIn('ltx-2.3-22b-ic-lora-in-outpainting-0.9.safetensors', result['missing_files'])
+            self.assertIn('ltx-2.3-22b-ic-lora-in-outpainting-0.9.safetensors', result['missing_files'])
+            self.assertNotIn('ltx-2.3-22b-ic-lora-outpaint.safetensors', result['missing_files'])
             self.assertIn('ZuraOutpaintReviewOverlay', result['missing_nodes'])
             self.assertIn('ZuraOutpaintSelectClip', result['missing_nodes'])
 

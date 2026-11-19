@@ -8,18 +8,20 @@ const KEY='zura-studio-colour-delivery-v1',RECORDS='zura-studio-hdr-deliveries-v
 const HDR_SPACES=new Set(['acescg','acescct','linear_rec709','hlg_rec2020','pq_rec2020','pq_display_p3']);
 const SDR_SPACES=new Set(['srgb_display','rec709_oetf','rec709_gamma24']);
 const FORMATS=new Set(['hlg_video','hlg_and_exr','acescg_exr']);
-const fileKey=file=>file?.filename?`${file.type||'output'}:${file.subfolder||''}/${file.filename}`:'';
+const fileKey=file=>file?.filename?`${file.type||'output'}:${typeof file.subfolder==='string'?file.subfolder.replaceAll('\\','/'):''}/${file.filename}`:'';
 const read=(storage,key,fallback)=>{try{return JSON.parse(storage.getItem(key))||fallback;}catch{return fallback;}};
 const isFile=file=>file?.type==='output'&&typeof file.filename==='string';
 const hdrSpace=value=>typeof value==='string'&&(HDR_SPACES.has(value.toLowerCase())||/acescg|acescct|linear|rec\.?2020|2084|hlg|\bpq\b/i.test(value));
-const activeJob=w=>!!(w?.busy===true||w?.job||w?.pendingSubmission||w?.submitting||w?.uploading||w?.picking||w?.exporting||w?.toolJob||w?.project?.phase==='working'||w?.hdrOutput?.busy||w?.hdrDelivery?.busy);
+const activeJob=w=>!!(w?.busy===true||w?.imageLayers?.busy||w?.job||w?.pendingSubmission||w?.submitting||w?.uploading||w?.picking||w?.exporting||w?.toolJob||w?.project?.phase==='working'||w?.hdrOutput?.busy||w?.hdrDelivery?.busy);
 
 export function studioInputDescription(source){
   let value=source?.colour?.encoding||source?.resolved_colour||source?.colour_space||source?.native_hdr?.colour_space||source?.native_hdr_video?.colour_space||'';
   if(['','auto','unknown'].includes(value))value=({'arib-std-b67':'hlg_rec2020',smpte2084:'pq_rec2020',bt709:'rec709_oetf','iec61966-2-1':'srgb_display'})[source?.transfer]||value;
   const working=source?.colour?.ocioWorkingSpace||'';
   const space=HDR_SPACES.has(value)?value:SDR_SPACES.has(value)?value:value==='auto'&&(source?.native_hdr||source?.native_hdr_video)?'auto':'';
-  const hdr=!!(hdrSpace(value)||hdrSpace(working)||source?.native_hdr||source?.native_hdr_video||source?.colour?.sceneLinear===true);
+  // A retained FLOAT/EXR asset is storage, not dynamic-range authority.
+  const explicitSDR=SDR_SPACES.has(value)&&source?.colour?.sceneLinear!==true&&!hdrSpace(working);
+  const hdr=!explicitSDR&&!!(hdrSpace(value)||hdrSpace(working)||source?.native_hdr||source?.native_hdr_video||source?.colour?.sceneLinear===true);
   return {input:hdr?'hdr':'sdr',space:space||(!hdr?'srgb_display':''),detected:!!value||!!working};
 }
 
@@ -51,14 +53,23 @@ export class StudioDeliveryControls {
     this.$('space').onchange=()=>this.changeInput(this.$('input').value,this.$('space').value);
     this.$('output').value=this.output;this.$('output').onchange=()=>{if(this.aeTransfer){this.$('output').value=this.output;return;}this.output=this.$('output').value;this.save();this.sync();if(this.output==='hdr')void this.convertCurrent();};
     this.$('cancel').onclick=()=>this.cancel();
-    this.progressHost=doc.createElement('div');this.progressHost.dataset.deliveryProgress='';this.progressHost.hidden=true;
-    this.progressHost.innerHTML='<ol data-delivery-stages aria-label="HDR conversion stages"></ol><progress data-delivery-bar aria-label="HDR conversion progress"></progress><span data-delivery-detail role="status" aria-live="polite"></span>';this.element.append(this.progressHost);
+    this.progressHost=doc.createElement('dialog');this.progressHost.dataset.deliveryProgress='';this.progressHost.hidden=true;
+    this.progressHost.setAttribute('aria-labelledby','zc-hdr-progress-title');
+    this.progressHost.innerHTML='<div class="zc-hdr-progress-heading"><strong id="zc-hdr-progress-title">Convert to HDR</strong><button type="button" data-delivery-dismiss autofocus>Minimise</button></div><small data-delivery-result hidden></small><ol data-delivery-stages aria-label="HDR conversion stages"></ol><progress data-delivery-bar aria-label="HDR conversion progress"></progress><span data-delivery-detail role="status" aria-live="polite"></span><small data-hdr-elapsed aria-hidden="true"></small><div class="zc-hdr-progress-actions"><button type="button" data-delivery-progress-cancel>Cancel conversion</button><button type="button" data-delivery-retry hidden>Retry HDR</button></div>';
+    root.append(this.progressHost);
+    const dismiss=()=>{this.progressDismissed=true;this.renderProgress();};
+    this.progressHost.querySelector('[data-delivery-dismiss]').onclick=dismiss;
+    this.progressHost.addEventListener('cancel',event=>{event.preventDefault();dismiss();});
+    this.progressHost.querySelector('[data-delivery-progress-cancel]').onclick=()=>this.cancel();
+    this.progressHost.querySelector('[data-delivery-retry]').onclick=()=>{const mode=activeStudioMode(this.owner),raw=this.raw(mode);if(this.output==='hdr'&&mode===this.activeMode&&fileKey(raw?.master)===fileKey(this.progressResult))void this.convertCurrent();};
+    this.progressToggle=doc.createElement('button');this.progressToggle.type='button';this.progressToggle.textContent='HDR progress';this.progressToggle.hidden=true;this.progressToggle.onclick=()=>{this.progressDismissed=false;this.renderProgress();};this.element.append(this.progressToggle);
+    this.cancellationNotice=doc.createElement('p');this.cancellationNotice.className='zc-hdr-notice';this.cancellationNotice.setAttribute('role','status');this.cancellationNotice.hidden=true;root.append(this.cancellationNotice);
     // Source interpretation is automatic. Export options live in Output settings.
     this.$('input').closest('label').remove();this.$('space-wrap').remove();
     this.delivery=new LTXHDRDelivery(api,{storage:this.storage,key:'zura-shared-hdr-delivery',onUpdate:job=>this.onUpdate(job),onComplete:take=>this.onComplete(take)});
     const show=owner.show;owner.show=(...args)=>{const result=show.apply(owner,args);this.sync();return result;};
     const close=owner.close;if(typeof close==='function')owner.close=(...args)=>{this.close();return close.apply(owner,args);};
-    queueMicrotask(()=>{if(!this.closed){this.sync();this.delivery.resume();}});
+    queueMicrotask(()=>{if(!this.closed){this.sync();this.delivery.resume();this.resumeImageVerification();}});
   }
   save(){try{this.storage.setItem(KEY,JSON.stringify({output:this.output,hdrFormat:this.hdrFormat,inputs:this.inputOverrides}));this.storage.setItem(RECORDS,JSON.stringify(Object.fromEntries(Object.entries(this.records).slice(-40))));}catch{}}
   setHDRFormat(value){if(!FORMATS.has(value)||this.aeTransfer==='float32'&&value!=='acescg_exr')return;this.hdrFormat=value;this.save();this.sync();}
@@ -85,7 +96,7 @@ export class StudioDeliveryControls {
   workspace(mode=activeStudioMode(this.owner)){return studioModeAdapter(mode)?.resolveWorkspace(this.owner);}
   source(w){
     const ae=this.owner.studio?.aeBridge?.source;if(ae)return ae;
-    if(w===this.owner)return w.references?.[0]||null;
+    if(w===this.owner){const source=w.references?.[0];return source?.processingView?.originalSource||source?.originalSourceMetadata||source||null;}
     if(w&&w===this.owner.studio?.hdrTool){
       const kind=w.$('source-kind').value;
       const selected=w.outputRef||w.output;
@@ -97,11 +108,12 @@ export class StudioDeliveryControls {
     const source=w?.sourceInfo||w?.source||w?.sequenceAsset||w?.getSource?.()||w?.state?.sourceInfo||w?.state?.source||w?.assets?.first||w?.assets?.images?.[0]||w?.project?.source||null;
     return source?.processingView?.originalSource||source;
   }
-  sourceKey(w){const s=this.source(w);return typeof s==='string'?s:s?.manifest?.relativePath||s?.studioAsset?.id||s?.id||s?.path||(typeof s?.file==='string'?s.file:fileKey(s?.file))||fileKey(s)||'';}
+  sourceKey(w){const s=this.source(w);return typeof s==='string'?s:s?.manifest?.relativePath||s?.studioAsset?.id||s?.studioAssetId||s?.master?.asset_id||s?.id||s?.path||(typeof s?.file==='string'?s.file:fileKey(s?.file))||fileKey(s)||'';}
   input(w){const detected=studioInputDescription(this.source(w)),override=this.inputOverrides[this.sourceKey(w)],declared=w?.state?.sourceColour;if(!detected.detected&&(HDR_SPACES.has(declared)||SDR_SPACES.has(declared))){detected.input=HDR_SPACES.has(declared)?'hdr':'sdr';detected.space=declared;}return override?{...detected,...override}:detected;}
   changeInput(input,space){
     const mode=activeStudioMode(this.owner),w=this.workspace(mode),key=this.sourceKey(w);if(!key||activeJob(w)||this.isBusyFor(mode))return;
     if(this.owner.studio?.aeBridge?.source)return this.message('Input colour follows the After Effects source interpretation');
+    if(w===this.owner&&w.references?.[0]?.processingView?.originalSource)return this.message('Source colour follows the retained original. Re-import it with the correct colour interpretation to change this setting.');
     const prior=this.input(w);space=space??(input===prior.input?prior.space:input==='sdr'?'srgb_display':'');
     this.inputOverrides[key]={input,space};this.save();
     if(w?.state&&space){w.state.sourceColour=space;w.state.sourceColourConfirmed=true;}
@@ -129,8 +141,8 @@ export class StudioDeliveryControls {
   raw(mode){const adapter=studioModeAdapter(mode);if(!adapter)return null;this.readingOutput=true;try{return adapter.getSelectedOutput(this.owner);}finally{this.readingOutput=false;}}
   resultKey(mode,raw,format=this.hdrFormat){return raw?.master?`${mode}:${fileKey(raw.master)}:${format}`:'';}
   recordFor(mode,raw){const key=this.resultKey(mode,raw);if(this.aeTransfer==='float32')return this.records[key+':float32'];const exact=this.records[key];if(exact)return exact;const prefix=`${mode}:${fileKey(raw?.master)}:`;return Object.entries(this.records).find(([key,record])=>key.startsWith(prefix)&&record.state==='complete')?.[1];}
-  alreadyHDR(raw){return raw?.kind==='hdr_sequence'||hdrSpace(raw?.colour?.encoding)||raw?.colour?.sceneLinear===true||hdrSpace(raw?.colour?.ocioWorkingSpace);}
-  isBusyFor(mode){return this.activeMode===mode&&!!(this.preparing||this.delivery?.busy);}
+  alreadyHDR(raw){if(SDR_SPACES.has(raw?.colour?.encoding)&&raw?.colour?.sceneLinear===false)return false;return raw?.kind==='hdr_sequence'||hdrSpace(raw?.colour?.encoding)||raw?.colour?.sceneLinear===true||hdrSpace(raw?.colour?.ocioWorkingSpace);}
+  isBusyFor(mode){return this.activeMode===mode&&!!(this.preparing||this.verifyingHDR||this.delivery?.busy);}
   outputFor(mode,raw){
     if(this.readingOutput||!raw)return raw;
     if(this.output==='sdr'){
@@ -145,8 +157,14 @@ export class StudioDeliveryControls {
   }
   bind(w,mode){
     if(!w)return;this.bindConfig(w,mode);
+    if(mode==='image'&&w.imageLayers&&!w.imageLayers.hdrDeliveryGuard){
+      const layers=w.imageLayers,commit=layers.commit,isBusy=layers.isBusy;
+      if(typeof commit==='function')layers.commit=(...args)=>{if(this.isBusyFor('image')){w.message?.('HDR output is running for this image. Cancel HDR before changing its layers.');return Promise.resolve();}return commit.apply(layers,args);};
+      if(typeof isBusy==='function')layers.isBusy=(...args)=>this.isBusyFor('image')||isBusy.apply(layers,args);
+      layers.hdrDeliveryGuard=this;
+    }
     if(this.bound.has(w))return;this.bound.add(w);
-    if(mode==='hdr'&&typeof w.longUpdate==='function'){const update=w.longUpdate;w.longUpdate=job=>{const result=update.call(w,job);this.nativeProgress={job,workspace:w};this.sync();return result;};}
+    if(mode==='hdr'&&typeof w.longUpdate==='function'){const update=w.longUpdate;w.longUpdate=job=>{const result=update.call(w,job);this.nativeProgress={job,workspace:w};this.noteProgress(job);this.sync();return result;};}
     if(mode==='hdr'&&typeof w.start==='function'){
       const start=w.start;w.start=(...args)=>{this.output='hdr';this.$('output').value='hdr';this.save();this.sync();return start.apply(w,args);};
     }
@@ -178,62 +196,179 @@ export class StudioDeliveryControls {
     }
   }
   nativeDelivery(mode,w){return mode==='hdr'||w?.hdrOutput?.busy||w?.hdrDelivery?.busy||w?.hdrSubmitting||w===this.owner.studio&&(this.owner.videoComposer?.ltxOutput?.delivery?.busy||this.owner.videoComposer?.ltxOutput?.submitting);}
-  usesNativeHDR(mode,w,config={}){return this.output==='hdr'&&!!nativeHDRRoute(this.owner,mode,w,config);}
+  nativeHDRI(mode='image'){const item=this.owner.items?.[this.owner.selectedImage];return mode==='image'&&item?.hdri_source_id&&item.source_hdr===true&&typeof this.owner.hdri?.outputDescriptor==='function'?{item,builder:this.owner.hdri}:null;}
+  usesNativeHDR(mode,w,config={}){return this.output==='hdr'&&!!(this.nativeHDRI(mode)||nativeHDRRoute(this.owner,mode,w,config));}
   async completed(mode,w,raw,config){
     const intent=config.studioDelivery||{output:this.output,hdrFormat:this.hdrFormat};
     if(intent.output!=='hdr'||this.nativeDelivery(mode,w)||this.alreadyHDR(raw)||this.usesNativeHDR(mode,w,config))return;
     return this.convert(mode,w,raw,{...config,...(intent.hdrFormat?{hdrOutput:intent.hdrFormat}:{})});
   }
+  imageCommitted(item){
+    // Explicit publication/commit events only. History selection and rendering
+    // never start a model job. A new immutable master gets its own result key.
+    if(this.closed||this.output!=='hdr'||this.owner.items?.[this.owner.selectedImage]!==item)return;
+    const master=fileKey(item.master||item.file),source=this.sourceKey(this.owner),aeSource=this.owner.studio?.aeBridge?.source,token={};this.imageCommitToken=token;
+    queueMicrotask(()=>{
+      if(this.closed||this.imageCommitToken!==token||this.output!=='hdr'||this.owner.items?.[this.owner.selectedImage]!==item||fileKey(item.master||item.file)!==master||this.sourceKey(this.owner)!==source||this.owner.studio?.aeBridge?.source!==aeSource||activeJob(this.owner)||this.preparing||this.verifyingHDR||this.delivery.busy)return;
+      const raw=this.raw('image');if(!raw||fileKey(raw.master)!==master)return;
+      if(this.records[this.resultKey('image',raw,'acescg_exr')])return;
+      const config=typeof this.owner.config==='function'?this.owner.config():{};
+      void this.completed('image',this.owner,raw,{...config,studioDelivery:{...config.studioDelivery,output:'hdr',hdrFormat:this.hdrFormat}}).catch(error=>this.message(error.message));
+    });
+  }
+  resumeImageVerification(){
+    const record=Object.values(this.records).reverse().find(value=>value?.state==='verifying'&&value.take?.studioMode==='image'&&value.take.hdrJobId);
+    if(!record||this.verifyingHDR)return;this.activeMode='image';this.progressResult=record.take.original?.master;void this.onComplete(record.take);
+  }
   async convertCurrent(){const mode=activeStudioMode(this.owner),w=this.workspace(mode),raw=this.raw(mode);if(raw&&!activeJob(w)&&!this.nativeDelivery(mode,w))return this.convert(mode,w,raw,typeof w.config==='function'?w.config():w.config||{});}
   async convert(mode,w,raw,config={}){
-    if(this.closed||this.preparing||this.delivery.busy||this.alreadyHDR(raw)||this.usesNativeHDR(mode,w,config))return;
-    const alphaRef=raw.alpha_ref||(raw.kind==='alpha_extract'?raw.master:null),rgbMaster=raw.kind==='alpha_extract'?raw.original:raw.master;
+    if(this.closed||this.preparing||this.verifyingHDR||this.delivery.busy||this.alreadyHDR(raw)||this.usesNativeHDR(mode,w,config))return;
+    const alphaRef=raw.alpha_ref||(raw.kind==='alpha_extract'?raw.master:null),originalMaster=raw.kind==='alpha_extract'?raw.original:raw.master,rgbMaster=originalMaster?{...originalMaster,subfolder:typeof originalMaster.subfolder==='string'?originalMaster.subfolder.replaceAll('\\','/'):'',type:originalMaster.type}:originalMaster;
     if(mode==='alpha'&&!alphaRef)return this.message('This take has no retained FLOAT alpha master. Regenerate its alpha to create HDR with the original precision.');
-    const image=raw.kind==='image';if(!image&&!/\.(mp4|mov|mkv|webm)$/i.test(rgbMaster?.filename||''))return this.message('This master needs a native HDR delivery route. Your original is retained.');
-    let format=FORMATS.has(config.hdrOutput)?config.hdrOutput:this.hdrFormat;
+    const image=raw.kind==='image'||mode==='image'&&!this.alreadyHDR(raw);if(!image&&!/\.(mp4|mov|mkv|webm)$/i.test(rgbMaster?.filename||''))return this.message('This master needs a native HDR delivery route. Your original is retained.');
+    let format=image?'acescg_exr':FORMATS.has(config.hdrOutput)?config.hdrOutput:this.hdrFormat;
     if(alphaRef&&format==='hlg_video')format='hlg_and_exr';
     const key=this.resultKey(mode,raw,format)+(this.aeTransfer==='float32'?':float32':'');
     if(this.records[key]?.state==='complete')return this.sync();
     if(['unknown','preparing'].includes(this.records[key]?.state))return this.message('Check the saved HDR job before starting another conversion. Your original master is retained.');
-    this.activeMode=mode;this.preparing=true;this.preparationCancelled=false;this.message('Checking HDR delivery…');this.sync();
+    const selectedItem=image?this.owner.items?.[this.owner.selectedImage]:null,selectedSource=image?this.sourceKey(this.owner):'',aeSource=image?this.owner.studio?.aeBridge?.source:null;
+    const stillCurrent=()=>{
+      if(!image)return true;if(this.closed)return false;
+      if(selectedItem&&this.owner.items?.[this.owner.selectedImage]===selectedItem&&fileKey(selectedItem.master||selectedItem.file)===fileKey(rgbMaster)&&this.sourceKey(this.owner)===selectedSource&&this.owner.studio?.aeBridge?.source===aeSource&&this.output==='hdr')return true;
+      const detail='The selected image or source changed before HDR started. Select the intended result and choose HDR again.';this.records[key]={state:'cancelled',original:raw};this.verificationErrorJob={state:'cancelled',error:detail};this.save();this.message(detail);return false;
+    };
+    this.clearCancellationNotice();this.preflightError=null;
+    this.activeMode=mode;this.preparing=true;this.preparationCancelled=false;this.progressDismissed=false;this.progressResult=rgbMaster;this.verificationErrorJob=null;this.message('');this.sync();
+    const cancelled=take=>{
+      if(!this.preparationCancelled)return false;
+      this.records[key]={state:'cancelled',...(take?{take}:{original:raw})};this.save();this.announceCancellation();
+      return true;
+    };
     try{
       const clock=config.ae_frame_contract?.frameRate;
       const info=await this.delivery.client.request('/zura/studio/hdr/source-info',{source_kind:image?'output_image':'output',output_ref:rgbMaster,...(image?{sequence_fps:clock?clock.numerator/clock.denominator:24,...(config.ae_frame_contract?{ae_frame_contract:config.ae_frame_contract}:{})}:{})});
+      if(this.closed||cancelled())return;
+      if(!stillCurrent())return;
+      if(image&&(info.frames!==1||![info.width,info.height].every(value=>Number.isInteger(value)&&value>0)))throw Error('The image master does not describe one valid full-resolution frame.');
       if(info.hasAlpha&&format==='hlg_video')format='hlg_and_exr';
       const original=mode==='alpha'&&isFile(w.result?.preview)?{...raw,preview:w.result.preview}:raw;
       const take={studioMode:mode,resultKey:key,kind:image?'image':'video',file:rgbMaster,original,...(alphaRef?{alpha_ref:alphaRef}:{}),
-        config:{...config,engine:config.engine||'studio',frames:info.frames,width:info.width,height:info.height,fps:info.fps,...(image?{single_frame:true}:{}),hdrSourceColour:info.transfer==='bt709'?'rec709_oetf':'srgb_display',hdrOutput:format,exr_storage:alphaRef||info.hasAlpha?'float32':this.settings.exrStorage(format)}};
+        config:{...config,engine:config.engine||'studio',frames:info.frames,width:info.width,height:info.height,fps:info.fps,...(image?{single_frame:true}:{}),hdrSourceColour:info.transfer==='bt709'?'rec709_oetf':'srgb_display',hdrOutput:format,exr_storage:image||alphaRef||info.hasAlpha?'float32':this.settings.exrStorage(format)}};
       await this.delivery.preflight(take.config);
-      if(this.closed||this.preparationCancelled){this.records[key]={state:'cancelled',take};this.save();this.message('HDR conversion cancelled. Your original master is retained.');return;}
-      this.records[key]={state:'preparing',take};this.save();await this.delivery.start(take);
-    }catch(error){this.records[key]={state:'failed',error:error.message,original:raw};this.save();this.message(error.message+' Your original master is retained.');}
+      if(this.closed||cancelled(take))return;
+      if(!stillCurrent())return;
+      this.records[key]={state:'preparing',take};this.save();this.preparing=false;await this.delivery.start(take);
+    }catch(error){if(!this.closed&&!cancelled()){this.records[key]={state:'failed',error:error.message,original:raw};this.preflightError={state:'failed',error:error.message};this.save();}}
     finally{this.preparing=false;this.sync();}
   }
   message(text){this.$('status').textContent=text||'';}
-  cancel(){if(this.preparing&&!this.delivery.busy){this.preparationCancelled=true;this.message('Cancelling HDR preparation…');this.sync();return;}if(this.nativeProgress?.workspace?.busy&&!this.delivery.busy)return this.nativeProgress.workspace.cancel();return this.delivery.cancel();}
+  clearCancellationNotice(){
+    clearTimeout(this.cancellationTimer);this.cancellationNotice.hidden=true;this.cancellationNotice.textContent='';
+  }
+  announceCancellation(){
+    this.clearCancellationNotice();this.message('');
+    this.cancellationNotice.hidden=false;this.cancellationNotice.textContent='HDR conversion cancelled. Your original master is retained.';
+    this.cancellationTimer=setTimeout(()=>this.clearCancellationNotice(),5000);this.cancellationTimer?.unref?.();
+  }
+  cancel(){
+    if(this.preparing&&!this.delivery.busy){this.preparationCancelled=true;this.sync();return;}
+    if(this.delivery.busy)return this.delivery.cancel();
+    if(this.nativeProgress?.workspace?.busy)return this.nativeProgress.workspace.cancel();
+  }
+  setProgressVisible(visible){
+    const host=this.progressHost;
+    if(visible){
+      host.hidden=false;
+      if(!host.hasAttribute('open')){
+        if(typeof host.showModal==='function'&&host.isConnected)host.showModal();else host.setAttribute('open','');
+      }
+    }else{
+      if(host.hasAttribute('open')){
+        if(typeof host.close==='function')host.close();else host.removeAttribute('open');
+      }
+      host.hidden=true;
+    }
+  }
   renderProgress(){
-    const native=this.nativeProgress,job=this.preparing?{state:this.preparationCancelled?'cancelling':'preparing'}:this.delivery.busy||!native?this.delivery.lastJob:native.job;
-    const host=this.progressHost;host.hidden=!job;if(!job){clearInterval(this.progressTimer);this.progressTimer=null;return;}const view=hdrDeliveryProgress(job),doc=this.root.ownerDocument,stages=host.querySelector('[data-delivery-stages]');stages.replaceChildren();
+    const native=this.nativeProgress;
+    let job=this.lastProgressJob||this.delivery.lastJob||native?.job;
+    if(this.verifyingHDR)job={state:'saving'};
+    else if(this.delivery.busy)job=this.delivery.lastJob;
+    else if(this.preparing)job={state:this.preparationCancelled?'cancelling':'preparing'};
+    else if(native?.workspace?.busy)job=native.job;
+    else job=this.preflightError||this.verificationErrorJob||job;
+    const host=this.progressHost,doc=this.root.ownerDocument,view=job?hdrDeliveryProgress(job):null;
+    if(this.verifyingHDR&&view)view.detail='Checking the saved HDR EXR and its source identity.';
+    const closed=!view||view.state==='complete'||view.state==='cancelled';
+    if(!view||view.terminal){clearInterval(this.progressTimer);this.progressTimer=null;}
+    if(closed){
+      this.progressDismissed=false;this.progressToggle.hidden=true;this.setProgressVisible(false);return;
+    }
     if(!view.terminal&&!this.progressTimer){this.progressStarted=Date.now();this.progressTimer=setInterval(()=>this.renderProgress(),1000);this.progressTimer?.unref?.();}
-    if(view.terminal&&this.progressTimer){clearInterval(this.progressTimer);this.progressTimer=null;}
-    view.labels.forEach((label,index)=>{const item=doc.createElement('li');item.textContent=label;item.className=index<view.phase?'done':index===view.phase?'current':'';if(index===view.phase)item.setAttribute('aria-current','step');stages.append(item);});
-    host.dataset.state=view.state;host.querySelector('[data-delivery-detail]').textContent=view.detail+(!view.terminal&&this.progressStarted?` ${Math.floor((Date.now()-this.progressStarted)/1000)}s elapsed.`:'');const bar=host.querySelector('progress');bar.hidden=view.terminal;if(view.value!==null){bar.max=view.max;bar.value=view.value;}else bar.removeAttribute('value');
+    this.progressToggle.hidden=!this.progressDismissed||view.terminal;
+    const result=this.delivery.take?.original?.master||this.progressResult;
+    host.dataset.state=view.state;
+    const caption=host.querySelector('[data-delivery-result]');caption.textContent=result?.filename||'';caption.hidden=!caption.textContent;
+    const dismiss=host.querySelector('[data-delivery-dismiss]');dismiss.textContent=view.terminal?'Close':'Minimise';
+    const cancel=host.querySelector('[data-delivery-progress-cancel]');
+    cancel.hidden=view.terminal||!!this.verifyingHDR;
+    cancel.disabled=view.state==='cancelling'||!!(this.delivery.busy?this.delivery.client.cancelPending:native?.workspace?.client?.cancelPending);
+    host.querySelector('[data-delivery-retry]').hidden=view.state!=='failed'||!this.progressResult||this.output!=='hdr'||activeStudioMode(this.owner)!==this.activeMode||fileKey(this.raw(this.activeMode)?.master)!==fileKey(this.progressResult);
+    const stages=host.querySelector('[data-delivery-stages]');stages.hidden=view.terminal;
+    if(!view.terminal&&this.displayedHDRPhase!==view.phase){
+      this.displayedHDRPhase=view.phase;stages.replaceChildren();
+      view.labels.forEach((label,index)=>{
+        const item=doc.createElement('li');item.textContent=label;item.className=index<view.phase?'done':index===view.phase?'current':'';
+        if(index===view.phase)item.setAttribute('aria-current','step');stages.append(item);
+      });
+    }
+    const detail=host.querySelector('[data-delivery-detail]');
+    const copy=cancel.disabled&&!view.terminal?'Cancelling HDR conversion…':view.detail;
+    if(detail.textContent!==copy)detail.textContent=copy;
+    const elapsed=host.querySelector('[data-hdr-elapsed]');elapsed.hidden=view.terminal;
+    if(!view.terminal)elapsed.textContent=Math.floor((Date.now()-this.progressStarted)/1000)+'s elapsed';
+    const bar=host.querySelector('progress');bar.hidden=view.terminal;
+    if(view.value!==null&&!cancel.disabled){bar.max=view.max;bar.value=view.value;}else bar.removeAttribute('value');
+    this.setProgressVisible(!this.progressDismissed);
   }
   observeNativeDeliveries(){
     const candidates=[this.owner.videoComposer?.ltxOutput?.delivery];
-    for(const candidate of candidates){if(!candidate||candidate===this.delivery||candidate.sharedProgressObserver===this)continue;candidate.sharedProgressObserver=this;const update=candidate.onUpdate;candidate.onUpdate=job=>{update?.(job);this.nativeProgress={job,workspace:candidate};this.sync();};if(candidate.lastJob)this.nativeProgress={job:candidate.lastJob,workspace:candidate};}
+    for(const candidate of candidates){if(!candidate||candidate===this.delivery||candidate.sharedProgressObserver===this)continue;candidate.sharedProgressObserver=this;const update=candidate.onUpdate;candidate.onUpdate=job=>{update?.(job);this.nativeProgress={job,workspace:candidate};this.noteProgress(job);this.sync();};if(candidate.lastJob)this.nativeProgress={job:candidate.lastJob,workspace:candidate};}
+  }
+  noteProgress(job){
+    if(this.closed)return;
+    const previous=this.lastProgressJob;
+    this.lastProgressJob=job;
+    if(job.state==='cancelled')this.announceCancellation();
+    else if(previous&&hdrDeliveryProgress(previous).terminal&&!hdrDeliveryProgress(job).terminal){this.progressDismissed=false;this.clearCancellationNotice();}
   }
   onUpdate(job){
+    this.noteProgress(job);
     const take=this.delivery.take;this.activeMode=take?.studioMode||this.activeMode;
     if(take&&['failed','cancelled','unknown'].includes(job.state)){this.records[take.resultKey]={state:job.state,take,error:job.error};this.save();}
-    this.message(({preparing:'Preparing HDR conversion…',queued:'HDR conversion queued',rendering:'Converting to HDR…',saving:'Saving HDR masters…',reconnecting:'Reconnecting to HDR conversion…',cancelling:'Cancelling HDR conversion…',complete:'HDR masters ready',cancelled:'HDR conversion cancelled. Your original master is retained.'})[job.state]||job.error||'Preparing HDR delivery…');this.sync();
+    if(job.state==='complete')this.message('HDR masters ready');
+    else if(job.state!=='cancelled')this.message('');
+    this.sync();
   }
-  onComplete(take){this.records[take.resultKey]={state:'complete',take};this.save();this.message(take.alphaAssociation==='straight'?'HDR with alpha ready · FLOAT EXR · Preview is SDR':'HDR masters ready · Preview is SDR');this.sync();this.owner.studio?.aeBridge?.updateMeta?.();}
+  async onComplete(take){
+    if(this.closed)return;
+    if(take.studioMode==='image'){
+      const record={state:'verifying',take};this.records[take.resultKey]=record;this.verifyingHDR=record;this.verificationErrorJob=null;this.save();this.sync();
+      try{
+        const verified=await this.settings.verifyHDRStill(take,take.hdrJobId);
+        if(this.closed||this.records[take.resultKey]!==record)return;
+        this.records[take.resultKey]={state:'complete',take:{...take,verifiedHDRImage:verified}};this.save();this.message('HDR EXR ready · Preview is SDR');this.owner.studio?.aeBridge?.updateMeta?.();
+      }catch(error){if(!this.closed&&this.records[take.resultKey]===record){this.records[take.resultKey]={state:'failed',take,error:error.message};this.verificationErrorJob={state:'failed',id:take.hdrJobId,error:error.message};this.save();this.message(error.message+' Your SDR master is retained.');}}
+      finally{if(this.verifyingHDR===record)this.verifyingHDR=null;this.sync();}
+      return;
+    }
+    this.records[take.resultKey]={state:'complete',take};this.save();this.message(take.alphaAssociation==='straight'?'HDR with alpha ready · FLOAT EXR · Preview is SDR':'HDR masters ready · Preview is SDR');this.sync();this.owner.studio?.aeBridge?.updateMeta?.();
+  }
   mountOutputChoice(mode,w){
     const page=w?.page||w?.root||this.root;
-    const selectors={image:'.zc-image-composer .zc-prompt-tools',video:'.gs-composer .zc-prompt-tools',swap:'.gs-composer .zc-prompt-tools',viewport:'.gs-composer .zc-prompt-tools',hdr:'.zh-footer',paint_vfx:'.zvfx-settings',paintout:'.zpx-properties',watermark:'.zf-composer .zc-prompt-tools',outpaint:'.zo-action',ripple:'.zru-tools',relight:'.zru-tools',camera:'.zpc-composer .zc-prompt-tools',panorama:'.zpc-composer .zc-prompt-tools',frames:'.zf-composer .zc-prompt-tools',references:'.zf-composer .zc-prompt-tools',alpha:'.zc-prompt-tools',director:'.zdir-composer-row'};
-    const selector=this.owner.plate?.inline?'.zpx-properties':w===this.owner.studio?'.gs-composer .zc-prompt-tools':selectors[mode],host=selector&&(page.querySelector?.(selector)||this.root.querySelector(selector));
-    this.outputChoice.hidden=!host;if(host){const primary=host.querySelector(':scope > button.gs-primary');if(primary){if(this.outputChoice.nextSibling!==primary)host.insertBefore(this.outputChoice,primary);}else if(this.outputChoice.parentElement!==host)host.append(this.outputChoice);}
+    const selectors={image:'.zc-image-composer .zc-composer-bottom',video:'.gs-composer .zc-prompt-tools',swap:'.gs-composer .zc-prompt-tools',viewport:'.gs-composer .zc-prompt-tools',hdr:'.zh-footer',paint_vfx:'.zvfx-settings',paintout:'.zpx-properties',watermark:'.zf-composer .zc-prompt-tools',outpaint:'.zo-action .zc-prompt-tools',ripple:'.zru-tools',relight:'.zru-tools',camera:'.zpc-composer .zc-prompt-tools',panorama:'.zpc-composer .zc-prompt-tools',frames:'.zf-composer .zc-prompt-tools',references:'.zf-composer .zc-prompt-tools',alpha:'.zc-prompt-tools',director:'.zdir-composer-row'};
+    const selector=this.owner.plate?.inline?'.zpx-properties':w===this.owner.studio?'.gs-composer .zc-prompt-tools':selectors[mode],host=selector&&(page.querySelector?.(selector)||this.root.querySelector(selector))||this.element;
+    this.outputChoice.hidden=mode==='home';const primary=host.querySelector(':scope > button.gs-primary');if(primary){if(this.outputChoice.nextSibling!==primary)host.insertBefore(this.outputChoice,primary);}else if(this.outputChoice.parentElement!==host)host.append(this.outputChoice);
   }
   sync(){
     if(this.closed||this.syncing)return;this.syncing=true;
@@ -250,8 +385,10 @@ export class StudioDeliveryControls {
       if(w===this.owner.studio&&this.owner.videoComposer?.ltxOutput?.control)this.owner.videoComposer.ltxOutput.control.hidden=true;
       if(w?.sourceColourControl)w.sourceColourControl.hidden=true;
       if((mode==='paintout'&&!this.owner.plate?.propagation())||mode==='watermark')for(const id of ['colour','processing','output','pipeline','source-colour-confirm']){const control=w?.$?.(id);if(control)control.closest('label')?.setAttribute('hidden','');}
-      if(mode==='outpaint'){const control=w?.$?.('hdr-output');if(control)control.closest('label')?.setAttribute('hidden','');}
-      if(mode==='outpaint'){const control=w?.$?.('delivery');if(control){control.value=this.output==='hdr'?this.hdrFormat:'sdr';control.closest('label')?.setAttribute('hidden','');}}
+      if(mode==='outpaint'){
+        const control=w?.$?.('delivery'),value=this.output==='hdr'?this.hdrFormat:'sdr';
+        if(control&&control.value!==value){control.value=value;control.onchange?.();}
+      }
       if(mode==='hdr'){
         for(const id of ['colour','output','mode']){const control=w?.$?.(id);if(control)control.closest('label')?.setAttribute('hidden','');}
         const output=w?.$?.('output');if(output)output.value=this.hdrFormat;
@@ -262,15 +399,17 @@ export class StudioDeliveryControls {
       const input=this.input(w),busy=activeJob(w)||this.isBusyFor(mode);
       const aeSource=!!(this.owner.studio?.aeSession||this.owner.studio?.aeBridge&&!this.owner.studio.aeBridge.closed);
       this.$('input').value=input.input;this.$('input').disabled=!this.sourceKey(w)||busy||aeSource;this.$('input').title=aeSource?'Verified After Effects source interpretation':input.detected?'Detected from source metadata':'SDR is assumed until source metadata or an override is available';
-      this.$('output').value=this.output;this.$('output').disabled=mode==='hdr'||busy||!!this.aeTransfer;
+      const nativeOutpaint=mode==='outpaint'&&w?.$?.('hdr-output')?.checked;
+      this.$('output').value=nativeOutpaint?'hdr':this.output;this.$('output').disabled=mode==='hdr'||nativeOutpaint||busy||!!this.aeTransfer;
       this.$('space').value=input.space||'';this.$('space').disabled=busy||aeSource;this.sourceSpaceRow.hidden=!this.sourceKey(w)||aeSource;this.$('space-wrap').hidden=!this.hasExportAdvanced&&this.sourceSpaceRow.hidden;this.$('space-wrap').classList.toggle('needs-choice',input.input==='hdr'&&!input.space);
       if(input.input==='hdr'&&!input.space&&!busy&&!aeSource)this.message('Choose the actual HDR source colour space');
-      this.$('cancel').hidden=!(this.preparing||this.delivery.busy||this.nativeProgress?.workspace?.busy);this.renderProgress();this.$('files').replaceChildren();
+      this.$('cancel').hidden=true;this.renderProgress();this.$('files').replaceChildren();
       const raw=this.raw(mode),record=raw&&this.recordFor(mode,raw);
       const availableFiles=record?.state==='complete'?record.take.hdrFiles||[]:this.alreadyHDR(raw)&&isFile(raw?.master)?[raw.master]:[];
       if(this.output==='hdr')for(const file of availableFiles){const a=this.root.ownerDocument.createElement('a');a.textContent=/\.(zip|exr)$/i.test(file.filename)?'EXR':'HDR video';a.href=this.api.apiURL('/view?'+new URLSearchParams(file));a.download=file.filename;this.$('files').append(a);}
       this.sourceControls?.sync();
+      this.settings.syncImageExports?.();
     }finally{this.syncing=false;}
   }
-  close(){this.closed=true;clearInterval(this.progressTimer);this.progressTimer=null;this.sourceControls?.close();this.delivery.close();this.save();}
+  close(){this.closed=true;this.setProgressVisible(false);this.clearCancellationNotice();clearInterval(this.progressTimer);this.progressTimer=null;this.sourceControls?.close();this.delivery.close();this.save();}
 }

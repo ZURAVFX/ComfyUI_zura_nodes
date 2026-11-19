@@ -8,17 +8,14 @@ Object.defineProperty(window.HTMLSelectElement.prototype,'value',{configurable:t
 for(const name of ['load','pause','play'])window.HTMLElement.prototype[name]=()=>{};
 const calls=[];
 const owner={root:document.querySelector('#genj-studio'),api:{clientId:'studio-client',apiURL:u=>u,addEventListener(){},removeEventListener(){}},show(){},
-  async fetch(path,body){calls.push([path,body]);if(path==='/zura/studio/outpaint/capabilities')return {anchored_masked:true,dependencies:{missing_files:['missing.safetensors'],missing_nodes:['MissingNode']},short_dependencies:{expand:{missing_files:['expand.safetensors'],missing_nodes:[]},black:{missing_files:['black.safetensors'],missing_nodes:[]}}};if(path==='/zura/studio/outpaint/review')return {id:'review',kind:'review',state:'queued'};
-    if(path.endsWith('/review/approve'))return {id:'review',approved:true};
-    if(path.endsWith('/review/render'))return {id:'render',kind:'render',state:'queued'};
-    if(path.endsWith('/jobs/review'))return {id:'review',kind:'review',state:'complete',url:'/view?review=1'};
+  async fetch(path,body){calls.push([path,body]);if(path==='/zura/studio/outpaint/capabilities')return {anchored_masked:true,dependencies:{missing_files:['missing.safetensors'],missing_nodes:['MissingNode']},short_dependencies:{expand:{missing_files:['expand.safetensors'],missing_nodes:[]},black:{missing_files:['black.safetensors'],missing_nodes:[]}}};if(path==='/zura/studio/outpaint/generate')return {id:'render',kind:'render',state:'queued'};
     if(path.endsWith('/jobs/render'))return {id:'render',kind:'render',state:'complete',url:'/view?render=1'};throw Error(path);}};
 const ui=new OutpaintWorkspace(owner);
 const composer=ui.page.querySelector('.zo-composer');
 assert.ok(composer.classList.contains('zc-prompt-card'));
-assert.equal(ui.trim.container.closest('.zc-prompt-tools').parentElement,ui.page.querySelector('.zo-action'),'Trim stays in the shared bottom toolbar');
+assert.equal(ui.trim.container.previousElementSibling,ui.stage,'The trim timeline is attached to the preview');
 assert.equal(ui.firstFrame.root.parentElement,ui.page.querySelector('.zo-sources'),'Optional first frame belongs with attachments');
-assert.equal(ui.$('progress-wrap').parentElement,ui.page,'Progress cannot cover the frame extension preview');
+assert.equal(ui.$('progress-wrap').parentElement,ui.$('status').closest('[data-run-state]'));assert.equal(ui.$('progress-detail').closest('[data-run-state]'),ui.$('progress-wrap').parentElement,'Step count and bar share one status strip');
 assert.equal(ui.$('mode').closest('.zo-settings'),ui.page.querySelector('.zo-settings'),'Canvas method stays beside dimensions and scale');
 assert.equal(composer.querySelector('textarea'),ui.$('prompt'));
 
@@ -29,7 +26,7 @@ assert.equal(ui.$('duration').tagName,'INPUT','timeline readout must never shado
 assert.equal(ui.config().duration,4,'a short video initially uses its entire source length');
 ui.trim.commit({start:1,duration:2.5});
 assert.equal(ui.config().start,1);assert.equal(ui.config().duration,2.5,'the drag selection reaches the graph request');
-assert.equal(ui.$('review').disabled,false);assert.equal(ui.$('generate').hidden,true);
+assert.equal(ui.$('generate').disabled,false);assert.equal(ui.$('generate').hidden,false);
 Object.defineProperty(ui.stage,'clientWidth',{configurable:true,value:900});Object.defineProperty(ui.stage,'clientHeight',{configurable:true,value:400});
 ui.paint();assert.equal(ui.canvas.style.width,'720px');assert.equal(ui.canvas.style.height,'400px');
 ui.$('width').value='1280';ui.$('width').oninput();
@@ -48,7 +45,7 @@ ui.$('scale-percent').value='';ui.$('scale-percent').oninput();
 assert.equal(ui.$('scale').value,'200','clearing a percentage while typing does not snap the slider');
 ui.$('scale-percent').value='5';ui.$('scale-percent').oninput();assert.equal(ui.$('scale').value,'5');
 ui.$('scale-percent').value='1000';ui.$('scale-percent').onchange();assert.equal(ui.$('scale').value,'1000');
-assert.equal(ui.$('review').disabled,true,'fully covered canvases have no area to extend');
+assert.equal(ui.$('generate').disabled,true,'fully covered canvases have no area to extend');
 assert.match(ui.$('help').textContent,/Reduce its size/);
 ui.setScale(200);
 Object.defineProperty(ui.canvas,'getBoundingClientRect',{configurable:true,value:()=>({width:800,height:400})});
@@ -57,7 +54,7 @@ assert.equal(ui.box.left,0,'an oversized source can pan across its visible crop'
 assert.ok(ui.box.right<0);ui.drag=null;
 ui.$('scale-fit').onclick();assert.equal(ui.$('scale').value,'100');
 ui.setScale(50);
-assert.equal(ui.$('review').disabled,false);
+assert.equal(ui.$('generate').disabled,false);
 assert.equal(ui.config().strategy,undefined,'short canvas renders use the single masked two-stage graph');
 ui.longReady=true;ui.source.duration=10;ui.trim.useSource();assert.equal(ui.config().strategy,'anchored_masked');assert.equal(ui.config().duration,10,'long selection reaches the request');
 ui.longReady=false;ui.trim.modeChanged();assert.equal(ui.config().strategy,undefined,'long selections are unavailable without backend capability');
@@ -67,35 +64,32 @@ ui.job={id:'progress-job',kind:'render'};ui.jobStarted=Date.now();ui.paint();
 assert.equal(ui.$('progress-wrap').hidden,false);
 ui.executing({detail:{prompt_id:'progress-job',node:'model'}});assert.equal(ui.$('status').textContent,'Loading LTX 2.5');assert.equal(ui.$('progress').hasAttribute('value'),false);
 ui.progress({detail:{prompt_id:'other-job',node:'sample',value:2,max:8}});assert.equal(ui.$('status').textContent,'Loading LTX 2.5');
-ui.progress({detail:{prompt_id:'progress-job',node:'sample',value:2,max:8}});assert.match(ui.$('status').textContent,/step 2 of 8/);assert.equal(Number(ui.$('progress').value),25);
+ui.progress({detail:{prompt_id:'progress-job',node:'sample',value:2,max:8}});assert.match(ui.$('progress-detail').textContent,/Step 2 of 8/);assert.equal(Number(ui.$('progress').value),25);
 ui.executing({detail:{prompt_id:'progress-job',node:'sample_high'}});assert.match(ui.$('status').textContent,/Refining extended video · pass 2 of 2/);
-ui.progress({detail:{prompt_id:'progress-job',node:'sample_high',value:1,max:2}});ui.sampleClock.time-=1000;ui.progress({detail:{prompt_id:'progress-job',node:'sample_high',value:2,max:2}});assert.match(ui.$('status').textContent,/step 2 of 2/);assert.match(ui.$('progress-detail').textContent,/0s left in this pass/);ui.progressDetail();assert.match(ui.$('progress-detail').textContent,/0s left in this pass/,'Polling preserves the current pass estimate');
+ui.progress({detail:{prompt_id:'progress-job',node:'sample_high',value:1,max:2}});ui.sampleClock.time-=1000;ui.progress({detail:{prompt_id:'progress-job',node:'sample_high',value:2,max:2}});assert.match(ui.$('progress-detail').textContent,/Step 2 of 2/);assert.match(ui.$('progress-detail').textContent,/0s left in this pass/);ui.progressDetail();assert.match(ui.$('progress-detail').textContent,/0s left in this pass/,'Polling preserves the current pass estimate');
 ui.job.active_prompt_id='active-window';ui.progress({detail:{prompt_id:'active-window',node:'sample',value:4,max:8}});assert.equal(Number(ui.$('progress').value),50,'the active long-render window can update its parent');
 ui.progress({detail:{prompt_id:'unrelated-window',node:'sample',value:6,max:8}});assert.equal(Number(ui.$('progress').value),50,'unrelated window events are ignored');
 ui.job=null;ui.paint();assert.equal(ui.$('progress-wrap').hidden,true);
 
-await ui.reviewSelection();await new Promise(r=>setTimeout(r,0));
-assert.equal(calls[0][1].start,1);assert.equal(calls[0][1].duration,2.5);
-assert.equal(calls[0][1].client_id,'studio-client','events go to the requesting Studio client');
-assert.equal(ui.runPhase,'review');assert.match(ui.$('run-title').textContent,/not the finished video/);assert.equal(ui.$('run-state').hidden,false);
-assert.equal(ui.review.id,'review');assert.equal(ui.$('generate').hidden,false);assert.equal(ui.result.hidden,false);
 await ui.generate();await new Promise(r=>setTimeout(r,0));
-assert.equal(ui.review,null);assert.equal(ui.result.hidden,false);assert.equal(ui.runPhase,'complete');assert.equal(ui.$('generate').hidden,true);assert.equal(ui.$('download').hidden,false);assert.match(ui.$('download').href,/render=1/);
-assert.deepEqual(calls.slice(0,4).map(c=>c[0]),['/zura/studio/outpaint/review','/zura/studio/outpaint/jobs/review','/zura/studio/outpaint/jobs/review/approve','/zura/studio/outpaint/jobs/review/render']);
-assert.equal(calls[3][1].client_id,'studio-client');
-assert.deepEqual(calls[3][1].custom_loras,[{name:'test-style.safetensors',strength:.6,confirm_unknown:true}],'selected LTX adapters reach the render request');
+assert.equal(calls[0][1].start,1);assert.equal(calls[0][1].duration,2.5);
+assert.equal(calls[0][1].client_id,'studio-client','Events go to the requesting Studio client');
+assert.equal(ui.result.hidden,false);assert.equal(ui.runPhase,'complete');assert.equal(ui.$('download').hidden,false);
+assert.match(ui.$('download').href,/render=1/);
+assert.deepEqual(calls.slice(0,2).map(c=>c[0]),['/zura/studio/outpaint/generate','/zura/studio/outpaint/jobs/render']);
+assert.deepEqual(calls[0][1].custom_loras,[{name:'test-style.safetensors',strength:.6,confirm_unknown:true}]);
 // Optional still guides are tied to this exact canvas and source frame.
 const guide=ui.firstFrame;
 globalThis.createImageBitmap=async()=>({width:ui.dimensions().width,height:ui.dimensions().height,close(){}});
 guide.store=async()=>({id:'guide-image',file:'genj_studio/guide/image.png'});
 await guide.upload(new Blob(['fixture'],{type:'image/png'}));
-assert.equal(guide.asset.id,'guide-image');assert.equal(guide.root.querySelector('.zo-guide-chip').hidden,false);
-ui.review={id:'review'};await ui.generate();await new Promise(r=>setTimeout(r,0));
-assert.equal(calls.findLast(c=>c[1]&&c[0].endsWith('/render'))[1].first_frame,'guide-image','Guide is explicitly submitted alongside the source-motion route');
+assert.equal(guide.asset.id,'guide-image');assert.equal(guide.attachment.slot.hidden,false);
+await ui.generate();await new Promise(r=>setTimeout(r,0));
+assert.equal(calls.findLast(c=>c[1]&&c[0].endsWith('/generate'))[1].first_frame,'guide-image','Guide is explicitly submitted alongside the source-motion route');
 ui.$('width').value='1344';ui.invalidate();assert.equal(guide.asset,null,'Changing output geometry invalidates the still guide');
 assert.equal(guide.preview.hidden,true);
 ui.$('width').value='1280';ui.reframe();ui.paint();
-ui.review={id:'old'};ui.invalidate();assert.equal(ui.review,null,'changing source geometry invalidates review');
+ui.invalidate();
 ui.$('mode').value='black';ui.reframe();assert.equal(Number(ui.$('width').value),768);assert.equal(Number(ui.$('height').value),432);
 ui.$('mode').value='expand';ui.longReady=false;ui.trim.update();assert.equal(ui.trim.longOption.hidden,true,'long controls stay hidden until backend capability is checked');
 ui.open();await new Promise(r=>setTimeout(r,0));assert.equal(ui.longReady,true);assert.equal(ui.trim.longOption.hidden,false,'verified capability makes the long option available');
@@ -117,13 +111,13 @@ Date.now=originalNow;ui.job=null;
 let cancellingState='cancelling';
 ui.job={id:'cancel-test',kind:'render'};ui.paint();
 ui.fetch=async(path,body)=>{if(path.endsWith('/cancel'))return {id:'cancel-test',state:'cancelling'};if(path.endsWith('/cancel-test'))return {id:'cancel-test',kind:'render',state:cancellingState,error:cancellingState==='cancelled'?'Stopped this outpaint job.':null};throw Error(path);};
-await ui.cancel();assert.equal(ui.job.id,'cancel-test');assert.equal(ui.$('cancel').disabled,true);assert.equal(ui.$('review').disabled,true);assert.match(ui.$('status').textContent,/Cancelling/);
+await ui.cancel();assert.equal(ui.job.id,'cancel-test');assert.equal(ui.$('cancel').disabled,true);assert.equal(ui.$('generate').disabled,true);assert.match(ui.$('status').textContent,/Cancelling/);
 ui.progress({detail:{prompt_id:'cancel-test',node:'sample',value:6,max:8}});assert.match(ui.$('status').textContent,/Cancelling/);
 clearTimeout(ui.timer);cancellingState='cancelled';await ui.poll();assert.equal(ui.job,null);assert.match(ui.$('status').textContent,/Stopped/);
 ui.capabilities={hdr_expand_experiment:true,hdr_expand_dependencies:{missing_files:['ltx-hdr.safetensors'],missing_nodes:['LTXVLoadConditioning']}};ui.$('mode').value='expand';ui.source.duration=10;ui.trim.useSource();ui.paint();
 assert.equal(ui.$('hdr-option').hidden,true,'SDR sources use the delivery selector rather than the native-HDR control');
 ui.isHDRSource=true;ui.paint();
-assert.equal(ui.$('hdr-option').hidden,false,'The native-HDR status appears for an imported HDR source when the backend advertises it');
+assert.equal(ui.$('hdr-option').hidden,true,'Native HDR processing has no duplicate output control');
 ui.$('hdr-output').checked=true;ui.$('hdr-output').onchange();
 assert.equal(ui.trim.long,false,'unverified long HDR cannot reuse the SDR sectioned route');
 assert.equal(ui.modelDownloads.context.route,'ltx_outpaint_hdr');assert.equal(ui.modelDownloads.context.files[0].filename,'ltx-hdr.safetensors');
@@ -131,11 +125,11 @@ assert.equal(ui.config().hdr,true);assert.equal(ui.config().colour_space,'auto')
 assert.ok(ui.config().duration<=113/24,'HDR trim is limited to a supported single pass');
 assert.match(ui.$('method-info').textContent,/HDR video source required/);
 ui.source.width=1920;ui.source.height=1080;ui.$('duration').value='2';ui.paint();
-assert.equal(ui.$('review').disabled,true,'selection beyond HDR source budget cannot be queued');assert.match(ui.$('method-info').textContent,/17 frames/);
-ui.trim.commit({start:0,duration:1});ui.paint();assert.equal(ui.$('review').disabled,false,'trimming to the supported range restores review');
-let renderBody;ui.review={id:'hdr-review',hdr:true};ui.fetch=async(path,body)=>{if(path.endsWith('/approve'))return {approved:true};if(path.endsWith('/render')){renderBody=body;return {id:'hdr-render',kind:'render'};}if(path.endsWith('/hdr-render'))return {id:'hdr-render',kind:'render',state:'complete',hdr:true,url:'/preview',artifact:{type:'output',filename:'final.mp4',subfolder:'genj/hdr'},hdr_files:{hlg:{type:'output',filename:'final.mp4',subfolder:'genj/hdr'},exr:{type:'output',filename:'frames.zip',subfolder:'genj/hdr'}}};throw Error(path);};
+assert.equal(ui.$('generate').disabled,true,'selection beyond HDR source budget cannot be queued');assert.match(ui.$('method-info').textContent,/17 frames/);
+ui.trim.commit({start:0,duration:1});ui.paint();assert.equal(ui.$('generate').disabled,false,'trimming to the supported range restores review');
+let renderBody;ui.fetch=async(path,body)=>{if(path.endsWith('/generate')){renderBody=body;return {id:'hdr-render',kind:'render'};}if(path.endsWith('/hdr-render'))return {id:'hdr-render',kind:'render',state:'complete',hdr:true,url:'/preview',artifact:{type:'output',filename:'final.mp4',subfolder:'genj/hdr'},hdr_files:{hlg:{type:'output',filename:'final.mp4',subfolder:'genj/hdr'},exr:{type:'output',filename:'frames.zip',subfolder:'genj/hdr'}}};throw Error(path);};
 await ui.generate();await new Promise(r=>setTimeout(r,0));assert.deepEqual(renderBody.custom_loras,[],'unsupported custom LoRAs are not sent to the HDR route');
-assert.equal(ui.$('download').textContent,'Download ProRes 4444');assert.equal(ui.$('download-exr').hidden,false);assert.match(ui.$('status').textContent,/tone-mapped/);
+assert.equal(ui.$('download').textContent,'Download ProRes 4444');assert.equal(ui.$('download-exr').hidden,false);assert.match(ui.$('status').textContent,/SDR preview/);
 ui.capabilities=null;ui.paint();assert.equal(ui.$('hdr-option').hidden,true,'normal Studio keeps the unverified control hidden');
 ui.capabilities={hdr_expand_experiment:true,hdr_expand_long_experiment:true,hdr_expand_long_dependencies:{missing_files:['long-hdr.safetensors'],missing_nodes:[]}};
 ui.$('hdr-output').checked=true;ui.source.duration=10;ui.trim.modeChanged();ui.trim.useSource();ui.paint();
@@ -155,13 +149,13 @@ ui.fetch=async()=>({kind:'video',path:'verified.mov',colour_space:'pq_display_p3
 await assert.rejects(ui.importStudioHDR({...hdrAsset,id:'unsupported'},'auto'),/not supported/);assert.equal(ui.source.id,'hdr-source','Failed handoff keeps the previous source');
 ui.setSourceAsset({...hdrAsset,id:'sdr-source'});assert.equal(ui.sourceColour,'auto','Replacing the source resets the HDR colour override');
 ui.isHDRSource=false;ui.$('hdr-output').checked=false;ui.hdrRecord=null;
-ui.review={id:'approved',kind:'review',state:'complete'};ui.job={id:'failed-last',kind:'render'};
+ui.job={id:'failed-last',kind:'render'};
 ui.fetch=async()=>({id:'failed-last',kind:'render',state:'failed',window:7,windows:7,error:'The selection extends past the source video.'});
-await ui.poll();assert.equal(ui.runPhase,'failed');assert.match(ui.$('run-title').textContent,/Generation failed.*segment 7 of 7/);assert.match(ui.$('run-detail').textContent,/extends past/);assert.equal(ui.$('generate').textContent,'Retry generation');assert.equal(ui.$('generate').hidden,false);
+await ui.poll();assert.equal(ui.runPhase,'failed');assert.match(ui.$('status').textContent,/Generation stopped.*Segment 7 of 7.*extends past/);assert.equal(ui.$('generate').textContent,'Retry generation');assert.equal(ui.$('generate').hidden,false);
 ui.paint();assert.equal(ui.runPhase,'failed','Layout updates must not erase a failed run');
-let retried=0;ui.fetch=async(path)=>{if(path.endsWith('/approve'))return {};if(path.endsWith('/render')){retried++;return {id:'retry',kind:'render',state:'queued'};}return {id:'retry',kind:'render',state:'complete',url:'/view?finished=1'};};
-await ui.generate();await new Promise(r=>setTimeout(r,0));assert.equal(retried,1);assert.equal(ui.runPhase,'complete');assert.match(ui.result.src,/finished=1/);assert.equal(ui.$('download').hidden,false);assert.equal(ui.$('generate').hidden,true);
-ui.job={id:'missing-video',kind:'render'};ui.fetch=async()=>({id:'missing-video',kind:'render',state:'complete'});await ui.poll();assert.equal(ui.runPhase,'failed');assert.match(ui.$('run-title').textContent,/video unavailable/);
+let retried=0;ui.fetch=async(path)=>{if(path.endsWith('/generate')){retried++;return {id:'retry',kind:'render',state:'queued'};}return {id:'retry',kind:'render',state:'complete',url:'/view?finished=1'};};
+await ui.generate();await new Promise(r=>setTimeout(r,0));assert.equal(retried,1);assert.equal(ui.runPhase,'complete');assert.match(ui.result.src,/finished=1/);assert.equal(ui.$('download').hidden,false);assert.equal(ui.$('generate').hidden,false);
+ui.job={id:'missing-video',kind:'render'};ui.fetch=async()=>({id:'missing-video',kind:'render',state:'complete'});await ui.poll();assert.equal(ui.runPhase,'failed');assert.match(ui.$('status').textContent,/video is unavailable/);
 ui.invalidate();assert.equal(ui.$('run-state').hidden,true,'Changing the selection clears the previous run state');
 // Returning from guide generation restores both the operation and its model filter.
 {
@@ -181,7 +175,7 @@ ui.invalidate();assert.equal(ui.$('run-state').hidden,true,'Changing the selecti
 }
 {
   ui.source={id:'native-rate',file:'input.mp4',name:'input',width:768,height:432,duration:7.2};
-  ui.isHDRSource=false;ui.review=null;ui.job=null;ui.longReady=true;ui.$('duration').value='5';ui.$('start').value='0';
+  ui.isHDRSource=false;ui.job=null;ui.longReady=true;ui.$('duration').value='5';ui.$('start').value='0';
   ui.fetch=async()=>({fps_num:30,fps_den:1});await ui.loadSourceRate('native-rate');
   assert.equal(ui.trim.fps(),30);assert.equal(ui.trim.trimmer.fps,30);
   assert.equal(ui.trim.long,true,'A range larger than 120 native frames enables sections');
@@ -199,4 +193,15 @@ ui.invalidate();assert.equal(ui.$('run-state').hidden,true,'Changing the selecti
   resolvePreview({preview_status:'ready',preview_url:'/old-source-preview'});await polling;
   assert.equal(ui.video.src,'/new-source-preview','Late preview results cannot replace a newer clip');
 }
-ui.dispose();console.log('Outpaint prototype requires review and approval before rendering, and invalidates stale selection.');
+{
+  ui.setSourceAsset({id:'removable',file:'source.mp4',thumbnail_url:'/view?thumbnail=1',name:'Test footage',width:768,height:432,duration:4},'auto',true);
+  assert.equal(ui.$('source').querySelector('img').getAttribute('src'),'/view?thumbnail=1');
+  assert.equal(ui.sourceAttachment.remove.hidden,false);
+  ui.job={id:'busy'};ui.paint();assert.equal(ui.sourceAttachment.remove.disabled,true);
+  ui.job=null;ui.paint();ui.sourceAttachment.remove.click();
+  assert.equal(ui.source,null);assert.equal(ui.$('source').querySelector('img'),null);
+  assert.equal(ui.sourceAttachment.remove.hidden,true);assert.equal(ui.video.hasAttribute('src'),false);
+  assert.equal(ui.$('generate').disabled,true);
+  assert.equal(ui.result.hidden,true);assert.equal(ui.canvas.hidden,true);
+}
+ui.dispose();console.log('Frame extension generates directly from the canvas with unified progress and scoped retry.');

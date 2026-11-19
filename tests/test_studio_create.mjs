@@ -807,7 +807,7 @@ await navStudio.restartNavigation.button.onclick();
 assert.equal(navStudio.restartNavigation.confirmation.hidden,false,'Watermark runs use the shared cancellation guard');
 assert.equal(wm.state.source,'C:/old.mp4','An active job never loses its clip');
 wm.job=null;
-await navStudio.restartNavigation.button.onclick();
+await navStudio.restartNavigation.confirmation.querySelector('[data-cancel-reset]').onclick();
 assert.equal(preserved,1,'The previous project is saved before its draft is cleared');
 assert.equal(wm.state.source,'');assert.equal(wm.state.mask,'');assert.deepEqual(wm.state.anchors,[]);
 assert.equal(wm.state.referenceEnabled,false);assert.equal(wm.state.referenceImage,null);
@@ -835,3 +835,25 @@ const relightChoices=[...relightRoutingStudio.container.querySelector('#zc-video
 assert.ok(relightChoices.includes('wan21')&&relightChoices.includes('relight-h3')&&relightChoices.includes('relight-ltx'));
 relightRouting.close();for(const workspace of relightRouting.rippleWorkspaces.values())workspace.dispose();
 console.log('Shared Relight navigation and Wan / LTX / H3 model choices preserve independent mode drafts.');
+
+// A normal Flux 3 completion must reveal its actual stack during ordinary
+// render(), without leaving and re-entering Image mode.
+{
+ const layerStudio=new context.Studio(),layerUI=layerStudio.creative;
+ await layerUI.modelsReady;layerUI.mode='image';layerUI.imageOperation='edit';layerUI.imageIntent='standard';layerUI.rippleImage.request=null;layerUI.rippleImage.stored=null;layerUI.items=[];layerUI.selectedImage=0;
+ layerUI.references=[{filename:'source.png',subfolder:'layer-fixture',file:'layer-fixture/source.png',type:'input',width:512,height:320}];layerUI.editMainMissing=false;layerUI.$('prompt').value='Change the logo';
+ const config={...layerUI.config(),model:IMAGE_MODELS.find(model=>model.edit&&model.type==='flux3')?.id||'flux3'};assert.ok(config.image_layer_base);assert.ok(buildImageGraph(config).save_layer,'Normal Flux 3 retains a source-sized raw layer');
+ const raw={filename:'flux3-layer.png',subfolder:'layer-fixture',type:'output'},master={filename:'master.exr',subfolder:'layer-fixture',type:'output'},preview={filename:'preview.png',subfolder:'layer-fixture',type:'output'};
+ const priorFetch=layerUI.fetch.bind(layerUI);let compositions=0,published=0;
+ layerUI.fetch=async(path,body)=>{
+  if(path==='/history/flux3-layer-fixture')return {'flux3-layer-fixture':{status:{completed:true,status_str:'success',messages:[]},outputs:{save_layer:{images:[raw]},save:{images:[preview]}}}};
+  if(path==='/zura/studio/image-layers/compose'){compositions++;return {master,preview,hasAlpha:false,source_sha256:'a'.repeat(64),width:512,height:320,sourceWidth:512,sourceHeight:320,colour:{encoding:'srgb_display',sceneLinear:false},applied:body.layers.map(layer=>({...layer}))};}
+  return priorFetch(path,body);
+ };
+ layerUI.imageLayers.conditioning=async()=>({filename:'composite.png',subfolder:'layer-fixture',file:'layer-fixture/composite.png',type:'input'});
+ layerUI.outputSettings.imageCommitted=item=>{published++;assert.equal(layerUI.job,null);assert.equal(layerUI.items[layerUI.selectedImage],item);};
+ layerUI.imageLayers.host.hidden=true;layerUI.job={id:'flux3-layer-fixture',config};await layerUI.poll();
+ assert.equal(layerUI.job,null);assert.equal(compositions,1);assert.equal(published,1);assert.equal(layerUI.imageLayers.host.hidden,false,'Publishing the new result refreshes layers without a mode change');assert.equal(layerUI.imageLayers.panel.querySelectorAll('li').length,1);assert.equal(layerUI.imageLayers.panel.querySelectorAll('input[type=range]').length,4);assert.ok(layerUI.imageLayers.panel.querySelector('.zp-layer-visibility svg'));assert.ok(layerUI.imageLayers.panel.querySelector('.zpx-layer-delete svg'));
+ layerUI.editInputs.toggle.click();assert.equal(layerUI.imageLayers.host.hidden,false);assert.equal(compositions,1,'Switching source/result only displays the saved stack');layerUI.render();assert.equal(compositions,1,'Rendering an existing stack never recomposes or reuploads it');layerUI.close();
+}
+console.log('Normal Flux 3 polling publishes its real layer stack and refreshes the visible controls without mode re-entry.');

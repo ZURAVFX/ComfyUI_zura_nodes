@@ -1,6 +1,7 @@
 import {VideoResolutionControl} from './studio_resolution.js';
 import {OpeningLoraControl} from './studio_opening_loras.js';
 import {BrowserImageConnection} from './studio_browser_images.js';
+import {removableAttachment,setAttachmentThumbnail} from './studio_composer_patterns.js';
 import {clipLength} from './studio_length.js';
 import {MainLTXDelivery} from './studio_main_ltx_delivery.js';
 const svg=body=>`<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${body}</svg>`;
@@ -62,9 +63,9 @@ export class VideoComposer {
     const attachments=document.createElement('div');attachments.className='zc-composer-attachments';
     attachments.innerHTML=`<button type="button" id="zc-attach-source" class="zc-attachment">${composerIcons.video}<span>Source video</span></button><button type="button" id="zc-attach-refs" class="zc-attachment">${composerIcons.image}<span>References</span></button><button type="button" id="zc-attach-frame" class="zc-attachment">${composerIcons.image}<span>Finished frame</span></button>`;
     for(const [id,type,label] of [['source','source','source video'],['refs','character','references'],['frame','ready','finished frame']]){
-      const input=attachments.querySelector('#zc-attach-'+id),slot=document.createElement('div');slot.className='zc-attachment-slot';input.before(slot);slot.append(input);
-      const remove=document.createElement('button');remove.type='button';remove.className='zf-remove-frame zc-remove-input';remove.id='zc-remove-'+id;remove.setAttribute('aria-label','Remove '+label);remove.innerHTML=svg('<path d="m7 7 10 10M7 17 17 7"/>');remove.hidden=true;
-      remove.onclick=()=>studio.removeInput(type);slot.append(remove);
+      const input=attachments.querySelector('#zc-attach-'+id);
+      const {remove}=removableAttachment(input,'Remove '+label,()=>studio.removeInput(type));
+      remove.id='zc-remove-'+id;
     }
     const sourceGroup=document.createElement('div');sourceGroup.className='zc-source-choice';sourceGroup.setAttribute('role','group');sourceGroup.setAttribute('aria-label','Choose a video source');const sourceSlot=attachments.querySelector('#zc-attach-source').parentElement;sourceSlot.before(sourceGroup);sourceGroup.append(sourceSlot);
     const or=document.createElement('span');or.className='zc-source-or';or.textContent='or';or.setAttribute('aria-hidden','true');sourceGroup.append(or);this.hdrChoiceSeparator=or;
@@ -236,9 +237,8 @@ export class VideoComposer {
   }
   openControls(){this.root.querySelector('.gs-workspace').classList.add('zc-controls-open');this.root.querySelector('#zc-video-controls').setAttribute('aria-expanded','true');}
   attachment(id,asset,label){
-    const button=this.root.querySelector('#zc-attach-'+id);let thumb=button.querySelector('img');
-    if(asset?.url){if(!thumb){thumb=document.createElement('img');thumb.alt='';button.prepend(thumb);}thumb.src=asset.poster_url||asset.url;}
-    else thumb?.remove();
+    const button=this.root.querySelector('#zc-attach-'+id);
+    setAttachmentThumbnail(button,asset?.poster_url||asset?.url);
     const remove=this.root.querySelector('#zc-remove-'+id);remove.hidden=!asset;remove.disabled=this.studio.busy||this.studio.project?.phase==='working';button.parentElement.hidden=false;button.classList.toggle('has-media',!!asset);button.querySelector('span').textContent=label;button.title=asset?.name||label;
   }
   sync(){

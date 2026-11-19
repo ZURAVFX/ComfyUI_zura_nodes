@@ -27,7 +27,7 @@ def _tracked_files(project, manifest, segment):
     if 'tracked_files' in segment:
         return dict(segment['tracked_files'])
     baseline = {}
-    if project and segment.get('tracked'):
+    if project and (segment.get('tracked') or segment.get('ready')):
         from . import editor_store as store
         for entry in reversed(store._read(project).get('mask_history', [])):
             if entry['revision'] > manifest['revision']:
@@ -35,7 +35,7 @@ def _tracked_files(project, manifest, segment):
             metadata = entry.get('metadata', {})
             same = metadata.get('segment_id') == segment['id']
             legacy = segment['id'] == 'legacy' and not metadata.get('segment_id')
-            tracked = metadata.get('tracked') or (legacy and entry.get('end_frame', 0) > entry.get('start_frame', 0) and not metadata.get('manual_correction'))
+            tracked = (metadata.get('tracked') or metadata.get('ready')) or (legacy and entry.get('end_frame', 0) > entry.get('start_frame', 0) and not metadata.get('manual_correction'))
             if not (same or legacy) or not tracked:
                 continue
             old = store._mask_manifest(project, entry['revision'])
@@ -54,7 +54,7 @@ def summaries(manifest, project=None):
         summary = {k: v for k, v in segment.items() if k not in ('files', 'tracked_files')}
         baseline = _tracked_files(project, manifest, segment)
         summary['correction_frames'] = sorted(int(key) for key, path in segment['files'].items()
-                                              if segment.get('tracked') and key in baseline and path != baseline[key])
+                                              if (segment.get('tracked') or segment.get('ready')) and key in baseline and path != baseline[key])
         result.append(summary)
     return result
 
@@ -80,7 +80,7 @@ def read_other_segments(project, selected, frame, revision=None, grow=0):
         raise ValueError('Choose a frame inside this mask project.')
     union = np.zeros((manifest['height'], manifest['width']), np.float32)
     for segment in segments_for(manifest):
-        if segment['id'] != selected and segment.get('tracked') and segment['start'] <= frame <= segment['end']:
+        if segment['id'] != selected and (segment.get('tracked') or segment.get('ready')) and segment['start'] <= frame <= segment['end']:
             union = np.maximum(union, store._load_mask(segment['files'].get(str(frame)), manifest['width'], manifest['height']))
     protected = store._load_mask(manifest.get('protection_files', {}).get(str(frame)), manifest['width'], manifest['height'])
     return store.effective_mask(union, grow, 0, protected)
@@ -104,7 +104,7 @@ def _publish(project, manifest, segments, expected, metadata, seed_masks=None, a
             frame = int(key)
             union = np.zeros((identity['height'], identity['width']), np.float32)
             for segment in segments:
-                if segment.get('tracked') and segment['start'] <= frame <= segment['end']:
+                if (segment.get('tracked') or segment.get('ready')) and segment['start'] <= frame <= segment['end']:
                     union = np.maximum(union, store._load_mask(segment['files'].get(key), identity['width'], identity['height']))
             path = Path(pending) / (key + '.png')
             Image.fromarray(np.round(union.clip(0, 1) * 255).astype(np.uint8)).save(path)
@@ -139,7 +139,7 @@ def commit_segment(project, identity, frame_masks, operation, expected, metadata
         owned.mkdir(parents=True)
         try:
             for frame, mask in sorted(frame_masks.items()):
-                if segment.get('tracked') and metadata.get('method')!='watermark_static' and not segment['start'] <= frame <= segment['end']:
+                if (segment.get('tracked') or segment.get('ready')) and metadata.get('method')!='watermark_static' and not segment['start'] <= frame <= segment['end']:
                     raise ValueError('Move inside this mask bar before correcting it.')
                 if isinstance(frame, bool) or not isinstance(frame, int) or not 0 <= frame < identity['count']:
                     raise ValueError('A mask frame is outside the source footage.')
@@ -151,13 +151,14 @@ def commit_segment(project, identity, frame_masks, operation, expected, metadata
                 path = owned / f'{frame:08d}.png'
                 Image.fromarray(np.round(value * 255).astype(np.uint8)).save(path)
                 segment['files'][str(frame)] = str(path)
-                if metadata.get('tracked'):
+                if (metadata.get('tracked') or metadata.get('ready')):
                     segment['tracked_files'][str(frame)] = str(path)
             available = sorted(map(int, segment['files']))
             segment.update(available_start=available[0], available_end=available[-1])
-            if (metadata.get('tracked') and not segment['tracked']) or 'start' not in segment:
+            if ((metadata.get('tracked') or metadata.get('ready')) and not segment['tracked']) or 'start' not in segment:
                 segment.update(start=available[0], end=available[-1])
             segment['tracked'] = segment['tracked'] or bool(metadata.get('tracked'))
+            if metadata.get('ready'):segment.update(ready=True,origin=metadata.get('method','import'))
             if metadata.get('method')=='watermark_static':
                 segment.update(start=metadata['layer_start'],end=metadata['layer_end'],static=True,name=segment['name'].replace('Mask ','Layer ',1))
             base = manifest or dict(source=identity, files={})
@@ -194,7 +195,7 @@ def edit_segment(body):
             segments.remove(segment)
         elif 'reset_frame' in body:
             frame = body['reset_frame']
-            if isinstance(frame, bool) or not isinstance(frame, int) or not segment.get('tracked') or not segment['start'] <= frame <= segment['end']:
+            if isinstance(frame, bool) or not isinstance(frame, int) or not (segment.get('tracked') or segment.get('ready')) or not segment['start'] <= frame <= segment['end']:
                 raise ValueError('Choose an edited frame inside this tracked mask.')
             baseline = _tracked_files(project, manifest, segment)
             key = str(frame)

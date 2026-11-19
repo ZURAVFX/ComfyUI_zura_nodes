@@ -1,3 +1,4 @@
+import {openStudioGraph} from './studio_graph_view.js';
 import {playbackFile} from './studio_delivery_formats.js';
 import {selectedEXRStorage} from './studio_exr_precision.js';
 import {workspaceStorage} from './studio_storage.js';
@@ -7,7 +8,6 @@ import {megapixelSlider,editableDimension,megapixelMaximum} from './studio_resol
 import {frameSourceResolution} from './frame_source_resolution.js';
 import {FRAME_LENGTHS,FRAME_SIZE_PRESETS,FRAME_MEGAPIXELS} from './frame_video_recipes.js';
 import {composerIcons as icons} from './studio_composer.js';
-import {tidyArtistGraph} from './artist_graph.js';
 import {ENDPOINT_RECIPES,endpointRecipe,endpointLengths,endpointPresetSize} from './video_recipe_catalog.js';
 import {attachWorkspaceSamplePreview,nativePreviewMethod} from './studio_live_preview.js';
 import {PreviewZoom} from './studio_preview_zoom.js';
@@ -269,5 +269,5 @@ export class FrameVideoWorkspace{
   async cancel(){if(this.hdrOutput?.busy){await this.hdrOutput.cancel();return;}await cancelOwnedJob(this);}
   stopPolling(){clearInterval(this.timer);this.timer=null;}
   close(){this.save();this.stopPolling();this.hdrOutput?.close();this.previewZoom?.stopDraw();this.nativeSamplePreview?.dispose();this.nativeSamplePreview=null;this.modelDownloads?.close();}
-  async graph(){try{const config=this.job?.config||this.config(),graph=await this.buildGraph(config),original=(this.app.rootGraph||this.app.graph)?.serialize?.();if(!original||typeof this.app.loadApiJson!=='function')throw new Error('Update ComfyUI to open this editable graph.');try{await this.app.loadApiJson(graph,`Zura ${endpointRecipe(config.engine).label} First and Last Frame · ${Date.now()}.json`);await import('./vendor/elk.bundled.js');await tidyArtistGraph(this.app,graph,'first_last',window.ELK);}catch(e){await this.app.loadGraphData(original);throw e;}this.studio.close();}catch(e){this.message(e.message);}}
+  async graph(){await openStudioGraph(this.studio,await this.buildGraph(this.config()),'First and last frame · Current settings','first_last');}
 }

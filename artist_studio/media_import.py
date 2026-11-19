@@ -146,6 +146,7 @@ def describe_asset(asset, store, check_asset, roots,cancel=None):
     preview=_owned_preview(asset,path,roots['input'])
     if preview is not None:
         media['media_url']=describe_media(str(preview),cancel=cancel)['media_url']
+        media.pop('playback_url',None)
     if colour:media['resolved_colour']=colour
     resolved['revalidate']()
     return result,media

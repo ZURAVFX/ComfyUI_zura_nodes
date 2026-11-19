@@ -44,6 +44,7 @@ def load_browser(native):
     modules={PACKAGE:types.ModuleType(PACKAGE),PACKAGE+'.paintout':types.ModuleType(PACKAGE+'.paintout'),
              PACKAGE+'.artist_studio':types.ModuleType(PACKAGE+'.artist_studio'),display.__name__:display,
              PACKAGE+'.paintout.paintout':native,PACKAGE+'.media_source':security,'server':server,**helpers}
+    modules[PACKAGE+'.artist_studio'].__path__=[str(ROOT/'artist_studio')]
     spec=importlib.util.spec_from_file_location(PACKAGE+'.paintout.browser',ROOT/'paintout/browser.py')
     module=importlib.util.module_from_spec(spec)
     with patch.dict(sys.modules,modules):spec.loader.exec_module(module)

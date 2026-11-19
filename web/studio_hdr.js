@@ -1,3 +1,4 @@
+import {openStudioGraph,rememberStudioGraph,studioGraphScope} from './studio_graph_view.js';
 import {deliveryVideoFile} from './studio_delivery_formats.js';
 import {aeFrameContract,aeFrameRate,aeFrameRequest,prepareAEFrameGraph} from './studio_ae_frame_contract.js';
 import {selectedEXRStorage,normaliseEXRStorage} from './studio_exr_precision.js';
@@ -325,6 +326,16 @@ export class HDRSourceTool {
     finally{this.busy=false;this.loras.setBusy(false);this.$('start-job').disabled=false;this.$('add-video').disabled=false;}
   }
   async request(path,body){const response=await this.api.fetchApi(path,body===undefined?{}:{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});let data;try{data=await response.json();}catch{throw new Error('ComfyUI could not respond.');}if(!response.ok)throw new Error(data.error?.message||data.error||'Could not complete the request.');return data;}
+  async graph(studio){
+    if(this.starting||this.busy)throw Error('The next HDR section’s graph will be available once it reaches the queue.');
+    const asset=this.getSource(),kind=this.$('source-kind').value,sourceKind=kind==='own'?'upload':kind;
+    const sourceId=kind==='sequence'?this.sequenceAsset?.id:kind==='own'?this.ownAsset?.id:asset?.id;
+    if(!sourceId&&!this.outputRef&&!asset?.projectId)throw Error('Add footage to prepare the HDR graph.');
+    const route=this.$('mode').value==='native'?'/zura/studio/hdr/native-graph':'/zura/studio/hdr/graph';
+    const prepared=await this.request(route,aeFrameRequest(this,{source_kind:sourceKind,source_id:sourceId,output_ref:this.outputRef,project_id:asset?.projectId,start_frame:Number(this.$('start').value),frame_count:Number(this.$('count').value),sequence_fps:Number(this.$('sequence-fps').value),colour_space:this.$('colour').value,output:this.$('output').value,exr_storage:selectedEXRStorage(this.outputSettings,this.$('output').value),custom_loras:this.loras.value()}));
+    const graph=await prepareAEFrameGraph(this,prepared.graph);
+    await openStudioGraph(studio,graph.graph,'Convert to HDR · Current settings','hdr');
+  }
   async start(){
     if(this.starting)return;
     if(this.longClient.busy){this.longUpdate({state:'reconnecting'});void this.longClient.resume();return;}
@@ -363,8 +374,10 @@ export class HDRSourceTool {
       if(longer){await this.longClient.start(aeFrameRequest(this,{mode:this.$('mode').value,source_kind:actualKind,source_id:sourceId,output_ref:this.outputRef,project_id:asset?.projectId,start_frame:start,frame_count:count,sequence_fps:Number(this.$('sequence-fps').value),colour_space:this.$('colour').value,output:this.$('output').value,exr_storage:selectedEXRStorage(this.outputSettings,this.$('output').value),section_frames:this.$('mode').value==='native'?Number(this.$('sections').value):121,custom_loras:this.loras.value(),client_id:this.api.clientId||'zura-hdr'}));return;}
       const route=this.$('mode').value==='native'?'/zura/studio/hdr/native-graph':'/zura/studio/hdr/graph';
       const prepared=await this.request(route,aeFrameRequest(this,{source_kind:actualKind,source_id:sourceId,output_ref:this.outputRef,project_id:asset?.projectId,start_frame:start,frame_count:count,sequence_fps:Number(this.$('sequence-fps').value),colour_space:this.$('colour').value,output:this.$('output').value,exr_storage:selectedEXRStorage(this.outputSettings,this.$('output').value),custom_loras:this.loras.value()}));
+      const scope=studioGraphScope(this,'hdr');
       const matched=await prepareAEFrameGraph(this,prepared.graph);const queued=await this.request('/prompt',{prompt:matched.graph,client_id:this.api.clientId||'zura-hdr',...(matched.config.ae_frame_contract?{extra_data:{ae_frame_contract:matched.config.ae_frame_contract}}:{})});
       if(!queued.prompt_id)throw new Error('ComfyUI did not accept the HDR conversion.');
+      rememberStudioGraph(this,'hdr',matched.graph,queued.prompt_id,scope);this.lastGraphPrompt=queued.prompt_id;
       this.job=queued.prompt_id;this.currentNode=null;try{this.storage.setItem('zura-hdr-active-job',this.job);}catch{}this.$('cancel').hidden=false;this.status('Queued · waiting for ComfyUI…');this.poll();
     }catch(error){this.status(error.message);this.finish();}
   }
@@ -372,7 +385,7 @@ export class HDRSourceTool {
   longUpdate(job){
     const state=job.state,previousPrompt=this.longPrompt,previousState=this.longState;this.busy=!['complete','cancelled','failed','unknown'].includes(state);this.loras.setBusy(this.busy);
     this.$('start-job').disabled=this.busy;this.$('cancel').hidden=!this.busy||!this.longClient.id;this.$('cancel').disabled=state==='cancelling';
-    this.longPrompt=job.active_prompt_id||null;
+    this.longPrompt=job.active_prompt_id||null;if(this.longPrompt)this.lastGraphPrompt=this.longPrompt;
     this.longState=state;
     this.longSection=Number.isInteger(job.total)&&job.total>0?`Segment ${Math.min(job.completed+1,job.total)} of ${job.total}`:null;
     if(state==='complete'){

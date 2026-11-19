@@ -500,3 +500,52 @@
 #genj-studio :is(.zplate-canvas-shell,.zplate-sidebar) .zp-editor-layer-adjustments label>span{min-width:0}
 #genj-studio :is(.zplate-canvas-shell,.zplate-sidebar) .zp-editor-layer-adjustments input[type=range]{width:100%;height:16px;min-height:0;margin:0;padding:0;align-self:center}
 #genj-studio :is(.zplate-canvas-shell,.zplate-sidebar) .zp-editor-layer-adjustments output{min-width:0;margin:0;line-height:16px}
+
+/* Independent mask tracks share the ruler's source-frame axis. */
+#genj-studio .zplate-surface .zp-editor-mask-lanes{display:flex;flex-direction:column;gap:4px;max-height:min(180px,24dvh);overflow-y:auto;overflow-x:hidden;padding:8px 0;scrollbar-width:thin}
+#genj-studio .zplate-surface .zp-editor-mask-lanes[hidden]{display:none}
+#genj-studio .zplate-surface .zp-editor-mask-row{position:relative;display:block;flex:none;min-height:30px;margin:0 48px}
+#genj-studio .zplate-surface .zp-editor-mask-lane{height:30px;min-height:30px;width:100%}
+#genj-studio .zplate-surface .zp-editor-mask-bar{height:30px}
+#genj-studio .zplate-surface .zp-editor-mask-remove{position:absolute;right:-36px;top:1px;width:28px;height:28px;min-height:28px;padding:4px}
+#genj-studio .zplate-surface .zp-editor-mask-bar__select{font-size:11px}
+
+@media(max-height:780px){#genj-studio .zplate-surface .zp-editor-mask-lanes{max-height:72px;padding-block:4px;scrollbar-width:none}#genj-studio .zplate-surface .zp-editor-mask-lanes::-webkit-scrollbar{display:none}}
+
+/* Frame actions sit above the selected card, outside timeline clipping. */
+.zp-frame-actions-popover {
+  position: fixed;
+  inset: auto;
+  z-index: 200;
+  width: min(206px, calc(100vw - 16px));
+  margin: 0;
+  padding: 5px;
+  box-sizing: border-box;
+  border: 1px solid var(--gs-line);
+  border-radius: 9px;
+  background: var(--gs-panel);
+  color: var(--zc-text);
+  box-shadow: var(--gs-floating-shadow) 0 8px 24px;
+}
+.zp-frame-actions-popover[hidden] { display: none; }
+.zp-frame-actions-popover .zp-frame-action {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  min-height: 34px;
+  padding: 6px 9px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+.zp-frame-action svg { width: 15px; height: 15px; flex: none; color: var(--gs-muted); }
+.zp-frame-action:first-child svg { color: var(--gs-accent); }
+.zp-frame-actions-popover .zp-frame-action:hover { background: var(--zc-hover); }
+.zp-frame-action:focus-visible { outline: 2px solid var(--gs-focus); outline-offset: -2px; }
+@media (pointer: coarse) { .zp-frame-actions-popover .zp-frame-action { min-height: 44px; } }

@@ -93,7 +93,7 @@ export function buildRippleStudioGraph(c,info={}){
   n('sampler','KSamplerSelect',{sampler_name:'lcm'},'Preparing sampler');
   n('sigmas','BasicScheduler',{model:r('attention'),scheduler:'simple',steps:6,denoise:1},'Preparing six sampling steps');
   n('guider','BasicGuider',{model:r('attention'),conditioning:r('apply')},'Preparing H3 guidance');
-  n('sample','SamplerCustomAdvanced',{noise:r('noise'),guider:r('guider'),sampler:r('sampler'),sigmas:r('sigmas'),latent_image:r('apply',1)},'Propagating edits through the clip');
+  n('sample','SamplerCustomAdvanced',{noise:r('noise'),guider:r('guider'),sampler:r('sampler'),sigmas:r('sigmas'),latent_image:r('apply',1)},c.plateAction==='paint'?'Adding the object throughout your clip':c.plateAction==='replace'?'Replacing the object throughout your clip':'Propagating edits through the clip');
   n('decode','VAEDecode',{samples:r('sample'),vae:r('video_vae')},'Decoding the video');
   n('save','ZuraPaintoutUncrop',{decoded_crop:r('decode'),plate:r('source',2),output_name:c.savePrefix||'ZURA STUDIO/ripple',precision:'float32',match_context:false,export_format:'SDR video',motion_preview:true},'Restoring source size, frame rate and audio');
   return applyAvailableAttention(graph,info);

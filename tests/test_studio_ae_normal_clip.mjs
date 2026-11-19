@@ -36,7 +36,7 @@ function maskViewer(){
 function paintout(Workspace=PaintoutWorkspace){
   const page=document.createElement('section');page.innerHTML='<div class="zf-viewer"></div>';
   const fields=new Map(),events=[],nativeMask=maskViewer();
-  const field=id=>{if(!fields.has(id)){const node=document.createElement(['colour','processing','output'].includes(id)?'select':'div');if(id==='colour')node.innerHTML='<option value="auto">Auto</option><option value="srgb_display">sRGB</option>';if(id==='processing')node.innerHTML='<option>SDR (sRGB)</option><option>HDR (ACEScct)</option>';if(id==='output')node.innerHTML='<option>SDR video</option><option>EXR + HLG video</option>';node.pause=()=>{};fields.set(id,node);page.append(node);}return fields.get(id);};
+  const field=id=>{if(!fields.has(id)){const node=document.createElement(['colour','processing','output'].includes(id)?'select':id==='video'?'video':'div');if(id==='video'){Object.assign(node,{readyState:2,videoWidth:512,videoHeight:320});Object.defineProperty(node,'src',{get(){return this.getAttribute('src');},set(src){this.setAttribute('src',src);}});}if(id==='colour')node.innerHTML='<option value="auto">Auto</option><option value="srgb_display">sRGB</option>';if(id==='processing')node.innerHTML='<option>SDR (sRGB)</option><option>HDR (ACEScct)</option>';if(id==='output')node.innerHTML='<option>SDR video</option><option>EXR + HLG video</option>';node.pause=()=>{};fields.set(id,node);page.append(node);}return fields.get(id);};
   const w=Object.assign(Object.create(Workspace.prototype),{page,storage:store,loras:{value:()=>[],setBusy(){}},state:{source:'',mode:'targeted',anchors:[],sourceColour:'auto'},sourceInfo:null,playhead:0,modelInfo:{},busy:()=>false,$:field,url:path=>path,render(){},save(){},renderAnchors(){},changed(){},message(text){this.lastMessage=text;},requestError:error=>error.message,
     pick:async()=>{events.push('picker');return [media.path];},info:async()=>{events.push('probe');return media;}});
   const editor=Object.assign(Object.create(PaintoutEditor.prototype),{w,stage:'trim',active:false,sequence:0,previewSequence:0,maskEditVersion:0,viewer:nativeMask.viewer,
@@ -73,7 +73,7 @@ for(const Workspace of [PaintoutWorkspace,WatermarkWorkspace]){
   assert.equal(received.w.sourceInfo,media,'Native inspection metadata is not rewritten');
   assert.deepEqual(received.events,manual.events.filter(event=>!['picker','probe'].includes(event)),'The prepared real clip skips only the picker/probe');
   assert.equal(received.w.state.source,media.path);assert.equal(received.w.state.clipTrimConfirmed,false);assert.equal(received.w.state.editorStage,'trim');
-  assert.equal(received.w.$('video').src,asset.preview_url,'The ordinary HTML player uses the normal browser proxy');
+  assert.equal(received.w.$('video').getAttribute('src'),asset.preview_url,'The ordinary HTML player uses the normal browser proxy');
   assert.equal(received.w.$('video').hidden,false);assert.equal(received.w.aeFrameBase,undefined,'The held raw return does not constrain normal processing');
   await received.w.editor.confirmClipTrim();assert.equal(received.w.editor.stage,'mask');assert.equal(received.w.editor.active,true);
   assert.match(received.nativeMask.viewer.loadedURL,/space=srgb_display/);assert.ok(received.nativeMask.viewer.image,'The native editor receives its real frame');

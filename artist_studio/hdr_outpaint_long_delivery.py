@@ -7,7 +7,7 @@ from .hdr_chunk_store import HDRChunkCancelled
 
 
 class HeldHDRStage:
-    """Append the final composed frame to an 8n+1 delivery length."""
+    """Append the final generated frame to an 8n+1 delivery length."""
     def __init__(self, staged):
         if not staged.plan:
             raise ValueError('No HDR sections are available for delivery.')
@@ -22,7 +22,7 @@ class HeldHDRStage:
     def stitched(self):
         seen = 0
         last = None
-        for batch in self.staged.stitched():
+        for batch in self.staged.stitched(strategy='cut'):
             if self.cancelled.is_set(): raise HDRChunkCancelled('HDR conversion cancelled.')
             if len(batch):
                 seen += len(batch)
@@ -37,7 +37,7 @@ class HeldHDRStage:
 
 async def export_long_hdr_outpaint(staged, output_root, prefix, *, source_path, has_audio,
                                    start_seconds, source_duration=None, ffmpeg=None, exr_storage="half"):
-    """Export HLG, ACEScg EXR and an SDR preview; publish only on success."""
+    """Export ProRes 4444, ACEScg EXR and an SDR preview; publish only on success."""
     from .hdr_chunk_exr import export_exr_zip
     from .hdr_chunk_video import export_hlg_video
     from .hdr_chunk_preview import export_sdr_preview

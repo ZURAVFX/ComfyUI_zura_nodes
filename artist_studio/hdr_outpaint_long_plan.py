@@ -136,11 +136,7 @@ def build_long_hdr_review_window(source, full_selection, sub_selection, *, revie
 def build_long_hdr_conversion_window(source, full_selection, sub_selection, intermediate, *, review_key,
                                      prompt_start_frame, seed=42, prefix='hdr_outpaint_long',
                                      check_asset=lambda asset: None):
-    """Convert one assembled SDR range and restore its native HDR centre.
-
-    The range starts at an output-relative frame. A separate chunk coordinator
-    stages and blends the resulting ACEScct frames before final export.
-    """
+    """Convert one assembled SDR range for direct HDR delivery."""
     from .hdr_studio import build_hdr_graph
     from .hdr_outpaint_experiment import _reviewed_sdr_first_selection, hdr_review_key
     values=long_plan_values(full_selection)
@@ -152,22 +148,8 @@ def build_long_hdr_conversion_window(source, full_selection, sub_selection, inte
     index = next((i for i, sub in enumerate(subplans) if sub == sub_selection), None)
     if index is None or parts[index].start != prompt_start_frame:
         raise ValueError('This section does not belong to the reviewed HDR selection.')
-    validated, path = _reviewed_sdr_first_selection(source, sub_selection,
+    validated, _ = _reviewed_sdr_first_selection(source, sub_selection,
         hdr_review_key(sub_selection, expected['colour_space']), expected['colour_space'], check_asset)
-    graph = build_hdr_graph(source=intermediate, start_frame=prompt_start_frame,
+    return build_hdr_graph(source=intermediate, start_frame=prompt_start_frame,
         frame_count=validated['frames'], fps=24., colour_space='srgb_display',
         output='hlg_and_exr', prefix=prefix, has_audio=False, seed=seed,_source_detail=False)
-    graph['native_original'] = {'class_type':'ZuraHDRSelectNativeTimeline','inputs':{
-        'source':path, 'start_seconds':validated['start'], 'frame_count':validated['frames'],
-        'output_fps':24., 'colour_space':expected['colour_space'], 'sequence_fps':24.}}
-    graph['native_canvas'] = {'class_type':'ZuraLTXOutpaintHDRCanvas','inputs':{
-        'images':['native_original',0], 'mode':validated['mode'], 'width':validated['padded_width'],
-        'height':validated['padded_height'], 'left':validated['left'], 'top':validated['top'],
-        'right':validated['right'], 'bottom':validated['bottom'], 'black_threshold':validated['black_threshold']}}
-    graph['final_hdr_composite'] = {'class_type':'ZuraHDRCompositeOutpaint','inputs':{
-        'generated':['hdr_unpad_raster',0], 'source':['native_canvas',0], 'mask':['native_canvas',1],
-        'feather':16, 'colour_match':1.0}}
-    if validated['mode'] == 'black':
-        from .hdr_outpaint_experiment import crop_black_hdr_composite
-        crop_black_hdr_composite(graph, validated['width'], validated['height'])
-    return graph

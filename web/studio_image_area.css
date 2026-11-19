@@ -1,9 +1,6 @@
-/* Optional edit selection; keep Studio's preview and quiet composer intact. */
-#genj-studio .zc-edit-main>:is(.zia-open,.zia-guide-open){flex:0 0 auto;white-space:nowrap;min-height:44px;border:1px solid var(--gs-accent)!important;background:var(--gs-selected)!important;color:var(--zc-text)!important;font-weight:600;gap:9px}
+/* Paint inputs use the same attachment treatment as the main image. */
 #genj-studio :is(.zia-open,.zia-guide-open)>svg{width:16px;height:16px;flex:none}
-#genj-studio .zc-edit-main>:is(.zia-open,.zia-guide-open)[aria-pressed=true]{background:var(--gs-accent)!important;color:var(--gs-ink)!important}
-#genj-studio .zc-edit-main>:is(.zia-open,.zia-guide-open):hover:not(:disabled){background:var(--gs-accent)!important;color:var(--gs-ink)!important}
-#genj-studio .zc-edit-main>:is(.zia-open,.zia-guide-open):disabled{opacity:.55}
+#genj-studio[data-workspace] :is(.zia-open,.zia-guide-open).is-painted{border-style:solid;background:var(--gs-selected)}
 #genj-studio[data-workspace=image] .zc-image-scroll:has(>.zia-editor:not([hidden])){display:flex;flex-direction:column;flex:1 0 auto;min-height:calc(var(--zs-preview-min,256px) + 48px);overflow:visible}
 #genj-studio[data-workspace=image] .zc-image-scroll:has(>.zia-editor:not([hidden]))>.zc-image-heading{flex:none}
 #genj-studio .zia-editor{grid-row:2;grid-column:1;flex:1 0 auto;min-width:0;min-height:0;display:grid;grid-template-rows:minmax(var(--zs-preview-min,256px),1fr) auto auto;overflow:visible;background:var(--zc-canvas,#101013)}
@@ -76,3 +73,26 @@
 #genj-studio .zia-toolbar .zia-brush-wide output{display:none}
 #genj-studio .zia-toolbar .zia-brush-wide .pap-brush-number{box-sizing:border-box;width:64px;min-height:36px;padding:6px;border:1px solid var(--gs-line);border-radius:5px;background:var(--gs-input);color:var(--zc-text);font:inherit;text-align:center}
 #genj-studio .zia-toolbar .zia-brush-wide input[type=range]:focus-visible{outline:2px solid var(--gs-accent);outline-offset:3px}
+
+/* Normal image selection: one rail, one mode/size row, one finish action. */
+#genj-studio .zia-editor.zia-unified-layout:has(>.zia-paint-rail:not(:empty)){grid-template-columns:112px minmax(0,1fr);grid-template-rows:minmax(260px,1fr) auto auto;box-sizing:border-box;width:100%;border:1px solid var(--gs-line);border-radius:8px}
+#genj-studio .zia-unified-layout>.zia-paint-rail{padding:8px;border-radius:8px 0 0 8px}
+#genj-studio .zia-unified-layout>.zia-paint-rail .zia-tools>button{gap:6px;justify-content:flex-start;padding:6px;font-size:11px;line-height:16px;white-space:nowrap}
+#genj-studio .zia-unified-layout>.zia-paint-rail .zia-tools>button svg{width:18px;height:18px;flex:none}
+#genj-studio .zia-unified-layout>.zia-paint-rail .pap-swatches{grid-template-columns:repeat(5,minmax(0,1fr));gap:4px}
+#genj-studio .zia-unified-layout>.zia-paint-rail .pap-swatches button{height:24px;min-height:24px}
+#genj-studio .zia-unified-layout>.zia-stage{border-radius:0 8px 0 0}
+#genj-studio .zia-unified-layout>.zia-toolbar{box-sizing:border-box;display:flex;align-items:center;flex-wrap:wrap;gap:8px 16px;width:100%;padding:12px;border-top:1px solid var(--gs-line);background:var(--gs-panel)}
+#genj-studio .zia-unified-layout .zia-editor-title{flex:0 0 auto;margin:0;font-size:12px;font-weight:500;line-height:20px}
+#genj-studio .zia-unified-layout .zia-toolbar .zia-brush-wide{flex:1 1 220px;display:grid;grid-template-columns:auto minmax(72px,1fr) 56px;gap:8px;max-width:320px;min-width:0;margin:0;padding:0}
+#genj-studio .zia-unified-layout .zia-toolbar .zia-brush-wide input[type=range]{width:100%;min-width:0;height:28px}
+#genj-studio .zia-unified-layout .zia-toolbar .zia-brush-wide .pap-brush-number{width:56px;min-height:32px;padding:4px}
+#genj-studio .zia-finish-actions{display:flex;align-items:center;justify-content:flex-end;gap:8px;min-width:0;margin-left:auto}
+#genj-studio .zia-unified-layout .zia-finish-actions :is(button,summary){min-height:32px;padding:6px 10px;font-size:12px;white-space:nowrap}
+#genj-studio .zia-unified-layout .zia-finish-actions .zia-done{min-width:64px}
+#genj-studio .zia-unified-layout>.zia-status{padding:4px 12px 8px;background:var(--gs-panel);border-radius:0 0 8px 0}
+#genj-studio .zia-unified-layout>.zia-status:empty{display:none}
+@media(max-width:700px){#genj-studio .zia-editor.zia-unified-layout:has(>.zia-paint-rail:not(:empty)){grid-template-columns:100px minmax(0,1fr);grid-template-rows:minmax(220px,1fr) auto auto}#genj-studio .zia-unified-layout>.zia-paint-rail{padding:6px}#genj-studio .zia-unified-layout>.zia-paint-rail .zia-tools>button{padding:6px 3px;font-size:10px;gap:4px}#genj-studio .zia-unified-layout .zia-toolbar{padding:8px;gap:8px}#genj-studio .zia-unified-layout .zia-toolbar .zia-brush-wide{flex-basis:100%;max-width:none;order:2}#genj-studio .zia-unified-layout .zia-finish-actions{flex-basis:100%;order:3;margin:0}#genj-studio .zia-unified-layout .zia-finish-actions :is(button,summary){min-height:36px;padding-inline:8px}}
+
+#genj-studio .zc-image-main:has(.zia-unified-layout:not([hidden]))>.zc-image-composer{box-sizing:border-box;width:min(var(--zc-video-width,1200px),100%);max-width:var(--zc-video-width,1200px);align-self:center;margin-inline:auto}
+#genj-studio .zia-unified-layout .zia-options:not([open])>.zia-options-panel{display:none}

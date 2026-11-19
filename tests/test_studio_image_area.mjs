@@ -16,7 +16,7 @@ area=new ImageEditArea(owner);
 let disposed=0;
 const viewer=()=>({maskPresent:false,history:[1],root:document.createElement('div'),width:1920,height:1080,
   maskCanvas:{width:1920,height:1080,toBlob(callback){callback(new Blob(['mask'],{type:'image/png'}));}},
-  measureMask(){return this.maskPresent;},setBrushSize(){},setTool(tool){this.tool=tool;},fit(){},undo(){this.history.pop();},clear(){this.maskPresent=false;area.changed();},dispose(){disposed++;}});
+  measureMask(){return this.maskPresent;},setBrushSize(){},setTool(tool){this.tool=tool;},fit(){},undo(){this.history.pop();},clear(kind){if(kind!=='guide')this.maskPresent=false;if(kind!=='area')this.sketchPresent=false;area.changed({kind});},dispose(){disposed++;}});
 area.loadViewer=async()=>{area.viewer=viewer();area.loading.hidden=true;area.refreshTools();};
 
 assert.equal(imageAreaSourceKey(main),'zura_images/references/original.png');
@@ -25,7 +25,11 @@ area.sync();assert.equal(area.button.hidden,false);assert.equal(area.config(),nu
 {
   const home=area.tools.parentElement,rail=document.createElement('nav');root.append(rail);rail.append(area.tools);area.inline=true;
   assert.doesNotThrow(()=>area.sync(),'Video inline mode keeps using the relocated toolbar controller');
-  area.setPaintAPlateMode(true);area.sync();
+  area.paintPalette.hidden=true;area.colour.closest('label').hidden=true;
+  area.setPaintAPlateMode(true);
+  assert.equal(area.paintPalette.hidden,false,'Entering video paint immediately reveals the shared swatches');
+  assert.equal(area.colour.closest('label').hidden,false,'The custom picker follows the swatches');
+  area.sync();
   assert.equal(area.tools.querySelector('[data-area-tool=draw]').hidden,false,'Paint stays available on the Add rail');
   assert.equal(area.tools.querySelector('[data-area-tool=brush]').hidden,true,'Add paints directly without a separate area-selection tool');
   assert.equal(area.tools.querySelector('.zia-colour').hidden,false,'Add keeps the paint colour picker visible');
@@ -34,17 +38,17 @@ area.sync();assert.equal(area.button.hidden,false);assert.equal(area.config(),nu
 assert.equal(area.button.textContent,'Paint area to edit');
 assert.ok(area.button.querySelector('svg'),'Paint action has a brush icon');
 assert.equal(area.button.getAttribute('aria-label'),'Paint area to edit');
-assert.equal(area.button.parentElement,owner.$('reference-list').querySelector('.zc-edit-main'),'Paint entry sits beside the main image and references');
-assert.ok(area.button.nextElementSibling.matches('.zi-references'),'Paint action sits immediately beside the main image, before optional references');
-assert.ok(area.guideButton.previousElementSibling.matches('.zi-references'),'Paint guidance is a separate image input, outside Paint Area');
+assert.equal(area.areaAttachment.slot.parentElement,owner.$('reference-list').querySelector('.zc-edit-main'),'Paint entry sits beside the main image and references');
+assert.ok(area.areaAttachment.slot.nextElementSibling.matches('.zi-references'),'Paint action sits immediately beside the main image, before optional references');
+assert.ok(area.guideAttachment.slot.previousElementSibling.matches('.zi-references'),'Paint guidance is a separate image input, outside Paint Area');
 assert.equal(area.button.disabled,false);
 const entry=area.button;
 owner.$('reference-list').innerHTML='<div class="zc-edit-main"><button>Main image</button><details class="zi-references"><summary>References</summary></details></div>';
 assert.equal(entry.isConnected,false,'Rebuilding image inputs detaches the old entry');
-area.sync();assert.equal(area.button,entry);assert.equal(entry.parentElement,owner.$('reference-list').firstElementChild,'Input rebuild remounts the same live paint control');assert.ok(entry.nextElementSibling.matches('.zi-references'));
+area.sync();assert.equal(area.button,entry);assert.equal(area.areaAttachment.slot.parentElement,owner.$('reference-list').firstElementChild,'Input rebuild remounts the same live paint control');assert.ok(area.areaAttachment.slot.nextElementSibling.matches('.zi-references'));
 assert.equal(root.querySelectorAll('.zia-open').length,1,'Rendering never duplicates the paint entry');
-owner.$('reference-list').replaceChildren();area.sync();assert.equal(entry.parentElement,root.querySelector('.zc-image-tools'),'A minimal or rebuilding view retains its header fallback');
-owner.$('reference-list').innerHTML='<div class="zc-edit-main"><button>Main image</button><details class="zi-references"><summary>References</summary></details></div>';area.sync();assert.equal(entry.parentElement,owner.$('reference-list').firstElementChild);
+owner.$('reference-list').replaceChildren();area.sync();assert.equal(area.areaAttachment.slot.parentElement,root.querySelector('.zc-image-tools'),'A minimal or rebuilding view retains its header fallback');
+owner.$('reference-list').innerHTML='<div class="zc-edit-main"><button>Main image</button><details class="zi-references"><summary>References</summary></details></div>';area.sync();assert.equal(area.areaAttachment.slot.parentElement,owner.$('reference-list').firstElementChild);
 owner.editMainMissing=true;area.sync();assert.equal(entry.hidden,false,'Edit mode advertises painting before an image is added');assert.equal(entry.disabled,true);assert.equal(entry.title,'Add a main image first');
 entry.click();assert.equal(area.state.enabled,false,'A missing main image cannot open an edit selection');
 owner.editMainMissing=false;area.sync();assert.equal(entry.disabled,false);
@@ -104,12 +108,13 @@ assert.equal(area.host.querySelector('.zia-toolbar').hidden,true);
 owner.editInputs.showSource=false;area.sync();assert.equal(area.host.hidden,true,'A source mask must not overlay a generated result');
 owner.editInputs.showSource=true;area.useWholeImage();assert.equal(area.host.hidden,true,'Whole image removes preview');
 const {selectionPreviewPixels}=await import('../web/studio_image_area_preview.js');
-const input=new Uint8ClampedArray(5*5*4);for(let y=1;y<4;y++)for(let x=1;x<4;x++)input[(y*5+x)*4]=255;
-const maskBefore=input.slice(),preview=selectionPreviewPixels(input,5,5);
-assert.equal(preview[(2*5+2)*4+3],26,'Interior uses quiet tint');
-assert.equal(preview[(1*5+2)*4+3],230,'Visible boundary follows mask pixels');
-assert.equal(preview[3],0,'Outside the region remains transparent');assert.deepEqual(input,maskBefore,'Preview never mutates the inference mask');
-input[(2*5+2)*4]=0;assert.equal(selectionPreviewPixels(input,5,5)[(2*5+1)*4+3],230,'Internal holes have a visible boundary');
+const input=new Uint8ClampedArray(17*17*4);for(let y=2;y<15;y++)for(let x=2;x<15;x++)input[(y*17+x)*4]=255;
+const maskBefore=input.slice(),preview=selectionPreviewPixels(input,17,17);
+assert.equal(preview[(8*17+8)*4+3],200,'Interior produces about 35% visible fill at default .45 opacity');
+assert.deepEqual([...preview.slice((2*17+8)*4,(2*17+8)*4+4)],[255,255,255,255],'High-contrast boundary follows the source mask');
+assert.equal(preview[3],0);assert.deepEqual(input,maskBefore,'Display construction never mutates the inference mask');
+input[(8*17+8)*4]=0;assert.equal(selectionPreviewPixels(input,17,17)[(8*17+7)*4+3],255,'Internal holes have a visible boundary');
+const zoomed=selectionPreviewPixels(maskBefore,17,17,{scale:.25});assert.equal(zoomed[(6*17+8)*4+3],255,'Boundary expands in source pixels when zoomed out');
 console.log('Image selection: retained source preview, result isolation and exact raster boundary pass.');
 
 
@@ -167,6 +172,23 @@ ImageEditArea.prototype.installSelectionPreview.call({owner:{root:{ownerDocument
 assert.deepEqual(normalPaints.slice(0,2),['source-raster','saved-coloured-strokes'],'Closed normal Image Edit keeps the actual saved coloured drawing through native viewer draw');
 assert.equal(normalPaints.at(-1),displayCanvas,'Exact ROI is a separate display layer');
 assert.equal(normalViewer.opacity,.5,'Readonly compositing preserves user opacity');
+
+// An unavailable display raster must not leak canvas alpha/smoothing into the next frame.
+const throwingContext=()=>({globalAlpha:.37,imageSmoothingEnabled:true,stack:[],fail:false,
+  save(){this.stack.push([this.globalAlpha,this.imageSmoothingEnabled]);},
+  restore(){[this.globalAlpha,this.imageSmoothingEnabled]=this.stack.pop();},
+  drawImage(){if(this.fail)throw Error('Unavailable display raster');}});
+const selectionFailureCtx=throwingContext();selectionFailureCtx.fail=true;
+const selectionFailureViewer={...normalViewer,ctx:selectionFailureCtx,draw(){}};
+assert.throws(()=>ImageEditArea.prototype.installSelectionPreview.call({owner:{root:{ownerDocument:{createElement:()=>displayCanvas}}},state:{enabled:true},isCurrent:()=>true},selectionFailureViewer),/Unavailable display raster/);
+assert.equal(selectionFailureCtx.globalAlpha,.37);assert.equal(selectionFailureCtx.imageSmoothingEnabled,true);assert.equal(selectionFailureCtx.stack.length,0);
+assert.equal(selectionFailureViewer.opacity,.5,'A failed selection draw preserves the viewer opacity');
+const shotFailureCtx=throwingContext(),shotFailureViewer={width:1,height:1,opacity:.45,ctx:shotFailureCtx,transform:()=>({x:0,y:0,scale:1}),draw(){}};
+installShotSelectionPreview(shotFailureViewer,()=>({key:'throwing-display',mask:{file:'kept-mask'}}),async()=>({selection:'display-only-selection',sketch:'display-only-guide'}));
+shotFailureViewer.draw();await new Promise(resolve=>setImmediate(resolve));shotFailureCtx.fail=true;
+assert.throws(()=>shotFailureViewer.draw(),/Unavailable display raster/);
+assert.equal(shotFailureCtx.globalAlpha,.37);assert.equal(shotFailureCtx.imageSmoothingEnabled,true);assert.equal(shotFailureCtx.stack.length,0);
+console.log('Display overlay draw errors propagate after restoring canvas alpha and smoothing.');
 
 // Exercise normal controller render ordering, including its real resultKey logic.
 const {ImageEditInputs}=await import('../web/studio_image_edit_inputs.js');
@@ -246,4 +268,18 @@ assert.equal(composited[0],guideViewer.image,'The guidance composite uses the or
 assert.equal(composited[1],guideViewer.sketchCanvas);
 area.finishEditor({render:false});assert.equal(area.config().guide.file,guideOnly.guide.file);
 area.restore(guideOnly);assert.equal((await area.prepare()).guide.file,guideOnly.guide.file,'A reopened guide-only edit retains its model input');
+const mask={file:'retained-mask.png',filename:'retained-mask.png'};
+area.restore({...guideOnly,enabled:true,mask});
+area.sync();
+assert.equal(area.areaAttachment.remove.hidden,false);
+assert.equal(area.guideAttachment.remove.hidden,false);
+area.guideAttachment.remove.click();
+assert.equal(area.state.sketch,null);
+assert.equal(area.config().guide,null);
+assert.equal(area.config().mask.file,mask.file,'Deleting guidance preserves the edit area');
+area.restore({...guideOnly,enabled:true,mask});
+area.sync();
+area.areaAttachment.remove.click();
+assert.equal(area.config().mask,null);
+assert.equal(area.config().guide.file,guideOnly.guide.file,'Deleting the edit area preserves guidance');
 console.log('Guide-only painting: independent upload, original-pixel composite and restore pass.');

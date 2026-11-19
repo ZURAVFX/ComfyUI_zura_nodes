@@ -2,6 +2,7 @@
  * UI craft follows Unslop by Damir Sokolovsky (@heydamir), CC BY 4.0.
  * https://github.com/heydamir/unslop
  */
+import {removableAttachment} from './studio_composer_patterns.js';
 import {selectionPreviewPixels} from './studio_image_area_preview.js';
 import {PaintoutMaskViewer} from './paintout_studio/paintout_viewer.js';
 import {installImagePaintControls} from './studio_paint_toolbar.js';
@@ -51,10 +52,12 @@ export class ImageEditArea {
     this.guideButton=doc.createElement('button');this.guideButton.type='button';this.guideButton.className='zia-guide-open zc-attachment';this.guideButton.innerHTML=`${brushIcon}<span>Paint guidance</span>`;
     this.guideButton.title='Draw what the model should make, independently of the edit area';this.guideButton.setAttribute('aria-label','Paint guidance');
     owner.root.querySelector('.zc-image-tools').append(this.guideButton);this.guideButton.addEventListener('click',()=>this.openEditor('draw'));
+    this.areaAttachment=removableAttachment(this.button,'Remove painted area',()=>this.clearAttachment('area'));
+    this.guideAttachment=removableAttachment(this.guideButton,'Remove painted guidance',()=>this.clearAttachment('guide'));
     this.host=doc.createElement('section');this.host.className='zia-editor';this.host.hidden=true;this.host.setAttribute('aria-label','Image edit area');
     this.host.innerHTML=`<div class="zia-stage"><div class="zia-viewer-host"></div><div class="zia-loading" role="status">Loading image…</div></div>
       <div class="zia-toolbar"><strong class="zia-editor-title">Paint area</strong><div class="zia-tools" role="group" aria-label="Painting tools">
-        <button type="button" data-area-tool="draw" aria-pressed="false">Draw guide</button><label class="zia-colour">Colour <input type="color" value="#ff6347" aria-label="Drawing colour"></label><button type="button" data-area-tool="brush" aria-pressed="true">Select area</button><button type="button" data-area-tool="protect" aria-pressed="false">Erase</button><button type="button" data-area-tool="pan" aria-pressed="false">Pan</button>
+        <button type="button" data-area-tool="draw" aria-pressed="false">Draw guide</button><label class="zia-colour">Custom <input type="color" value="#ff6347" aria-label="Drawing colour"></label><button type="button" data-area-tool="brush" aria-pressed="true">Select area</button><button type="button" data-area-tool="protect" aria-pressed="false">Erase</button><button type="button" data-area-tool="pan" aria-pressed="false">Pan</button>
         <label class="zia-brush">Size <input type="range" min="1" max="1000" value="96" aria-label="Brush size in source pixels"><output>96 px</output></label>
         <button type="button" data-area-action="undo">Undo</button><button type="button" data-area-action="clear">Clear</button><button type="button" data-area-action="fit">Fit</button></div>
         <details class="zia-options"><summary>Blend</summary><div class="zia-options-panel"><label>Surrounding context <input type="number" min="0" max="512" step="1" data-area-context></label><label>Edge softness <input type="number" min="0" max="128" step="1" data-area-feather></label><p>Context helps the model match the scene. Only the painted area is changed.</p></div></details>
@@ -77,9 +80,22 @@ export class ImageEditArea {
     this.host.querySelector('[data-area-action=done]').addEventListener('click',()=>this.finishEditor());
     const rail=doc.createElement('aside');rail.className='zia-paint-rail';rail.setAttribute('aria-label','Paint controls');rail.append(this.tools);this.host.prepend(rail);
     installImagePaintControls(this,rail);
+    const toolbar=this.host.querySelector('.zia-toolbar'),actions=doc.createElement('div');actions.className='zia-finish-actions';
+    actions.append(this.host.querySelector('.zia-options'),this.host.querySelector('[data-area-action=whole]'),this.host.querySelector('[data-area-action=done]'));toolbar.append(actions);
+    this.host.classList.add('zia-unified-layout');
   }
   source(){const o=this.owner;return !o.editMainMissing&&o.references?.[0]?.filename?o.references[0]:null;}
-  setPaintAPlateMode(enabled){this.paintAPlateEnabled=enabled===true;this.viewer?.setPaintAPlateMode?.(this.paintAPlateEnabled);for(const node of this.tools.querySelectorAll('[data-area-tool=light],[data-area-action=redo]'))node.hidden=!this.paintAPlateEnabled;}
+  setPaintAPlateMode(enabled){
+    this.paintAPlateEnabled=enabled===true;
+    this.viewer?.setPaintAPlateMode?.(this.paintAPlateEnabled);
+    for(const node of this.tools.querySelectorAll('[data-area-tool=light],[data-area-action=redo]'))node.hidden=!this.paintAPlateEnabled;
+    this.syncPaintColour();
+  }
+  syncPaintColour(){
+    const hidden=!this.paintAPlateEnabled&&this.editorMode!=='guide';
+    this.colour.closest('label').hidden=hidden;
+    this.paintPalette.hidden=hidden;
+  }
   busy(){const o=this.owner;return !!(o.job||o.pendingSubmission||o.submitting||o.uploading||this.preparing);}
   currentKey(){return imageAreaSourceKey(this.source());}
   isCurrent(key=this.state.source_key){return !!key&&this.currentKey()===key;}
@@ -108,25 +124,37 @@ export class ImageEditArea {
     // Input rendering may rebuild this group. Keep one entry point beside the
     // main image and its references rather than losing it with the old nodes.
     const controls=o.$('reference-list')?.querySelector('.zc-edit-main')||o.root.querySelector('.zc-image-tools');
-    if(controls){const references=controls.querySelector('.zi-references');if(references){controls.insertBefore(this.button,references);controls.insertBefore(this.guideButton,references.nextSibling);}else{if(this.button.parentElement!==controls)controls.append(this.button);if(this.guideButton.parentElement!==controls)controls.append(this.guideButton);}}
+    const areaSlot=this.areaAttachment.slot,guideSlot=this.guideAttachment.slot;
+    if(controls){
+      const references=controls.querySelector('.zi-references');
+      if(references){
+        if(areaSlot.nextElementSibling!==references)references.before(areaSlot);
+        if(guideSlot.previousElementSibling!==references)references.after(guideSlot);
+      }else if(areaSlot.parentElement!==controls)controls.append(areaSlot,guideSlot);
+    }
     if(key!==this.state.source_key){
       clearTimeout(this.saveTimer);this.revision++;this.disposeViewer();this.state=empty(key);this.editing=false;this.dirty=false;this.error='';
     }
-    this.button.hidden=!visible;this.button.disabled=!visible||!source||this.busy();this.button.setAttribute('aria-pressed',String(visible&&!!source&&this.state.enabled));
-    this.guideButton.hidden=!visible;this.guideButton.disabled=!visible||!source||this.busy();this.guideButton.setAttribute('aria-pressed',String(visible&&!!source&&!!this.state.sketch));
-    const label=this.button.querySelector('span');if(label)label.textContent=this.editing&&this.editorMode==='area'?'Painting area…':this.state.mask?'Edit painted area':'Paint area to edit';
+    const hasArea=!!(this.state.mask||this.viewer?.maskPresent),hasGuide=!!(this.state.sketch||this.state.guide||this.viewer?.sketchPresent);
+    for(const [button,attachment,painted] of [[this.button,this.areaAttachment,hasArea],[this.guideButton,this.guideAttachment,hasGuide]]){
+      attachment.slot.hidden=button.hidden=!visible||this.editing;
+      button.disabled=!visible||!source||this.busy();
+      button.classList.toggle('is-painted',painted);
+      button.setAttribute('aria-pressed',String(visible&&!!source&&painted));
+      attachment.remove.hidden=!painted;attachment.remove.disabled=button.disabled||!!this.load;
+    }
+    const label=this.button.querySelector('span');if(label)label.textContent=this.editing&&this.editorMode==='area'?'Painting area…':hasArea?'Edit painted area':'Paint area to edit';
     this.button.setAttribute('aria-label',label?.textContent||'Paint area to edit');
-    const guideLabel=this.guideButton.querySelector('span');if(guideLabel)guideLabel.textContent=this.editing&&this.editorMode==='guide'?'Painting guidance…':this.state.sketch?'Edit guidance':'Paint guidance';
+    const guideLabel=this.guideButton.querySelector('span');if(guideLabel)guideLabel.textContent=this.editing&&this.editorMode==='guide'?'Painting guidance…':hasGuide?'Edit guidance':'Paint guidance';
     this.guideButton.setAttribute('aria-label',guideLabel?.textContent||'Paint guidance');
     this.button.title=source?'Paint the part of the main image the model should change':'Add a main image first';
     const preview=!!(visible&&source&&!this.editing&&this.isCurrent()&&o.editInputs.showSource&&(this.state.enabled&&(this.state.mask||this.dirty&&this.viewer?.maskPresent)||this.state.sketch||this.dirty&&this.viewer?.sketchPresent));
     const show=visible&&!!source&&(this.editing||preview);this.host.hidden=!show;
     this.host.querySelector('.zia-toolbar').hidden=preview;
-    this.host.querySelector('.zia-editor-title').textContent=this.paintAPlateEnabled?(this.viewer?.tool==='brush'?'Select area':'Paint'):this.editorMode==='guide'?'Paint guidance':'Paint area';
+    this.host.querySelector('.zia-editor-title').textContent=({draw:'Paint guidance',light:'Paint light',brush:'Select area',protect:this.editorMode==='guide'?'Erase guidance':'Erase selection',pan:'Pan image'})[this.viewer?.tool]||(this.editorMode==='guide'?'Paint guidance':'Select area');
     this.tools.querySelector('[data-area-tool=draw]').hidden=!this.paintAPlateEnabled&&this.editorMode!=='guide';
     this.tools.querySelector('[data-area-tool=brush]').hidden=this.paintAPlateEnabled&&!this.owner.plate?.propagation?.()||!this.paintAPlateEnabled&&this.editorMode==='guide';
-    this.tools.querySelector('.zia-colour').hidden=!this.paintAPlateEnabled&&this.editorMode!=='guide';
-    for(const swatches of [this.tools.querySelector('.pap-swatches'),this.host.querySelector('.pap-swatches')])if(swatches)swatches.hidden=!this.paintAPlateEnabled&&this.editorMode!=='guide';
+    this.syncPaintColour();
     this.host.querySelector('.zia-options').hidden=this.paintAPlateEnabled||this.editorMode==='guide';
     this.host.querySelector('[data-area-action=whole]').hidden=this.paintAPlateEnabled||this.editorMode==='guide';
     if(this.viewer&&preview&&this.viewer.tool!=='pan')this.viewer.setTool('pan');
@@ -150,7 +178,7 @@ export class ImageEditArea {
     if(!this.host)return;
     const busy=this.busy(),ready=!!this.viewer&&!this.load;
     this.stage.style.pointerEvents=busy?'none':'';
-    for(const element of [...this.host.querySelectorAll('button,input'),...this.tools.querySelectorAll('button,input')])element.disabled=busy||(!ready&&!element.matches('[data-area-action=whole],[data-area-action=done]'));
+    for(const element of new Set([...this.host.querySelectorAll('button,input'),...this.tools.querySelectorAll('button,input'),...this.paintPalette.querySelectorAll('button'),this.colour]))element.disabled=busy||(!ready&&!element.matches('[data-area-action=whole],[data-area-action=done]'));
     // The plate rail stays visible before painting begins. Selecting a tool is
     // the explicit entry into paint mode, rather than opening it on frame load.
     if(this.inline&&!busy&&this.source())for(const button of this.tools.querySelectorAll('[data-area-tool=draw],[data-area-tool=brush]'))button.disabled=false;
@@ -179,9 +207,16 @@ export class ImageEditArea {
     if(this.owner.imageComparison)this.owner.imageComparison.active=false;
     this.editing=false;this.owner.save();if(render)this.owner.render();
   }
-  useWholeImage(){
-    if(this.busy())return;this.state.enabled=false;this.state.mask=null;this.viewer?.clear('area');this.editing=false;this.owner.save();this.owner.render();
+  clearAttachment(kind){
+    if(this.busy()||this.load)return;
+    this.revision++;
+    if(kind==='area'){this.state.enabled=false;this.state.mask=null;}
+    else{this.state.guide=null;this.state.sketch=null;}
+    this.viewer?.clear(kind);
+    this.editing=false;
+    this.owner.save();this.owner.render();
   }
+  useWholeImage(){this.clearAttachment('area');}
   setParameter(field,value,max){this.state[field]=Math.round(clamp(value,0,max));this.owner.save();this.refreshTools();}
   async loadViewer(source,key){
     const epoch=++this.viewerEpoch,revision=this.revision,url=imageUrl(this.owner,source);this.loading.textContent='Loading image…';this.loading.hidden=false;
@@ -212,7 +247,7 @@ export class ImageEditArea {
     })();
     this.load=work;
     try{await work;}catch(error){if(epoch===this.viewerEpoch){this.error=error.message||'Could not open the image selection.';this.loading.textContent=this.error;this.viewer?.dispose();this.viewer=null;}}
-    finally{if(this.load===work)this.load=null;this.refreshTools();this.owner.plate?.surface?.inlineEditor?.sync?.();}
+    finally{if(this.load===work){this.load=null;for(const {remove} of [this.areaAttachment,this.guideAttachment])remove.disabled=this.busy();}this.refreshTools();this.owner.plate?.surface?.inlineEditor?.sync?.();}
   }
   installSelectionPreview(viewer){
     // Display-only raster: never export it through maskCanvas or sketchCanvas.
@@ -221,12 +256,13 @@ export class ImageEditArea {
       const opacity=viewer.opacity;viewer.opacity=0;try{draw();}finally{viewer.opacity=opacity;}
       const hideOverlay=this.paintAPlateEnabled&&(viewer.tool==='draw'||viewer.tool==='light'||viewer.sketchPresent&&viewer.tool!=='brush');
       if(hideOverlay||!this.isCurrent()||!viewer.image||!this.state.enabled&&!viewer.maskPresent)return;
-      if(version!==viewer.maskVersion){
-        version=viewer.maskVersion;canvas.width=viewer.width;canvas.height=viewer.height;
+      const t=viewer.transform(),previewVersion=viewer.maskVersion+':'+Math.min(32,Math.max(1,Math.ceil(1.25/Math.max(.04,t.scale))));
+      if(version!==previewVersion){
+        version=previewVersion;canvas.width=viewer.width;canvas.height=viewer.height;
         const ctx=canvas.getContext('2d'),pixels=ctx.createImageData(canvas.width,canvas.height);
-        pixels.data.set(selectionPreviewPixels(viewer.maskCtx.getImageData(0,0,canvas.width,canvas.height).data,canvas.width,canvas.height));ctx.putImageData(pixels,0,0);
+        pixels.data.set(selectionPreviewPixels(viewer.maskCtx.getImageData(0,0,canvas.width,canvas.height).data,canvas.width,canvas.height,{scale:t.scale}));ctx.putImageData(pixels,0,0);
       }
-      const t=viewer.transform(),ctx=viewer.ctx;ctx.save();ctx.globalAlpha=opacity;ctx.imageSmoothingEnabled=false;ctx.drawImage(canvas,t.x,t.y,viewer.width*t.scale,viewer.height*t.scale);ctx.restore();
+      const ctx=viewer.ctx;ctx.save();try{ctx.globalAlpha=opacity>0?1:0;ctx.imageSmoothingEnabled=false;ctx.drawImage(canvas,t.x,t.y,viewer.width*t.scale,viewer.height*t.scale);}finally{ctx.restore();}
     };viewer.draw();
   }
   setTool(tool){

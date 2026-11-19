@@ -25,6 +25,7 @@ export async function openZuraStudio(workspace){
   if(!registeredStudio){registeredStudio=mountStudio({host:comfyHost});registeredStudio.container.querySelector(".gs-zura-mark").src=new URL("./assets/zura-logo.png",import.meta.url).href;}
   const studio=registeredStudio;
   if(!studio.container.isConnected)await studio.open();
+  else studio.returnFromGraph();
   if(workspace)await navigateStudioMode(studio.creative,workspace);
   return studio;
 }
@@ -34,6 +35,7 @@ async function openDesktopAESession(credential,{isCurrent=()=>true}={}){
   if(previous?.aeSession){await previous.aeBridge?.cancelAndLeave();previous=registeredStudio;if(!isCurrent())return false;}
   const session=await createStudioSession(api,credential);if(session.error)return false;
   if(!isCurrent()){try{await api.fetchApi('/zura/comfylink/v1/studio/sessions/'+encodeURIComponent(session.id)+'/leave',{method:'POST',headers:{'Content-Type':'application/json','X-ComfyLink-Studio-Session':session.capability},body:'{}'});}catch{}return false;}
+  previous?.returnFromGraph?.();
   const wasOpen=!!previous?.container.isConnected,parent=previous?.container.parentNode,next=previous?.container.nextSibling;
   if(wasOpen){previous.container.querySelectorAll('video,audio').forEach(media=>media.pause());previous.container.remove();}
   const studio=mountStudio({host:comfyHost,session,storage:studioLaunchStorage(session)});registeredStudio=studio;

@@ -45,6 +45,6 @@ workspace.ripple.job={id:'run'};assert.equal(studioWorkspaceBusy(workspace),true
 workspace.ripple.job=null;assert.equal(await resetStudioWorkspace(workspace),true);assert.equal(workspace.ripple.resets,1);assert.equal(showCalls.at(-1),'ripple');
 workspace.ripple.resetResult=false;assert.equal(await resetStudioWorkspace(workspace),false,'A rejected reset is not reported as successful');
 const controller=installStudioRestartNavigation(studio);controller.sync();
-assert.equal(controller.button.parentElement.parentElement,page.querySelector('.zru-heading'),'Start over is placed in the Ripple workspace heading');
+assert.equal(controller.button.parentElement.parentElement===root,true,'Start over uses the global host fallback when the header has no actions');
 controller.dispose();
 console.log('Ripple navigation and guarded restart work with the shared video workflow picker.');

@@ -36,13 +36,11 @@ class HDRCanvasTests(unittest.TestCase):
         key = experiment.hdr_review_key(selection, 'pq_rec2020')
         kwargs = dict(review_key=key, colour_space='pq_rec2020')
         stage = experiment.build_reviewed_sdr_first_stage(source, selection, **kwargs)
-        final = experiment.build_reviewed_sdr_first_composite(source, selection, 'intermediate.mp4', **kwargs, has_audio=True)
+        final = experiment.build_reviewed_sdr_first_delivery(source, selection, 'intermediate.mp4', **kwargs, has_audio=True)
         self.assertEqual(stage['hdr_source']['inputs']['start_seconds'], .517)
         self.assertEqual(stage['hdr_source']['inputs']['frame_count'], 12)
         self.assertEqual(stage['tone_map_source']['inputs']['image'], ['hdr_input_hold', 0])
         self.assertEqual(stage['tone_map_source']['class_type'],'LTXVHDRDecodePostprocess','Model conditioning is outside this display-only change')
-        self.assertEqual(final['native_original']['inputs']['frame_count'], 12)
-        self.assertEqual(final['native_original']['inputs']['start_seconds'], .517)
         self.assertEqual(final['hdr_original_length']['inputs']['length'], 12)
         self.assertEqual(final['hdr_delivery_hold']['inputs']['stride'], 8)
         self.assertEqual(final['original_audio']['inputs']['start_seconds'], .517)
@@ -113,24 +111,18 @@ class HDRCanvasTests(unittest.TestCase):
         self.assertEqual(stage['canvas']['inputs']['images'], ['tone_map_source', 0])
         self.assertEqual(stage['stage_video']['inputs']['images'], ['trim_result', 0])
         self.assertNotIn('hdr_vae', stage)
-        graph = experiment.build_sdr_first_hdr_composite('/native-pq.mp4', '/intermediate.mp4', **params)
-        self.assertEqual(graph['native_canvas']['inputs']['images'], ['native_original', 0])
-        self.assertEqual(graph['final_hdr_composite']['inputs']['generated'], ['hdr_unpad_raster', 0])
-        self.assertEqual(graph['final_hdr_composite']['inputs']['source'], ['native_canvas', 0])
-        self.assertEqual(graph['final_hdr_composite']['inputs']['mask'], ['native_canvas', 1])
-        self.assertEqual(graph['final_hdr_composite']['inputs']['colour_match'], 1.0)
-        self.assertEqual(graph['zura_hdr_save_video']['inputs']['images'], ['final_hdr_composite', 0])
-        self.assertEqual(graph['zura_hdr_archive']['inputs']['images'], ['final_hdr_composite', 0])
-        timed = experiment.build_sdr_first_hdr_composite('/native-pq.mp4', '/intermediate.mp4',
+        graph = experiment.build_sdr_first_hdr_delivery('/native-pq.mp4', '/intermediate.mp4', **params)
+        self.assertNotIn('native_canvas', graph)
+        self.assertFalse(any(node['class_type'] == 'ZuraHDRCompositeOutpaint' for node in graph.values()))
+        self.assertEqual(graph['zura_hdr_save_video']['inputs']['images'], ['hdr_unpad_raster', 0])
+        self.assertEqual(graph['zura_hdr_archive']['inputs']['images'], ['hdr_unpad_raster', 0])
+        timed = experiment.build_sdr_first_hdr_delivery('/native-pq.mp4', '/intermediate.mp4',
             **{**params, 'start_frame': 15}, source_fps=30., has_audio=True)
-        self.assertEqual(timed['native_original']['inputs']['start_seconds'], .5)
-        self.assertEqual(timed['native_original']['inputs']['output_fps'], 24.)
         self.assertEqual(timed['original_audio']['inputs']['start_seconds'], .5)
         precise = {**params, 'start_frame': 15, 'source_fps': 30., 'start_seconds': .517}
         precise_stage = experiment.build_sdr_first_stage('/native-pq.mp4', **precise)
-        precise_composite = experiment.build_sdr_first_hdr_composite('/native-pq.mp4', '/intermediate.mp4', **precise, has_audio=True)
+        precise_composite = experiment.build_sdr_first_hdr_delivery('/native-pq.mp4', '/intermediate.mp4', **precise, has_audio=True)
         self.assertEqual(precise_stage['hdr_source']['inputs']['start_seconds'], .517)
-        self.assertEqual(precise_composite['native_original']['inputs']['start_seconds'], .517)
         self.assertEqual(precise_composite['original_audio']['inputs']['start_seconds'], .517)
         for invalid in (-1, float('nan'), True):
             with self.assertRaisesRegex(ValueError, 'start time'):
@@ -139,7 +131,7 @@ class HDRCanvasTests(unittest.TestCase):
         self.assertEqual(timed['zura_hdr_preview_video']['inputs']['audio'], ['original_audio', 0])
         self.assertFalse(any(node['class_type'].startswith('H3') for node in graph.values()))
         with self.assertRaisesRegex(ValueError, 'HDR video colour'):
-            experiment.build_sdr_first_hdr_composite('/native-pq.mp4', '/intermediate.mp4', **{**params, 'colour_space':'acescg'})
+            experiment.build_sdr_first_hdr_delivery('/native-pq.mp4', '/intermediate.mp4', **{**params, 'colour_space':'acescg'})
 
     def test_hdr_hold_is_removed_from_delivered_length(self):
         images = torch.arange(24, dtype=torch.float32).reshape(24, 1, 1, 1).expand(-1, 2, 2, 3)

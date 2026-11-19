@@ -43,7 +43,8 @@ class ReviewedHDRRunnerTests(unittest.IsolatedAsyncioTestCase):
         submissions = [e for e in self.events if e[0] == 'submit']
         self.assertEqual([e[1] for e in submissions], ['outpaint', 'hdr'])
         self.assertEqual(submissions[0][2]['hdr_source']['inputs']['start_seconds'], .517)
-        self.assertEqual(submissions[1][2]['native_original']['inputs']['start_seconds'], .517)
+        self.assertNotIn('native_original', submissions[1][2])
+        self.assertEqual(submissions[1][2]['original_audio']['inputs']['start_seconds'], .517)
         self.assertEqual(submissions[1][2]['zura_hdr_source']['inputs']['source'], 'intermediate.mp4')
         self.assertEqual(self.events[-1], ('cleanup', 'intermediate.mp4'))
 

@@ -243,14 +243,27 @@ const studio={
 };
 studio.creative.studio=studio;
 const controller=installStudioRestartNavigation(studio);
-assert.equal(controller.button.closest('.gs-top-actions'),null,'Start over is not in the app header');
-assert.equal(controller.button.parentElement.parentElement,heading,'Start over is in the main preview heading');
-for(const [mode,selector] of [['image','zc-image-heading'],['frames','zf-heading'],['references','zf-heading'],['paintout','zf-heading'],['watermark','zf-heading'],['outpaint','header'],['alpha','header'],['panorama','zpc-heading'],['hdr','zf-heading']]){
- const page=document.createElement('section'),host=document.createElement(selector==='header'?'header':'div');host.className=selector;page.append(host);navRoot.append(page);
- const member=({references:'referencesVideo',hdr:'hdrTool'})[mode]||mode;
- if(mode==='hdr')studio.hdrTool={root:page};else studio.creative[member]={page};
- studio.creative.mode=mode;controller.sync();assert.equal(controller.button.parentElement.parentElement,host,mode+' has its own main-workspace reset');
+assert.equal(controller.button.closest('.gs-top-actions'),topActions,'Start over is always in the Studio header');
+for(const mode of ['image','frames','director','references','paintout','watermark','outpaint','ripple','alpha','panorama','hdr','paint_vfx']){
+  studio.creative.mode=mode;controller.sync();
+  assert.equal(controller.button.closest('.gs-top-actions'),topActions,mode+' uses the same reset position');
 }
+let resetCount=0;
+studio.creative.mode='paint_vfx';
+studio.creative.paint_vfx={busy:()=>false,async reset(){resetCount++;return true;}};
+controller.button.click();
+assert.equal(controller.confirmation.hidden,false);
+assert.match(controller.confirmation.textContent,/Unsaved edits and loaded media/);
+assert.equal(resetCount,0,'Opening confirmation never clears media');
+controller.confirmation.querySelector('[data-keep-run]').click();
+assert.equal(controller.confirmation.hidden,true);
+assert.equal(resetCount,0);
+controller.button.click();
+studio.creative.show('alpha');studio.creative.mode='alpha';controller.sync();
+assert.equal(controller.confirmation.hidden,true,'Changing mode dismisses a stale reset confirmation');
+studio.creative.mode='paint_vfx';controller.button.click();
+await controller.confirmation.querySelector('[data-cancel-reset]').onclick();
+assert.equal(resetCount,1);assert.equal(controller.confirmation.hidden,true);
 studio.creative.mode='video';controller.sync();
 assert.equal(controller.navigateStep(2),true);
 assert.equal(studio.navigationStep,2);

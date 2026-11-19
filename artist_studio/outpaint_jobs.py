@@ -92,35 +92,13 @@ def inspect_sdr_delivery(job):
         'width': raster['width'], 'height': raster['height'], 'frames': raster['frames'],
         'fps': raster['fps'], 'has_audio': raster['audio_tracks'] == 1}}
 
-LONG_REQUIRED_FILES = (
-    ('diffusion_models', 'ltx-2.5-22b-distilled-transformer-comfy-int8-convrot.safetensors'),
-    ('text_encoders', 'gemma4-12b-with-proj-ltx-2.5-nvfp4.safetensors'),
-    ('vae', 'ltx-2.5-video-vae-conv-bf16.safetensors'),
-    ('vae', 'ltx-2.5-audio-vae-bf16.safetensors'),
-    ('loras', 'ltx-2.3-22b-ic-lora-outpaint.safetensors'),
-)
-LONG_REQUIRED_NODES = ('LTXAddVideoICLoRAGuide', 'LTXICLoRALoaderModelOnly',
-    'LTXVImgToVideoInplace', 'ZuraOutpaintExactVideo', 'ZuraOutpaintSelectClip', 'ZuraOutpaintTemporalHold',
-    'ZuraLTXOutpaintCanvas', 'LoadVideo', 'GetVideoComponents', 'CLIPLoader',
-    'CLIPTextEncode', 'LTXVConditioning', 'VAELoader', 'UNETLoader',
-    'EmptyLTXVLatentVideo', 'LTXVEmptyLatentAudio', 'LTXVConcatAVLatent', 'CFGGuider',
-    'RandomNoise', 'KSamplerSelect', 'ManualSigmas', 'SamplerCustomAdvanced',
-    'LTXVSeparateAVLatent', 'LTXVCropGuides', 'VAEDecodeTiled', 'ImageFromBatch',
-    'LoadImage', 'CreateVideo', 'SaveVideo')
-
-
 def long_dependencies():
-    """Check actual configured model locations and loaded Comfy node types."""
-    import folder_paths
-    import nodes
-    missing_files = [name for folder, name in LONG_REQUIRED_FILES if not folder_paths.get_full_path(folder, name)]
-    missing_nodes = [name for name in LONG_REQUIRED_NODES if name not in nodes.NODE_CLASS_MAPPINGS]
-    return {'ready': not missing_files and not missing_nodes, 'missing_files': missing_files,
-            'missing_nodes': missing_nodes,
-            'packages': ['ltx25_core', 'ltx25_text_encoder', 'ltx25_outpaint']}
+    """Long sections use the short recipe plus first-frame conditioning."""
+    result = short_dependencies('expand', with_anchor=True)
+    return {**result, 'packages': ['ltx25_core', 'ltx25_text_encoder', 'ltx25_in_outpaint']}
 
 
-def short_dependencies(mode):
+def short_dependencies(mode, *, with_anchor=False):
     """Report dependencies from the actual graph used by the chosen method."""
     source = {'file': 'genj_studio/setup/source.mp4', 'sha': 'a' * 64,
               'duration': 1, 'width': 128, 'height': 128}
@@ -128,6 +106,9 @@ def short_dependencies(mode):
     graphs = [build_review_graph(source, selection, output_prefix='genj/outpaint/setup'),
               build_studio_graph(source, selection, review_key=selection['review_key'],
                                  output_prefix='genj/outpaint/setup', pad_delivery=True)]
+    if with_anchor:
+        from .outpaint_anchor import attach_first_frame
+        graphs[-1] = attach_first_frame(graphs[-1], 'setup.png')
     return graph_dependencies(graphs)
 
 
@@ -157,7 +138,7 @@ def graph_dependencies(graphs):
 def hdr_expand_dependencies():
     """Check all three actual graphs, including both LTX generation passes."""
     from .hdr_outpaint_experiment import (build_hdr_review_experiment, hdr_review_key,
-        build_reviewed_sdr_first_stage, build_reviewed_sdr_first_composite)
+        build_reviewed_sdr_first_stage, build_reviewed_sdr_first_delivery)
     source = {'file': 'genj_studio/setup/source.mp4', 'sha': 'a' * 64,
               'duration': 1, 'width': 128, 'height': 128, 'asset_kind': 'video'}
     selection = plan(source, start=0, duration=.5, mode='expand', width=192, height=192,
@@ -165,14 +146,14 @@ def hdr_expand_dependencies():
     key = hdr_review_key(selection, 'auto')
     review, _ = build_hdr_review_experiment(source, selection)
     stage = build_reviewed_sdr_first_stage(source, selection, review_key=key)
-    final = build_reviewed_sdr_first_composite(source, selection, 'intermediate.mp4', review_key=key, has_audio=True)
+    final = build_reviewed_sdr_first_delivery(source, selection, 'intermediate.mp4', review_key=key, has_audio=True)
     return graph_dependencies([review, stage, final])
 
 
 def hdr_black_dependencies():
     """Inspect the actual black-mask review and both soundtrack variants."""
     from .hdr_outpaint_experiment import (build_hdr_review_experiment, hdr_review_key,
-        build_reviewed_sdr_first_stage, build_reviewed_sdr_first_composite)
+        build_reviewed_sdr_first_stage, build_reviewed_sdr_first_delivery)
     source = {'file':'genj_studio/setup/source.mp4', 'sha':'a'*64, 'duration':1,
               'width':128, 'height':128, 'asset_kind':'video', 'has_audio':True}
     selection = plan(source,start=0,duration=.5,mode='black',width=128,height=128)
@@ -180,7 +161,7 @@ def hdr_black_dependencies():
     review,_ = build_hdr_review_experiment(source,selection)
     stages = [build_reviewed_sdr_first_stage({**source,'has_audio':audio},selection,review_key=key)
               for audio in (False,True)]
-    finals = [build_reviewed_sdr_first_composite(source,selection,'intermediate.mp4',review_key=key,has_audio=audio)
+    finals = [build_reviewed_sdr_first_delivery(source,selection,'intermediate.mp4',review_key=key,has_audio=audio)
               for audio in (False,True)]
     return graph_dependencies([review,*stages,*finals])
 
@@ -316,17 +297,22 @@ class OutpaintJobs:
             'create_time': int(time.time()*1000), 'comfy_usage_source':'zura-studio'}, valid[2], {}))
         return self.public(job)
 
-    async def submit_reviewed_hdr(self, source, selection, reviewed, *, colour_space, has_audio,
+    async def submit_reviewed_hdr(self, source, selection, reviewed=None, *, colour_space, has_audio,
                                   prompt='', seed=42, client_id=None, exr_storage='half'):
         """Internal bounded HDR render; not registered as a public route yet."""
         if exr_storage not in ('half','float32'): raise ValueError('Choose half or float32 EXR storage.')
         from .hdr_outpaint_experiment import _reviewed_sdr_first_selection
         from .hdr_outpaint_queue import ReviewedHDRQueue
-        if (not reviewed or reviewed.get('kind') != 'review' or reviewed.get('state') != 'complete'
+        if reviewed is not None and (reviewed.get('kind') != 'review' or reviewed.get('state') != 'complete'
                 or not reviewed.get('approved') or reviewed.get('source', {}).get('sha') != source.get('sha')):
             raise ValueError('Review and approve the HDR selection before generating.')
-        if reviewed.get('exr_storage','half') != exr_storage: raise ValueError('EXR storage changed since review. Review again.')
-        key = reviewed.get('hdr_review_key')
+        if reviewed is not None:
+            if reviewed.get('exr_storage','half') != exr_storage:
+                raise ValueError('EXR storage changed since review. Review again.')
+            key = reviewed.get('hdr_review_key')
+        else:
+            from .hdr_outpaint_experiment import hdr_review_key
+            key = hdr_review_key(selection, colour_space)
         await asyncio.to_thread(_reviewed_sdr_first_selection, source, selection, key, colour_space, check_asset)
         if not isinstance(prompt, str) or len(prompt) > 4000 or type(seed) is not int or not 0 <= seed <= 2**53-1:
             raise ValueError('Choose a valid prompt and seed.')
@@ -372,12 +358,12 @@ class OutpaintJobs:
         if exr_storage not in ('half','float32'): raise ValueError('Choose half or float32 EXR storage.')
         if kind not in ('review','render'):
             raise ValueError('Choose a valid HDR frame-extension job.')
-        if kind=='render' and (not reviewed or reviewed.get('kind')!='review' or
+        if kind=='render' and reviewed is not None and (reviewed.get('kind')!='review' or
                 reviewed.get('state')!='complete' or not reviewed.get('approved') or
                 not reviewed.get('hdr_long') or reviewed.get('source',{}).get('sha')!=source.get('sha') or
                 reviewed.get('selection',{}).get('review_key')!=selection.get('review_key')):
             raise ValueError('Review and approve the full HDR selection before generating.')
-        if kind == 'render' and reviewed.get('exr_storage','half') != exr_storage: raise ValueError('EXR storage changed since review. Review again.')
+        if kind == 'render' and reviewed is not None and reviewed.get('exr_storage','half') != exr_storage: raise ValueError('EXR storage changed since review. Review again.')
         root=Path(folder_paths.get_output_directory()).resolve()
         args={'review_key':selection.get('review_key'), 'output_root':root,
               'check_asset':check_asset, 'client_id':client_id or 'zura-hdr-outpaint'}
@@ -446,7 +432,7 @@ class OutpaintJobs:
             raise ValueError('Invalid Studio connection. Reload Studio and try again.')
         if current.get('strategy') == 'anchored_masked' and not anchor:
             raise ValueError('The approved anchored workflow requires its reference frame.')
-        if kind == 'render' and (not reviewed or reviewed.get('kind') != 'review'
+        if kind == 'render' and reviewed is not None and (reviewed.get('kind') != 'review'
                 or reviewed.get('state') != 'complete' or not reviewed.get('approved')
                 or reviewed.get('selection', {}).get('review_key') != current['review_key']):
             raise ValueError('Review and approve the full outpaint selection before generating.')
@@ -673,72 +659,84 @@ def register(studio, routes, response):
         probed = await asyncio.to_thread(probe_sdr_source, source)
         return web.json_response({'fps_num': probed['fps_num'], 'fps_den': probed['fps_den']})
 
+    async def plan_request(body):
+        source = await asyncio.to_thread(jobs.source, body.get('source'))
+        fields = {k: body.get(k) for k in ('start', 'duration', 'mode', 'width', 'height', 'left', 'top', 'right', 'bottom', 'black_threshold')}
+        strategy = body.get('strategy')
+        hdr = body.get('hdr', False)
+        if hdr is False:
+            source = await asyncio.to_thread(probe_sdr_source, source)
+        if type(hdr) is not bool:
+            raise ValueError('Choose a valid HDR option.')
+        contract=body.get('ae_frame_contract') or (body.get('config') or {}).get('ae_frame_contract')
+        if contract is not None:
+            from ..comfylink.frame_contract import normalise_frame_contract, contract_rate, validate_interval
+            contract=normalise_frame_contract(contract)
+            if hdr:
+                raise ValueError('HDR frame extension cannot yet guarantee exact AE frame delivery. Use SDR frame extension or a supported HDR conversion workflow.')
+            fields.update(start=0,duration=float(contract['frameCount']/contract_rate(contract)),ae_frame_contract=contract)
+            validate_interval(contract,frames=contract['frameCount'],fps=source_rate(source),width=fields['width'],height=fields['height'])
+        if not hdr and fields['mode'] in ('expand', 'black') and strategy in (None, 'black_guide') and (float(fields['duration'])*float(source_rate(source)) > 120 or needs_bounded_canvas(fields['width'], fields['height'], fields['duration'], source_rate(source))):
+            strategy = 'anchored_masked'
+        if hdr:
+            if not hdr_outpaint_enabled():
+                raise ValueError('HDR frame extension is not available in this version yet.')
+            if fields['mode'] not in ('expand','black'):
+                raise ValueError('Choose canvas expansion or black areas.')
+            black = fields['mode']=='black'
+            if black and not hdr_black_outpaint_enabled():
+                raise ValueError('HDR black-area preview is not available in this version yet.')
+            if strategy=='hdr_long':
+                if not hdr_long_outpaint_enabled():
+                    raise ValueError('Long HDR frame extension is not available in this version yet.')
+                dependencies=await asyncio.to_thread(hdr_long_dependencies,'black') if black else await asyncio.to_thread(hdr_long_dependencies)
+                if not dependencies['ready']:
+                    raise ValueError('Long HDR frame extension needs these models or nodes: '+', '.join(dependencies['missing_files']+dependencies['missing_nodes']))
+                from .hdr_outpaint_long_plan import plan_hdr_windows
+                selection,_,_=plan_hdr_windows(source,**fields,
+                    colour_space=body.get('colour_space','auto'))
+                return source, selection, 'hdr_long'
+            if strategy not in (None, 'black_guide'):
+                raise ValueError('Choose a supported HDR frame-extension preview.')
+            dependencies = await asyncio.to_thread(hdr_black_dependencies if black else hdr_expand_dependencies)
+            if not dependencies['ready']:
+                missing = dependencies['missing_files'] + dependencies['missing_nodes']
+                raise ValueError('HDR frame extension needs these models or nodes: ' + ', '.join(missing) + '. Open model setup for guidance.')
+            selection = plan(source, **fields)
+            return source, selection, 'hdr'
+        if strategy == 'anchored_masked':
+            if not LONG_MODE_READY:
+                raise ValueError('Long frame extension is not available in this version yet.')
+            dependencies = await asyncio.to_thread(long_dependencies)
+            if not dependencies['ready']:
+                missing = dependencies['missing_files'] + dependencies['missing_nodes']
+                raise ValueError('Long frame extension needs these models or nodes: ' + ', '.join(missing) + '. Use model setup and install missing node packs.')
+            from .outpaint_long_runner import plan_long
+            selection, _, _ = plan_long(source, **fields, overlap=9, strategy=strategy)
+            return source, selection, 'sdr_long'
+        if strategy not in (None, 'black_guide'):
+            raise ValueError('Choose a supported frame-extension method.')
+        selection = plan(source, **fields)
+        return source, selection, 'sdr'
+
     @routes.post('/zura/studio/outpaint/review')
     @routes.post('/genj/studio/outpaint/review')
     @response
     async def review(request):
         body = await request.json()
         async with jobs.lock:
-            source = await asyncio.to_thread(jobs.source, body.get('source'))
-            fields = {k: body.get(k) for k in ('start', 'duration', 'mode', 'width', 'height', 'left', 'top', 'right', 'bottom', 'black_threshold')}
-            strategy = body.get('strategy')
-            hdr = body.get('hdr', False)
-            if hdr is False:
-                source = await asyncio.to_thread(probe_sdr_source, source)
-            if type(hdr) is not bool:
-                raise ValueError('Choose a valid HDR option.')
-            contract=body.get('ae_frame_contract') or (body.get('config') or {}).get('ae_frame_contract')
-            if contract is not None:
-                from ..comfylink.frame_contract import normalise_frame_contract, contract_rate, validate_interval
-                contract=normalise_frame_contract(contract)
-                if hdr:
-                    raise ValueError('HDR frame extension cannot yet guarantee exact AE frame delivery. Use SDR frame extension or a supported HDR conversion workflow.')
-                fields.update(start=0,duration=float(contract['frameCount']/contract_rate(contract)),ae_frame_contract=contract)
-                validate_interval(contract,frames=contract['frameCount'],fps=source_rate(source),width=fields['width'],height=fields['height'])
-            if not hdr and fields['mode'] in ('expand', 'black') and strategy in (None, 'black_guide') and (float(fields['duration'])*float(source_rate(source)) > 120 or needs_bounded_canvas(fields['width'], fields['height'], fields['duration'], source_rate(source))):
-                strategy = 'anchored_masked'
-            if hdr:
-                if not hdr_outpaint_enabled():
-                    raise ValueError('HDR frame extension is not available in this version yet.')
-                if fields['mode'] not in ('expand','black'):
-                    raise ValueError('Choose canvas expansion or black areas.')
-                black = fields['mode']=='black'
-                if black and not hdr_black_outpaint_enabled():
-                    raise ValueError('HDR black-area preview is not available in this version yet.')
-                if strategy=='hdr_long':
-                    if not hdr_long_outpaint_enabled():
-                        raise ValueError('Long HDR frame extension is not available in this version yet.')
-                    dependencies=await asyncio.to_thread(hdr_long_dependencies,'black') if black else await asyncio.to_thread(hdr_long_dependencies)
-                    if not dependencies['ready']:
-                        raise ValueError('Long HDR frame extension needs these models or nodes: '+', '.join(dependencies['missing_files']+dependencies['missing_nodes']))
-                    from .hdr_outpaint_long_plan import plan_hdr_windows
-                    selection,_,_=plan_hdr_windows(source,**fields,
-                        colour_space=body.get('colour_space','auto'))
-                    return web.json_response(await jobs.submit_long_hdr('review',source,selection,client_id=body.get('client_id'),exr_storage=body.get('exr_storage','half')))
-                if strategy not in (None, 'black_guide'):
-                    raise ValueError('Choose a supported HDR frame-extension preview.')
-                dependencies = await asyncio.to_thread(hdr_black_dependencies if black else hdr_expand_dependencies)
-                if not dependencies['ready']:
-                    missing = dependencies['missing_files'] + dependencies['missing_nodes']
-                    raise ValueError('HDR frame extension needs these models or nodes: ' + ', '.join(missing) + '. Open model setup for guidance.')
-                selection = plan(source, **fields)
+            source, selection, mode = await plan_request(body)
+            options = {'client_id': body.get('client_id')}
+            if mode in ('hdr', 'hdr_long'):
+                options['exr_storage'] = body.get('exr_storage', 'half')
+            if mode == 'hdr_long':
+                return web.json_response(await jobs.submit_long_hdr('review', source, selection, **options))
+            if mode == 'hdr':
                 return web.json_response(await jobs.submit_hdr_review(source, selection,
-                    colour_space=body.get('colour_space', 'auto'), client_id=body.get('client_id'), exr_storage=body.get('exr_storage','half')))
-            if strategy == 'anchored_masked':
-                if not LONG_MODE_READY:
-                    raise ValueError('Long frame extension is not available in this version yet.')
-                dependencies = await asyncio.to_thread(long_dependencies)
-                if not dependencies['ready']:
-                    missing = dependencies['missing_files'] + dependencies['missing_nodes']
-                    raise ValueError('Long frame extension needs these models or nodes: ' + ', '.join(missing) + '. Use model setup and install missing node packs.')
-                from .outpaint_long_runner import plan_long
-                selection, _, _ = plan_long(source, **fields, overlap=9, strategy=strategy)
-                return web.json_response(await jobs.submit_long('review', source, selection,
-                    client_id=body.get('client_id'), anchor=True))
-            if strategy not in (None, 'black_guide'):
-                raise ValueError('Choose a supported frame-extension method.')
-            selection = plan(source, **fields)
-            return web.json_response(await jobs.submit('review', source, selection, client_id=body.get('client_id')))
+                    colour_space=body.get('colour_space', 'auto'), **options))
+            if mode == 'sdr_long':
+                return web.json_response(await jobs.submit_long('review', source, selection, anchor=True, **options))
+            return web.json_response(await jobs.submit('review', source, selection, **options))
 
     @routes.get('/zura/studio/outpaint/jobs/{identity}')
     @routes.get('/genj/studio/outpaint/jobs/{identity}')
@@ -767,6 +765,68 @@ def register(studio, routes, response):
             job['approved'] = True
             return web.json_response(jobs.public(job))
 
+    def render_settings(body):
+        prompt, seed = body.get('prompt', ''), body.get('seed', 42)
+        if not isinstance(prompt, str) or len(prompt) > 4000 or type(seed) is not int or not 0 <= seed <= 2**53-1:
+            raise ValueError('Choose a prompt up to 4,000 characters and a valid seed.')
+        return prompt, seed
+
+    async def guide_for(body, selection):
+        if not body.get('first_frame'):
+            return None
+        from .outpaint_first_frame import guide_asset
+        return await asyncio.to_thread(guide_asset, studio, body['first_frame'], selection, check_asset)
+
+    async def submit_render(body, source, selection, mode, reviewed=None):
+        prompt, seed = render_settings(body)
+        options = {'prompt': prompt, 'seed': seed, 'client_id': body.get('client_id')}
+        custom_loras = body.get('custom_loras', [])
+        if mode in ('hdr', 'hdr_long'):
+            if body.get('first_frame'):
+                raise ValueError('Image first-frame guides currently apply to SDR frame extension.')
+            if custom_loras:
+                raise ValueError('Custom LoRAs are not supported by native HDR frame extension yet.')
+            if selection['mode'] == 'black' and not hdr_black_outpaint_enabled():
+                raise ValueError('HDR black-area fill is not available in this version yet.')
+            options.update(reviewed=reviewed, exr_storage=body.get('exr_storage', 'half'))
+            if mode == 'hdr_long':
+                if not hdr_long_outpaint_enabled():
+                    raise ValueError('Long HDR frame extension is not available in this version yet.')
+                return await jobs.submit_long_hdr('render', source, selection, **options)
+            if not hdr_outpaint_enabled():
+                raise ValueError('HDR frame extension is not available in this version yet.')
+            colour_space = reviewed['hdr_colour_space'] if reviewed else body.get('colour_space', 'auto')
+            has_audio = await asyncio.to_thread(source_has_audio, source)
+            return await jobs.submit_reviewed_hdr(source, selection, colour_space=colour_space,
+                has_audio=has_audio, **options)
+
+        first_frame = await guide_for(body, selection)
+        if mode == 'sdr_long':
+            if not LONG_MODE_READY or selection.get('strategy') != 'anchored_masked':
+                raise ValueError('Long frame extension is not available in this version yet.')
+            return await jobs.submit_long('render', source, selection, reviewed=reviewed, anchor=True,
+                custom_loras=custom_loras, first_frame=first_frame, **options)
+        anchor_file = None
+        if first_frame is not None:
+            from .outpaint_first_frame import prepare_anchor
+            anchor_file = await asyncio.to_thread(prepare_anchor, first_frame, selection, check_asset)
+        return await jobs.submit('render', source, selection, custom_loras=custom_loras,
+            pad_delivery=True, anchor_file=anchor_file, **options)
+
+    @routes.post('/zura/studio/outpaint/generate')
+    @routes.post('/genj/studio/outpaint/generate')
+    @response
+    async def generate(request):
+        body = await request.json()
+        async with jobs.lock:
+            source, selection, mode = await plan_request(body)
+            if mode == 'sdr':
+                dependencies = await asyncio.to_thread(short_dependencies, selection['mode'])
+                if not dependencies['ready']:
+                    missing = dependencies['missing_files'] + dependencies['missing_nodes']
+                    raise ValueError('Open Models to install: ' + ', '.join(missing))
+            return web.json_response(await submit_render(body, source, selection, mode))
+
     @routes.post('/zura/studio/outpaint/jobs/{identity}/render')
     @routes.post('/genj/studio/outpaint/jobs/{identity}/render')
     @response
@@ -789,52 +849,33 @@ def register(studio, routes, response):
                 # An explicit new Generate click may retry a confirmed failure.
                 # Running or completed jobs remain idempotent.
                 review_job.pop('render_id')
-            if not isinstance(body.get('prompt', ''), str) or len(body.get('prompt', '')) > 4000:
-                raise ValueError('Enter a prompt up to 4,000 characters.')
-            seed = body.get('seed', 42)
-            if type(seed) is not int or not 0 <= seed <= 2**53-1:
-                raise ValueError('Choose a valid seed.')
-            first_frame = None
-            if body.get('first_frame'):
-                if review_job.get('hdr_review_key') or review_job.get('hdr_long'):
-                    raise ValueError('Image first-frame guides currently apply to SDR frame extension.')
-                from .outpaint_first_frame import guide_asset
-                first_frame = await asyncio.to_thread(guide_asset, studio, body['first_frame'], review_job['selection'], check_asset)
-            if review_job.get('hdr_long'):
-                if not hdr_long_outpaint_enabled():
-                    raise ValueError('Long HDR frame extension is not available in this version yet.')
-                if review_job['selection'].get('mode')=='black' and not hdr_black_outpaint_enabled():
-                    raise ValueError('HDR black-area preview is not available in this version yet.')
-                if body.get('custom_loras'):
-                    raise ValueError('Custom LoRAs are not supported by the long HDR preview yet.')
-                result=await jobs.submit_long_hdr('render',review_job['source'],review_job['selection'],
-                    reviewed=review_job,prompt=body.get('prompt',''),seed=seed,client_id=body.get('client_id'),exr_storage=body.get('exr_storage','half'))
-            elif review_job.get('hdr_review_key'):
-                if not hdr_outpaint_enabled():
-                    raise ValueError('HDR frame extension is not available in this version yet.')
-                if review_job['selection'].get('mode')=='black' and not hdr_black_outpaint_enabled():
-                    raise ValueError('HDR black-area preview is not available in this version yet.')
-                if body.get('custom_loras'):
-                    raise ValueError('Custom LoRAs are not supported by the HDR frame-extension preview yet.')
-                has_audio = await asyncio.to_thread(source_has_audio, review_job['source'])
-                result = await jobs.submit_reviewed_hdr(review_job['source'], review_job['selection'], review_job,
-                    colour_space=review_job['hdr_colour_space'], has_audio=has_audio,
-                    prompt=body.get('prompt', ''), seed=seed, client_id=body.get('client_id'), exr_storage=body.get('exr_storage','half'))
-            elif review_job.get('long'):
-                if not LONG_MODE_READY or review_job['selection'].get('strategy') != 'anchored_masked':
-                    raise ValueError('Long frame extension is not available in this version yet.')
-                result = await jobs.submit_long('render', review_job['source'], review_job['selection'],
-                    reviewed=review_job, prompt=body.get('prompt', ''), seed=seed,
-                    client_id=body.get('client_id'), anchor=True, custom_loras=body.get('custom_loras', []), first_frame=first_frame)
-            else:
-                anchor_file = None
-                if first_frame is not None:
-                    from .outpaint_first_frame import prepare_anchor
-                    anchor_file = await asyncio.to_thread(prepare_anchor, first_frame, review_job['selection'], check_asset)
-                result = await jobs.submit('render', review_job['source'], review_job['selection'], body.get('prompt', ''), seed,
-                                           client_id=body.get('client_id'), custom_loras=body.get('custom_loras', []), pad_delivery=True, anchor_file=anchor_file)
+            mode = ('hdr_long' if review_job.get('hdr_long') else 'hdr' if review_job.get('hdr_review_key')
+                    else 'sdr_long' if review_job.get('long') else 'sdr')
+            result = await submit_render(body, review_job['source'], review_job['selection'], mode, reviewed=review_job)
             review_job['render_id'] = result['id']
             return web.json_response(result)
+
+    @routes.post('/zura/studio/outpaint/graph')
+    @routes.post('/genj/studio/outpaint/graph')
+    @response
+    async def export_current_graph(request):
+        body = await request.json()
+        source, selection, mode = await plan_request(body)
+        if mode != 'sdr':
+            raise ValueError('This selection uses linked renders. Short SDR selections can open as a single graph.')
+        prompt, seed = render_settings(body)
+        graph = await asyncio.to_thread(build_studio_graph, source, selection,
+            review_key=selection['review_key'], prompt=prompt, seed=seed,
+            output_prefix='genj/outpaint/' + uuid.uuid4().hex, check_asset=check_asset, pad_delivery=True)
+        from .custom_loras import apply_installed_ltx_loras
+        graph = await asyncio.to_thread(apply_installed_ltx_loras, graph, body.get('custom_loras', []))
+        first_frame = await guide_for(body, selection)
+        if first_frame is not None:
+            from .outpaint_anchor import attach_first_frame
+            from .outpaint_first_frame import prepare_anchor
+            anchor = await asyncio.to_thread(prepare_anchor, first_frame, selection, check_asset)
+            graph = attach_first_frame(graph, anchor)
+        return web.json_response({'graph': graph})
 
     @routes.post('/zura/studio/outpaint/jobs/{identity}/graph')
     @routes.post('/genj/studio/outpaint/jobs/{identity}/graph')

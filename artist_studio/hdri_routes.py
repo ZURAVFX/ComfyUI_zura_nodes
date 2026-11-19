@@ -118,8 +118,23 @@ def register(studio, routes, response, check_asset):
         body=await request.json()
         def work():
             image,meta=rendered(body);path,reference=output_path('environment_'+uuid.uuid4().hex[:12]+'.exr')
-            hdri.write_environment(path,image,body.get('export_space','linear_rec709'))
-            return {'file':reference,**meta}
+            export_space=body.get('export_space','linear_rec709')
+            hdri.write_environment(path,image,export_space)
+            # Validate the native file, rather than assigning HDR to its SDR preview.
+            import OpenImageIO as oiio
+            reader=oiio.ImageInput.open(str(path))
+            if reader is None:raise ValueError('The native HDRI export could not be read back.')
+            try:
+                spec=oiio.ImageSpec(reader.spec());pixels=reader.read_image(format=oiio.FLOAT)
+                expected={'acescg','aces-acescg','lin_ap1','lin_ap1_scene'} if export_space=='acescg' else {'linearrec.709','linearrec709','linear_rec709','lin_rec709_scene','lin_srgb_scene','linearsrgb'}
+                actual=str(spec.getattribute('oiio:ColorSpace') or '').lower().replace(' ','')
+                if spec.nchannels!=3 or tuple(spec.channelnames)!=('R','G','B') or spec.format!=oiio.FLOAT or spec.alpha_channel!=-1 or actual not in expected or pixels is None or pixels.shape!=image.shape or not np.isfinite(pixels).all():raise ValueError('The native HDRI export did not retain its RGB FLOAT colour contract.')
+            finally:reader.close()
+            identity={}
+            if body.get('source_id'):
+                asset=studio.store.load(body['source_id']);check_asset(asset)
+                identity={'source_id':asset['id'],'source_sha256':asset['sha']}
+            return {'file':reference,**meta,**identity,'colour':{'encoding':export_space,'sceneLinear':True},'sampleType':'float32','bitDepth':32,'hasAlpha':False,'sha256':hashlib.sha256(path.read_bytes()).hexdigest()}
         async with operation_lock:
             return web.json_response(await asyncio.to_thread(work))
 

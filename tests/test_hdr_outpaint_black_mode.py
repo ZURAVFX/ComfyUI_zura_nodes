@@ -38,10 +38,10 @@ class HDRBlackTests(unittest.TestCase):
     def test_short_review_generation_and_restoration_use_same_hdr_mask(self):
         review,_ = experiment.build_hdr_review_experiment(self.source,self.selection,colour_space='pq_rec2020')
         stage = self.stage()
-        final = experiment.build_reviewed_sdr_first_composite(self.source,self.selection,'intermediate.mp4',
+        final = experiment.build_reviewed_sdr_first_delivery(self.source,self.selection,'intermediate.mp4',
             review_key=self.key,colour_space='pq_rec2020',has_audio=True)
         self.assertEqual(review['canvas']['class_type'],'ZuraLTXOutpaintHDRCanvas')
-        for graph, name in ((stage,'canvas'),(final,'native_canvas')):
+        for graph, name in ((stage,'canvas'),):
             reference = review['canvas']['inputs']; actual = graph[name]['inputs']
             for field in ('mode','width','height','left','top','right','bottom','black_threshold'):
                 self.assertEqual(actual[field],reference[field])
@@ -53,16 +53,14 @@ class HDRBlackTests(unittest.TestCase):
         self.assertEqual(stage['masked_sdr_guide']['inputs']['source'],['black_fill',0])
         self.assertEqual(stage['mask_image']['inputs']['mask'],['canvas',1])
         self.assertEqual(stage['low_reference']['inputs']['image'],['masked_sdr_guide',0])
-        self.assertEqual(stage['green_high']['inputs']['images'],['masked_sdr_guide',0])
-        self.assertEqual(stage['green_high']['inputs']['mask'],['canvas',1])
-        self.assertEqual(stage['blend_high']['inputs']['mask'],['canvas',1])
+        self.assertNotIn('blend_low',stage)
+        self.assertNotIn('blend_high',stage)
+        self.assertEqual(stage['trim_result']['inputs']['image'],['decode_high',0])
         self.assertEqual(stage['adapter']['inputs']['lora_name'],'ltx-2.3-22b-ic-lora-in-outpainting-0.9.safetensors')
-        self.assertEqual(final['final_hdr_composite']['inputs']['mask'],['native_mask_crop',0])
-        self.assertEqual(final['native_mask_crop']['inputs']['mask'],['native_canvas',1])
-        self.assertEqual(final['final_hdr_composite']['inputs']['colour_match'],1.0)
-        self.assertEqual(final['native_source_crop']['inputs']['width'],190)
-        self.assertEqual(final['native_source_crop']['inputs']['height'],130)
-        self.assertEqual(final['hdr_original_length']['inputs']['image'],['final_hdr_composite',0])
+        self.assertNotIn('final_hdr_composite', final)
+        self.assertEqual(final['hdr_generated_crop']['inputs'],{
+            'image':['hdr_unpad_raster',0], 'width':190, 'height':130, 'x':0, 'y':0})
+        self.assertEqual(final['hdr_original_length']['inputs']['image'],['hdr_generated_crop',0])
         self.assertEqual(final['zura_hdr_save_video']['inputs']['images'],['hdr_delivery_hold',0])
         self.assertEqual(final['zura_hdr_archive']['inputs']['images'],['hdr_delivery_hold',0])
         for graph in (stage,final):
@@ -137,16 +135,11 @@ class HDRBlackTests(unittest.TestCase):
                 self.assertNotIn('zura_anchor_pad',stage)
             final=planner.build_long_hdr_conversion_window(self.source,full,sub,'assembled.mp4',
                 review_key=full['review_key'],prompt_start_frame=parts[index].start)
-            self.assertEqual(final['native_canvas']['inputs']['mode'],'black')
-            self.assertEqual(final['native_canvas']['inputs']['black_threshold'],.01)
-            self.assertEqual(final['native_mask_crop']['inputs']['mask'],['native_canvas',1])
-            self.assertEqual(final['final_hdr_composite']['inputs']['mask'],['native_mask_crop',0])
-            self.assertEqual(final['final_hdr_composite']['inputs']['colour_match'],1.0)
-            self.assertEqual((final['native_mask_crop']['inputs']['width'],final['native_mask_crop']['inputs']['height']),(190,130))
-            self.assertEqual((final['hdr_generated_crop']['inputs']['width'],final['hdr_generated_crop']['inputs']['height']),(190,130))
+            self.assertNotIn('final_hdr_composite',final)
+            self.assertNotIn('native_canvas',final)
             store=type('Store',(),{'plan':parts,'identity':'a'*32,'width':190,'height':130})()
-            staged=chunks.chunk_graph(final,store,index,'final_hdr_composite',anchor_strength=.75,anchor_mode='i2v')
-            self.assertEqual(staged['zura_hdr_stage_chunk']['inputs']['images'],['final_hdr_composite',0])
+            staged=chunks.chunk_graph(final,store,index,'hdr_unpad_raster',anchor_strength=.75,anchor_mode='i2v')
+            self.assertEqual(staged['zura_hdr_stage_chunk']['inputs']['images'],['hdr_unpad_raster',0])
         stale=copy.deepcopy(full);stale['black_threshold']=.02
         with self.assertRaisesRegex(ValueError,'selection changed'):
             planner.build_long_hdr_sdr_window(self.source,stale,subs[0],review_key=full['review_key'])

@@ -115,7 +115,7 @@
 #genj-studio.image-composer-refined .zc-image-source figure{position:relative;overflow:hidden}
 #genj-studio.image-composer-refined .zc-image-scroll:has(.zo-guide-handoff:not([hidden])){grid-template-rows:auto auto minmax(0,1fr)}
 #genj-studio.image-composer-refined .zc-image-scroll>.zo-guide-handoff{grid-row:2;grid-column:1;margin:0;background:var(--gs-panel);border:1px solid var(--gs-line);border-radius:12px}
-#genj-studio.image-composer-refined .zc-image-scroll:has(.zo-guide-handoff:not([hidden]))>:is(.zc-gallery,.zc-image-empty,.zc-image-comparison){grid-row:3;grid-column:1}
+#genj-studio.image-composer-refined .zc-image-scroll:has(.zo-guide-handoff:not([hidden]))>:is(.zc-gallery,.zc-image-empty,.zc-image-comparison,.zc-image-source){grid-row:3;grid-column:1}
 /* Camera editor lives in a portal; keep its toolbar in the Studio family. */
 .zura-camera-editor-open :is(.zc-camera-toolbar,.zc-panorama-actions){font-family:"Zura Manrope",system-ui,sans-serif;font-size:14px;background:#202020;border-color:#424242;box-shadow:none}
 .zura-camera-editor-open .zc-camera-toolbar{padding:16px 20px;gap:16px}
@@ -383,3 +383,15 @@
 #genj-studio[data-workspace] .zc-model-control.zura-has-model-picker>select{flex:0 0 auto;width:156px;min-width:120px;max-width:180px;padding-right:20px;color:var(--zc-text);-webkit-text-fill-color:var(--zc-text);opacity:1}
 #genj-studio[data-workspace] .zc-model-control.zura-has-model-picker>svg:last-of-type{position:static;flex:0 0 12px;width:12px}
 #genj-studio[data-workspace] .zc-model-control.zura-has-model-picker>.zura-inline-install-btn{flex:0 0 auto;margin-left:4px;min-height:28px;box-sizing:border-box}
+
+.zura-return-to-studio{
+  position:fixed;z-index:9999;right:20px;bottom:20px;
+  padding:10px 16px;border:1px solid #485323;border-radius:8px;
+  background:#22251a;color:#e7ff9f;font:600 13px system-ui,sans-serif;cursor:pointer;
+}
+.zura-return-to-studio:focus-visible{outline:2px solid #d7ff50;outline-offset:3px}
+
+.zura-graph-notice{max-width:min(440px,calc(100vw - 32px));padding:20px;border:1px solid var(--gs-line);border-radius:12px;background:var(--gs-panel,#222);color:var(--gs-text,#eee)}
+.zura-graph-notice::backdrop{background:#09090999}
+.zura-graph-notice form{display:grid;justify-items:start;gap:12px}
+.zura-graph-notice p{margin:0;line-height:1.5}

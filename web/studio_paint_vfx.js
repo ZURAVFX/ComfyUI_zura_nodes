@@ -1,3 +1,4 @@
+import {openStudioGraph} from './studio_graph_view.js';
 import {BrushSizeControl} from './studio_brush_size.js';
 import {playbackFile} from './studio_delivery_formats.js';
 import {paintToolIcon,PAINT_SWATCHES as SWATCHES} from './studio_paint_toolbar.js';
@@ -10,12 +11,13 @@ const KEY='zura-paint-vfx-v1';
 const assetUrl=(api,file,type='input')=>api.apiURL('/view?'+new URLSearchParams({filename:file.filename,subfolder:file.subfolder||'',type:file.type||type}));
 const blob=canvas=>new Promise((resolve,reject)=>canvas.toBlob(value=>value?resolve(value):reject(Error('Could not save the painted frame.')),'image/png'));
 const clone=value=>JSON.parse(JSON.stringify(value));
+const initialPaintState=()=>({width:512,height:512,frames:121,fps:24,prompt:'',seed:42,colour:'#ff6347',brush:48,background:'#000000',keys:[{frame:0},{frame:120}]});
 export function paintVfxSlots(frames){const slots=[0];for(let frame=1;frame<=frames-8;frame+=8)slots.push(frame);if(slots.at(-1)!==frames-1)slots.push(frames-1);return slots;}
 export class PaintVFXWorkspace{
   constructor(owner,{Viewer=PaintoutMaskViewer}={}){
     this.owner=owner;this.studio=owner.studio;this.app=owner.app;this.api=owner.api;this.independentAsset=true;this.storage=workspaceStorage(owner);this.Viewer=Viewer;this.epoch=0;this.admissionEpoch=0;this.active=false;this.revision=0;this.dirty=false;this.closed=false;
     let saved={};try{saved=JSON.parse(this.storage.getItem(KEY))||{};}catch{}
-    this.state={width:512,height:512,frames:121,fps:24,prompt:'',seed:42,colour:'#ff6347',brush:48,background:'#000000',keys:[{frame:0},{frame:120}],...saved.state};
+    this.state={...initialPaintState(),...saved.state};
     if(!Array.isArray(this.state.keys)||!this.state.keys.length)this.state.keys=[{frame:0},{frame:this.state.frames-1}];
     this.selected=this.state.keys[0].frame;this.items=Array.isArray(saved.items)?saved.items.slice(0,12):[];this.result=this.items[0]||null;this.job=saved.job||null;this.pendingSubmission=saved.pendingSubmission||null;
     const doc=owner.root.ownerDocument;this.page=doc.createElement('section');this.page.className='zvfx-page';this.page.hidden=true;
@@ -148,6 +150,16 @@ export class PaintVFXWorkspace{
     this.$('readiness').textContent=busy?(this.saving?'Saving the painted frame…':'Working…'):this.loadError||(['Paint the first and last keyframes before generating.','Describe the effect to generate.'].includes(error)?paintHint:error)||missing;this.$('generate').disabled=busy||!!this.loadError||!!error||!this.availability?.ready;
     this.$('history').replaceChildren(...this.items.map((item,index)=>{const button=this.page.ownerDocument.createElement('button');button.type='button';button.textContent='Take '+(this.items.length-index)+' · '+item.config.width+' × '+item.config.height;button.onclick=()=>this.showResult(item);return button;}));
   }
+  async reset(){
+    if(this.busy())return false;
+    clearTimeout(this.saveTimer);clearTimeout(this.brushSaveTimer);
+    this.revision++;this.admissionEpoch++;this.dirty=false;
+    this.state=initialPaintState();this.selected=0;this.tool='draw';this.result=null;this.review=false;
+    const video=this.$('result');video.pause();video.removeAttribute('src');video.load();
+    this.$('download').removeAttribute('href');this.$('background-file').value='';
+    for(const id of ['width','height','frames','fps','seed','prompt','colour','background','brush'])this.$(id).value=this.state[id];
+    this.message('');this.save();await this.loadKey();return true;
+  }
   showResult(item){this.result=item;this.review=true;this.$('result').src=assetUrl(this.api,playbackFile(item.file),'output');this.$('download').href=assetUrl(this.api,item.file,'output');this.render();}
   async generate(){
     if(this.busy())return;const token=this.admission();try{
@@ -168,6 +180,6 @@ export class PaintVFXWorkspace{
     }else{const queue=await this.fetch('/queue');if(this.job!==job)return;if(![...queue.queue_running||[],...queue.queue_pending||[]].some(row=>row[1]===job.id)){const again=await this.fetch('/history/'+encodeURIComponent(job.id));if(this.job!==job||again[job.id])return;this.job=null;this.stopPolling();this.save();this.message('The run left the queue. Your painted frames are retained.');this.render();}else this.$('progress-detail').textContent=job.cancelPending?'Waiting for cancellation…':'Generating the painted effect…';}}
     catch(error){this.message('Connection interrupted. Reconnecting to the saved run…');}finally{this.polling=false;}
   }
-  async graph(){try{await this.flushKey();await this.app.loadApiJson(buildPaintVfxGraph(this.config(),this.info),'Zura Paint VFX.json');this.studio.close();}catch(error){this.message(error.message);}}
+  async graph(){await this.flushKey();await openStudioGraph(this.studio,buildPaintVfxGraph(this.config(),this.info),'Paint VFX · Current settings','paint_vfx');}
   close(){this.deactivate();this.closed=true;clearTimeout(this.saveTimer);clearTimeout(this.brushSaveTimer);void this.flushKey().catch(error=>this.message(error.message)).finally(()=>{if(this.closed){this.viewer?.dispose();this.viewer=null;this.epoch++;}});this.save();this.stopPolling();this.modelDownloads.close();}
 }

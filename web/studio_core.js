@@ -788,10 +788,36 @@ export class ArtistStudio {
     this.render();
     return updated;
   }
+  activeGraphPrompt(){
+    const action=this.project?.actions?.at(-1);
+    if(this.project?.phase==='working')return action?.id;
+    if(this.preview==='video'&&action?.state==='complete')return action.id;
+    return null;
+  }
+  showComfyGraph(){
+    const doc=this.container.ownerDocument;
+    this.container.querySelectorAll('video,audio').forEach(media=>media.pause());
+    if(this.container.contains(doc.fullscreenElement))doc.exitFullscreen?.().catch(()=>{});
+    this.container.style.display='none';
+    doc.documentElement.classList.remove('genj-open');
+    if(!this.graphReturn){
+      const button=doc.createElement('button');button.type='button';button.className='zura-return-to-studio';
+      button.textContent='Back to Zura Studio';button.onclick=()=>this.returnFromGraph();
+      doc.body.append(button);this.graphReturn=button;
+    }
+    this.graphReturn.focus();
+  }
+  returnFromGraph(){
+    if(!this.graphReturn)return;
+    this.graphReturn.remove();this.graphReturn=null;
+    this.container.style.removeProperty('display');
+    this.container.ownerDocument.documentElement.classList.add('genj-open');
+    this.$('exit')?.focus();
+  }
   async graphView() {
     if(this.creative?.mode==='paint_vfx')return this.creative.paint_vfx.graph();
     if(this.creative?.mode==='panorama')return this.creative.panorama.graph();
-    if(!this.project && (!this.source || !this.hasLook())){this.close();return;}
+    if(!this.project && (!this.source || !this.hasLook()))throw Error('Add the source and starting look to prepare this stage’s graph.');
     await this.perform(async(epoch)=>{
       this.config=this.readConfig();
       if(!this.project){
@@ -803,8 +829,9 @@ export class ArtistStudio {
       const stage=this.$("graph-stage").value;
       const id=this.project.id,exported=await this.request(`/projects/${id}/graph?stage=${encodeURIComponent(stage)}`);if(epoch!==this.resetEpoch||this.project?.id!==id)return;
       if(!this.graph.available)throw new Error("Open Studio in ComfyUI to use editable Graph view.");
+      if(this.graphViewCheck&&!this.graphViewCheck())return;
       await this.graph.openApiGraph(exported);
-      this.close();
+      if(!this.graphViewCheck||this.graphViewCheck())this.showComfyGraph();
     });
   }
   async primary() {
@@ -1757,7 +1784,7 @@ export class ArtistStudio {
     }catch(e){if(epoch===this.resetEpoch)this.message("Connection interrupted. Your job is saved. Reopen this view when ComfyUI reconnects.",true);}
     finally{if(epoch===this.resetEpoch)this.polling=false;}
   }
-  close(){this.api?.removeEventListener?.("minimax_h3_preview",this.h3PreviewListener);this.aeBridge?.dispose();this.restartNavigation?.dispose();this.nativeSamplePreview?.dispose();this.nativeSamplePreview=null;this.previewZoom?.stopDraw();this.hdrTool?.deactivate?.();this.creative?.close();this.comparison?.hide();this.trimTimeline?.close();this.$("canvas").classList.remove("is-expanded");if(document.fullscreenElement===this.$("canvas"))document.exitFullscreen?.().catch(()=>{});this.container.querySelectorAll("video,audio").forEach(media=>media.pause());this.container.remove();document.documentElement.classList.remove("genj-open");clearInterval(this.timer);this.onClosed?.();}
+  close(){this.graphReturn?.remove();this.graphReturn=null;this.container.style.removeProperty('display');this.api?.removeEventListener?.("minimax_h3_preview",this.h3PreviewListener);this.aeBridge?.dispose();this.restartNavigation?.dispose();this.nativeSamplePreview?.dispose();this.nativeSamplePreview=null;this.previewZoom?.stopDraw();this.hdrTool?.deactivate?.();this.creative?.close();this.comparison?.hide();this.trimTimeline?.close();this.$("canvas").classList.remove("is-expanded");if(document.fullscreenElement===this.$("canvas"))document.exitFullscreen?.().catch(()=>{});this.container.querySelectorAll("video,audio").forEach(media=>media.pause());this.container.remove();document.documentElement.classList.remove("genj-open");clearInterval(this.timer);this.onClosed?.();}
 }
 
 

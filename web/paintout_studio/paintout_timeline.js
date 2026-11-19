@@ -4,8 +4,8 @@ const finite=(value,fallback)=>Number.isFinite(Number(value))?Number(value):fall
 
 /** Timeline with distinct seek and clean-frame lanes. Frame labels stay absolute. */
 export class PaintoutTimeline{
-  constructor(container,{onSeek=()=>{},onCreate=()=>{},onSelect=()=>{},onRemove=()=>{},onMaskSelect=()=>{},onTrim=()=>{},onMaskTrim=()=>{},onSegmentSelect=()=>{},onSegmentRemove=()=>{},onAddMask=()=>{}}={}){
-    this.container=container;this.callbacks={onSeek,onCreate,onSelect,onRemove,onMaskSelect,onTrim,onMaskTrim,onSegmentSelect,onSegmentRemove,onAddMask};
+  constructor(container,{onSeek=()=>{},onCreate=()=>{},onSelect=()=>{},onEditFrame,onExportFrame,onImportFrame,onRemove=()=>{},onMaskSelect=()=>{},onTrim=()=>{},onMaskTrim=()=>{},onSegmentSelect=()=>{},onSegmentRemove=()=>{},onAddMask=()=>{}}={}){
+    this.container=container;this.callbacks={onSeek,onCreate,onSelect,onEditFrame,onExportFrame,onImportFrame,onRemove,onMaskSelect,onTrim,onMaskTrim,onSegmentSelect,onSegmentRemove,onAddMask};
     this.state={startFrame:0,frameCount:1,fps:24,playhead:0,anchors:[],selected:-1,busy:false,thumbnail:null,maskRanges:[]};
     this.windowSize=Infinity;this.windowStart=0;this.dragging=false;
     this.root=el('section','zp-editor-timeline');this.root.setAttribute('aria-label','Paintout source timeline');
@@ -38,6 +38,7 @@ export class PaintoutTimeline{
     this.ruler.append(this.ticks,this.coverage,this.playheadLine,this.range,this.maskAnchors);
     this.readout=el('div','zp-editor-timeline__readout');this.frameText=el('span','','Frame 0');this.timeText=el('span','','00:00:00:00');this.help=el('span','zp-editor-timeline__hint','Scrub to a frame, then choose Add clean frame · K');
     this.trimText=el('span','zp-editor-timeline__trim-readout');this.trimText.title='Drag the In and Out handles to trim. Arrow keys adjust a focused handle.';this.readout.append(this.frameText,this.timeText,this.trimText,this.help);this.lanes.append(this.cleanLane,this.ruler,this.maskLanes,this.readout);this.root.append(this.header,this.lanes);container.append(this.root);
+    if(onEditFrame)this.createFrameActions();
     this.range.addEventListener('input',()=>{this.dragging=true;this.seekFromInput(true);});
     this.range.addEventListener('change',()=>{this.dragging=false;this.seekFromInput(false);});
     this.range.addEventListener('keydown',event=>{if(['ArrowLeft','ArrowRight','Home','End','PageUp','PageDown'].includes(event.key)){event.stopPropagation();}});
@@ -92,7 +93,7 @@ export class PaintoutTimeline{
   }
   onKeydown(event){
     if(this.state.busy)return;
-    if(event.defaultPrevented||event.target.matches('input,textarea,select,[contenteditable=true]'))return;
+    if(event.defaultPrevented||event.target.matches('input,textarea,select,[contenteditable=true]')||event.target.closest('.zp-frame-actions-popover'))return;
     if(['clean','render'].includes(this.state.stage)&&event.key.toLowerCase()==='k'&&!event.ctrlKey&&!event.metaKey&&!this.state.busy){event.preventDefault();this.callbacks.onCreate(this.state.playhead);return;}
     if(event.key==='ArrowLeft'||event.key==='ArrowRight'){event.preventDefault();this.seek(this.state.playhead+(event.key==='ArrowLeft'?-1:1));}
   }
@@ -117,15 +118,16 @@ export class PaintoutTimeline{
     for(const range of this.state.stage==='mask'?[]:this.state.maskRanges||[]){const frame=range.metadata?.frame;if(!Number.isInteger(frame)||frame<start||frame>=end||seen.has(frame))continue;seen.add(frame);const marker=el('button','zp-editor-timeline__mask-anchor');marker.type='button';marker.disabled=this.state.busy;marker.style.left=`${this.position(frame)}%`;marker.title=`Mask correction at source frame ${frame}`;marker.setAttribute('aria-label',marker.title);marker.onclick=event=>{event.stopPropagation();this.callbacks.onMaskSelect(frame);};this.maskAnchors.append(marker);}
   }
   renderMaskBars(){
-    this.maskLanes.replaceChildren();this.addMask.hidden=this.state.stage!=='mask'||!(this.state.maskSegments||[]).some(s=>s.tracked);this.addMask.disabled=this.state.busy||this.state.newMaskPending;
+    const maskCount=(this.state.maskSegments||[]).filter(segment=>segment.tracked||segment.ready).length;const heading=this.header.querySelector('strong');if(heading)heading.textContent=this.state.stage==='mask'&&maskCount?'Source timeline · '+maskCount+' masks'+(maskCount>2?' (scroll)':''):'Source timeline';
+    this.maskLanes.replaceChildren();this.addMask.hidden=this.state.stage!=='mask'||!(this.state.maskSegments||[]).some(s=>s.tracked||s.ready);this.addMask.disabled=this.state.busy||this.state.newMaskPending;
     const showClean=this.state.stage==='clean'||this.state.stage==='render'||!!(this.state.anchors?.length&&this.state.stage!=='trim');
     this.cleanLane.hidden=!showClean;this.addFrame.hidden=!['clean','render'].includes(this.state.stage);
     if(this.state.stage!=='mask'){this.maskLanes.hidden=true;return;}
-    this.maskLanes.hidden=false;
-    const segments=(this.state.maskSegments||[]).filter(s=>s.tracked);
+    this.maskLanes.hidden=false;this.maskLanes.tabIndex=0;this.maskLanes.setAttribute('aria-label','Independent mask tracks. Scroll to see additional masks.');
+    const segments=(this.state.maskSegments||[]).filter(s=>s.tracked||s.ready);
     if(!segments.length){this.maskLanes.append(el('p','zp-editor-mask-empty','Completed masks appear here. Drag the ends of a bar to trim its duration.'));return;}
     for(const segment of segments){
-      const row=el('div','zp-editor-mask-row');const lane=el('div','zp-editor-mask-lane');
+      const row=el('div','zp-editor-mask-row');row.dataset.segment=segment.id;row.setAttribute('role','group');row.setAttribute('aria-label',segment.name+' mask lane');const lane=el('div','zp-editor-mask-lane');
       const bar=el('div','zp-editor-mask-bar');bar.classList.toggle('is-selected',segment.id===this.state.selectedMask);bar.dataset.segment=segment.id;
       const place=(start,end)=>{bar.style.left=this.position(start)+'%';bar.style.width=Math.max(.5,this.position(end)-this.position(start))+'%';bar.title=`${segment.name}: frames ${start}–${end}. Click to edit; drag the ends to trim.`;};
       place(segment.start,segment.end);bar.hidden=segment.end<this.visibleStart()||segment.start>=this.visibleEnd();
@@ -146,21 +148,104 @@ export class PaintoutTimeline{
       lane.append(bar);row.append(lane,remove);this.maskLanes.append(row);
     }
   }
+  createFrameActions(){
+    const doc=this.root.ownerDocument;
+    const panel=el('div','zp-frame-actions-popover');
+    panel.hidden=true;panel.setAttribute('popover','manual');panel.setAttribute('role','group');
+    panel.setAttribute('aria-label','Timeline frame actions');
+    const actions=[
+      ['onEditFrame','paintbrush','Edit frame','Open the paint controls for this frame'],
+      ['onExportFrame','download','Save source frame','Save a full-size frame for Photoshop or another editor'],
+      ['onImportFrame','upload','Import edited frame','Use a prepared image for this timeline frame'],
+    ];
+    for(const [key,icon,label,description] of actions){
+      if(!this.callbacks[key])continue;
+      const button=el('button','zp-frame-action');button.type='button';button.title=description;
+      button.innerHTML=maskIcons[icon];button.append(el('span','',label));button.dataset.frameAction=key;
+      button.onclick=()=>{
+        const index=this.state.anchors.indexOf(this.actionFrame);
+        if(index<0||this.state.busy)return;
+        this.closeFrameActions(true);
+        return this.callbacks[key](index);
+      };
+      panel.append(button);
+    }
+    this.frameActions=panel;this.root.append(panel);
+    this.dismissFrameActions=event=>{
+      if(!panel.contains(event.target)&&!event.target.closest?.('.zp-editor-frame-card__select'))this.closeFrameActions();
+    };
+    this.frameActionEscape=event=>{
+      if(!this.actionFrame||event.key!=='Escape')return;
+      event.preventDefault();event.stopPropagation();this.closeFrameActions(true);
+    };
+    this.frameActionScroll=()=>this.positionFrameActions();
+    this.frameActionDocument=doc;
+  }
+  openFrameActions(anchor,keyboard){
+    if(!this.frameActions)return;
+    this.closeFrameActions();
+    this.actionFrame=anchor;
+    const panel=this.frameActions,doc=this.frameActionDocument;
+    panel.hidden=false;panel.showPopover?.();
+    doc.addEventListener('pointerdown',this.dismissFrameActions,true);
+    doc.addEventListener('keydown',this.frameActionEscape,true);
+    doc.addEventListener('scroll',this.frameActionScroll,true);
+    this.positionFrameActions();
+    if(keyboard&&!panel.hidden)panel.querySelector('button')?.focus({preventScroll:true});
+  }
+  closeFrameActions(restoreFocus=false){
+    const panel=this.frameActions,doc=this.frameActionDocument;
+    if(!this.actionFrame)return;
+    const trigger=this.frameActionTrigger;
+    trigger?.setAttribute('aria-expanded','false');
+    this.actionFrame=this.frameActionTrigger=null;
+    panel.hidePopover?.();
+    panel.hidden=true;
+    doc.removeEventListener('pointerdown',this.dismissFrameActions,true);
+    doc.removeEventListener('keydown',this.frameActionEscape,true);
+    doc.removeEventListener('scroll',this.frameActionScroll,true);
+    if(restoreFocus)trigger?.focus({preventScroll:true});
+  }
+  positionFrameActions(){
+    if(!this.actionFrame)return;
+    const index=this.state.anchors.indexOf(this.actionFrame),frame=this.actionFrame.frame;
+    const trigger=this.cards.querySelector('[data-frame-index="'+index+'"]'),panel=this.frameActions;
+    const inRange=frame>=(this.state.exportStart??this.state.startFrame)&&frame<=(this.state.exportEnd??this.state.startFrame+this.state.frameCount-1);
+    if(!trigger||!inRange||this.state.busy||this.state.selected!==index||this.state.playhead!==frame||this.cleanLane.hidden||this.root.closest('[hidden]')){
+      this.closeFrameActions();return;
+    }
+    this.frameActionTrigger=trigger;trigger.setAttribute('aria-expanded','true');
+    const rect=trigger.getBoundingClientRect(),view=this.frameActionDocument.defaultView;
+    if(!view?.innerWidth)return;
+    if(!rect.width||rect.bottom<=0||rect.top>=view.innerHeight){this.closeFrameActions();return;}
+    const {width,height}=panel.getBoundingClientRect(),margin=8;
+    const left=Math.max(margin,Math.min(rect.left+(rect.width-width)/2,view.innerWidth-width-margin));
+    const top=rect.top>height+margin*2?rect.top-height-margin:Math.min(rect.bottom+margin,view.innerHeight-height-margin);
+    panel.style.left=left+'px';panel.style.top=Math.max(margin,top)+'px';
+  }
   renderCards(){
     const layout=typeof getComputedStyle==='function'?getComputedStyle(this.root):null,rowStep=Math.max(48,finite(parseFloat(layout?.getPropertyValue('--zp-card-row-step')),82)),laneBase=Math.max(rowStep+16,finite(parseFloat(layout?.getPropertyValue('--zp-card-lane-base')),108));
+    const focused=this.root.ownerDocument.activeElement?.dataset?.frameIndex;
     this.cards.replaceChildren();const {anchors,selected,thumbnail,busy}=this.state,start=this.visibleStart(),end=this.visibleEnd(),rows=[];let tallest=0;
     anchors.forEach((anchor,index)=>{
       const frame=Math.trunc(finite(anchor.frame,0));if(frame<start||frame>=end)return;
       const position=this.position(frame),pixel=(this.cards.clientWidth||600)*position/100;let row=rows.findIndex(positions=>positions.every(last=>Math.abs(pixel-last)>=102));if(row<0){row=rows.length;rows.push([]);}rows[row].push(pixel);tallest=Math.max(tallest,row);
       const outsideTrim=frame<this.state.startFrame||frame>=this.state.startFrame+this.state.frameCount;
       const card=el('article','zp-editor-frame-card');card.classList.toggle('is-outside-trim',outsideTrim);card.title=outsideTrim?'Outside trim. Kept for later; extend the In/Out range to use this guide.':'';card.style.left=`${position}%`;card.style.bottom=`${8+row*rowStep}px`;card.classList.toggle('is-selected',index===selected);card.classList.toggle('is-disabled',anchor.enabled===false);card.classList.toggle('is-review',anchor.status==='needs_review'||anchor.status==='failed');
-      const pick=el('button','zp-editor-frame-card__select');pick.type='button';pick.disabled=busy;pick.setAttribute('aria-pressed',String(index===selected));pick.setAttribute('aria-label',`${anchor.status==='accepted'?'Accepted clean frame':'Clean frame'} at source frame ${frame}${outsideTrim?', outside trim, excluded from render':anchor.enabled===false?', disabled':''}`);
+      const pick=el('button','zp-editor-frame-card__select');pick.type='button';pick.dataset.frameIndex=String(index);pick.disabled=busy;if(this.frameActions)pick.setAttribute('aria-expanded','false');pick.setAttribute('aria-pressed',String(index===selected));pick.setAttribute('aria-label',`${anchor.status==='accepted'?'Accepted clean frame':'Clean frame'} at source frame ${frame}${outsideTrim?', outside trim, excluded from render':anchor.enabled===false?', disabled':''}`);
       const image=el('img','zp-editor-frame-card__image');image.alt='';image.loading='lazy';image.draggable=false;const src=typeof thumbnail==='function'?thumbnail(anchor):anchor.thumbnail||anchor.url||anchor.file;if(src)image.src=src;image.onerror=()=>{image.removeAttribute('src');image.classList.add('is-unavailable');};
       const state=outsideTrim?'Outside trim':anchor.enabled===false?'Disabled':anchor.status==='accepted'?'Ready':anchor.status==='needs_review'?'Review':anchor.status==='failed'?'Failed':anchor.status==='generating'?'Working':'Draft';
-      const meta=el('span','zp-editor-frame-card__meta');meta.append(el('strong','',String(frame)),el('small','',state));pick.append(image,meta);pick.onclick=event=>{event.stopPropagation();this.callbacks.onSelect(index);};
+      const meta=el('span','zp-editor-frame-card__meta');meta.append(el('strong','',String(frame)),el('small','',state));pick.append(image,meta);pick.onclick=async event=>{
+        event.stopPropagation();
+        this.closeFrameActions();
+        const loaded=await this.callbacks.onSelect(index);
+        if(loaded!==false&&this.state.anchors[this.state.selected]===anchor&&this.state.playhead===frame)this.openFrameActions(anchor,event.detail===0);
+      };
       const remove=el('button','zp-editor-frame-card__remove');remove.innerHTML=maskIcons.x;remove.type='button';remove.disabled=busy;remove.setAttribute('aria-label',`Remove clean frame at source frame ${frame}`);remove.title=`Remove clean frame at source frame ${frame}`;remove.onclick=event=>{event.stopPropagation();this.callbacks.onRemove(index);};
       card.append(pick,remove);this.cards.append(card);
     });
+    if(focused!==undefined)this.cards.querySelector('[data-frame-index="'+focused+'"]')?.focus({preventScroll:true});
+    this.positionFrameActions();
     this.cards.style.height=`${rowStep*(tallest+1)}px`;this.cleanLane.style.minHeight=`${laneBase+rowStep*tallest}px`;
   }
   render(){
@@ -174,5 +259,5 @@ export class PaintoutTimeline{
     this.help.textContent=this.state.stage==='mask'?'Drag In/Out to set tracking range · Mask bars have their own duration':this.state.stage==='trim'?'Drag In/Out, then choose Use trimmed clip':'Add clean frame at the playhead · Open Trim clip to change the exported range';
     this.cleanLane.setAttribute('aria-description',`${this.state.anchors.length} clean frames. Click an empty position above the ruler to add one. Press K at the playhead to add one.`);
   }
-  dispose(){this.resizeObserver?.disconnect();this.root.remove();}
+  dispose(){this.closeFrameActions();this.resizeObserver?.disconnect();this.root.remove();}
 }

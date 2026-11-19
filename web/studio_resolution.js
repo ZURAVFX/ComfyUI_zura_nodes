@@ -4,6 +4,23 @@ import {SOURCE_MODEL_LIMITS,sourceModelRaster} from './source_model_resolution.j
 
 export const VIDEO_CANVAS_LIMITS=Object.freeze({minDimension:256,maxDimension:4096,maxPixels:8_388_608});
 export const megapixelMaximum=cap=>Math.floor(cap.maxPixels/1e6/.05)*.05;
+/** Largest useful source-aspect working raster under an explicit MP ceiling.
+ * Source mode keeps the existing outward grid alignment. A limit never enlarges
+ * either source axis; the original raster is retained for inverse restoration.
+ */
+export function sourceMegapixelLimit(sourceWidth,sourceHeight,megapixels=0,{step=64,min=64,max=4096}={}){
+  const width=Number(sourceWidth),height=Number(sourceHeight),limit=Number(megapixels||0);
+  if(![width,height].every(n=>Number.isInteger(n)&&n>0)||!Number.isFinite(limit)||limit<0||limit>16)throw Error('Choose a valid source size and megapixel limit.');
+  if(!limit){const size={width:Math.max(min,Math.ceil(width/step)*step),height:Math.max(min,Math.ceil(height/step)*step)};if(Math.max(size.width,size.height)>max)throw Error('Choose a megapixel limit for footage larger than the model canvas.');return size;}
+  const maxWidth=Math.floor(Math.min(width,max)/step)*step,maxHeight=Math.floor(Math.min(height,max)/step)*step,pixels=Math.floor(limit*1e6),minimum=Math.ceil(min/step)*step,candidates=[];
+  for(let w=minimum;w<=maxWidth;w+=step)for(let h=minimum;h<=maxHeight;h+=step)if(w*h<=pixels)candidates.push({width:w,height:h,pixels:w*h,error:Math.abs(Math.log((w/h)/(width/height)))});
+  if(!candidates.length)throw Error('This source and limit are smaller than the model grid. Choose Source size or a larger limit.');
+  const largest=Math.max(...candidates.map(size=>size.pixels));
+  // Prefer source aspect among similarly sized canvases instead of selecting a
+  // tiny exact-ratio raster or a full-budget canvas with visibly wrong framing.
+  const selected=candidates.filter(size=>size.pixels>=largest*.8).sort((a,b)=>a.error-b.error||b.pixels-a.pixels)[0];
+  return {width:selected.width,height:selected.height};
+}
 // Shared size maths and editing behaviour for every Studio composer.
 export function resolutionSize(ratio, megapixels, {step=32,min=256,max=1536,maxPixels=Infinity}={}) {
   const pixels=Math.min(Number(megapixels)*1e6,maxPixels);

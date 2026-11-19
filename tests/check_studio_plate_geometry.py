@@ -47,7 +47,7 @@ with tempfile.TemporaryDirectory(prefix='zura-layout-') as directory:
             assert geometry['ruler']['height'] >= 40, geometry
             assert all(handle['height'] >= 40 and handle['bottom'] < geometry['timeline']['bottom']
                        for handle in geometry['handles']), geometry
-            assert geometry['view']['height'] >= 180, geometry
+            assert geometry['view']['height'] >= (160 if scenario.startswith('mask') else 180), geometry
             if scenario == 'inline-tools':
                 rail = geometry['rail']
                 assert len(geometry['inlineTools']) == 8, geometry['inlineTools']
@@ -62,6 +62,13 @@ with tempfile.TemporaryDirectory(prefix='zura-layout-') as directory:
                 assert appearance['fresh'] == appearance['accent'], appearance
                 assert appearance['ready'] != appearance['fresh'], appearance
             if scenario.startswith('mask'):
+                lanes=geometry['maskLanes'];assert len(lanes)==3,lanes
+                assert geometry['maskScroll']['visible'],geometry['maskScroll']
+                for index,lane in enumerate(lanes):
+                    assert lane['row']['height']>=24,lanes
+                    assert abs(lane['lane']['left']-geometry['ruler']['left'])<=1,lanes
+                    assert abs(lane['lane']['right']-geometry['ruler']['right'])<=1,lanes
+                    if index:assert lane['row']['top']>=lanes[index-1]['row']['bottom'],lanes
                 appearance = geometry['cleanAppearance']
                 assert appearance['track'] == appearance['input'], appearance
                 assert appearance['track'] != appearance['accent'], appearance

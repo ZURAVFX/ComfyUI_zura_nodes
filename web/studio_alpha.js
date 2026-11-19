@@ -1,3 +1,4 @@
+import {openStudioGraph} from './studio_graph_view.js';
 import {workspaceStorage} from './studio_storage.js';
 import {ClipTrimmer} from './studio_trim.js';
 import {StudioModelDownloads} from './studio_model_download.js';
@@ -173,7 +174,7 @@ export class AlphaWorkspace {
     if(this.job||this.pendingSubmission||this.submitting)return false;
     ++this.revision;this.uploadController?.abort();this.uploadController=null;this.picking=false;this.source=this.sourceInfo=null;this.result=null;this.state=initial();this.releaseLocalPreview();this.$('trim').open=false;this.trimmer.close();this.video.pause();this.video.removeAttribute('src');this.video.load();this.video.hidden=true;this.still.hidden=true;this.$('empty').hidden=false;this.clearProgress();this.message('');this.save();this.render();return true;
   }
-  async graph(){try{const graph=buildAlphaVideoGraph(this.job?.config||this.config(),this.modelInfo),original=(this.app.rootGraph||this.app.graph)?.serialize?.();if(!original||typeof this.app.loadApiJson!=='function')throw Error('Update ComfyUI to open this editable graph.');try{await this.app.loadApiJson(graph,`Zura LTX Alpha Gen · ${Date.now()}.json`);}catch(error){await this.app.loadGraphData(original);throw error;}this.owner.studio?.close();}catch(error){this.message(error.message);}}
+  async graph(){await openStudioGraph(this.owner.studio,buildAlphaVideoGraph(this.config(),this.modelInfo),'Extract alpha · Current settings','alpha');}
   open(){this.closed=false;this.page.hidden=false;this.modelDownloads.resume();void this.restoreSource();void this.checkModels();if(this.job||this.pendingSubmission){this.setProgress({title:this.job?'Reconnecting to alpha run':'Checking your run',detail:'Restoring the saved ComfyUI run…'});this.startPolling();}this.render();}
   close(){this.closed=true;this.page.hidden=true;this.video.pause();this.trimmer.close();this.modelDownloads.close();this.save();}
   dispose(){this.disposed=true;++this.revision;++this.modelRevision;this.uploadController?.abort();this.stopPolling();this.releaseLocalPreview();this.disposeExecuting?.();this.api.removeEventListener?.('progress',this.onProgress);this.close();this.modelDownloads.dispose();this.page.remove();}

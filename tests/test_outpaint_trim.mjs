@@ -6,21 +6,19 @@ assert.equal(hdrOutpaintFrameLimit({width:1920,height:1080},1088,640),17,'the or
 assert.equal(hdrOutpaintFrameLimit({width:7680,height:4320},1088,640),0,'unsafe source raster is rejected before queueing');
 assert.equal(hdrOutpaintFrameLimit({width:128,height:128},512,320),113,'small sources use the bounded model limit');
 
-const {document}=parseHTML(`<section><div class="settings"><label>Start <input data-start value="0"></label><label>Length <input data-duration value="2"></label></div><video></video><textarea data-prompt></textarea></section>`);
+const {document}=parseHTML(`<section><div class="settings"><label>Start <input data-start value="0"></label><label>Length <input data-duration value="2"></label></div><div class="zo-stage"><video></video></div><textarea data-prompt></textarea></section>`);
 globalThis.document=document;
 const page=document.querySelector('section'),video=page.querySelector('video');
-const workspace={page,video,source:{duration:4.25},job:null,submitting:false,mode:'expand',longReady:false,
+const workspace={page,video,stage:page.querySelector('.zo-stage'),source:{duration:4.25},job:null,submitting:false,mode:'expand',longReady:false,
   $(name){return page.querySelector(`${name==='duration'||name==='start'?'input':''}[data-${name}]`);},invalidate(){this.invalidated=(this.invalidated||0)+1;}};
 const trim=new OutpaintTrim(workspace);
 trim.initial();
 assert.equal(Number(workspace.$('duration').value),4.25,'short sources default to their complete length');
-assert.equal(!!trim.menu.open,false,'the timeline starts collapsed so the preview and action remain visible');
-assert.equal(trim.selection.textContent,'4.25s','the collapsed control still shows the selected duration');
-trim.menu.open=true;trim.menu.dispatchEvent(new document.defaultView.Event('toggle'));
-assert.equal(trim.trimmer.host.hidden,false,'opening the control makes the draggable timeline available');
-const outside=document.createElement('button');document.body.append(outside);
-outside.dispatchEvent(new document.defaultView.Event('pointerdown',{bubbles:true}));
-assert.equal(trim.menu.open,false,'clicking outside dismisses the timeline');
+assert.equal(trim.container.previousElementSibling,workspace.stage,'The timeline sits below the canvas');
+assert.equal(trim.container.hidden,false);
+assert.equal(trim.trimmer.host.hidden,false);
+assert.equal(trim.container.querySelector('.zo-trim-toolbar').previousElementSibling,trim.trimmer.host);
+assert.equal(trim.play.textContent.trim(),'Play selection');
 assert.equal(trim.button.disabled,false);
 trim.commit({start:1,duration:2});
 assert.equal(workspace.$('start').value,'1');
@@ -43,13 +41,23 @@ assert.equal(Number(workspace.$('duration').value),2,'selection cannot extend pa
 workspace.longReady=true;trim.update();
 assert.equal(trim.longOption.hidden,false);assert.equal(trim.button.disabled,false,'verified long backend enables full-source selection');
 trim.button.click();assert.equal(trim.long,true);assert.equal(Number(workspace.$('duration').value),10,'entire source selects a long range explicitly');
-assert.equal(trim.selection.textContent,'10s · long','the collapsed label identifies a long selection');
+assert.match(trim.trimmer.host.querySelector('[data-duration]').textContent,/10\.00s selected/);
 trim.commit({start:1,duration:8});assert.equal(Number(workspace.$('duration').value),8,'dragged long range remains intact');
 workspace.mode='black';trim.modeChanged();assert.equal(trim.long,true);assert.equal(Number(workspace.$('duration').value),8,'black-area mode keeps an approved long selection');
 workspace.mode='expand';trim.update();trim.longMode.checked=true;trim.modeChanged();trim.longMode.checked=false;trim.longMode.onchange();assert.ok(Number(workspace.$('duration').value)<=5,'turning long mode off clamps the existing range');
 workspace.source={duration:218/30,fps_num:30,fps_den:1};trim.initial();assert.equal(Number(workspace.$('duration').value),4,'120 source frames are four seconds at 30 fps');assert.equal(trim.trimmer.fps,30,'Timeline dragging snaps to the source frame rate');
 trim.button.click();assert.equal(trim.long,true);assert.equal(Number(workspace.$('duration').value),218/30,'Use entire source keeps every original 30 fps frame');
 trim.commit({start:1/30,duration:15/30});assert.equal(Number(workspace.$('start').value),1/30);assert.equal(Number(workspace.$('duration').value),15/30);
+let paused=true;
+Object.defineProperty(video,'paused',{get:()=>paused});
+video.src='/test.mp4';video.currentTime=5;
+video.play=()=>{paused=false;video.dispatchEvent(new document.defaultView.Event('play'));};
+video.pause=()=>{paused=true;video.dispatchEvent(new document.defaultView.Event('pause'));};
+trim.update();assert.equal(trim.play.disabled,false);
+trim.play.click();assert.equal(video.currentTime,1/30);assert.equal(trim.play.textContent.trim(),'Pause');
+video.currentTime=trim.trimmer.range.end;
+video.dispatchEvent(new document.defaultView.Event('timeupdate'));
+assert.equal(paused,true);assert.equal(trim.play.textContent.trim(),'Play selection');
 workspace.job={id:'busy'};trim.update();assert.equal(trim.button.disabled,true);
 trim.close();
 console.log('Frame-extension trim tracks the source, selection limit and precise timing.');

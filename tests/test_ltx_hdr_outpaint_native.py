@@ -53,10 +53,10 @@ class NativeHDROutpaintTest(unittest.TestCase):
         self.assertEqual(g['hdr_trim']['inputs']['image'], ['blend_high',0])
         self.assertNotIn('hdr_composite', g)
         self.assertEqual(g['test_delivery_hold']['inputs']['length'],17)
-        self.assertEqual(g['hdr_experiment_hlg']['inputs']['image'], ['test_delivery_hold',0])
+        self.assertEqual(g['hdr_experiment_save']['inputs']['images'], ['test_delivery_hold',0])
         self.assertEqual(g['hdr_experiment_exr']['inputs']['images'], ['test_delivery_hold',0])
         self.assertEqual(g['audio_encoded']['inputs']['audio'], ['hdr_audio_hold',1])
-        self.assertEqual(g['hdr_experiment_video']['inputs']['audio'], ['hdr_audio_hold',1])
+        self.assertEqual(g['hdr_experiment_save']['inputs']['audio'], ['hdr_audio_hold',1])
         self.assertEqual(g['hdr_preview_video']['inputs']['audio'], ['hdr_audio_hold',1])
         for item in g.values():
             for value in item['inputs'].values():
@@ -78,7 +78,7 @@ class NativeHDROutpaintTest(unittest.TestCase):
         self.assertEqual(g['av_high']['inputs']['audio_latent'], ['split',1])
         self.assertNotIn('audio_frozen',g)
         self.assertNotIn('freeze_high',g)
-        self.assertNotIn('audio',g['hdr_experiment_video']['inputs'])
+        self.assertNotIn('audio',g['hdr_experiment_save']['inputs'])
 
     def test_changed_selection_or_review_is_rejected(self):
         with self.assertRaisesRegex(ValueError,'approve'):

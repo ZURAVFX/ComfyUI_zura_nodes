@@ -9,6 +9,7 @@ const {document,window}=parseHTML('<html><head></head><body></body></html>');
 Object.assign(globalThis,{document,window});
 Object.defineProperty(window.HTMLSelectElement.prototype,'value',{configurable:true,get(){return this.querySelector('option[selected]')?.value??this.querySelector('option')?.value??'';},set(value){for(const option of this.querySelectorAll('option'))option.toggleAttribute('selected',option.value===String(value));}});
 assert.equal(studioInputDescription({precision:{sourceBitDepth:32},colour:{encoding:'unknown',sceneLinear:false,ocioWorkingSpace:'Output - sRGB'}}).input,'sdr','FLOAT is precision, not a claim that footage is HDR');
+assert.equal(studioInputDescription({native_hdr:{file:'retained.exr'},colour:{encoding:'srgb_display',sceneLinear:false}}).input,'sdr','Explicit SDR colour is retained even when its original is stored as FLOAT EXR');
 assert.deepEqual(studioInputDescription({resolved_colour:'hlg_rec2020'}),{input:'hdr',space:'hlg_rec2020',detected:true});
 const explicitHalf=Object.assign(Object.create(StudioOutputSettings.prototype),{precision:{value:()=> 'half'},delivery:{aeTransfer:'float32'}});
 assert.equal(explicitHalf.exrStorage('acescg_exr'),'float32','AE32 overrides a saved HALF preference for this transfer only');
@@ -31,7 +32,9 @@ function fixture(storage=memoryStorage()){
       path.endsWith('/jobs/conversion')?{id:'conversion',state,...(state==='complete'?{result:{preview,files:[zip,video],exr_storage:'float32',...(alphaDelivery?{alphaAssociation:'straight',layout:'RGBA'}:{})}}:{})}:{};
     return {ok:true,json:async()=>result};}};
   c.studio.creative=c;
-  const settings={exrStorage:()=> 'float32'},controls=new StudioDeliveryControls(root,api,c,settings);c.outputSettings={delivery:controls};
+  // Physical export verification is exercised by test_studio_image_delivery;
+  // these controller-transition fixtures supply its successful interface.
+  const settings={exrStorage:()=> 'float32',verifyHDRStill:async()=>({filename:'verified.exr',subfolder:'ZURA STUDIO/image-exports/fixture',type:'output'})},controls=new StudioDeliveryControls(root,api,c,settings);c.outputSettings={delivery:controls};
   return {c,root,calls,api,controls,transparent(){imageHasAlpha=true;},complete(){state='complete';},close(){controls.close();root.remove();}};
 }
 {
@@ -54,12 +57,38 @@ function fixture(storage=memoryStorage()){
  controls.delivery.take={studioMode:'image',resultKey:'progress-test'};controls.delivery.busy=true;
  for(const [state,phase] of [['preparing',0],['rendering',1],['staging',1],['exporting',2],['reconnecting',0],['cancelling',0]]){controls.delivery.update({id:'progress',state,completed:1,total:3});assert.equal(controls.progressHost.hidden,false);assert.equal(controls.progressHost.querySelectorAll('li')[phase].getAttribute('aria-current'),'step');}
  controls.delivery.update({id:'progress',state:'rendering',completed:1,total:3});assert.match(controls.progressHost.textContent,/1 of 3 sections converted/);assert.equal(controls.progressHost.querySelector('progress').value,1);assert.equal(controls.progressHost.querySelector('progress').max,3);
- f.c.show('video');assert.equal(controls.$('cancel').hidden,false,'Active HDR cancellation remains available after a mode change');assert.equal(controls.progressHost.hidden,false);
+ f.c.show('video');assert.equal(controls.progressHost.querySelector('[data-delivery-progress-cancel]').hidden,false,'Active HDR cancellation remains available after a mode change');assert.equal(controls.progressHost.hidden,false);
  controls.delivery.update({id:'progress',state:'exporting',completed:3,total:3});assert.equal(controls.progressHost.querySelector('progress').hasAttribute('value'),false,'Export has no invented percentage');assert.match(controls.progressHost.textContent,/Encoding HDR video and writing EXR masters/);
  controls.delivery.update({id:'progress',state:'failed',error:'Encoder stopped'});assert.match(controls.progressHost.textContent,/Encoder stopped/);assert.equal(controls.progressHost.querySelector('progress').hidden,true);assert.equal(controls.$('cancel').hidden,true);
- controls.delivery.update({id:'progress',state:'cancelled'});assert.match(controls.progressHost.textContent,/original master is retained/);
+ controls.delivery.update({id:'progress',state:'cancelled'});
+ assert.equal(controls.progressHost.hidden,true);assert.equal(controls.progressHost.hasAttribute('open'),false);
+ assert.equal(controls.progressToggle.hidden,true);assert.equal(controls.progressTimer,null);
+ assert.match(controls.cancellationNotice.textContent,/original master is retained/);assert.equal(controls.$('status').textContent,'');
+ controls.delivery.update({id:'second',state:'queued'});
+ assert.equal(controls.progressHost.hasAttribute('open'),true,'A later conversion opens its own dialog');
+ controls.progressHost.querySelector('[data-delivery-dismiss]').click();
+ assert.equal(controls.progressHost.hidden,true);assert.equal(controls.progressToggle.hidden,false);
+ controls.progressToggle.click();assert.equal(controls.progressHost.hidden,false);
  controls.delivery.update({id:'progress',state:'complete',result:{files:[]}});assert.equal(controls.progressHost.dataset.state,'failed','Incomplete masters never show Ready');
  assert.equal(hdrDeliveryProgress({state:'rendering'}).value,null);assert.equal(hdrDeliveryProgress({state:'rendering',completed:2,total:2}).complete,false,'Completed sections are not completed delivery');f.close();
+}
+{
+ const f=fixture();await Promise.resolve();const controls=f.controls;
+ const original={kind:'video',master:{filename:'deliver.mov',type:'output'}};
+ let release;
+ controls.delivery.client.request=()=>new Promise(resolve=>{release=resolve;});
+ const converting=controls.convert('paintout',f.c,original,{});
+ assert.equal(controls.progressHost.hidden,false);
+ controls.progressHost.querySelector('[data-delivery-progress-cancel]').click();
+ assert.equal(controls.progressHost.querySelector('[data-delivery-progress-cancel]').disabled,true);
+ release({frames:17,width:512,height:320,fps:24});
+ await converting;
+ assert.equal(controls.progressHost.hidden,true);
+ assert.equal(controls.progressTimer,null);
+ assert.equal(controls.delivery.busy,false);
+ assert.equal(f.calls.filter(call=>call.path==='/zura/studio/hdr/jobs').length,0);
+ assert.match(controls.cancellationNotice.textContent,/original master is retained/);
+ f.close();
 }
 {
   const f=fixture();await Promise.resolve();f.controls.output='hdr';f.controls.save();
@@ -114,14 +143,14 @@ function fixture(storage=memoryStorage()){
 }
 {
   const f=fixture();await Promise.resolve();f.controls.output='hdr';f.transparent();
-  const raw={kind:'image',master:{filename:'transparent.png',type:'output'}};await f.controls.convert('image',f.c,raw,{});
+  const raw={kind:'image',master:{filename:'transparent.png',type:'output'}};f.c.items=[{file:raw.master}];await f.controls.convert('image',f.c,raw,{});
   const body=f.calls.find(call=>call.path==='/zura/studio/hdr/jobs').body;assert.equal(body.source_kind,'output_image');assert.equal(body.exr_storage,'float32');
   f.complete();await f.controls.delivery.client.poll();assert.equal(f.controls.outputFor('image',raw).alpha,'straight');f.close();
 }
 {
   const f=fixture();await Promise.resolve();f.controls.output='hdr';
   let release;f.controls.delivery.preflight=()=>new Promise(resolve=>release=resolve);
-  const converting=f.controls.convert('image',f.c,{kind:'image',master:{filename:'cancel.png',type:'output'}},{});
+  const raw={kind:'image',master:{filename:'cancel.png',type:'output'}};f.c.items=[{file:raw.master}];const converting=f.controls.convert('image',f.c,raw,{});
   while(!release)await new Promise(resolve=>setTimeout(resolve,0));f.controls.cancel();release();await converting;
   assert.equal(f.calls.filter(call=>call.path==='/zura/studio/hdr/jobs').length,0,'Cancelling preflight prevents any conversion submission');f.close();
 }

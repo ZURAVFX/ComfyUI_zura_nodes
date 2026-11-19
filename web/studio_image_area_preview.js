@@ -1,10 +1,12 @@
 /** Exact mask-raster boundary and quiet tint. Display only, never inference data. */
-export function selectionPreviewPixels(mask,width,height){
-  const out=new Uint8ClampedArray(width*height*4),selected=i=>i>=0&&i<width*height&&mask[i*4]>0;
+export function selectionPreviewPixels(mask,width,height,{scale=1}={}){
+  const out=new Uint8ClampedArray(width*height*4),radius=Math.min(32,Math.max(1,Math.ceil(1.25/Math.max(.04,scale))));
+  const selected=(x,y)=>x>=0&&y>=0&&x<width&&y<height&&mask[(y*width+x)*4]>0;
+  const boundary=(x,y,r)=>!selected(x-1,y)||!selected(x+1,y)||!selected(x,y-1)||!selected(x,y+1)||!selected(x-r,y)||!selected(x+r,y)||!selected(x,y-r)||!selected(x,y+r);
   for(let y=0;y<height;y++)for(let x=0;x<width;x++){
-    const i=y*width+x;if(!selected(i))continue;
-    const edge=x===0||y===0||x===width-1||y===height-1||!selected(i-1)||!selected(i+1)||!selected(i-width)||!selected(i+width);
-    out.set([245,99,71,edge?230:26],i*4);
+    if(!selected(x,y))continue;
+    const edge=boundary(x,y,radius),inner=!edge&&boundary(x,y,radius*2);
+    out.set(edge?[255,255,255,255]:inner?[16,16,16,255]:[245,99,71,200],(y*width+x)*4);
   }
   return out;
 }
@@ -23,9 +25,10 @@ export function installShotSelectionPreview(viewer,current,load){
       }).catch(()=>{if(token===epoch){key='';raster=null;}});
     }
     if(!raster)return;
-    const t=viewer.transform(),ctx=viewer.ctx;ctx.save();ctx.imageSmoothingEnabled=false;
-    if(raster.sketch){ctx.globalAlpha=1;ctx.drawImage(raster.sketch,t.x,t.y,viewer.width*t.scale,viewer.height*t.scale);}
-    ctx.globalAlpha=.65;ctx.drawImage(raster.selection||raster,t.x,t.y,viewer.width*t.scale,viewer.height*t.scale);ctx.restore();
+    const t=viewer.transform(),ctx=viewer.ctx;ctx.save();try{ctx.imageSmoothingEnabled=false;
+      if(raster.sketch){ctx.globalAlpha=1;ctx.drawImage(raster.sketch,t.x,t.y,viewer.width*t.scale,viewer.height*t.scale);}
+      ctx.globalAlpha=Number.isFinite(viewer.opacity)?viewer.opacity:.45;ctx.drawImage(raster.selection||raster,t.x,t.y,viewer.width*t.scale,viewer.height*t.scale);
+    }finally{ctx.restore();}
   };
 }
 

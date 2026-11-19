@@ -1,3 +1,4 @@
+import {openStudioGraph} from './studio_graph_view.js';
 import {buildRippleStudioGraph, rippleStudioAvailability, rippleStudioValidation} from './studio_ripple_recipes.js';
 import {submitOwnedGraph, recoverOwnedSubmission, cancelOwnedJob} from './studio_owned_jobs.js';
 import {durationLabel, installOwnedExecuting} from './studio_progress.js';
@@ -149,15 +150,7 @@ export function installRippleJobs(ui){
   });
   for(const type of ['execution_success','execution_error','execution_interrupted'])listen(type,event=>{if(event.detail?.prompt_id===ui.job?.id)void ui.poll();});
 
-  ui.graph=async()=>{
-    try{
-      const config=ui.job?.config||ui.config(),graph=buildRippleStudioGraph(config,ui.modelInfo||{});
-      const original=(ui.app.rootGraph||ui.app.graph)?.serialize?.();
-      if(!original||typeof ui.app.loadApiJson!=='function')throw Error('Update ComfyUI to open this Ripple graph.');
-      try{await ui.app.loadApiJson(graph,`Zura Ripple · ${Date.now()}.json`);}catch(error){await ui.app.loadGraphData(original);throw error;}
-      ui.owner.studio.close();
-    }catch(error){ui.message(error.message);}
-  };
+  ui.graph=async()=>openStudioGraph(ui.owner.studio,buildRippleStudioGraph(ui.config(),ui.modelInfo||{}),'Ripple · Current settings','ripple');
   const controller={dispose(){if(disposed)return;disposed=true;ui.stopPolling();removeExecuting();for(const [name,callback] of listeners)ui.api.removeEventListener?.(name,callback);}};
   ui.rippleJobs=controller;
   return controller;

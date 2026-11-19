@@ -22,7 +22,7 @@ function replaceOptions(select,items,selected){
 /** Describe an original, never the already tone-mapped thumbnail URL. */
 export function studioDisplaySource(source,type='input'){
   if(!source)return null;
-  const bound=source.processingView?.originalSource?.displaySelector;
+  const bound=source.processingView?.originalSource?.displaySelector??source.displaySelector;
   if(typeof bound?.imported_frame==='string')return {imported_frame:bound.imported_frame};
   if(source.display_source)return {source_token:source.display_source};
   if(typeof source.studioAssetId==='string'&&/^[a-f0-9]{32}$/.test(source.studioAssetId))return {asset_id:source.studioAssetId,...(Number.isFinite(source.frame_time)?{frame_time:source.frame_time}:{})};

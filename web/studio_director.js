@@ -1,3 +1,4 @@
+import {openStudioGraph} from './studio_graph_view.js';
 import {playbackFile} from './studio_delivery_formats.js';
 import {workspaceStorage} from './studio_storage.js';
 import {StudioModelDownloads} from './studio_model_download.js';
@@ -6,7 +7,6 @@ import {installOwnedExecuting} from './studio_progress.js';
 import {frameSourceResolution} from './frame_source_resolution.js';
 import {resolutionSize} from './studio_resolution.js';
 import {PreviewZoom} from './studio_preview_zoom.js';
-import {tidyArtistGraph} from './artist_graph.js';
 import {DIRECTOR_ENGINES,directorAvailability,buildDirectorGraph,directorFrameCount} from './director_recipes.js';
 
 const KEY='zura-director-v1',FPS=24,CAP={dimensionStep:32,minDimension:256,maxDimension:4096,maxPixels:8_388_608};
@@ -167,7 +167,7 @@ export class DirectorWorkspace{
   stopPolling(){clearInterval(this.pollTimer);this.pollTimer=null;}
   async poll(){if(this.pendingSubmission&&!this.job)return recoverOwnedSubmission(this);if(!this.job||this.polling)return;const job=this.job;this.polling=true;try{const history=await this.fetch('/history/'+encodeURIComponent(job.id)),entry=history[job.id];if(this.job!==job)return;if(entry?.status?.completed||entry?.status?.status_str==='error'){const output=entry.outputs?.save||{},files=[...(output.images||[]),...(output.gifs||[]),...(output.videos||[]),...(output.files||[])];this.job=null;this.stopPolling();if(files.length){this.items.unshift({file:files[0],config:job.config});this.items=this.items.slice(0,16);this.showResult(this.items[0]);this.message('Director shot complete.');}else this.message(entry.status?.messages?.find(message=>message[0]==='execution_error')?.[1]?.exception_message||'The run finished without a video.',true);this.save();this.render();return;}const queue=await this.fetch('/queue'),running=queue.queue_running?.some(row=>row[1]===job.id),pending=queue.queue_pending?.some(row=>row[1]===job.id);if(!running&&!pending){const again=await this.fetch('/history/'+encodeURIComponent(job.id));if(!again[job.id]&&this.job===job){this.job=null;this.stopPolling();this.message(job.cancelPending?'Director run cancelled. Saved shots are unchanged.':'This run is no longer in ComfyUI’s queue.',true);this.save();this.render();return;}}if(this.job?.cancelPending){this.$('progress-title').textContent='Cancelling…';this.$('progress-detail').textContent='Waiting for ComfyUI to stop this run';}else this.$('progress-detail').textContent=running?this.elapsed():'Waiting for other ComfyUI jobs';}catch{this.message('Connection interrupted. Reconnecting to your saved Director run…');}finally{this.polling=false;}}
   async cancel(){await cancelOwnedJob(this);}
-  async graph(){if(!this.availability?.ready)return;try{const graph=buildDirectorGraph(this.config(),this.modelInfo),original=(this.app.rootGraph||this.app.graph)?.serialize?.();if(!original||typeof this.app.loadApiJson!=='function')throw new Error('Update ComfyUI to open this editable graph.');try{await this.app.loadApiJson(graph,`Zura Director · ${this.engine().label} · ${Date.now()}.json`);await import('./vendor/elk.bundled.js');await tidyArtistGraph(this.app,graph,'director',window.ELK);}catch(error){await this.app.loadGraphData(original);throw error;}this.studio.close();}catch(error){this.message(error.message,true);}}
+  async graph(){if(!this.modelInfo)await this.loadModels();await openStudioGraph(this.studio,buildDirectorGraph(this.config(),this.modelInfo),'Director · Current settings','director');}
   async paste(event){const item=Array.from(event.clipboardData?.items||[]).find(value=>value.kind==='file'&&value.type.startsWith('image/'));if(!item)return;event.preventDefault();event.stopPropagation();const file=item.getAsFile();if(file)await this.upload('image',file);}
   open(){this.closed=false;this.page.hidden=false;this.modelDownloads.resume();if(!this.modelInfo)void this.loadModels();if(this.job||this.pendingSubmission)this.startPolling();this.render();}
   close(){this.endTimelineDrag(null,true);this.save();this.stopPolling();this.closed=true;this.page.hidden=true;this.$('result').pause?.();this.modelDownloads.close();}

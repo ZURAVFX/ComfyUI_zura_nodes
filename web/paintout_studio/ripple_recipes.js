@@ -35,7 +35,7 @@ export function buildRippleGraph(c,info){
   const error=rippleValidation(c);if(error)throw Error(error);
   const g={},r=(id,slot=0)=>[id,slot],n=(id,class_type,inputs,title)=>{g[id]={class_type,inputs,_meta:{title}};return r(id);};
   n('source','ZuraPaintoutFullFrame',{plate_path:c.source,colour_space:c.sourceColour||'srgb_display',start_frame:c.startFrame,frame_count:c.frameCount,sequence_fps:c.sequenceFps,context_pixels:128,max_crop_side:768,repair_grow:0,feather_pixels:0,processing_mode:'SDR (sRGB)',framing_mode:c.resolutionMode==='plate'||c.resolutionMode==='source'?'Plate resolution (stretch to next grid)':'Full frame (fit, no crop)',render_width:c.width||1152,render_height:c.height||640},'Reading the selected clip at its original frame rate');
-  n('anchors','ZuraPaintoutAnchors',{plate:r('source',2),anchors:JSON.stringify(c.anchors.filter(a=>a.enabled!==false).map(a=>({file:a.file,frame:c.startFrame,strength:1,enabled:true,colour_space:a.colour_space||c.sourceColour||'srgb_display'})))},'Loading your replacement first frame');
+  n('anchors','ZuraPaintoutAnchors',{plate:r('source',2),anchors:JSON.stringify(c.anchors.filter(a=>a.enabled!==false).map(a=>({file:a.file,frame:c.startFrame,strength:1,enabled:true,colour_space:a.colour_space||c.sourceColour||'srgb_display'})))},c.plateAction==='paint'?'Loading your edited first frame':'Loading your replacement first frame');
   n('take','ZuraPaintoutTake',{plate:r('source',2)},'Preparing source frames and held tail');
   n('ripple_guide','ZuraRippleGuide',{plate:r('source',2),anchors:r('anchors')},'Preparing the first-frame Ripple guide');
   n('model','UNETLoader',{unet_name:file(info,'UNETLoader','unet_name',PAINTOUT_MODELS.model),weight_dtype:'default'},'Loading LTX 2.5');
@@ -58,10 +58,10 @@ export function buildRippleGraph(c,info){
   n('noise','RandomNoise',{noise_seed:c.seed},'Preparing noise');
   n('sampler','KSamplerSelect',{sampler_name:'euler'},'Preparing sampler');
   n('sigmas','BasicScheduler',{model:r('attention'),scheduler:'simple',steps:8,denoise:1},'Preparing eight sampling steps');
-  n('sample','SamplerCustomAdvanced',{noise:r('noise'),guider:r('guider'),sampler:r('sampler'),sigmas:r('sigmas'),latent_image:r('combine')},'Replacing the object through your clip');
+  n('sample','SamplerCustomAdvanced',{noise:r('noise'),guider:r('guider'),sampler:r('sampler'),sigmas:r('sigmas'),latent_image:r('combine')},c.plateAction==='paint'?'Adding the object throughout your clip':'Replacing the object throughout your clip');
   n('separate','LTXVSeparateAVLatent',{av_latent:r('sample')},'Preparing the video result');
   n('crop_guides','LTXVCropGuides',{positive:r('guide'),negative:r('guide',1),latent:r('separate')},'Removing model guides');
-  n('decode','VAEDecode',{samples:r('crop_guides',2),vae:r('video_vae')},'Decoding the replacement video');
+  n('decode','VAEDecode',{samples:r('crop_guides',2),vae:r('video_vae')},c.plateAction==='paint'?'Decoding the edited video':'Decoding the replacement video');
   n('align','ImageFromBatch',{image:r('decode'),batch_index:1,length:r('take',4)},'Aligning every frame with the original audio');
   n('save','ZuraPaintoutUncrop',{decoded_crop:r('align'),plate:r('source',2),output_name:c.savePrefix||'ZURA STUDIO/object replacement',precision:'float32',match_context:false,export_format:'SDR video',motion_preview:true},'Saving the full selected clip and original audio');
   return applyAvailableAttention(g,info);

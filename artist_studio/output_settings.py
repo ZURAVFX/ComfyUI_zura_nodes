@@ -5,6 +5,7 @@ import json
 import logging
 import os
 from pathlib import Path
+import re
 import shutil
 import sqlite3
 import tempfile
@@ -100,10 +101,23 @@ class OutputSettings:
         if not isinstance(subfolder, str):
             return None
         subfolder = subfolder.replace('\\', '/')
+        if subfolder.startswith('ZURA STUDIO/images'):
+            # SaveImage's real product prefix is ZURA STUDIO/images/<model>.
+            # Its basename receives Comfy's counter, not an arbitrary subpath.
+            if subfolder != 'ZURA STUDIO/images' or not re.fullmatch(r'[A-Za-z0-9_-]{1,100}_[0-9]{5,}_\.png', name):
+                return None
+        if subfolder.startswith(('ZURA STUDIO/image-layers/', 'ZURA STUDIO/image-exports/')):
+            # Product masters/previews are private until their complete receipt
+            # and immutable bytes have been checked. Do not whitelist the parent.
+            try:
+                from .image_export import verified_product_file
+                return verified_product_file(self.source, {'filename': name, 'subfolder': subfolder, 'type': 'output'})
+            except (ValueError, KeyError, TypeError, OSError, RuntimeError):
+                return None
         allowed = ('genj/final', 'genj/hdr', 'genj/hdr_outpaint', 'genj/outpaint',
                    'zura_images', 'paintout', 'zura_paintout', 'genj/frames', 'genj/references',
                    'genj/reference_video', 'genj/studio_images', 'zura/ltx25',
-                   'zura/first_last', 'zura/reference', 'zura/director', 'ZURA STUDIO/camera', 'ZURA STUDIO/hdri')
+                   'zura/first_last', 'zura/reference', 'zura/director', 'ZURA STUDIO/camera', 'ZURA STUDIO/hdri', 'ZURA STUDIO/images')
         if subfolder=='ZURA STUDIO/hdri' and not name.startswith('environment_'):return None
         if subfolder=='ZURA STUDIO':
             if not name.startswith(('relight','ripple','plate')):return None

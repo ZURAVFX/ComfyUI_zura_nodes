@@ -64,9 +64,11 @@ export function paintoutValidation(config={}){
   if(!whole(c.startFrame,0,100000))return 'Start frame must be a whole source-frame number, starting at 0.';
   if(!whole(c.frameCount,1,993))return 'Choose between 1 and 993 frames for one continuous shot.';
   if(!Number.isFinite(Number(c.sequenceFps))||Number(c.sequenceFps)<1||Number(c.sequenceFps)>120)return 'Sequence frame rate must be between 1 and 120 fps.';
-  if(c.sourceWidth>4096||c.sourceHeight>4096)return 'This plate exceeds the current 4096-pixel processing limit. No smaller proxy will be substituted.';
+  if((c.sourceWidth>4096||c.sourceHeight>4096)&&!(Number(c.processingMegapixelLimit)>0))return 'This plate exceeds the current 4096-pixel processing limit. Choose a megapixel limit deliberately before rendering.';
   if(c.resolutionMode==='source'&&![c.sourceWidth,c.sourceHeight].every(n=>whole(n,1,4096)))return 'Load footage up to 4096 pixels per side, or choose a smaller processing resolution.';
   if(![c.width,c.height].every(n=>whole(n,64,4096)&&Number(n)%64===0))return 'Render width and height must use 64-pixel increments, from 64 to 4096 pixels.';
+  if(c.processingMegapixelLimit!=null&&(!Number.isFinite(Number(c.processingMegapixelLimit))||Number(c.processingMegapixelLimit)<0||Number(c.processingMegapixelLimit)>16))return 'Choose a megapixel limit from 0.25 to 16 MP, or Source size.';
+  if(Number(c.processingMegapixelLimit)>0&&(c.width*c.height>Number(c.processingMegapixelLimit)*1e6||c.width>c.sourceWidth||c.height>c.sourceHeight))return 'The processing canvas must stay within the selected megapixel limit and original source axes.';
   if(!PAINTOUT_COLOUR_SPACES.includes(c.sourceColour))return 'Choose the actual source colour space.';
   if(c.maskBlockSize!==0&&!whole(c.maskBlockSize,8,512))return 'Mask block size must be Off or a whole number from 8 to 512 pixels.';
   if(!['SDR (sRGB)','HDR (ACEScct)'].includes(c.processingSpace))return 'Choose SDR or HDR processing.';
@@ -133,7 +135,7 @@ export function buildPaintoutGraph(config={},info){
     plate_path:c.colourPipeline?ref('colour_check'):c.source,...(targeted?{mask_path:projectMask?ref('mask_source'):c.mask}:{}),colour_space:c.sourceColour,
     start_frame:Number(c.startFrame),frame_count:Number(c.frameCount),sequence_fps:Number(c.sequenceFps),
     context_pixels:128,max_crop_side:768,repair_grow:targeted?Number(c.maskGrow??0):0,feather_pixels:targeted?Number(c.maskFeather??0):0,
-    processing_mode:paintoutColourPipeline(c)==='hdr_hdr'?'HDR (ACEScct)':'SDR (sRGB)',framing_mode:'Plate resolution (stretch to next grid)',
+    processing_mode:paintoutColourPipeline(c)==='hdr_hdr'?'HDR (ACEScct)':'SDR (sRGB)',framing_mode:Number(c.processingMegapixelLimit)>0?'Full frame (stretch to working size)':'Plate resolution (stretch to next grid)',
     render_width:Number(c.width),render_height:Number(c.height),
   });
   if(targeted)node('anchors','ZuraPaintoutAnchors',{plate:ref('source',2),anchors:JSON.stringify(c.anchors.filter(a=>a.enabled!==false).map(a=>({file:a.file,frame:Number(a.frame),strength:Number(a.strength??.75),enabled:true,...(a.colour_space?{colour_space:a.colour_space}:{})})))});

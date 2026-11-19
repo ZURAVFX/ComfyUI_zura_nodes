@@ -90,24 +90,32 @@ export class RippleImageHandoff {
     this.banner.querySelector('[data-ripple-return]').disabled=busy;
     this.banner.querySelector('[data-ripple-use]').textContent=label==='Relight'?'Use lighting frame':'Use edited frame';this.banner.querySelector('[data-ripple-use]').disabled=busy||!this.request||!this.current(this.request)||item?.ripple_guide!==request.id;this.owner.plate?.syncInlineImage(request);
   }
-  async useResult(){
-    await this.resume();
-    const o=this.owner,request=this.request,item=o.items[o.selectedImage];
-    if(!request||this.importing||this.imageBusy()||item?.ripple_guide!==request.id)return;
-    this.importing=true;o.render();this.syncImageUI();
-    try{
+  async resultFile(request,item){
+    const o=this.owner;
       this.check(request);const file=item.file;
       const response=await o.api.fetchApi('/view?'+new URLSearchParams({filename:file.filename,subfolder:file.subfolder||'',type:file.type||'output'}));this.check(request);
       if(!response.ok)throw Error('Could not read this edited image.');const blob=await response.blob();this.check(request);
       const bitmap=await createImageBitmap(blob),canvas=o.root.ownerDocument.createElement('canvas');canvas.width=request.width;canvas.height=request.height;
       try{this.check(request);canvas.getContext('2d').drawImage(bitmap,0,0,request.width,request.height);}finally{bitmap.close();}
       const exact=await new Promise((resolve,reject)=>canvas.toBlob(value=>value?resolve(value):reject(Error('Could not prepare the edited frame.')),'image/png'));this.check(request);
+    return new File([exact],`ripple_frame_${request.anchor.frame}.png`,{type:'image/png'});
+  }
+  async useResult(){
+    await this.resume();
+    const o=this.owner,request=this.request,item=o.items[o.selectedImage];
+    if(!request||this.importing||this.imageBusy()||item?.ripple_guide!==request.id)return;
+    this.importing=true;o.render();this.syncImageUI();
+    try{
+      const plate=request.workspace.platePrimary&&o.plate;
+      const draft=plate?await plate.readyFrameDraft(request,item):null;
+      const file=plate?null:await this.resultFile(request,item);
       await o.imageArea?.flush();this.check(request);
-      // Acceptance belongs to the generated image's selection, never a newer
-      // brush draft made while reviewing it. Keep that newer draft for retries.
+      // Use the selection that belonged to the generation, even after revising a paint draft.
       const editArea=Object.hasOwn(item,'edit_area')?item.edit_area:o.imageArea?.config?.();
       request.anchor.image_references=o.references.slice(1).map(ref=>({...ref}));
-      await request.workspace.importAnchorFile(request.anchor,new File([exact],`ripple_frame_${request.anchor.frame}.png`,{type:'image/png'}),()=>this.check(request));this.check(request);
+      if(plate)plate.commitFrameLayers(request.anchor,draft);
+      else await request.workspace.importAnchorFile(request.anchor,file,()=>this.check(request));
+      this.check(request);
       request.anchor.edit_area=editArea;
       const prompt=o.$('prompt').value;request.workspace.state.prompt=prompt;request.workspace.$('prompt').value=prompt;request.workspace.save();
       await this.leave(true);request.workspace.message(request.workspace.platePrimary?'':`Edited frame ${request.anchor.frame} is ready.`);

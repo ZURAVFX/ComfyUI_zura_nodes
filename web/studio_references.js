@@ -1,3 +1,4 @@
+import {openStudioGraph} from './studio_graph_view.js';
 import {workspaceStorage} from './studio_storage.js';
 import {installOwnedExecuting} from './studio_progress.js';
 import {submitOwnedGraph} from './studio_owned_jobs.js';
@@ -7,7 +8,6 @@ import {FrameVideoWorkspace} from './studio_frames.js';
 import {composerIcons as icons} from './studio_composer.js';
 import {FRAME_SIZE_PRESETS,FRAME_MEGAPIXELS,frameVideoPresetSize} from './frame_video_recipes.js';
 import {buildReferenceVideoGraph,referenceVideoAvailability,referenceAudioSources,REFERENCE_VIDEO_PROFILES as PROFILES,REFERENCE_VIDEO_CAPABILITIES as CAP} from './reference_video_recipes.js';
-import {tidyArtistGraph} from './artist_graph.js';
 import {PreviewZoom} from './studio_preview_zoom.js';
 import {LTXLoras} from './studio_ltx_loras.js';
 import {StudioModelDownloads} from './studio_model_download.js';
@@ -123,7 +123,7 @@ export class ReferenceVideoWorkspace {
     this.$('ref-timing').innerHTML=['videos','audios'].flatMap(kind=>this.assets[kind].map((a,i)=>`<div class="zr-timing"><strong>${escape(kind==='audios'?audioTag(i).slice(1,-1):`Video ${i+1}`)}</strong>${kind==='videos'?`<label>Start (seconds)<input type="number" min="0" step="0.1" data-ref-field="start" data-kind="${kind}" data-index="${i}" value="${a.start??0}" ${busy?'disabled':''}/></label>`:''}<label>${kind==='audios'?'Reference context':'Use'} (seconds)<input type="number" min="${kind==='videos'?2:0.5}" max="${kind==='videos'?15:10}" step="0.1" data-ref-field="duration" data-kind="${kind}" data-index="${i}" value="${a.duration??(kind==='videos'?3:10)}" ${busy?'disabled':''}/></label></div>`)).join('')+(selectedAudio?'<p>Follow Audio uses the vocal from the selected start for the output clip length. Reference context only limits its separate sound reference.</p>':'')+(this.assets.videos.length?'<p>Video references use the first 3 seconds by default. Adjust their sections above (2–15 seconds). Soundtracks are not included; add audio separately.</p>':'');
   }
   async generate(){if(['width','height'].some(k=>this.$(k).commitDimension?.()===false)){this.message('Enter a whole number for width and height.');return;}if(this.busy())return;this.submitting=true;const attempt={};this.submitAttempt=attempt;this.message('');this.render();try{if(!this.availability?.ready)throw new Error('Install the required H3 reference models and refresh.');const config=this.config();if(config.random)config.seed=crypto.getRandomValues(new Uint32Array(1))[0];const graph=await this.loras.patch(this.build(config),config.custom_loras),previewMethod=await nativePreviewMethod(this.api,'h3');await submitOwnedGraph(this,graph,config,previewMethod,{zura_reference_video:true});}catch(e){this.message(e.message);}finally{if(this.submitAttempt===attempt){this.submitting=false;this.submitAttempt=null;this.render();}}}
-  async graph(){try{const config=this.job?.config||this.config(),graph=await this.loras.patch(this.build(config),config.custom_loras||[]),original=(this.app.rootGraph||this.app.graph)?.serialize?.();if(!original||typeof this.app.loadApiJson!=='function')throw new Error('Update ComfyUI to open this editable graph.');try{await this.app.loadApiJson(graph,`Zura H3 Reference Video · ${Date.now()}.json`);await import('./vendor/elk.bundled.js');await tidyArtistGraph(this.app,graph,'reference_video',window.ELK);}catch(e){await this.app.loadGraphData(original);throw e;}this.studio.close();}catch(e){this.message(e.message);}}
+  async graph(){const config=this.config();await openStudioGraph(this.studio,await this.loras.patch(this.build(config),config.custom_loras||[]),'Reference video · Current settings','reference_video');}
 }
 
 // Keep submission recovery, owned cancellation and history handling identical.

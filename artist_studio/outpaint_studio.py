@@ -250,8 +250,8 @@ def build_review_graph(source, selection, *, output_prefix, check_asset=lambda a
     return graph
 
 
-def build_studio_graph(source, selection, *, review_key, prompt='', seed=42, output_prefix, check_asset=lambda asset: None, pad_delivery=False, masked_black=False):
-    """Use the user-approved LTX 2.5 black-guide recipe after mask review."""
+def build_studio_graph(source, selection, *, review_key, prompt='', seed=42, output_prefix, check_asset=lambda asset: None, pad_delivery=False, native_hdr_guide=False):
+    """Use the reviewed mask to condition LTX video in/outpainting."""
     if not isinstance(selection, dict) or review_key != selection.get('review_key') or not re.fullmatch(r'[a-f0-9]{64}', str(review_key)):
         raise ValueError('Review and approve the current outpaint selection first.')
     expected = plan(source, start=selection['start'], duration=selection.get('requested_duration', selection['duration']), mode=selection['mode'],
@@ -265,33 +265,46 @@ def build_studio_graph(source, selection, *, review_key, prompt='', seed=42, out
     if not re.fullmatch(r'genj/outpaint/[a-zA-Z0-9_-]{1,96}', str(output_prefix)):
         raise ValueError('Choose a safe outpaint output destination.')
     check_asset(source)
-    if masked_black and expected['mode'] == 'black':
-        if expected.get('ae_frame_contract') is not None and source_rate(source)!=24:
-            raise ValueError('This masked black-area recipe requires 24 fps. Use the source-cadence outpaint recipe for this AE clip.')
-        # A black guide on its own can be interpreted as a permanent letterbox.
-        # For explicitly selected black areas, use the separately tested native
-        # in/outpainting guide so the reviewed mask reaches the sampler.
+    if not native_hdr_guide:
         from .ltx_outpaint import build_test_graph
-        g = build_test_graph(source['file'], output_prefix, expected['padded_frames'], FPS,
-            expected['padded_width'], expected['padded_height'], mode='black',
-            prompt=prompt, seed=seed, black_threshold=expected['black_threshold'])
-        g['source_range'] = {'class_type': 'GenjSelectClip', 'inputs': {
+
+        text = str(prompt).strip() or (
+            'Extend the scene naturally into the missing areas. Continue the surroundings, '
+            'matching the camera movement, perspective, lighting and visual style.'
+        )
+        geometry = {key: expected[key] for key in
+                    ('mode', 'left', 'top', 'right', 'bottom', 'black_threshold')}
+        graph = build_test_graph(source['file'], output_prefix, expected['padded_frames'],
+            source_rate(source), expected['padded_width'], expected['padded_height'],
+            prompt=text, seed=seed, **geometry)
+        graph['source_range'] = {'class_type': 'ZuraOutpaintSelectClip', 'inputs': {
             'video': ['source', 0], 'start_seconds': expected['start'],
-            'duration_seconds': expected['requested_duration'], 'long_edge': 1920, 'round_up': True}}
-        g['components']['inputs']['video'] = ['source_range', 0]
-        g['temporal_hold'] = {'class_type': 'ZuraOutpaintTemporalHold', 'inputs': {
-            'images': ['components', 0], 'audio': ['components', 1], 'expected_frames': expected['frames']}}
-        g['canvas']['inputs']['images'] = ['temporal_hold', 0]
-        g['audio_encoded']['inputs']['audio'] = ['temporal_hold', 1]
-        g['trim_result'] = {'class_type': 'ImageFromBatch', 'inputs': {
-            'image': ['blend_high', 0], 'batch_index': 0, 'length': expected['frames']}}
-        g['unpad_result'] = {'class_type': 'ImageCrop', 'inputs': {'image': ['trim_result', 0],
-            'width': expected['width'], 'height': expected['height'], 'x': 0, 'y': 0}}
-        g['assemble']['inputs'].update(images=['unpad_result', 0], audio=['components', 1])
+            'duration_seconds': expected['requested_duration'], 'long_edge': 1920,
+            'fps_num': expected['fps_num'], 'fps_den': expected['fps_den'],
+            'expected_frames': expected['frames']}}
+        graph['components']['inputs']['video'] = ['source_range', 0]
+        graph['temporal_hold'] = {'class_type': 'ZuraOutpaintTemporalHold', 'inputs': {
+            'images': ['components', 0], 'audio': ['components', 1],
+            'expected_frames': expected['frames'], 'fps': float(source_rate(source))}}
+        graph['canvas']['inputs']['images'] = ['temporal_hold', 0]
+        graph['audio_encoded']['inputs']['audio'] = ['temporal_hold', 1]
+        graph['trim_result'] = {'class_type': 'ImageFromBatch', 'inputs': {
+            'image': ['decode_high', 0], 'batch_index': 0, 'length': expected['frames']}}
+        images = ['trim_result', 0]
+        if expected['mode'] == 'black':
+            graph['unpad_result'] = {'class_type': 'ImageCrop', 'inputs': {
+                'image': images, 'width': expected['width'], 'height': expected['height'], 'x': 0, 'y': 0}}
+            images = ['unpad_result', 0]
+        graph['assemble'] = {'class_type': 'ZuraOutpaintExactVideo', 'inputs': {
+            'images': images, 'fps_num': expected['fps_num'], 'fps_den': expected['fps_den']}}
+        if source.get('has_audio') is not False:
+            graph['assemble']['inputs']['audio'] = ['components', 1]
         if expected.get('ae_frame_contract') is not None:
             from ..comfylink.frame_contract import prepare_frame_contract_graph
-            return prepare_frame_contract_graph(g,expected['ae_frame_contract'],'outpaint')
-        return pad_outpaint_delivery(g) if pad_delivery else g
+            return prepare_frame_contract_graph(graph, expected['ae_frame_contract'], 'outpaint')
+        return pad_outpaint_delivery(graph) if pad_delivery else graph
+
+    # The separate native HDR experiment uses its original full-resolution guide.
     def n(kind, **inputs): return {'class_type': kind, 'inputs': inputs}
     g = {
         'source': n('LoadVideo', file=source['file']),
@@ -358,5 +371,5 @@ def pad_outpaint_delivery(graph):
 
 NODE_CLASS_MAPPINGS = {'ZuraOutpaintExactVideo': ZuraOutpaintExactVideo, 'ZuraOutpaintSelectClip': ZuraOutpaintSelectClip, 'ZuraOutpaintTemporalHold': ZuraOutpaintTemporalHold,
                        'ZuraOutpaintReviewOverlay': ZuraOutpaintReviewOverlay}
-NODE_DISPLAY_NAME_MAPPINGS = {'ZuraOutpaintExactVideo': 'Zura · Outpaint Video at Source Rate', 'ZuraOutpaintSelectClip': 'Zura · Select Outpaint Source', 'ZuraOutpaintTemporalHold': 'Zura · Hold Outpaint End Frame',
-                              'ZuraOutpaintReviewOverlay': 'Zura · Review Outpaint Selection'}
+NODE_DISPLAY_NAME_MAPPINGS = {'ZuraOutpaintExactVideo': 'Zura Â· Outpaint Video at Source Rate', 'ZuraOutpaintSelectClip': 'Zura Â· Select Outpaint Source', 'ZuraOutpaintTemporalHold': 'Zura Â· Hold Outpaint End Frame',
+                              'ZuraOutpaintReviewOverlay': 'Zura Â· Review Outpaint Selection'}

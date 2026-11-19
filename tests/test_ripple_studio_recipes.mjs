@@ -47,6 +47,13 @@ const ltx={...c,engine:'ltx',width:1984,anchors:[{frame:10,file:'start.png'}]};
 assert.equal(rippleStudioAvailability(info,'ltx').ready,true);
 assert.equal(rippleStudioValidation(ltx),'');
 const g=buildRippleStudioGraph(ltx,info);
+for(const config of [ltx,c]){
+  const add=buildRippleStudioGraph({...config,plateAction:'paint'},info);
+  const replace=buildRippleStudioGraph({...config,plateAction:'replace'},info);
+  assert.equal(add.sample._meta.title,'Adding the object throughout your clip');
+  assert.equal(replace.sample._meta.title,'Replacing the object throughout your clip');
+  assert.deepEqual(add.sample.inputs,replace.sample.inputs);
+}
 assert.equal(g.source.inputs.framing_mode,'Full frame (stretch to working size)');
 assert.equal(g.source.inputs.render_width,1984);
 assert.equal(g.source.inputs.sequence_fps,30000/1001);

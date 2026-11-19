@@ -6,7 +6,7 @@ import subprocess
 from fractions import Fraction
 import torch
 import numpy as np
-from .paintout import encode_ct, native_colour, resize, sdr_view
+from .paintout import resize, sdr_view
 
 def correct_video_clock(path,fps,hdr=False):
     rate=Fraction(str(fps)).limit_denominator(100000)
@@ -51,7 +51,6 @@ class Delivery:
         if self.preview:
             from comfy_extras.nodes_video import CreateVideo
         x=torch.stack(self.pending);self.pending=[]
-        ct=encode_ct(x)
         if self.sdr:
             from .paintout import is_hdr
             sdr=sdr_view(x,is_hdr(self.plate['space']))
@@ -66,7 +65,7 @@ class Delivery:
             self.hdr_chunks.append(write_prores4444(x,part,width=w,height=h,count=len(x),
                 fps=self.plate['fps'],source_space='linear_rec709' if self.plate.get('space')=='linear_rec709' else 'acescg'))
         if self.preview:
-            h,w=ct.shape[1:3];scale=min(1,960/max(h,w))
+            h,w=x.shape[1:3];scale=min(1,960/max(h,w))
             h=max(2,round(h*scale/2)*2);w=max(2,round(w*scale/2)*2)
             # SDR processing stays display-referred; HDR viewing uses a fixed shoulder.
             from .paintout import is_hdr

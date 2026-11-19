@@ -22,7 +22,7 @@ def build_experimental_graph(source, *, start_frame, frame_count, fps, width, he
     if type(start_frame) is not int or start_frame < 0:
         raise ValueError('Choose a valid starting frame.')
     if type(frame_count) is not int or frame_count < 9 or frame_count > 121 or (frame_count - 1) % 8:
-        raise ValueError('The experiment uses 9–121 frames in 8n+1 increments.')
+        raise ValueError('The experiment uses 9â€“121 frames in 8n+1 increments.')
     if colour_space not in ('auto', 'hlg_rec2020', 'pq_rec2020'):
         raise ValueError('Choose HLG or PQ video colour.')
     if type(has_audio) is not bool:
@@ -35,7 +35,7 @@ def build_experimental_graph(source, *, start_frame, frame_count, fps, width, he
         raise ValueError('Choose a safe experiment output name.')
     g = build_test_graph(source, prefix, frame_count, fps, width, height, mode=mode,
                          left=left, top=top, right=right, bottom=bottom,
-                         prompt=prompt, seed=seed)
+                         prompt=prompt, seed=seed, blend_source=True)
     for name in ('source', 'components', 'assemble', 'save'):
         del g[name]
     # Use the full VAE used by the tested native HDR path; the SDR prototype's
@@ -96,7 +96,7 @@ def build_black_guide_experiment(source, *, start_frame, frame_count, width, hei
     if type(start_frame) is not int or start_frame < 0:
         raise ValueError('Choose a valid starting frame.')
     if type(frame_count) is not int or frame_count < 9 or frame_count > 113 or (frame_count - 1) % 8:
-        raise ValueError('Choose 9–113 frames in 8n+1 increments.')
+        raise ValueError('Choose 9â€“113 frames in 8n+1 increments.')
     if not isinstance(source, str) or not source.strip():
         raise ValueError('Choose an HDR source.')
     if colour_space not in ('auto', 'hlg_rec2020', 'pq_rec2020'):
@@ -111,7 +111,7 @@ def build_black_guide_experiment(source, *, start_frame, frame_count, width, hei
                      width=width, height=height, left=left, top=top,
                      right=right, bottom=bottom)
     g = build_studio_graph(asset, selection, review_key=selection['review_key'],
-                           prompt=prompt, seed=seed, output_prefix='genj/outpaint/hdr_experiment', masked_black=True)
+                           prompt=prompt, seed=seed, output_prefix='genj/outpaint/hdr_experiment', native_hdr_guide=True)
     for key in ('source', 'source_range', 'components', 'temporal_hold', 'assemble', 'save'):
         del g[key]
     def node(kind, **inputs): return {'class_type': kind, 'inputs': inputs}
@@ -154,8 +154,7 @@ def build_sdr_first_stage(source, *, start_frame, frame_count, width, height,
                           prompt='', seed=42, prefix='genj/hdr_outpaint/sdr_first', source_fps=24., start_seconds=None):
     """Internal HDR-to-SDR guide experiment; produces no HDR claim by itself.
 
-    Preserve the original native source separately for the later composite.
-    This model-generated SDR border cannot recover lost source highlights.
+    The model-generated frames are used as the guide for HDR conversion.
     """
     selected_start = _selected_start_seconds(start_frame, source_fps, start_seconds)
     graph = build_black_guide_experiment(source, start_frame=start_frame, frame_count=frame_count,
@@ -184,15 +183,13 @@ def build_sdr_first_stage(source, *, start_frame, frame_count, width, height,
     return graph
 
 
-def build_sdr_first_hdr_composite(source, intermediate, *, start_frame, frame_count, width, height,
+def build_sdr_first_hdr_delivery(source, intermediate, *, start_frame, frame_count, width, height,
                                   left=0, top=0, right=0, bottom=0, colour_space='auto',
-                                  prefix='sdr_first_composite', seed=42, feather=16, source_fps=24., has_audio=False,
+                                  prefix='sdr_first_delivery', seed=42, source_fps=24., has_audio=False,
                                   start_seconds=None, mode='expand', black_threshold=2/255, exr_storage='half'):
-    """Internal two-stage test, not yet a Studio route or a quality claim."""
+    """Convert the SDR outpaint into HDR and attach the original soundtrack."""
     if colour_space not in ('auto', 'hlg_rec2020', 'pq_rec2020'):
         raise ValueError('Choose a supported HDR video colour space.')
-    if type(feather) is not int or not 0 <= feather <= 128:
-        raise ValueError('Choose a valid HDR composite feather.')
     selected_start = _selected_start_seconds(start_frame, source_fps, start_seconds)
     if type(has_audio) is not bool:
         raise ValueError('Audio selection must be explicit.')
@@ -203,34 +200,18 @@ def build_sdr_first_hdr_composite(source, intermediate, *, start_frame, frame_co
         raise ValueError('Black threshold must be between 0 and 0.1.')
     # Reuse the validated native-canvas builder to check dimensions, length and
     # paths against the same constraints as the actual outpaint stage.
-    checked = build_black_guide_experiment(source, start_frame=start_frame, frame_count=frame_count,
+    build_black_guide_experiment(source, start_frame=start_frame, frame_count=frame_count,
         width=width, height=height, left=left, top=top, right=right, bottom=bottom,
         colour_space=colour_space, prefix='genj/hdr_outpaint/composite_setup')
     from .hdr_studio import build_hdr_graph
     graph = build_hdr_graph(source=intermediate, start_frame=0, frame_count=frame_count, fps=24.,
         colour_space='srgb_display', output='hlg_and_exr', prefix=prefix, has_audio=False, seed=seed, exr_storage=exr_storage,_source_detail=False)
-    graph['native_original'] = {'class_type': 'ZuraHDRSelectNativeTimeline', 'inputs': {
-        'source': source, 'start_seconds': selected_start, 'frame_count': frame_count,
-        'output_fps': 24., 'colour_space': colour_space, 'sequence_fps': 24.}}
-    graph['native_canvas'] = checked['canvas']
-    graph['native_canvas']['inputs']['images'] = ['native_original', 0]
-    if mode == 'black':
-        graph['native_canvas']['inputs'].update(mode='black', black_threshold=float(black_threshold))
-    graph['final_hdr_composite'] = {'class_type': 'ZuraHDRCompositeOutpaint', 'inputs': {
-        'generated': ['hdr_unpad_raster', 0], 'source': ['native_canvas', 0],
-        'mask': ['native_canvas', 1], 'feather': feather, 'colour_match': 1.0}}
     if has_audio:
         graph['original_audio'] = {'class_type': 'ZuraHDRLoadTimedAudio', 'inputs': {
             'source': source, 'start_seconds': selected_start, 'frame_count': frame_count,
             'fps': 24., 'allow_tail_hold': True}}
         graph['zura_hdr_save_video']['inputs']['audio'] = ['original_audio', 0]
         graph['zura_hdr_preview_video']['inputs']['audio'] = ['original_audio', 0]
-    for key, node in graph.items():
-        if key == 'final_hdr_composite':
-            continue
-        for field, value in node['inputs'].items():
-            if value == ['hdr_unpad_raster', 0]:
-                node['inputs'][field] = ['final_hdr_composite', 0]
     return graph
 
 
@@ -306,7 +287,7 @@ def _black_sdr_first_stage(source, expected, path, *, colour_space, prompt, seed
     if type(source.get('has_audio')) is not bool:
         raise ValueError('Verify whether the HDR source has audio before rendering.')
     graph = build_studio_graph(source, expected, review_key=expected['review_key'],
-        prompt=prompt, seed=seed, output_prefix='genj/outpaint/hdr_experiment', masked_black=True)
+        prompt=prompt, seed=seed, output_prefix='genj/outpaint/hdr_experiment')
     # Use the established in/outpaint graph for explicit black-pixel masks.
     # Its VIDEO source and output nodes are replaced by native HDR input and a
     # bounded silent intermediate. Audio guides remain available where present.
@@ -349,42 +330,31 @@ def _black_sdr_first_stage(source, expected, path, *, colour_space, prompt, seed
     return graph
 
 
-def crop_black_hdr_composite(graph, width, height):
-    """Remove internal model padding before blending an already-padded plate."""
-    image_crop = lambda image: {'class_type':'ImageCrop','inputs':{
-        'image':image, 'width':width, 'height':height, 'x':0, 'y':0}}
-    graph['native_source_crop'] = image_crop(['native_canvas',0])
-    graph['native_mask_crop'] = {'class_type':'CropMask','inputs':{
-        'mask':['native_canvas',1], 'width':width, 'height':height, 'x':0, 'y':0}}
-    graph['hdr_generated_crop'] = image_crop(['hdr_unpad_raster',0])
-    graph['final_hdr_composite']['inputs'].update(generated=['hdr_generated_crop',0],
-        source=['native_source_crop',0], mask=['native_mask_crop',0])
-
-
-def build_reviewed_sdr_first_composite(source, selection, intermediate, *, review_key,
+def build_reviewed_sdr_first_delivery(source, selection, intermediate, *, review_key,
                                        colour_space='auto', has_audio=False, seed=42,
                                        prefix='sdr_first_reviewed', check_asset=lambda asset: None, exr_storage='half'):
     """Build the HDR delivery pass for the same approved bounded selection."""
     expected, path = _reviewed_sdr_first_selection(source, selection, review_key, colour_space, check_asset)
     if type(has_audio) is not bool:
         raise ValueError('Audio selection must be explicit.')
-    graph = build_sdr_first_hdr_composite(path, intermediate, start_frame=0, start_seconds=expected['start'],
+    graph = build_sdr_first_hdr_delivery(path, intermediate, start_frame=0, start_seconds=expected['start'],
         frame_count=expected['padded_frames'], width=expected['padded_width'], height=expected['padded_height'],
         left=expected['left'], top=expected['top'], right=expected['right'], bottom=expected['bottom'],
         colour_space=colour_space, has_audio=False, seed=seed, prefix=prefix,
         mode=expected['mode'], black_threshold=expected['black_threshold'], exr_storage=exr_storage)
-    graph['native_original']['inputs']['frame_count'] = expected['frames']
-    graph['hdr_input_hold'] = {'class_type': 'ZuraHDRTemporalHold', 'inputs': {'images': ['native_original', 0]}}
-    graph['native_canvas']['inputs']['images'] = ['hdr_input_hold', 0]
+    result = ['hdr_unpad_raster', 0]
     if expected['mode'] == 'black':
-        crop_black_hdr_composite(graph, expected['width'], expected['height'])
-    graph['hdr_original_length'] = {'class_type': 'ImageFromBatch', 'inputs': {'image': ['final_hdr_composite', 0], 'batch_index': 0, 'length': expected['frames']}}
+        graph['hdr_generated_crop'] = {'class_type': 'ImageCrop', 'inputs': {
+            'image': result, 'width': expected['width'], 'height': expected['height'], 'x': 0, 'y': 0}}
+        result = ['hdr_generated_crop', 0]
+    graph['hdr_original_length'] = {'class_type': 'ImageFromBatch', 'inputs': {
+        'image': result, 'batch_index': 0, 'length': expected['frames']}}
     graph['hdr_delivery_hold'] = {'class_type': 'GenjHoldToModelLength', 'inputs': {'images': ['hdr_original_length', 0], 'stride': 8}}
     for key, node in graph.items():
-        if key == 'hdr_original_length':
+        if key in ('hdr_generated_crop', 'hdr_original_length'):
             continue
         for field, value in node['inputs'].items():
-            if value == ['final_hdr_composite', 0]:
+            if value == ['hdr_unpad_raster', 0]:
                 node['inputs'][field] = ['hdr_delivery_hold', 0]
     if has_audio:
         graph['original_audio'] = {'class_type': 'ZuraHDRLoadTimedAudio', 'inputs': {

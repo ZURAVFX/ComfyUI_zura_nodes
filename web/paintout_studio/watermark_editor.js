@@ -1,3 +1,4 @@
+import {openStudioGraph,rememberStudioGraph,studioGraphScope} from '../studio_graph_view.js';
 import {isRipple,syncRippleEditor} from './ripple_editor.js';
 import {describeGeneration,updateGenerationSteps} from './paintout_generation_steps.js';
 import {maskIcons} from './paintout_icons.js';
@@ -757,8 +758,10 @@ export class PaintoutEditor{
   }
   async queue(graph,kind,anchor,details={}){
     this.submitting=true;this.jobProgress=null;this.$('job').querySelector('progress').removeAttribute('value');this.$('job-label').textContent=kind==='mask'?'Submitting mask…':'Submitting frame cleanup…';this.status('');this.w.render();
+    const graphScope=studioGraphScope(this,kind);
     try{const response=await this.w.fetch('/prompt',{prompt:graph,client_id:this.w.api.clientId,extra_data:{zura_paintout_editor:true}});
       if(!response.prompt_id)throw Error('ComfyUI did not confirm the run. Check the queue before retrying.');
+      rememberStudioGraph(this,kind,graph,response.prompt_id,graphScope);
       this.toolJob={id:response.prompt_id,kind,anchor,...details,source:this.w.state.source,frame:this.w.playhead,phase:'Queued',stages:Object.fromEntries(Object.entries(graph).map(([id,n])=>[id,n._meta?.title||n.class_type]))};
       this.$('job-label').textContent='Queued in ComfyUI';this.w.state.editorJob=this.toolJob;this.w.save();this.startPolling();
     }finally{this.submitting=false;this.w.render();}

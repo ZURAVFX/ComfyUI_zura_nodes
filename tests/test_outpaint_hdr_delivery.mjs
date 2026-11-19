@@ -32,8 +32,7 @@ const api={apiURL:p=>p,clientId:'outpaint-test',addEventListener(){},removeEvent
 }};
 const owner={root:document.querySelector('#genj-studio'),api,show(){},async fetch(path,body){
   calls.push({path,body});
-  if(path.endsWith('/approve'))return {approved:true};
-  if(path.endsWith('/render'))return {id:renderState.id,kind:'render',state:'queued'};
+  if(path.endsWith('/generate'))return {id:renderState.id,kind:'render',state:'queued'};
   if(path.endsWith('/delivery'))return {artifact:renderState.artifact,output_raster:renderState.output_raster};
   if(path.endsWith('/jobs/'+renderState.id))return {...renderState,url:'/view?render=1'};
   if(path.endsWith('/capabilities'))return {anchored_masked:true,short_dependencies:{expand:{missing_files:[],missing_nodes:[]},black:{missing_files:[],missing_nodes:[]}}};
@@ -44,10 +43,10 @@ const ui=new OutpaintWorkspace(owner);ui.closed=false;
 ui.source={id:'a'.repeat(32),width:768,height:432,duration:4};ui.reframe();ui.trim.initial();
 ui.capabilities={short_dependencies:{expand:{missing_files:[],missing_nodes:[]},black:{missing_files:[],missing_nodes:[]}}};
 ui.$('delivery').value='hlg_and_exr';ui.$('delivery').onchange();
-assert.equal(ui.$('delivery-note').hidden,false);
+assert.equal(ui.$('delivery').hidden,true,'The native format stays internal after repaint');
 assert.equal(ui.$('hdr-option').hidden,true,'SDR input has one output selector, not a second HDR checkbox');
-ui.review={id:'review1',hdr:false};await ui.generate();
-assert.ok(!calls.some(c=>c.path.endsWith('/approve')),'Missing HDR setup stops before outpaint generation');
+await ui.generate();
+assert.ok(!calls.some(c=>c.path.endsWith('/generate')),'Missing HDR setup stops before outpaint generation');
 assert.match(ui.$('status').textContent,/hdr-adapter/);
 assert.ok(ui.modelDownloads.context.files.some(f=>f.filename==='hdr-adapter.safetensors'),'Missing HDR model is included in setup');
 ready=true;calls.length=0;await ui.generate();await tick();await tick();
@@ -60,8 +59,8 @@ assert.equal(ui.trim.container.hasAttribute('inert'),true,'The trim timeline can
 const previousDuration=ui.$('duration').value;ui.trim.commit({start:0,duration:1});assert.equal(ui.$('duration').value,previousDuration);
 ui.dragStart({pointerId:1,clientX:0,clientY:0,preventDefault(){assert.fail('A busy canvas must not capture a drag');}});assert.equal(ui.drag,undefined);
 assert.equal(ui.invalidate(),false,'An active conversion cannot be silently discarded');assert.throws(()=>ui.setSourceAsset({id:'new',file:'new.mp4'}),/HDR delivery/);
-ui.progress({detail:{prompt_id:'unrelated',node:'hdr_sample',value:4,max:8}});assert.doesNotMatch(ui.$('status').textContent,/step 4/);
-ui.progress({detail:{prompt_id:'owned-prompt',node:'hdr_sample',value:4,max:8}});assert.match(ui.$('status').textContent,/step 4 of 8/);
+ui.progress({detail:{prompt_id:'unrelated',node:'hdr_sample',value:4,max:8}});assert.doesNotMatch(ui.$('progress-detail').textContent,/Step 4/);
+ui.progress({detail:{prompt_id:'owned-prompt',node:'hdr_sample',value:4,max:8}});assert.match(ui.$('progress-detail').textContent,/Step 4 of 8/);
 ui.close();ui.open();await tick();assert.equal(calls.filter(c=>c.path==='/zura/studio/hdr/jobs').length,1,'Reopening reconnects without resubmitting');
 hdrState='complete';await ui.hdrDelivery.client.poll();
 assert.equal(ui.$('download').hidden,false);assert.equal(ui.$('download-exr').hidden,false);assert.equal(ui.$('download-sdr').hidden,false);
@@ -71,7 +70,7 @@ assert.equal(ui.hdrRecord,null,'Changing canvas geometry releases the previous r
 assert.equal(storage.has('zura-outpaint-hdr-record'),false);assert.equal(ui.$('download-sdr').hidden,true);
 ui.close();ui.open();await tick();assert.equal(ui.result.hidden,true,'Reopening cannot restore a result from prior geometry');
 const completedTake={file:preview,sdrFile:artifact,hdrFiles:[hlg,exr]};ui.hdrRecord={state:'complete',take:completedTake};ui.saveHDR();ui.showHDR(completedTake);
-ui.$('delivery').value='sdr';ui.review={id:'new-review',hdr:false};
+ui.$('delivery').value='sdr';
 const regularFetch=ui.fetch.bind(ui);ui.fetch=async(path,body)=>path.endsWith('/jobs/outpaint1')?new Promise(()=>{}):regularFetch(path,body);
 await ui.generate();
 assert.equal(ui.hdrRecord,null,'Starting another render clears the previous HDR record');
@@ -82,10 +81,10 @@ ui.close();storage.clear();calls.length=0;
 
 // Black-area mode uses the same verified conversion path. A missing receipt
 // preserves the SDR output and never queues a conversion.
-const ui2=new OutpaintWorkspace(owner);ui2.closed=false;ui2.source={id:'b'.repeat(32),width:768,height:432,duration:4};ui2.$('mode').value='black';ui2.reframe();ui2.trim.initial();ui2.$('delivery').value='hlg_video';
-ui2.review={id:'review2',hdr:false};renderState={...base,id:'outpaint2',output_raster:null};await ui2.generate();await tick();await tick();
+const ui2=new OutpaintWorkspace(owner);ui2.closed=false;ui2.source={id:'b'.repeat(32),width:768,height:432,duration:4};ui2.$('mode').value='black';ui2.reframe();ui2.trim.initial();ui2.$('delivery').value='hlg_video';ui2.paint();
+renderState={...base,id:'outpaint2',output_raster:null};await ui2.generate();await tick();await tick();
 assert.ok(!calls.some(c=>c.path==='/zura/studio/hdr/jobs'));assert.equal(ui2.$('download').hidden,false);assert.match(ui2.$('status').textContent,/SDR video is available/);
-renderState={...base,id:'outpaint3'};ui2.review={id:'review3',hdr:false};calls.length=0;hdrState='rendering';await ui2.generate();await tick();await tick();
+renderState={...base,id:'outpaint3'};calls.length=0;hdrState='rendering';await ui2.generate();await tick();await tick();
 assert.deepEqual(calls.find(c=>c.path==='/zura/studio/hdr/jobs').body.output_ref,artifact);
 await ui2.cancel();assert.ok(calls.some(c=>c.path.endsWith('/jobs/hdr-job/cancel')));
 hdrState='failed';await ui2.hdrDelivery.client.poll();ui2.close();ui2.open();await tick();

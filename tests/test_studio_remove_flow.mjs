@@ -77,7 +77,7 @@ try{
   await ui.pickSource('footage');await settle();
   assert.equal(editor.stage,'trim');assert.equal(ui.state.clipTrimConfirmed,false);
   assert.ok(visible(editor.nav),'Remove stage navigation must remain in the visible rebuilt surface');
-  assert.ok(visible(surface.$('trim')));assert.equal(surface.$('trim').textContent,'Use clip');
+  assert.ok(visible(surface.$('trim')));assert.equal(surface.$('trim').textContent,'Continue to masking');
   await surface.$('trim').onclick();await settle();
   assert.equal(editor.stage,'mask');assert.equal(ui.state.clipTrimConfirmed,true);
   assert.ok(visible(editor.$('track')),'Track must be reachable after confirming the clip');

@@ -62,7 +62,7 @@ def disk_requirements(width, height, parts, *, anchor=False):
     return output, anchors
 
 
-def ffmpeg_assembly(ffmpeg, parts, rendered, output, *, source=None, audio_start=0, pad_tail=False, audio_duration=None, fps=FPS):
+def ffmpeg_assembly(ffmpeg, parts, rendered, output, *, source=None, audio_start=0, pad_tail=False, audio_duration=None, fps=FPS, cut=False):
     """Construct a non-shell FFmpeg command to overlap/blend SDR windows.
 
     Each input must already be verified to contain exactly its window's frame
@@ -99,7 +99,7 @@ def ffmpeg_assembly(ffmpeg, parts, rendered, output, *, source=None, audio_start
     # previous window's last frame and skip the next window's duplicate; each
     # concat segment then contains a normal multi-frame span.
     single_overlap = len(parts) > 1 and all(part.overlap == 1 for part in parts[1:])
-    if single_overlap:
+    if cut or single_overlap:
         for i, part in enumerate(parts):
             before = part.overlap
             filters.append(f'[{i}:v]trim=start_frame={before}:end_frame={part.count},setpts=PTS-STARTPTS[body{i}]')
@@ -107,7 +107,7 @@ def ffmpeg_assembly(ffmpeg, parts, rendered, output, *, source=None, audio_start
     else:
         if any(part.overlap == 1 for part in parts[1:]):
             raise ValueError('Do not mix single-frame and blended overlaps.')
-    for i, part in enumerate(parts if not single_overlap else []):
+    for i, part in enumerate(parts if not (cut or single_overlap) else []):
         before = part.overlap
         after = parts[i+1].overlap if i + 1 < len(parts) else 0
         branches = 1 + (before > 0) + (after > 0)

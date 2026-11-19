@@ -74,6 +74,23 @@ class ImportReviewTests(unittest.TestCase):
         np.testing.assert_array_equal(self.original, original)
         self.assertEqual(editor.load_project(self.id), before)
 
+    def test_current_review_difference_is_not_inverse_and_video_mask_is_immutable(self):
+        import hashlib
+        identity=editor.source_identity(str(self.source),self.description)
+        editor.commit_mask_pass(self.id,identity,{0:self.mask.astype(np.float32),1:self.mask.astype(np.float32)},'replace',editor.load_project(self.id)['revision'],{'segment_id':'a'*24,'tracked':True})
+        document=editor.load_project(self.id);self.body['mask_revision']=document['mask_revision']
+        existing={path:hashlib.sha256(path.read_bytes()).hexdigest() for path in editor.project_dir(self.id).rglob('*') if path.is_file()}
+        result=review.review_import(self.body)
+        from PIL import Image
+        outside=np.asarray(Image.open(result['difference_file']).convert('L'))>0
+        self.assertFalse(outside[0,0]);self.assertTrue(outside[1,2])
+        self.accept(result,'current')
+        np.testing.assert_array_equal(self.saved[-1][0][self.mask],self.edited[self.mask])
+        np.testing.assert_array_equal(self.saved[-1][0][~self.mask],self.original[~self.mask])
+        self.accept(result,'include')
+        self.assertEqual(editor.load_project(self.id),document)
+        for path,digest in existing.items():self.assertEqual(hashlib.sha256(path.read_bytes()).hexdigest(),digest)
+
     def test_metadata_snapshot_and_source_import_staleness(self):
         result = review.review_import(self.body)
         manifest = json.loads((editor.project_dir(self.id) / 'import_reviews' / result['token'] / 'manifest.json').read_text())

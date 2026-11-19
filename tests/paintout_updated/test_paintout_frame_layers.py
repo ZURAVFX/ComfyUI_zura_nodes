@@ -15,6 +15,22 @@ layers=importlib.util.module_from_spec(spec);sys.modules[spec.name]=layers;spec.
 
 
 class PaintLayerTests(unittest.TestCase):
+    def test_unmasked_second_edit_does_not_bake_in_lower_layer(self):
+        original = np.zeros((12, 16, 3), dtype=np.float32)
+        first = original.copy()
+        first[1:4, 1:4] = .9
+        first_mask = (first[..., 0] > 0).astype(np.float32)
+        cumulative = first.copy()
+        cumulative[8:11, 10:14] = .8
+        inferred = []
+        composed = layers.compose_pixels(original, [(first, first_mask), (cumulative, None)],
+                                         inferred_masks=inferred)
+        np.testing.assert_array_equal(composed, cumulative)
+        mask = editor.decode_mask(inferred[0], 16, 12)
+        without_first = layers.compose_pixels(original, [(cumulative, mask)])
+        np.testing.assert_array_equal(without_first[1:4, 1:4], original[1:4, 1:4])
+        np.testing.assert_array_equal(without_first[8:11, 10:14], cumulative[8:11, 10:14])
+
     def test_expansion_reveals_generated_object_beyond_original_mask(self):
         original=np.full((20,24,3),.25,np.float32)
         candidate=original.copy();candidate[4:15,8:16]=[2.,-.25,.75]

@@ -65,7 +65,9 @@ class OutpaintCanvasTests(unittest.TestCase):
                                         left=192, right=192, top=116, bottom=116)
         self.assertEqual(graph['inpaint']['inputs']['mask'], ['low_mask', 0])
         self.assertEqual(graph['guide']['inputs']['image'], ['inpaint', 0])
-        self.assertEqual(graph['blend_high']['inputs']['mask'], ['canvas', 1])
+        self.assertNotIn('blend_low', graph)
+        self.assertNotIn('blend_high', graph)
+        self.assertEqual(graph['upsize']['inputs']['image'], ['decode_low', 0])
         self.assertEqual(graph['assemble']['inputs']['audio'], ['components', 1])
         self.assertEqual(graph['empty']['inputs']['length'], 25)
         with self.assertRaises(ValueError):

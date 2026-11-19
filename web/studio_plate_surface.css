@@ -113,6 +113,10 @@
 #genj-studio .zplate-surface{grid-template-columns:104px minmax(0,1fr) 252px;grid-template-rows:40px minmax(0,1fr);font-family:inherit}
 #genj-studio .zpx-header{padding:4px 12px}
 #genj-studio .zpx-source-menu{position:relative;flex:none;margin-left:auto}
+#genj-studio .zpx-source-control{display:flex;align-items:center;gap:0;flex:none;min-width:0;order:-1}
+#genj-studio .zpx-source-control>[data-plate-source]{min-height:32px;padding:6px 12px;border-radius:6px 0 0 6px;background:var(--gs-input);white-space:nowrap}
+#genj-studio .zpx-source-control>.zpx-source-menu{margin-left:0}
+#genj-studio .zpx-source-control>.zpx-source-menu>summary{min-height:32px;box-sizing:border-box;padding:6px 10px;border-left:0;border-radius:0 6px 6px 0}
 #genj-studio .zpx-source-menu>summary{padding:6px 12px;cursor:pointer;border:1px solid var(--gs-line);border-radius:6px;list-style:none}
 #genj-studio .zpx-source-menu>summary::after{content:'\2304';margin-left:12px;color:var(--gs-muted)}
 #genj-studio .zpx-source-menu>div{position:absolute;right:0;top:calc(100% + 8px);z-index:30;min-width:176px;padding:4px;display:grid;gap:4px;border:1px solid var(--gs-line);border-radius:8px;background:var(--gs-panel);box-shadow:0 8px 24px #0003}
@@ -220,3 +224,10 @@
    guide and actions, without another row of Trim/Mask/Clean/Render tabs. */
 #genj-studio .zpx-removal-flow .zp-editor-stages>[data-stage]{display:none!important}
 @media(max-width:700px){#genj-studio .zpx-trim-controls{gap:8px}#genj-studio .zpx-trim-controls>span{font-size:11px}}
+#genj-studio .zpx-processing{display:grid;gap:4px;min-width:0}
+#genj-studio .zpx-processing[hidden]{display:none}
+#genj-studio .zpx-processing-heading{display:flex;align-items:center;justify-content:space-between;gap:8px;color:var(--gs-muted);font-size:12px}
+#genj-studio .zpx-processing-heading output{color:var(--zc-text);font-variant-numeric:tabular-nums}
+#genj-studio .zpx-processing input[type=range]{width:100%;min-width:0;height:24px;margin:0;accent-color:var(--gs-accent)}
+#genj-studio .zpx-processing [data-plate-processing-native]{min-height:28px;padding:3px 8px;font-size:11px;white-space:nowrap}
+#genj-studio .zpx-processing [data-plate-processing-native][aria-pressed=true]{color:var(--gs-accent);background:var(--gs-selected)}

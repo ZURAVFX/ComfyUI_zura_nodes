@@ -87,7 +87,7 @@ async def run_windows(*, kind, source, selection, parts, subplans, submit, wait,
             source=source_audio if kind == 'render' else None,
             audio_start=selection['start'], pad_tail=kind == 'render' and selection.get('ae_frame_contract') is None,
             audio_duration=selection.get('requested_duration', selection['duration']),
-            fps=Fraction(selection.get('fps_num', FPS),selection.get('fps_den', 1)))
+            fps=Fraction(selection.get('fps_num', FPS),selection.get('fps_den', 1)), cut=True)
         process = await asyncio.create_subprocess_exec(*command, stdout=asyncio.subprocess.DEVNULL,
             stderr=asyncio.subprocess.PIPE)
         _, stderr = await process.communicate()

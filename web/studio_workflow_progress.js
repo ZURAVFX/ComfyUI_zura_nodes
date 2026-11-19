@@ -48,7 +48,7 @@ export function workflowProgress(owner){
     w=owner.panorama;const state=w?.state||{};
     view=flow('camera','Change camera angle',['Source','Camera','Video','Result'],!state.source?0:running(w)?(state.cameraReviewed?2:1):state.result?3:state.cameraReviewed?2:1,state.result);
   }else if(mode==='outpaint'){
-    w=owner.outpaint;view=flow(mode,'Frame extension',['Source','Frame guides','Video','Result'],!w?.source?0:running(w)?2:w?.completedResult||w?.outputRef?3:1,w?.completedResult);
+    w=owner.outpaint;view=flow(mode,'Frame extension',['Source','Canvas','Generate','Result'],!w?.source?0:running(w)?2:w?.completedResult||w?.outputRef?3:1,w?.completedResult);
   }else if(mode==='alpha'){
     w=owner.alpha;view=flow(mode,'Extract alpha',['Source','Settings','Extract','Result'],!w?.source?0:running(w)?2:w?.result?3:1,w?.result);
   }else if(mode==='hdr'){

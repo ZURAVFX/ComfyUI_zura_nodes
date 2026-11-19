@@ -2696,6 +2696,8 @@ def register():
     register_media_import(studio, routes, response, check_asset)
     from .image_layers import register as register_image_layers
     register_image_layers(routes)
+    from .image_export import register as register_image_export
+    register_image_export(routes)
     from .opening import register as register_opening
     register_opening(studio, routes, response)
     from .content import register as register_content

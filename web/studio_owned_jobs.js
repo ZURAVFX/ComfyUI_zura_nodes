@@ -1,3 +1,4 @@
+import {rememberStudioGraph,studioGraphScope} from './studio_graph_view.js';
 import {prepareAEFrameGraph} from './studio_ae_frame_contract.js';
 // Direct Comfy prompts carry an opaque per-submission token in extra_data.
 // Comfy stores that data at index 3 in queue entries and history.prompt.
@@ -47,6 +48,9 @@ export async function submitOwnedGraph(ui, graph, config, previewMethod, extra, 
   if(ui.aeSessionEnded)throw Object.assign(new Error('This AE shot has ended'),{name:'AbortError'});
   const pending={requestId:crypto.randomUUID(),started:Date.now(),config,previewMethod,
     stages:Object.fromEntries(Object.entries(graph).map(([id,node])=>[id,node._meta?.title]).filter(([,title])=>title))};
+  const kind=Object.keys(extra).find(key=>key.startsWith('zura_'))?.slice(5);
+  const stage=kind==='panorama'?'camera':kind;
+  const identity=studioGraphScope(ui,stage);
   ui.pendingSubmission=pending;
   if(ui.save()===false){ui.pendingSubmission=null;throw new Error('Browser storage is unavailable. Free storage before starting a tracked run.');}
   ui.$('progress-title').textContent=extra.zura_image?'Submitting image':'Submitting video';
@@ -56,7 +60,7 @@ export async function submitOwnedGraph(ui, graph, config, previewMethod, extra, 
     assertCurrent?.();
     const response=await ui.fetch('/prompt',{prompt:graph,client_id:ui.api.clientId,
       extra_data:{...extra,...(config.ae_frame_contract?{ae_frame_contract:config.ae_frame_contract}:{}),...(config.ae_intermediate_image?{ae_intermediate_image:config.ae_intermediate_image}:{}),preview_method:previewMethod,zura_studio_request:pending.requestId}});
-    if(response.prompt_id)adoptOwnedSubmission(ui,pending,response.prompt_id);
+    if(response.prompt_id){rememberStudioGraph(ui,stage,graph,response.prompt_id,identity);adoptOwnedSubmission(ui,pending,response.prompt_id);}
     else if(ui.pendingSubmission===pending)ui.message('Checking whether the run started. This run will not be submitted again automatically.');
   }catch(error){
     if(ui.pendingSubmission!==pending)return;

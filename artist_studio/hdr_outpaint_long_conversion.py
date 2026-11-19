@@ -67,7 +67,7 @@ def create_long_hdr_conversion(server, source, selection, intermediate, *, revie
         return build_long_hdr_conversion_window(source, expected, by_start[part.start], str(path),
             review_key=review_key, prompt_start_frame=part.start, seed=42,
             prefix='hdr_outpaint_'+identity, check_asset=check_asset)
-    renderer=ComfyHDRRenderer(server, store, build, 'final_hdr_composite',
+    renderer=ComfyHDRRenderer(server, store, build, 'hdr_unpad_raster',
                               anchor_strength=.75, anchor_mode='i2v', client_id=client_id)
     async def export(staged):
         # Recheck the asset before extracting its original soundtrack.

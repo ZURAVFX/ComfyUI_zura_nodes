@@ -5,7 +5,7 @@ This is not a public Studio route until the complete path has been tested.
 """
 import asyncio
 
-from .hdr_outpaint_experiment import build_reviewed_sdr_first_stage, build_reviewed_sdr_first_composite
+from .hdr_outpaint_experiment import build_reviewed_sdr_first_stage, build_reviewed_sdr_first_delivery
 
 
 async def run_reviewed_hdr_outpaint(*, source, selection, review_key, colour_space,
@@ -51,7 +51,7 @@ async def run_reviewed_hdr_outpaint(*, source, selection, review_key, colour_spa
         intermediate = await run_pass('outpaint', stage)
         # Revalidate the source, approved geometry and colour before the second
         # pass; a changed selection must not reuse an earlier approval.
-        final = await asyncio.to_thread(build_reviewed_sdr_first_composite, source, selection, intermediate,
+        final = await asyncio.to_thread(build_reviewed_sdr_first_delivery, source, selection, intermediate,
             review_key=review_key, colour_space=colour_space, has_audio=has_audio,
             seed=seed, prefix='hdr_outpaint_' + identity, check_asset=check_asset, exr_storage=exr_storage)
         return await run_pass('hdr', final)

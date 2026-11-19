@@ -59,7 +59,7 @@ export class LTXHDRDelivery {
       const files=job.result?.files||[],preview=job.result?.preview;
       const output=this.take?.config?.hdrOutput,hasEXR=files.some(file=>file.type==='output'&&/\.(zip|exr)$/i.test(file.filename||'')),hasVideo=files.some(file=>file.type==='output'&&/\.(mp4|mov)$/i.test(file.filename||''));
       const complete=output==='acescg_exr'?hasEXR:output==='hlg_video'?hasVideo:output==='hlg_and_exr'?hasEXR&&hasVideo:false;
-      if(preview?.type==='output'&&complete)this.onComplete({...this.take,file:preview,hdrFiles:files,exr_storage:normaliseEXRStorage(job.result?.exr_storage||job.exr_storage||this.take?.config?.exr_storage),...(job.result?.colour?{colour:job.result.colour}:{}),...(job.result?.videoColour?{videoColour:job.result.videoColour}:{}),...(job.result?.alphaAssociation==='straight'?{alphaAssociation:'straight'}:{})});
+      if(preview?.type==='output'&&complete)this.onComplete({...this.take,hdrJobId:job.id||this.client.id,file:preview,hdrFiles:files,exr_storage:normaliseEXRStorage(job.result?.exr_storage||job.exr_storage||this.take?.config?.exr_storage),...(job.result?.colour?{colour:job.result.colour}:{}),...(job.result?.videoColour?{videoColour:job.result.videoColour}:{}),...(job.result?.alphaAssociation==='straight'?{alphaAssociation:'straight'}:{})});
       else job={...job,state:'failed',error:'HDR delivery finished without the requested files. Your SDR take is retained.'};
     }
     this.lastJob=job;this.onUpdate(job);

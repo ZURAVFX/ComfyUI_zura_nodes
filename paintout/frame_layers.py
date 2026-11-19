@@ -104,13 +104,18 @@ def inward_layer_alpha(mask, blend_pixels=0):
     return mask * ramp
 
 
-def compose_pixels(original, layers, protection=None, linear=False):
+def compose_pixels(original, layers, protection=None, linear=False, inferred_masks=None):
     """Each cumulative candidate contributes only its own independent paint mask."""
     result = original.copy()
     for layer in layers:
         if not isinstance(layer, (tuple, list)) or len(layer) not in (2, 3, 4, 5, 6):
             raise ValueError('Each clean-frame layer needs pixels, a mask and optional layer controls.')
         pixels, mask = layer[:2]
+        if mask is None and inferred_masks is not None:
+            # Ignore small differences from the image model and PNG round trip.
+            difference = np.max(np.abs(pixels - result), axis=2)
+            mask = (difference > 6 / 255).astype(np.float32)
+            inferred_masks.append(encode_layer_mask(mask))
         brightness_ev = validate_brightness_ev(layer[3] if len(layer) >= 4 else 0)
         blend_pixels = validate_blend_pixels(layer[2] if len(layer) >= 3 else 0)
         if pixels.shape != original.shape or mask.shape != original.shape[:2] or not np.isfinite(pixels).all() or not np.isfinite(mask).all() or np.any((mask < 0) | (mask > 1)):
@@ -136,6 +141,10 @@ def compose_layers(body):
     layers = body.get('layers')
     if not isinstance(layers, list) or not 1 <= len(layers) <= 32:
         raise ValueError('Compose between 1 and 32 clean-frame layers.')
+    derive = body.get('derive_mask_for')
+    if derive is not None and (type(derive) is not int or not 0 <= derive < len(layers)):
+        raise ValueError('Choose one image layer to derive a mask for.')
+    inferred_masks = [] if derive is not None else None
     document = load_project(body['project'])
     expected = body.get('expected_revision')
     if expected is not None and int(expected) != document['revision']:
@@ -167,18 +176,22 @@ def compose_layers(body):
             raise ValueError('The saved protection belongs to different or modified footage.')
         protection = protection_mask(descriptor, frame)
     def prepared_layers():
-        for layer in layers:
+        for index, layer in enumerate(layers):
             if not isinstance(layer, dict): raise ValueError('Each clean-frame layer needs a saved file and mask.')
             if type(layer.get('enabled', True)) is not bool:raise ValueError('Layer visibility must be true or false.')
             opacity=validate_opacity(layer.get('opacity', 1))
             blend_pixels = validate_blend_pixels(layer.get('blend_pixels', 0))
             expand_pixels = validate_expand_pixels(layer.get('expand_pixels', 0))
             brightness_ev = validate_brightness_ev(layer.get('brightness_ev', 0))
-            if not layer.get('enabled', True):continue
+            if not layer.get('enabled', True):
+                if index != derive:
+                    continue
+                opacity = 0
             pixels, colour = load_layer_image(layer['file'], layer.get('colour_space', 'srgb_display'), original.shape[:2])
             pixels = to_linear(torch.from_numpy(pixels.copy()).float(), colour).numpy() if hdr else working(torch.from_numpy(pixels.copy())[None].float(), colour, 'SDR (sRGB)')[0].numpy()
-            yield pixels, decode_mask(layer['mask'], description['width'], description['height']), blend_pixels, brightness_ev, opacity, expand_pixels
-    result = compose_pixels(original, prepared_layers(), protection, linear=hdr)
+            mask = None if index == derive else decode_mask(layer['mask'], description['width'], description['height'])
+            yield pixels, mask, blend_pixels, brightness_ev, opacity, expand_pixels
+    result = compose_pixels(original, prepared_layers(), protection, linear=hdr, inferred_masks=inferred_masks)
     if source_identity(str(source), describe(str(source))) != before:
         raise ValueError('The source changed while composing. Reload the footage.')
     directory = Path(folder_paths.get_output_directory())/'paintout'/'clean_frames'; directory.mkdir(parents=True, exist_ok=True)
@@ -188,6 +201,7 @@ def compose_layers(body):
     preview = sdr_view(torch.from_numpy(result), True).numpy() if hdr else result
     save_png16(png, preview)
     return dict(file=str(master), png_file=str(png), url=grant(png), master_url=grant(master), frame=frame, colour_space=colour, preview_colour_space='srgb_display', width=result.shape[1], height=result.shape[0],
+                **({'derived_mask': inferred_masks[0]} if inferred_masks else {}),
                 blend_widths=[layer.get('blend_pixels', 0) for layer in layers],
                 expansion_widths=[validate_expand_pixels(layer.get('expand_pixels', 0)) for layer in layers],
                 brightness_values=[validate_brightness_ev(layer.get('brightness_ev', 0)) for layer in layers],

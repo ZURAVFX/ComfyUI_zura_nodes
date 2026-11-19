@@ -20,3 +20,22 @@ export function applyComposerPatterns(root){
   root.addEventListener('keydown',key,true);keys.set(root,()=>root.removeEventListener('keydown',key,true));
 }
 export function disposeComposerPatterns(root){keys.get(root)?.();keys.delete(root);}
+
+/** A removable attachment keeps its primary action and corner action separate. */
+export function removableAttachment(button,label,onRemove){
+  const doc=button.ownerDocument,slot=doc.createElement('div'),remove=doc.createElement('button');
+  slot.className='zc-attachment-slot';
+  button.before(slot);slot.append(button,remove);
+  remove.type='button';remove.className='zf-remove-frame zc-remove-input';remove.hidden=true;
+  remove.setAttribute('aria-label',label);remove.title=label;
+  remove.innerHTML='<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="m7 7 10 10M7 17 17 7"/></svg>';
+  remove.onclick=()=>{if(remove.disabled)return;onRemove();if(!button.disabled&&!slot.hidden)button.focus({preventScroll:true});};
+  return {slot,remove};
+}
+
+export function setAttachmentThumbnail(button,url){
+  let image=button.querySelector('img');
+  if(!url){image?.remove();return;}
+  if(!image){image=button.ownerDocument.createElement('img');image.alt='';button.prepend(image);}
+  if(image.getAttribute('src')!==url)image.src=url;
+}

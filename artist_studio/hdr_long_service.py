@@ -100,19 +100,38 @@ class HDRLongService:
                 return self.status(old['id'])
             if any(not task.done() for task in self.jobs.tasks.values()):
                 raise ValueError('An HDR conversion is already running.')
+            from .image_export_hdr import capture_still_source, verify_still_source, snapshot_still_model, verify_model_input, discard_model_input
+            admitted_source = await asyncio.to_thread(capture_still_source, body, self.output_root)
             asset,check=self._asset(body)
             await asyncio.to_thread(self.check_setup,mode,body.get('output','hlg_and_exr'))
+            admitted_model = None
+            if admitted_source is not None:
+                admitted_model = await asyncio.to_thread(snapshot_still_model, asset, check, admitted_source, self.output_root)
+                check = lambda _: verify_model_input(admitted_model, self.output_root)
+                if asset.get('hdr_alpha_image') is not None:
+                    asset = {**asset, 'hdr_alpha_image': admitted_model['asset']}
             factory=self.create_sdr if mode=='sdr' else self.create_native
             # A modest continuation anchor is deliberately fixed for this
             # private evaluation; no artist-facing quality claim is implied.
             if request_id:self._requests[request_id]={'fingerprint':fingerprint,'id':None}
+            model_admitted = False
             try:
                 job,details=await asyncio.to_thread(factory,self.server,asset,body,check,
                     self.output_root,anchor_strength=0.75,max_chunk_frames=section_frames)
+                if admitted_source is not None:
+                    await asyncio.to_thread(verify_still_source, admitted_source, self.output_root)
+                    await asyncio.to_thread(verify_model_input, admitted_model, self.output_root)
+                    details = {**details, 'sourceMaster': admitted_source, 'modelInput': admitted_model}
                 identity=self.jobs.start(job,details)
+                model_admitted = True
                 from ..comfylink.studio_cancel import claim_work
                 claim_work(self.server, ('hdr', identity), lambda: self.jobs.cancel(identity))
             except Exception:
+                if admitted_model is not None and not model_admitted:
+                    try:
+                        await asyncio.to_thread(discard_model_input, admitted_model, self.output_root)
+                    except (ValueError, OSError):
+                        pass  # Retain changed private media rather than delete unknown files.
                 if request_id:self._requests.pop(request_id,None)
                 raise
             if request_id:self._requests[request_id]['id']=identity

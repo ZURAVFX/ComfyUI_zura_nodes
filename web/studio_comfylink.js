@@ -101,10 +101,21 @@ export class StudioAEBridge {
   }
   sourceClockKey(){const c=this.studio.creative,id=activeStudioMode(c),w=studioModeAdapter(id)?.resolveWorkspace(c);return id+':'+(id==='paintout'?(c.plate?.propagation?.()?'guide':'repair'):'source')+':'+(aeFramePolicy(id,typeof w?.config==='function'?w.config():w?.config||{},w||{}).nativeFPS||'source');}
   ownedResultReady(){const c=this.studio.creative,adapter=studioModeAdapter(activeStudioMode(c));return !!(this.source&&adapter&&this.loaded.get(adapter.id)===adapter.resolveWorkspace(c)&&adapter.getSelectedOutput(c));}
-  modeChanged(){this.updateMeta();this.updateRecoveryButton();if(this.closed)return;const c=this.studio.creative,id=activeStudioMode(c),adapter=studioModeAdapter(id),workspace=adapter?.resolveWorkspace(c);if(this.pending&&this.ownedResultReady()&&!this.sending&&!this.importPolling)this.send.disabled=this.rawReturnHeld();if(id==='image'&&(c.rippleImage?.request||c.outpaintGuide?.request))return;if(!this.pending&&(this.sourceMode!==id||this.sourceWorkspace!==workspace||this.loadedClock!==this.sourceClockKey())){this.sourceMode=id;this.sourceWorkspace=workspace;void this.loadSource();if(!this.pending)void this.findSavedResults();}}
+  pauseAutomaticSourceForReset(id){
+    if(this.closed||!id)return;
+    this.resetSources??=new Set();
+    if(this.resetSources.has(id))return;
+    this.resetSources.add(id);
+    return ()=>this.resetSources.delete(id);
+  }
+  modeChanged(){this.updateMeta();this.updateRecoveryButton();if(this.closed)return;const c=this.studio.creative,id=activeStudioMode(c),adapter=studioModeAdapter(id),workspace=adapter?.resolveWorkspace(c);if(this.pending&&this.ownedResultReady()&&!this.sending&&!this.importPolling)this.send.disabled=this.rawReturnHeld();if(this.resetSources?.has(id)||id==='image'&&(c.rippleImage?.request||c.outpaintGuide?.request))return;if(!this.pending&&(this.sourceMode!==id||this.sourceWorkspace!==workspace||this.loadedClock!==this.sourceClockKey())){this.sourceMode=id;this.sourceWorkspace=workspace;void this.loadSource();if(!this.pending)void this.findSavedResults();}}
   async loadSource(force=false){
     const creative=this.studio.creative,id=activeStudioMode(creative),adapter=studioModeAdapter(id),workspace=adapter?.resolveWorkspace(creative);
     if(this.closed||this.pending||!adapter)return;
+    if(this.resetSources?.has(id)){
+      if(!force)return;
+      this.resetSources.delete(id);
+    }
     if(id==='paint_vfx'){if(!this.sending&&!this.importPolling)this.message('Paint VFX creates a new clip. Your AE source remains linked.');return;}
     // Borrowed frame edits own their uploaded still, not the parent AE video.
     if(id==='image'&&(creative.rippleImage?.request||creative.outpaintGuide?.request))return;

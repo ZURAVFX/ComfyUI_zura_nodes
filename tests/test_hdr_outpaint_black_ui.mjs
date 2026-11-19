@@ -10,7 +10,7 @@ Object.defineProperty(window.HTMLSelectElement.prototype,'value',{configurable:t
 for(const name of ['load','pause','play'])window.HTMLElement.prototype[name]=()=>{};
 const requests=[];
 const owner={root:document.querySelector('#genj-studio'),api:{clientId:'test',apiURL:u=>u,addEventListener(){},removeEventListener(){}},show(){},openHDR(){},
-  async fetch(path,body){requests.push({path,body});if(path==='/zura/studio/outpaint/review')return {id:'review',kind:'review',state:'queued'};throw Error(path);}};
+  async fetch(path,body){requests.push({path,body});if(path==='/zura/studio/outpaint/generate')return {id:'render',kind:'render',state:'queued'};throw Error(path);}};
 const ui=new OutpaintWorkspace(owner);
 ui.capabilities={hdr_expand_experiment:true,hdr_expand_long_experiment:true,hdr_black_experiment:true,
   hdr_black_long_experiment:true,hdr_black_dependencies:{ready:false,missing_files:['inpaint.safetensors'],missing_nodes:['CropMask']},
@@ -20,18 +20,18 @@ ui.source={id:'hdr-source',file:'input.mov',name:'input.mov',width:190,height:13
 ui.isHDRSource=true;ui.sourceColour='pq_rec2020';ui.$('hdr-output').checked=true;
 ui.$('mode').value='black';ui.$('mode').onchange();
 assert.equal(ui.mode,'black');assert.equal(ui.$('hdr-output').checked,true,'HDR input remains HDR');
-assert.equal(ui.$('hdr-option').hidden,false);assert.deepEqual(ui.dimensions(),{width:190,height:130});
+assert.equal(ui.$('hdr-option').hidden,true);assert.deepEqual(ui.dimensions(),{width:190,height:130});
 assert.deepEqual(ui.box,{left:0,top:0,right:0,bottom:0});
-assert.equal(ui.$('review').disabled,true,'Missing black-specific models cannot look ready');
+assert.equal(ui.$('generate').disabled,true,'Missing black-specific models cannot look ready');
 assert.match(ui.$('method-info').textContent,/setup is incomplete/);
 assert.equal(ui.modelDownloads.context.files[0].filename,'inpaint.safetensors');
 assert.deepEqual(ui.modelDownloads.context.missingNodes,['CropMask']);
 ui.capabilities.hdr_black_dependencies={ready:true,missing_files:[],missing_nodes:[]};ui.paint();
-assert.equal(ui.$('review').disabled,false);assert.match(ui.$('method-info').textContent,/black-area preview/);
+assert.equal(ui.$('generate').disabled,false);assert.match(ui.$('method-info').textContent,/fills black areas/);
 assert.match(ui.$('help').textContent,/dark clothing or shadows/);
 ui.trim.commit({start:.5,duration:1});ui.poll=()=>{};
-await ui.reviewSelection();
-const submitted=requests.find(r=>r.path==='/zura/studio/outpaint/review').body;
+await ui.generate();
+const submitted=requests.find(r=>r.path==='/zura/studio/outpaint/generate').body;
 assert.deepEqual({mode:submitted.mode,hdr:submitted.hdr,colour:submitted.colour_space,width:submitted.width,height:submitted.height,start:submitted.start,duration:submitted.duration},
   {mode:'black',hdr:true,colour:'pq_rec2020',width:190,height:130,start:.5,duration:1});
 assert.equal(submitted.black_threshold,2/255);assert.equal(submitted.strategy,undefined);

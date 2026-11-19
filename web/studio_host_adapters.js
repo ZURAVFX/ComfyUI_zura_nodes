@@ -93,9 +93,9 @@ export function createComfyGraphHost(app,{request,tidy,attach}){
     if(typeof app.loadApiJson!=='function')throw new Error('Update the ComfyUI frontend to open editable API graphs.');
     const previous=(app.rootGraph||app.graph)?.serialize?.();
     if(!previous||typeof app.loadGraphData!=='function')throw new Error('Update ComfyUI to open Graph view without replacing your current workflow.');
-    try{await app.loadApiJson(exported.graph,`${exported.name} · ${crypto.randomUUID().slice(0,8)}.json`);await tidy(app,exported.graph,exported.stage);}
+    try{await app.loadApiJson(exported.graph,`${exported.name} · ${crypto.randomUUID().slice(0,8)}.json`);if(!exported.verbatim)await tidy(app,exported.graph,exported.stage);}
     catch(error){await app.loadGraphData(previous);throw new Error('Could not arrange this stage into an artist graph. Your previous workflow has been restored. '+error.message);}
-    attach(app,{projectId:exported.project_id,stage:exported.stage,context:exported.context,progress:exported.progress,request,tidy});
+    if(exported.project_id)attach(app,{projectId:exported.project_id,stage:exported.stage,context:exported.context,progress:exported.progress,request,tidy});
   }};
 }
 
