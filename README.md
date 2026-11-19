@@ -34,7 +34,7 @@ Use your own ComfyUI host and port if they differ.
 
 ## Current release
 
-**1.3.68** adds editable Graph View for active Studio runs, ProRes source playback previews, and adjustable draft layers in Add and Replace. It streamlines frame extension, speeds up full-frame Paintout delivery, and improves image and HDR exports. See the [release notes](CHANGELOG.md) for details.
+**1.3.69** makes H3 Ripple setup report what is missing and moves imported-frame confirmation into the Add and Replace video controls. See the [release notes](CHANGELOG.md) for details.
 
 Zura Studio remains free to open and use normally, without a ComfyLink licence. The separate native ComfyLink After Effects plug-in is optional and is not bundled here. Existing [Relight](docs/RELIGHT_MODELS.md), [Director](docs/DIRECTOR_STUDIO.md), [Paintout](PAINTOUT.md), [alpha extraction](docs/LTX_ALPHA.md), [Ripple editing](docs/RIPPLE_STUDIO.md) and [painted image edits](docs/IMAGE_EDIT_AREA.md) remain available.
 

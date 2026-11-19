@@ -1,5 +1,10 @@
 # Release notes
 
+## 1.3.69 - 19 November 2026
+
+- Show the result of Check setup in H3 Ripple. List missing requirements next to the model controls and offer to install WepeNerd through ComfyUI Manager where supported.
+- Show imported frame review in Add and Replace. Accept the edited frame from the video controls, or open the keyframe editor when the shot still needs one.
+
 ## 1.3.68 - 18 November 2026
 
 - Open the submitted ComfyUI graph from Studio, including during a run. Return to the same Studio session without submitting another render.
