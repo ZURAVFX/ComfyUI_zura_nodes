@@ -39,7 +39,7 @@ jobs:
               # Ubuntu's primary hosts can share a DNS outage. The fallback
               # retains the existing Ubuntu signature keyring and source fields.
               sudo python tools/ci_ubuntu_mirror.py
-              sudo timeout --kill-after=10s 120s apt-get \
+              sudo timeout --kill-after=10s 540s apt-get \
                 -o APT::Update::Error-Mode=any \
                 -o Acquire::Retries=0 \
                 -o Acquire::http::Timeout=15 \
