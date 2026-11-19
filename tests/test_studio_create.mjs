@@ -111,18 +111,40 @@ assert.equal(ui.imageTask.parentElement,ui.videoComposer.modeHost,'Image mode sh
 const workflowMenu=ui.videoComposer.task;
 assert.equal(workflowMenu.tagName,'DETAILS');
 assert.equal(workflowMenu.querySelector('select').hidden,true,'OS-native workflow dropdown is hidden behind the styled menu');
-assert.equal(workflowMenu.querySelectorAll('[role="menuitemradio"]').length,14);
+assert.equal(workflowMenu.querySelectorAll('[role="menuitemradio"]').length,15);
 assert.equal(workflowMenu.querySelector('[data-workflow="paint_vfx"]').closest('.zc-mode-group').getAttribute('aria-label'),'Create a shot','Paint VFX is a separate creation mode');
 assert.ok(workflowMenu.querySelector('[data-workflow="director"]'),'Director shares the persistent video workflow selector');
 assert.equal(workflowMenu.querySelector('[data-workflow="inpaint"]'),null,'Edited-frame work has one Ripple route, without a duplicate Inpaint preview');
 assert.ok(workflowMenu.querySelector('[data-workflow="outpaint"]'),'Frame extension is available as a preview workflow');
+assert.equal(workflowMenu.querySelector('[data-workflow="extend_length"]').closest('.zc-mode-group').getAttribute('aria-label'),'Finish footage');
+ui.show('extend_length');
+assert.equal(ui.extendLength.page.hidden,false);
+assert.equal(ui.extendLength.$('prompt').hidden,false);
+assert.equal(ui.extendLength.$('negative-control').hidden,true);
+ui.show('upscale');
+const upscale=ui.upscale;
+assert.equal(ui.extendLength.page.hidden,true);
+assert.equal(upscale.$('negative-control').hidden,true);
+upscale.$('model').value='ltx25_tiled_x2';
+upscale.$('model').onchange();
+assert.equal(upscale.$('negative-control').hidden,false);
+assert.equal(upscale.$('negative-control').hasAttribute('open'),false);
+assert.equal(upscale.$('refine-scale').value,'1');
+upscale.$('negative').value='Altered lettering';
+upscale.$('negative').oninput();
+assert.equal(upscale.$('negative-status').hidden,false);
+assert.equal(upscale.config().negativePrompt,'Altered lettering');
+upscale.reset();
+assert.equal(upscale.$('negative-status').hidden,true);
+ui.show('video');
+
 assert.equal(workflowMenu.querySelector('[data-workflow="swap"]').getAttribute('aria-checked'),'true');
 assert.equal(workflowMenu.querySelectorAll('.zc-mode-group').length,3);
 for(const button of workflowMenu.querySelectorAll('[data-workflow]')){assert.ok(button.querySelector('svg'));assert.ok(button.querySelector('small').textContent.length>12);}
 const modeSearch=workflowMenu.querySelector('input[type=search]');modeSearch.value='lighting';modeSearch.oninput({target:modeSearch});
 assert.deepEqual([...workflowMenu.querySelectorAll('[data-workflow]')].filter(button=>!button.hidden).map(button=>button.dataset.workflow),['relight']);
 modeSearch.value='no such mode';modeSearch.oninput({target:modeSearch});assert.equal(workflowMenu.querySelector('.zc-mode-no-results').hidden,false);
-modeSearch.value='';modeSearch.oninput({target:modeSearch});assert.equal([...workflowMenu.querySelectorAll('[data-workflow]')].filter(button=>!button.hidden).length,14);
+modeSearch.value='';modeSearch.oninput({target:modeSearch});assert.equal([...workflowMenu.querySelectorAll('[data-workflow]')].filter(button=>!button.hidden).length,15);
 
 const removedInputs=[],savedRemoveInput=studio.removeInput;studio.removeInput=type=>removedInputs.push(type);
 for(const id of ['source','refs','frame'])studio.container.querySelector('#zc-remove-'+id).onclick();

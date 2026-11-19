@@ -177,17 +177,6 @@
       "title": "CLIP Text Encode (Positive Prompt)"
     }
   },
-  "5014:5557": {
-    "inputs": {
-      "string": "",
-      "substring": "ltxv_",
-      "case_sensitive": true
-    },
-    "class_type": "StringContains",
-    "_meta": {
-      "title": "has ltxv api key?"
-    }
-  },
   "5014:1241": {
     "inputs": {
       "positive": [
@@ -208,46 +197,6 @@
       "title": "LTXVConditioning"
     }
   },
-  "5014:5560": {
-    "inputs": {
-      "switch": [
-        "5014:5557",
-        0
-      ],
-      "on_false": [
-        "5014:1241",
-        1
-      ],
-      "on_true": [
-        "5014:5505",
-        0
-      ]
-    },
-    "class_type": "ComfySwitchNode",
-    "_meta": {
-      "title": "negative conditioning source - If/Else Switch"
-    }
-  },
-  "5014:5558": {
-    "inputs": {
-      "switch": [
-        "5014:5557",
-        0
-      ],
-      "on_false": [
-        "5014:1241",
-        0
-      ],
-      "on_true": [
-        "5014:5504",
-        0
-      ]
-    },
-    "class_type": "ComfySwitchNode",
-    "_meta": {
-      "title": "positive conditioning source - If/Else Switch"
-    }
-  },
   "5014:5556": {
     "inputs": {
       "switch": false,
@@ -263,36 +212,6 @@
     "class_type": "ComfySwitchNode",
     "_meta": {
       "title": "If/Else Switch"
-    }
-  },
-  "5014:5504": {
-    "inputs": {
-      "api_key": "",
-      "enhance_prompt": false,
-      "prompt": [
-        "5508",
-        0
-      ],
-      "ckpt_name": "ltx-2.5-22b-distilled-transformer-comfy-int8-convrot.safetensors"
-    },
-    "class_type": "GemmaAPITextEncode",
-    "_meta": {
-      "title": "\ud83c\udd5b\ud83c\udd63\ud83c\udd67 Gemma API Text Encode - POSITIVE"
-    }
-  },
-  "5014:5505": {
-    "inputs": {
-      "api_key": "",
-      "enhance_prompt": false,
-      "prompt": [
-        "5509",
-        0
-      ],
-      "ckpt_name": "ltx-2.5-22b-distilled-transformer-comfy-int8-convrot.safetensors"
-    },
-    "class_type": "GemmaAPITextEncode",
-    "_meta": {
-      "title": "\ud83c\udd5b\ud83c\udd63\ud83c\udd67 Gemma API Text Encode - NEGATIVE"
     }
   },
   "5549": {
@@ -387,7 +306,7 @@
     },
     "class_type": "LTXAddVideoICLoRAGuide",
     "_meta": {
-      "title": "\ud83c\udd5b\ud83c\udd63\ud83c\udd67 Add Video IC-LoRA Guide"
+      "title": "🅛🅣🅧 Add Video IC-LoRA Guide"
     }
   },
   "9002:3159": {
@@ -415,12 +334,12 @@
   "9002:9005": {
     "inputs": {
       "positive": [
-        "5014:5558",
+        "5014:1241",
         0
       ],
       "negative": [
-        "5014:5560",
-        0
+        "5014:1241",
+        1
       ],
       "frame_rate": [
         "9006",
@@ -441,7 +360,7 @@
     },
     "class_type": "LTXFloatToInt",
     "_meta": {
-      "title": "\ud83c\udd5b\ud83c\udd63\ud83c\udd67 Float To Int"
+      "title": "🅛🅣🅧 Float To Int"
     }
   },
   "9002:3980": {
@@ -691,7 +610,7 @@
     },
     "class_type": "LTXICLoRALoaderModelOnly",
     "_meta": {
-      "title": "\ud83c\udd5b\ud83c\udd63\ud83c\udd67 IC-LoRA Loader Model Only"
+      "title": "🅛🅣🅧 IC-LoRA Loader Model Only"
     }
   },
   "5517:4975": {

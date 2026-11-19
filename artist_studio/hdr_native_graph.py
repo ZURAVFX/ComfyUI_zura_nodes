@@ -22,12 +22,12 @@ def build_native_exr_graph(*, source, frame_count, fps, width, height, prefix,
                            model='ltx-2.5-22b-distilled-transformer-comfy-int8-convrot.safetensors',
                            video_vae='ltx-2.5-video-vae-bf16.safetensors',
                            text_encoder='gemma4-12b-with-proj-ltx-2.5-nvfp4.safetensors',
-                           upscaler='ltx-2.5-latent-spatial-upscaler-x2-bf16-1.0.safetensors'):
+                           upscaler='ltx-2.5-latent-spatial-upscaler-x2-bf16-1.0.safetensors', max_dimension=2048):
     if not isinstance(source,str) or not source.strip(): raise ValueError('Choose an EXR sequence.')
     if type(frame_count) is not int or not 9 <= frame_count <= 121 or (frame_count-1)%8:
         raise ValueError('Experimental native HDR input requires 9–121 frames in 8n+1 increments.')
-    if any(type(v) is not int or v < 512 or v > 2048 or v % 64 for v in (width,height)):
-        raise ValueError('Choose output dimensions between 512 and 2048 pixels, multiples of 64.')
+    if any(type(v) is not int or v < 512 or v > max_dimension or v % 64 for v in (width,height)):
+        raise ValueError(f'Choose output dimensions between 512 and {max_dimension} pixels, multiples of 64.')
     if not isinstance(fps,(int,float)) or isinstance(fps,bool) or not math.isfinite(fps) or not 1<=fps<=120:
         raise ValueError('Choose a valid frame rate.')
     if source_colour not in ('acescg','acescct','srgb_linear'):
@@ -65,7 +65,8 @@ def build_native_exr_graph(*, source, frame_count, fps, width, height, prefix,
 
 def build_native_video_graph(*, source, start_frame, frame_count, fps, width, height,
                              prefix, colour_space='auto', has_audio=False, output='hlg_and_exr',
-                             sequence_manifest='', manifest_sha='', temporal_window=0, exr_storage='half'):
+                             sequence_manifest='', manifest_sha='', temporal_window=0, exr_storage='half',
+                             upscale_2x=False, refine=False, prompt='', negative_prompt=''):
     """Bounded HDR-video post-pass, padded for LTX then cropped to source raster.
 
     This preserves frame count and source soundtrack; the model may alter scene
@@ -91,9 +92,25 @@ def build_native_video_graph(*, source, start_frame, frame_count, fps, width, he
     padded=max(9,1+8*((frame_count-1+7)//8))
     if pw*ph*padded > 40_000_000:
         raise ValueError('This padded range is too large; choose fewer frames.')
+    scale=2 if upscale_2x else 1
+    if upscale_2x and pw*ph*padded*4 > 96_000_000:
+        raise ValueError('This 2× HDR selection exceeds the render memory budget. Trim to a shorter range.')
     # Keep the public graph's validation unchanged. The internal temporal test
     # constructs a valid short graph then expands its *single* latent canvas.
-    g=build_native_exr_graph(source=source,frame_count=min(padded,121),fps=fps,width=pw,height=ph,prefix=prefix,output=output,exr_storage=exr_storage)
+    g=build_native_exr_graph(source=source,frame_count=min(padded,121),fps=fps,
+        width=pw*scale,height=ph*scale,prefix=prefix,output=output,exr_storage=exr_storage,
+        max_dimension=2048*scale, **({'text_encoder':'gemma4-12b-with-proj-ltx-2.5-comfy-int8-convrot.safetensors'}
+                                    if refine else {}))
+    if refine and prompt:
+        g['positive']['inputs']['text']=prompt
+        g['positive2']['inputs']['text']=prompt
+    if refine and negative_prompt:
+        g['negative']['inputs']['text']=negative_prompt
+        for name in ('sample1','sample2'):
+            g[name]['inputs']['cfg']=1.5
+    if refine and height>width:
+        for name in ('sample1','sample2'):
+            g[name]['inputs'].update(tile_width=576,tile_height=1024)
     if temporal_window:
         g['empty']['inputs']['length']=padded
         for name in ('guide1','guide2','sample1','sample2'):
@@ -109,7 +126,7 @@ def build_native_video_graph(*, source, start_frame, frame_count, fps, width, he
     g['resize1']['inputs']['image']=['native_pad',0]
     g['resize2']['inputs']['image']=['native_pad',0]
     g['trim_frames']=n('ImageFromBatch',image=['decode',0],batch_index=0,length=frame_count)
-    g['trim_raster']=n('ImageCrop',image=['trim_frames',0],width=width,height=height,x=0,y=0)
+    g['trim_raster']=n('ImageCrop',image=['trim_frames',0],width=width*scale,height=height*scale,x=0,y=0)
     # Rebuild delivery against cropped ACEScct, never the padded canvas.
     for key in list(g):
         if key.startswith('zura_hdr_'):del g[key]

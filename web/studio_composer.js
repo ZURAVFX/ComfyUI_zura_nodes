@@ -21,7 +21,7 @@ export const composerIcons={
   takes:svg('<rect x="3" y="7" width="18" height="14" rx="2"/><path d="M7 3h10m-8 9 6 3-6 3z"/>'),
   download:svg('<path d="M12 3v12m-4-4 4 4 4-4M4 17v4h16v-4"/>'),
 };
-export const VIDEO_WORKFLOWS=[['swap','Character replacement'],['plate','Add, remove & replace'],['viewport','Viewport to final'],['camera','Change camera angle'],['relight','Relight'],['watermark','Watermark removal'],['alpha','Extract alpha'],['upscale','Upscale video'],['outpaint','Frame extension · preview'],['hdr','Convert to HDR'],['paint_vfx','Paint VFX'],['director','Director'],['frames','First & last frame'],['references','Reference to video']];
+export const VIDEO_WORKFLOWS=[['swap','Character replacement'],['plate','Add, remove & replace'],['viewport','Viewport to final'],['camera','Change camera angle'],['relight','Relight'],['watermark','Watermark removal'],['alpha','Extract alpha'],['upscale','Upscale video'],['extend_length','Extend length'],['outpaint','Frame extension · preview'],['hdr','Convert to HDR'],['paint_vfx','Paint VFX'],['director','Director'],['frames','First & last frame'],['references','Reference to video']];
 
 // Navigation describes the artist's task; model choices stay with generation controls.
 const MODE_DETAILS={
@@ -33,6 +33,7 @@ const MODE_DETAILS={
  paintout:['Edit footage','<path d="m4 15 9-11 7 6-9 11H7zM9 9l7 6M4 21h17"/>','Remove objects with masks and clean frames'],
  watermark:['Finish footage','<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M6 15h12M8 12l8-5m-7 0 7 5"/>','Remove subtitles, logos or other overlays'],
  alpha:['Finish footage','<path d="M3 3h18v18H3zM3 9h18M3 15h18M9 3v18M15 3v18"/>','Generate transparency for compositing'],
+ extend_length:['Finish footage','<rect x="3" y="5" width="12" height="14" rx="2"/><path d="M16 12h5m-2.5-2.5L21 12l-2.5 2.5"/>','Continue a clip beyond the last frame'],
  upscale:['Finish footage','<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M7 17 17 7m-5 0h5v5"/>','Double the resolution of a clip'],
  outpaint:['Edit footage','<rect x="7" y="7" width="10" height="10" rx="1"/><path d="M3 8V3h5m8 0h5v5m0 8v5h-5M8 21H3v-5"/>','Expand the scene beyond the original frame'],
  hdr:['Finish footage','<path d="M3 5h18v14H3zM12 5v14"/><path d="m7 9-2 3 2 3m10-6 2 3-2 3"/>','Convert SDR footage to HDR'],
@@ -171,7 +172,7 @@ export class VideoComposer {
     if(value==='relight'&&this.workspace.selectRelightEngine){void this.workspace.selectRelightEngine(this.workspace.relightEngine||'wan21');return;}
     if(['objects','ripple','inpaint'].includes(value)){this.workspace.ensureRippleWorkspace?.('edit');this.workspace.show('ripple');return;}
     if(value==='paintout'&&['inpaint','ripple'].includes(this.workspace.paintout?.state.mode)){this.workspace.show('paintout');this.workspace.paintout.setMode('targeted');this.syncWorkflow();return;}
-    if(['paint_vfx','director','frames','references','paintout','watermark','outpaint','alpha','upscale'].includes(value)){this.workspace.show(value);return;}
+    if(['paint_vfx','director','frames','references','paintout','watermark','outpaint','alpha','upscale','extend_length'].includes(value)){this.workspace.show(value);return;}
     if(!VIDEO_WORKFLOWS.some(([id])=>id===value))return;
     const input=this.root.querySelector(`input[name="gs-workflow"][value="${value}"]`);
     if(input&&!input.disabled){
@@ -190,7 +191,7 @@ export class VideoComposer {
     this.syncWorkflow();
   }
   syncWorkflow(){
-    const independent=['paint_vfx','director','frames','references','paintout','watermark','outpaint','ripple','alpha','upscale','panorama','hdr'].includes(this.workspace.mode),select=this.task.querySelector('select');
+    const independent=['paint_vfx','director','frames','references','paintout','watermark','outpaint','ripple','alpha','upscale','extend_length','panorama','hdr'].includes(this.workspace.mode),select=this.task.querySelector('select');
     select.value=independent?this.workspace.mode:this.studio.config.workflow_mode==='motion'?'swap':this.studio.config.workflow_mode;
     if(this.workspace.mode==='panorama')select.value='camera';if(this.workspace.mode==='ripple'&&this.workspace.ripple?.intent==='relight')select.value='relight';
     if(this.workspace.mode==='paintout'&&this.workspace.paintout?.state.mode==='ripple')select.value='ripple';

@@ -9,3 +9,18 @@
 #genj-studio .zup-page [data-wipe-host] .gs-compare-stage{flex:1;min-height:0}
 #genj-studio .zup-page [data-status]:empty{display:none}
 #genj-studio .zup-page [data-full]{margin-top:8px}
+
+#genj-studio .zup-page [data-prompt],
+#genj-studio .zup-negative textarea{box-sizing:border-box;width:100%}
+#genj-studio .zup-negative>summary{display:inline-flex;align-items:center;gap:7px;padding:4px 2px;min-height:24px;color:var(--gs-muted);font-size:12px;cursor:pointer;list-style:none}
+#genj-studio .zup-negative>summary::-webkit-details-marker{display:none}
+#genj-studio .zup-negative>summary::before{content:'›';display:inline-block}
+#genj-studio .zup-negative[open]>summary::before{transform:rotate(90deg)}
+#genj-studio .zup-negative>summary:hover,
+#genj-studio .zup-negative [data-negative-status]{color:var(--gs-text)}
+#genj-studio .zup-negative textarea{min-height:52px;resize:vertical}
+#genj-studio .zup-extension-controls{display:flex;flex-wrap:wrap;align-items:center;gap:8px 16px;margin-top:8px}
+#genj-studio .zup-extension-controls label{display:inline-flex;align-items:center;gap:6px;font-size:12px}
+#genj-studio .zup-extension-controls input[type=number]{width:78px}
+#genj-studio .zup-extend-settings>div{display:grid;gap:8px;padding-block:8px}
+#genj-studio .zup-extend-settings [data-seed]{width:132px}

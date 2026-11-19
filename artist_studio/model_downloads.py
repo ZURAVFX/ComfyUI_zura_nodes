@@ -323,6 +323,18 @@ CATALOG["ltx_ripple"] = dict(
         {**_file("loras", "LTX25_Ripple_v11.safetensors", "WepeNerd/LTX-Ripple", "76abac5ede8a3415b9d1cd803843a38ecb351600", "LTX25_Ripple_v11.safetensors", 654443392, "bde543610144e5bba78782fb0ac18daa663fc087c2212244b8116deb1925ee2a"), "gated": False},
     ])
 
+CATALOG["h3_extend_quality"] = {
+    **CATALOG["h3_reference_core"],
+    "name": "MiniMax H3 · Extend length (Quality)",
+    "note": "Local reference model, text encoder and video/audio VAEs for clip continuation.",
+}
+CATALOG["h3_extend_turbo"] = {
+    **CATALOG["h3_extend_quality"],
+    "name": "MiniMax H3 · Extend length (Turbo)",
+    "note": "Local clip continuation setup with the Turbo adapter.",
+    "files": [*CATALOG["h3_reference_core"]["files"], CATALOG["h3_first_last"]["files"][4]],
+}
+
 CATALOG["relayvsr_x2"] = dict(
     name="Relay VSR · 2× video upscale", gated=False,
     license_url="https://huggingface.co/Comfy-Org/RelayVSR",
@@ -349,6 +361,28 @@ CATALOG["seedvr2_7b_x2"] = dict(
               "df48879708206a403d2a61acd55578c2e80fd233", "vae/seedvr2_ema_vae_fp16.safetensors",
               501324814, "20678548f420d98d26f11442d3528f8b8c94e57ee046ef93dbb7633da8612ca1"),
     ],
+)
+
+CATALOG["ltx25_latent_x2"] = dict(
+    name="LTX 2.5 · Latent 2×", gated=True,
+    license_url=CATALOG["ltx25_core"]["license_url"],
+    note="Spatial upscaler and matching video VAE. Accept the LTX 2.5 terms on Hugging Face.",
+    files=[CATALOG["ltx25_core"]["files"][index] for index in (1, 3)],
+)
+
+CATALOG["ltx25_tiled_x2"] = dict(
+    name="LTX 2.5 · Refine (SDR)", gated=True,
+    license_url=CATALOG["ltx25_refine"]["license_url"],
+    note="Accept the LTX 2.5 and Refine Details terms. Requires the Lightricks ComfyUI-LTXVideo extension.",
+    files=[CATALOG["ltx25_core"]["files"][0], CATALOG["ltx25_full_vae"]["files"][0],
+           CATALOG["ltx25_text_int8"]["files"][0], CATALOG["ltx25_refine"]["files"][0]],
+)
+
+CATALOG["ltx25_hdr_refine_x2"] = dict(
+    name="LTX 2.5 · Refine (HDR)", gated=True,
+    license_url=CATALOG["ltx25_refine"]["license_url"],
+    note="Two-stage native HDR refinement. Accept the LTX 2.5 and Refine Details terms. Requires ComfyUI-LTXVideo.",
+    files=[*CATALOG["ltx25_tiled_x2"]["files"], CATALOG["ltx25_core"]["files"][3]],
 )
 
 CATALOG["ltx_alpha"] = dict(

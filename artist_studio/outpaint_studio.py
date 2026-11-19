@@ -276,7 +276,7 @@ def build_studio_graph(source, selection, *, review_key, prompt='', seed=42, out
                     ('mode', 'left', 'top', 'right', 'bottom', 'black_threshold')}
         graph = build_test_graph(source['file'], output_prefix, expected['padded_frames'],
             source_rate(source), expected['padded_width'], expected['padded_height'],
-            prompt=text, seed=seed, **geometry)
+            prompt=text, seed=seed, single_pass=True, **geometry)
         graph['source_range'] = {'class_type': 'ZuraOutpaintSelectClip', 'inputs': {
             'video': ['source', 0], 'start_seconds': expected['start'],
             'duration_seconds': expected['requested_duration'], 'long_edge': 1920,
@@ -289,7 +289,7 @@ def build_studio_graph(source, selection, *, review_key, prompt='', seed=42, out
         graph['canvas']['inputs']['images'] = ['temporal_hold', 0]
         graph['audio_encoded']['inputs']['audio'] = ['temporal_hold', 1]
         graph['trim_result'] = {'class_type': 'ImageFromBatch', 'inputs': {
-            'image': ['decode_high', 0], 'batch_index': 0, 'length': expected['frames']}}
+            'image': ['decode_low', 0], 'batch_index': 0, 'length': expected['frames']}}
         images = ['trim_result', 0]
         if expected['mode'] == 'black':
             graph['unpad_result'] = {'class_type': 'ImageCrop', 'inputs': {

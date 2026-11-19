@@ -51,11 +51,10 @@ class HDRBlackTests(unittest.TestCase):
         self.assertEqual(stage['tone_map_source']['class_type'],'LTXVHDRDecodePostprocess','Keep the trained model-conditioning transform unchanged')
         self.assertEqual(stage['masked_sdr_guide']['inputs']['mask'],['canvas',1])
         self.assertEqual(stage['masked_sdr_guide']['inputs']['source'],['black_fill',0])
-        self.assertEqual(stage['mask_image']['inputs']['mask'],['canvas',1])
-        self.assertEqual(stage['low_reference']['inputs']['image'],['masked_sdr_guide',0])
+        self.assertEqual(stage['inpaint']['inputs'], {'images':['masked_sdr_guide',0], 'mask':['canvas',1]})
         self.assertNotIn('blend_low',stage)
         self.assertNotIn('blend_high',stage)
-        self.assertEqual(stage['trim_result']['inputs']['image'],['decode_high',0])
+        self.assertEqual(stage['trim_result']['inputs']['image'],['decode_low',0])
         self.assertEqual(stage['adapter']['inputs']['lora_name'],'ltx-2.3-22b-ic-lora-in-outpainting-0.9.safetensors')
         self.assertNotIn('final_hdr_composite', final)
         self.assertEqual(final['hdr_generated_crop']['inputs'],{

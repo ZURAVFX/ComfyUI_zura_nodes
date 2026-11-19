@@ -54,7 +54,7 @@
     },
     "class_type": "LTXVInpaintPreprocess",
     "_meta": {
-      "title": "\ud83c\udd5b\ud83c\udd63\ud83c\udd67 LTXV Inpaint Preprocess"
+      "title": "🅛🅣🅧 LTXV Inpaint Preprocess"
     }
   },
   "5409:3159": {
@@ -90,12 +90,12 @@
       "tile_overlap": 64,
       "attention_strength": 1,
       "positive": [
-        "5408:5612",
+        "5408:1241",
         0
       ],
       "negative": [
-        "5408:5613",
-        0
+        "5408:1241",
+        1
       ],
       "vae": [
         "5407:5601",
@@ -112,7 +112,7 @@
     },
     "class_type": "LTXAddVideoICLoRAGuideAdvanced",
     "_meta": {
-      "title": "\ud83c\udd5b\ud83c\udd63\ud83c\udd67 Add Video IC-LoRA Guide Advanced"
+      "title": "🅛🅣🅧 Add Video IC-LoRA Guide Advanced"
     }
   },
   "5409:5390": {
@@ -132,7 +132,7 @@
     },
     "class_type": "LTXVSetAudioRefTokens",
     "_meta": {
-      "title": "\ud83c\udd5b\ud83c\udd63\ud83c\udd67 Set Audio Ref Tokens"
+      "title": "🅛🅣🅧 Set Audio Ref Tokens"
     }
   },
   "5409:5391": {
@@ -235,7 +235,7 @@
     },
     "class_type": "LTXVLaplacianPyramidBlend",
     "_meta": {
-      "title": "\ud83c\udd5b\ud83c\udd63\ud83c\udd67 LTX Laplacian Pyramid Blend"
+      "title": "🅛🅣🅧 LTX Laplacian Pyramid Blend"
     }
   },
   "9006:5227": {
@@ -274,7 +274,7 @@
     },
     "class_type": "LTXVInpaintPreprocess",
     "_meta": {
-      "title": "\ud83c\udd5b\ud83c\udd63\ud83c\udd67 LTXV Inpaint Preprocess"
+      "title": "🅛🅣🅧 LTXV Inpaint Preprocess"
     }
   },
   "9005:4851": {
@@ -316,7 +316,7 @@
     },
     "class_type": "LTXVLaplacianPyramidBlend",
     "_meta": {
-      "title": "\ud83c\udd5b\ud83c\udd63\ud83c\udd67 LTX Laplacian Pyramid Blend"
+      "title": "🅛🅣🅧 LTX Laplacian Pyramid Blend"
     }
   },
   "5429": {
@@ -421,7 +421,7 @@
     },
     "class_type": "LTXVSetAudioRefTokens",
     "_meta": {
-      "title": "\ud83c\udd5b\ud83c\udd63\ud83c\udd67 Set Audio Ref Tokens"
+      "title": "🅛🅣🅧 Set Audio Ref Tokens"
     }
   },
   "9008": {
@@ -431,24 +431,6 @@
     "class_type": "PrimitiveStringMultiline",
     "_meta": {
       "title": "Negative prompt"
-    }
-  },
-  "5408:5020": {
-    "inputs": {
-      "enhance_prompt": false,
-      "api_key": [
-        "5408:5022",
-        0
-      ],
-      "prompt": [
-        "9008",
-        0
-      ],
-      "ckpt_name": "ltx-2.5-22b-distilled-transformer-comfy-int8-convrot.safetensors"
-    },
-    "class_type": "GemmaAPITextEncode",
-    "_meta": {
-      "title": "\ud83c\udd5b\ud83c\udd63\ud83c\udd67 Gemma API Text Encode - NEGATIVE"
     }
   },
   "5408:2483": {
@@ -607,7 +589,7 @@
     },
     "class_type": "LTXVDilateVideoMask",
     "_meta": {
-      "title": "\ud83c\udd5b\ud83c\udd63\ud83c\udd67 LTXV Dilate Video Mask"
+      "title": "🅛🅣🅧 LTXV Dilate Video Mask"
     }
   },
   "5408:5384": {
@@ -681,7 +663,7 @@
     },
     "class_type": "LTXVDilateVideoMask",
     "_meta": {
-      "title": "\ud83c\udd5b\ud83c\udd63\ud83c\udd67 LTXV Dilate Video Mask"
+      "title": "🅛🅣🅧 LTXV Dilate Video Mask"
     }
   },
   "5408:1241": {
@@ -702,33 +684,6 @@
     "class_type": "LTXVConditioning",
     "_meta": {
       "title": "LTXVConditioning"
-    }
-  },
-  "5408:5021": {
-    "inputs": {
-      "enhance_prompt": false,
-      "api_key": [
-        "5408:5022",
-        0
-      ],
-      "prompt": [
-        "5404",
-        0
-      ],
-      "ckpt_name": "ltx-2.5-22b-distilled-transformer-comfy-int8-convrot.safetensors"
-    },
-    "class_type": "GemmaAPITextEncode",
-    "_meta": {
-      "title": "\ud83c\udd5b\ud83c\udd63\ud83c\udd67 Gemma API Text Encode - POSITIVE"
-    }
-  },
-  "5408:5022": {
-    "inputs": {
-      "value": ""
-    },
-    "class_type": "PrimitiveString",
-    "_meta": {
-      "title": "LTX API KEY"
     }
   },
   "5408:9018": {
@@ -789,46 +744,6 @@
       "title": "prompt source (enhanced or raw) - If/Else Switch"
     }
   },
-  "5408:5612": {
-    "inputs": {
-      "switch": [
-        "5408:5611",
-        0
-      ],
-      "on_false": [
-        "5408:1241",
-        0
-      ],
-      "on_true": [
-        "5408:5021",
-        0
-      ]
-    },
-    "class_type": "ComfySwitchNode",
-    "_meta": {
-      "title": "positive conditioning source - If/Else Switch"
-    }
-  },
-  "5408:5613": {
-    "inputs": {
-      "switch": [
-        "5408:5611",
-        0
-      ],
-      "on_false": [
-        "5408:1241",
-        1
-      ],
-      "on_true": [
-        "5408:5020",
-        0
-      ]
-    },
-    "class_type": "ComfySwitchNode",
-    "_meta": {
-      "title": "negative conditioning source - If/Else Switch"
-    }
-  },
   "5408:5608": {
     "inputs": {
       "max_length": 600,
@@ -855,17 +770,6 @@
     "class_type": "TextGenerateLTX2Prompt",
     "_meta": {
       "title": "Positive prompt (t2v) enhancer - TextGenerateLTX2Prompt"
-    }
-  },
-  "5408:5611": {
-    "inputs": {
-      "string": "",
-      "substring": "ltxv_",
-      "case_sensitive": true
-    },
-    "class_type": "StringContains",
-    "_meta": {
-      "title": "has ltxv api key?"
     }
   },
   "5408:5400": {
@@ -1165,7 +1069,7 @@
     },
     "class_type": "LTXICLoRALoaderModelOnly",
     "_meta": {
-      "title": "\ud83c\udd5b\ud83c\udd63\ud83c\udd67 IC-LoRA Loader Model Only"
+      "title": "🅛🅣🅧 IC-LoRA Loader Model Only"
     }
   },
   "9009": {

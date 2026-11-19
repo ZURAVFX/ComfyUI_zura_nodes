@@ -63,6 +63,7 @@ function activeTarget(owner){
     case 'paint_vfx':return {workspace:owner.paint_vfx,kind:'paint_vfx',title:'Paint VFX'};
     case 'frames':return {workspace:owner.frames,kind:'first_last',title:'First and last frame'};
     case 'references':return {workspace:owner.referencesVideo,kind:'reference_video',title:'Reference video'};
+    case 'extend_length':return {workspace:owner.extendLength,kind:'extend_length',title:'Extend length'};
     case 'upscale':return {workspace:owner.upscale,kind:'upscale',title:'Upscale video'};
     case 'alpha':return {workspace:owner.alpha,kind:'alpha',title:'Extract alpha'};
     case 'panorama':return {workspace:owner.panorama,kind:'camera',title:'Panorama camera'};

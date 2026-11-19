@@ -23,6 +23,7 @@ function workspaceFor(creative){
     case 'outpaint': return creative.outpaint;
     case 'ripple': return creative.ripple;
     case 'alpha': return creative.alpha;
+    case 'extend_length': return creative.extendLength;
     case 'upscale': return creative.upscale;
     case 'hdr': return creative.studio?.hdrTool;
     case 'panorama': return creative.panorama;
@@ -48,7 +49,7 @@ export function studioWorkspaceBusy(creative){
     workspace?.job||workspace?.pendingSubmission||workspace?.submitting||workspace?.uploading||
     workspace?.hdrOutput?.busy||invokeBusy(workspace)
   );
-  if(mode==='paintout'||mode==='watermark'||mode==='ripple'||mode==='alpha'||mode==='upscale')return !!(workspace?.job||workspace?.pendingSubmission||workspace?.submitting||workspace?.uploading||workspace?.picking||workspace?.exporting||invokeBusy(workspace));
+  if(mode==='paintout'||mode==='watermark'||mode==='ripple'||mode==='alpha'||mode==='upscale'||mode==='extend_length')return !!(workspace?.job||workspace?.pendingSubmission||workspace?.submitting||workspace?.uploading||workspace?.picking||workspace?.exporting||invokeBusy(workspace));
   if(mode==='outpaint')return !!(
     workspace?.job||workspace?.submitting||workspace?.hdrSubmitting||
     workspace?.layers?.busy||workspace?.hdrDelivery?.busy||invokeBusy(workspace)
@@ -257,6 +258,7 @@ export async function resetStudioWorkspace(creative){
     if(result!==false)creative.show?.('ripple');
     return result!==false;
   }
+  if(mode==='extend_length')return creative?.extendLength?.reset?.()===true;
   if(mode==='upscale')return creative?.upscale?.reset?.()===true;
   if(mode==='alpha'){
     if(typeof creative?.alpha?.reset!=='function')return false;
@@ -331,6 +333,7 @@ function modeLabel(mode){
     ripple:'Ripple editing',
     alpha:'Extract alpha',
     upscale:'Upscale video',
+    extend_length:'Extend length',
     hdr:'HDR',
     panorama:'Camera angle',
     camera:'Camera angle',

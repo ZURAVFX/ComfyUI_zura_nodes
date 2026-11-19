@@ -246,7 +246,7 @@ NODE_DISPLAY_NAME_MAPPINGS = {'ZuraLTXOutpaintCanvas': 'Zura · Prepare Outpaint
 
 def build_test_graph(source_file, output_prefix, frame_count, fps, width, height,
                      *, mode='expand', left=0, top=0, right=0, bottom=0,
-                     prompt='', seed=42, black_threshold=2 / 255, blend_source=False):
+                     prompt='', seed=42, black_threshold=2 / 255, blend_source=False, single_pass=False):
     """Build the tested native single-graph LTX 2.5 outpaint prototype.
 
     The supplied source must already contain exactly ``frame_count`` frames,
@@ -278,11 +278,15 @@ def build_test_graph(source_file, output_prefix, frame_count, fps, width, height
     components = node('components', 'GetVideoComponents', video=video)
     canvas = node('canvas', 'ZuraLTXOutpaintCanvas', images=components, mode=mode, width=width, height=height,
                   left=left, top=top, right=right, bottom=bottom, black_threshold=black_threshold)
-    mask_image = node('mask_image', 'MaskToImage', mask=port(canvas, 1))
-    low_mask_image = node('low_mask_image', 'ImageScale', image=mask_image, upscale_method='area', width=width//2, height=height//2, crop='disabled')
-    low_mask = node('low_mask', 'ImageToMask', image=low_mask_image, channel='red')
-    low_reference = node('low_reference', 'ImageScale', image=canvas, upscale_method='lanczos', width=width//2, height=height//2, crop='disabled')
-    guide_pixels = node('inpaint', 'LTXVInpaintPreprocess', images=low_reference, mask=low_mask)
+    guide_width, guide_height = (width, height) if single_pass else (width//2, height//2)
+    guide_image, guide_mask = canvas, port(canvas,1)
+    if not single_pass:
+        mask_image = node('mask_image', 'MaskToImage', mask=port(canvas, 1))
+        low_mask_image = node('low_mask_image', 'ImageScale', image=mask_image, upscale_method='area', width=width//2, height=height//2, crop='disabled')
+        low_mask = node('low_mask', 'ImageToMask', image=low_mask_image, channel='red')
+        low_reference = node('low_reference', 'ImageScale', image=canvas, upscale_method='lanczos', width=width//2, height=height//2, crop='disabled')
+        guide_image, guide_mask = low_reference, low_mask
+    guide_pixels = node('inpaint', 'LTXVInpaintPreprocess', images=guide_image, mask=guide_mask)
     encoder = node('encoder', 'CLIPLoader', clip_name='gemma4-12b-with-proj-ltx-2.5-nvfp4.safetensors', type='ltxv', device='default')
     positive = node('positive', 'CLIPTextEncode', clip=encoder, text=str(prompt))
     negative = node('negative', 'CLIPTextEncode', clip=encoder, text='pc game, console game, video game, cartoon, childish, ugly')
@@ -291,7 +295,7 @@ def build_test_graph(source_file, output_prefix, frame_count, fps, width, height
     audio_vae = node('audio_vae', 'VAELoader', vae_name='ltx-2.5-audio-vae-bf16.safetensors')
     model = node('model', 'UNETLoader', unet_name='ltx-2.5-22b-distilled-transformer-comfy-int8-convrot.safetensors', weight_dtype='default')
     adapter = node('adapter', 'LTXICLoRALoaderModelOnly', model=model, lora_name='ltx-2.3-22b-ic-lora-in-outpainting-0.9.safetensors', strength_model=1.0)
-    latent = node('empty', 'EmptyLTXVLatentVideo', width=width//2, height=height//2, length=frame_count, batch_size=1)
+    latent = node('empty', 'EmptyLTXVLatentVideo', width=guide_width, height=guide_height, length=frame_count, batch_size=1)
     guide = node('guide', 'LTXAddVideoICLoRAGuideAdvanced', positive=cond, negative=port(cond,1), vae=vae, latent=latent, image=guide_pixels,
                  frame_idx=0, strength=1.0, latent_downscale_factor=port(adapter,1), crop='disabled', use_tiled_encode=False,
                  tile_size=256, tile_overlap=64, attention_strength=1.0)
@@ -306,24 +310,26 @@ def build_test_graph(source_file, output_prefix, frame_count, fps, width, height
     split = node('split', 'LTXVSeparateAVLatent', av_latent=sample)
     crop = node('crop_guides', 'LTXVCropGuides', positive=frozen, negative=port(frozen,1), latent=split)
     decode = node('decode_low', 'VAEDecodeTiled', samples=port(crop,2), vae=vae, tile_size=512, overlap=64, temporal_size=128, temporal_overlap=32)
-    refinement_input = decode
-    if blend_source:
-        refinement_input = node('blend_low', 'LTXVLaplacianPyramidBlend', image_a=decode, image_b=guide_pixels, mask=low_mask, trim_to_shortest=True, mask_low_res_dilation=5)
-    upsized = node('upsize', 'ImageScale', image=refinement_input, upscale_method='lanczos', width=width, height=height, crop='disabled')
-    encoded = node('encode_high', 'VAEEncodeTiled', pixels=upsized, vae=vae, tile_size=512, overlap=64, temporal_size=128, temporal_overlap=32)
-    frozen2 = node('freeze_high', 'LTXVSetAudioRefTokens', positive=crop, negative=port(crop,1), audio_latent=port(split,1))
-    av2 = node('av_high', 'LTXVConcatAVLatent', video_latent=encoded, audio_latent=port(frozen2,2))
-    guider2 = node('guider_high', 'CFGGuider', model=adapter, positive=frozen2, negative=port(frozen2,1), cfg=1.0)
-    noise2 = node('noise_high', 'RandomNoise', noise_seed=int(seed))
-    sampler2 = node('sampler_high', 'KSamplerSelect', sampler_name='euler')
-    sigmas2 = node('sigmas_high', 'ManualSigmas', sigmas='0.7250, 0.4219, 0.0')
-    sample2 = node('sample_high', 'SamplerCustomAdvanced', noise=noise2, guider=guider2, sampler=sampler2, sigmas=sigmas2, latent_image=av2)
-    split2 = node('split_high', 'LTXVSeparateAVLatent', av_latent=sample2)
-    decode2 = node('decode_high', 'VAEDecodeTiled', samples=split2, vae=vae, tile_size=512, overlap=64, temporal_size=128, temporal_overlap=32)
-    final = decode2
-    if blend_source:
-        green2 = node('green_high', 'LTXVInpaintPreprocess', images=canvas, mask=port(canvas,1))
-        final = node('blend_high', 'LTXVLaplacianPyramidBlend', image_a=decode2, image_b=green2, mask=port(canvas,1), trim_to_shortest=True, mask_low_res_dilation=6)
+    final = decode
+    if not single_pass:
+        refinement_input = decode
+        if blend_source:
+            refinement_input = node('blend_low', 'LTXVLaplacianPyramidBlend', image_a=decode, image_b=guide_pixels, mask=low_mask, trim_to_shortest=True, mask_low_res_dilation=5)
+        upsized = node('upsize', 'ImageScale', image=refinement_input, upscale_method='lanczos', width=width, height=height, crop='disabled')
+        encoded = node('encode_high', 'VAEEncodeTiled', pixels=upsized, vae=vae, tile_size=512, overlap=64, temporal_size=128, temporal_overlap=32)
+        frozen2 = node('freeze_high', 'LTXVSetAudioRefTokens', positive=crop, negative=port(crop,1), audio_latent=port(split,1))
+        av2 = node('av_high', 'LTXVConcatAVLatent', video_latent=encoded, audio_latent=port(frozen2,2))
+        guider2 = node('guider_high', 'CFGGuider', model=adapter, positive=frozen2, negative=port(frozen2,1), cfg=1.0)
+        noise2 = node('noise_high', 'RandomNoise', noise_seed=int(seed))
+        sampler2 = node('sampler_high', 'KSamplerSelect', sampler_name='euler')
+        sigmas2 = node('sigmas_high', 'ManualSigmas', sigmas='0.7250, 0.4219, 0.0')
+        sample2 = node('sample_high', 'SamplerCustomAdvanced', noise=noise2, guider=guider2, sampler=sampler2, sigmas=sigmas2, latent_image=av2)
+        split2 = node('split_high', 'LTXVSeparateAVLatent', av_latent=sample2)
+        decode2 = node('decode_high', 'VAEDecodeTiled', samples=split2, vae=vae, tile_size=512, overlap=64, temporal_size=128, temporal_overlap=32)
+        final = decode2
+        if blend_source:
+            green2 = node('green_high', 'LTXVInpaintPreprocess', images=canvas, mask=port(canvas,1))
+            final = node('blend_high', 'LTXVLaplacianPyramidBlend', image_a=decode2, image_b=green2, mask=port(canvas,1), trim_to_shortest=True, mask_low_res_dilation=6)
     video_out = node('assemble', 'CreateVideo', images=final, fps=float(fps), audio=port(components,1), bit_depth=8, color_space='sRGB', codec='none')
     node('save', 'ZuraSaveProRes4444', video=video_out, filename_prefix=output_prefix)
     return g

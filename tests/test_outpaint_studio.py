@@ -34,7 +34,6 @@ class StudioOutpaintTests(unittest.TestCase):
         self.assertEqual(graph['temporal_hold']['inputs']['fps'], 30)
         self.assertEqual(graph['assemble']['class_type'], 'ZuraOutpaintExactVideo')
         self.assertEqual((graph['assemble']['inputs']['fps_num'], graph['assemble']['inputs']['fps_den']), (30, 1))
-        self.assertEqual(graph['empty']['inputs']['width'], selection['padded_width'] // 2)
         self.assertEqual(graph['guide']['inputs']['image'], ['inpaint', 0])
         self.assertEqual(graph['adapter']['inputs']['lora_name'], 'ltx-2.3-22b-ic-lora-in-outpainting-0.9.safetensors')
         self.assertEqual(graph['adapter']['inputs']['strength_model'], 1)
@@ -43,8 +42,12 @@ class StudioOutpaintTests(unittest.TestCase):
         self.assertEqual(graph['sigmas']['inputs']['sigmas'], '1.0, 0.99375, 0.9875, 0.98125, 0.975, 0.909375, 0.725, 0.421875, 0.0')
         self.assertNotIn('blend_low', graph)
         self.assertNotIn('blend_high', graph)
-        self.assertEqual(graph['upsize']['inputs']['image'], ['decode_low', 0])
-        self.assertEqual(graph['trim_result']['inputs']['image'], ['decode_high', 0])
+        self.assertNotIn('upsize', graph)
+        self.assertEqual(graph['trim_result']['inputs']['image'], ['decode_low', 0])
+        self.assertEqual(graph['empty']['inputs']['width'], selection['padded_width'])
+        self.assertEqual(graph['empty']['inputs']['height'], selection['padded_height'])
+        self.assertEqual(graph['inpaint']['inputs'], {'images': ['canvas', 0], 'mask': ['canvas', 1]})
+        self.assertNotIn('sample_high', graph)
         changed = dict(source, fps_num=24)
         with self.assertRaisesRegex(ValueError, 'changed'):
             module.build_studio_graph(changed, selection, review_key=selection['review_key'], output_prefix='genj/outpaint/rate')
@@ -83,8 +86,8 @@ class StudioOutpaintTests(unittest.TestCase):
         self.assertEqual(g['audio_encoded']['inputs']['audio'], ['temporal_hold', 1])
         self.assertEqual(g['adapter']['inputs']['lora_name'], 'ltx-2.3-22b-ic-lora-in-outpainting-0.9.safetensors')
         self.assertEqual(g['guide']['inputs']['image'], ['inpaint', 0])
-        self.assertEqual(g['inpaint']['inputs']['mask'], ['low_mask', 0])
-        self.assertEqual(g['mask_image']['inputs']['mask'], ['canvas', 1])
+        self.assertEqual(g['inpaint']['inputs']['mask'], ['canvas', 1])
+        self.assertNotIn('mask_image', g)
         self.assertTrue(g['positive']['inputs']['text'], 'Blank prompts still describe a scene extension')
         changed = copy.deepcopy(p); changed['left'] += 1
         with self.assertRaisesRegex(ValueError, 'changed'):

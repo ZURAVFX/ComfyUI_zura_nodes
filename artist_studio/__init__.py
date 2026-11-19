@@ -795,6 +795,9 @@ from .h3_window_nodes import (ZuraH3PrepareFullAudioTimeline, ZuraH3WindowInputs
 _H3_WINDOW_NODES = (ZuraH3PrepareFullAudioTimeline, ZuraH3WindowInputs,
     ZuraSaveH3Continuation, ZuraLoadH3Continuation, ZuraApplyH3Continuation)
 NODE_CLASS_MAPPINGS.update({cls.__name__: cls for cls in _H3_WINDOW_NODES})
+
+from .h3_extend import NODE_CLASS_MAPPINGS as H3_EXTEND_NODES
+NODE_CLASS_MAPPINGS.update(H3_EXTEND_NODES)
 NODE_DISPLAY_NAME_MAPPINGS.update({
     "ZuraH3PrepareFullAudioTimeline": "Zura · Prepare Full H3 Audio",
     "ZuraH3WindowInputs": "Zura · Load H3 Motion Window",

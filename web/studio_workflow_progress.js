@@ -49,6 +49,8 @@ export function workflowProgress(owner){
     view=flow('camera','Change camera angle',['Source','Camera','Video','Result'],!state.source?0:running(w)?(state.cameraReviewed?2:1):state.result?3:state.cameraReviewed?2:1,state.result);
   }else if(mode==='outpaint'){
     w=owner.outpaint;view=flow(mode,'Frame extension',['Source','Canvas','Generate','Result'],!w?.source?0:running(w)?2:w?.completedResult||w?.outputRef?3:1,w?.completedResult);
+  }else if(mode==='extend_length'){
+    w=owner.extendLength;view=flow(mode,'Extend length',['Source','Trim & direct','Extend','Result'],!w?.source?0:running(w)?2:w?.result?3:1,w?.result);
   }else if(mode==='upscale'){
     w=owner.upscale;view=flow(mode,'Upscale video',['Source','Upscale','Result'],running(w)?1:w?.result?2:0,w?.result);
   }else if(mode==='alpha'){
@@ -75,7 +77,7 @@ export function workflowProgress(owner){
   if(!view)return null;
   const delivery=owner.outputSettings?.delivery;
   const nativeMode=mode==='video'?'swap':mode==='ripple'?(w?.intent==='relight'?'relight':'ripple'):mode==='panorama'?'camera':mode;
-  if(view.id!=='hdr'&&view.id!=='upscale'&&delivery?.output==='hdr'&&!borrowed&&!nativeHDRRoute(owner,nativeMode,w,typeof w?.config==='object'?w.config:{})){
+  if(view.id!=='hdr'&&view.id!=='upscale'&&view.id!=='extend_length'&&delivery?.output==='hdr'&&!borrowed&&!nativeHDRRoute(owner,nativeMode,w,typeof w?.config==='object'?w.config:{})){
     const recordMode=mode==='video'?'swap':mode==='ripple'?(w?.intent==='relight'?'relight':'ripple'):mode==='panorama'?'camera':mode;
     let delivered=view.raw;try{delivered=delivery.raw?.(recordMode)||delivered;}catch{}
     const output=view.labels.length-1,record=delivered&&delivery.recordFor?.(recordMode,delivered);

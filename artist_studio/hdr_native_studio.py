@@ -40,6 +40,18 @@ def build_asset_graph(asset, body, check_asset):
     else:
         fps=info['fps']
         with av.open(str(path)) as stream:has_audio=bool(stream.streams.audio)
+    upscale=body.get('upscale_2x',False)
+    refine=body.get('refine',upscale)
+    if type(upscale) is not bool or type(refine) is not bool or (upscale and not refine):
+        raise ValueError('Choose a valid HDR operation.')
+    prompt=body.get('prompt','')
+    negative=body.get('negative_prompt','')
+    sdr_delivery=body.get('sdr_delivery',False)
+    if type(sdr_delivery) is not bool or (sdr_delivery and not refine):
+        raise ValueError('Choose a valid output range.')
+    if refine and (any(not isinstance(text,str) or len(text)>1000 for text in (prompt,negative))
+                   or body.get('ae_frame_contract') is not None):
+        raise ValueError('HDR refine requires standalone footage and prompts of up to 1000 characters.')
     contract=body.get('ae_frame_contract')
     if contract is not None:
         from ..comfylink.frame_contract import validate_interval
@@ -47,13 +59,21 @@ def build_asset_graph(asset, body, check_asset):
     prefix='native_'+uuid.uuid4().hex
     graph=build_native_video_graph(source=str(path),start_frame=start,frame_count=count,fps=fps,
         width=info['width'],height=info['height'],prefix=prefix,colour_space=colour,has_audio=has_audio,
-        output=body.get('output','hlg_and_exr'), sequence_manifest=str(manifest) if sequence else '',
-        manifest_sha=asset.get('sha','') if sequence else '', exr_storage=body.get('exr_storage','half'))
+        output='hlg_video' if sdr_delivery else body.get('output','hlg_and_exr'), sequence_manifest=str(manifest) if sequence else '',
+        manifest_sha=asset.get('sha','') if sequence else '', exr_storage=body.get('exr_storage','half'),
+        upscale_2x=upscale,refine=refine,prompt=prompt.strip() if refine else '',
+        negative_prompt=negative.strip() if refine else '')
+    if sdr_delivery:
+        graph.pop('zura_hdr_save_video')
+        graph['save']={'class_type':'ZuraSaveProRes4444','inputs':{
+            'video':['zura_hdr_preview_video',0],'filename_prefix':'genj/hdr/'+prefix+'_sdr'}}
+        graph.pop('zura_hdr_save_preview')
     if contract is not None:
         from ..comfylink.frame_contract import prepare_frame_contract_graph
         graph=prepare_frame_contract_graph(graph,contract,'hdr')
-    return graph,{'prefix':prefix,'width':info['width'],'height':info['height'],'frames':count,
-                  'fps':fps,'has_audio':has_audio,'output':body.get('output','hlg_and_exr'),'exr_storage':body.get('exr_storage','half')}
+    factor=2 if upscale else 1
+    return graph,{'prefix':prefix,'width':info['width']*factor,'height':info['height']*factor,'frames':count,
+                  'fps':fps,'has_audio':has_audio,'output':'sdr' if sdr_delivery else body.get('output','hlg_and_exr'),'exr_storage':body.get('exr_storage','half')}
 
 
 def register(studio,routes,response,check_asset):
@@ -66,9 +86,11 @@ def register(studio,routes,response,check_asset):
         body=await request.json()
         import folder_paths
         from .hdr_native_graph import REFINER
+        refine=body.get('refine',body.get('upscale_2x',False))
+        encoder='gemma4-12b-with-proj-ltx-2.5-comfy-int8-convrot.safetensors' if refine else 'gemma4-12b-with-proj-ltx-2.5-nvfp4.safetensors'
         required=(('diffusion_models','ltx-2.5-22b-distilled-transformer-comfy-int8-convrot.safetensors'),
                   ('vae','ltx-2.5-video-vae-bf16.safetensors'),
-                  ('text_encoders','gemma4-12b-with-proj-ltx-2.5-nvfp4.safetensors'),
+                  ('text_encoders',encoder),
                   ('latent_upscale_models','ltx-2.5-latent-spatial-upscaler-x2-bf16-1.0.safetensors'),
                   ('loras',REFINER))
         missing=[name for folder,name in required if not folder_paths.get_full_path(folder,name)]

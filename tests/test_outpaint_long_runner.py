@@ -126,7 +126,8 @@ class OutpaintLongPlanning(unittest.TestCase):
         self.assertEqual(graph['canvas']['inputs']['left'], sub['left'])
         self.assertEqual(graph['guide']['inputs']['image'], ['inpaint', 0])
         self.assertEqual(graph['adapter']['inputs']['lora_name'], 'ltx-2.3-22b-ic-lora-in-outpainting-0.9.safetensors')
-        self.assertEqual(graph['trim_result']['inputs']['image'], ['decode_high', 0])
+        self.assertEqual(graph['trim_result']['inputs']['image'], ['decode_low', 0])
+        self.assertNotIn('sample_high', graph)
         self.assertEqual(graph['trim_result']['inputs']['length'], sub['frames'])
         self.assertEqual(graph['assemble']['inputs']['audio'], ['components', 1])
         with self.assertRaisesRegex(ValueError, 'Review'):

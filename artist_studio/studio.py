@@ -1322,18 +1322,6 @@ def _build_native_graph(project, stage, use_cache=True, run_id=None):
             graph[key]["inputs"]["value"] += " Remove the masked captions, subtitles and title banners completely. Fill those areas with clean background or character clothing. No overlaid text or lettering."
         from . import text_cache_path
         cache_key, _ = text_cache_info(graph, stage)
-        # These local Studio paths always use the installed text encoder. Strip
-        # the template's unused cloud option so graph view cannot activate it.
-        cloud_switches = ("5408:5612", "5408:5613") if stage == "background" else ("5014:5558", "5014:5560")
-        local_text = {identity: graph[identity]["inputs"]["on_false"] for identity in cloud_switches}
-        cloud_nodes = [graph[identity]["inputs"]["on_true"][0] for identity in cloud_switches]
-        cloud_flag = graph[cloud_switches[0]]["inputs"]["switch"][0]
-        for node in graph.values():
-            for name, value in list(node["inputs"].items()):
-                if isinstance(value, list) and len(value) == 2 and value[0] in local_text:
-                    node["inputs"][name] = local_text[value[0]]
-        for identity in (*cloud_switches, *cloud_nodes, cloud_flag):
-            graph.pop(identity)
         if use_cache and text_cache_path(cache_key).exists():
             prefix = "5408" if stage == "background" else "5014"
             replacements = {prefix + ":2483": 0, prefix + ":2612": 1}
