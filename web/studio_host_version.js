@@ -1,1 +1,1 @@
-export const STUDIO_UI_VERSION="1.3.71";
+export const STUDIO_UI_VERSION="1.3.72";

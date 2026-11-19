@@ -1,5 +1,9 @@
 # Release notes
 
+## 1.3.72 - 19 November 2026
+
+- Update the Studio navigation release check for the new Upscale entry.
+
 ## 1.3.71 - 19 November 2026
 
 - Keep both 2× models available in standalone Studio and preserve the existing After Effects workflow list.

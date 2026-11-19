@@ -111,7 +111,7 @@ assert.equal(ui.imageTask.parentElement,ui.videoComposer.modeHost,'Image mode sh
 const workflowMenu=ui.videoComposer.task;
 assert.equal(workflowMenu.tagName,'DETAILS');
 assert.equal(workflowMenu.querySelector('select').hidden,true,'OS-native workflow dropdown is hidden behind the styled menu');
-assert.equal(workflowMenu.querySelectorAll('[role="menuitemradio"]').length,13);
+assert.equal(workflowMenu.querySelectorAll('[role="menuitemradio"]').length,14);
 assert.equal(workflowMenu.querySelector('[data-workflow="paint_vfx"]').closest('.zc-mode-group').getAttribute('aria-label'),'Create a shot','Paint VFX is a separate creation mode');
 assert.ok(workflowMenu.querySelector('[data-workflow="director"]'),'Director shares the persistent video workflow selector');
 assert.equal(workflowMenu.querySelector('[data-workflow="inpaint"]'),null,'Edited-frame work has one Ripple route, without a duplicate Inpaint preview');
@@ -122,7 +122,7 @@ for(const button of workflowMenu.querySelectorAll('[data-workflow]')){assert.ok(
 const modeSearch=workflowMenu.querySelector('input[type=search]');modeSearch.value='lighting';modeSearch.oninput({target:modeSearch});
 assert.deepEqual([...workflowMenu.querySelectorAll('[data-workflow]')].filter(button=>!button.hidden).map(button=>button.dataset.workflow),['relight']);
 modeSearch.value='no such mode';modeSearch.oninput({target:modeSearch});assert.equal(workflowMenu.querySelector('.zc-mode-no-results').hidden,false);
-modeSearch.value='';modeSearch.oninput({target:modeSearch});assert.equal([...workflowMenu.querySelectorAll('[data-workflow]')].filter(button=>!button.hidden).length,13);
+modeSearch.value='';modeSearch.oninput({target:modeSearch});assert.equal([...workflowMenu.querySelectorAll('[data-workflow]')].filter(button=>!button.hidden).length,14);
 
 const removedInputs=[],savedRemoveInput=studio.removeInput;studio.removeInput=type=>removedInputs.push(type);
 for(const id of ['source','refs','frame'])studio.container.querySelector('#zc-remove-'+id).onclick();
