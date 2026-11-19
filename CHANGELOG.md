@@ -1,5 +1,9 @@
 # Release notes
 
+## 1.3.71 - 19 November 2026
+
+- Keep both 2× models available in standalone Studio and preserve the existing After Effects workflow list.
+
 ## 1.3.70 - 19 November 2026
 
 - Upscale video 2× in Studio with Relay VSR or SeedVR2 7B INT8. Process the whole clip or a frame range, compare against the source, and export a ProRes master or MP4 preview. Setup checks for the selected model and downloads missing weights.

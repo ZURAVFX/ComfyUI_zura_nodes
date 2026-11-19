@@ -4,7 +4,7 @@ import {referenceVideoDimensions,REFERENCE_VIDEO_CAPABILITIES} from './reference
 import {paintoutOutputDescriptor,paintoutPreviewFile} from './paintout_studio/paintout_outputs.js';
 import {deliveryVideoColour} from './studio_delivery_formats.js';
 // Native Studio modes. Data crosses typed workspace methods, never a DOM preview.
-const definitions=[['swap','Character replacement','Video'],['ripple','Ripple editing','Video'],['viewport','Viewport to final','Video'],['camera','Change camera angle','Video'],['relight','Relight','Video'],['paintout','Paintout / clean plate','Video'],['watermark','Watermark removal','Video'],['alpha','Extract alpha','Video'],['upscale','Upscale video','Video'],['outpaint','Frame extension','Video'],['hdr','Convert to HDR','Video'],['paint_vfx','Paint VFX','Painted'],['director','Director','Authored'],['frames','First & last frame','Endpoint'],['references','Reference to video','Reference'],['image','Image','Image']];
+const definitions=[['swap','Character replacement','Video'],['ripple','Ripple editing','Video'],['viewport','Viewport to final','Video'],['camera','Change camera angle','Video'],['relight','Relight','Video'],['paintout','Paintout / clean plate','Video'],['watermark','Watermark removal','Video'],['alpha','Extract alpha','Video'],['outpaint','Frame extension','Video'],['hdr','Convert to HDR','Video'],['paint_vfx','Paint VFX','Painted'],['director','Director','Authored'],['frames','First & last frame','Endpoint'],['references','Reference to video','Reference'],['image','Image','Image']];
 const mainModes=new Set(['swap','viewport']);
 export async function navigateStudioMode(creative,id){
   if(id==='plate')return creative.plate.select();
@@ -68,7 +68,6 @@ function selectedOutput(c,id,w){
         item?.master?.type==='output'&&/\.exr$/i.test(item.master.filename||''))return {...selected,kind:'image'};
     return selected;
   }
-  if(id==='upscale')return output(w.result,'video');
   if(id==='alpha')return w.result?.native_hdr?{kind:'hdr_sequence',master:alphaFileRef(w.result.native_hdr),preview:alphaFileRef(w.result.alpha),colour:{encoding:'acescg',sceneLinear:true},alpha:'straight'}:w.result?.ae_float&&w.result?.alpha?{kind:'alpha_extract',master:alphaFileRef(w.result.ae_float),original:alphaFileRef(w.result.alpha),alpha_ref:alphaFileRef(w.result.ae_float),...(w.result.ae_float.colour?{colour:w.result.ae_float.colour}:{})}:w.result?.alpha?{...output({master:alphaFileRef(w.result.alpha)},'video'),...(w.result.alpha_float?{alpha_ref:alphaFileRef(w.result.alpha_float)}:{})}:null;
   if(id==='paint_vfx'){const value=output(w.result);return value?{...value,width:w.result.config.width,height:w.result.config.height,frameCount:w.result.config.frames,fps:w.result.config.fps,colour:{encoding:'srgb_display',sceneLinear:false}}:null;}
   if(id==='camera')return output(w.state?.result);
