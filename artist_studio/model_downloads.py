@@ -323,6 +323,20 @@ CATALOG["ltx_ripple"] = dict(
         {**_file("loras", "LTX25_Ripple_v11.safetensors", "WepeNerd/LTX-Ripple", "76abac5ede8a3415b9d1cd803843a38ecb351600", "LTX25_Ripple_v11.safetensors", 654443392, "bde543610144e5bba78782fb0ac18daa663fc087c2212244b8116deb1925ee2a"), "gated": False},
     ])
 
+CATALOG["relayvsr_x2"] = dict(
+    name="Relay VSR · 2× video upscale", gated=False,
+    license_url="https://huggingface.co/Comfy-Org/RelayVSR",
+    note="Matched 2× diffusion model and Flash decoder. Requires ComfyUI with Relay VSR support.",
+    files=[
+        _file("diffusion_models", "relayvsr_x2_lightx2v_int8_convrot.safetensors", "Comfy-Org/RelayVSR",
+              "202c35eb0a5bb64b7017d5a09ea9acea87b7a081", "diffusion_models/relayvsr_x2_lightx2v_int8_convrot.safetensors",
+              5163295248, "240e75e0c17cf2845d559b25254a230ff7458f81449d7a8c5e7e3fb8275c7b3c"),
+        _file("vae", "relayvsr_flash_vae_x2_fp32.safetensors", "Comfy-Org/RelayVSR",
+              "202c35eb0a5bb64b7017d5a09ea9acea87b7a081", "vae/relayvsr_flash_vae_x2_fp32.safetensors",
+              127759464, "b5bb0339acb5b52545911ea29a51b4c5b805776a779222b5a14591571f42e21c"),
+    ],
+)
+
 CATALOG["ltx_alpha"] = dict(
     name="LTX 2.5 · extract alpha", gated=True,
     license_url="https://huggingface.co/Lightricks/LTX-2.5-22b-IC-LoRA-Alpha-Gen",

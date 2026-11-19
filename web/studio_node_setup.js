@@ -51,7 +51,7 @@ export function groupMissingNodes(nodes){
   return {packs,unknown:[...unknown]};
 }
 
-NODE_PACKS.find(pack=>pack.name==='ComfyUI').nodes.push('LoadMoGeModel','MoGeInference','LoadVideo','GetVideoComponents','ImageCrop','RepeatImageBatch','ImageBatch','BasicScheduler');
+NODE_PACKS.find(pack=>pack.name==='ComfyUI').nodes.push('LoadMoGeModel','MoGeInference','LoadVideo','Video Slice','GetVideoComponents','RelayVSRConditioning','VSRDecode','ImageCrop','RepeatImageBatch','ImageBatch','BasicScheduler');
 NODE_PACKS.find(pack=>pack.name==='ComfyUI-VideoHelperSuite').nodes.push('VHS_LoadVideoPath');
 NODE_PACKS.find(pack=>pack.name==='ComfyUI ControlNet Aux').nodes.push('DepthAnythingV2Preprocessor');
 NODE_PACKS.find(pack=>pack.name==='ComfyUI').nodes.push('ImageToMask','JoinImageWithAlpha','SplitImageWithAlpha','SaveWEBM','ModelSamplingFlux');
