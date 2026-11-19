@@ -1,5 +1,7 @@
 #genj-studio .zup-page .zup-view-actions{display:flex;flex-wrap:wrap;gap:8px}
 #genj-studio .zup-page .zc-prompt-bottom{margin-top:12px}
+#genj-studio .zup-page .zup-model{display:flex;align-items:center;gap:8px;font-size:13px}
+#genj-studio .zup-page .zup-detail[hidden]{display:none}
 #genj-studio .zup-page .zup-detail{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:13px}
 #genj-studio .zup-page .zup-detail input{width:110px;accent-color:var(--gs-accent)}
 #genj-studio .zup-page .zup-detail output{min-width:40px;font-variant-numeric:tabular-nums}

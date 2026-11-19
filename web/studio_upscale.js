@@ -7,7 +7,7 @@ import {playbackFile} from './studio_delivery_formats.js';
 import {captureResultExports,installResultExportStyles} from './studio_result_exports.js';
 import {submitOwnedGraph,recoverOwnedSubmission,cancelOwnedJob} from './studio_owned_jobs.js';
 import {durationLabel,installOwnedExecuting} from './studio_progress.js';
-import {buildUpscaleGraph,upscaleAvailability} from './studio_upscale_recipes.js';
+import {buildUpscaleGraph,DEFAULT_UPSCALE_MODEL,UPSCALE_MODELS,upscaleAvailability} from './studio_upscale_recipes.js';
 
 const KEY='zura-upscale-workspace-v1';
 const HDR=new Set(['acescg','acescct','linear_rec709','hlg_rec2020','pq_rec2020','pq_display_p3']);
@@ -23,6 +23,7 @@ export class UpscaleWorkspace{
     this.source=saved.source||null;
     this.range=saved.range||null;
     this.detail=saved.detail??1;
+    this.model=Object.hasOwn(UPSCALE_MODELS,saved.model)?saved.model:DEFAULT_UPSCALE_MODEL;
     this.result=saved.result||null;
     this.job=saved.job||null;
     this.pendingSubmission=saved.pendingSubmission||null;
@@ -50,7 +51,7 @@ export class UpscaleWorkspace{
       <div class="zalpha-composer zc-prompt-card">
         <div class="zalpha-attachments"><button type="button" class="zc-attachment" data-source hidden>Replace video</button><input type="file" data-file accept=".mp4,.mov,.mkv,.webm,video/*" hidden><span data-source-meta></span></div>
         <details data-trim class="zalpha-trim" hidden><summary><span>Trim clip</span><span data-range></span></summary><div data-trimmer></div><div class="zalpha-trim-fields"><label>In frame <input type="number" min="1" step="1" data-in></label><label>Out frame <input type="number" min="1" step="1" data-out></label><button type="button" data-full>Use full clip</button></div></details>
-        <div class="zc-prompt-bottom"><div class="zc-prompt-tools"><span class="zc-tool" data-resolution>Relay VSR · 2×</span><label class="zup-detail">Detail <input data-detail type="range" min="0" max="1" step="0.05" aria-label="Detail enhancement"><output data-detail-value></output></label><details class="zc-tool-popup gs-model-help" data-models hidden></details></div><div class="zalpha-actions"><button type="button" class="gs-primary" data-generate>Upscale video</button></div></div>
+        <div class="zc-prompt-bottom"><div class="zc-prompt-tools"><label class="zup-model">Model <select data-model aria-label="Upscale model"></select></label><span class="zc-tool" data-resolution>2×</span><label class="zup-detail" data-detail-control>Detail <input data-detail type="range" min="0" max="1" step="0.05" aria-label="Detail enhancement"><output data-detail-value></output></label><details class="zc-tool-popup gs-model-help" data-models hidden></details></div><div class="zalpha-actions"><button type="button" class="gs-primary" data-generate>Upscale video</button></div></div>
         <p class="zalpha-status" data-status role="status"></p>
         <div class="zalpha-exports zc-result-exports" data-exports hidden><a data-download download>Save ProRes master</a><a data-preview-download download hidden>Save MP4 preview</a></div>
       </div>`;
@@ -79,6 +80,23 @@ export class UpscaleWorkspace{
     };
     this.$('in').onchange=this.$('out').onchange=()=>this.setFrames(Number(this.$('in').value),Number(this.$('out').value));
     this.$('full').onclick=()=>{this.range=null;this.save();this.render();};
+    const select=this.$('model');
+    for(const [id,model] of Object.entries(UPSCALE_MODELS)){
+      const option=doc.createElement('option');
+      option.value=id;
+      option.textContent=model.label;
+      select.append(option);
+    }
+    select.value=this.model;
+    select.onchange=()=>{
+      if(this.busy()||!Object.hasOwn(UPSCALE_MODELS,select.value))return;
+      this.model=select.value;
+      this.message('');
+      this.updateAvailability();
+      this.save();
+      this.render();
+      void this.checkModels();
+    };
     this.$('detail').value=String(this.detail);
     this.$('detail').oninput=()=>{
       this.detail=Number(this.$('detail').value);
@@ -141,11 +159,11 @@ export class UpscaleWorkspace{
     this.video.currentTime=(first-1)/fps;
   }
   busy(){return !!(this.uploadController||this.submitting||this.job||this.pendingSubmission);}
-  config(){return {file:this.source?.file,start:this.range?.start||0,duration:this.range?.duration||0,detail:this.detail};}
+  config(){return {file:this.source?.file,start:this.range?.start||0,duration:this.range?.duration||0,detail:this.detail,model:this.model};}
   save(){
     try{
-      const {source,range,detail,result,job,pendingSubmission}=this;
-      this.storage.setItem(KEY,JSON.stringify({source,range,detail,result,job,pendingSubmission}));
+      const {source,range,detail,model,result,job,pendingSubmission}=this;
+      this.storage.setItem(KEY,JSON.stringify({source,range,detail,model,result,job,pendingSubmission}));
       return true;
     }catch{return false;}
   }
@@ -168,10 +186,12 @@ export class UpscaleWorkspace{
   }
   render(){
     const busy=this.busy(),source=this.source;
-    this.$('add').disabled=this.$('source').disabled=this.$('detail').disabled=this.$('full').disabled=busy;
+    const needsSetup=this.availability?.ready===false;
+    this.$('add').disabled=this.$('source').disabled=this.$('detail').disabled=this.$('full').disabled=this.$('model').disabled=busy;
     this.$('source').hidden=!source;
     this.$('source-meta').textContent=source?`${source.name} · ${source.width} × ${source.height} · ${Number(source.fps.toFixed(3))} fps`:'';
-    this.$('resolution').textContent=source?`Relay VSR · 2× · ${source.width*2} × ${source.height*2}`:'Relay VSR · 2×';
+    this.$('resolution').textContent=source?`2× · ${source.width*2} × ${source.height*2}`:'2×';
+    this.$('detail-control').hidden=this.model!==DEFAULT_UPSCALE_MODEL;
     this.$('detail-value').textContent=Math.round(this.detail*100)+'%';
     this.$('range').textContent=this.range?`${this.range.duration.toFixed(2)}s selected`:'Full clip';
     this.$('trim').hidden=!source;
@@ -182,8 +202,8 @@ export class UpscaleWorkspace{
     }
     this.$('in').disabled=this.$('out').disabled=busy;
     this.trimmer.update(source&&{...source,url:this.sourceURL()},this.range?{...this.range,length_mode:'custom',workflow_mode:'relight'}:{length_mode:'original',workflow_mode:'relight'},{disabled:busy});
-    this.$('generate').disabled=busy||!source;
-    this.$('generate').textContent=busy?'Working…':this.availability?.ready===false?'Set up Relay VSR':'Upscale video';
+    this.$('generate').disabled=busy||(!source&&!needsSetup);
+    this.$('generate').textContent=busy?'Working…':needsSetup?`Set up ${UPSCALE_MODELS[this.model].label}`:'Upscale video';
     this.$('view').hidden=this.$('compare').hidden=!source||!this.result;
     this.$('view').textContent=this.view==='source'?'View result':'View source';
     this.$('exports').hidden=!this.result;
@@ -213,7 +233,7 @@ export class UpscaleWorkspace{
       if(!response.ok||!asset.id||!asset.file)throw Error(asset.error||'Could not upload this video.');
       const info=await this.fetch('/zura/studio/assets/'+encodeURIComponent(asset.id)+'/ripple',{});
       if(this.disposed||controller.signal.aborted)return;
-      if(HDR.has(info.resolved_colour))throw Error('Choose an SDR source for Relay VSR. HDR upscaling is not available in this mode.');
+      if(HDR.has(info.resolved_colour))throw Error('Choose an SDR source for Upscale.');
       const fps=Number(info.fps),duration=Number(asset.duration);
       if(![fps,duration,info.width,info.height].every(value=>Number.isFinite(value)&&value>0)||!Number.isInteger(info.frames)||info.frames<1)throw Error('Could not read this clip’s dimensions or timing.');
       this.source={id:asset.id,file:asset.file,name:asset.name||file.name,width:info.width,height:info.height,frames:info.frames,fps,duration};
@@ -226,32 +246,37 @@ export class UpscaleWorkspace{
     finally{this.uploadController=null;if(!this.disposed)this.render();}
   }
 
+  updateAvailability(){
+    this.availability=this.modelInfo?upscaleAvailability(this.modelInfo,this.model):null;
+    this.modelDownloads.setMissingContext(this.model,this.availability?.missing,`${UPSCALE_MODELS[this.model].label} · 2×`);
+  }
   async checkModels(){
     try{
       this.modelInfo=await this.fetch('/object_info');
       if(this.disposed)return null;
-      this.availability=upscaleAvailability(this.modelInfo);
-      this.modelDownloads.setMissingContext('relayvsr_x2',this.availability.missing);
+      this.updateAvailability();
       this.render();
       return this.availability;
     }catch(error){
-      if(!this.disposed)this.message('Could not check Relay VSR setup. '+error.message);
+      if(!this.disposed)this.message('Could not check upscale setup. '+error.message);
       return null;
     }
   }
 
   async generate(){
-    if(this.busy()||!this.source)return;
+    if(this.busy())return;
     if(this.availability?.ready===false){await this.modelDownloads.checkSetup();return;}
+    if(!this.source)return;
     this.submitting=true;
     this.$('trim').open=false;
     this.message('');
-    this.setProgress('Checking setup','Preparing Relay VSR');
+    const label=UPSCALE_MODELS[this.model].label;
+    this.setProgress('Checking setup',`Preparing ${label}`);
     this.render();
     try{
       const availability=await this.checkModels();
       if(this.disposed)return;
-      if(!availability?.ready)throw Error('Check Relay VSR setup before upscaling.');
+      if(!availability?.ready)throw Error(`Check ${label} setup before upscaling.`);
       const config=this.config();
       const submission=submitOwnedGraph(this,buildUpscaleGraph(config,this.modelInfo),config,'auto',{zura_upscale:true});
       await submission;
@@ -307,8 +332,9 @@ export class UpscaleWorkspace{
   }
   async graph(){
     const availability=await this.checkModels();
-    if(!availability?.ready)throw Error('Complete Relay VSR setup before opening the graph.');
-    await openStudioGraph(this.owner.studio,buildUpscaleGraph(this.config(),this.modelInfo),'Upscale video · Current settings','upscale');
+    const label=UPSCALE_MODELS[this.model].label;
+    if(!availability?.ready)throw Error(`Complete ${label} setup before opening the graph.`);
+    await openStudioGraph(this.owner.studio,buildUpscaleGraph(this.config(),this.modelInfo),`Upscale video · ${label}`,'upscale');
   }
   onCancel(){return this.cancel();}
   open(){

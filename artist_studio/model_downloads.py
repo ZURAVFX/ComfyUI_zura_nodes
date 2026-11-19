@@ -337,6 +337,20 @@ CATALOG["relayvsr_x2"] = dict(
     ],
 )
 
+CATALOG["seedvr2_7b_x2"] = dict(
+    name="SeedVR2 7B INT8 · 2× video upscale", gated=False,
+    license_url="https://huggingface.co/Comfy-Org/SeedVR2",
+    note="SeedVR2 7B INT8 diffusion model and its matching FP16 video VAE. Requires ComfyUI with native SeedVR2 support.",
+    files=[
+        _file("diffusion_models", "seedvr2_7b_int8_convrot.safetensors", "Comfy-Org/SeedVR2",
+              "df48879708206a403d2a61acd55578c2e80fd233", "diffusion_models/seedvr2_7b_int8_convrot.safetensors",
+              8334897976, "5aa0d25fc9d35e449b659d0c9a5dcb22e2a4fa04032101b95a39da42b32c1be6"),
+        _file("vae", "seedvr2_ema_vae_fp16.safetensors", "Comfy-Org/SeedVR2",
+              "df48879708206a403d2a61acd55578c2e80fd233", "vae/seedvr2_ema_vae_fp16.safetensors",
+              501324814, "20678548f420d98d26f11442d3528f8b8c94e57ee046ef93dbb7633da8612ca1"),
+    ],
+)
+
 CATALOG["ltx_alpha"] = dict(
     name="LTX 2.5 · extract alpha", gated=True,
     license_url="https://huggingface.co/Lightricks/LTX-2.5-22b-IC-LoRA-Alpha-Gen",

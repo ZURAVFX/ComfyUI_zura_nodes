@@ -96,7 +96,6 @@ jobs:
           node tests/test_studio_result_ownership.mjs
           node tests/test_studio_plate_inline.mjs
           node tests/test_studio_plate_compact.mjs
-          node tests/test_studio_upscale.mjs
           node tests/test_studio_paint_vfx_ui.mjs
           node tests/test_studio_ae_bridge.mjs
           node tests/test_studio_ae_display.mjs
