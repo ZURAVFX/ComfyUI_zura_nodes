@@ -502,7 +502,7 @@ class SharedEngineTests(unittest.TestCase):
             branded = {(method, path.replace('/zura/studio', '/genj/studio'))
                 for method, path in routes if path.startswith('/zura/studio')}
             legacy = {(method, path) for method, path in routes if path.startswith('/genj/studio')}
-            current_only={('POST','/genj/studio/image-layers/compose')}
+            current_only={('POST','/genj/studio/image-layers/compose'),('POST','/genj/studio/image-export')}
             self.assertEqual(branded-current_only, legacy)
             self.assertTrue(current_only <= branded)
             self.assertGreaterEqual(len(branded), 14)
