@@ -1,5 +1,9 @@
 # Release notes
 
+## 1.3.70 - 19 November 2026
+
+- Upscale video 2× in Studio with Relay VSR or SeedVR2 7B INT8. Process the whole clip or a frame range, compare against the source, and export a ProRes master or MP4 preview. Setup checks for the selected model and downloads missing weights.
+
 ## 1.3.69 - 19 November 2026
 
 - Show the result of Check setup in H3 Ripple. List missing requirements next to the model controls and offer to install WepeNerd through ComfyUI Manager where supported.

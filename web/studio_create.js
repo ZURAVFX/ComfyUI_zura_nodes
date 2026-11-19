@@ -26,6 +26,7 @@ import {OutpaintWorkspace} from "./studio_outpaint.js";
 import {PanoramaCameraWorkspace} from './studio_panorama.js';
 import {RippleWorkspace} from './studio_ripple.js';
 import {AlphaWorkspace} from './studio_alpha.js';
+import {UpscaleWorkspace} from './studio_upscale.js';
 import {installRippleJobs} from './studio_ripple_jobs.js';
 import {RippleImageHandoff} from './studio_ripple_image.js';
 import {groupMissingNodes} from './studio_node_setup.js';
@@ -439,13 +440,14 @@ export class CreativeWorkspace {
     if(mode==='outpaint')this.outpaint??=new OutpaintWorkspace(this);
     if(mode==='ripple')this.ensureRippleWorkspace();
     if(mode==='alpha')this.alpha??=new AlphaWorkspace(this);
+    if(mode==='upscale')this.upscale??=new UpscaleWorkspace(this);
     if(mode==='panorama')this.panorama??=new PanoramaCameraWorkspace(this);
     this.videoComposer?.mountWorkflow(mode);
     // Set real visibility as well as the CSS state, so another page cannot
     // cover navigation when the workspace changes or styles are still loading.
-    const pages={'.zvfx-page':'paint_vfx','.zdir-page':'director','.zc-home':'home','.zc-image-page':'image','.zf-page:not(.zr-page):not(.zp-page):not(.zh-page)':'frames','.zr-page':'references','.zp-page:not(.zwm-page)':'paintout','.zwm-page':'watermark','.zh-page':'hdr','.zo-page':'outpaint','.zru-page':'ripple','.zalpha-page':'alpha','.zpc-page':'panorama','.gs-workspace':'video','.gs-steps':'video'};
+    const pages={'.zvfx-page':'paint_vfx','.zdir-page':'director','.zc-home':'home','.zc-image-page':'image','.zf-page:not(.zr-page):not(.zp-page):not(.zh-page)':'frames','.zr-page':'references','.zp-page:not(.zwm-page)':'paintout','.zwm-page':'watermark','.zh-page':'hdr','.zo-page':'outpaint','.zru-page':'ripple','.zalpha-page:not(.zup-page)':'alpha','.zup-page':'upscale','.zpc-page':'panorama','.gs-workspace':'video','.gs-steps':'video'};
     for(const child of this.root.children)for(const [selector,space] of Object.entries(pages))if(child.matches(selector))child.hidden=mode!==space||(space==='ripple'&&child!==this.ripple?.page);
-    for(const b of this.root.querySelectorAll('.zc-nav [data-space]'))b.setAttribute('aria-current',b.dataset.space===(['paint_vfx','director','frames','references','paintout','watermark','outpaint','ripple','alpha','panorama','hdr'].includes(mode)?'video':mode)?'page':'false');
+    for(const b of this.root.querySelectorAll('.zc-nav [data-space]'))b.setAttribute('aria-current',b.dataset.space===(['paint_vfx','director','frames','references','paintout','watermark','outpaint','ripple','alpha','upscale','panorama','hdr'].includes(mode)?'video':mode)?'page':'false');
     this.root.querySelectorAll('video,audio').forEach(m=>m.pause());
     this.root.querySelector('#zc-open-hdr').setAttribute('aria-current',mode==='hdr'?'page':'false');
     if(mode==='hdr')this.studio.hdrTool?.activate();else this.studio.hdrTool?.deactivate();
@@ -461,6 +463,8 @@ export class CreativeWorkspace {
     if(mode==='outpaint')this.outpaint.open();
     if(mode==='ripple')this.ripple.open();
     if(mode==='alpha')this.alpha.open();
+    if(mode==='upscale')this.upscale.open();
+    else this.upscale?.comparison.hide();
     if(mode==='panorama')this.panorama.open();
     if(this.job||this.pendingSubmission)this.startPolling();
     if(mode==='image'||mode==='ripple')void this.rippleImage?.resume();
@@ -750,7 +754,7 @@ export class CreativeWorkspace {
   }
   async cancel(){await cancelOwnedJob(this);}
   stopPolling(){clearInterval(this.timer);this.timer=null;}
-  close(){this.workflowProgress?.close();for(const access of this.imageModelAccess?.values()||[])access.dispose();this.imageModelSetup?.close();this.modelDownloadClosed=true;this.browserConnection?.close();this.videoComposer?.browserConnection?.close();this.videoComposer?.ltxOutput?.close();void this.imageArea?.close();this.save();this.stopPolling();this.imageZoom?.stopDraw();this.paint_vfx?.close();this.frames?.close();this.director?.close();this.referencesVideo?.close();this.outpaint?.close();for(const workspace of new Set([this.ripple,...(this.rippleWorkspaces?.values()||[])]))workspace?.close();this.alpha?.close();this.rippleImage?.dispose();this.panorama?.close();this.hdri?.close();if(this.paintout?.owner===this)this.paintout.close();if(this.watermark?.owner===this)this.watermark.close();this.disposePopovers?.();}
+  close(){this.workflowProgress?.close();for(const access of this.imageModelAccess?.values()||[])access.dispose();this.imageModelSetup?.close();this.modelDownloadClosed=true;this.browserConnection?.close();this.videoComposer?.browserConnection?.close();this.videoComposer?.ltxOutput?.close();void this.imageArea?.close();this.save();this.stopPolling();this.imageZoom?.stopDraw();this.paint_vfx?.close();this.frames?.close();this.director?.close();this.referencesVideo?.close();this.outpaint?.close();for(const workspace of new Set([this.ripple,...(this.rippleWorkspaces?.values()||[])]))workspace?.close();this.alpha?.close();this.upscale?.close();this.rippleImage?.dispose();this.panorama?.close();this.hdri?.close();if(this.paintout?.owner===this)this.paintout.close();if(this.watermark?.owner===this)this.watermark.close();this.disposePopovers?.();}
   async graph(){
     await openStudioGraph(this.studio,await this.imageGraph(this.config()),'Image · Current settings','image');
   }
