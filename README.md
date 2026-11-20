@@ -34,7 +34,7 @@ Use your own ComfyUI host and port if they differ.
 
 ## Current release
 
-**1.3.72** adds Relay VSR and SeedVR2 7B INT8 to Studio under **Video → Finish footage → Upscale**. See the [release notes](CHANGELOG.md) for details.
+**1.3.73** adds live motion previews, single-frame upscale and refine comparisons, and local MiniMax H3 clip extension. See the [release notes](CHANGELOG.md) for details.
 
 Zura Studio remains free to open and use normally, without a ComfyLink licence. The separate native ComfyLink After Effects plug-in is optional and is not bundled here. Existing [Relight](docs/RELIGHT_MODELS.md), [Director](docs/DIRECTOR_STUDIO.md), [Paintout](PAINTOUT.md), [alpha extraction](docs/LTX_ALPHA.md), [Ripple editing](docs/RIPPLE_STUDIO.md) and [painted image edits](docs/IMAGE_EDIT_AREA.md) remain available.
 

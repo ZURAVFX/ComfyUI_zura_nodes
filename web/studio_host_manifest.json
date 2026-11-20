@@ -1,13 +1,13 @@
 {
   "hostSchema": 1,
-  "uiVersion": "1.3.72",
-  "backendVersion": "1.3.72",
-  "sourceSha256": "c63db85800957839f85574984949e4fca26bdef2cabfda540676170a3ebaf90d",
+  "uiVersion": "1.3.73",
+  "backendVersion": "1.3.73",
+  "sourceSha256": "ef840ff67bbbc43128801f39fc8b04530592a493d4eb624b42cb03dd73f32f7d",
   "entrySha256": {
     "studio_ae.html": "6a3a8600f6b26868276fad65c464ac0dc876dc8815cf50a57a27f784773090a6",
     "studio_ae_probe.js": "cb91d33bb224a0531b83fec0a7d2ba40b91293ec0548e47a1a35cf528380d7a1",
     "studio_ae_entry.js": "174d86da26972d7be55df19c729a953277c91417a5987a2557ff06ce043ac2c4",
-    "studio_host_version.js": "cfe9a527e727123dd37e0986ad8e5c3789e69a7a0c11f6796a0595da07ef69d9"
+    "studio_host_version.js": "5f2c0cb598b7fe5b7418f7cc4933f8965315d22e6e36d02c2c32e3b34ef92494"
   },
   "assetSha256": {
     "assets/fonts/Geist-Variable.woff2": "2ffebe993e969069a9789d15164b7715d42491b5835516c5e3b935d5f81b05f1",
@@ -15,19 +15,19 @@
     "assets/zura-logo.png": "98160f2f340b5e272744dc6544f6bd2bd81afaa7c1f56416d9fad028daea3293",
     "flux3_prompt_upsampling.json": "c9292cb2d6d11eb5616ba9d9d7bcc498b9e73ff4537b9957b5a1ddb0d37ae622",
     "paintout_studio/assets/fonts/Manrope-Variable.ttf": "3ae11c49db0455a3cc33e37d380f20fdb8c7f8b41dc07625c177e3d87a9d6ae6",
-    "paintout_studio/assets/icons/circle-minus.svg": "9d310498fc34f48fea9fbdee205e011b9d34dbfc3ce7f18f681d2cb46069457b",
-    "paintout_studio/assets/icons/circle-plus.svg": "2d1c17b8bd26d749197633e4557fab34e60bc51686312522b6061b686d00a5c2",
-    "paintout_studio/assets/icons/eraser.svg": "8b1a71dafd0ccdfd290bbdb6573db9710f73ec6a43086fc5d785e38c0e2b6d4c",
-    "paintout_studio/assets/icons/hand.svg": "c919d2a3473edf7c7635d564f10763db48db86b48b9846d58193d8f5a46a1234",
-    "paintout_studio/assets/icons/paintbrush.svg": "7c9d077d6a58bcfee45ce6e36c7fe9e8cd3aefd91d9617e8f995ccb62d71bc4a",
-    "paintout_studio/assets/icons/undo-2.svg": "9b085917c5000838749056afbc20e673193e6c8a8dab40795967692a3aa2a3d8",
+    "paintout_studio/assets/icons/circle-minus.svg": "d1a47f5249d6aaedc89bb6caf0a4f172084171a369e5656b88ad8f32d8d8386e",
+    "paintout_studio/assets/icons/circle-plus.svg": "6fa978530075df975ad05e2742896a1950b74c2b133a0d208891b038a4a41c17",
+    "paintout_studio/assets/icons/eraser.svg": "838d4355dd49340523c38a22a2d23f1aca72ef42f8eba79f6a0c84bf6e27b929",
+    "paintout_studio/assets/icons/hand.svg": "fe3771fa2f0a9a3c7736164c9a855beefacc02548084ac1d6fc8da8a8a9180b0",
+    "paintout_studio/assets/icons/paintbrush.svg": "b0a958ba9889f89c40df6e1c168b8a7aa20f6309780e795c5bce00a4bc11bff6",
+    "paintout_studio/assets/icons/undo-2.svg": "efad2edbbd2be6038cc23fd64df2d012fad5cc6460dfbf227cfa3d990e9e897f",
     "paintout_studio/assets/zura-logo.png": "98160f2f340b5e272744dc6544f6bd2bd81afaa7c1f56416d9fad028daea3293",
-    "vendor/elk.bundled.js": "133a752a2b7fc35188cce62f28f5ee30c5a50caf212531a750f3ccc15ba1ac0f",
+    "vendor/elk.bundled.js": "1222e44f953ce7746af23801e723708f8e6f436b8b377a6a5fc7552f34a307b3",
     "vendor/paintaplate/canvas.mjs": "07ee54c4280f382b19afac16632c78a216ff568220f19cb77bc92945a6d4860c",
     "vendor/paintaplate/stroke_logic.mjs": "bbf538e424a6c342500e41a53a3a3cf81bc74d15db24c1470e9be9092c1d41f1",
     "vendor/paintaplate/strokes.mjs": "3d5f205da4daabba1811c4722939d8a88c756130526a9626b32b16153feb23d3",
-    "vendor/studio-components.css": "3b5f260d1291f9bfd819ea08490f3e38203dc7a7bbfa3e1e86d9046304ca91e8",
-    "vendor/studio-components.js": "319ad4c894431fdd615bb7e207bbd8624b3badb601fe20503022add4b00b9599"
+    "vendor/studio-components.css": "805297d03b27ff2c60119944a5c251d11c518c7943ef9d59d49531149f7459d0",
+    "vendor/studio-components.js": "11a029b871c147bc13e2b6eb87a732df1c600c7dfe291416456a4d17d6e6bb87"
   },
   "entries": {
     "comfy": "studio.js",

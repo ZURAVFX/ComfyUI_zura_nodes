@@ -1,5 +1,14 @@
 # Release notes
 
+## 1.3.73 - 20 November 2026
+
+- Preview motion during supported MiniMax H3, Wan and LTX sampling runs.
+- Preview and compare one frame before processing an entire clip. Compare finished upscales and refinements with the source.
+- Add NVIDIA RTX upscaling and a RelayVSR BF16 option, plus clearer upscale progress, model setup and downloads.
+- Extend clips with local MiniMax H3, or refine SDR and HDR footage with LTX at source size or 2×.
+- Keep installed models available while other models download.
+
+
 ## 1.3.72 - 19 November 2026
 
 - Update the Studio navigation release check for the new Upscale entry.
