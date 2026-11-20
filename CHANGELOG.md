@@ -1,5 +1,9 @@
 # Release notes
 
+## 1.3.74 - 20 November 2026
+
+- Keep Studio routes available on hosts that do not provide a ComfyUI prompt queue.
+
 ## 1.3.73 - 20 November 2026
 
 - Preview motion during supported MiniMax H3, Wan and LTX sampling runs.

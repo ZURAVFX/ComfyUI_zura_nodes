@@ -42,6 +42,9 @@ class LivePreviewTests(unittest.TestCase):
             image.seek(7)
             self.assertGreaterEqual(min(image.getpixel((0, 0))), 252)
 
+    def test_host_without_a_prompt_queue_can_register_routes(self):
+        preview.register_motion_preview(SimpleNamespace())
+
     def test_only_studio_video_jobs_send_throttled_motion_to_their_client(self):
         import torch
 

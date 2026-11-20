@@ -64,13 +64,13 @@ def _encode_motion(sample, factors, bias, duration_ms):
 
 
 def register_motion_preview(server):
+    read_queue = getattr(getattr(server, "prompt_queue", None), "get_current_queue_volatile", None)
+    if read_queue is None:
+        return
     try:
         import latent_preview
         from comfy_execution.utils import get_executing_context
     except ImportError:
-        return
-    read_queue = getattr(server.prompt_queue, "get_current_queue_volatile", None)
-    if read_queue is None:
         return
 
     original = latent_preview.prepare_callback
