@@ -52,6 +52,7 @@ DEFAULTS = {"engine": "local", "background": "keep", "scope": "person", "prompt"
             "start": 0.0, "duration": 2.0, "size": 512, "performer": -1,
             "margin": 20, "pitch": False, "seed": 42, "render_size": 0, "h3_preset": "preview_quality", "h3_steps": 0, "h3_attention": "native", "remove_text": False,
             "resolution": 1280, "delivery_mode": "native", "quality": "fast", "audio_id": "", "audio_start": 0.0, "length_mode": "custom", "lip_sync": False, "refine_lips": False,
+            "viewport_keyframes": [], "viewport_character_pose": False, "viewport_pose_video": "",
             "finished_frame_position": "first", "finished_frame_number": 1, "h3_viewport_direct": False, "h3_head_swap": False,
             "camera_preset": "Left three-quarter", "camera_prompt": "", "camera_width": 768, "camera_height": 448,
             "subject_mode": "auto", "preserve_people": False, "preserve_identity": False,
@@ -102,6 +103,22 @@ def design_readiness(node_mappings, get_full_path, model="klein9b"):
 
 def clean_config(value):
     c = {**DEFAULTS, **{k: v for k, v in value.items() if k in DEFAULTS}}
+    keyframes = c["viewport_keyframes"]
+    if (not isinstance(keyframes, list) or len(keyframes) > 8
+            or any(not isinstance(entry, dict)
+                   or not isinstance(entry.get("asset_id"), str)
+                   or not re.fullmatch(r"[0-9a-f]{32}", entry["asset_id"])
+                   or type(entry.get("frame")) is not int or not 1 <= entry["frame"] <= 360
+                   for entry in keyframes)):
+        raise ValueError("Choose up to eight finished keyframes with valid frame numbers.")
+    c["viewport_keyframes"] = [{"asset_id": entry["asset_id"], "frame": entry["frame"]} for entry in keyframes]
+    if type(c["viewport_character_pose"]) is not bool:
+        raise ValueError("Choose whether to use character pose guidance.")
+    pose_video = c["viewport_pose_video"]
+    if not isinstance(pose_video, str) or (pose_video and not re.fullmatch(r"[0-9a-f]{32}", pose_video)):
+        raise ValueError("Choose an uploaded OpenPose video.")
+    if c["workflow_mode"] != "viewport" or c["engine"] != "local":
+        c.update(viewport_keyframes=[], viewport_character_pose=False, viewport_pose_video="")
     contract = None
     if value.get('ae_frame_contract') is not None:
         from ..comfylink.frame_contract import normalise_frame_contract, contract_model_rate
@@ -645,6 +662,17 @@ def ltx25_viewport_readiness(node_mappings):
             "model_files": files, "missing_nodes": missing}
 
 
+def ltx25_viewport_pose_readiness(node_mappings, detectors):
+    from .ltx25 import VIEWPORT_POSE_MODELS
+    common = [name for name in ("LTXAddVideoICLoRAGuideAdvanced", "LoadVideo") if name not in node_mappings]
+    adapter = VIEWPORT_POSE_MODELS["pose_union"]
+    if not folder_paths.get_full_path("loras", adapter):
+        common.append(adapter)
+    missing = common + ([] if "DWPreprocessor" in node_mappings else ["DWPreprocessor"])
+    missing.extend(VIEWPORT_POSE_MODELS[name] for name, path in detectors.items() if not path)
+    return {"ready": not missing, "missing": missing, "manual_ready": not common, "manual_missing": common}
+
+
 def _ltx25_model_pin(path):
     """Bounded file identity; model payloads are never loaded by Studio."""
     path = Path(path).resolve(strict=True)
@@ -661,10 +689,11 @@ def _ltx25_model_pin(path):
 def ltx25_native_plan(project):
     """Resolve the current reviewed interval and model files without inference."""
     from . import verify_review
-    from .ltx25 import QUALIFIED_MODELS, VIEWPORT_MODELS, build_plan
+    from .ltx25 import QUALIFIED_MODELS, VIEWPORT_MODELS, VIEWPORT_POSE_MODELS, build_plan
     assert_approved(project)
     source = check_asset(project["source"])
-    check_asset(project["character"])
+    if project.get("character"):
+        check_asset(project["character"])
     check_asset(project["opening_input"])
     hdr_endpoint = None
     if (project.get("opening_input") or {}).get("native_hdr") is not None:
@@ -692,7 +721,20 @@ def ltx25_native_plan(project):
         if not hdr_endpoint:
             raise ValueError("Choose an HDR EXR appearance or use the HDR source frame before generation.")
         hdr_source = source_interval(project["source"], Store(), check_asset, project["config"], timeline)
-    viewport = bool(project.get("config", {}).get("viewport_render"))
+    project = _viewport_project(project)
+    viewport = project["viewport_render"]
+    character_pose = viewport and project["config"].get("viewport_character_pose")
+    pose_pass = project.get("viewport_pose_asset") if character_pose else None
+    if pose_pass:
+        with av.open(str(check_asset(pose_pass))) as media:
+            stream = media.streams.video[0]
+            if stream.average_rate != 24 or (stream.width, stream.height) != (width, height):
+                raise ValueError("Export the OpenPose pass at 24 fps with the same dimensions as the viewport video.")
+            if (stream.frames or sum(1 for _ in media.decode(video=0))) != clip["frames"]:
+                raise ValueError(f"The OpenPose pass needs exactly {clip['frames']} frames. Export the selected clip only.")
+    if viewport:
+        for keyframe in project.get("viewport_keyframes", []):
+            check_asset(keyframe["asset"])
     objects = project.get("config", {}).get("subject_mode") == "objects"
     model_set = dict(VIEWPORT_MODELS) if viewport else {k: v for k, v in QUALIFIED_MODELS.items()
         if not objects or k not in ("bbox_detector", "pose_estimator")}
@@ -701,13 +743,21 @@ def ltx25_native_plan(project):
         model_set["video_vae"] = VIDEO_VAE
     categories = {"model": "diffusion_models", "video_vae": "vae", "audio_vae": "vae",
                   "union": "loras", "upscaler": "latent_upscale_models"}
+    if character_pose:
+        import nodes
+        pose_setup = ltx25_viewport_pose_readiness(nodes.NODE_CLASS_MAPPINGS, ltx25_detector_paths())
+        missing = pose_setup["manual_missing" if pose_pass else "missing"]
+        if missing:
+            raise ValueError("Character pose guidance needs: " + ", ".join(missing) + ".")
+        model_set.update(VIEWPORT_POSE_MODELS if not pose_pass else {"pose_union": VIEWPORT_POSE_MODELS["pose_union"]})
+        categories["pose_union"] = "loras"
     paths = {}
     for name, category in categories.items():
         value = folder_paths.get_full_path(category, model_set[name])
         if not value:
             raise ValueError("An LTX 2.5 component is missing: " + model_set[name])
         paths[name] = Path(value)
-    if not viewport and not objects:
+    if (character_pose and not pose_pass) or (not viewport and not objects):
         for name, path in ltx25_detector_paths().items():
             if path is None:
                 raise ValueError("The local LTX body-motion detector is missing: " + QUALIFIED_MODELS[name])
@@ -758,7 +808,7 @@ def ltx25_native_plan(project):
         from .ltx25_hdr_plan import build_native_hdr_plan
         return build_native_hdr_plan(_viewport_project(project), hdr_endpoint=hdr_endpoint,
             hdr_source=hdr_source, output=project["config"].get("ltx_output", "sdr"), exr_storage=project['config'].get('exr_storage','half'), **arguments)
-    return build_plan(_viewport_project(project), **arguments)
+    return build_plan(project, **arguments)
 
 
 def ltx25_phase_graph(project, phase):
@@ -1553,11 +1603,12 @@ def public_project(project):
     p["selection_target"] = directed_source_subject(p.get("config", {}))
     if p.get("audio") and "audio_id" not in p.get("config", {}) and p["audio"].get("id"):
         p["config"]["audio_id"] = p["audio"]["id"]
-    for key in ("source", "character", "opening_input", "audio", "reference_audio"):
+    for key in ("source", "character", "opening_input", "audio", "reference_audio", "viewport_pose_asset"):
         if p.get(key):
             a = p[key]
             a["url"] = media_url({"filename": Path(a["file"]).name, "subfolder": str(Path(a["file"]).parent).replace("\\", "/"), "type": "input"})
-    for a in [*p.get("references", []), *([p["starting_asset"]] if p.get("starting_asset") else [])]:
+    for a in [*p.get("references", []), *([p["starting_asset"]] if p.get("starting_asset") else []),
+              *(entry["asset"] for entry in p.get("viewport_keyframes", []))]:
         a["url"] = media_url({"filename": Path(a["file"]).name,
                               "subfolder": str(Path(a["file"]).parent).replace("\\", "/"), "type": "input"})
     for a in [p, *([p["source"]] if p.get("source") else [])]:
@@ -2275,6 +2326,20 @@ class Studio:
         remembered_audio = audio or p.get("reference_audio") or p.get("audio")
         if remembered_audio:
             p["reference_audio"] = copy.deepcopy(remembered_audio)
+        viewport_keyframes = []
+        for entry in config["viewport_keyframes"]:
+            asset = self.store.load(entry["asset_id"])
+            if asset.get("kind") != "asset" or asset.get("asset_kind") != "image" or asset.get("native_hdr") is not None:
+                raise ValueError("Choose a PNG, JPEG or WebP image for each finished keyframe.")
+            check_asset(asset)
+            viewport_keyframes.append({"asset": asset, "frame": entry["frame"]})
+        pose_asset = self.store.load(config["viewport_pose_video"]) if config["viewport_pose_video"] else None
+        if pose_asset:
+            if pose_asset.get("kind") != "asset" or pose_asset.get("asset_kind") != "video":
+                raise ValueError("Choose a video for the OpenPose pass.")
+            check_asset(pose_asset)
+        p["viewport_keyframes"] = viewport_keyframes
+        p["viewport_pose_asset"] = pose_asset
         p["config"], p["audio"] = config, audio
         stale_text_review = bool(config.get("remove_text") and p.get("review")
                                  and p.get("prepared_key") != prep_key(p))
@@ -2852,6 +2917,7 @@ def register():
             "missing_design_nodes": design["missing_nodes"],
             "missing_ltx_scene_nodes": missing_ltx_scene_nodes,
             "missing_ltx_viewport_nodes": ltx_viewport["missing_nodes"],
+            "ltx_viewport_pose": ltx25_viewport_pose_readiness(nodes.NODE_CLASS_MAPPINGS, detectors),
             "missing_h3_viewport_nodes": missing_h3_viewport_nodes,
             "missing_wan2_nodes": wan2["missing_nodes"],
             "model_files": {"openjutsu": openjutsu["model_files"], "design": design["model_files"], "wan2": wan2["model_files"],

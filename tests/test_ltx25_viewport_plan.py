@@ -34,33 +34,33 @@ class ViewportPlanTests(unittest.TestCase):
         self.assertNotIn("VideoDepthAnythingProcess", all_types)
         self.assertNotIn("CannyEdgePreprocessor", all_types)
 
-    def test_layout_is_padded_and_delivery_holds_last_frame(self):
+    def test_layout_is_padded_only_for_sampling(self):
         project, kwargs = viewport_inputs()
         plan = plan_module.build_plan(project, **kwargs)
-        self.assertEqual(plan["delivered_frames"], 361)
+        self.assertEqual(plan["delivered_frames"], 360)
         self.assertEqual(plan["basis"]["timeline"]["frames"], 360)
         self.assertEqual(plan["basis"]["frames"], 361)
         self.assertEqual(plan["basis"]["source_frames"], 360)
         self.assertEqual(plan["basis"]["base"], [960, 544])
         self.assertEqual(plan["basis"]["native"], [1920, 1088])
         self.assertEqual(plan["generation_frames"], 361)
-        self.assertEqual(plan["trimmed_tail_frames"], 0)
+        self.assertEqual(plan["trimmed_tail_frames"], 1)
         self.assertEqual(plan["artifacts"]["layout"]["frames"], 361)
         self.assertEqual(plan["phases"]["motion"]["pad_source"]["class_type"], "GenjLTXFramePad")
         self.assertEqual(plan["phases"]["decode"]["trim_frames"]["inputs"]["length"], 360)
-        self.assertEqual(plan["phases"]["decode"]["hold_output"]["inputs"]["stride"], 8)
-        self.assertEqual(plan["phases"]["decode"]["create_video"]["inputs"]["images"], ["hold_output", 0])
+        self.assertNotIn("hold_output", plan["phases"]["decode"])
+        self.assertEqual(plan["phases"]["decode"]["create_video"]["inputs"]["images"], ["delivery_size", 0])
         self.assertNotIn("audio", plan["phases"]["decode"]["create_video"]["inputs"])
         kwargs["timeline"]["frames"] = 120
         five_second = plan_module.build_plan(project, **kwargs)
         self.assertEqual(five_second["generation_frames"], 121)
-        self.assertEqual(five_second["delivered_frames"], 121)
-        self.assertEqual(five_second["trimmed_tail_frames"], 0)
+        self.assertEqual(five_second["delivered_frames"], 120)
+        self.assertEqual(five_second["trimmed_tail_frames"], 1)
 
     def test_official_sampling_and_reference_encoding_recipe(self):
         project, kwargs = viewport_inputs()
         plan = plan_module.build_plan(project, **kwargs)
-        self.assertEqual(plan["basis"]["recipe_version"], 3)
+        self.assertEqual(plan["basis"]["recipe_version"], 4)
         for phase, sigmas in (("stage1", plan_module.STAGE1_SIGMAS),
                               ("refine", plan_module.STAGE2_SIGMAS)):
             graph = plan["phases"][phase]
@@ -79,6 +79,24 @@ class ViewportPlanTests(unittest.TestCase):
         old_basis = copy.deepcopy(plan["basis"])
         old_basis.pop("recipe_version")
         self.assertNotEqual(plan["key"], plan_module.digest(old_basis))
+
+    def test_character_pose_uses_an_independent_guide_and_only_loads_when_enabled(self):
+        project, kwargs = viewport_inputs()
+        project["config"]["viewport_character_pose"] = True
+        with self.assertRaisesRegex(ValueError, "Resolve and pin"):
+            plan_module.build_plan(project, **kwargs)
+        kwargs["models"].update(plan_module.VIEWPORT_POSE_MODELS)
+        kwargs["model_pins"].update({name: {"sha": "c" * 64} for name in plan_module.VIEWPORT_POSE_MODELS})
+        plan = plan_module.build_plan(project, **kwargs)
+        self.assertEqual(plan["phases"]["motion"]["pose"]["class_type"], "DWPreprocessor")
+        self.assertEqual(plan["artifacts"]["pose"]["frames"], plan["artifacts"]["layout"]["frames"])
+        for phase in ("stage1", "refine"):
+            graph = plan["phases"][phase]
+            self.assertIn("pose", plan["dependencies"][phase])
+            self.assertEqual(graph["pose_adapter"]["inputs"]["model"], ["layout_adapter", 0])
+            self.assertEqual(graph["pose_guide"]["inputs"]["latent_downscale_factor"], ["pose_adapter", 1])
+            self.assertEqual(graph["pose_guide"]["inputs"]["attention_strength"], 0.8)
+            self.assertEqual(graph["guider"]["inputs"]["model"], ["pose_adapter", 0])
 
     def test_wrong_adapter_and_unqualified_speech_fail_explicitly(self):
         project, kwargs = viewport_inputs()
@@ -105,8 +123,7 @@ class ViewportPlanTests(unittest.TestCase):
         self.assertEqual(plan["generation_audio"], "disabled")
         self.assertEqual(plan["delivery_audio"], "original")
         self.assertEqual(plan["phases"]["decode"]["trim_audio"]["inputs"]["duration"], 360 / 24)
-        self.assertEqual(plan["phases"]["decode"]["create_video"]["inputs"]["audio"], ["hold_audio", 0])
-        self.assertEqual(plan["phases"]["decode"]["hold_audio"]["inputs"]["frames"], ["hold_output", 1])
+        self.assertEqual(plan["phases"]["decode"]["create_video"]["inputs"]["audio"], ["trim_audio", 0])
 
 if __name__ == "__main__":
     unittest.main()

@@ -78,8 +78,15 @@ For a finished image, **Frame position** offers First, Last or Frame number
 with H3 and whole-scene LTX. Frame numbers start at 1 in the selected **24 fps
 output clip**, rather than in the untrimmed source. Last means the final
 delivered frame, excluding internal model padding. These are native timed
-conditioning guides, not a promise of pixel-perfect reconstruction. One timed
-finished image is supported; additional images remain appearance references.
+conditioning guides. In **Viewport to final → LTX 2.5**, approve the starting
+look, then use **Add finished keyframe** in the video controls to place up to
+eight more images. Match each image to the corresponding camera view and
+enter its frame number in the selected clip. For character shots, turn on
+**Character pose guidance** to extract body and hand poses from the playblast
+and apply them alongside the layout. For a stylised rig or a plain mannequin,
+use **Upload OpenPose pass**. Match the selected interval, viewport dimensions
+and 24 fps. The export keeps the selected clip length. Other routes retain
+their single timed image.
 Wan Animate and masked LTX edits retain their existing reference behaviour.
 Timed H3/LTX paths have structural and native-node tests; their visual quality
 has not yet been qualified with a new render.
@@ -103,6 +110,17 @@ Wan's human pose route did not retain whole-scene blockout motion and is no
 longer offered for viewport renders. Zura does not add a blanket Canny or depth
 pass. In the tested LTX scene, adding depth softened the image and shifted
 details, so the raw layout remains the default.
+
+In **Upscale video**, choose **MiniMax H3 · Regenerate IC** when its local
+components are installed. It refines SDR clips at 24 fps and preserves the
+selected frame count and soundtrack in an MP4. The 1080p and 2K presets keep
+the source aspect ratio on the model grid. Select 9 to 120 frames. H3 can
+redraw fine details, so compare the result with the source before delivery.
+
+Install the optional [H3 Video Upsampler](https://github.com/sandpies/ComfyUI-H3-Video-Upsampler)
+and follow its `ic` model setup. Studio uses the full INT8 Ref2VA model, the
+H3 video and audio VAEs, the 3D latent upscaler, the rank-21 IC LoRA and
+HyperFlow. Restart ComfyUI after setup to make the model available.
 
 The optional shared **Prompt** is passed to LTX, H3, Wan and Seedance. When
 building a starting frame, it also guides that image.

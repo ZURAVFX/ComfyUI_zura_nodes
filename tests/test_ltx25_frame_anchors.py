@@ -64,6 +64,30 @@ class FinishedFrameTests(unittest.TestCase):
                 self.assertEqual(plan["phases"][phase]["appearance_guide"]["inputs"]["frame_idx"], expected)
             self.assertEqual(plan["appearance_reference_role"], "finished_frame_at_selected_time")
 
+    def test_extra_viewport_keyframes_are_ordered_and_used_in_both_stages(self):
+        project, kwargs = viewport_inputs()
+        kwargs["timeline"]["frames"] = 120
+        self.ready(project, "first")
+        project["viewport_keyframes"] = [
+            {"frame": 120, "asset": {"file": "end.png", "sha": "a" * 64}},
+            {"frame": 66, "asset": {"file": "reveal.png", "sha": "b" * 64}},
+        ]
+        plan = plan_module.build_plan(project, **kwargs)
+        for phase in ("stage1", "refine"):
+            graph = plan["phases"][phase]
+            self.assertEqual(graph["keyframe_image_1"]["inputs"]["image"], "reveal.png")
+            self.assertEqual(graph["keyframe_guide_1"]["inputs"]["frame_idx"], 65)
+            self.assertEqual(graph["keyframe_guide_2"]["inputs"]["frame_idx"], 119)
+            self.assertEqual(graph["sample"]["inputs"]["latent_image"], ["keyframe_guide_2", 2])
+            self.assertEqual(graph["crop_guides"]["inputs"]["positive"], ["keyframe_guide_2", 0])
+        project["viewport_keyframes"][0]["frame"] = 121
+        with self.assertRaisesRegex(ValueError, "1 to 120"):
+            plan_module.build_plan(project, **kwargs)
+        for duplicate in (1, 66):
+            project["viewport_keyframes"][0]["frame"] = duplicate
+            with self.assertRaisesRegex(ValueError, "only one finished image"):
+                plan_module.build_plan(project, **kwargs)
+
     def test_generated_appearance_stays_untimed_and_invalid_number_fails(self):
         project, kwargs = viewport_inputs()
         project["config"].update(finished_frame_position="frame", finished_frame_number=400)

@@ -2,7 +2,7 @@
   "hostSchema": 1,
   "uiVersion": "1.3.75",
   "backendVersion": "1.3.75",
-  "sourceSha256": "05193371fc2548859be59c57076d873ebc281a47ea5f45c57c74abdfa52ebecc",
+  "sourceSha256": "22c7eccd6158807e64f841528d0c0b6dd15c8d88d6ea47f75368f259a0a17cf1",
   "entrySha256": {
     "studio_ae.html": "6a3a8600f6b26868276fad65c464ac0dc876dc8815cf50a57a27f784773090a6",
     "studio_ae_probe.js": "cb91d33bb224a0531b83fec0a7d2ba40b91293ec0548e47a1a35cf528380d7a1",

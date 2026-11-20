@@ -405,3 +405,42 @@ assert.equal(ui.config.custom_loras[0].confirm_unknown,true);
 ui.config.engine='local';ui.syncForm();assert.match(ui.$('lora-note').textContent,/not.*available|aren't available/i);
 ui.$('lora-list').querySelector('[data-lora-remove]').click();await new Promise(resolve=>setTimeout(resolve,0));assert.equal(ui.config.custom_loras.length,0);
 console.log('Custom video LoRAs require compatibility confirmation and can be removed on unsupported routes.');
+
+// Viewport keyframes and the optional OpenPose guide use their own uploads,
+// frame positions and saved config, without replacing the starting image.
+ui.config={...ui.config,engine:'local',workflow_mode:'viewport',edit_area:'scene',duration:2,start:0,
+  viewport_character_pose:false,viewport_pose_video:'',viewport_keyframes:[],finished_frame_position:'first',finished_frame_number:1};
+ui.source={...ui.source,duration:3,fps:24};ui.lookMode='ready';ui.promptStage=null;
+ui.project={id:'ltx-viewport',phase:'opening',opening_input:{file:'start.png'},opening_key:'start',opening_approval:'start',config:ui.config,actions:[]};
+ui.modelStatus={...status,ltx_viewport_pose:{ready:true,manual_ready:true,missing:[],manual_missing:[]}};
+const viewportRequests=[];
+api.fetchApi=async(path,options)=>{
+  viewportRequests.push(path);
+  if(path.includes('/upload?')){
+    const name=options.body.get('file').name,id=path.endsWith('=video')?'c'.repeat(32):'d'.repeat(32);
+    return {ok:true,json:async()=>({id,name,file:'genj_studio/fixture/'+name})};
+  }
+  assert.equal(path,'/zura/studio/projects/ltx-viewport/config');
+  return {ok:true,json:async()=>({...ui.project,config:JSON.parse(options.body).config})};
+};
+ui.syncForm();ui.render();
+assert.equal(ui.$('viewport-controls').hidden,false);
+assert.equal(ui.$('viewport-pose-pass').hidden,true);
+const poseSwitch=ui.$('viewport_character_pose');poseSwitch.checked=true;
+poseSwitch.dispatchEvent(new window.Event('change',{bubbles:true}));await new Promise(resolve=>setTimeout(resolve,0));
+assert.equal(ui.config.viewport_character_pose,true);
+assert.equal(ui.$('viewport-pose-pass').hidden,false);
+await ui.upload('viewportPose',new File(['pose fixture'],'pose.mp4',{type:'video/mp4'}));
+await ui.upload('viewportKeyframe',new File(['frame fixture'],'reveal.png',{type:'image/png'}));
+assert.equal(ui.config.viewport_pose_video,'c'.repeat(32));
+assert.equal(ui.config.viewport_keyframes[0].asset_id,'d'.repeat(32));
+assert.equal(ui.config.viewport_keyframes[0].frame,24);
+assert.equal(ui.project.opening_input.file,'start.png');
+const frame=ui.$('viewport-keyframe-list').querySelector('[data-keyframe]');frame.value='48';
+frame.dispatchEvent(new window.Event('change',{bubbles:true}));await new Promise(resolve=>setTimeout(resolve,0));
+assert.equal(ui.config.viewport_keyframes[0].frame,48);
+assert.equal(ui.viewportKeyframeError([{frame:49}]),'Choose a keyframe between 1 and 48.');
+assert.equal(ui.viewportKeyframeError([{frame:1}]),'Choose only one finished image for frame 1.');
+assert.ok(viewportRequests.includes('/zura/studio/upload?kind=video'));
+assert.ok(viewportRequests.includes('/zura/studio/upload?kind=image'));
+console.log('LTX viewport guides upload independently, persist their frame numbers and preserve the opening image.');

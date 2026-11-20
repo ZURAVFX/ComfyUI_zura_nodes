@@ -17,7 +17,7 @@ import { HDRSourceTool } from "./studio_hdr.js";
 import { uploadNativePerformanceOpening, preferredHDRFile } from "./studio_native_hdr_performance.js";
 
 const ROOT = "/zura/studio";
-const defaults = {custom_loras:[],opening_loras:[],h3_character_method:"openjutsu",openjutsu_resolution:"480",openjutsu_background:"keep",openjutsu_direct:false,engine:"h3", relight_engine:"h3", background:"keep", scope:"person", prompt:"", image_prompt:"", start:0, duration:2, size:512, performer:-1, margin:20, pitch:false, seed:42, render_size:0, h3_head_swap:false, h3_preset:"take_fast", h3_steps:0, h3_attention:"native", remove_text:false, resolution:1280, delivery_mode:"native", quality:"fast", audio_id:"", audio_start:0, length_mode:"custom", lip_sync:false, refine_lips:false, workflow_mode:"swap", preserve_people:false, preserve_identity:false, edit_area:"mask", mask_method:"auto", mask_prompt:"person", mask_points:[],subject_mode:"people",finished_frame_position:"first",finished_frame_number:1};
+const defaults = {custom_loras:[],opening_loras:[],h3_character_method:"openjutsu",openjutsu_resolution:"480",openjutsu_background:"keep",openjutsu_direct:false,engine:"h3", relight_engine:"h3", background:"keep", scope:"person", prompt:"", image_prompt:"", start:0, duration:2, size:512, performer:-1, margin:20, pitch:false, seed:42, render_size:0, h3_head_swap:false, h3_preset:"take_fast", h3_steps:0, h3_attention:"native", remove_text:false, resolution:1280, delivery_mode:"native", quality:"fast", audio_id:"", audio_start:0, length_mode:"custom", lip_sync:false, refine_lips:false, workflow_mode:"swap", preserve_people:false, preserve_identity:false, edit_area:"mask", mask_method:"auto", mask_prompt:"person", mask_points:[],subject_mode:"people",viewport_keyframes:[],viewport_character_pose:false,viewport_pose_video:"",finished_frame_position:"first",finished_frame_number:1};
 // Keep saved experimental projects readable without silently converting their recipe.
 function verifiedSetup(c={}, nativeHDRObjects=false) {
   if(c.engine==="h3" && c.workflow_mode==="swap" && c.h3_character_method==="openjutsu")return c.scope==="person" && c.mask_method==="auto" && c.edit_area===(c.openjutsu_background==="replace"?"scene":"mask") && !["audio_id","lip_sync","refine_lips","preserve_people","remove_text","h3_head_swap"].some(k=>c[k]);
@@ -25,7 +25,7 @@ function verifiedSetup(c={}, nativeHDRObjects=false) {
   if(c.workflow_mode==="camera")return c.engine==="h3" && c.edit_area==="scene" && !["audio_id","lip_sync","refine_lips","preserve_people","h3_head_swap","remove_text"].some(k=>c[k]);
   if(c.engine==="wan2")return ((c.workflow_mode==="motion" && c.edit_area==="scene") || (c.workflow_mode==="swap" && c.edit_area==="mask" && c.scope==="person" && c.mask_method==="auto")) && ["auto","people"].includes(c.subject_mode || "auto") && !["audio_id","lip_sync","refine_lips","preserve_people","remove_text","h3_head_swap"].some(k=>c[k]);
   if(c.h3_head_swap)return c.engine==="h3" && c.workflow_mode==="swap" && c.scope==="head" && !c.audio_id && !c.lip_sync && !c.remove_text && c.delivery_mode!=="enhanced1080";
-  if(c.workflow_mode==="viewport")return c.engine==="h3" && c.edit_area==="scene"
+  if(c.workflow_mode==="viewport")return ["h3","local"].includes(c.engine) && c.edit_area==="scene"
     && !c.preserve_people && !c.refine_lips && !c.audio_id && !c.lip_sync;
   if(c.engine==="local" && c.workflow_mode==="motion")return c.edit_area==="scene"
     && (["auto","people"].includes(c.subject_mode||"auto") || (c.subject_mode==="objects" && nativeHDRObjects)) && !c.preserve_people && !c.refine_lips;
@@ -33,7 +33,7 @@ function verifiedSetup(c={}, nativeHDRObjects=false) {
     && ["person","head"].includes(c.scope) && ["auto","people"].includes(c.subject_mode||"auto")
     && !c.preserve_people && !c.refine_lips;
 }
-const verifiedNotice="Choose Character performance with Wan, H3 or LTX, or Viewport to final with H3. Saved results are still available.";
+const verifiedNotice="Choose Character performance with Wan, H3 or LTX, or Viewport to final with H3 or LTX 2.5. Saved results are still available.";
 
 const icon = (name) => {
   const paths = {
@@ -150,7 +150,20 @@ export class ArtistStudio {
           <details class="gs-advanced" id="gs-model-downloads"></details>
           </div></details>
         </fieldset>
-        <div id="gs-video-options"><div class="gs-two"><label id="gs-quality-setting"><span class="gs-label">Resolution</span><select id="gs-resolution"><option value="512">512 px · small test</option><option value="768">768 px</option><option value="1280">720p · HD</option><option value="1920">1080p · Full HD</option><option value="1920-enhanced">1080p · Enhanced after H3</option></select></label>
+        <div id="gs-video-options">
+          <section id="gs-viewport-controls" class="gs-upload-group" aria-label="LTX viewport guides" hidden>
+            <label class="gs-checkbox"><input id="gs-viewport_character_pose" type="checkbox" role="switch"/><span>Character pose guidance<small id="gs-viewport-pose-note">Tracks the body and hands from a humanoid playblast. Use it when the character's motion needs extra guidance.</small></span></label>
+            <div id="gs-viewport-pose-pass" class="gs-upload-group" hidden>
+              <button id="gs-add-viewport-pose" class="gs-quiet" type="button">Upload OpenPose pass</button>
+              <button id="gs-remove-viewport-pose" class="gs-quiet" type="button" hidden>Remove pose pass</button>
+              <input id="gs-viewport-pose-file" class="gs-file" type="file" accept=".mp4,.mov,.webm,.mkv" aria-label="OpenPose pass"/>
+              <small>Optional. Export the selected clip at 24 fps, matching the viewport dimensions.</small>
+            </div>
+            <div id="gs-viewport-keyframe-list" class="gs-reference-gallery"></div>
+            <button id="gs-add-viewport-keyframe" class="gs-quiet" type="button">Add finished keyframe</button>
+            <input id="gs-viewport-keyframe-file" class="gs-file" type="file" accept="image/png,image/jpeg,image/webp" aria-label="Additional finished keyframe"/>
+            <p class="gs-note">Match each image to its camera view in the playblast. Frame numbers start at 1 in the selected 24 fps clip.</p>
+          </section><div class="gs-two"><label id="gs-quality-setting"><span class="gs-label">Resolution</span><select id="gs-resolution"><option value="512">512 px · small test</option><option value="768">768 px</option><option value="1280">720p · HD</option><option value="1920">1080p · Full HD</option><option value="1920-enhanced">1080p · Enhanced after H3</option></select></label>
           </div><div class="gs-clip-length"><span class="gs-label">Clip length</span><select id="gs-length_mode" hidden aria-hidden="true" tabindex="-1"><option value="original">Original clip length</option><option value="custom" selected>Custom length</option></select><div class="gs-length-choice" role="group" aria-label="Clip length"><button type="button" data-length-mode="original" aria-pressed="false">Use source</button><button type="button" data-length-mode="custom" aria-pressed="true">Custom</button></div><label id="gs-duration-setting"><span class="gs-label">Seconds</span><input id="gs-duration" type="number" min="0.25" max="30" step="0.25" value="2"/></label></div>
         <label id="gs-trim-start"><span class="gs-label">Start at <small>seconds</small></span><input id="gs-start" type="number" min="0" max="86400" step="0.1" value="0"/></label>
         <details class="gs-advanced"><summary>Output, speed and memory</summary><div class="gs-advanced-body"><p class="gs-note" id="gs-output-note"></p><div class="gs-note" id="gs-system-guidance" aria-live="polite"><p id="gs-hardware-note">Checking this system…</p><p id="gs-limit-note"></p><p id="gs-speed-note"></p><p id="gs-memory-note"></p><p>Measured on an RTX 4080 with 16 GB VRAM and 64 GB RAM. Other systems vary.</p></div></div></details>
@@ -302,7 +315,8 @@ export class ArtistStudio {
   }
   engineAllowed(engine) {
     if(this.config.workflow_mode==="camera")return engine==="h3";
-    return this.config.workflow_mode==="relight"?engine==="wan21":this.config.workflow_mode!=="viewport" || engine!=="wan";
+    if(this.config.workflow_mode==="viewport")return ["h3","local"].includes(engine);
+    return this.config.workflow_mode!=="relight" || engine==="wan21";
   }
   openjutsu() {return this.config.engine==="h3" && this.config.workflow_mode==="swap" && this.config.h3_character_method==="openjutsu" && !this.headSwap();}
   directViewport() {return this.lookMode!=="ready" && this.config.engine==="h3" && this.config.workflow_mode==="viewport" && !!this.config.h3_viewport_direct;}
@@ -376,7 +390,9 @@ export class ArtistStudio {
     if(type==="source"){
       this.source=null;this.hdrSourceLook=false;this.$("source").value="";this.trimTimeline?.close();
       this.trimSeeking=false;this.trimSeekTime=null;this.lastVideo=null;
-      this.config={...this.config,start:0,mask_points:[],performer:-1};
+      this.viewportKeyframeAssets?.clear();
+      this.config={...this.config,start:0,mask_points:[],performer:-1,viewport_keyframes:[],viewport_pose_video:""};
+      this.viewportPoseAsset=null;
       this.$("player").pause?.();this.$("player").removeAttribute("src");
     }else if(type==="character"){
       this.references=[];this.$("character").value="";this.referenceFingerprint=null;
@@ -413,6 +429,9 @@ export class ArtistStudio {
     if(c.length_mode==="original")c.start=0;
     if(c.workflow_mode==="relight")c.relight_engine="wan21";
     c.engine=["relight","camera"].includes(c.workflow_mode)?"h3":selectedEngine;
+    const ltxViewport=c.workflow_mode==="viewport" && c.engine==="local";
+    c.viewport_character_pose=ltxViewport && !!this.$("viewport_character_pose")?.checked;
+    if(!ltxViewport){c.viewport_keyframes=[];c.viewport_pose_video="";}
     c.preserve_people=c.engine==="h3" && c.workflow_mode==="motion" && !!this.$("preserve_people")?.checked;
     c.preserve_identity=c.workflow_mode==="relight" && !!this.$("preserve_identity")?.checked;
     if(c.workflow_mode==="relight" && c.relight_engine==="wan21"){
@@ -491,6 +510,28 @@ export class ArtistStudio {
     this.$("primary").onclick=()=>this.primary();
     this.$("camera-regenerate").onclick=()=>this.$("redesign").click();
     this.$("camera_prompt").oninput=()=>{if(this.config.workflow_mode==="camera")this.render();};
+    this.$("add-viewport-pose").onclick=()=>this.$("viewport-pose-file").click();
+    this.$("viewport-pose-file").onchange=event=>{
+      const file=event.target.files[0];event.target.value="";
+      if(file)this.upload("viewportPose",file);
+    };
+    this.$("remove-viewport-pose").onclick=()=>this.perform(epoch=>this.updateViewportPose(null,epoch));
+    this.$("add-viewport-keyframe").onclick=()=>this.$("viewport-keyframe-file").click();
+    this.$("viewport-keyframe-file").onchange=event=>{
+      const file=event.target.files[0];event.target.value="";
+      if(file)this.upload("viewportKeyframe",file);
+    };
+    const viewportKeyframes=this.$("viewport-keyframe-list");
+    viewportKeyframes.onclick=event=>{
+      const button=event.target.closest("[data-remove-keyframe]");
+      if(button)this.perform(epoch=>this.updateViewportKeyframes(
+        this.config.viewport_keyframes.filter(item=>item.asset_id!==button.dataset.removeKeyframe),epoch));
+    };
+    viewportKeyframes.onchange=event=>{
+      const input=event.target.closest("[data-keyframe]");
+      if(input)this.perform(epoch=>this.updateViewportKeyframes(this.config.viewport_keyframes.map(item=>
+        item.asset_id===input.dataset.keyframe?{...item,frame:Number(input.value)}:item),epoch));
+    };
     this.$("starting-image").onclick=()=>this.$("opening-file").click();
     this.$("opening-file").onchange=e=>{
       const file=e.target.files[0];e.target.value="";this.upload("opening",file);
@@ -577,6 +618,10 @@ export class ArtistStudio {
           if(input.value==="original")this.$("audio_start").value=0;
         }
         this.config=this.readConfig();
+        if(input.name==="gs-engine" && this.config.workflow_mode==="viewport" && this.config.engine==="local"){
+          this.config.h3_viewport_direct=false;
+          if(this.lookMode!=="ready")this.useGeneratedLook();
+        }
         if(["gs-engine","gs-workflow"].includes(input.name))this.syncForm();
         if(input.id==="gs-h3_character_method")this.syncForm();
         if(["gs-openjutsu_background","gs-wan2_background"].includes(input.id)){this.invalidateLook();this.syncForm();}
@@ -696,6 +741,71 @@ export class ArtistStudio {
       this.config=next;this.pointFrameStart=start;this.preview="mask";this.syncForm();
     } finally {video.pause();video.removeAttribute("src");video.load();}
   }
+  viewportKeyframeLimit(){
+    const {frames}=clipLength(this.config,this.source?.duration,this.source?.fps);
+    return Number.isFinite(frames)&&frames>0?Math.min(frames,360):360;
+  }
+  viewportKeyframeError(entries=this.config.viewport_keyframes,config=this.config){
+    const limit=this.viewportKeyframeLimit();
+    const opening=this.lookMode==="ready"?(config.finished_frame_position==="last"?limit:
+      config.finished_frame_position==="frame"?config.finished_frame_number:1):1;
+    const occupied=new Set([opening]);
+    for(const entry of entries||[]){
+      if(!Number.isInteger(entry.frame)||entry.frame<1||entry.frame>limit)return `Choose a keyframe between 1 and ${limit}.`;
+      if(occupied.has(entry.frame))return `Choose only one finished image for frame ${entry.frame}.`;
+      occupied.add(entry.frame);
+    }
+    return "";
+  }
+  async updateViewportKeyframes(entries,epoch){
+    const config={...this.readConfig(),viewport_keyframes:entries};
+    if(entries.some(item=>!Number.isInteger(item.frame)||item.frame<1||item.frame>360))throw new Error("Enter a whole frame number between 1 and 360.");
+    if(this.project){
+      const id=this.project.id;
+      const updated=await this.request(`/projects/${id}/config`,this.configBody(config));
+      if(epoch!==this.resetEpoch||this.project?.id!==id)return;
+      this.project=updated;
+    }
+    if(epoch===this.resetEpoch)this.config=config;
+  }
+  async updateViewportPose(asset,epoch){
+    const config={...this.readConfig(),viewport_pose_video:asset?.id||""};
+    if(this.project){
+      const id=this.project.id;
+      const updated=await this.request(`/projects/${id}/config`,this.configBody(config));
+      if(epoch!==this.resetEpoch||this.project?.id!==id)return;
+      this.project=updated;
+    }
+    if(epoch===this.resetEpoch){this.viewportPoseAsset=asset;this.config=config;}
+  }
+  renderViewportControls(working){
+    const controls=this.$("viewport-controls");
+    controls.hidden=this.config.workflow_mode!=="viewport"||this.config.engine!=="local";
+    if(controls.hidden)return;
+    const entries=this.config.viewport_keyframes||[],disabled=this.busy||working;
+    const pose=this.modelStatus?.ltx_viewport_pose;
+    const poseAsset=this.config.viewport_pose_video&&(this.project?.viewport_pose_asset||this.viewportPoseAsset);
+    this.$("viewport-pose-pass").hidden=!this.config.viewport_character_pose;
+    this.$("add-viewport-pose").textContent=poseAsset?`Replace ${poseAsset.name}`:"Upload OpenPose pass";
+    this.$("add-viewport-pose").disabled=disabled||pose?.manual_ready===false;
+    this.$("remove-viewport-pose").hidden=!poseAsset;
+    this.$("remove-viewport-pose").disabled=disabled;
+    this.$("viewport-pose-note").textContent=pose?.manual_ready===false?`Setup needed: ${pose.manual_missing.join(", ")}.`:
+      pose?.ready===false?"Upload an OpenPose pass to guide the character's movement.":
+      "Tracks the body and hands from a humanoid playblast. You can also supply an OpenPose pass from your rig.";
+    const assets=new Map((this.project?.viewport_keyframes||[]).map(({asset})=>[asset.id,asset]));
+    for(const [id,asset] of this.viewportKeyframeAssets||[])assets.set(id,asset);
+    const list=this.$("viewport-keyframe-list");
+    const markup=entries.map((entry,index)=>{
+      const asset=assets.get(entry.asset_id);
+      return `<figure>${asset?.url?`<img src="${escape(asset.url)}" alt=""/>`:""}<figcaption>${escape(asset?.name || `Keyframe ${index+1}`)}</figcaption><label>Frame <input type="number" min="1" max="${this.viewportKeyframeLimit()}" step="1" value="${entry.frame}" data-keyframe="${escape(entry.asset_id)}" aria-label="Frame number for keyframe ${index+1}" ${disabled?"disabled":""}/></label><button class="gs-icon-button" type="button" data-remove-keyframe="${escape(entry.asset_id)}" aria-label="Remove keyframe ${index+1}" ${disabled?"disabled":""}>${icon("close")}</button></figure>`;
+    }).join("");
+    if(this.viewportKeyframeMarkup!==markup){
+      list.innerHTML=markup;
+      this.viewportKeyframeMarkup=markup;
+    }
+    this.$("add-viewport-keyframe").disabled=disabled||!this.source||entries.length>=8||entries.length+1>=this.viewportKeyframeLimit();
+  }
   async upload(type,file) {
     const files=Array.isArray(file)?file:[file];
     if(!files.length || !files[0]){this.message("No file was received. Click the upload area to choose it instead.",true);return;}
@@ -720,7 +830,7 @@ export class ArtistStudio {
         if(/\.exr$/i.test(file.name)&&["opening","ready"].includes(type)){
           nativeAsset=await uploadNativePerformanceOpening(this.api,file,this.config,this.modelStatus?.native_hdr_performance,controller.signal);
         }else{
-          r=await this.api.fetchApi(`${ROOT}/upload?kind=${type==="source"?"video":type==="audio"?"audio":"image"}`,{method:"POST",body:form,signal:controller.signal,timeoutMs:null});
+          r=await this.api.fetchApi(`${ROOT}/upload?kind=${["source","viewportPose"].includes(type)?"video":type==="audio"?"audio":"image"}`,{method:"POST",body:form,signal:controller.signal,timeoutMs:null});
         }
       }catch(error){
         if(error.name==="AbortError")throw new Error("Loading was stopped or took longer than five minutes. Try a trimmed MP4 or choose the file again.");
@@ -736,7 +846,22 @@ export class ArtistStudio {
       }
       asset.url=this.api.apiURL("/view?"+new URLSearchParams({filename:asset.file.split("/").pop(),subfolder:asset.file.split("/").slice(0,-1).join("/"),type:"input"}));
       if(["character","ready","opening"].includes(type))this.hdrSourceLook=false;
-      if(type==="audio"){
+      if(type==="viewportKeyframe"){
+        const entries=this.config.viewport_keyframes||[],limit=this.viewportKeyframeLimit();
+        if(entries.length>=8||entries.some(item=>item.asset_id===asset.id))throw new Error("Choose up to eight separate finished keyframes.");
+        let frame=Math.max(2,Math.round(limit/2));
+        while(frame<=limit && this.viewportKeyframeError([...entries,{asset_id:asset.id,frame}]))frame++;
+        if(frame>limit){
+          frame=1;
+          while(frame<=limit && this.viewportKeyframeError([...entries,{asset_id:asset.id,frame}]))frame++;
+        }
+        if(frame>limit)throw new Error("Check the existing keyframe positions before adding another image.");
+        this.viewportKeyframeAssets??=new Map();
+        this.viewportKeyframeAssets.set(asset.id,asset);
+        await this.updateViewportKeyframes([...entries,{asset_id:asset.id,frame}],epoch);
+      }else if(type==="viewportPose"){
+        await this.updateViewportPose(asset,epoch);
+      }else if(type==="audio"){
         const config=this.referenceAudioConfig(asset);
         if(this.project){const id=this.project.id,updated=await this.request(`/projects/${id}/config`,this.configBody(config));if(epoch!==this.resetEpoch)return;if(this.project?.id===id)this.project=updated;}
         this.audio=asset;this.pendingReference=false;this.config=config;this.syncForm();
@@ -755,7 +880,7 @@ export class ArtistStudio {
       }else{
         this[type]=asset;this.project=null;this.storage.removeItem("genj-studio-project");this.lastVideo=null;
       }
-      if(type==="source"){this.hdrSourceLook=false;this.trimSeeking=false;this.trimSeekTime=null;this.promptStage=null;this.config.duration=Math.min(2,asset.duration);this.config.start=0;this.config.mask_points=[];this.pointFrameStart=0;this.syncForm();}
+      if(type==="source"){this.config.viewport_keyframes=[];this.config.viewport_pose_video="";this.viewportKeyframeAssets?.clear();this.viewportPoseAsset=null;this.hdrSourceLook=false;this.trimSeeking=false;this.trimSeekTime=null;this.promptStage=null;this.config.duration=Math.min(2,asset.duration);this.config.start=0;this.config.mask_points=[];this.pointFrameStart=0;this.syncForm();}
       }
       this.message("");this.render();
     });
@@ -940,8 +1065,9 @@ export class ArtistStudio {
     this.container.querySelectorAll('input[name="gs-workflow"]').forEach(input=>{
       const allowed=["swap","viewport","camera","relight"].includes(input.value);input.closest("label").hidden=!allowed;input.disabled=!allowed || this.busy || this.project?.phase==="working";
     });
+    const ltxViewportReady=!this.modelStatus||!!this.modelStatus.ltx_viewport_pose;
     this.container.querySelectorAll('input[name="gs-engine"]').forEach(input=>{
-      const allowed=viewport||camera?input.value==="h3":relight?input.value==="wan21":["wan","h3","local","wan2"].includes(input.value);
+      const allowed=viewport?(input.value==="h3"||input.value==="local"&&ltxViewportReady):camera?input.value==="h3":relight?input.value==="wan21":["wan","h3","local","wan2"].includes(input.value);
       input.closest("label").hidden=!allowed;input.disabled=!allowed || this.busy || this.project?.phase==="working";
     });
     for(const id of ["mask_method","subject_mode"]){const input=this.$(id);input.closest("label").hidden=id!=="subject_mode" || !this.nativeHDRObjects();}
@@ -957,7 +1083,7 @@ export class ArtistStudio {
     }
     const help=this.container.querySelector(".gs-model-help");
     const modelSegment=this.container.querySelector('.gs-settings fieldset .gs-segment');
-    if(modelSegment)modelSegment.style.gridTemplateColumns=viewport||camera?"1fr":"repeat(2,minmax(0,1fr))";
+    if(modelSegment)modelSegment.style.gridTemplateColumns=camera?"1fr":"repeat(2,minmax(0,1fr))";
     this.$("engine-legend").textContent=relight?"Relight model":"Generate with";
     const helpKey=(relight?"relight:"+(this.config.relight_engine||"h3")+":":camera?"camera:":head?"head:":viewport?"viewport:":"character:")+this.config.engine+":"+(this.config.h3_character_method||"control");
     if(help && help.dataset.verified!==helpKey){
@@ -1102,6 +1228,7 @@ export class ArtistStudio {
     this.$("remove_text").checked=!!this.config.remove_text;
     this.$("preserve_identity").checked=!!this.config.preserve_identity;
     this.$("lip_sync").checked=!!this.config.lip_sync;
+    if(this.$("viewport_character_pose"))this.$("viewport_character_pose").checked=!!this.config.viewport_character_pose;
     this.$("audio-mode").value=this.pendingReference || this.config.audio_id?"reference":"original";
     this.$("refine_lips").checked=!!this.config.refine_lips;
     if(this.$("image_prompt"))this.$("image_prompt").value=this.config.image_prompt || "";
@@ -1165,7 +1292,7 @@ export class ArtistStudio {
     }
     if(epoch!==this.resetEpoch)return false;
     this.project=null;this.source=null;this.character=null;this.audio=null;this.pendingReference=false;
-    this.voiceJob=null;this.voiceSample=null;this.config={...defaults};this.preview="mask";
+    this.voiceJob=null;this.voiceSample=null;this.config={...defaults};this.viewportKeyframeAssets?.clear();this.viewportPoseAsset=null;this.preview="mask";
     this.references=[];this.readyAsset=null;this.lookMode="build";this.hdrSourceLook=false;this.referenceFingerprint=null;this.resultFingerprint=null;this.reviewPreviewKey=null;this.pointFrameStart=0;
     this.voicePolling=false;this.polling=false;this.$("audio-settings").open=false;
     if(this.activeDialog?.open)this.activeDialog.close();this.activeDialog=null;
@@ -1186,6 +1313,8 @@ export class ArtistStudio {
       const epoch=this.resetEpoch,project=await this.request("/projects/"+id);
       if(epoch!==this.resetEpoch)return;
       this.project=project;
+      this.viewportKeyframeAssets?.clear();
+      this.viewportPoseAsset=this.project.viewport_pose_asset||null;
       this.source=this.project.source;this.character=this.project.character;this.audio=this.project.audio || this.project.reference_audio || null;this.pendingReference=false;this.config={...defaults,h3_character_method:"control",openjutsu_direct:false,...this.project.config};
       this.references=this.project.references || (this.character?[this.character]:[]);this.readyAsset=this.project.starting_asset || null;this.hdrSourceLook=this.project.look_mode==="source_hdr";this.lookMode=this.hdrSourceLook?"build":this.project.look_mode || "build";
       if(!this.project.config.workflow_mode){
@@ -1484,6 +1613,11 @@ export class ArtistStudio {
     if(preservePeople){this.$("lip_sync").checked=false;this.$("refine_lips").checked=false;this.$("lip_sync").disabled=true;this.$("refine_lips").disabled=true;}
     this.container.querySelectorAll('input[name="gs-look"]').forEach(choice=>choice.disabled=working || this.busy || preservePeople && choice.value==="ready");
     if(this.config.length_mode==="original"){this.$("start").value=0;this.$("start").disabled=true;}
+    this.renderViewportControls(working);
+    const poseSwitch=this.$("viewport_character_pose");
+    const poseStatus=this.modelStatus?.ltx_viewport_pose;
+    const poseReady=this.config.viewport_pose_video?poseStatus?.manual_ready:poseStatus?.ready;
+    poseSwitch.disabled=working||this.busy||poseStatus?.manual_ready===false&&!this.config.viewport_character_pose;
     const btn=this.$("primary"),hasAssets=!!this.source && this.hasLook();
     let label=this.directViewport()?"Prepare motion guidance":this.lookMode==="ready"?"Review finished frame":"Create starting frame",note=!this.source?"Add a source video to begin.":"Add reference images or a finished frame on the left.";
     if(hasAssets)note=this.directViewport()?"Review the source motion before generating the video.":"We’ll prepare the source and create the starting frame. Review it before generating video.";
@@ -1562,7 +1696,11 @@ export class ArtistStudio {
     if(this.hdrSourceLook && !p?.opening_input && !working){label=p?.phase==="review"?"Use HDR source frame":"Review HDR source";note=p?.phase==="review"?"Check the source movement, then use its HDR frame.":"Prepare and review the source before choosing its HDR appearance.";}
     if(recoverLength){label="Choose clip length";this.$("action-note").classList.add("is-warning");}
     else this.$("action-note").classList.remove("is-warning");
-    btn.innerHTML=escape(label)+icon(working?"frames":"arrow");btn.disabled=working || this.busy || (!recoverLength && (!hasAssets || missingSelection || (reference && !this.audio) || enhancementUnavailable || unsupportedViewport || unsupportedRelight || wan21RelightUnavailable || unsupportedSubject || openjutsuUnavailable));
+    const keyframeError=viewport && this.config.engine==="local"?this.viewportKeyframeError():"";
+    const poseUnavailable=viewport&&this.config.engine==="local"&&this.config.viewport_character_pose&&poseReady===false;
+    if(poseUnavailable&&!working&&!this.busy){label="Set up character pose";note="Upload an OpenPose pass, complete pose setup or switch off the toggle.";}
+    if(keyframeError&&!working&&!this.busy){label="Check finished keyframes";note=keyframeError;}
+    btn.innerHTML=escape(label)+icon(working?"frames":"arrow");btn.disabled=!!keyframeError || poseUnavailable || working || this.busy || (!recoverLength && (!hasAssets || missingSelection || (reference && !this.audio) || enhancementUnavailable || unsupportedViewport || unsupportedRelight || wan21RelightUnavailable || unsupportedSubject || openjutsuUnavailable));
     this.$("action-note").textContent=note;this.$("cancel").hidden=!working;this.$("cancel").disabled=this.busy;
     this.$("image-editor").hidden=this.directViewport() || working || this.lookMode==="ready" || this.config.engine==="seedance" || !hasAssets || ["done","draft"].includes(phase);
     this.$("video-options").hidden=!p?.opening_input && !this.directViewport() && !this.headSwap();

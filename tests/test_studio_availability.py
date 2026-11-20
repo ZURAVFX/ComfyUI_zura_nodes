@@ -97,7 +97,7 @@ class AvailabilityTests(unittest.TestCase):
                 require_verified_setup(config, stage)
 
     def test_viewport_routes_and_stage_boundaries(self):
-        for engine, stage in (("h3", "h3"),):
+        for engine, stage in (("h3", "h3"), ("local", "restyle")):
             config = self.config(engine=engine, workflow_mode="viewport", edit_area="scene")
             self.assertTrue(verified_setup(config))
             require_verified_setup(config, stage)
@@ -106,9 +106,9 @@ class AvailabilityTests(unittest.TestCase):
             for changes in ({"edit_area": "mask"}, {"audio_id": "a"*32}, {"lip_sync": True}):
                 self.assertFalse(verified_setup({**config, **changes}))
 
-    def test_ltx_viewport_remains_development_only_until_keyframe_workflow_qualifies(self):
+    def test_ltx_viewport_rejects_masked_setup(self):
         with self.assertRaisesRegex(ValueError, "not available in Studio"):
-            require_verified_setup(self.config(engine="local", workflow_mode="viewport"))
+            require_verified_setup({**self.config(engine="local", workflow_mode="viewport"), "edit_area": "mask"})
 
     def test_direct_stage_bypass_is_rejected(self):
         for stage in ("h3", "h3_enhance", "draft", "final", "background", "restyle"):

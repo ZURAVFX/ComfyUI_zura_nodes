@@ -68,6 +68,30 @@ ui.selectClip(image.id);ui.$('clip-end').value=27;ui.$('clip-end').onchange();as
 const timelineGraph=buildDirectorGraph({...ui.config(),prompt:"Gesture test"},info);assert.ok(Object.values(timelineGraph).some(n=>n.inputs?.timeline_data?.includes('"length":8')),'Image duration reaches the native timeline');
 ui.save();const gestureReload=new DirectorWorkspace(owner);assert.deepEqual(gestureReload.draft.clips,ui.draft.clips);gestureReload.dispose();
 ui.draft.clips=originalClips;ui.render();
+const timeline=ui.$('timeline-body');let focusTarget;
+timeline.focus=()=>{focusTarget=timeline;};
+function pressDelete(target,modifiers={}){
+  const event=new window.Event('keydown',{bubbles:true,cancelable:true});
+  Object.assign(event,{key:'Delete',...modifiers});
+  target.dispatchEvent(event);
+  return event.defaultPrevented;
+}
+const directionButton=timeline.querySelector(`[data-clip="${direction.id}"]`);
+timeline.onpointerdown(pointer(directionButton,direction.startFrame));
+assert.equal(pressDelete(timeline),false,'Delete does not interrupt an active drag');
+timeline.onpointerup(pointer(timeline,direction.startFrame));
+assert.equal(focusTarget,timeline,'Clicking a cue keeps keyboard focus on the surviving timeline element');
+assert.equal(pressDelete(ui.$('clip-text')),false,'Editing the cue text keeps the native Delete key');
+assert.equal(pressDelete(ui.$('clip-end')),false,'Editing a frame number keeps the native Delete key');
+assert.equal(pressDelete(ui.$('prompt')),false,'Delete outside the timeline does not remove a cue');
+assert.equal(pressDelete(timeline,{ctrlKey:true}),false,'Modified Delete is not handled');
+ui.uploading=true;assert.equal(pressDelete(timeline),false,'Delete is disabled during an upload');ui.uploading=false;
+assert.equal(pressDelete(focusTarget),true);
+assert.equal(ui.clip(),null);
+assert.deepEqual(ui.draft.clips.map(c=>c.id),originalClips.filter(c=>c.id!==direction.id).map(c=>c.id));
+assert.equal(pressDelete(timeline),false,'A repeated keypress cannot remove another cue');
+const deletionReload=new DirectorWorkspace(owner);assert.deepEqual(deletionReload.draft.clips,ui.draft.clips);deletionReload.dispose();
+ui.draft.clips=originalClips;ui.render();
 const clips=structuredClone(ui.draft.clips),modelElement=ui.$('model');
 ui.$('engine').value='h3';ui.$('engine').onchange();assert.equal(ui.draft.engine,'h3');assert.deepEqual(ui.draft.clips,clips);assert.equal(ui.$('model'),modelElement);assert.equal(ui.draft.steps,8);assert.equal(ui.$('steps').disabled,true);
 ui.$('engine').value='ltx';ui.$('engine').onchange();assert.deepEqual(ui.draft.clips,clips);

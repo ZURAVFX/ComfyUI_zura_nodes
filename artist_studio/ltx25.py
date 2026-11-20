@@ -31,6 +31,10 @@ QUALIFIED_MODELS = {
 VIEWPORT_MODELS = {name: value for name, value in QUALIFIED_MODELS.items()
                    if name not in ("bbox_detector", "pose_estimator")}
 VIEWPORT_MODELS["union"] = "ltx-2.5-22b-ic-lora-layout-to-render-1.0.safetensors"
+VIEWPORT_POSE_MODELS = {"pose_union": QUALIFIED_MODELS["union"],
+                        "bbox_detector": QUALIFIED_MODELS["bbox_detector"],
+                        "pose_estimator": QUALIFIED_MODELS["pose_estimator"]}
+
 
 
 def resolve_finished_frame(config, delivered_frames):
@@ -505,7 +509,10 @@ def build_viewport_plan(project, *, scenario, timeline, models, text_encoder_inp
         raise ValueError("Start a new LTX render to prepare its files safely.")
     source = _asset(project.get("source"), "viewport video")
     look = _asset(project.get("opening_input"), "approved composed scene plate")
-    expected_models = VIEWPORT_MODELS
+    character_pose = c.get("viewport_character_pose", False)
+    pose_pass = project.get("viewport_pose_asset") if character_pose else None
+    pose_models = ({"pose_union": VIEWPORT_POSE_MODELS["pose_union"]} if pose_pass else VIEWPORT_POSE_MODELS)
+    expected_models = {**VIEWPORT_MODELS, **(pose_models if character_pose else {})}
     expected_pins = set(expected_models) | {"text_encoder"}
     if models != expected_models or set(model_pins) != expected_pins or any(not v for v in model_pins.values()):
         raise ValueError("Resolve and pin the LTX 2.5 Layout-to-Render model, adapter, encoder and VAEs first.")
@@ -523,6 +530,15 @@ def build_viewport_plan(project, *, scenario, timeline, models, text_encoder_inp
     frames = source_frames
     padded = frames + (1 - frames) % 8
     finished_anchor = _finished_anchor(project, source_frames)
+    occupied = {0 if finished_anchor is None else finished_anchor}
+    keyframes = []
+    for entry in sorted(project.get("viewport_keyframes", []), key=lambda item: item["frame"]):
+        frame = resolve_finished_frame({"finished_frame_position": "frame",
+                                        "finished_frame_number": entry["frame"]}, source_frames)
+        if frame in occupied:
+            raise ValueError(f"Choose only one finished image for frame {frame + 1}.")
+        occupied.add(frame)
+        keyframes.append({"frame_idx": frame, "asset": _asset(entry["asset"], "finished keyframe")})
     width, height = timeline.get("width"), timeline.get("height")
     if type(width) is not int or type(height) is not int or min(width, height) < 1:
         raise ValueError("Verify the viewport video's dimensions first.")
@@ -544,7 +560,7 @@ def build_viewport_plan(project, *, scenario, timeline, models, text_encoder_inp
                 "Follow the guide camera movement, framing, timing, object placement and animation throughout. "
                 + str(c.get("prompt", "")).strip())
     negative = "flicker, sliding feet, warped anatomy, text, subtitles"
-    basis = {"schema": SCHEMA, "route": "viewport_layout_to_render", "recipe_version": 3,
+    basis = {"schema": SCHEMA, "route": "viewport_layout_to_render", "recipe_version": 4,
              "run_namespace": namespace,
              "scenario": scenario, "review": project["review"], "approval": approval_key,
              "opening_key": project["opening_key"], "source": source, "opening": look,
@@ -561,6 +577,12 @@ def build_viewport_plan(project, *, scenario, timeline, models, text_encoder_inp
             fps=fps, width=delivery[0], height=delivery[1])
     if finished_anchor is not None:
         basis["finished_frame_index"] = finished_anchor
+    if keyframes:
+        basis["viewport_keyframes"] = keyframes
+    if character_pose:
+        basis["viewport_pose_attention"] = 0.8
+        if pose_pass:
+            basis["viewport_pose_pass"] = _asset(pose_pass, "OpenPose video")
     custom_loras = _checked_loras(custom_loras)
     if custom_loras:
         basis["custom_loras"] = copy.deepcopy(custom_loras)
@@ -612,6 +634,21 @@ def build_viewport_plan(project, *, scenario, timeline, models, text_encoder_inp
     node(g, "save_layout", "SaveImage", images=images, filename_prefix=prefix)
     artifacts["layout"] = {"phase": "motion", "node": "save_layout", "kind": "images",
                            "prefix": prefix, "frames": padded, "raster": base, "guide": "raw_layout"}
+    if character_pose:
+        if pose_pass:
+            pose_video = node(g, "pose_video", "LoadVideo", file=pose_pass["file"])
+            pose_video = node(g, "pad_pose_video", "GenjLTXFramePad", video=pose_video)
+            pose = node(g, "pose", "GetVideoComponents", video=pose_video)
+        else:
+            pose = node(g, "pose", "DWPreprocessor", image=images, detect_body="enable", detect_hand="enable",
+                        detect_face="disable", resolution=512, scale_stick_for_xinsr_cn="disable",
+                        bbox_detector=models["bbox_detector"], pose_estimator=models["pose_estimator"])
+        pose = node(g, "fit_pose", "ImageScale", image=pose, width=base[0], height=base[1],
+                    upscale_method="bilinear", crop="disabled")
+        prefix = "zura/ltx25/" + key + "/pose/frame"
+        node(g, "save_pose", "SaveImage", images=pose, filename_prefix=prefix)
+        artifacts["pose"] = {"phase": "motion", "node": "save_pose", "kind": "images",
+                             "prefix": prefix, "frames": padded, "raster": base, "guide": "viewport_pose"}
 
     def sample(phase, raster, initial_name=None):
         g = graph(phase)
@@ -635,6 +672,21 @@ def build_viewport_plan(project, *, scenario, timeline, models, text_encoder_inp
         guided = node(g, "appearance_guide", "LTXAddVideoICLoRAGuide", positive=guided, negative=[guided[0], 1],
                       vae=vae, latent=[guided[0], 2], image=look_image, frame_idx=-1 if finished_anchor is None else finished_anchor, strength=1,
                       latent_downscale_factor=adapter_factor, crop="center", use_tiled_encode=False, tile_size=256, tile_overlap=64)
+        if character_pose:
+            adapter = node(g, "pose_adapter", "LTXICLoRALoaderModelOnly", model=adapter,
+                           lora_name=models["pose_union"], strength_model=1)
+            pose = load(g, phase, "pose")
+            guided = node(g, "pose_guide", "LTXAddVideoICLoRAGuideAdvanced", positive=guided,
+                          negative=[guided[0], 1], vae=vae, latent=[guided[0], 2], image=pose,
+                          frame_idx=0, strength=1, attention_strength=basis["viewport_pose_attention"],
+                          latent_downscale_factor=[adapter[0], 1], crop="disabled",
+                          use_tiled_encode=False, tile_size=256, tile_overlap=64)
+        for index, keyframe in enumerate(keyframes, 1):
+            image = node(g, f"keyframe_image_{index}", "LoadImage", image=keyframe["asset"]["file"])
+            guided = node(g, f"keyframe_guide_{index}", "LTXAddVideoICLoRAGuide", positive=guided,
+                          negative=[guided[0], 1], vae=vae, latent=[guided[0], 2], image=image,
+                          frame_idx=keyframe["frame_idx"], strength=1, latent_downscale_factor=adapter_factor,
+                          crop="center", use_tiled_encode=False, tile_size=256, tile_overlap=64)
         # The dedicated Layout-to-Render workflow samples video only. Adding
         # the replacement-speech route's empty audio stream changes inference,
         # even when that generated audio is discarded during delivery.
@@ -660,12 +712,11 @@ def build_viewport_plan(project, *, scenario, timeline, models, text_encoder_inp
     images = node(g, "decode", "VAEDecodeTiled", samples=video, vae=vae, tile_size=256, overlap=64, temporal_size=128, temporal_overlap=8)
     images = node(g, "trim_frames", "ImageFromBatch", image=images, batch_index=0, length=source_frames)
     images = node(g, "delivery_size", "ImageScale", image=images, width=delivery[0], height=delivery[1], upscale_method="lanczos", crop="disabled")
-    images = node(g, "hold_output", "GenjHoldToModelLength", images=images, stride=8)
     args = {"images": images, "fps": fps, "bit_depth": 8, "color_space": "sRGB", "codec": "none"}
     if scenario == "original":
         components = node(g, "source_components", "GetVideoComponents", video=reviewed(g))
-        audio = node(g, "trim_audio", "TrimAudioDuration", audio=[components[0], 1], start_index=0., duration=source_frames / fps)
-        args["audio"] = node(g, "hold_audio", "GenjPadAudioToFrames", audio=audio, frames=["hold_output", 1], fps=fps)
+        args["audio"] = node(g, "trim_audio", "TrimAudioDuration", audio=[components[0], 1],
+                             start_index=0., duration=source_frames / fps)
     video = node(g, "create_video", "CreateVideo", **args)
     node(g, "save_video", "ZuraSaveProRes4444", video=video, filename_prefix="zura/ltx25/" + key + "/result")
     if c.get('ae_frame_contract') is not None:
@@ -680,8 +731,7 @@ def build_viewport_plan(project, *, scenario, timeline, models, text_encoder_inp
             "stage1_handoff": "Layout and appearance guides remain native and are cropped before caching.",
             "qualification": "Experimental viewport route; current-media visual testing required.",
             "source_frames": source_frames, "generation_frames": padded,
-            "delivered_frames": source_frames if c.get('ae_frame_contract') is not None else padded,
-            "trimmed_tail_frames": padded-source_frames if c.get('ae_frame_contract') is not None else 0,
+            "delivered_frames": source_frames, "trimmed_tail_frames": padded - source_frames,
             "appearance_reference_role": ("composed_scene_plate_at_rope_minus_one" if finished_anchor is None
                                           else "finished_frame_at_selected_time"),
             "graph_hashes": {phase: digest(value) for phase, value in phases.items()}}
@@ -699,6 +749,7 @@ def image_sequence_receipt(spec, history, *, output_directory):
     if not isinstance(outputs, list) or len(outputs) != spec["frames"]:
         raise ValueError("The motion frame count does not match the selected clip.")
     entries, counters = [], []
+    has_pose = False
     for item in outputs:
         if not isinstance(item, dict) or item.get("type") != "output":
             raise ValueError("Only native saved motion frames may guide LTX.")
@@ -714,10 +765,15 @@ def image_sequence_receipt(spec, history, *, output_directory):
             if image.format != "PNG" or list(image.size) != spec["raster"]:
                 raise ValueError("The motion frame dimensions do not match the reviewed clip.")
             image.verify()
+        if spec.get("guide") == "viewport_pose" and not has_pose:
+            with Image.open(path) as image:
+                has_pose = bool(image.convert("RGB").point(lambda x: 255 if x > 24 else 0).getbbox())
         if file_digest(path) != value:
             raise ValueError("The motion frames changed during verification.")
         entries.append({"filename": filename, "sha256": value, "raster": spec["raster"]})
         counters.append(int(match[1]))
+    if spec.get("guide") == "viewport_pose" and not has_pose:
+        raise ValueError("No character pose was detected. Upload an OpenPose pass or switch off Character pose guidance.")
     names = [entry["filename"] for entry in entries]
     if (names != sorted(names) or len(set(names)) != len(names) or
             counters != list(range(counters[0], counters[0] + len(counters)))):

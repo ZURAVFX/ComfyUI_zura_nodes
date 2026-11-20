@@ -2,8 +2,21 @@ import {LTX_DISTILLED_SIGMAS,LTX_FRAME_VIDEO_MODELS as LTX} from './ltx_frame_vi
 
 export const RTX_UPSCALE='nvidia_rtx';
 export const RTX_NODE='RTXVideoSuperResolution';
+export const H3_IC_REFINE='h3_regenerate_ic';
+const H3_IC_NODE='H3VideoUpsamplerToFile';
+const H3_IC_AUDIO_VAE='minimax_h3_audio_vae_fp32.safetensors';
+const H3_IC_UPSCALER='minimax_h3_latent_upscaler_3d_conv_v1_bf16.safetensors';
+const H3_IC_LORA='minimax_h3_open_regenerate_2k_ic_lora_avg_rank_21_bf16.safetensors';
+const H3_IC_HYPERFLOW='minimax_h3_hyperflow_8step_v1.0.safetensors';
 const LTX_NODES=['GetImageSize','GenjHoldToModelLength','ImageScale','ImageFromBatch','VAEDecodeTiled'];
 export const UPSCALE_MODELS = {
+  [H3_IC_REFINE]: {
+    label:'MiniMax H3 · Regenerate IC', vae:'minimax_h3_video_vae_int8_convrot.safetensors',
+    weights:[['UNETLoader','unet_name','minimax_h3_ref2va_int8_convrot.safetensors'],
+      ['VAELoader','vae_name',H3_IC_AUDIO_VAE],['LatentUpscaleModelLoader','model_name',H3_IC_UPSCALER],
+      [H3_IC_NODE,'lora',H3_IC_LORA],['LoraLoaderModelOnly','lora_name',H3_IC_HYPERFLOW]],
+    nodes:[H3_IC_NODE],output:'H3_Regenerate_IC',
+  },
   [RTX_UPSCALE]: {
     label:'NVIDIA RTX Super Resolution', nodes:[RTX_NODE], output:'NVIDIA_RTX',
   },
@@ -78,7 +91,7 @@ export function upscaleAvailability(info,model=DEFAULT_UPSCALE_MODEL){
   const recipe=UPSCALE_MODELS[model];
   const nodes=model===RTX_UPSCALE?[]:recipe.weights?recipe.weights.map(([node])=>node):[recipe.loader||'UNETLoader','KSampler'];
   if(recipe.vae)nodes.push('VAELoader');
-  const common=recipe.hdr?['VAELoader','CreateVideo']:REQUIRED;
+  const common=model===H3_IC_REFINE?['LoadVideo','Video Slice']:recipe.hdr?['VAELoader','CreateVideo']:REQUIRED;
   const missing=[...new Set([...common,...recipe.nodes,...nodes])].filter(type=>!info[type]);
   const weights=installedWeights(info,recipe);
   weightRequirements(recipe).forEach(([, , file],index)=>{if(!weights[index])missing.push(file);});
@@ -157,6 +170,14 @@ function ltxUpscale(add,mode,{width,height,prompt='',negativePrompt='',refineSca
     resize('delivery_size',trimmed,targetWidth,targetHeight,'Restoring exact output dimensions');
 }
 
+export function h3RefineProblem({width,height,frames,fps,h3Megapixels=2}){
+  if(![2,3.5].includes(h3Megapixels))return 'Choose 1080p or 2K refinement.';
+  if(fps!==24)return 'H3 IC refinement uses 24 fps footage.';
+  if(!Number.isInteger(frames)||frames<9||frames>120)return 'Choose a clip between 9 and 120 frames for H3 IC refinement.';
+  if(!(width>0&&height>0)||width*height>=h3Megapixels*1024**2)return 'Choose an output larger than the source video.';
+  return '';
+}
+
 export function upscaleFrameConfig(config,sourceFrames,time){
   const frame=Math.max(0,Math.min(sourceFrames-1,Math.floor((time+1e-6)*config.fps)));
   // Refine needs short temporal context. Spatial and restoration routes can
@@ -193,6 +214,23 @@ export function buildUpscaleGraph(config,info){
   };
   const loaded=add('source','LoadVideo',{file},'Reading source video');
   const selected=start||duration?add('trim','Video Slice',{video:loaded,start_time:start,duration,strict_duration:false},'Reading the selected clip'):loaded;
+  if(mode===H3_IC_REFINE){
+    const {h3Megapixels=2,width,height,frames,fps}=config;
+    const problem=h3RefineProblem({width,height,frames,fps,h3Megapixels});
+    if(problem)throw Error(problem);
+    const [model,audioVae,upscaler,adapter]=weights;
+    const settings=Object.fromEntries(Object.entries(info[H3_IC_NODE].input.required)
+      .filter(([,spec])=>spec[1]?.default!==undefined).map(([key,spec])=>[key,spec[1].default]));
+    const diffusion=add('model','UNETLoader',{unet_name:model,weight_dtype:'default'},'Loading MiniMax H3 Ref2VA');
+    const videoVae=add('vae','VAELoader',{vae_name:vae},'Loading H3 video VAE');
+    const audio=add('audio_vae','VAELoader',{vae_name:audioVae},'Loading H3 audio VAE');
+    add('save',H3_IC_NODE,{...settings,video:selected,model:diffusion,vae:videoVae,audio_vae:audio,
+      upscale_model:upscaler,lora:adapter,method:'ic',megapixels:h3Megapixels,denoise:.8,tile_tokens:0,
+      attention:'sparse',chunking:true,tiling:true,face_pass:'off',codec:'h264',quality:'max',
+      frame_gen:'off',frame_rate:'source',filename_prefix:'ZURA STUDIO/upscale/'+recipe.output},
+      'Regenerating detail from the draft and saving MP4');
+    return graph;
+  }
   const images=add('components','GetVideoComponents',{video:selected},'Separating picture and audio');
   const fullSizePreview=info.ZuraSaveProRes4444.input?.optional?.full_size_preview?{full_size_preview:true}:{};
   const finish=upscaled=>{

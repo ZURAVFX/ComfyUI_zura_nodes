@@ -7,7 +7,7 @@ import {playbackFile} from './studio_delivery_formats.js';
 import {captureResultExports,installResultExportStyles} from './studio_result_exports.js';
 import {submitOwnedGraph,recoverOwnedSubmission,cancelOwnedJob} from './studio_owned_jobs.js';
 import {durationLabel,installOwnedNodeProgress} from './studio_progress.js';
-import {buildUpscaleGraph,DEFAULT_UPSCALE_MODEL,RTX_UPSCALE,UPSCALE_MODELS,rtxCapabilities,rtxSize,upscaleAvailability,upscaleFrameConfig,addUpscaleFramePreviews} from './studio_upscale_recipes.js';
+import {buildUpscaleGraph,DEFAULT_UPSCALE_MODEL,H3_IC_REFINE,UPSCALE_MODELS,h3RefineProblem,RTX_UPSCALE,rtxCapabilities,rtxSize,upscaleAvailability,upscaleFrameConfig,addUpscaleFramePreviews} from './studio_upscale_recipes.js';
 
 import {EXTEND_DEFAULT,EXTEND_MODELS,EXTEND_SETTINGS,buildExtendGraph,extendAvailability,extendPlan} from './studio_extend_recipes.js';
 
@@ -21,7 +21,7 @@ const outputFile=(output,extension)=>Object.values(output||{}).flat().find(
 function completedVideo(entry,config){
   if(entry?.status?.status_str!=='success')return null;
   const outputs=entry.outputs||{};
-  const master=outputFile(outputs.zura_hdr_save_video||outputs.save,/\.mov$/i);
+  const master=outputFile(outputs.zura_hdr_save_video||outputs.save,config.model===H3_IC_REFINE?/\.mp4$/i:/\.mov$/i);
   if(!master)return null;
   const preview=outputFile(outputs.zura_hdr_save_preview,/\.mp4$/i);
   const archive=outputFile(outputs.zura_hdr_archive,/\.zip$/i);
@@ -48,6 +48,7 @@ export class UpscaleWorkspace{
     this.prompt=typeof saved.prompt==='string'?saved.prompt:'';
     this.negativePrompt=typeof saved.negativePrompt==='string'?saved.negativePrompt:'';
     this.refineScale=saved.refineScale===2?2:1;
+    this.h3Megapixels=saved.h3Megapixels===3.5?3.5:2;
     this.rtxScale=[1,1.5,2,3,4].includes(saved.rtxScale)?saved.rtxScale:2;
     this.rtxQuality=typeof saved.rtxQuality==='string'?saved.rtxQuality:'';
     this.rtxStrength=Number.isFinite(saved.rtxStrength)?saved.rtxStrength:1;
@@ -84,7 +85,7 @@ export class UpscaleWorkspace{
         <label data-prompt-control class="zup-prompt" hidden><span>${extending?'Extension prompt':'Refinement prompt'} <small>Optional</small></span><textarea data-prompt class="zc-shared-prompt" aria-label="${extending?'Extension prompt':'Refinement prompt'}" placeholder="Describe how the refinement should look" maxlength="1000"></textarea></label>
         ${extending?'<div class="zup-extension-controls"><label>Add seconds <input type="number" data-seconds min="0.25" max="10" step="0.25"></label><label>Ending context (s) <input type="number" data-context min="0.25" max="4.25" step="0.25"></label><label>Processing (MP) <input type="number" data-megapixels min="0.16" max="1.05" step="0.01"></label><details class="zc-tool-popup zup-extend-settings"><summary>Settings</summary><div><label>Steps <input type="number" data-steps min="4" max="50"></label><label>Seed <input type="number" data-seed min="0" max="9007199254740991"></label><label data-turbo-control>Turbo strength <input type="number" data-turbo-strength min="0" max="1" step="0.05"></label><label><input type="checkbox" data-audio> Generate audio for the extension</label></div></details></div>':''}
         <details class="zup-negative" data-negative-control hidden><summary>Avoid… <span data-negative-status hidden>Added</span></summary><textarea data-negative class="zc-shared-prompt" aria-label="Negative prompt" placeholder="Describe changes to avoid, such as halos, smearing or altered lettering" maxlength="1000"></textarea></details>
-        <div class="zc-prompt-bottom"><div class="zc-prompt-tools"><label class="zup-model">Model <select data-model aria-label="Video model"></select></label><span class="zc-tool" data-resolution>2×</span><label data-rtx-scale-control hidden>Scale <select data-rtx-scale aria-label="RTX upscale factor"><option value="1">1×</option><option value="1.5">1.5×</option><option value="2">2×</option><option value="3">3×</option><option value="4">4×</option></select></label><label data-rtx-quality-control hidden>Quality <select data-rtx-quality aria-label="RTX quality"></select></label><label class="zup-detail" data-rtx-strength-control hidden>Strength <input data-rtx-strength type="range" min="0" max="1" step="0.05" aria-label="RTX effect strength"><output data-rtx-strength-value></output></label><label data-refine-scale-control hidden>Size <select data-refine-scale aria-label="Refine output size"><option value="1">Original size</option><option value="2">2×</option></select></label><label class="zup-detail" data-detail-control title="0% uses the bicubic base. 100% keeps all detail added by the Flash decoder.">Flash detail <input data-detail type="range" min="0" max="1" step="0.05" aria-label="Detail enhancement"><output data-detail-value></output></label><details class="zc-tool-popup gs-model-help" data-models hidden></details><label class="zc-output-choice">Output:<select data-refine-output aria-label="Output range"><option value="sdr">SDR</option><option value="hdr">HDR</option></select></label></div><div class="zalpha-actions"><button type="button" data-frame-preview hidden title="Preview the current frame with the selected model">Preview frame</button><button type="button" class="gs-primary" data-generate>Upscale video</button></div></div>
+        <div class="zc-prompt-bottom"><div class="zc-prompt-tools"><label class="zup-model">Model <select data-model aria-label="Video model"></select></label><span class="zc-tool" data-resolution>2×</span><label data-rtx-scale-control hidden>Scale <select data-rtx-scale aria-label="RTX upscale factor"><option value="1">1×</option><option value="1.5">1.5×</option><option value="2">2×</option><option value="3">3×</option><option value="4">4×</option></select></label><label data-rtx-quality-control hidden>Quality <select data-rtx-quality aria-label="RTX quality"></select></label><label class="zup-detail" data-rtx-strength-control hidden>Strength <input data-rtx-strength type="range" min="0" max="1" step="0.05" aria-label="RTX effect strength"><output data-rtx-strength-value></output></label><label data-h3-size-control hidden>Size <select data-h3-size aria-label="H3 refinement resolution"><option value="2">1080p class</option><option value="3.5">2K class</option></select></label><label data-refine-scale-control hidden>Size <select data-refine-scale aria-label="Refine output size"><option value="1">Original size</option><option value="2">2×</option></select></label><label class="zup-detail" data-detail-control title="0% uses the bicubic base. 100% keeps all detail added by the Flash decoder.">Flash detail <input data-detail type="range" min="0" max="1" step="0.05" aria-label="Detail enhancement"><output data-detail-value></output></label><details class="zc-tool-popup gs-model-help" data-models hidden></details><label class="zc-output-choice">Output:<select data-refine-output aria-label="Output range"><option value="sdr">SDR</option><option value="hdr">HDR</option></select></label></div><div class="zalpha-actions"><button type="button" data-frame-preview hidden title="Preview the current frame with the selected model">Preview frame</button><button type="button" class="gs-primary" data-generate>Upscale video</button></div></div>
         <p class="zalpha-status" data-range-hint hidden></p>
         <p class="zalpha-status" data-detail-hint hidden>Blends detail from the Flash decoder. 0% keeps the bicubic upscale, 100% keeps all model detail.</p>
         <p class="zalpha-status" data-status role="status"></p>
@@ -124,6 +125,7 @@ export class UpscaleWorkspace{
       const option=doc.createElement('option');
       option.value=id;
       option.textContent=model.label;
+      if(id===H3_IC_REFINE)option.hidden=true;
       select.append(option);
     }
     select.value=this.model;
@@ -166,6 +168,8 @@ export class UpscaleWorkspace{
       this.$('rtx-strength-value').textContent=Math.round(this.rtxStrength*100)+'%';
     };
     this.$('rtx-strength').onchange=()=>this.save();
+    this.$('h3-size').value=String(this.h3Megapixels);
+    this.$('h3-size').onchange=()=>{this.h3Megapixels=Number(this.$('h3-size').value);this.save();this.render();};
     this.$('refine-scale').value=String(this.refineScale);
     this.$('refine-output').value=this.refineOutput;
     this.$('refine-scale').onchange=()=>{this.refineScale=Number(this.$('refine-scale').value);this.save();this.render();};
@@ -267,12 +271,12 @@ export class UpscaleWorkspace{
     this.video.currentTime=(first-1)/fps;
   }
   busy(){return !!(this.uploadController||this.submitting||this.job||this.pendingSubmission);}
-  refining(){return ['ltx25_tiled_x2',HDR_REFINE].includes(this.model);}
-  config(){const {id,width,height,frames,fps}=this.source||{};return {...this.extension,sourceId:id,fps,file:this.source?.file,start:this.range?.start||0,duration:this.range?.duration||0,detail:this.detail,model:this.model,width,height,rtxScale:this.rtxScale,rtxQuality:this.rtxQuality,rtxStrength:this.rtxStrength,prompt:this.prompt,negativePrompt:this.negativePrompt,refineScale:this.refineScale,refineOutput:this.refineOutput,frames:this.range?Math.round(this.range.duration*fps):frames};}
+  refining(){return ['ltx25_tiled_x2',HDR_REFINE,H3_IC_REFINE].includes(this.model);}
+  config(){const {id,width,height,frames,fps}=this.source||{};return {...this.extension,sourceId:id,fps,file:this.source?.file,start:this.range?.start||0,duration:this.range?.duration||0,detail:this.detail,model:this.model,width,height,rtxScale:this.rtxScale,rtxQuality:this.rtxQuality,rtxStrength:this.rtxStrength,prompt:this.prompt,negativePrompt:this.negativePrompt,refineScale:this.refineScale,refineOutput:this.refineOutput,h3Megapixels:this.h3Megapixels,frames:this.range?Math.round(this.range.duration*fps):frames};}
   save(){
     try{
-      const {source,range,detail,model,result,job,pendingSubmission,prompt,negativePrompt,refineScale,refineOutput,rtxScale,rtxQuality,rtxStrength}=this;
-      this.storage.setItem(this.key,JSON.stringify({extension:this.extension,source,range,detail,model,result,job,pendingSubmission,prompt,negativePrompt,refineScale,refineOutput,rtxScale,rtxQuality,rtxStrength}));
+      const {source,range,detail,model,result,job,pendingSubmission,prompt,negativePrompt,refineScale,refineOutput,rtxScale,rtxQuality,rtxStrength,h3Megapixels}=this;
+      this.storage.setItem(this.key,JSON.stringify({extension:this.extension,source,range,detail,model,result,job,pendingSubmission,prompt,negativePrompt,refineScale,refineOutput,rtxScale,rtxQuality,rtxStrength,h3Megapixels}));
       return true;
     }catch{return false;}
   }
@@ -316,10 +320,14 @@ export class UpscaleWorkspace{
     this.$('source').hidden=!source;
     this.$('source-meta').textContent=source?`${source.name} · ${source.width} × ${source.height} · ${Number(source.fps.toFixed(3))} fps`:'';
 
-    const refine=this.refining(),rtx=this.model===RTX_UPSCALE;
+    const refine=this.refining(),rtx=this.model===RTX_UPSCALE,h3IC=this.model===H3_IC_REFINE;
+    const h3Problem=h3IC&&source?h3RefineProblem(this.config()):'';
     const scale=refine?this.refineScale:this.models[this.model].scale||2;
     const plan=this.extending&&source?extendPlan(this.config()):null;
     const size=source&&(rtx?rtxSize(source.width,source.height,this.rtxScale):{width:source.width*scale,height:source.height*scale});
+    this.$('resolution').hidden=h3IC;
+    this.$('h3-size-control').hidden=!h3IC;
+    this.$('h3-size').disabled=busy;
     this.$('resolution').textContent=plan?plan.width+' × '+plan.height+' processing':size?size.width+' × '+size.height:'';
     const rtxOutOfRange=rtx&&size&&Object.values(size).some(n=>n<64||n>8192);
     this.$('rtx-scale-control').hidden=this.$('rtx-quality-control').hidden=!rtx;
@@ -343,7 +351,7 @@ export class UpscaleWorkspace{
     const textGuidance=this.models[this.model].textGuidance;
     this.$('prompt-control').hidden=!textGuidance&&!this.extending;
     this.$('negative-control').hidden=!textGuidance;
-    this.$('refine-scale-control').hidden=!refine;
+    this.$('refine-scale-control').hidden=!refine||h3IC;
     this.$('negative-status').hidden=!this.negativePrompt.trim();
     if(this.extending){
       for(const field of ['seconds','context','megapixels','steps','seed','turbo-strength','audio'])this.$(field).disabled=busy;
@@ -370,10 +378,10 @@ export class UpscaleWorkspace{
     this.trimmer.update(source&&{...source,url:this.sourceURL()},this.range?{...this.range,length_mode:'custom',workflow_mode:'relight'}:{length_mode:'original',workflow_mode:'relight'},{disabled:busy});
     const wrongSource=source?.hdr!==undefined&&source.hdr!==(this.model===HDR_REFINE);
     const hint=wrongSource?(this.extending?'Add an SDR video to extend.':source.hdr?'Choose LTX Refine (HDR) for this source.':'LTX Refine (HDR) needs an HDR source video.'):rtxOutOfRange?'Choose an RTX scale that gives dimensions between 64 and 8192 pixels.':'';
-    this.$('range-hint').hidden=!hint;
-    this.$('range-hint').textContent=hint;
-    this.$('generate').disabled=busy||(!needsSetup&&(!source||wrongSource||rtxOutOfRange));
-    this.$('frame-preview').hidden=this.extending;
+    this.$('range-hint').hidden=!(hint||h3Problem);
+    this.$('range-hint').textContent=hint||h3Problem;
+    this.$('generate').disabled=busy||(!needsSetup&&(!source||wrongSource||rtxOutOfRange||!!h3Problem));
+    this.$('frame-preview').hidden=this.extending||h3IC;
     this.$('frame-preview').disabled=busy||!source||!!wrongSource||!!rtxOutOfRange;
     this.$('generate').textContent=busy?'Working…':needsSetup?'Set up '+this.models[this.model].label:this.extending?'Extend video':refine?'Refine video':'Upscale video';
     this.$('view').hidden=!source||!this.result;
@@ -394,6 +402,7 @@ export class UpscaleWorkspace{
     }
     this.$('view').textContent=this.view==='source'?'View result':'View source';
     this.$('download').hidden=!this.result;
+    this.$('download').textContent=this.result?.config?.model===H3_IC_REFINE?'Download MP4':'Download MOV';
     this.$('exports').hidden=true;
     if(this.result){
       this.$('download').href=this.fileURL(this.result.file);
@@ -455,6 +464,15 @@ export class UpscaleWorkspace{
     try{
       this.modelInfo=await this.fetch('/object_info');
       if(this.disposed)return null;
+      if(!this.extending){
+        const option=this.$('model').querySelector(`option[value="${H3_IC_REFINE}"]`);
+        if(option)option.hidden=!upscaleAvailability(this.modelInfo,H3_IC_REFINE).ready;
+        if(option?.hidden&&this.model===H3_IC_REFINE&&!this.busy()){
+          this.model=DEFAULT_UPSCALE_MODEL;
+          this.$('model').value=this.model;
+          this.save();
+        }
+      }
       this.updateAvailability();
       this.render();
       return this.availability;
@@ -485,7 +503,7 @@ export class UpscaleWorkspace{
     return reply.graph;
   }
   async generate(previewFrame=false){
-    if(this.busy()||previewFrame&&this.extending)return;
+    if(this.busy()||previewFrame&&(this.extending||this.model===H3_IC_REFINE))return;
     if(this.availability?.ready===false){await this.modelDownloads.checkSetup();return;}
     if(!this.source)return;
     let config=this.config();

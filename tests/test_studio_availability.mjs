@@ -31,11 +31,11 @@ assert.deepEqual(engines.filter(m=>!m.label.hidden).map(m=>m.value),['local','h3
 assert.ok(engines.find(m=>m.value==='seedance').disabled);
 assert.ok(stages.filter(s=>['h3','h3_enhance','draft','final'].includes(s.value)).every(s=>s.hidden&&s.disabled));
 assert.ok(stages.find(s=>s.value==='wan21_relight').disabled,'Wan relight graph stays unavailable outside relight mode');
-for (const engine of ['h3']) {
+for (const engine of ['h3','local']) {
   ui.config={...good,engine,workflow_mode:'viewport',edit_area:'scene',audio_id:'',lip_sync:false};
   assert.equal(context.allowed(ui.config),true);
   ui.applyVerifiedSurface();
-  assert.deepEqual(engines.filter(m=>!m.label.hidden).map(m=>m.value),['h3']);
+  assert.deepEqual(engines.filter(m=>!m.label.hidden).map(m=>m.value),['local','h3']);
   assert.equal(ui.$('audio-settings').hidden,true);
   assert.equal(stages.find(s=>s.value==='h3').disabled,engine!=='h3');
   let queued=false;ui.primaryRecipe=async()=>{queued=true;};
@@ -51,14 +51,14 @@ for(const engine of ['wan','h3','local'])for(const audio of [{audio_id:'',lip_sy
   assert.equal(stages.find(s=>s.value===stage).hidden,false);
   let queued=false;ui.primaryRecipe=async()=>{queued=true;};await ui.primary();assert.equal(queued,true);
 }
-console.log('Approved character/audio routes restored across three models; rejected viewport and masked LTX stay blocked.');
+console.log('Verified character and viewport routes expose the correct engines and stage boundaries.');
 
 const fresh=Object.create(context.Studio.prototype);
 fresh.config={...good,workflow_mode:'viewport'};fresh.modelStatus={h3_attention_backends:{kitchen:true}};fresh.useGeneratedLook=()=>{};
 fresh.selectWorkflow();assert.equal(fresh.config.h3_attention,'kitchen');assert.equal(fresh.config.engine,'h3');
 assert.equal(fresh.config.h3_viewport_direct,true);assert.equal(fresh.config.audio_id,'');
 
-assert.equal(context.allowed({...good,engine:'local',workflow_mode:'viewport',edit_area:'scene'}),false,'LTX stays a private development route until its keyframes qualify');
+assert.equal(context.allowed({...good,engine:'local',workflow_mode:'viewport',edit_area:'scene'}),true,'LTX viewport is available for the timed keyframe workflow');
 assert.equal(context.allowed({...good,engine:'h3',workflow_mode:'motion',edit_area:'scene'}),false,'Do not substitute unapproved H3 whole-scene character pipeline');
 for(const engine of ['wan','h3','local']){
   fresh.config={...good,engine,workflow_mode:'swap',audio_id:'voice',lip_sync:true};fresh.selectWorkflow();

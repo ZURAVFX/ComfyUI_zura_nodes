@@ -2,13 +2,13 @@
 
 UNAVAILABLE = ("This setup is not available in Studio. Choose character replacement "
                "with Wan or H3, performance recreation with LTX, or Viewport to final "
-               "with H3. Saved results are still available.")
+               "with H3 or LTX 2.5. Saved results are still available.")
 
 
 def viewport_setup(config):
     return (config.get("workflow_mode") == "viewport"
             and config.get("edit_area") == "scene"
-            and config.get("engine") == "h3"
+            and config.get("engine") in ("h3", "local")
             and not config.get("preserve_people")
             and not config.get("refine_lips")
             and not config.get("audio_id")
