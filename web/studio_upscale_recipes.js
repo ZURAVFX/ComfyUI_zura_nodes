@@ -1,13 +1,26 @@
 import {LTX_DISTILLED_SIGMAS,LTX_FRAME_VIDEO_MODELS as LTX} from './ltx_frame_video_recipes.js';
 
+export const RTX_UPSCALE='nvidia_rtx';
+export const RTX_NODE='RTXVideoSuperResolution';
 const LTX_NODES=['GetImageSize','GenjHoldToModelLength','ImageScale','ImageFromBatch','VAEDecodeTiled'];
 export const UPSCALE_MODELS = {
+  [RTX_UPSCALE]: {
+    label:'NVIDIA RTX Super Resolution', nodes:[RTX_NODE], output:'NVIDIA_RTX',
+  },
   relayvsr_x2: {
-    label: 'Relay VSR',
+    label: 'RelayVSR · 2× INT8', scale:2,
     model: 'relayvsr_x2_lightx2v_int8_convrot.safetensors',
     vae: 'relayvsr_flash_vae_x2_fp32.safetensors',
     nodes: ['RelayVSRConditioning','VSRDecode'],
     output: 'RelayVSR_2x',
+  },
+  relayvsr_x2_bf16: {
+    label:'RelayVSR · 2× BF16', scale:2,
+    loader:'ZuraRelayVSRLoadBF16',
+    model:'relayvsr_lightx2v_bf16_original.safetensors',
+    vae:'relayvsr_flash_vae_x2_fp32.safetensors',
+    nodes:['RelayVSRConditioning','VSRDecode'],
+    output:'RelayVSR_2x_BF16',
   },
   seedvr2_7b_x2: {
     label: 'SeedVR2 7B INT8',
@@ -24,7 +37,7 @@ export const UPSCALE_MODELS = {
     nodes: [...LTX_NODES,'VAEEncodeTiled','LTXVLatentUpsampler'], output:'LTX25_Latent_2x',
   },
   ltx25_tiled_x2: {
-    label: 'LTX 2.5 · Refine (SDR)', vae:'ltx-2.5-video-vae-bf16.safetensors',
+    label: 'LTX 2.5 · Refine (SDR)', textGuidance:true, vae:'ltx-2.5-video-vae-bf16.safetensors',
     weights: [['UNETLoader','unet_name',LTX.model],['CLIPLoader','clip_name',LTX.text],
       ['LTXICLoRALoaderModelOnly','lora_name','ltx-2.5-22b-ic-lora-refine-details-1.0.safetensors']],
     nodes:[...LTX_NODES,'CLIPTextEncode','LTXVConditioning','EmptyLTXVLatentVideo',
@@ -34,6 +47,7 @@ export const UPSCALE_MODELS = {
 };
 UPSCALE_MODELS.ltx25_hdr_refine_x2 = {
   label:'LTX 2.5 · Refine (HDR)',
+  textGuidance:true,
   hdr:true,
   vae:UPSCALE_MODELS.ltx25_tiled_x2.vae,
   weights:[...UPSCALE_MODELS.ltx25_tiled_x2.weights,['LatentUpscaleModelLoader','model_name',LTX.latentUpscaler]],
@@ -44,8 +58,7 @@ UPSCALE_MODELS.ltx25_hdr_refine_x2 = {
     'ZuraHDRPackageACEScct','ZuraHDRSDRPreview','ZuraHDRSaveExactRate'],
 };
 export const DEFAULT_UPSCALE_MODEL = 'relayvsr_x2';
-export const LATENT_UPSCALE_MAX_FRAMES = 97;
-const REQUIRED = ['LoadVideo','Video Slice','GetVideoComponents','VAELoader','CreateVideo','ZuraSaveProRes4444'];
+const REQUIRED = ['LoadVideo','Video Slice','GetVideoComponents','CreateVideo','ZuraSaveProRes4444'];
 const basename=value=>String(value).split(/[\\/]/).pop();
 function installedModel(info,type,key,name){
   const field=info[type]?.input?.required?.[key];
@@ -53,8 +66,9 @@ function installedModel(info,type,key,name){
   return choices.find(choice=>basename(choice)===name);
 }
 function weightRequirements(recipe){
+  if(!recipe.vae)return [];
   return [['VAELoader','vae_name',recipe.vae,recipe.vaeAlias],
-    ...(recipe.weights||[['UNETLoader','unet_name',recipe.model]])];
+    ...(recipe.weights||[[recipe.loader||'UNETLoader','unet_name',recipe.model]])];
 }
 function installedWeights(info,recipe){
   return weightRequirements(recipe).map(([node,key,file,alias])=>
@@ -62,7 +76,8 @@ function installedWeights(info,recipe){
 }
 export function upscaleAvailability(info,model=DEFAULT_UPSCALE_MODEL){
   const recipe=UPSCALE_MODELS[model];
-  const nodes=recipe.weights?recipe.weights.map(([node])=>node):['UNETLoader','KSampler'];
+  const nodes=model===RTX_UPSCALE?[]:recipe.weights?recipe.weights.map(([node])=>node):[recipe.loader||'UNETLoader','KSampler'];
+  if(recipe.vae)nodes.push('VAELoader');
   const common=recipe.hdr?['VAELoader','CreateVideo']:REQUIRED;
   const missing=[...new Set([...common,...recipe.nodes,...nodes])].filter(type=>!info[type]);
   const weights=installedWeights(info,recipe);
@@ -70,12 +85,24 @@ export function upscaleAvailability(info,model=DEFAULT_UPSCALE_MODEL){
   return {ready:missing.length===0,missing};
 }
 
-function ltxUpscale(add,mode,{width,height,prompt='',negativePrompt='',refineScale=1,frames},images,vae,weights){
+export function rtxCapabilities(info){
+  const fields=info?.[RTX_NODE]?.input?.required;
+  const available=fields?.quality?.[1]?.options||fields?.quality?.[0];
+  const offered=Array.isArray(available)?available:['LOW','MEDIUM','HIGH','ULTRA'];
+  const quality=['HIGHBITRATE_ULTRA','ULTRA','HIGH','MEDIUM','LOW','BICUBIC'].filter(id=>offered.includes(id));
+  return {quality,strength:!!fields?.strength,tenBit:!!fields?.image_encoding};
+}
+
+export function rtxSize(width,height,scale){
+  const aligned=value=>Math.round(value*scale/8)*8;
+  return {width:aligned(width),height:aligned(height)};
+}
+
+function ltxUpscale(add,mode,{width,height,prompt='',negativePrompt='',refineScale=1},images,vae,weights){
   if(![width,height].every(value=>Number.isInteger(value)&&value>0&&value<=4096)){
     throw Error('Choose a source up to 4096 pixels per side for LTX upscale.');
   }
   const direct=mode==='ltx25_latent_x2';
-  if(direct&&frames>LATENT_UPSCALE_MAX_FRAMES)throw Error('Trim to 97 frames for Latent 2×, or choose LTX Refine (SDR) for a longer clip.');
   const measured=add('source_size','GetImageSize',{image:images},'Counting selected source frames');
   const held=add('pad_frames','GenjHoldToModelLength',{images,stride:8},'Preparing LTX frame count');
   const scale=direct||refineScale===2?2:1;
@@ -130,6 +157,26 @@ function ltxUpscale(add,mode,{width,height,prompt='',negativePrompt='',refineSca
     resize('delivery_size',trimmed,targetWidth,targetHeight,'Restoring exact output dimensions');
 }
 
+export function upscaleFrameConfig(config,sourceFrames,time){
+  const frame=Math.max(0,Math.min(sourceFrames-1,Math.floor((time+1e-6)*config.fps)));
+  // Refine needs short temporal context. Spatial and restoration routes can
+  // process a single source frame through their standard graph.
+  const frames=config.model.startsWith('ltx25_')&&config.model!=='ltx25_latent_x2'?Math.min(9,sourceFrames):1;
+  const first=Math.min(Math.max(0,frame-Math.floor(frames/2)),sourceFrames-frames);
+  return {...config,start:first/config.fps,duration:frames/config.fps,frames,
+    framePreview:{frame,offset:frame-first}};
+}
+
+export function addUpscaleFramePreviews(graph,{offset},source,result,hdr=false){
+  for(const [id,images,title] of [['original',source,'Source frame'],['result',result,'Processed frame']]){
+    const still='frame_'+id;
+    graph[still]={class_type:'ImageFromBatch',inputs:{image:images,batch_index:offset,length:1}};
+    if(hdr)graph[still+'_sdr']={class_type:'ZuraHDRSDRPreview',inputs:{image:[still,0]}};
+    graph[still+'_preview']={class_type:'PreviewImage',inputs:{images:[hdr?still+'_sdr':still,0]},_meta:{title}};
+  }
+  return graph;
+}
+
 export function buildUpscaleGraph(config,info){
   const {file,start=0,duration=0,detail=1,model:mode=DEFAULT_UPSCALE_MODEL}=config;
   const recipe=UPSCALE_MODELS[mode];
@@ -147,12 +194,34 @@ export function buildUpscaleGraph(config,info){
   const loaded=add('source','LoadVideo',{file},'Reading source video');
   const selected=start||duration?add('trim','Video Slice',{video:loaded,start_time:start,duration,strict_duration:false},'Reading the selected clip'):loaded;
   const images=add('components','GetVideoComponents',{video:selected},'Separating picture and audio');
+  const fullSizePreview=info.ZuraSaveProRes4444.input?.optional?.full_size_preview?{full_size_preview:true}:{};
+  const finish=upscaled=>{
+    if(config.framePreview)return addUpscaleFramePreviews(graph,config.framePreview,images,upscaled);
+    saveVideo(add,upscaled,recipe,fullSizePreview);
+    return graph;
+  };
+  if(mode===RTX_UPSCALE){
+    const {rtxScale=2,rtxQuality,rtxStrength=1}=config;
+    const size=rtxSize(config.width,config.height,rtxScale);
+    if(!Number.isFinite(rtxScale)||rtxScale<1||rtxScale>4||
+       !Object.values(size).every(value=>Number.isInteger(value)&&value>=64&&value<=8192)){
+      throw Error('Choose an RTX scale that gives dimensions between 64 and 8192 pixels.');
+    }
+    const caps=rtxCapabilities(info);
+    const quality=caps.quality.includes(rtxQuality)?rtxQuality:caps.quality[0];
+    if(!quality)throw Error('Update the NVIDIA VFX nodes to use RTX Super Resolution.');
+    const inputs={images,resize_type:'target dimensions','resize_type.width':size.width,'resize_type.height':size.height,quality};
+    if(caps.strength)inputs.strength=Math.max(0,Math.min(1,rtxStrength));
+    if(caps.tenBit)inputs.image_encoding='10-bit RGB (RGB10A2)';
+    const upscale=add('upscale',RTX_NODE,inputs,'Upscaling with NVIDIA RTX');
+    return finish(upscale);
+  }
   const decoder=add('vae','VAELoader',{vae_name:vae},'Loading the matching VAE');
   if(recipe.weights){
-    saveVideo(add,ltxUpscale(add,mode,config,images,decoder,weights),recipe);
-    return graph;
+    return finish(ltxUpscale(add,mode,config,images,decoder,weights));
   }
-  const diffusion=add('model','UNETLoader',{unet_name:weights[0],weight_dtype:'default'},`Loading ${recipe.label}`);
+  const modelInputs={unet_name:weights[0],...(!recipe.loader&&{weight_dtype:'default'})};
+  const diffusion=add('model',recipe.loader||'UNETLoader',modelInputs,`Loading ${recipe.label}`);
   const sample=(positive,negative,latent)=>add('sample','KSampler',{
     model:diffusion,positive,negative,latent_image:latent,seed:42,steps:1,cfg:1,
     sampler_name:'euler',scheduler:'simple',denoise:1,
@@ -185,11 +254,10 @@ export function buildUpscaleGraph(config,info){
     const samples=sample(conditioning,conditioning,['conditioning',1]);
     upscaled=add('decode','VSRDecode',{vae:decoder,samples,images,detail},'Upscaling every frame');
   }
-  saveVideo(add,upscaled,recipe);
-  return graph;
+  return finish(upscaled);
 }
 
-function saveVideo(add,upscaled,recipe){
+function saveVideo(add,upscaled,recipe,preview){
   const video=add('video','CreateVideo',{images:upscaled,audio:['components',1],fps:['components',2]},'Restoring source frame rate and audio');
-  add('save','ZuraSaveProRes4444',{video,filename_prefix:'ZURA STUDIO/upscale/'+recipe.output},'Writing ProRes master and playback preview');
+  add('save','ZuraSaveProRes4444',{video,filename_prefix:'ZURA STUDIO/upscale/'+recipe.output,...preview},'Writing ProRes master and playback preview');
 }

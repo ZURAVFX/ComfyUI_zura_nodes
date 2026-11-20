@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import {stageProgress,durationLabel} from '../web/studio_progress.js';
+import {stageProgress,durationLabel,installOwnedNodeProgress} from '../web/studio_progress.js';
 assert.equal(durationLabel(61),'1m 1s');
 assert.equal(durationLabel(0),'0s');
 assert.deepEqual(stageProgress({state:'queued',queue_position:2,stage_percent:40}),{
@@ -38,3 +38,30 @@ console.log('Studio progress shows actual stage percent, honest unknown states a
 assert.equal(stageProgress({state:"running",segment_current:2,segment_total:6,step:3,total_steps:4},{stage:"wan21_relight"}).meta,"Segment 2 of 6 · Step 3 of 4");
 assert.equal(stageProgress({state:"preparing",stage_elapsed_seconds:0},{elapsedSeconds:51}).meta,"51s elapsed");
 assert.ok(!stageProgress({action_id:"old",segment_current:5,segment_total:6},{actionId:"new"}).meta.includes("Segment"));
+
+const api=new EventTarget();
+const job={id:'owned'};
+const seen=[];
+let now=1000;
+const tracker=installOwnedNodeProgress(api,()=>job,(owner,time)=>seen.push([owner.id,time]),()=>now);
+const event=(type,detail)=>api.dispatchEvent(new CustomEvent(type,{detail}));
+event('execution_start',{prompt_id:job.id});
+event('executing','encode');
+event('progress',{prompt_id:job.id,node:'encode',value:2,max:10});
+assert.equal(tracker.read(job).measurement.remaining,null);
+now=5000;
+event('progress',{prompt_id:job.id,node:'encode',value:4,max:10});
+assert.equal(tracker.read(job).measurement.remaining,12);
+event('progress',{prompt_id:'other',node:'decode',value:5,max:10});
+assert.equal(tracker.read(job).node,'encode');
+event('executing',{prompt_id:job.id,node:'sample'});
+assert.equal(tracker.read(job).measurement,null,'Changing stages resets the measured ETA');
+event('progress',{prompt_id:job.id,value:4,max:8});
+assert.equal(tracker.read(job).measurement.value,4,'Progress without a node uses the current stage');
+event('progress',{prompt_id:job.id,node:'sample',value:1,max:8});
+assert.equal(tracker.read(job).measurement.remaining,null,'A new pass starts a fresh estimate');
+job.cancelPending=true;
+event('progress',{prompt_id:job.id,node:'sample',value:2,max:8});
+assert.equal(tracker.read(job).measurement.value,1,'Progress cannot overwrite cancellation');
+tracker.dispose();
+assert.equal(seen.length,7);

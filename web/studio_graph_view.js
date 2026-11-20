@@ -30,6 +30,12 @@ export function rememberStudioGraph(ui,kind,graph,id,identity=studioGraphScope(u
   try{graphStorage(ui)?.setItem(storageKey(ui,kind),JSON.stringify({id,identity}));}catch{}
 }
 
+export function studioGraphReceipt(ui,kind,identity=studioGraphScope(ui,kind)){
+  let receipt=submissions.get(ui)?.get(kind);
+  if(!receipt)try{receipt=JSON.parse(graphStorage(ui)?.getItem(storageKey(ui,kind))||'null');}catch{}
+  return receipt?.identity===identity?receipt:null;
+}
+
 export async function readStudioPrompt(api,id){
   if(typeof id!=='string'||!id)return null;
   const read=async path=>{
@@ -131,9 +137,7 @@ export async function inspectStudioGraph(owner){
     const identity=studioGraphScope(w,target.kind);
     const isCurrent=()=>owner.mode===mode&&studioGraphScope(w,target.kind)===identity&&activeTarget(owner).kind===target.kind;
     studio.graphViewCheck=isCurrent;
-    let receipt=submissions.get(w)?.get(target.kind);
-    if(!receipt)try{receipt=JSON.parse(graphStorage(w)?.getItem(storageKey(w,target.kind))||'null');}catch{}
-    const current=receipt?.identity===identity?receipt:null;
+    const current=studioGraphReceipt(w,target.kind,identity);
     const active=target.id||(!target.managed&&(w.job?.active_prompt_id||w.job?.id));
     if(!active&&(w.pendingSubmission||w.submitting||w.starting))throw Error('ComfyUI is preparing this stage. Open Graph View again once it reaches the queue.');
     const id=active||current?.id;

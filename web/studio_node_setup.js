@@ -25,7 +25,7 @@ export const NODE_PACKS=[
 ];
 
 NODE_PACKS.find(pack=>pack.name==='ComfyUI').nodes.push('ResizeImageMaskNode','LTXVPreprocess','LatentUpscaleModelLoader','ManualSigmas');
-NODE_PACKS.find(pack=>pack.name==='Zura Nodes').nodes.push('ZuraSaveVideoLatentData','ZuraLoadVideoLatentData','ZuraSaveProRes4444');
+NODE_PACKS.find(pack=>pack.name==='Zura Nodes').nodes.push('ZuraSaveVideoLatentData','ZuraLoadVideoLatentData','ZuraSaveProRes4444','ZuraRelayVSRLoadBF16');
 NODE_PACKS.push({name:'ComfyUI-VideoHelperSuite',url:'https://github.com/Kosinkadink/ComfyUI-VideoHelperSuite',nodes:['VHS_LoadImagesPath']});
 
 // These image recipe classes ship in ComfyUI/comfy_extras. They require a
@@ -61,3 +61,5 @@ NODE_PACKS.find(pack=>pack.name==='ComfyUI').nodes.push('ImageToMask','JoinImage
 
 // Reference preparation ships with Studio; there is no separate Manager pack.
 NODE_PACKS.find(pack=>pack.name==='Zura Nodes').nodes.push('H3ReferenceVideo','H3ReferenceAudio');
+
+NODE_PACKS.push({name:'ComfyUI Nvidia VFX Nodes',url:'https://github.com/Comfy-Org/ComfyUI_Nvidia_VFX_Nodes',nodes:['RTXVideoSuperResolution'],note:'Install the extension and its NVIDIA VFX runtime, then restart ComfyUI.'});

@@ -16,7 +16,13 @@ try{
   emit('execution_start',{prompt_id:'foreign'});emit('progress',{prompt_id:'foreign'});emit('b_preview',new Blob(['old'],{type:'image/jpeg'}));assert.equal(samples.length,1);
   emit('execution_start',{prompt_id:'own'});emit('b_preview',new Blob(['not-ready'],{type:'image/jpeg'}));assert.equal(samples.length,1);
   emit('progress',{prompt_id:'own'});emit('b_preview',new Blob(['legacy'],{type:'image/jpeg'}));assert.equal(samples.length,2);
+  const motion={prompt_id:'own',node_id:'sampler',webp:'UklGRgAA',step:1,total_steps:8};
+  emit('zura_motion_preview',{...motion,prompt_id:'foreign'});assert.equal(samples.length,2);
+  emit('zura_motion_preview',motion);assert.equal(samples.length,3);assert.equal(samples.at(-1).motion,true);
+  assert.match(samples.at(-1).src,/^data:image\/webp;base64,/);
+  emit('b_preview_with_metadata',{jobId:'own',nodeId:'sampler',blob});assert.equal(samples.length,3,'Still samples leave the motion loop visible');
   emit('execution_success',{prompt_id:'own'});assert.ok(clears>0);assert.equal(revoked.length,2);
+  emit('zura_motion_preview',motion);assert.equal(samples.length,3,'A late encoder result cannot redisplay a finished preview');
   live.dispose();for(const handlers of listeners.values())assert.equal(handlers.size,0);
   const resumed=installNativeSamplePreview(api,{getJob:()=>job,onPreview:sample=>samples.push(sample)});
   const beforeResume=samples.length;

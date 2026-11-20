@@ -3,6 +3,7 @@ import {FrameVideoWorkspace} from '../web/studio_frames.js';
 import {ReferenceVideoWorkspace} from '../web/studio_references.js';
 import {CreativeWorkspace} from '../web/studio_create.js';
 import {StudioImageLayers} from '../web/studio_image_layers.js';
+import {UpscaleWorkspace} from '../web/studio_upscale.js';
 import {findOwnedSubmission} from '../web/studio_owned_jobs.js';
 
 const foreign=[0,'foreign',{}, {zura_studio_request:'another-request'},[]];
@@ -113,6 +114,62 @@ for(const Workspace of [CreativeWorkspace,FrameVideoWorkspace,ReferenceVideoWork
   ui.job={id:'failed',started:Date.now(),config:{engine:'h3',outputMode:'SDR video'}};ui.items=[];
   ui.fetch=async path=>path.startsWith('/history/')?{failed:{status:{completed:false,status_str:'error',messages:[['execution_error',{exception_message:'Sampler failed'}]]},outputs:{save:{images:[{filename:'partial.mp4'}]}}}}:{};
   await ui.poll();assert.equal(ui.items.length,0,'An error with partial output is not reported as a completed take');assert.match(ui.lastMessage,/Sampler failed/);
+}
+
+{
+  const {ui}=fixture(UpscaleWorkspace);
+  const source={file:'source.mov'},previous={file:{filename:'previous.mov'}};
+  const emptyQueue={queue_running:[],queue_pending:[]};
+  const job={id:'upscale',config:{model:'seedvr2_7b_x2'},started:Date.now()};
+  Object.assign(ui,{source,result:previous,job,preview(){},stopPolling(){this.stopped=true;}});
+
+  ui.fetch=async path=>path==='/queue'?{...emptyQueue,queue_pending:[[0,job.id]]}:{};
+  await ui.poll();
+  assert.equal(ui.$('progress-title').textContent,'Queued');
+  assert.equal(ui.job,job);
+  ui.fetch=async path=>path==='/queue'?{...emptyQueue,queue_running:[[0,job.id]]}:{};
+  await ui.poll();
+  assert.equal(ui.$('progress-title').textContent,'Processing video');
+
+  ui.fetch=async path=>path==='/queue'?{}:{};
+  await ui.poll();
+  assert.equal(ui.job,job,'A missing queue response cannot discard a saved run');
+  assert.equal(ui.$('progress-title').textContent,'Reconnecting');
+
+  ui.fetch=async path=>path==='/queue'?emptyQueue:{};
+  await ui.poll();
+  assert.equal(ui.job,null);
+  assert.equal(ui.stopped,true);
+  assert.equal(ui.source,source);
+  assert.equal(ui.result,previous);
+  assert.equal(ui.$('generate').disabled,false);
+
+  ui.job=job;
+  const output={filename:'finished.mov',type:'output'};
+  const finished={upscale:{status:{completed:true,status_str:'success'},outputs:{save:{images:[output]}}}};
+  let historyReads=0;
+  ui.fetch=async path=>path==='/queue'?emptyQueue:++historyReads===1?{}:finished;
+  await ui.poll();
+  assert.equal(ui.result.file,output,'Completion between queue and history checks is retained');
+
+  ui.pendingSubmission={requestId:'request-123',started:job.started,config:job.config};
+  const updates=[];
+  ui.fetch=async(path,body)=>{if(body)updates.push(body);return path==='/queue'?emptyQueue:{};};
+  await ui.poll();
+  assert.equal(ui.$('progress-title').textContent,'Run not found');
+  assert.ok(ui.pendingSubmission);
+  await ui.cancel();
+  assert.equal(ui.pendingSubmission,null);
+  assert.deepEqual(updates,[],'Clearing an unconfirmed attempt leaves other jobs alone');
+
+  ui.pendingSubmission={requestId:'request-123',started:job.started,config:job.config};
+  ui.fetch=async(path,body)=>{
+    if(body){updates.push(body);return {};}
+    return path==='/queue'?{...emptyQueue,queue_pending:[own(job.id)]}:{};
+  };
+  await ui.cancel();
+  assert.equal(ui.job?.cancelPending,true);
+  assert.deepEqual(updates,[{delete:[job.id]},{prompt_id:job.id}],'A recovered submission is cancelled by its prompt ID');
 }
 
 console.log('Owned submissions recover after lost responses/reopen; cancellation is persisted, scoped, idempotent and preserves completed results.');

@@ -125,7 +125,7 @@ component.request=async(path,body)=>{
 };
 const reconnect=component.start('wan_animate_2');
 await new Promise(resolve=>setTimeout(resolve,20));
-assert.equal(component.job,'reconnect-job');assert.equal(component.select.disabled,true);
+assert.equal(component.job,'reconnect-job');assert.ok(!component.select.disabled,'Packages remain browsable during a download');
 assert.match(component.progress.textContent,/Reconnecting/);
 await reconnect;assert.equal(starts,1);assert.equal(polls,2);assert.equal(component.progress.textContent,'Download complete.');
 let releaseStatus;const resumedStatus=new Promise(resolve=>{releaseStatus=resolve;});let resumedStarts=0;
@@ -135,7 +135,7 @@ const resumed=new StudioModelDownloads(resumedPanel,async(path,body)=>{
   if(path==='/model-downloads'&&body){resumedStarts++;throw Error('must not submit');}
   if(path==='/model-downloads/existing')return resumedStatus;throw Error(path);
 });
-await resumed.load();assert.equal(resumed.job,'existing');assert.equal(resumed.select.disabled,true);
+await resumed.load();assert.equal(resumed.job,'existing');assert.ok(!resumed.select.disabled);
 assert.match(resumed.progress.textContent,/Reconnecting/);assert.equal(resumedStarts,0);
 const finish=releaseStatus;releaseStatus=null;finish({phase:'done'});await new Promise(resolve=>setTimeout(resolve,10));
 assert.equal(resumed.job,null);assert.equal(resumedStarts,0);resumed.dispose();
@@ -194,4 +194,27 @@ assert.deepEqual(alphaCalls.find(([path,body])=>path==='/model-access'&&body?.ac
 alphaAllowed=true;await alphaDownloads.startWorkflow();
 assert.deepEqual(alphaCalls.find(([path,body])=>path==='/model-downloads'&&body)[1],{model_ids:['ltx_alpha'],file_keys:[`loras/${alphaFile.filename}`]});
 assert.equal(alphaDownloads.progress.textContent,'Download complete.');alphaDownloads.dispose();
+const backgroundHost=document.createElement('div');
+const backgroundPanel=document.createElement('details');
+backgroundHost.append(backgroundPanel);document.body.append(backgroundHost);
+const backgroundDownloads=new StudioModelDownloads(backgroundPanel,async()=>{throw Error('Unexpected request');});
+backgroundDownloads.packages=[
+  {id:'wan22_first_last',name:'Wan 2.2',files:[{filename:'wan.safetensors',installed:false}]},
+  {id:'h3_first_last',name:'MiniMax H3',files:[{filename:'h3.safetensors',installed:false}]},
+];
+backgroundDownloads.mountQuick(backgroundHost);
+backgroundDownloads.job='wan-download';
+backgroundDownloads.jobState={model_ids:['wan22_first_last']};
+backgroundDownloads.progress.textContent='Downloading Wan · 24%';
+backgroundDownloads.setContext({route:'h3_first_last',files:[],missingNodes:[]});
+const backgroundQuick=backgroundDownloads.quick;
+assert.equal(backgroundQuick.querySelector('[data-quick-install]').hidden,true);
+assert.equal(backgroundQuick.querySelector('[data-quick-refresh]').disabled,false);
+assert.match(backgroundQuick.querySelector('[data-quick-status]').textContent,/24%.*can use installed models/);
+assert.ok(!backgroundDownloads.select.disabled);
+assert.equal(backgroundDownloads.jobMatchesPlan({ready:true,packs:ltxPackages}),false);
+backgroundDownloads.setMissingContext('h3_first_last',['h3.safetensors']);
+assert.equal(backgroundQuick.querySelector('[data-quick-install]').disabled,true,'An unrelated download still prevents a second installation');
+assert.match(backgroundQuick.querySelector('[data-quick-status]').textContent,/24%.*after the current download finishes/);
+backgroundDownloads.dispose();
 console.log('Video package sizes, source licences, explicit download, retained setup, gated Alpha access, single-poll recovery and completion refresh pass.');

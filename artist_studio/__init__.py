@@ -796,6 +796,9 @@ _H3_WINDOW_NODES = (ZuraH3PrepareFullAudioTimeline, ZuraH3WindowInputs,
     ZuraSaveH3Continuation, ZuraLoadH3Continuation, ZuraApplyH3Continuation)
 NODE_CLASS_MAPPINGS.update({cls.__name__: cls for cls in _H3_WINDOW_NODES})
 
+from .relayvsr import ZuraRelayVSRLoadBF16
+NODE_CLASS_MAPPINGS['ZuraRelayVSRLoadBF16'] = ZuraRelayVSRLoadBF16
+
 from .h3_extend import NODE_CLASS_MAPPINGS as H3_EXTEND_NODES
 NODE_CLASS_MAPPINGS.update(H3_EXTEND_NODES)
 NODE_DISPLAY_NAME_MAPPINGS.update({

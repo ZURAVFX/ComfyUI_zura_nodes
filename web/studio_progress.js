@@ -25,6 +25,64 @@ export function durationLabel(seconds) {
   return remainder?`${minutes}m ${remainder}s`:`${minutes}m`;
 }
 
+// Shared progress for workspaces that submit native ComfyUI graphs. Keep
+// samples out of persisted job state and reset the estimate at every node.
+export function installOwnedNodeProgress(api,getJob,onChange,now=Date.now){
+  let activeJob=null,node=null,measurement=null;
+  const getOwnedJob=promptId=>{
+    const job=getJob();
+    return job?.id&&job.id===promptId&&!job.cancelPending?job:null;
+  };
+  const selectNode=(job,next)=>{
+    if(job!==activeJob||node!==next){
+      activeJob=job;
+      node=next;
+      measurement=null;
+    }
+  };
+  const started=event=>{
+    const job=getOwnedJob(event.detail?.prompt_id);
+    if(!job)return;
+    selectNode(job,null);
+    onChange(job,now());
+  };
+  const stopExecuting=installOwnedExecuting(api,event=>{
+    const job=getOwnedJob(event.detail?.prompt_id);
+    if(!job||event.detail.node==null)return;
+    selectNode(job,String(event.detail.node));
+    onChange(job,now());
+  });
+  const progress=event=>{
+    const report=event.detail,job=getOwnedJob(report?.prompt_id);
+    if(!job||!Number.isFinite(report.value)||!Number.isFinite(report.max)||
+       report.value<0||report.max<=0||report.value>report.max)return;
+    const next=report.node==null?(activeJob===job?node:null):String(report.node);
+    if(next===null)return;
+    selectNode(job,next);
+    const {value,max}=report,time=now();
+    if(!measurement||max!==measurement.max||value<measurement.value){
+      measurement={value,max,firstValue:value,firstTime:time,remaining:null};
+    }else if(value>measurement.value){
+      measurement.value=value;
+      const seconds=(time-measurement.firstTime)/1000;
+      if(seconds>=1){
+        measurement.remaining=seconds*(max-value)/(value-measurement.firstValue);
+      }
+    }
+    onChange(job,time);
+  };
+  api.addEventListener?.('execution_start',started);
+  api.addEventListener?.('progress',progress);
+  return {
+    read(job){return job===activeJob?{node,measurement}:{};},
+    dispose(){
+      stopExecuting();
+      api.removeEventListener?.('execution_start',started);
+      api.removeEventListener?.('progress',progress);
+    },
+  };
+}
+
 export function stageProgress(progress, fallback={}) {
   // A phase handoff can arrive before the next native progress snapshot. Never
   // carry the previous sampler's percentage or ETA into the next model load.

@@ -109,11 +109,14 @@ class ZuraHDRSaveProRes4444:
     def save(self,images,filename_prefix,fps,source_space='acescg',audio=None):
         import folder_paths
         from comfy_api.latest import InputImpl
+        from comfy.utils import ProgressBar
         count,height,width,channels=images.shape
         if channels not in (3,4):raise ValueError('ProRes delivery needs RGB or RGBA frames.')
         folder,name,counter,subfolder,_=folder_paths.get_save_image_path(filename_prefix,folder_paths.get_output_directory(),width,height)
         destination=Path(folder)/f'{name}_{counter:05d}_.mov'
-        write_prores4444(images,destination,width=width,height=height,count=count,fps=fps,source_space=source_space,audio=audio,channels=channels)
+        progress=ProgressBar(count)
+        write_prores4444(images,destination,width=width,height=height,count=count,fps=fps,
+                         source_space=source_space,audio=audio,channels=channels,progress=progress.update_absolute)
         ref={'filename':destination.name,'subfolder':subfolder,'type':'output','colour':{'encoding':source_space,'sceneLinear':source_space in ('acescg','linear_rec709')}}
         return {'ui':{'images':[ref],'animated':[True]},'result':(InputImpl.VideoFromFile(str(destination)),)}
 
@@ -122,8 +125,9 @@ class ZuraSaveProRes4444(ZuraHDRSaveProRes4444):
     """Save raw native VIDEO components without an H.264 intermediate."""
     @classmethod
     def INPUT_TYPES(cls):
-        return {'required':{'video':('VIDEO',),'filename_prefix':('STRING',{'default':'ZURA STUDIO/video/result'})}}
-    def save(self,video,filename_prefix,**kwargs):
+        return {'required':{'video':('VIDEO',),'filename_prefix':('STRING',{'default':'ZURA STUDIO/video/result'})},
+                'optional':{'full_size_preview':('BOOLEAN',{'default':False})}}
+    def save(self,video,filename_prefix,full_size_preview=False,**kwargs):
         components=video.get_components();images=components.images
         if getattr(components,'alpha',None) is not None and images.shape[-1]==3:
             import torch
@@ -133,18 +137,29 @@ class ZuraSaveProRes4444(ZuraHDRSaveProRes4444):
         result=super().save(images,filename_prefix,float(components.frame_rate),source_space='srgb_display',audio=components.audio)
         import folder_paths
         ref=result['ui']['images'][0];master=Path(folder_paths.get_output_directory())/ref['subfolder']/ref['filename']
-        preview=make_sdr_preview(master)
+        try:
+            preview=make_sdr_preview(master,full_size=full_size_preview)
+        except (ValueError,subprocess.TimeoutExpired):
+            if not full_size_preview:
+                raise
+            preview=make_sdr_preview(master)
         ref['preview']={'filename':preview.name,'subfolder':ref['subfolder'],'type':'output'}
         return result
 
 
-def make_sdr_preview(master):
+def make_sdr_preview(master, *, full_size=False):
     """A browser copy only; the ProRes file remains the downloadable master."""
-    master=Path(master);preview=master.with_name(master.stem+'_preview.mp4')
+    master=Path(master);preview=master.with_name(master.stem+('_full_preview.mp4' if full_size else '_preview.mp4'))
     if not preview.exists():
+        scale="pad=ceil(iw/2)*2:ceil(ih/2)*2" if full_size else "scale='min(960,iw)':'min(960,ih)':force_original_aspect_ratio=decrease:force_divisible_by=2"
         command=[shutil.which('ffmpeg'),'-v','error','-i',str(master),'-map','0:v:0','-map','0:a:0?',
-                 '-vf',"scale='min(960,iw)':'min(960,ih)':force_original_aspect_ratio=decrease:force_divisible_by=2",
-                 '-c:v','libx264','-crf','20','-preset','fast','-pix_fmt','yuv420p','-c:a','aac','-b:a','192k','-movflags','+faststart',str(preview)]
-        result=subprocess.run(command,capture_output=True,timeout=300)
-        if result.returncode:preview.unlink(missing_ok=True);raise ValueError('Could not create the browser video preview. The ProRes master is retained.')
+                 '-vf',scale,
+                 '-c:v','libx264','-crf','17' if full_size else '20','-preset','fast','-pix_fmt','yuv420p','-c:a','aac','-b:a','192k','-movflags','+faststart',str(preview)]
+        try:
+            result=subprocess.run(command,capture_output=True,timeout=300)
+            if result.returncode:
+                raise ValueError('Could not create the browser video preview. The ProRes master is retained.')
+        except (ValueError,subprocess.TimeoutExpired):
+            preview.unlink(missing_ok=True)
+            raise
     return preview

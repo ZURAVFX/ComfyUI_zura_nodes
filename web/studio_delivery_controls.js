@@ -368,7 +368,7 @@ export class StudioDeliveryControls {
     const page=w?.page||w?.root||this.root;
     const selectors={image:'.zc-image-composer .zc-composer-bottom',video:'.gs-composer .zc-prompt-tools',swap:'.gs-composer .zc-prompt-tools',viewport:'.gs-composer .zc-prompt-tools',hdr:'.zh-footer',paint_vfx:'.zvfx-settings',paintout:'.zpx-properties',watermark:'.zf-composer .zc-prompt-tools',outpaint:'.zo-action .zc-prompt-tools',ripple:'.zru-tools',relight:'.zru-tools',camera:'.zpc-composer .zc-prompt-tools',panorama:'.zpc-composer .zc-prompt-tools',frames:'.zf-composer .zc-prompt-tools',references:'.zf-composer .zc-prompt-tools',alpha:'.zc-prompt-tools',director:'.zdir-composer-row'};
     const selector=this.owner.plate?.inline?'.zpx-properties':w===this.owner.studio?'.gs-composer .zc-prompt-tools':selectors[mode],host=selector&&(page.querySelector?.(selector)||this.root.querySelector(selector))||this.element;
-    this.outputChoice.hidden=mode==='home';const primary=host.querySelector(':scope > button.gs-primary');if(primary){if(this.outputChoice.nextSibling!==primary)host.insertBefore(this.outputChoice,primary);}else if(this.outputChoice.parentElement!==host)host.append(this.outputChoice);
+    this.outputChoice.hidden=['home','upscale','extend_length'].includes(mode);const primary=host.querySelector(':scope > button.gs-primary');if(primary){if(this.outputChoice.nextSibling!==primary)host.insertBefore(this.outputChoice,primary);}else if(this.outputChoice.parentElement!==host)host.append(this.outputChoice);
   }
   sync(){
     if(this.closed||this.syncing)return;this.syncing=true;

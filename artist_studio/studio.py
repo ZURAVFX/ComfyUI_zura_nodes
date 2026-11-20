@@ -2622,6 +2622,8 @@ def register():
     if getattr(server, "_zura_artist_studio_registered", False):
         return
     server._zura_artist_studio_registered = True
+    from .live_preview import register_motion_preview
+    register_motion_preview(server)
     studio = Studio(server)
     routes = server.routes
     proxy_jobs = {}

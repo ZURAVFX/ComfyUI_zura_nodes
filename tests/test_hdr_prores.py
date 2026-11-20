@@ -63,13 +63,19 @@ class ProResTests(unittest.TestCase):
         import torch
         import folder_paths
         with tempfile.TemporaryDirectory() as folder:
-            frames=torch.full((2,32,32,3),.3)
+            frames=torch.full((2,1024,32,3),.3)
             components=types.SimpleNamespace(images=frames,frame_rate=Fraction(24),audio=None,alpha=None)
             video=types.SimpleNamespace(get_components=lambda:components)
             latest=types.SimpleNamespace(InputImpl=types.SimpleNamespace(VideoFromFile=lambda path:path))
-            with patch.dict(sys.modules,{'comfy_api.latest':latest}),patch.object(folder_paths,'get_output_directory',return_value=folder,create=True),patch.object(folder_paths,'get_save_image_path',return_value=(folder,'result',1,'',None),create=True):
-                result=prores.ZuraSaveProRes4444().save(video,'result')
+            updates=[]
+            utils=types.SimpleNamespace(ProgressBar=lambda count:types.SimpleNamespace(
+                update_absolute=lambda current,total:updates.append((current,total))))
+            with patch.dict(sys.modules,{'comfy_api.latest':latest,'comfy.utils':utils}),patch.object(folder_paths,'get_output_directory',return_value=folder,create=True),patch.object(folder_paths,'get_save_image_path',return_value=(folder,'result',1,'',None),create=True):
+                result=prores.ZuraSaveProRes4444().save(video,'result',full_size_preview=True)
+            self.assertEqual(updates,[(1,2),(2,2)])
             ref=result['ui']['images'][0]
             self.assertTrue(ref['filename'].endswith('.mov'));self.assertTrue(ref['preview']['filename'].endswith('_preview.mp4'))
             self.assertTrue((Path(folder)/ref['preview']['filename']).is_file())
+            with av.open(str(Path(folder)/ref['preview']['filename'])) as container:
+                self.assertEqual((container.streams.video[0].width,container.streams.video[0].height),(32,1024))
             prores.inspect_prores4444(Path(folder)/ref['filename'])

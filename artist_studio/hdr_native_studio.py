@@ -66,7 +66,7 @@ def build_asset_graph(asset, body, check_asset):
     if sdr_delivery:
         graph.pop('zura_hdr_save_video')
         graph['save']={'class_type':'ZuraSaveProRes4444','inputs':{
-            'video':['zura_hdr_preview_video',0],'filename_prefix':'genj/hdr/'+prefix+'_sdr'}}
+            'video':['zura_hdr_preview_video',0],'filename_prefix':'genj/hdr/'+prefix+'_sdr','full_size_preview':True}}
         graph.pop('zura_hdr_save_preview')
     if contract is not None:
         from ..comfylink.frame_contract import prepare_frame_contract_graph

@@ -2,11 +2,12 @@ import {rememberStudioGraph,studioGraphScope} from './studio_graph_view.js';
 import {prepareAEFrameGraph} from './studio_ae_frame_contract.js';
 // Direct Comfy prompts carry an opaque per-submission token in extra_data.
 // Comfy stores that data at index 3 in queue entries and history.prompt.
-export async function findOwnedSubmission(fetch, requestId) {
+export async function findOwnedSubmission(fetch, requestId, {onMissing}={}) {
   const match=item=>Array.isArray(item)&&typeof item[1]==='string'&&item[3]?.zura_studio_request===requestId?item[1]:null;
   const inQueue=async()=>{
     const queue=await fetch('/queue');
-    return [...(queue.queue_running||[]),...(queue.queue_pending||[])].map(match).filter(Boolean);
+    if(!Array.isArray(queue?.queue_running)||!Array.isArray(queue?.queue_pending))throw Error('ComfyUI queue is unavailable.');
+    return [...queue.queue_running,...queue.queue_pending].map(match).filter(Boolean);
   };
   const found=await inQueue();
   const queued=[...new Set(found)];
@@ -17,27 +18,31 @@ export async function findOwnedSubmission(fetch, requestId) {
   // A request can move from submission to the queue while history is read.
   found.push(...await inQueue());
   const unique=[...new Set(found)];
+  if(!unique.length)onMissing?.();
   return unique.length===1?unique[0]:null;
 }
 
 export function adoptOwnedSubmission(ui, pending, id) {
   if(!id||ui.pendingSubmission!==pending)return false;
-  ui.job={id,started:pending.started,config:pending.config,previewMethod:pending.previewMethod,stages:pending.stages};
+  ui.job={id,started:pending.started,config:pending.config,previewMethod:pending.previewMethod,stages:pending.stages,
+    ...(pending.cancelRequested?{cancelRequested:true}:{})};
   ui.pendingSubmission=null;ui.sampleStarted=null;ui.submitting=false;ui.submitAttempt=null;ui.save();
   ui.$('progress-title').textContent='Queued';ui.message('');ui.render();
   return true;
 }
 
-export async function recoverOwnedSubmission(ui) {
+export async function recoverOwnedSubmission(ui, {onMissing}={}) {
   if(!ui.pendingSubmission||ui.job||ui.polling)return;
   const pending=ui.pendingSubmission;ui.polling=true;
   try{
-    const id=await findOwnedSubmission(path=>ui.fetch(path),pending.requestId);
-    if(ui.pendingSubmission!==pending)return;
+    let missing=false;
+    const id=await findOwnedSubmission(path=>ui.fetch(path),pending.requestId,{onMissing:()=>{missing=true;}});
+    if(ui.disposed||ui.pendingSubmission!==pending)return;
     if(id)adoptOwnedSubmission(ui,pending,id);
+    else if(missing&&onMissing)onMissing(pending);
     else ui.message('Checking whether the run started. Check the ComfyUI queue; this run will not be submitted again automatically.');
   }catch{
-    if(ui.pendingSubmission===pending)ui.message('Connection interrupted while checking your run. Reconnecting without submitting again…');
+    if(!ui.disposed&&ui.pendingSubmission===pending)ui.message('Connection interrupted while checking your run. Reconnecting without submitting again…');
   }finally{ui.polling=false;}
 }
 

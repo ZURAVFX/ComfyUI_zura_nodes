@@ -336,7 +336,7 @@ CATALOG["h3_extend_turbo"] = {
 }
 
 CATALOG["relayvsr_x2"] = dict(
-    name="Relay VSR · 2× video upscale", gated=False,
+    name="RelayVSR · 2× INT8", gated=False,
     license_url="https://huggingface.co/Comfy-Org/RelayVSR",
     note="Matched 2× diffusion model and Flash decoder. Requires ComfyUI with Relay VSR support.",
     files=[
@@ -348,6 +348,17 @@ CATALOG["relayvsr_x2"] = dict(
               127759464, "b5bb0339acb5b52545911ea29a51b4c5b805776a779222b5a14591571f42e21c"),
     ],
 )
+
+CATALOG["relayvsr_x2_bf16"] = dict(
+    name="RelayVSR · 2× BF16", gated=False,
+    license_url="https://huggingface.co/lightx2v/RelayVSR_X2",
+    note="Original LightX2V BF16 weights and the shared 2× Flash decoder. Uses more memory than INT8.",
+    files=[
+        _file("diffusion_models", "relayvsr_lightx2v_bf16_original.safetensors", "lightx2v/RelayVSR_X2",
+              "bdaba6f33b6ec0b7f8a7d0c32c871e2539d1193b", "wan_x2.safetensors",
+              10127172392, "12c0469ee5cdeb7adc180eb8704d074fa078f73332ee08827fc1ed932132cb4d"),
+        CATALOG["relayvsr_x2"]["files"][1],
+    ])
 
 CATALOG["seedvr2_7b_x2"] = dict(
     name="SeedVR2 7B INT8 · 2× video upscale", gated=False,

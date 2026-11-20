@@ -1669,6 +1669,7 @@ export class ArtistStudio {
   receiveH3Preview(detail){
     const project=this.project,action=project?.actions?.at(-1);
     if(!project || this.config.engine!=="h3" || action?.stage!=="h3" || !detail.webp ||
+       (this.liveSampleAction===action.id&&this.liveSampleData?.motion) ||
        String(detail.node_id)!==`h3_live_preview_${project.id}`)return;
     this.liveSampleAction=action.id;this.liveSampleData=detail;
     this.renderLiveH3Preview(project.phase==="working");
