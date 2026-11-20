@@ -1,5 +1,11 @@
 # Release notes
 
+## 1.3.75 - 20 November 2026
+
+- Generate and edit images with your OpenAI API key in native ComfyUI graphs. Choose Sunburst, Flare or another GPT Image model from the picker, request supported native sizes, connect up to 16 references and see an estimated image output cost before queuing.
+- Draw edit masks, coloured markup and markup transparency on a reference frame with Image Guidance Painter. The drawing is saved with the workflow.
+- Preserve straight alpha on the ChatGPT image output so native Save Image writes transparent PNGs with the original edge pixels.
+
 ## 1.3.74 - 20 November 2026
 
 - Keep Studio routes available on hosts that do not provide a ComfyUI prompt queue.

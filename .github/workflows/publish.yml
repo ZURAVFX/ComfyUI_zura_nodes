@@ -204,6 +204,8 @@ jobs:
           python -m unittest discover -s tests -p 'test_browser_defaults.py'
           python tests/test_subscription_sessions.py
           python tests/test_browser_image_routes.py
+          python tests/test_openai_image.py
+          python tests/test_image_guidance.py
           python -m unittest discover -s tests -p 'test_video_browser_openings.py'
           python -m unittest discover -s tests -p 'test_opening_models.py'
           python -m unittest discover -s tests -p 'test_opening_edit.py'

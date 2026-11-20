@@ -68,7 +68,7 @@ NODE_DISPLAY_NAME_MAPPINGS.update(QWEN_DESIGN_NAMES)
 
 WEB_DIRECTORY = "./web"
 PACKAGE_ROOT = Path(__file__).resolve().parent
-__version__ = "1.3.74"
+__version__ = "1.3.75"
 
 
 def _register_routes():
@@ -262,9 +262,16 @@ NODE_CLASS_MAPPINGS.update(CHATGPT_IMAGE_NODES)
 NODE_DISPLAY_NAME_MAPPINGS.update(CHATGPT_IMAGE_NAMES)
 NODE_CLASS_MAPPINGS.update(GEMINI_IMAGE_NODES)
 NODE_DISPLAY_NAME_MAPPINGS.update(GEMINI_IMAGE_NAMES)
+from . import openai_image
+from .image_guidance import ZuraImageGuidance
+NODE_CLASS_MAPPINGS.update(openai_image.NODE_CLASS_MAPPINGS)
+NODE_DISPLAY_NAME_MAPPINGS.update(openai_image.NODE_DISPLAY_NAME_MAPPINGS)
+NODE_CLASS_MAPPINGS["ZuraImageGuidance"] = ZuraImageGuidance
+NODE_DISPLAY_NAME_MAPPINGS["ZuraImageGuidance"] = "Zura · Image Guidance Painter"
 if getattr(PromptServer, 'instance', None) is not None:
     from .browser_image_routes import register as register_browser_image_routes
     register_browser_image_routes(PromptServer.instance.routes)
+    openai_image.register_credentials(PromptServer.instance.routes)
 # Keep the legacy batch loader when it is installed; do not register a competing ID.
 _legacy_comfylink = PACKAGE_ROOT.parent / "comfylink_ae" / "__init__.py"
 if not _legacy_comfylink.is_file():

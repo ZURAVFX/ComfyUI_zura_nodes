@@ -19,6 +19,10 @@ and editing. ChatGPT Image and Gemini Image are also available through your
 browser account, with no Zura or paid API credits. Website plan limits apply.
 See [browser image setup](docs/STUDIO_BROWSER_IMAGES.md).
 
+For native ComfyUI graphs, **Zura · ChatGPT Image (API Key)** provides direct API-key
+access to Sunburst, Flare and other GPT Image models with exact output sizes.
+See [OpenAI Image API setup](docs/OPENAI_IMAGE_API.md).
+
 ## Install and open
 
 Install **Zura Nodes**, published by **ZURAVFX**, through ComfyUI Manager when an approved Registry version is available. Otherwise, use the official [GitHub release](https://github.com/ZURAVFX/ComfyUI_zura_nodes/releases/latest).
@@ -34,7 +38,7 @@ Use your own ComfyUI host and port if they differ.
 
 ## Current release
 
-**1.3.74** adds live motion previews, single-frame upscale and refine comparisons, and local MiniMax H3 clip extension. See the [release notes](CHANGELOG.md) for details.
+**1.3.75** adds ChatGPT Image (API Key), Image Guidance Painter and transparent PNG output through native Save Image. See the [release notes](CHANGELOG.md) for details.
 
 Zura Studio remains free to open and use normally, without a ComfyLink licence. The separate native ComfyLink After Effects plug-in is optional and is not bundled here. Existing [Relight](docs/RELIGHT_MODELS.md), [Director](docs/DIRECTOR_STUDIO.md), [Paintout](PAINTOUT.md), [alpha extraction](docs/LTX_ALPHA.md), [Ripple editing](docs/RIPPLE_STUDIO.md) and [painted image edits](docs/IMAGE_EDIT_AREA.md) remain available.
 

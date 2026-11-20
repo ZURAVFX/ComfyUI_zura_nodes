@@ -1,0 +1,88 @@
+.zura-guidance {
+  --zg-bg: #1b1e22;
+  --zg-panel: #24282d;
+  --zg-line: #3a4148;
+  --zg-text: #ecf0f3;
+  --zg-muted: #b6c0cb;
+  --zg-accent: #6ee0be;
+  box-sizing: border-box;
+  width: min(1120px, calc(100vw - 32px));
+  height: min(820px, calc(100vh - 32px));
+  max-height: none;
+  padding: 0;
+  border: 1px solid var(--zg-line);
+  border-radius: 15px;
+  background: var(--zg-bg);
+  color: var(--zg-text);
+  font: 14px system-ui, sans-serif;
+  overflow: hidden;
+}
+
+.zura-guidance[open] { display: flex; flex-direction: column; }
+.zura-guidance::backdrop { background: #080b10b8; }
+.zura-guidance [hidden] { display: none !important; }
+.zura-guidance header, .zura-guidance footer, .zura-guidance .zg-controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+}
+.zura-guidance header { justify-content: space-between; gap: 24px; }
+.zura-guidance h2 { margin: 0 0 4px; font-size: 19px; font-weight: 650; }
+.zura-guidance p { margin: 0; color: var(--zg-muted); }
+.zura-guidance .zg-controls { flex-wrap: wrap; background: var(--zg-panel); border-block: 1px solid var(--zg-line); }
+.zura-guidance nav, .zura-guidance .zg-tools, .zura-guidance .zg-history {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px;
+}
+.zura-guidance .zg-history { margin-left: auto; }
+.zura-guidance button {
+  padding: 6px 10px;
+  color: var(--zg-text);
+  background: transparent;
+  border: 1px solid var(--zg-line);
+  border-radius: 6px;
+  font: inherit;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.zura-guidance button:hover:not(:disabled) { background: #353d44; }
+.zura-guidance button:focus-visible, .zura-guidance input:focus-visible {
+  outline: 2px solid var(--zg-accent);
+  outline-offset: 2px;
+}
+.zura-guidance button[aria-pressed="true"] { color: var(--zg-accent); border-color: #508a7a; background: #193a34; }
+.zura-guidance button:disabled { opacity: .42; cursor: default; }
+.zura-guidance .zg-save { color: #101e1b; border-color: var(--zg-accent); background: var(--zg-accent); font-weight: 650; }
+.zura-guidance .zg-save:hover:not(:disabled) { background: #99efd6; }
+.zura-guidance .zg-brush, .zura-guidance .zg-colour { display: flex; align-items: center; gap: 5px; padding-inline: 4px; }
+.zura-guidance input[type="range"] { width: 72px; accent-color: var(--zg-accent); }
+.zura-guidance input[type="color"] { width: 29px; height: 27px; padding: 2px; border: 0; background: transparent; cursor: pointer; }
+.zura-guidance output { min-width: 42px; color: var(--zg-muted); font-variant-numeric: tabular-nums; }
+.zura-guidance .zg-viewport {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  padding: 14px;
+  overflow: auto;
+  background: #101215;
+}
+.zura-guidance canvas {
+  flex: none;
+  margin: auto;
+  background: #181d22;
+  box-shadow: 0 0 0 1px #41494f;
+  cursor: crosshair;
+  touch-action: none;
+}
+.zura-guidance .zg-empty { margin: auto; max-width: 340px; text-align: center; }
+.zura-guidance .zg-empty p { margin: 6px 0 14px; }
+.zura-guidance footer { border-top: 1px solid var(--zg-line); }
+.zura-guidance footer p { flex: 1; min-width: 0; }
+
+@media (max-width: 800px) {
+  .zura-guidance .zg-history { margin-left: 0; }
+  .zura-guidance header, .zura-guidance footer, .zura-guidance .zg-controls { padding-inline: 10px; }
+}
