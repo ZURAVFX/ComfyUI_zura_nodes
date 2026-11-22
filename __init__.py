@@ -68,7 +68,7 @@ NODE_DISPLAY_NAME_MAPPINGS.update(QWEN_DESIGN_NAMES)
 
 WEB_DIRECTORY = "./web"
 PACKAGE_ROOT = Path(__file__).resolve().parent
-__version__ = "1.3.75"
+__version__ = "1.3.76"
 
 
 def _register_routes():
@@ -304,3 +304,10 @@ if getattr(PromptServer, "instance", None) is not None:
 from .h3_reference_media import NODE_CLASS_MAPPINGS as H3_REFERENCE_MEDIA_NODES, NODE_DISPLAY_NAME_MAPPINGS as H3_REFERENCE_MEDIA_NAMES
 NODE_CLASS_MAPPINGS.update(H3_REFERENCE_MEDIA_NODES)
 NODE_DISPLAY_NAME_MAPPINGS.update(H3_REFERENCE_MEDIA_NAMES)
+
+
+from .artist_studio.switch_x_nodes import NODE_CLASS_MAPPINGS as SWITCH_X_NODES
+NODE_CLASS_MAPPINGS.update(SWITCH_X_NODES)
+if getattr(PromptServer, "instance", None) is not None:
+    from .artist_studio.switch_x_routes import register as register_switch_x
+    register_switch_x(PromptServer.instance.routes)

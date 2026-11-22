@@ -1,5 +1,17 @@
 """Artist-supplied selection masks and reuse of reviewed character selections."""
 
+def selection_luminance(frames):
+    """Coverage of an artist's white selection, including antialiased edge samples."""
+    return frames[..., :3].mean(-1).clip(0, 1)
+
+
+def editable_mask(white_selection, white_means):
+    if white_means == "replace":
+        return white_selection
+    if white_means == "keep":
+        return 1 - white_selection
+    raise ValueError("Choose whether white keeps or replaces the selection.")
+
 def add_custom_mask(graph, project, check_asset):
     asset = project.get("selection_mask")
     if not asset or asset.get("id") != project["config"].get("mask_video"):
@@ -40,7 +52,7 @@ class ZuraCharacterMaskFrames:
             raise ValueError("The mask video is shorter than the selected clip. Supply the full source mask or a matching trimmed mask.")
         times = torch.arange(count, device=frames.device, dtype=torch.float64) / 24 + offset
         indices = torch.arange(count,device=frames.device) if paired else torch.floor(times * rate + 1e-6).long().clamp(max=len(frames)-1)
-        gray = frames[indices, :, :, :3].float().mean(dim=-1).clamp(0, 1)
+        gray = selection_luminance(frames[indices].float())
         masks = F.interpolate(gray[:, None], size=(height, width), mode="bilinear", align_corners=False)[:, 0]
         if not torch.any(masks > 0.01):
             raise ValueError("The custom mask is black throughout. White must mark the subject to replace.")

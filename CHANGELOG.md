@@ -1,5 +1,11 @@
 # Release notes
 
+## 1.3.76 - 22 November 2026
+
+- Add Zura SwitchX as its own video mode. Use native MiniMax H3 Ref2VA for a reference-driven scene edit, or use a tracked matte to keep and relight a selection or replace it.
+- Reuse approved Character Replacement selections. Review luminance or embedded-alpha mattes on the source, scrub individual frames and set a replacement margin.
+- Drive a single H3 generation with the source soundtrack or an uploaded recording. Open the submitted graph for inspection and save the master from Studio.
+
 ## 1.3.75 - 20 November 2026
 
 - Generate and edit images with your OpenAI API key in native ComfyUI graphs. Choose Sunburst, Flare or another GPT Image model from the picker, request supported native sizes, connect up to 16 references and see an estimated image output cost before queuing.

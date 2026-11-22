@@ -21,10 +21,11 @@ export const composerIcons={
   takes:svg('<rect x="3" y="7" width="18" height="14" rx="2"/><path d="M7 3h10m-8 9 6 3-6 3z"/>'),
   download:svg('<path d="M12 3v12m-4-4 4 4 4-4M4 17v4h16v-4"/>'),
 };
-export const VIDEO_WORKFLOWS=[['swap','Character replacement'],['plate','Add, remove & replace'],['viewport','Viewport to final'],['camera','Change camera angle'],['relight','Relight'],['watermark','Watermark removal'],['alpha','Extract alpha'],['upscale','Upscale video'],['extend_length','Extend length'],['outpaint','Frame extension · preview'],['hdr','Convert to HDR'],['paint_vfx','Paint VFX'],['director','Director'],['frames','First & last frame'],['references','Reference to video']];
+export const VIDEO_WORKFLOWS=[['swap','Character replacement'],['plate','Add, remove & replace'],['viewport','Viewport to final'],['camera','Change camera angle'],['relight','Relight'],['switch_x','Zura SwitchX'],['watermark','Watermark removal'],['alpha','Extract alpha'],['upscale','Upscale video'],['extend_length','Extend length'],['outpaint','Frame extension · preview'],['hdr','Convert to HDR'],['paint_vfx','Paint VFX'],['director','Director'],['frames','First & last frame'],['references','Reference to video']];
 
 // Navigation describes the artist's task; model choices stay with generation controls.
 const MODE_DETAILS={
+ switch_x:['Edit footage','<path d="M3 4h18v16H3zM12 4v16"/>','Keep or replace selected parts of a shot with MiniMax H3'],
  swap:['Edit footage','<circle cx="8" cy="7" r="3"/><path d="M2 20v-3a6 6 0 0 1 12 0v3m2-14h6m-3-3 3 3-3 3m3 5h-6m3-3-3 3 3 3"/>','Replace a performer while keeping their motion'],
  plate:['Edit footage','<path d="M3 5h18v14H3zM8 5v14m8-14v14m-8-7h8"/><circle cx="12" cy="12" r="2"/>','Paint, erase or replace using edited frames on a timeline'],
  viewport:['Create a shot','<path d="m12 3 9 5v9l-9 5-9-5V8zM3 8l9 5 9-5m-9 5v9"/>','Turn your 3D blockout into a finished shot'],
@@ -166,6 +167,7 @@ export class VideoComposer {
   }
   selectWorkflow(value){
     this.studio.navigationStep=null;
+    if(value==='switch_x'){this.workspace.show('switch_x');return;}
     if(value==='plate'){void this.workspace.plate.select();return;}
     if(value==='camera'){this.workspace.show('panorama');return;}
     if(value==='hdr'){this.workspace.openHDR();return;}
@@ -191,7 +193,7 @@ export class VideoComposer {
     this.syncWorkflow();
   }
   syncWorkflow(){
-    const independent=['paint_vfx','director','frames','references','paintout','watermark','outpaint','ripple','alpha','upscale','extend_length','panorama','hdr'].includes(this.workspace.mode),select=this.task.querySelector('select');
+    const independent=['switch_x','paint_vfx','director','frames','references','paintout','watermark','outpaint','ripple','alpha','upscale','extend_length','panorama','hdr'].includes(this.workspace.mode),select=this.task.querySelector('select');
     select.value=independent?this.workspace.mode:this.studio.config.workflow_mode==='motion'?'swap':this.studio.config.workflow_mode;
     if(this.workspace.mode==='panorama')select.value='camera';if(this.workspace.mode==='ripple'&&this.workspace.ripple?.intent==='relight')select.value='relight';
     if(this.workspace.mode==='paintout'&&this.workspace.paintout?.state.mode==='ripple')select.value='ripple';

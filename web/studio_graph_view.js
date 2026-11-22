@@ -7,6 +7,7 @@ const graphStorage=ui=>ui.storage||ui.w?.storage||ui.owner?.storage;
 const storageKey=(ui,kind)=>'zura-graph-receipt-v1:'+kind+(ui.w?.page?.classList.contains('zwm-page')?':watermark':'');
 
 export function studioGraphScope(ui,kind){
+  if(kind==='switch_x')return JSON.stringify([kind,ui.config?.method,ui.config?.source,ui.config?.matte]);
   if(kind==='project')return JSON.stringify([kind,mediaKey(ui.source),ui.$('graph-stage')?.value]);
   if(kind==='image'){
     const handoff=ui.rippleImage?.request?.id||ui.outpaintGuide?.request?.id;
@@ -68,6 +69,10 @@ function activeTarget(owner){
     case 'director':return {workspace:owner.director,kind:'director',title:'Director'};
     case 'paint_vfx':return {workspace:owner.paint_vfx,kind:'paint_vfx',title:'Paint VFX'};
     case 'frames':return {workspace:owner.frames,kind:'first_last',title:'First and last frame'};
+    case 'switch_x':return {workspace:owner.switchX,kind:'switch_x',title:'Zura SwitchX',draft:async()=>{
+      const graph=await owner.switchX.buildGraph();
+      if(owner.mode==='switch_x')await openStudioGraph(studio,graph,'Zura SwitchX · Draft graph','switch_x');
+    }};
     case 'references':return {workspace:owner.referencesVideo,kind:'reference_video',title:'Reference video'};
     case 'extend_length':return {workspace:owner.extendLength,kind:'extend_length',title:'Extend length'};
     case 'upscale':return {workspace:owner.upscale,kind:'upscale',title:'Upscale video'};

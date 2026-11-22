@@ -23,6 +23,10 @@ For native ComfyUI graphs, **Zura · ChatGPT Image (API Key)** provides direct A
 access to Sunburst, Flare and other GPT Image models with exact output sizes.
 See [OpenAI Image API setup](docs/OPENAI_IMAGE_API.md).
 
+## Zura SwitchX
+
+Choose **Video → Zura SwitchX** to change the setting, lighting or a selected object. Native Ref2VA follows a source clip and up to four images. Mask-guided Ref2VA accepts a keep or replace matte and preserves the source timeline. [Guide and worked example](docs/SWITCHX.md)
+
 ## Install and open
 
 Install **Zura Nodes**, published by **ZURAVFX**, through ComfyUI Manager when an approved Registry version is available. Otherwise, use the official [GitHub release](https://github.com/ZURAVFX/ComfyUI_zura_nodes/releases/latest).

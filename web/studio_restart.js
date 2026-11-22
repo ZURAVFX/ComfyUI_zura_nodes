@@ -21,6 +21,7 @@ function workspaceFor(creative){
     case 'paintout': return creative.paintout;
     case 'watermark': return creative.watermark;
     case 'outpaint': return creative.outpaint;
+    case 'switch_x': return creative.switchX;
     case 'ripple': return creative.ripple;
     case 'alpha': return creative.alpha;
     case 'extend_length': return creative.extendLength;
@@ -49,7 +50,7 @@ export function studioWorkspaceBusy(creative){
     workspace?.job||workspace?.pendingSubmission||workspace?.submitting||workspace?.uploading||
     workspace?.hdrOutput?.busy||invokeBusy(workspace)
   );
-  if(mode==='paintout'||mode==='watermark'||mode==='ripple'||mode==='alpha'||mode==='upscale'||mode==='extend_length')return !!(workspace?.job||workspace?.pendingSubmission||workspace?.submitting||workspace?.uploading||workspace?.picking||workspace?.exporting||invokeBusy(workspace));
+  if(mode==='paintout'||mode==='watermark'||mode==='switch_x'||mode==='ripple'||mode==='alpha'||mode==='upscale'||mode==='extend_length')return !!(workspace?.job||workspace?.pendingSubmission||workspace?.submitting||workspace?.uploading||workspace?.picking||workspace?.exporting||invokeBusy(workspace));
   if(mode==='outpaint')return !!(
     workspace?.job||workspace?.submitting||workspace?.hdrSubmitting||
     workspace?.layers?.busy||workspace?.hdrDelivery?.busy||invokeBusy(workspace)
@@ -233,6 +234,7 @@ export async function resetStudioWorkspace(creative){
     await handoff.leave();
     return currentMode(creative)!=='image'&&resetStudioWorkspace(creative);
   }
+  if(mode==='switch_x')return creative.switchX?.reset?.()===true;
   if(mode==='paint_vfx')return creative.paint_vfx?.reset?.()??false;
   if(mode==='frames')return resetFrameWorkspace(creative?.frames,creative);
   if(mode==='director'){
@@ -289,7 +291,7 @@ async function cancelStudioWorkspace(creative){
   const mode=currentMode(creative),workspace=workspaceFor(creative);
   if(mode==='video')return false;
   if(mode==='watermark'&&workspace?.editor?.busy())await workspace.editor.cancel?.();
-  if(mode==='paint_vfx')await cancelOwnedJob(workspace);
+  if(mode==='paint_vfx'||mode==='switch_x')await cancelOwnedJob(workspace);
   else if(mode==='hdr')await workspace?.cancel?.();
   else if(mode==='panorama'&&typeof workspace?.cancel!=='function')await cancelOwnedJob(workspace);
   else await workspace?.cancel?.();
@@ -330,6 +332,7 @@ function modeLabel(mode){
     paint_vfx:'Paint VFX',
     watermark:'Watermark removal',
     outpaint:'Frame extension',
+    switch_x:'Zura SwitchX',
     ripple:'Ripple editing',
     alpha:'Extract alpha',
     upscale:'Upscale video',
