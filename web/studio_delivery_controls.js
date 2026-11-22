@@ -93,7 +93,7 @@ export class StudioDeliveryControls {
     this.sync();
   }
   mountAdvanced(exrLabel,formatLabel,note){const doc=this.root.ownerDocument,details=doc.createElement('details'),summary=doc.createElement('summary');summary.textContent='File settings';details.append(summary,exrLabel,formatLabel);if(note)details.append(note);this.settings.form.querySelector('.zc-output-actions').before(details);this.hasExportAdvanced=true;}
-  workspace(mode=activeStudioMode(this.owner)){return studioModeAdapter(mode)?.resolveWorkspace(this.owner);}
+  workspace(mode=activeStudioMode(this.owner)){return mode==='switch_x'?this.owner.switchX:studioModeAdapter(mode)?.resolveWorkspace(this.owner);}
   source(w){
     const ae=this.owner.studio?.aeBridge?.source;if(ae)return ae;
     if(w===this.owner){const source=w.references?.[0];return source?.processingView?.originalSource||source?.originalSourceMetadata||source||null;}
@@ -138,7 +138,14 @@ export class StudioDeliveryControls {
     if(!target||this.configured.has(target)||typeof target.config!=='function')return;
     const original=target.config;target.config=(...args)=>this.configure(workspace,original.apply(target,args),mode);this.configured.add(target);
   }
-  raw(mode){const adapter=studioModeAdapter(mode);if(!adapter)return null;this.readingOutput=true;try{return adapter.getSelectedOutput(this.owner);}finally{this.readingOutput=false;}}
+  raw(mode){
+    if(mode==='switch_x'){
+      const result=this.owner.switchX?.result;
+      return isFile(result?.master)?{kind:'video',...result}:null;
+    }
+    const adapter=studioModeAdapter(mode);if(!adapter)return null;
+    this.readingOutput=true;try{return adapter.getSelectedOutput(this.owner);}finally{this.readingOutput=false;}
+  }
   resultKey(mode,raw,format=this.hdrFormat){return raw?.master?`${mode}:${fileKey(raw.master)}:${format}`:'';}
   recordFor(mode,raw){const key=this.resultKey(mode,raw);if(this.aeTransfer==='float32')return this.records[key+':float32'];const exact=this.records[key];if(exact)return exact;const prefix=`${mode}:${fileKey(raw?.master)}:`;return Object.entries(this.records).find(([key,record])=>key.startsWith(prefix)&&record.state==='complete')?.[1];}
   alreadyHDR(raw){if(SDR_SPACES.has(raw?.colour?.encoding)&&raw?.colour?.sceneLinear===false)return false;return raw?.kind==='hdr_sequence'||hdrSpace(raw?.colour?.encoding)||raw?.colour?.sceneLinear===true||hdrSpace(raw?.colour?.ocioWorkingSpace);}
@@ -367,8 +374,8 @@ export class StudioDeliveryControls {
   mountOutputChoice(mode,w){
     const page=w?.page||w?.root||this.root;
     const selectors={image:'.zc-image-composer .zc-composer-bottom',video:'.gs-composer .zc-prompt-tools',swap:'.gs-composer .zc-prompt-tools',viewport:'.gs-composer .zc-prompt-tools',hdr:'.zh-footer',paint_vfx:'.zvfx-settings',paintout:'.zpx-properties',watermark:'.zf-composer .zc-prompt-tools',outpaint:'.zo-action .zc-prompt-tools',ripple:'.zru-tools',relight:'.zru-tools',camera:'.zpc-composer .zc-prompt-tools',panorama:'.zpc-composer .zc-prompt-tools',frames:'.zf-composer .zc-prompt-tools',references:'.zf-composer .zc-prompt-tools',alpha:'.zc-prompt-tools',director:'.zdir-composer-row'};
-    const selector=this.owner.plate?.inline?'.zpx-properties':w===this.owner.studio?'.gs-composer .zc-prompt-tools':selectors[mode],host=selector&&(page.querySelector?.(selector)||this.root.querySelector(selector))||this.element;
-    this.outputChoice.hidden=['home','upscale','extend_length'].includes(mode);const primary=host.querySelector(':scope > button.gs-primary');if(primary){if(this.outputChoice.nextSibling!==primary)host.insertBefore(this.outputChoice,primary);}else if(this.outputChoice.parentElement!==host)host.append(this.outputChoice);
+    const selector=mode==='switch_x'?'.zs-switch-tools':this.owner.plate?.inline?'.zpx-properties':w===this.owner.studio?'.gs-composer .zc-prompt-tools':selectors[mode],host=selector&&(page.querySelector?.(selector)||this.root.querySelector(selector))||this.element;
+    this.outputChoice.hidden=['home','passes','upscale','extend_length'].includes(mode);const primary=host.querySelector(':scope > button.gs-primary');if(primary){if(this.outputChoice.nextSibling!==primary)host.insertBefore(this.outputChoice,primary);}else if(this.outputChoice.parentElement!==host)host.append(this.outputChoice);
   }
   sync(){
     if(this.closed||this.syncing)return;this.syncing=true;
@@ -405,6 +412,7 @@ export class StudioDeliveryControls {
       if(input.input==='hdr'&&!input.space&&!busy&&!aeSource)this.message('Choose the actual HDR source colour space');
       this.$('cancel').hidden=true;this.renderProgress();this.$('files').replaceChildren();
       const raw=this.raw(mode),record=raw&&this.recordFor(mode,raw);
+      if(mode==='switch_x')w?.syncMaster?.(this);
       const availableFiles=record?.state==='complete'?record.take.hdrFiles||[]:this.alreadyHDR(raw)&&isFile(raw?.master)?[raw.master]:[];
       if(this.output==='hdr')for(const file of availableFiles){const a=this.root.ownerDocument.createElement('a');a.textContent=/\.(zip|exr)$/i.test(file.filename)?'EXR':'HDR video';a.href=this.api.apiURL('/view?'+new URLSearchParams(file));a.download=file.filename;this.$('files').append(a);}
       this.sourceControls?.sync();

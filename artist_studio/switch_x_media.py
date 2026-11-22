@@ -73,6 +73,12 @@ def rgb(frame):
     return frame.to_ndarray(format="rgb48le").astype(np.float32) / 65535.0
 
 
+def neutral_replacement_guide(image, selection):
+    """Remove old material chroma before either H3 encoder sees the replacement."""
+    luminance = image @ np.array((0.2126, 0.7152, 0.0722), dtype=np.float32)
+    return image + selection[..., None] * (luminance[..., None] - image)
+
+
 def alpha_image(frame, channel="luma"):
     from .character_mask import selection_luminance
 

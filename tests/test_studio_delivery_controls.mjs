@@ -91,6 +91,25 @@ function fixture(storage=memoryStorage()){
  f.close();
 }
 {
+  const f=fixture();await Promise.resolve();
+  const page=document.createElement('section');page.innerHTML='<div class="zs-switch-tools"></div>';f.c.root.append(page);
+  const master={filename:'switch.mov',subfolder:'switch_x',type:'output'};
+  const workspace={page,config:{},async poll(){this.result={master,preview};this.job=null;}};
+  f.c.switchX=workspace;f.c.show('switch_x');
+  assert.equal(f.controls.outputChoice.parentElement,page.firstElementChild);
+  assert.equal(f.controls.outputChoice.hidden,false);
+  f.controls.output='hdr';f.controls.sync();
+  workspace.job={id:'switch-shot',config:f.controls.configure(workspace,workspace.config,'switch_x')};
+  await workspace.poll();
+  for(let i=0;i<20&&!f.controls.delivery.client.id;i++)await new Promise(resolve=>setTimeout(resolve,0));
+  const jobs=f.calls.filter(call=>call.path==='/zura/studio/hdr/jobs');
+  assert.equal(jobs.length,1);assert.deepEqual(jobs[0].body.output_ref,master);
+  f.complete();await f.controls.delivery.client.poll();
+  assert.equal(f.controls.outputFor('switch_x',f.controls.raw('switch_x')).master.filename,'hdr.zip');
+  f.controls.output='sdr';assert.deepEqual(f.controls.outputFor('switch_x',f.controls.raw('switch_x')).master,master);
+  f.close();
+}
+{
   const f=fixture();await Promise.resolve();f.controls.output='hdr';f.controls.save();
   const original={filename:'generated.png',type:'output',subfolder:'images'};
   f.c.job={id:'image-job',config:f.c.config()};f.c.pendingFile=original;

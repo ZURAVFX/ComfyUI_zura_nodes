@@ -38,6 +38,8 @@ export function workflowProgress(owner){
       else active=accepted?3:2;
     }
     view=flow('plate-'+action,remove?'Remove':action==='paint'?'Add':'Replace',labels,active,w?.result);
+  }else if(mode==='switch_x'){
+    w=owner.switchX;view=flow(mode,'Zura SwitchX',['Source','Settings','Generate','Result'],!w?.config?.source?0:running(w)?2:w?.result?3:1,w?.result);
   }else if(mode==='watermark'){
     w=owner.watermark;view=flow(mode,'Watermark removal',['Source','Settings','Remove','Result'],!w?.state?.source?0:running(w)?2:w?.result?3:1,w?.result);
   }else if(mode==='ripple'){

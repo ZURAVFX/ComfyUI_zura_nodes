@@ -100,6 +100,38 @@ class RelightTimingTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             timing.timeline('missing.mp4',{'duration':0})
 
+    def test_wan_clock_keeps_all_indices_then_restores_precise_rate_and_raster(self):
+        import torch
+        for rate in (Fraction(30), Fraction(30000,1001), Fraction(60000,1001)):
+            with self.subTest(rate=rate), tempfile.TemporaryDirectory() as folder:
+                path = Path(folder)
+                source = path / 'original.mov'
+                with av.open(str(source), 'w') as media:
+                    stream = media.add_stream('prores_ks', rate=rate)
+                    stream.width, stream.height, stream.pix_fmt = 65, 49, 'yuv444p10le'
+                    for index in range(21):
+                        image = av.VideoFrame.from_ndarray(np.full((49,65,3), 20+9*index, np.uint8), format='rgb24')
+                        for packet in stream.encode(image):
+                            media.mux(packet)
+                    for packet in stream.encode():
+                        media.mux(packet)
+                details = dict(source=str(source), start=float(3/rate), duration=float(13/rate))
+                model, _, _, native, _ = timing.reload_review(path, details, 256, 1, True, 0, ffmpeg, 16)
+                model_rate, values, _ = inspect(model)
+                self.assertEqual((model_rate,len(values)), (Fraction(16),13))
+                self.assertAlmostEqual(values[0], 47, delta=2)
+                self.assertTrue(all(b-a>5 for a,b in zip(values,values[1:])))
+                tensor = torch.stack([torch.full((64,64,3), value/255) for value in values+[values[-1]]*3])
+                generated = SimpleNamespace(get_components=lambda: SimpleNamespace(images=tensor))
+                with patch.dict(sys.modules, {'comfy.model_management':SimpleNamespace(throw_exception_if_processing_interrupted=lambda:None)}):
+                    timing.save_relight_frames(generated, native, path/'final.mov', 65, 49)
+                    timing.verify_frame_clock(path/'final.mov', 13, rate, 65, 49)
+                    restored = inspect(path/'final.mov')[1]
+                    self.assertTrue(all(abs(a-b)<2 for a,b in zip(values,restored)))
+                    native['frames'] = 17
+                    with self.assertRaisesRegex(ValueError, 'produced 16 of 17 source frames'):
+                        timing.save_relight_frames(generated, native, path/'short.mov', 65, 49)
+
 
 class RelightQueueTimingTests(unittest.IsolatedAsyncioTestCase):
     async def test_queue_records_native_frame_count_and_fractional_rate(self):

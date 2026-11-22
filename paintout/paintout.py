@@ -772,10 +772,10 @@ def _full_frame_delivery(plate,match_context):
 
 class ZuraPaintoutUncrop:
     @classmethod
-    def INPUT_TYPES(cls):return {'required':{'decoded_crop':('IMAGE',),'plate':('ZURA_PLATE',),'output_name':string('paintout/take'),'precision':(['float32','float16'],),'match_context':('BOOLEAN',{'default':True})},'optional':{'export_format':(EXPORT_FORMATS,), 'motion_preview':('BOOLEAN',{'default':True}), 'ae_frame_contract':string('')}}
+    def INPUT_TYPES(cls):return {'required':{'decoded_crop':('IMAGE',),'plate':('ZURA_PLATE',),'output_name':string('paintout/take'),'precision':(['float32','float16'],),'match_context':('BOOLEAN',{'default':True})},'optional':{'export_format':(EXPORT_FORMATS,), 'motion_preview':('BOOLEAN',{'default':True}), 'ae_frame_contract':string(''), 'restore_source_size':('BOOLEAN',{'default':True}), 'verify_source_clock':('BOOLEAN',{'default':False})}}
     RETURN_TYPES=('STRING',);RETURN_NAMES=('saved_sequence',);OUTPUT_NODE=True;FUNCTION='save';CATEGORY=CATEGORY
     @cpu_frames
-    def save(self,decoded_crop,plate,output_name,precision,match_context,export_format='EXR sequence',motion_preview=False,ae_frame_contract=''):
+    def save(self,decoded_crop,plate,output_name,precision,match_context,export_format='EXR sequence',motion_preview=False,ae_frame_contract='',restore_source_size=True,verify_source_clock=False):
         import folder_paths
         if ae_frame_contract:
             from ..comfylink.frame_contract import validate_interval
@@ -785,6 +785,9 @@ class ZuraPaintoutUncrop:
         if len(decoded_crop)<plate['count']:raise ValueError('Decoded sequence is shorter than source range')
         ph,pw=plate['padded'];rh,rw=plate['resized'];x,y,w,h=plate['rect']
         if tuple(decoded_crop.shape[1:3])!=(ph,pw):raise ValueError('Decoded crop size differs from crop metadata')
+        full_frame=_full_frame_delivery(plate,match_context)
+        if not restore_source_size and (ae_frame_contract or not full_frame):
+            raise ValueError('This delivery needs the source dimensions. Enable Return at source resolution.')
         base=Path(folder_paths.get_output_directory());relative=Path(output_name)
         if relative.is_absolute() or '..' in relative.parts:raise ValueError('Output name must be relative to ComfyUI output')
         root=base/relative;root.parent.mkdir(parents=True,exist_ok=True)
@@ -815,9 +818,9 @@ class ZuraPaintoutUncrop:
             progress=frame_progress(plate['count'])
             def decoded_frame(i):
                 raw=decoded_crop[i:i+1,:rh,:rw,:3].detach().float().cpu()
-                return resize(unworking(raw,plate['space'],plate.get('processing','HDR (ACEScct)')),h,w)[0]
+                working=unworking(raw,plate['space'],plate.get('processing','HDR (ACEScct)'))
+                return (resize(working,h,w) if restore_source_size else working)[0]
 
-            full_frame=_full_frame_delivery(plate,match_context)
             if full_frame:
                 # The entire source raster is replaced. Its pixels and matte
                 # distances cannot affect the result, so avoid a second decode.
@@ -865,6 +868,13 @@ class ZuraPaintoutUncrop:
             metadata=dict(exports=exports,plate={k:v for k,v in plate.items() if not k.startswith('_')},precision=precision,match_context=match_context,colour_fits=metrics,notes='RGB only. Source alpha/AOV/header metadata are not copied. Video exports copy source audio when present, trimmed to the selected range. Sequence fps is authoritative.')
             (target/'paintout.json').write_text(json.dumps(metadata,indent=2),encoding='utf-8')
             previews=delivery.finish()
+            if verify_source_clock:
+                from ..artist_studio.source_timing import verify_frame_clock
+                master=next((file for file in previews.get('images',[]) if file['filename'].endswith('.mov')),None)
+                if master is None:
+                    raise ValueError('The relight run did not create a video master to verify.')
+                verify_frame_clock(base/master['subfolder']/master['filename'],plate['count'],
+                                   Fraction(str(plate['fps_rational'])),w if restore_source_size else rw,h if restore_source_size else rh)
             return {'ui':{'text':[f'Saved {plate["count"]} frames: {target}'], 'zura_saved_sequence':[str(target)],'zura_exports':exports, **previews},'result':(str(target),)}
         finally:mask_exports.abort()
 

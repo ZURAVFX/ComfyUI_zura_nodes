@@ -152,12 +152,12 @@ class Wan21RelightTests(unittest.TestCase):
 
     def build(self, project=None):
         project = project or self.project()
-        with patch.object(studio, "assert_approved"), patch.object(wan21, "_output_size", return_value=(1280, 704)):
+        with patch.object(studio, "assert_approved"), patch.object(wan21, "_output_size", return_value=(1280, 704)), patch.object(wan21, "_source_size", return_value=(1921, 1081)):
             return wan21.build_studio_graph(project, lambda asset: asset["file"])
 
     def test_selected_resolution_reaches_both_native_relight_inputs(self):
         project = self.project()
-        project["config"].update(relight_width=720, relight_height=1280)
+        project["config"].update(relight_width=720, relight_height=1280, relight_return_source_resolution=False)
         graph = self.build(project)
         self.assertTrue(graph["wan21_shot"]["inputs"]["preserve_aspect"])
         self.assertEqual(graph["272:408:275:190"]["inputs"]["crop_position"], graph["272:407:89"]["inputs"]["crop_position"])
@@ -168,18 +168,19 @@ class Wan21RelightTests(unittest.TestCase):
         self.assertEqual(graph["wan21_export"]["inputs"]["output_width"], 720)
         self.assertEqual(graph["wan21_export"]["inputs"]["output_height"], 1280)
 
-    def test_source_size_exports_original_even_resolution(self):
+    def test_source_delivery_is_independent_of_working_raster(self):
         project = self.project()
         project["config"].update(relight_shape="source_size", relight_width=1920, relight_height=1088)
-        with patch.object(wan21, "_source_size", return_value=(1920, 1080)):
-            graph = self.build(project)
+        graph = self.build(project)
         self.assertEqual(graph["272:407:89"]["inputs"]["height"], 1088)
-        self.assertEqual(graph["wan21_export"]["inputs"]["output_width"], 1920)
-        self.assertEqual(graph["wan21_export"]["inputs"]["output_height"], 1080)
+        self.assertEqual(graph["wan21_export"]["inputs"]["output_width"], 1921)
+        self.assertEqual(graph["wan21_export"]["inputs"]["output_height"], 1081)
+        self.assertEqual(graph["wan21_shot"]["inputs"]["model_fps"], 16)
+        self.assertEqual(graph["272:407:89"]["inputs"]["keep_proportion"], "stretch")
 
     def test_4k_resolution_reaches_review_loader_and_both_model_inputs(self):
         project = self.project()
-        project["config"].update(relight_width=3840, relight_height=2160)
+        project["config"].update(relight_width=3840, relight_height=2160, relight_return_source_resolution=False)
         graph = self.build(project)
         self.assertEqual(graph["wan21_shot"]["inputs"]["render_long_edge"], 3840)
         for key in ("272:407:89", "272:408:275:190"):
@@ -218,8 +219,8 @@ class Wan21RelightTests(unittest.TestCase):
         self.assertEqual(graph["wan21_source_frames"]["inputs"]["video"], ["wan21_shot", 0])
         self.assertEqual(graph["wan21_hold_source"]["inputs"], {"images":["272:404:395",0],"length":["272:403:387",0]})
         self.assertEqual(graph["272:407:89"]["inputs"]["image"], ["wan21_hold_source",0])
-        self.assertEqual(graph["wan21_hold_result"]["inputs"], {"images":["272:402",0],"stride":4})
-        self.assertEqual(graph["wan21_video"]["inputs"]["images"], ["wan21_hold_result",0])
+        self.assertNotIn("wan21_hold_result", graph)
+        self.assertEqual(graph["wan21_video"]["inputs"]["images"], ["272:402",0])
         self.assertNotIn('target_frames', graph['wan21_export']['inputs'], 'Model padding must not extend the delivered selection')
         self.assertTrue(graph['wan21_shot']['inputs']['preserve_source_timing'])
         self.assertEqual(graph['wan21_video']['inputs']['fps'], ['wan21_source_frames', 2])
@@ -246,6 +247,34 @@ class Wan21RelightTests(unittest.TestCase):
         for private in ("relight needed.mp4", "reference_image.png", "ComfyUI-Shared", "C:\\\\Users\\\\ellio", "data:image/"):
             self.assertNotIn(private, raw)
 
+    def test_overlapping_windows_match_colour_without_blending_frame_content(self):
+        import torch
+        previous = torch.full((7, 8, 8, 3), .5)
+        incoming = torch.full((6, 8, 8, 3), .4)
+        for frame in range(len(incoming)):
+            incoming[frame, 0, frame] = .8
+        joiner = wan21.GenjJoinRelightSections()
+        (joined,) = joiner.join(previous, incoming, overlap=3, section_start=4)
+        self.assertEqual(len(joined), 10)
+        torch.testing.assert_close(joined[:4], previous[:4])
+        torch.testing.assert_close(joined[4:, 1:, :, :], torch.full((6, 7, 8, 3), .5))
+        for frame in range(len(incoming)):
+            self.assertEqual(torch.count_nonzero(joined[4 + frame, :, :, 0] > .6).item(), 1)
+            self.assertGreater(joined[4 + frame, 0, frame, 0], .8)
+        self.assertIs(joiner.join(previous[:1], incoming, overlap=1, section_start=0)[0], incoming)
+        with self.assertRaisesRegex(ValueError, "matching frames"):
+            joiner.join(previous, incoming, overlap=3, section_start=5)
+        # A window and foreground can need opposite corrections at one join.
+        previous = torch.full((7, 96, 96, 3), .45)
+        previous[:, :48] = .60
+        incoming = torch.full((6, 96, 96, 3), .50)
+        (joined,) = joiner.join(previous, incoming, overlap=3, section_start=4)
+        torch.testing.assert_close(joined[4:, 8, 48], torch.full((6, 3), .60))
+        torch.testing.assert_close(joined[4:, 87, 48], torch.full((6, 3), .45))
+        graph = self.build()
+        self.assertEqual(graph["272:405:399"]["class_type"], "GenjJoinRelightSections")
+        self.assertEqual(graph["272:401"]["inputs"]["initial_value1"], ["272:405:399", 0])
+
     def test_matching_loader_ids_do_not_skip_source_approval_checks(self):
         with patch.object(studio, "assert_approved", side_effect=ValueError("Source changed")):
             with self.assertRaisesRegex(ValueError, "Source changed"):
@@ -261,8 +290,7 @@ class Wan21RelightTests(unittest.TestCase):
     def test_supplied_lighting_image_needs_no_written_direction(self):
         project = self.project()
         project["config"]["prompt"] = ""
-        with patch.object(studio, "assert_approved"), patch.object(wan21, "_output_size", return_value=(1280, 704)):
-            graph = wan21.build_studio_graph(project, lambda asset: asset["file"])
+        graph = self.build(project)
         self.assertIn("supplied lighting image", graph["272:408:274:3"]["inputs"]["text"])
 
     def test_rejects_missing_approval_or_unsupported_features(self):

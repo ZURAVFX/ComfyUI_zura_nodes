@@ -20,6 +20,7 @@ from .switch_x_media import (
     canvas,
     fit,
     input_path,
+    neutral_replacement_guide,
     paired_frames,
     rgb,
     source_info,
@@ -46,10 +47,11 @@ class SwitchGuide:
             "optional": {
                 "white_means": (["keep", "replace"],),
                 "mask_channel": (["luma", "alpha"],),
+                "neutralize_replacement": ("BOOLEAN", {"default": False}),
             },
         }
 
-    def prepare(self, source, matte, start, count, side, white_means="keep", mask_channel="luma"):
+    def prepare(self, source, matte, start, count, side, white_means="keep", mask_channel="luma", neutralize_replacement=False):
         from comfy_extras.nodes_minimax_h3 import adapt_canvas
 
         images = masks = reference = None
@@ -58,8 +60,12 @@ class SwitchGuide:
             for frame, mask in frames:
                 dims = canvas(frame.width, frame.height, side)
                 decoded = rgb(frame)
+                selection = alpha_image(mask, mask_channel)
+                neutralize = neutralize_replacement and white_means == "replace"
+                if neutralize:
+                    decoded = neutral_replacement_guide(decoded, selection)
                 source_frame = fit(decoded, dims)
-                selected = fit(alpha_image(mask, mask_channel), dims)
+                selected = fit(selection, dims)
                 if images is None:
                     rw, rh = adapt_canvas(frame.width, frame.height)
                     if frame.width * frame.height <= rw * rh:
@@ -77,7 +83,7 @@ class SwitchGuide:
                     )
                 # Feed native-resolution reference detail independently of the render canvas.
                 # Bound memory for UHD footage at H3's own reference canvas size.
-                if frame.format.name in {
+                if not neutralize and frame.format.name in {
                     "yuvj420p",
                     "yuvj422p",
                     "yuvj444p",

@@ -22,7 +22,10 @@ studio.source={width:3840,height:2160};control.sync();assert.deepEqual([studio.c
 studio.source={width:1921,height:1081};control.sync();assert.deepEqual([studio.config.opening_width,studio.config.opening_height],[1936,1088],'Every source axis only moves outwards to the nearest grid');
 assert.equal(Number(field('mp').max),8.35);assert.match(field('hint').textContent,/restored to 1921 × 1081/);
 studio.modelStatus={opening_models:{klein9b:{raster_limits:{size_step:16,max_dimension:8192,max_pixels:8_388_608}}}};control.sync();
-const imageWidth=studio.config.opening_width;stage='video';control.sync();assert.match(field('dimensions').textContent,/1280 × 720/,'Existing relight default matches its graph');
+const imageWidth=studio.config.opening_width;stage='video';control.sync();assert.match(field('dimensions').textContent,/1921 × 1081/,'Relight defaults to returning the exact source raster');
+assert.match(field('hint').textContent,/1280 × 720 processing/);
+control.returnSource.checked=false;control.returnSource.onchange();control.sync();assert.match(field('dimensions').textContent,/1280 × 720/);
+control.returnSource.checked=true;control.returnSource.onchange();
 field('shape').value='portrait';field('shape').onchange();assert.ok(studio.config.relight_height>studio.config.relight_width);assert.equal(studio.config.opening_width,imageWidth,'Image and video sizes stay independent');
 field('shape').value='custom';field('shape').onchange();field('width').value='720';field('height').value='1280';field('width').commitDimension();assert.equal(studio.config.relight_width,720);assert.equal(studio.config.relight_height,1280);
 studio.source={width:1920,height:1088};control.sync();field('shape').value='source_size';field('shape').onchange();

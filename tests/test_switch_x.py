@@ -56,6 +56,20 @@ class OneGeneration(unittest.TestCase):
         self.assertIn("0:02 Switch lights on", g["scene"]["inputs"]["prompt"])
         self.assertEqual(sum(n["class_type"] == "SamplerCustomAdvanced" for n in g.values()), 1)
 
+    def test_source_relative_resolution_keeps_all_masked_inputs_aligned(self):
+        for scale in (1, .75, .5, .25):
+            g = self.graph(scale=scale, pinnedFrames={"car.png": 0})
+            side, width, height = routes.processing_size(1280, 720, {"scale": scale})
+            self.assertEqual(side, round(1280 * scale))
+            self.assertEqual((width, height), (side, ((round(720 * scale) + 31) // 32) * 32))
+            self.assertEqual((g["scene"]["inputs"]["width"], g["scene"]["inputs"]["height"]), (width, height))
+            for key in ("plates", "look_0", "finish"):
+                self.assertEqual(g[key]["inputs"]["side"], side)
+        self.assertEqual(routes.processing_size(1080, 1920, {"scale": .5}), (960, 544, 960))
+        self.assertEqual(routes.processing_size(1080, 1920, {"side": 1024}), (1024, 576, 1024))
+        with self.assertRaisesRegex(ValueError, "lower processing resolution"):
+            routes.processing_size(4096, 4096, {"scale": 1})
+
     def test_stale_two_pass_settings_cannot_reactivate_another_generation(self):
         g = self.graph(independentEnvironment=True, environmentRefs=["car.png"], cleanFringe=True)
         self.assertFalse(any("environment" in key or "fringe" in key for key in g))
@@ -80,8 +94,10 @@ class OneGeneration(unittest.TestCase):
         self.assertEqual(keep["protected_latent"]["class_type"],"ZuraSwitchXProtectedLatent")
         self.assertTrue(keep["protected_latent"]["inputs"]["allow_relight"])
         self.assertNotIn("edit_margin",keep)
+        self.assertNotIn("neutralize_replacement",keep["plates"]["inputs"])
         for margin in (0,8):
             edit=self.graph(whiteMeans="replace",replacementMargin=margin)
+            self.assertTrue(edit["plates"]["inputs"]["neutralize_replacement"])
             mask=["edit_margin",0] if margin else ["plates",1]
             self.assertFalse(edit["protected_latent"]["inputs"]["allow_relight"])
             for node,key in [("edit_region","mask"),("structure","replace"),("protected_latent","replace")]:
@@ -104,6 +120,18 @@ class OneGeneration(unittest.TestCase):
         np.testing.assert_array_equal(selection.editable_mask(alpha,"replace"),alpha)
         with self.assertRaisesRegex(ValueError,"embedded alpha"):
             media.alpha_image(av.VideoFrame.from_ndarray(rgba[:,:,:3].copy(),format="rgb24"),"alpha")
+
+    def test_replacement_guidance_removes_selected_chroma_only(self):
+        import numpy as np
+        media = importlib.import_module(package.__name__ + ".switch_x_media")
+        image = np.full((1, 3, 3), [.08, .62, .48], dtype=np.float32)
+        weights = np.array([[0, .5, 1]], dtype=np.float32)
+        guide = media.neutral_replacement_guide(image, weights)
+        np.testing.assert_array_equal(guide[0, 0], image[0, 0])
+        np.testing.assert_allclose(guide[0, 2], [guide[0, 2, 0]] * 3, atol=1e-6)
+        np.testing.assert_allclose(guide[0, 1], (image[0, 1] + guide[0, 2]) / 2, atol=1e-6)
+        luma = np.array([.2126, .7152, .0722], dtype=np.float32)
+        np.testing.assert_allclose(guide @ luma, image @ luma, atol=1e-6)
 
 
 if __name__ == "__main__":

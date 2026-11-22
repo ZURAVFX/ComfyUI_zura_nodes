@@ -10,6 +10,10 @@
 #genj-studio .zru-lighting-actions button{min-height:36px;padding:6px 12px;border:1px solid var(--gs-line);border-radius:6px;background:var(--gs-input);color:var(--zc-text);font:inherit;font-size:12px}
 #genj-studio .zru-lighting-actions button:disabled{opacity:.5;cursor:default}
 #genj-studio .zru-lighting-state{margin:0;color:var(--gs-muted);font-size:12px;line-height:1.5}
+#genj-studio .zru-return-source{display:inline-flex;align-items:center;gap:6px;min-height:36px;margin:0;color:var(--zc-text);font-size:12px}
+#genj-studio .zru-return-source input{accent-color:var(--gs-accent)}
+#genj-studio .zru-relight-megapixels{display:inline-grid;grid-template-columns:8ch minmax(75px,110px) 7ch;align-items:center;gap:8px;color:var(--zc-text);font-size:12px}
+#genj-studio .zru-relight-megapixels input{padding:0;accent-color:var(--gs-accent)}
 #genj-studio .zru-relight-advanced{padding:12px 0;border-top:1px solid var(--gs-line);font-size:12px;color:var(--gs-muted)}
 #genj-studio .zru-relight-advanced>summary{cursor:pointer;min-height:24px;line-height:24px}
 #genj-studio .zru-relight-advanced[open]>summary{margin-bottom:12px}

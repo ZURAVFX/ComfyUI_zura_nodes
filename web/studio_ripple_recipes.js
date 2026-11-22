@@ -76,6 +76,13 @@ export function buildRippleStudioGraph(c,info={}){
     graph.anchors.inputs.anchors=JSON.stringify(ltx.anchors.map(a=>({file:a.file,frame:a.frame,strength:1,enabled:true,colour_space:a.colour_space||'srgb_display'})));
     graph.anchors._meta={...graph.anchors._meta,title:`Loading visual reference from source frame ${referenceFrame}`,source_reference_frame:referenceFrame};
     graph.ripple_guide._meta={...graph.ripple_guide._meta,title:'Preparing the whole-clip visual reference'};
+    if(c.intent==='relight'){
+      graph.conditioning.inputs.frame_rate=24;
+      graph.conditioning._meta.title='Conditioning on LTX’s 24 fps model clock';
+      graph.audio.inputs.frame_rate=24;
+      graph.save.inputs.restore_source_size=c.returnSourceResolution!==false;
+      graph.save.inputs.verify_source_clock=true;
+    }
     return graph;
   }
   const graph={},r=(id,slot=0)=>[id,slot],n=(id,class_type,inputs,title)=>{graph[id]={class_type,inputs,_meta:{title}};return r(id);};
@@ -96,5 +103,6 @@ export function buildRippleStudioGraph(c,info={}){
   n('sample','SamplerCustomAdvanced',{noise:r('noise'),guider:r('guider'),sampler:r('sampler'),sigmas:r('sigmas'),latent_image:r('apply',1)},c.plateAction==='paint'?'Adding the object throughout your clip':c.plateAction==='replace'?'Replacing the object throughout your clip':'Propagating edits through the clip');
   n('decode','VAEDecode',{samples:r('sample'),vae:r('video_vae')},'Decoding the video');
   n('save','ZuraPaintoutUncrop',{decoded_crop:r('decode'),plate:r('source',2),output_name:c.savePrefix||'ZURA STUDIO/ripple',precision:'float32',match_context:false,export_format:'SDR video',motion_preview:true},'Restoring source size, frame rate and audio');
+  if(c.intent==='relight')Object.assign(graph.save.inputs,{restore_source_size:c.returnSourceResolution!==false,verify_source_clock:true});
   return applyAvailableAttention(graph,info);
 }

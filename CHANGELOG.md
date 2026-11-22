@@ -1,5 +1,13 @@
 # Release notes
 
+## 1.3.78 - 22 November 2026
+
+- Preview uploaded lighting frames and render with them in Studio Relight. Studio fits uploads to the source framing and shows when it centre-crops an image.
+- Choose the processing resolution separately from the delivery raster. Return at source resolution is enabled by default. Relight restores the source frame rate and verifies the delivered frame count and clock.
+- Match lighting across overlapping Wan 2.1 sections. The frame 57 brightness step measured under two levels after the fix, down from eleven on the tested shot.
+- Align SwitchX upload and render controls. Add Studio's SDR and HDR output choices and source-relative processing resolution.
+- Remove the old material colour from SwitchX replacement guidance. The revised amber vase example includes a lossless master and the exact render graph.
+
 ## 1.3.77 - 22 November 2026
 
 - Include Zura SwitchX in the complete video menu regression check used by the Registry release workflow. This patch carries the SwitchX mode and example introduced in 1.3.76.

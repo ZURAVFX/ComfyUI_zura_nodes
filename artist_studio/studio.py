@@ -48,6 +48,7 @@ DEFAULTS = {"engine": "local", "background": "keep", "scope": "person", "prompt"
             "opening_model": "klein9b",
             "opening_width": 0, "opening_height": 0, "opening_shape": "source_size", "opening_megapixels": 1.0,
             "relight_width": 0, "relight_height": 0, "relight_shape": "source", "relight_megapixels": 0.9,
+            "relight_return_source_resolution": True,
             "camera_shape": "source", "camera_megapixels": 0.35,
             "start": 0.0, "duration": 2.0, "size": 512, "performer": -1,
             "margin": 20, "pitch": False, "seed": 42, "render_size": 0, "h3_preset": "preview_quality", "h3_steps": 0, "h3_attention": "native", "remove_text": False,
@@ -2982,6 +2983,9 @@ def register():
                         raise ValueError("The clip length could not be read. Export an MP4 and upload it again.")
                     details = {"duration": duration, "width": stream.width, "height": stream.height,
                                "has_audio": bool(video.streams.audio), "video_codec": stream.codec_context.name}
+                    rate = stream.average_rate or stream.base_rate
+                    if rate:
+                        details.update(fps=float(rate), fps_num=rate.numerator, fps_den=rate.denominator)
                     from .preview_proxy import needs_proxy
                     if needs_proxy(stream.codec_context.name):
                         details["preview_file"] = str(Path(relative).parent / "preview.mp4").replace("\\", "/")

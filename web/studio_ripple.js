@@ -6,6 +6,7 @@ import {StudioModelDownloads} from './studio_model_download.js';
 import {rippleStudioProcessingSize, rippleStudioValidation} from './studio_ripple_recipes.js';
 import {RippleTimeline} from './studio_ripple_timeline.js';
 import {RippleAnchorPreview} from './studio_ripple_preview.js';
+import {resolutionSize,VIDEO_CANVAS_LIMITS} from './studio_resolution.js';
 
 const STATE_KEY='zura-ripple-workspace-v1';
 const clamp=(value,min,max)=>Math.max(min,Math.min(max,value));
@@ -42,7 +43,7 @@ export class RippleWorkspace {
     this.intent=intent==='relight'?'relight':'edit';this.storageKey=this.intent==='relight'?'zura-relight-workspace-v1':STATE_KEY;this.owner=owner;this.api=owner.api;this.root=owner.root;this.app=owner.app;this.closed=true;
     const saved=readState(this.storage,this.storageKey);this.state={...initial(),...saved};
     if(!['h3','ltx'].includes(this.state.engine))this.state.engine='h3';
-    if(![1,.75,.5,.25].includes(Number(this.state.scale)))this.state.scale=1;
+    if(!(this.intent==='relight'&&this.state.scale==='custom')&&![1,.75,.5,.25].includes(Number(this.state.scale)))this.state.scale=1;
     this.state.anchors=sharedAnchors(saved.anchors,this.state.engine);
     this.source=null;this.sourceInfo=null;this.selectedId=saved.selectedId||null;this.job=saved.job||null;this.pendingSubmission=saved.pendingSubmission||null;this.result=saved.result||null;
     this.revision=0;this.submitting=false;this.importing=false;this.exporting=false;this.picking=false;this.modelInfo=null;this.availability=null;
@@ -81,13 +82,13 @@ export class RippleWorkspace {
     });
     this.$('source').onclick=()=>this.$('source-file').click();this.$('source-file').onchange=e=>{const file=e.target.files?.[0];e.target.value='';if(file)void this.uploadSource(file);};this.$('clear-source').onclick=()=>this.reset();
     this.$('engine').onchange=()=>{if(this.busy())return;if(this.intent==='relight'&&this.$('engine').value==='wan21'){void this.owner.selectRelightEngine('wan21');return;}this.owner.rippleImage?.invalidate(this);if(this.viewingEdit)this.viewAnchor(false);this.state.engine=this.$('engine').value;if(this.intent==='relight')this.owner.rememberRelightEngine?.(this.state.engine);if(this.state.engine==='ltx'){const reference=this.selected()?.file?this.selected():this.ltxReference();this.state.ltxReferenceId=reference?.id||null;this.message(reference?`LTX uses frame ${reference.frame} as one visual reference for the whole clip. H3 supports timed keyframes.`:'LTX uses one edited image as a visual reference for the whole clip.');}else this.message('');this.save();this.checkModels();this.render();};
-    this.$('scale').onchange=()=>{if(this.busy())return;this.state.scale=Number(this.$('scale').value);this.save();this.render();};
+    this.$('scale').onchange=()=>{if(this.busy())return;const value=this.$('scale').value;this.state.scale=value==='custom'?'custom':Number(value);this.save();this.render();};
     this.$('prompt').oninput=()=>{this.state.prompt=this.$('prompt').value;this.save();};
     this.$('frame').onfocus=e=>e.target.select();this.$('frame').onchange=e=>{const raw=e.target.value.trim(),n=Number(raw);if(!raw||!Number.isInteger(n)){this.message('Enter a whole frame number.');this.render();return;}this.seek(n);};
     this.$('frame').onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();const n=Number(e.target.value.trim());if(Number.isInteger(n))this.addAnchor(n);else this.message('Enter a whole frame number.');}};
     this.$('edit').onclick=()=>{const anchor=this.selected();if(!anchor)return;if(typeof this.owner.editRippleFrame!=='function'){this.message('The image editor is not available.');return;}void Promise.resolve(this.owner.editRippleFrame(this,anchor)).catch(error=>this.message(error.message));};
     this.$('export').onclick=()=>void this.exportAnchor();this.$('import').onclick=()=>this.$('import-file').click();
-    this.$('import-file').onchange=e=>{const file=e.target.files?.[0];e.target.value='';if(file)void this.importAnchorFile(this.selected(),file).catch(()=>{});};
+    this.$('import-file').onchange=e=>{const file=e.target.files?.[0];e.target.value='';if(file)void this.importAnchorFile(this.selected(),file).catch(error=>this.message(error.message));};
     this.$('compare').onclick=()=>this.viewAnchor(!this.viewingEdit);
     this.$('generate').onclick=()=>void this.generate();this.$('cancel').onclick=()=>void this.cancel();
     this.$('view-result').onclick=()=>{if(!this.result?.file)return;if(this.video.dataset.kind==='result')this.viewAnchor(false);else{this.viewingEdit=false;this.showResult(this.result);this.render();}};
@@ -112,6 +113,10 @@ export class RippleWorkspace {
   anchors(){return this.state.anchors;}
   ltxReference(){
     const enabled=this.anchors().filter(a=>a.enabled!==false),inside=a=>a.frame>=this.state.startFrame&&a.frame<this.state.startFrame+this.state.frameCount;
+    if(this.intent==='relight'){
+      const active=enabled.filter(inside);
+      return active.find(a=>a.file&&a.id===this.state.ltxReferenceId)||active.find(a=>a.file)||active.find(a=>a.id===this.state.ltxReferenceId)||active[0]||null;
+    }
     return enabled.find(a=>a.id===this.state.ltxReferenceId)||enabled.find(a=>a.file&&inside(a))||enabled.find(inside)||enabled.find(a=>a.file)||enabled[0]||null;
   }
   selected(){return this.anchors().find(anchor=>String(anchor.id)===String(this.selectedId))||null;}
@@ -132,7 +137,7 @@ export class RippleWorkspace {
   setSource(info){
     if(!info?.path||info.kind!=='video'||!Number.isInteger(info.frames)||info.frames<1||!(info.width>0&&info.height>0))throw Error('Choose a supported video clip.');
     this.owner.rippleImage?.invalidate(this);
-    ++this.revision;this.source=this.sourceInfo=info;this.state={...initial(),engine:this.state.engine,scale:this.state.scale,prompt:this.state.prompt,sourcePath:info.path,sourceName:info.name||'',studioAsset:info.studioAsset||null,frameCount:info.frames};
+    ++this.revision;this.source=this.sourceInfo=info;this.state={...initial(),engine:this.state.engine,scale:this.state.scale,megapixels:this.state.megapixels,prompt:this.state.prompt,returnSourceResolution:this.state.returnSourceResolution,sourcePath:info.path,sourceName:info.name||'',studioAsset:info.studioAsset||null,frameCount:info.frames};
     this.state.sourceColour=info.resolved_colour||'rec709_oetf';this.selectedId=null;this.result=null;this.job=null;this.pendingSubmission=null;this.picking=false;this.projectPromise=null;this.viewingEdit=false;this.uploadController=null;this.clearProgress();
     this.video.dataset.kind='source';this.video.src=this.url(info.media_url||info.thumbnail_url);this.video.hidden=false;this.framePreview.hidden=true;this.video.load();this.$('empty').hidden=true;this.seek(0);this.message(['hlg_rec2020','pq_rec2020','pq_display_p3','acescg','acescct','linear_rec709'].includes(info.resolved_colour)?'Ripple currently supports SDR footage.':'');this.save();this.render();
   }
@@ -193,24 +198,36 @@ export class RippleWorkspace {
   async importAnchorFile(anchor,file,check=()=>{}){
     if(!anchor||!file||!this.source||this.importing)throw Error('Choose a keyframe and edited image first.');
     const revision=this.revision,source=this.source.path,frame=anchor.frame,engine=this.state.engine;this.importing=true;this.render();
-    try{const project=await this.ensureProject(),body=new FormData();body.append('project',project);body.append('source',source);body.append('frame',String(frame));body.append('colour_space','srgb_display');body.append('file',file,file.name||`frame_${frame}.png`);
+    try{const project=await this.ensureProject(),body=new FormData();body.append('project',project);body.append('source',source);body.append('frame',String(frame));body.append('colour_space','srgb_display');if(this.intent==='relight')body.append('intent','relight');body.append('file',file,file.name||`frame_${frame}.png`);
       const response=await this.api.fetchApi('/zura/paintout/editor/import-frame',{method:'POST',body});const result=await response.json();if(!response.ok)throw Error(result.error||'Could not import this edited image.');
       if(revision!==this.revision||this.source?.path!==source||this.state.engine!==engine||!this.anchors().includes(anchor)||anchor.frame!==frame)throw Error('The source or keyframe changed. Import the image again.');
       if(Number(result.frame)!==frame||!result.file)throw Error('The imported image does not match this keyframe.');
-      check();Object.assign(anchor,{file:result.file,colour_space:result.colour_space||'srgb_display',enabled:true});this.selectedId=anchor.id;this.save();this.message(`Edit ready for frame ${frame}.`);return anchor;
+      check();Object.assign(anchor,{file:result.file,colour_space:result.colour_space||'srgb_display',enabled:true,fitted:result.fitted===true});this.selectedId=anchor.id;
+      if(this.intent==='relight'||engine==='ltx')this.state.ltxReferenceId=anchor.id;
+      this.save();this.message(this.intent==='relight'?'Lighting frame ready.':`Edit ready for frame ${frame}.`);return anchor;
     }catch(error){this.message(error.message||'Could not import this edited image.');throw error;}finally{this.importing=false;this.render();}
   }
+  processingSize(){
+    const source=this.source;
+    if(!source)return {width:0,height:0};
+    if(this.intent==='relight'&&this.state.scale==='custom'){
+      const cap=VIDEO_CANVAS_LIMITS;
+      return resolutionSize(source.width/source.height,clamp(Number(this.state.megapixels)||.9,.25,8.35),
+        {step:this.state.engine==='ltx'?64:32,min:64,max:cap.maxDimension,maxPixels:cap.maxPixels});
+    }
+    return rippleStudioProcessingSize(source.width,source.height,Number(this.state.scale),this.state.engine);
+  }
   config(){
-    const source=this.source,size=source?rippleStudioProcessingSize(source.width,source.height,Number(this.state.scale),this.state.engine):{width:0,height:0};
+    const source=this.source,size=this.processingSize();
     const start=this.state.startFrame,end=start+this.state.frameCount;
     const references=this.state.engine==='ltx'||this.intent==='relight'&&!this.state.relightAdvanced?[this.ltxReference()].filter(Boolean):this.anchors().filter(a=>a.enabled!==false&&a.frame>=start&&a.frame<end);
     const anchors=references.map(a=>({...a}));
-    return {...(this.intent==='relight'?{intent:'relight',savePrefix:'ZURA STUDIO/relight'}:{}),engine:this.state.engine,source:source?.path||'',startFrame:start,frameCount:this.state.frameCount,sequenceFps:this.fps(),width:size.width,height:size.height,resolutionMode:'plate',anchors,prompt:this.$('prompt').value,seed:42,outputMode:'SDR video',sourceColour:this.colourSpace(),detectedSourceColour:source?.resolved_colour||''};
+    return {...(this.intent==='relight'?{intent:'relight',savePrefix:'ZURA STUDIO/relight',returnSourceResolution:this.state.returnSourceResolution!==false}:{}),engine:this.state.engine,source:source?.path||'',startFrame:start,frameCount:this.state.frameCount,sequenceFps:this.fps(),width:size.width,height:size.height,resolutionMode:'plate',anchors,prompt:this.$('prompt').value,seed:42,outputMode:'SDR video',sourceColour:this.colourSpace(),detectedSourceColour:source?.resolved_colour||''};
   }
   async generate(){
-    if(this.busy())return;let config=this.config();const delivery=this.owner.outputSettings?.delivery,error=rippleStudioValidation(delivery?.modelInputValidationConfig?.(this,config)||config);if(error){this.message(error);return;}
+    if(this.busy())return;let config=this.config();const delivery=this.owner.outputSettings?.delivery,error=rippleStudioValidation(delivery?.modelInputValidationConfig?.(this,config)||config);if(error){this.message(this.intent==='relight'&&!config.anchors.some(a=>a.file)?'Create or upload a lighting frame before relighting the video.':error);return;}
     if(typeof this.onGenerate!=='function'){this.message('Ripple is still connecting to ComfyUI. Try again shortly.');return;}
-    try{config=await delivery?.prepareInferenceView?.(this,'ripple',config)||config;const invalid=rippleStudioValidation(config);if(invalid)throw Error(invalid);await this.onGenerate(config);}catch(error){this.message(error.message||'Could not start the Ripple run.');this.render();}
+    try{config=await delivery?.prepareInferenceView?.(this,this.intent==='relight'?'relight':'ripple',config)||config;const invalid=rippleStudioValidation(config);if(invalid)throw Error(invalid);await this.onGenerate(config);}catch(error){this.message(error.message||'Could not start the Ripple run.');this.render();}
   }
   async cancel(){if(this.picking&&this.uploadController){this.uploadController.abort();this.uploadController=null;this.picking=false;++this.revision;this.clearProgress();this.message('Video upload cancelled.');this.render();return;}if((this.job||this.pendingSubmission)&&typeof this.onCancel==='function')await this.onCancel(this.job);}
   setProgress({title='Generating video',detail='',value=null}={}){this.$('progress').hidden=false;this.$('progress-title').textContent=this.intent==='relight'?title.replaceAll('Ripple','Relight'):title;this.$('progress-detail').textContent=this.intent==='relight'?detail.replaceAll('Ripple','Relight'):detail;if(Number.isFinite(value))this.$('bar').value=clamp(value,0,100);else this.$('bar').removeAttribute('value');}
@@ -252,7 +269,7 @@ export class RippleWorkspace {
     this.timeline.update({startFrame:start,frameCount:this.state.frameCount||1,totalFrames:frames||1,fps:this.fps(),playhead:this.state.playhead,anchors:this.anchors().map(a=>({...a,status:a.file?'accepted':'draft'})),selected:this.anchors().indexOf(anchor),stage:'clean',busy,thumbnail:a=>a.file?this.thumbnail(a.file,0,a.colour_space||'srgb_display'):this.thumbnail(this.source?.path,a.frame)});
     for(const name of ['source','clear-source','engine','scale','frame','scrub','add-on-track','edit','export','import','compare','full-clip'])this.$(name).disabled=busy||(!has&&!['source','engine','scale'].includes(name));
     this.$('generate').disabled=busy||!has;this.$('cancel').disabled=!this.job&&!this.pendingSubmission&&!this.uploadController;this.$('download').hidden=!this.result?.file;this.$('view-result').hidden=!this.result?.file;this.$('view-result').textContent=this.video.dataset.kind==='result'?'View source':'View result';
-    if(has){const size=rippleStudioProcessingSize(this.source.width,this.source.height,Number(this.state.scale),this.state.engine);this.$('processing-size').textContent=`${size.width} × ${size.height} processing · ${this.source.width} × ${this.source.height} output`;this.trimmer.update({url:this.url(this.source.media_url||''),duration:frames/this.fps(),fps:this.fps()},{workflow_mode:'relight',length_mode:'custom',start:start/this.fps(),duration:this.state.frameCount/this.fps()},{disabled:busy});this.trimmer.setPlayhead(this.state.playhead/this.fps());}else{this.$('processing-size').textContent='';this.trimmer.update(null,{});}
+    if(has){const size=this.processingSize(),output=this.intent==='relight'&&this.state.returnSourceResolution===false?size:this.source;this.$('processing-size').textContent=`${size.width} × ${size.height} processing · ${output.width} × ${output.height} output`;this.trimmer.update({url:this.url(this.source.media_url||''),duration:frames/this.fps(),fps:this.fps()},{workflow_mode:'relight',length_mode:'custom',start:start/this.fps(),duration:this.state.frameCount/this.fps()},{disabled:busy});this.trimmer.setPlayhead(this.state.playhead/this.fps());}else{this.$('processing-size').textContent='';this.trimmer.update(null,{});}
     this.simpleRelight?.sync();
   }
   reset(){if(this.busy())return false;this.anchorPreview.close();this.owner.rippleImage?.invalidate(this);++this.revision;this.trimmer.close();this.video.pause();this.video.removeAttribute('src');this.video.load();this.video.hidden=true;this.framePreview.hidden=true;this.framePreview.style.backgroundImage='';this.source=this.sourceInfo=null;this.state=this.intent==='relight'?{...initial(),engine:this.state.engine,relightCleared:true,clearedStudioAssetId:this.state.studioAsset?.id||this.state.clearedStudioAssetId}:initial();this.selectedId=null;this.result=null;this.job=null;this.pendingSubmission=null;this.projectPromise=null;this.viewingEdit=false;this.$('prompt').value='';this.$('engine').value=this.state.engine;this.$('scale').value='1';this.$('download').hidden=true;this.clearProgress();this.message('');this.save();this.render();return true;}

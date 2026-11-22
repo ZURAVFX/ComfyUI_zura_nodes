@@ -1745,6 +1745,10 @@ export class ArtistStudio {
     if(p?.review && !wholeScene && p.tracking_coverage?.cut_reselection_requires_review)description+=" Check that the correct person or object stays selected after each camera cut.";
     if(p?.review && !wholeScene && p.tracking_coverage?.near_empty_frames)description+=" The selection is missing in part of the clip. Check whether the subject has left the picture or the mask needs correcting.";
     if(p?.opening_url && this.preview==="look" && (!["done","draft"].includes(phase) || this.composerStage()!=="video")){opening=p.opening_url;video=null;title=working?"Your approved starting frame":this.lookMode==="ready"?"Review your finished frame":"Review your starting frame";description=relight?"Check the lighting. Subjects, objects and composition should match the source.":"Check the appearance and framing before animation.";if(relight)title=working?"Your approved lighting frame":"Review your lighting frame";}
+    if(relight && !p?.opening_input && this.lookMode==="ready" && this.readyAsset?.url){
+      opening=this.readyAsset.url;video=null;title="Review your lighting frame";
+      description="Check the lighting and framing before generating the video.";
+    }
     if(this.preview==="original" && this.composerStage()==="image" && this.source){
       video=this.sourcePlayback();opening=video?null:this.source.thumbnail_url;title="Original footage";
       description="Regenerate the selected starting frame from this source, using your references and revised prompt.";

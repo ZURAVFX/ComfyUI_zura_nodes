@@ -2,6 +2,7 @@
 from fractions import Fraction
 import math
 from pathlib import Path
+from uuid import uuid4
 
 import av
 
@@ -16,7 +17,7 @@ def timeline(source, details):
         rate = Fraction(stream.average_rate or stream.base_rate or 0)
         available = (float(stream.duration * stream.time_base) if stream.duration is not None
                      else float((container.duration or 0) / av.time_base))
-        count = stream.frames
+        count = stream.frames or sum(1 for _ in container.decode(stream))
     if rate <= 0 or rate > 240:
         raise ValueError('The original video has no supported frame rate.')
     duration = min(requested, available - start)
@@ -28,7 +29,7 @@ def timeline(source, details):
                 duration=float(Fraction(frames, 1) / rate), selected_duration=duration, full_source=full)
 
 
-def reload_review(directory, details, render_long_edge, output_scale, preserve_aspect, preview_seconds, ffmpeg):
+def reload_review(directory, details, render_long_edge, output_scale, preserve_aspect, preview_seconds, ffmpeg, model_fps=0):
     """Reread RGB from the original, never upsample the 24 fps review proxy."""
     source = Path(details['source'])
     if preview_seconds:
@@ -37,6 +38,10 @@ def reload_review(directory, details, render_long_edge, output_scale, preserve_a
     timing = timeline(source, details)
     details = dict(details, **timing)
     rate = Fraction(timing['fps_num'], timing['fps_den'])
+    if model_fps:
+        start_frame = round(Fraction(str(details['start'])) * rate)
+        details['start'] = float(start_frame / rate)
+        details['model_fps'] = model_fps
     with av.open(str(source)) as container:
         stream = container.streams.video[0]
         sw, sh = stream.width, stream.height
@@ -48,8 +53,32 @@ def reload_review(directory, details, render_long_edge, output_scale, preserve_a
     target_w, target_h = (max(2, round(side * scale / 2) * 2) for side in (sw, sh))
     cache = Path(directory) / (f"source_timing_v1_{render_long_edge}_x{output_scale}_{timing['frames']}f_"
                                f"{rate.numerator}_{rate.denominator}_{grid}")
+    if model_fps:
+        cache = cache.with_name(cache.name + f'_start{start_frame}_model{model_fps}')
     cache.mkdir(exist_ok=True)
     high_source = cache / 'source.mp4'
+    if model_fps:
+        # Reinterpret each captured frame on the model clock. The fps filter
+        # would resample the timeline and delete or repeat source frames.
+        if not high_source.exists():
+            pending = high_source.with_name(f'.source-{uuid4().hex}.mp4')
+            try:
+                ffmpeg('-i', source, '-map', '0:v:0', '-an',
+                       '-vf', f'trim=start_frame={start_frame}:end_frame={start_frame + timing["frames"]},'
+                              f'settb=1/{model_fps},setpts=N,scale={w}:{h}:flags=lanczos',
+                       '-fps_mode', 'cfr', '-r', model_fps, '-enc_time_base', f'1/{model_fps}',
+                       '-c:v', 'libx264', '-crf', 16, '-pix_fmt', 'yuv420p', pending)
+                verify_frame_clock(pending, timing['frames'], Fraction(model_fps), w, h)
+                pending.replace(high_source)
+            finally:
+                pending.unlink(missing_ok=True)
+        # Wan consumes only the source VIDEO and clip details; retain the
+        # approved review paths for the unused mask and guide outputs.
+        details.update(width=w, height=h, export_width=target_w, export_height=target_h,
+                       render_long_edge=render_long_edge, selected_path=str(high_source))
+        mask = Path(directory) / 'mask.mp4'
+        performer = Path(directory) / 'performer_mask.mp4'
+        return high_source, mask, Path(directory) / 'guide.mp4', details, performer if performer.exists() else mask
     if not high_source.exists():
         ffmpeg('-ss', details['start'], '-i', source, '-i', Path(directory) / 'source.mp4',
                '-map', '0:v:0', '-map', '1:a:0?', '-t', timing['duration'],
@@ -78,3 +107,52 @@ def reload_review(directory, details, render_long_edge, output_scale, preserve_a
     details.update(width=w, height=h, export_width=target_w, export_height=target_h,
                    render_long_edge=render_long_edge, selected_path=str(high_source))
     return high_source, paths[0], paths[1], details, paths[2]
+
+
+def verify_frame_clock(path, count, rate, width, height):
+    with av.open(str(path)) as media:
+        stream = media.streams.video[0]
+        if (stream.width, stream.height, stream.average_rate) != (width, height, rate):
+            raise ValueError(f'Expected {width} × {height} at {rate} fps in the delivered video.')
+        index = -1
+        for index, frame in enumerate(media.decode(stream)):
+            if frame.pts is None or frame.pts * frame.time_base != Fraction(index, 1) / rate:
+                raise ValueError(f'Frame {index} does not match the required video clock.')
+        if index + 1 != count:
+            raise ValueError(f'Expected {count} video frames but decoded {index + 1}.')
+
+
+def save_relight_frames(video, details, destination, width, height):
+    import cv2
+    from comfy.model_management import throw_exception_if_processing_interrupted
+    from .hdr_prores import write_prores4444
+
+    frames = video.get_components().images
+    count = details['frames']
+    rate = Fraction(details['fps_num'], details['fps_den'])
+    if len(frames) < count:
+        raise ValueError(f'The model produced {len(frames)} of {count} source frames. Re-render the shot.')
+    source = details['source']
+    with av.open(str(source)) as media:
+        has_audio = bool(media.streams.audio)
+    width = width or frames.shape[2]
+    height = height or frames.shape[1]
+
+    def restored_frames():
+        for frame in frames[:count]:
+            throw_exception_if_processing_interrupted()
+            rgb = frame[..., :3].detach().float().cpu().numpy()
+            if rgb.shape[:2] != (height, width):
+                rgb = cv2.resize(rgb, (width, height), interpolation=cv2.INTER_LANCZOS4)
+            yield rgb
+
+    write_prores4444(restored_frames(), destination, width=width, height=height,
+                     count=count, fps=rate, source_space='srgb_display',
+                     audio_source=source if has_audio else None, audio_start=details['start'],
+                     audio_duration=float(count / rate))
+    try:
+        verify_frame_clock(destination, count, rate, width, height)
+    except BaseException:
+        destination.unlink(missing_ok=True)
+        destination.with_suffix('.mov.json').unlink(missing_ok=True)
+        raise

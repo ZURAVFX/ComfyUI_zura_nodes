@@ -46,19 +46,51 @@ async def effective_preview(request):
         return web.json_response({'error': str(error)}, status=400)
 
 
-def _validated_frame_result(target, description, frame, colour):
+def _validated_frame_result(target, description, frame, colour, fit_lighting=False):
     """Validate the owned snapshot, so later external edits cannot alter a guide."""
     validate_edit_orientation(target)
     pixels = read_image(str(target))
-    if pixels.shape[:2] != (description['height'], description['width']):
-        raise ValueError('Edited frame dimensions must match the original source exactly.')
+    width, height = description['width'], description['height']
+    fitted = False
+    if pixels.shape[:2] != (height, width):
+        if not fit_lighting:
+            raise ValueError('Edited frame dimensions must match the original source exactly.')
+        image_height, image_width = pixels.shape[:2]
+        if target.suffix.lower() == '.exr' or colour != 'srgb_display':
+            raise ValueError('Export this lighting image at the source dimensions to preserve its colour and precision.')
+        import cv2
+        import OpenImageIO as oiio
+        if abs(image_width * height / (image_height * width) - 1) > .02:
+            if (image_width > image_height) != (width > height) and min(image_width, image_height) / max(image_width, image_height) < .8:
+                raise ValueError('Choose a lighting image with the same orientation as the source.')
+            crop_width = min(image_width, max(1, round(image_height * width / height)))
+            crop_height = min(image_height, max(1, round(image_width * height / width)))
+            left, top = (image_width - crop_width) // 2, (image_height - crop_height) // 2
+            pixels = pixels[top:top + crop_height, left:left + crop_width]
+            fitted = True
+        resized = cv2.resize(pixels, (width, height), interpolation=cv2.INTER_LANCZOS4)
+        target = target.with_suffix('.png') if target.suffix.lower() != '.png' else target.with_name(target.stem + '-fitted.png')
+        writer = oiio.ImageOutput.create(str(target))
+        if not writer:
+            raise ValueError('Could not create the fitted lighting frame.')
+        try:
+            try:
+                spec = oiio.ImageSpec(width, height, 3, oiio.UINT16)
+                samples = np.ascontiguousarray(np.rint(resized.clip(0, 1) * 65535), dtype=np.uint16)
+                if not writer.open(str(target), spec) or not writer.write_image(samples):
+                    raise ValueError('Could not resize the lighting image.')
+            finally:
+                writer.close()
+        except BaseException:
+            target.unlink(missing_ok=True)
+            raise
     if not np.isfinite(pixels).all():
         raise ValueError('The edited frame contains invalid pixel values. Export a finite image before importing.')
     if colour not in COLOUR_SPACES:
         raise ValueError('Choose the edited image colour space.')
     if colour == 'auto':
         colour = selected_space(description, colour)
-    return dict(file=str(target), frame=frame, colour_space=colour, url=grant(target),
+    return dict(file=str(target), frame=frame, colour_space=colour, url=grant(target), fitted=fitted,
                 width=description['width'], height=description['height'])
 
 
@@ -154,7 +186,10 @@ async def import_frame(request):
         target = project_dir(project) / 'imports' / (secrets.token_hex(12) + upload[0])
         target.parent.mkdir(exist_ok=True)
         target.write_bytes(upload[1])
-        result = await asyncio.to_thread(_validated_frame_result, target, description, frame, fields.get('colour_space', 'srgb_display'))
+        result = await asyncio.to_thread(_validated_frame_result, target, description, frame,
+                                         fields.get('colour_space', 'srgb_display'), fields.get('intent') == 'relight')
+        if Path(result['file']) != target:
+            target.unlink(missing_ok=True)
         return web.json_response(result)
     except (ValueError, OSError, TypeError) as error:
         if target and target.exists():

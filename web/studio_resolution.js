@@ -77,6 +77,13 @@ export class VideoResolutionControl {
   constructor(studio,panel){
     this.studio=studio;this.panel=panel;panel.innerHTML=resolutionMarkup('zvr');
     this.$=id=>panel.querySelector('#zvr-'+id);
+    const delivery=panel.ownerDocument.createElement('label');
+    delivery.className='gs-checkbox';
+    this.returnSource=panel.ownerDocument.createElement('input');
+    this.returnSource.type='checkbox';
+    this.returnSource.onchange=()=>{studio.config.relight_return_source_resolution=this.returnSource.checked;this.commit();};
+    delivery.append(this.returnSource,'Return at source resolution');
+    this.$('hint').before(delivery);
     this.$('shape').onchange=()=>{this.apply();this.commit();};this.$('mp').oninput=()=>this.apply();this.$('mp').onchange=()=>this.commit();
     for(const key of ['width','height'])editableDimension(this.$(key),()=>{this.apply(true);this.commit();},()=>this.context().cap);
   }
@@ -122,6 +129,9 @@ export class VideoResolutionControl {
   commit(){this.studio.$('resolution').dispatchEvent(new this.panel.ownerDocument.defaultView.Event('change',{bubbles:true}));}
   sync(){
     const x=this.context(),busy=x.s.busy||x.s.project?.phase==='working';
+    this.returnSource.parentElement.hidden=!x.relight||x.opening;
+    this.returnSource.checked=!!x.c.ae_frame_contract||x.c.relight_return_source_resolution!==false;
+    this.returnSource.disabled=busy||!!x.c.ae_frame_contract||!x.source.width;
     const sourceWidth=x.source.width||1280,sourceHeight=x.source.height||720;
     const fallback=x.camera?{width:768,height:448}:x.opening?resolutionSize(x.ratio,1,x.cap):{width:Math.max(256,Math.round(sourceWidth*1280/Math.max(sourceWidth,sourceHeight)/16)*16),height:Math.max(256,Math.round(sourceHeight*1280/Math.max(sourceWidth,sourceHeight)/16)*16)};
     const requestedShape=x.c[x.key+'_shape']||(x.opening?'source_size':'source');
@@ -147,14 +157,16 @@ export class VideoResolutionControl {
     this.$('custom').hidden=this.$('shape').value!=='custom';
     for(const key of ['width','height']){const field=this.$(key);if(field!==this.panel.ownerDocument.activeElement)field.value=size[key];field.disabled=busy;}
     this.$('mp').disabled=busy||(!x.exact&&(x.c.engine==='wan2'||x.c.h3_head_swap));
-    const output=sourceSize&&x.relight?{width:sourceWidth,height:sourceHeight}:size;
+    const output=x.relight&&!x.opening&&this.returnSource.checked&&x.source.width?{width:sourceWidth,height:sourceHeight}:size;
     this.$('dimensions').textContent=`${output.width} × ${output.height} px`;
     const sourceHint=sourceSize?(x.opening
       ?(sourceSize.width===sourceWidth&&sourceSize.height===sourceHeight
         ?'Processing matches the source.'
         :`Processing is stretched up to the model grid. Generated at ${sourceSize.width} × ${sourceSize.height}, then restored to ${sourceWidth} × ${sourceHeight}.`)
-      :`${output.width===sourceWidth&&output.height===sourceHeight?'Output matches the source.':'Output is restored to the exact source raster.'} ${sourceSize.width===output.width&&sourceSize.height===output.height?'':`Generated at ${sourceSize.width} × ${sourceSize.height} on Wan’s ${x.cap.step}-pixel grid, then fitted to the output.`}`):'';
-    this.$('hint').textContent=sourceError?sourceError:x.camera?`Camera still and video use ${size.width} × ${size.height}. Images are fitted without stretching${sourceSize&&(size.width!==sourceWidth||size.height!==sourceHeight)?'; source size adjusted for H3':''}.`:sourceSize?`${sourceHint}${size.width*size.height>1920*1088?' High resolutions need more memory and may be slower.':''}`.trim():x.opening?`Image generation · ${x.cap.step}-pixel grid. Saved frame stays ${sourceWidth} × ${sourceHeight}.${size.width*size.height>2e6?' High resolution needs more memory and may be slower.':''}`:x.exact?`Wan 2.1 · ${x.cap.step}-pixel grid. Images are fitted without stretching.${size.width*size.height>1920*1088?' High resolutions need more memory and are untested.':''}`:'The slider selects supported native sizes for this workflow.';
+      :this.returnSource.checked
+        ?`${size.width===sourceWidth&&size.height===sourceHeight?'Output matches the source.':'Output is restored to the exact source raster.'} ${size.width===output.width&&size.height===output.height?'':`Generated at ${size.width} × ${size.height} on Wan’s ${x.cap.step}-pixel grid.`}`
+        :`Output uses the ${size.width} × ${size.height} working raster.`):'';
+    this.$('hint').textContent=sourceError?sourceError:x.camera?`Camera still and video use ${size.width} × ${size.height}. Images are fitted without stretching${sourceSize&&(size.width!==sourceWidth||size.height!==sourceHeight)?'; source size adjusted for H3':''}.`:sourceSize?`${sourceHint}${size.width*size.height>1920*1088?' High resolutions need more memory and may be slower.':''}`.trim():x.opening?`Image generation · ${x.cap.step}-pixel grid. Saved frame stays ${sourceWidth} × ${sourceHeight}.${size.width*size.height>2e6?' High resolution needs more memory and may be slower.':''}`:x.exact?`Wan 2.1 · ${size.width} × ${size.height} processing. ${size.width*size.height>1920*1088?'High resolutions need more memory.':''}`.trim():'The slider selects supported native sizes for this workflow.';
     return output;
   }
 }

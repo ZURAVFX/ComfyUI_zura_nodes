@@ -31,9 +31,14 @@ export async function selectRelightEngine(owner,engine){
       const source=w?.state.studioAsset;
       if(studio.config.workflow_mode!=='relight'){studio.readyAsset=null;studio.lookMode='build';studio.invalidateLook();}
       Object.assign(studio.config,{workflow_mode:'relight',engine:'h3',relight_engine:'wan21',edit_area:'scene',h3_head_swap:false});
-      if(source&&source.id!==studio.source?.id){studio.source=source;studio.readyAsset=null;studio.lookMode='build';studio.invalidateLook();}
+      if(source&&source.id!==studio.source?.id){
+        const parts=source.file?.split('/')||[],filename=parts.pop();
+        const url=source.url||(filename?owner.api.apiURL(frameFile({filename,subfolder:parts.join('/'),type:'input'})):null);
+        studio.source={...source,url,...(w.source?{fps:w.fps()}:{})};
+        studio.readyAsset=null;studio.lookMode='build';studio.invalidateLook();
+      }
       if(w?.source&&source){
-        Object.assign(studio.config,{start:w.state.startFrame/w.fps(),duration:w.state.frameCount/w.fps(),length_mode:'custom',prompt:w.$('prompt').value,image_prompt:w.$('prompt').value});
+        Object.assign(studio.config,{start:w.state.startFrame/w.fps(),duration:w.state.frameCount/w.fps(),length_mode:'custom',prompt:w.$('prompt').value,image_prompt:w.$('prompt').value,relight_return_source_resolution:w.state.returnSourceResolution!==false});
         const anchor=w.selected()?.file?w.selected():w.anchors().find(a=>a.file&&a.enabled!==false&&a.frame>=w.state.startFrame&&a.frame<w.state.startFrame+w.state.frameCount);
         if(anchor?.file&&w.state.wanAnchorFile!==anchor.file){
           const exported=await owner.fetch('/zura/paintout/export-frame',{file:anchor.file,frame:0,colour_space:anchor.colour_space||'srgb_display'});
@@ -51,6 +56,7 @@ export async function selectRelightEngine(owner,engine){
     if(fromWan&&target.source&&source?.id===target.state.studioAsset?.id){
       const fps=target.fps(),start=Math.max(0,Math.min(target.source.frames-1,Math.round((studio.config.start||0)*fps))),duration=studio.config.length_mode==='original'?target.source.frames-start:Math.max(1,Math.round((studio.config.duration||target.source.frames/fps)*fps));
       target.state.startFrame=start;target.state.frameCount=Math.min(duration,target.source.frames-start);target.state.playhead=Math.max(start,Math.min(start+target.state.frameCount-1,target.state.playhead||start));
+      target.state.returnSourceResolution=studio.config.relight_return_source_resolution!==false;
       const prompt=studio.config.image_prompt||studio.config.prompt||'';target.state.prompt=prompt;target.$('prompt').value=prompt;
     }
     target.state.engine=engine;if(engine==='ltx'){const anchor=target.selected()?.file?target.selected():target.ltxReference();if(anchor)target.state.ltxReferenceId=anchor.id;}target.$('engine').value=engine;owner.rememberRelightEngine(engine);owner.show('ripple');

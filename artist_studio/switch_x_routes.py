@@ -8,6 +8,23 @@ from .switch_x_graph import CONTROL, generation_graph
 from .switch_x_media import STILLS, canvas, input_path, opened, source_info
 
 
+def processing_size(width, height, config):
+    scale = config.get("scale", "legacy")
+    if scale == "legacy":
+        side = int(config.get("side", 1024))
+        if side not in (512, 768, 1024, 1280, 1920, 3840):
+            raise ValueError("Choose a supported H3 processing resolution.")
+    else:
+        scale = float(scale)
+        if scale not in (1, 0.75, 0.5, 0.25):
+            raise ValueError("Choose Full, 75%, 50% or 25% resolution.")
+        side = max(32, round(max(width, height) * scale))
+    _, _, gw, gh = canvas(width, height, side)
+    if max(gw, gh) > 4096 or gw * gh > 8_388_608:
+        raise ValueError("This size exceeds the H3 canvas. Choose a lower processing resolution.")
+    return side, gw, gh
+
+
 def build(config):
     source, matte = config["source"], config["matte"]
     w, h, total, rate = source_info(input_path(source))
@@ -19,9 +36,7 @@ def build(config):
         )
     if total < 1 or total / rate > 20.05:
         raise ValueError("Choose a shot up to 20 seconds long.")
-    side = int(config.get("side", 1024))
-    if side not in (512, 768, 1024, 1280, 1920, 3840):
-        raise ValueError("Choose a supported H3 processing resolution.")
+    side, gw, gh = processing_size(w, h, config)
     guidance = float(config.get("structureStrength", 0.96))
     if not 0 <= guidance <= 1:
         raise ValueError("Source detail strength must be between zero and one.")
@@ -34,7 +49,6 @@ def build(config):
         for path, number in pins.items()
     ):
         raise ValueError(f"Pin each look to a source frame between 0 and {total - 1}.")
-    _, _, gw, gh = canvas(w, h, side)
     seed = int(config.get("seed", 42))
     steps = int(config.get("steps", 8))
     if steps not in (8, 40):
@@ -89,6 +103,7 @@ def build(config):
         }
         graph["structure"]["inputs"]["model"] = ["edit_region", 0]
     if role == "replace":
+        graph["plates"]["inputs"]["neutralize_replacement"] = True
         margin = int(config.get("replacementMargin", 8))
         if not 0 <= margin <= 128:
             raise ValueError("Choose an edit margin from 0 to 128 pixels.")
@@ -213,11 +228,13 @@ def register(routes):
             width, height, count, rate = await asyncio.to_thread(source_info, path)
             with opened(path) as media:
                 has_audio = bool(media.streams.audio)
-            _, _, gw, gh = canvas(width, height, int(config.get("side", 1024)))
+            _, gw, gh = processing_size(width, height, config)
             return web.json_response(
                 {
                     "width": gw,
                     "height": gh,
+                    "sourceWidth": width,
+                    "sourceHeight": height,
                     "frames": count,
                     "fps": float(rate),
                     "duration": float(count / rate),

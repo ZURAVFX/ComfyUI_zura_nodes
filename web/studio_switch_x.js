@@ -3,7 +3,7 @@ import {workspaceStorage} from './studio_storage.js';
 import {submitOwnedGraph,recoverOwnedSubmission,cancelOwnedJob} from './studio_owned_jobs.js';
 
 const storageKey='zura-switch-x-native-v3';
-const initial={source:'',matte:'',refs:[],prompt:'',method:'native',audioMode:'source',audioFile:'',whiteMeans:'keep',maskChannel:'luma',replacementMargin:8,structureStrength:.96,side:1024,steps:8,depthGuide:false,lossless:false};
+const initial={source:'',matte:'',refs:[],prompt:'',method:'native',audioMode:'source',audioFile:'',whiteMeans:'keep',maskChannel:'luma',replacementMargin:8,structureStrength:.96,scale:'1',side:1024,steps:8,depthGuide:false,lossless:false};
 const videoAccept='video/*,.mov,.mkv,.mxf,.avi';
 
 export class SwitchXWorkspace {
@@ -23,6 +23,7 @@ export class SwitchXWorkspace {
     }catch{}
     const draft=saved.config||{};
     this.config=Object.fromEntries(Object.entries(initial).map(([key,value])=>[key,draft[key]??value]));
+    if(draft.scale==null && draft.side!=null)this.config.scale='legacy';
     this.config.pinnedFrames=draft.pinnedFrames||{};
     this.job=saved.job;
     this.pendingSubmission=saved.pendingSubmission;
@@ -56,21 +57,27 @@ export class SwitchXWorkspace {
           <button type="button" data-use-review hidden>Use reviewed selection</button></div>
         <div class="zs-switch-tray" data-tray><div data-ref-strip class="zs-switch-ref-strip"></div><button type="button" data-clear hidden>Clear references</button></div>
         <label class="zs-switch-direction">Scene direction<textarea data-prompt rows="2" placeholder="Describe the new setting, lighting and action…"></textarea></label>
-        <div class="zs-switch-tools"><label>Workflow<select data-method><option value="native">Native Ref2VA</option><option value="masked">Mask-guided Ref2VA</option></select></label>
-          <label>Audio<select data-audioMode><option value="source">Source audio</option><option value="upload">Choose audio</option><option value="mute">Silent</option></select></label>
-          <details><summary>Render settings</summary><div class="zs-switch-settings"><label>H3 long edge<select data-side><option>512</option><option>768</option><option>1024</option><option>1280</option></select></label>
+        <div class="zs-switch-tools"><label>Workflow<select class="zu-select" data-method><option value="native">Native Ref2VA</option><option value="masked">Mask-guided Ref2VA</option></select></label>
+          <label>Audio<select class="zu-select" data-audioMode><option value="source">Source audio</option><option value="upload">Choose audio</option><option value="mute">Silent</option></select></label>
+          <label>Processing resolution<select class="zu-select" data-scale><option value="1">Full resolution</option><option value="0.75">75% resolution</option><option value="0.5">50% resolution</option><option value="0.25">25% resolution</option></select></label>
+        </div><output data-processing-size class="zs-switch-size" aria-live="polite"></output>
+        <details class="zs-switch-advanced"><summary>Render settings</summary><div class="zs-switch-settings">
           <label>Sampling<select data-steps><option value="8">8 steps · Turbo</option><option value="40">40 steps · Ref2VA</option></select></label>
           <label data-edit-margin>Replacement margin (px)<input data-replacementMargin type="number" min="0" max="128" step="1"></label><label data-mask-only>Source detail<input data-structureStrength type="range" min="0" max="1" step=".01"></label>
           <label data-mask-only><input type="checkbox" data-depthGuide> Source depth guidance</label>
-          <label data-mask-only><input type="checkbox" data-lossless> Lossless RGB master</label></div></details></div></fieldset>
+          <label data-mask-only><input type="checkbox" data-lossless> Lossless RGB master</label></div></details></fieldset>
         <footer><div class="zs-switch-feedback" role="status" aria-live="polite"><strong data-progress-title></strong> <span data-progress-detail></span><span data-message></span><progress data-bar hidden></progress></div>
           <div class="zs-switch-actions"><a download data-master hidden>Save master</a><button type="button" data-cancel hidden>Cancel run</button><button type="button" class="gs-primary" data-run>Generate shot</button></div></footer>
       </div></div>`;
     owner.root.append(this.page);
-    for(const key of ['method','prompt','audioMode','whiteMeans','maskChannel','replacementMargin','structureStrength','side','steps','depthGuide','lossless']){
+    if(this.config.scale==='legacy'){
+      const option=doc.createElement('option');option.value='legacy';option.textContent='Saved size · '+this.config.side+' px';
+      this.$('scale').append(option);
+    }
+    for(const key of ['method','prompt','audioMode','whiteMeans','maskChannel','replacementMargin','structureStrength','scale','steps','depthGuide','lossless']){
       const el=this.$(key);
       if(el.type==='checkbox')el.checked=this.config[key];else el.value=this.config[key];
-      el.oninput=()=>{this.config[key]=el.type==='checkbox'?el.checked:el.value;if(key==='method'){this.result=this.results[el.value]||null;this.view=this.result?'result':'source';}this.save();if(['method','audioMode','whiteMeans','maskChannel'].includes(key))this.render();};
+      el.oninput=()=>{this.config[key]=el.type==='checkbox'?el.checked:el.value;if(key==='method'){this.result=this.results[el.value]||null;this.view=this.result?'result':'source';}this.save();if(['method','audioMode','whiteMeans','maskChannel','scale'].includes(key))this.render();};
     }
     for(const key of ['source','matte','refs','audioFile'])this.$(key).onchange=e=>void this.upload(key,[...e.target.files]);
     this.$('empty').onclick=()=>this.$('source').click();
@@ -111,7 +118,8 @@ export class SwitchXWorkspace {
   reset(){
     if(this.busy())return false;
     this.config={...initial,refs:[],pinnedFrames:{}};
-    this.results={};this.result=null;this.view='source';this.sourceMeta=null;this.metaSource='';this.compareTime=0;
+    this.$('scale').querySelector('option[value="legacy"]')?.remove();
+    this.results={};this.result=null;this.view='source';this.sourceMeta=null;this.metaSource='';this.sizeError='';this.compareTime=0;
     for(const [key,value] of Object.entries(this.config)){
       const field=this.$(key);
       if(!field)continue;
@@ -134,9 +142,13 @@ export class SwitchXWorkspace {
     this.$('empty').disabled=busy;
     const current=this.owner.studio?.project;
     this.$('use-review').hidden=!(masked&&current?.review&&current?.approval&&current.config?.workflow_mode==='swap');
-    if(this.config.source&&this.metaSource!==this.config.source)void this.refreshMeta();
+    const sourceRequest=this.sourceRequest(),metaKey=JSON.stringify(sourceRequest);
+    if(this.config.source&&this.metaSource!==metaKey)void this.refreshMeta(sourceRequest,metaKey);
     const meta=this.sourceMeta;
     this.$('shot-meta').textContent=meta?Math.round(meta.frames)+' frames · '+Number(meta.fps.toFixed(3))+' fps':'';
+    const size=this.$('processing-size');
+    size.textContent=meta?`${meta.width} × ${meta.height} processing · ${masked?meta.sourceWidth:meta.width} × ${masked?meta.sourceHeight:meta.height} output`:this.sizeError||'';
+    size.hidden=!size.textContent;
     this.$('selection-scrub').hidden=this.view!=='matte'||!this.config.source||!this.config.matte;
     const frame=Math.max(0,Math.min((meta?.frames||1)-1,Math.round((this.compareTime||0)*(meta?.fps||24))));
     this.$('selection-frame').max=Math.max(0,(meta?.frames||1)-1);this.$('selection-frame').value=frame;
@@ -178,8 +190,7 @@ export class SwitchXWorkspace {
       }
     }
     strip.hidden=!this.config.refs.length;
-    this.$('master').hidden=!this.result;
-    if(this.result)this.$('master').href=fileUrl(this.result.master);
+    this.syncMaster(this.owner.outputSettings?.delivery);
     for(const kind of ['source','matte','result']){
       const button=this.$('view-'+kind);
       button.disabled=!(kind==='result'?this.result:this.config[kind]);
@@ -208,12 +219,30 @@ export class SwitchXWorkspace {
       }else if(picture.getAttribute('src')!==url)picture.src=url;
     }else picture?.remove();
   }
-  async refreshMeta(){
-    const source=this.config.source;this.metaSource=source;this.sourceMeta=null;
+  sourceRequest(){
+    const {source,scale,side}=this.config;
+    return scale==='legacy'?{source,side}:{source,scale:Number(scale)};
+  }
+  syncMaster(delivery){
+    const master=this.result?.master,link=this.$('master');
+    const hdr=master&&delivery?.output==='hdr';
+    const selected=hdr?delivery.outputFor('switch_x',{kind:'video',...this.result})?.master:null;
+    link.hidden=!master;
+    link.textContent=selected?'Save HDR master':hdr?'Save SDR master':'Save master';
+    if(master)link.href=this.api.apiURL('/view?'+new URLSearchParams(selected||master));
+    else link.removeAttribute('href');
+  }
+  async readSource(request){
+    const meta=await this.fetch('/zura/studio/switch-x/source',request);
+    if(!meta.sourceWidth||!meta.sourceHeight)throw Error('Restart ComfyUI after your current render to load the SwitchX resolution controls.');
+    return meta;
+  }
+  async refreshMeta(request,key){
+    this.metaSource=key;this.sourceMeta=null;this.sizeError='';
     try{
-      const meta=await this.fetch('/zura/studio/switch-x/source',{source,side:this.config.side});
-      if(source===this.config.source){this.sourceMeta=meta;this.render();}
-    }catch(e){if(source===this.config.source)this.message(e.message);}
+      const meta=await this.readSource(request);
+      if(this.metaSource===key){this.sourceMeta=meta;this.render();}
+    }catch(e){if(this.metaSource===key){this.sizeError=e.message;this.render();}}
   }
   async importReview(){
     if(this.busy())return;
@@ -247,7 +276,7 @@ export class SwitchXWorkspace {
     }catch(e){this.message(e.message);}finally{this.$(key).value='';this.uploading=false;this.render();}
   }
   async buildGraph(){
-    const source=await this.fetch('/zura/studio/switch-x/source',{source:this.config.source,side:this.config.side});
+    const source=await this.readSource(this.sourceRequest());
     if(this.config.method==='native')return nativeSwitchGraph(this.config,source);
     const selectedAudio=this.config.audioMode==='upload'?this.config.audioFile:
       this.config.audioMode==='mute'?'':source.hasAudio?this.config.source:'';
@@ -262,7 +291,9 @@ export class SwitchXWorkspace {
     this.submitting=true;this.render();this.message('Checking the shot and audio…');
     try{
       const graph=await this.buildGraph();
-      await submitOwnedGraph(this,graph,{...this.config},'auto',{zura_switch_x:true});
+      const delivery=this.owner.outputSettings?.delivery;
+      const config=delivery?delivery.configure(this,this.config,'switch_x'):{...this.config};
+      await submitOwnedGraph(this,graph,config,'auto',{zura_switch_x:true});
     }catch(e){this.message(e.status===404?'Restart ComfyUI to load the Zura SwitchX backend.':e.message);}
     finally{this.submitting=false;this.render();}
   }

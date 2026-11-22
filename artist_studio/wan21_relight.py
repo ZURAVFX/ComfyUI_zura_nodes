@@ -2,8 +2,8 @@
 
 This recipe is the approved Switch X relight graph, adapted to Studio's
 reviewed clip, generated lighting frame, original-audio and output contracts.
-It runs the source in overlapping 81-frame windows and keeps the last overlap
-as a hard cut, matching the supplied artist workflow.
+It runs the source in overlapping 81-frame windows and matches lighting
+between sections using pairs that represent the same source frames.
 """
 from __future__ import annotations
 
@@ -18,6 +18,7 @@ HERE = Path(__file__).parent
 RECIPE = HERE / "graphs" / "07_Wan21_Relight_Recipe.json"
 LONG_EDGE = 1280
 WINDOW_FRAMES = 81
+MODEL_FPS = 16
 STEPS = 4
 SAMPLER = "er_sde"
 SHIFT = 5.0
@@ -34,7 +35,7 @@ REQUIRED_NODES = {
     "BasicScheduler", "CLIPLoader", "CLIPTextEncode", "CLIPVisionEncode",
     "CLIPVisionLoader", "CreateVideo", "ForLoopClose", "ForLoopOpen",
     "GetImageSizeAndCount", "GetVideoComponents", "GenjLoadReviewedShot", "GenjHoldImages", "GenjHoldToModelLength",
-    "GenjRestoreSoundtrack", "ImageBatchExtendWithOverlap", "ImageFromBatch",
+    "GenjRestoreSoundtrack", "GenjJoinRelightSections", "ImageFromBatch",
     "ImageResizeKJv2", "KSamplerSelect", "LoadImage", "LoraLoaderModelOnly",
     "ModelSamplingSD3", "PathchSageAttentionKJ", "SamplerCustom",
     "SimpleMath+", "UNETLoader", "VAEDecode", "VAELoader",
@@ -44,6 +45,57 @@ REQUIRED_NODES = {
 
 class Wan21RelightError(ValueError):
     """A missing prerequisite or invalid Wan 2.1 relight request."""
+
+
+class GenjJoinRelightSections:
+    """Match the incoming section's colour while keeping one image per frame."""
+
+    CATEGORY = "Zura/Artist Studio"
+    FUNCTION = "join"
+    RETURN_TYPES = ("IMAGE",)
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {"required": {
+            "previous": ("IMAGE",), "incoming": ("IMAGE",),
+            "overlap": ("INT", {"min": 0}), "section_start": ("INT", {"min": 0}),
+        }}
+
+    def join(self, previous, incoming, overlap, section_start):
+        import torch
+        import torch.nn.functional as F
+
+        if section_start == 0:
+            # Before iteration one, previous is only the uploaded lighting still.
+            return (incoming,)
+        if (previous.shape[1:] != incoming.shape[1:] or section_start != len(previous) - overlap
+                or not 0 < overlap <= min(len(previous), len(incoming))):
+            raise Wan21RelightError("The Wan relight sections do not have matching frames at their join.")
+
+        # Compare the same points in time. A coarse correction field lets the
+        # window and foreground match independently without blending details.
+        samples = min(overlap, 12)
+        height, width = incoming.shape[1:3]
+        rows = max(1, min(6, height // 16))
+        columns = max(1, min(6, width // 16))
+        block = 8
+        size = (rows * block, columns * block)
+        before = F.adaptive_avg_pool2d(previous[section_start:section_start + samples].movedim(-1, 1).float(), size)
+        after = F.adaptive_avg_pool2d(incoming[:samples].movedim(-1, 1).float(), size)
+        patches = (before - after).unfold(2, block, block).unfold(3, block, block)
+        changes = patches.flatten(-2).median(dim=-1).values
+        shared = changes.median(dim=0).values
+        maps = torch.stack((changes[0], shared)).clamp(-0.15, 0.15)
+        boundary, steady = F.interpolate(maps, size=(height, width), mode='bilinear',
+                                         align_corners=False).movedim(1, -1).to(incoming)
+        ramp = torch.linspace(0, 1, samples, device=incoming.device, dtype=incoming.dtype)
+        ramp = ramp.square() * (3 - 2 * ramp)
+        corrected = incoming.clone()
+        for index, weight in enumerate(ramp):
+            corrected[index].add_(torch.lerp(boundary, steady, weight))
+        corrected[samples:].add_(steady)
+        corrected.clamp_(0, 1)
+        return (torch.cat((previous[:-overlap], corrected)),)
 
 
 def readiness(node_mappings: Mapping[str, Any], get_full_path) -> dict[str, Any]:
@@ -152,6 +204,8 @@ def build_studio_graph(project: Mapping[str, Any], check_asset) -> dict[str, dic
                    "preserve_aspect": True, "preserve_source_timing": True},
         "_meta": {"title": "Load approved source clip"},
     }
+    if config.get('ae_frame_contract') is None:
+        graph["wan21_shot"]["inputs"]["model_fps"] = MODEL_FPS
     graph["wan21_source_frames"] = {
         "class_type": "GetVideoComponents", "inputs": {"video": ["wan21_shot", 0]},
         "_meta": {"title": "Source frames and camera motion"},
@@ -169,12 +223,22 @@ def build_studio_graph(project: Mapping[str, Any], check_asset) -> dict[str, dic
     graph["272:408:275:190"]["inputs"]["crop_position"] = "center"
     graph["272:408:274:3"]["inputs"]["text"] = prompt
     graph["272:407:277:19"]["inputs"]["noise_seed"] = int(config.get("seed", 42))
-    graph["wan21_hold_result"] = {"class_type": "GenjHoldToModelLength", "inputs": {
-        "images": ["272:402", 0], "stride": 4},
-        "_meta": {"title": "Hold final frame to a supported Wan length"}}
+    graph["272:405:399"] = {
+        "class_type": "GenjJoinRelightSections",
+        "inputs": {"previous": ["272:392", 2], "incoming": ["272:407:6", 0],
+                   "overlap": ["272:405:398", 0], "section_start": ["272:404:394", 0]},
+        "_meta": {"title": "Match lighting across overlapping sections"},
+    }
+    graph["272:401"]["inputs"]["initial_value1"] = ["272:405:399", 0]
+    result_frames = ["272:402", 0]
+    if config.get('ae_frame_contract') is not None:
+        graph["wan21_hold_result"] = {"class_type": "GenjHoldToModelLength", "inputs": {
+            "images": result_frames, "stride": 4},
+            "_meta": {"title": "Hold final frame to a supported Wan length"}}
+        result_frames = ["wan21_hold_result", 0]
     graph["wan21_video"] = {
         "class_type": "CreateVideo",
-        "inputs": {"images": ["wan21_hold_result", 0], "fps": ["wan21_source_frames", 2]},
+        "inputs": {"images": result_frames, "fps": ["wan21_source_frames", 2]},
         "_meta": {"title": "Assemble relit frames"},
     }
     graph["wan21_export"] = {
@@ -194,11 +258,13 @@ def build_studio_graph(project: Mapping[str, Any], check_asset) -> dict[str, dic
         # Keep the model's proven working canvas; its native export restores
         # the original source raster and verifies the final AE interval.
         graph['wan21_export']['inputs'].update(output_width=source_width, output_height=source_height)
-    elif config.get("relight_shape") == "source_size":
+    elif config.get("relight_return_source_resolution", True):
         source_width, source_height = _source_size(source_path)
-        # H.264 yuv420p requires even output dimensions.
-        graph["wan21_export"]["inputs"].update(output_width=source_width - source_width % 2,
-                                                 output_height=source_height - source_height % 2)
-    elif config.get("relight_width") and config.get("relight_height"):
+        if max(source_width, source_height) > 16384:
+            raise Wan21RelightError('Disable Return at source resolution for sources larger than 16384 pixels on either side.')
+        graph["wan21_export"]["inputs"].update(output_width=source_width, output_height=source_height)
+        for key in ("272:407:89", "272:408:275:190"):
+            graph[key]["inputs"]["keep_proportion"] = "stretch"
+    else:
         graph["wan21_export"]["inputs"].update(output_width=width, output_height=height)
     return graph

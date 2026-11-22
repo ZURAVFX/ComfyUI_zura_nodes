@@ -409,6 +409,8 @@ class GenjLoadReviewedShot:
                     "preview_seconds": ("FLOAT", {"default": 0, "min": 0, "max": 30}),
                     "preserve_source_timing": ("BOOLEAN", {"default": False,
                         "tooltip": "Reload original frames at their source rate. Enabled by Wan 2.1 Relight."}),
+                    "model_fps": ("INT", {"default": 0, "min": 0, "max": 120,
+                        "tooltip": "Reinterpret the same ordered source frames at this model rate. 0 retains the source clock."}),
                     "preserve_aspect": ("BOOLEAN", {"default": False,
                         "tooltip": "Keep source proportions before the downstream model resize."})}}
 
@@ -418,14 +420,14 @@ class GenjLoadReviewedShot:
     CATEGORY = CATEGORY
 
     @classmethod
-    def IS_CHANGED(cls, shot_id, approved_shot_id, render_long_edge=0, output_scale=1, preview_seconds=0, preserve_aspect=False, preserve_source_timing=False):
+    def IS_CHANGED(cls, shot_id, approved_shot_id, render_long_edge=0, output_scale=1, preview_seconds=0, preserve_aspect=False, preserve_source_timing=False, model_fps=0):
         if shot_id and shot_id == approved_shot_id:
             directory, manifest = verify_review(shot_id)
             source_hash = digest_file(manifest["clip"]["source"]) if render_long_edge else ""
-            return digest_file(directory / "review.json") + source_hash + str((render_long_edge, output_scale, preview_seconds, preserve_aspect, preserve_source_timing))
+            return digest_file(directory / "review.json") + source_hash + str((render_long_edge, output_scale, preview_seconds, preserve_aspect, preserve_source_timing, model_fps))
         return float("nan")
 
-    def load(self, shot_id, approved_shot_id, render_long_edge=0, output_scale=1, preview_seconds=0, preserve_aspect=False, preserve_source_timing=False):
+    def load(self, shot_id, approved_shot_id, render_long_edge=0, output_scale=1, preview_seconds=0, preserve_aspect=False, preserve_source_timing=False, model_fps=0):
         if not shot_id or shot_id != approved_shot_id:
             raise ValueError("Approve the reviewed mask in Zura Studio before generation. Standalone graphs require matching reviewed and approved shot IDs.")
         directory, manifest = verify_review(shot_id)
@@ -435,7 +437,7 @@ class GenjLoadReviewedShot:
         if preserve_source_timing:
             from .source_timing import reload_review
             paths = reload_review(directory, details, render_long_edge, output_scale,
-                                  preserve_aspect, preview_seconds, ffmpeg)
+                                  preserve_aspect, preview_seconds, ffmpeg, model_fps)
             return tuple(value if index == 3 else InputImpl.VideoFromFile(str(value))
                          for index, value in enumerate(paths))
         if render_long_edge:
@@ -691,6 +693,17 @@ class GenjRestoreSoundtrack:
         source = Path(clip_details["source"])
         if digest_file(source) != clip_details["source_hash"]:
             raise ValueError("The original source changed after review. Prepare and review the shot again.")
+        if clip_details.get("model_fps") and not ae_frame_contract and output_subfolder == "final":
+            import uuid
+            from .hdr_prores import make_sdr_preview
+            from .source_timing import save_relight_frames
+            path = root() / "final" / f"{take_name}_{uuid.uuid4().hex[:12]}.mov"
+            save_relight_frames(video, clip_details, path, output_width, output_height)
+            viewing = make_sdr_preview(path)
+            master = {"filename": path.name, "subfolder": "genj/final", "type": "output",
+                      "format": "video/quicktime", "colour": {"encoding": "srgb_display", "sceneLinear": False},
+                      "preview": {"filename": viewing.name, "subfolder": "genj/final", "type": "output"}}
+            return {"ui": {"gifs": [master]}, "result": (InputImpl.VideoFromFile(str(path)),)}
         generated = source_path(video)
         fps = (Fraction(clip_details['fps_num'], clip_details['fps_den'])
                if clip_details.get('fps_num') and clip_details.get('fps_den')
@@ -786,6 +799,10 @@ NODE_DISPLAY_NAME_MAPPINGS = {"GenjSelectClip": "Choose Clip", "GenjChoosePerfor
 NODE_DISPLAY_NAME_MAPPINGS["GenjRecordDraft"] = "Record Draft and Source Shot"
 NODE_DISPLAY_NAME_MAPPINGS.update({"GenjSaveTextConditioning": "Cache Video Prompt",
     "GenjLoadTextConditioning": "Load Video Prompt"})
+
+from .wan21_relight import GenjJoinRelightSections
+NODE_CLASS_MAPPINGS["GenjJoinRelightSections"] = GenjJoinRelightSections
+NODE_DISPLAY_NAME_MAPPINGS["GenjJoinRelightSections"] = "Match Relight Sections"
 
 from .h3 import NODE_CLASS_MAPPINGS as H3_NODES, NODE_DISPLAY_NAME_MAPPINGS as H3_NAMES
 NODE_CLASS_MAPPINGS.update(H3_NODES)
