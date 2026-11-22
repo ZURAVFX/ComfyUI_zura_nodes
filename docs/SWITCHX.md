@@ -25,6 +25,6 @@ The complete selected shot goes through one H3 video sampler and one video decod
 
 Use the installed H3 Ref2VA transformer, H3 text encoder and both H3 VAEs. Eight-step Turbo uses its Ref2VA adapter. ProRes export requires FFmpeg. Fine edges, fast motion, occlusion and complex camera moves are shot-dependent. Review the output before using it as a final VFX plate.
 
-The release includes a small vase example with original footage, a white-replace matte and an edited opening image. [Download the example pack](https://github.com/ZURAVFX/ComfyUI_zura_nodes/releases/download/v1.3.76/Zura-SwitchX-example.zip).
+The release includes a small vase example with original footage, a white-replace matte and an edited opening image. [Download the example pack](https://github.com/ZURAVFX/ComfyUI_zura_nodes/releases/download/v1.3.77/Zura-SwitchX-example.zip).
 
 Model references: [MiniMax H3](https://huggingface.co/MiniMaxAI/MiniMax-H3) and [H3 Fun ControlNet Union 2.0](https://huggingface.co/alibaba-pai/MiniMax-H3-Fun-Controlnet-Union-2.0).

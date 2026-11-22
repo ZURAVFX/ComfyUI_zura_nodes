@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import vm from 'node:vm';
 import {parseHTML} from '../../ui-check/node_modules/linkedom/esm/index.js';
 import {CreativeWorkspace} from '../web/studio_create.js';
+import {VIDEO_WORKFLOWS} from '../web/studio_composer.js';
 import {IMAGE_MODELS,buildImageGraph,imageAvailability} from '../web/image_recipes.js';
 import {ContentDetection} from '../web/studio_content.js';
 import {rememberStudioGraph} from '../web/studio_graph_view.js';
@@ -112,8 +113,10 @@ studio.config.engine=originalEngine;studio.config.workflow_mode=originalMode;ui.
 assert.equal(ui.imageTask.parentElement,ui.videoComposer.modeHost,'Image mode shares the main navigation location');
 const workflowMenu=ui.videoComposer.task;
 assert.equal(workflowMenu.tagName,'DETAILS');
+assert.equal(workflowMenu.querySelector('[data-workflow=switch_x] strong').textContent,'Zura SwitchX');
+assert.equal(workflowMenu.querySelector('[data-workflow=switch_x]').closest('.zc-mode-group').getAttribute('aria-label'),'Edit footage');
 assert.equal(workflowMenu.querySelector('select').hidden,true,'OS-native workflow dropdown is hidden behind the styled menu');
-assert.equal(workflowMenu.querySelectorAll('[role="menuitemradio"]').length,15);
+assert.equal(workflowMenu.querySelectorAll('[role="menuitemradio"]').length,VIDEO_WORKFLOWS.length);
 assert.equal(workflowMenu.querySelector('[data-workflow="paint_vfx"]').closest('.zc-mode-group').getAttribute('aria-label'),'Create a shot','Paint VFX is a separate creation mode');
 assert.ok(workflowMenu.querySelector('[data-workflow="director"]'),'Director shares the persistent video workflow selector');
 assert.equal(workflowMenu.querySelector('[data-workflow="inpaint"]'),null,'Edited-frame work has one Ripple route, without a duplicate Inpaint preview');
@@ -282,7 +285,7 @@ for(const button of workflowMenu.querySelectorAll('[data-workflow]')){assert.ok(
 const modeSearch=workflowMenu.querySelector('input[type=search]');modeSearch.value='lighting';modeSearch.oninput({target:modeSearch});
 assert.deepEqual([...workflowMenu.querySelectorAll('[data-workflow]')].filter(button=>!button.hidden).map(button=>button.dataset.workflow),['relight']);
 modeSearch.value='no such mode';modeSearch.oninput({target:modeSearch});assert.equal(workflowMenu.querySelector('.zc-mode-no-results').hidden,false);
-modeSearch.value='';modeSearch.oninput({target:modeSearch});assert.equal([...workflowMenu.querySelectorAll('[data-workflow]')].filter(button=>!button.hidden).length,15);
+modeSearch.value='';modeSearch.oninput({target:modeSearch});assert.equal([...workflowMenu.querySelectorAll('[data-workflow]')].filter(button=>!button.hidden).length,VIDEO_WORKFLOWS.length);
 
 const removedInputs=[],savedRemoveInput=studio.removeInput;studio.removeInput=type=>removedInputs.push(type);
 for(const id of ['source','refs','frame'])studio.container.querySelector('#zc-remove-'+id).onclick();

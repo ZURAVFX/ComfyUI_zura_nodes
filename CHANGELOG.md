@@ -1,5 +1,9 @@
 # Release notes
 
+## 1.3.77 - 22 November 2026
+
+- Include Zura SwitchX in the complete video menu regression check used by the Registry release workflow. This patch carries the SwitchX mode and example introduced in 1.3.76.
+
 ## 1.3.76 - 22 November 2026
 
 - Add Zura SwitchX as its own video mode. Use native MiniMax H3 Ref2VA for a reference-driven scene edit, or use a tracked matte to keep and relight a selection or replace it.
