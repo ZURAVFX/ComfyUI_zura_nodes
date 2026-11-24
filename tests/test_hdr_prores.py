@@ -64,7 +64,8 @@ class ProResTests(unittest.TestCase):
         import folder_paths
         with tempfile.TemporaryDirectory() as folder:
             frames=torch.full((2,1024,32,3),.3)
-            components=types.SimpleNamespace(images=frames,frame_rate=Fraction(24),audio=None,alpha=None)
+            rate=Fraction(496125000,16537483)
+            components=types.SimpleNamespace(images=frames,frame_rate=rate,audio=None,alpha=None)
             video=types.SimpleNamespace(get_components=lambda:components)
             latest=types.SimpleNamespace(InputImpl=types.SimpleNamespace(VideoFromFile=lambda path:path))
             updates=[]
@@ -78,4 +79,9 @@ class ProResTests(unittest.TestCase):
             self.assertTrue((Path(folder)/ref['preview']['filename']).is_file())
             with av.open(str(Path(folder)/ref['preview']['filename'])) as container:
                 self.assertEqual((container.streams.video[0].width,container.streams.video[0].height),(32,1024))
-            prores.inspect_prores4444(Path(folder)/ref['filename'])
+            master=Path(folder)/ref['filename']
+            prores.inspect_prores4444(master)
+            with av.open(str(master)) as container:
+                stream=container.streams.video[0]
+                self.assertEqual(stream.average_rate,rate)
+                self.assertEqual([frame.pts*frame.time_base for frame in container.decode(stream)],[0,1/rate])

@@ -102,7 +102,8 @@ class RelightTimingTests(unittest.TestCase):
 
     def test_wan_clock_keeps_all_indices_then_restores_precise_rate_and_raster(self):
         import torch
-        for rate in (Fraction(30), Fraction(30000,1001), Fraction(60000,1001)):
+        for rate in (Fraction(30), Fraction(30000,1001), Fraction(60000,1001),
+                     Fraction(496125000,16537483)):
             with self.subTest(rate=rate), tempfile.TemporaryDirectory() as folder:
                 path = Path(folder)
                 source = path / 'original.mov'
@@ -117,6 +118,7 @@ class RelightTimingTests(unittest.TestCase):
                         media.mux(packet)
                 details = dict(source=str(source), start=float(3/rate), duration=float(13/rate))
                 model, _, _, native, _ = timing.reload_review(path, details, 256, 1, True, 0, ffmpeg, 16)
+                self.assertEqual(Fraction(native['fps_num'], native['fps_den']), rate)
                 model_rate, values, _ = inspect(model)
                 self.assertEqual((model_rate,len(values)), (Fraction(16),13))
                 self.assertAlmostEqual(values[0], 47, delta=2)

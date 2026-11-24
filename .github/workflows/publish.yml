@@ -138,6 +138,7 @@ jobs:
           python -m unittest discover -s tests -p 'test_studio_availability.py'
           python -m unittest discover -s tests -p 'test_wan21_relight.py'
           python -m unittest discover -s tests -p 'test_relight_source_timing.py'
+          python -m unittest discover -s tests -p 'test_hdr_prores.py'
           python -m unittest discover -s tests -p 'test_studio_upload.py'
           python -m unittest discover -s tests -p 'test_h3_viewport_render.py'
           python -m unittest discover -s tests -p 'test_ltx25_viewport_plan.py'

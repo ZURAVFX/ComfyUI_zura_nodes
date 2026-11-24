@@ -31,7 +31,8 @@ def write_prores4444(frames, destination, *, width, height, count, fps,
     if source_space not in ('acescg','acescct','linear_rec709','srgb_display'):
         raise ValueError('Choose the working RGB space for ProRes delivery.')
     if channels not in (3,4):raise ValueError('ProRes delivery needs RGB or RGBA frames.')
-    rate=Fraction(str(fps)).limit_denominator(1_000_000)
+    # A source clock is already exact. Only approximate decimal FPS inputs.
+    rate=fps if isinstance(fps,Fraction) else Fraction(str(fps)).limit_denominator(1_000_000)
     if not 1<=rate<=120 or min(width,height,count)<1:raise ValueError('Invalid ProRes dimensions or frame range.')
     executable=executable or shutil.which('ffmpeg')
     if not executable:raise ValueError('FFmpeg is required for ProRes 4444 delivery.')
@@ -134,7 +135,7 @@ class ZuraSaveProRes4444(ZuraHDRSaveProRes4444):
             alpha=components.alpha
             if alpha.ndim==3:alpha=alpha.unsqueeze(-1)
             images=torch.cat([images,alpha.to(images)],dim=-1)
-        result=super().save(images,filename_prefix,float(components.frame_rate),source_space='srgb_display',audio=components.audio)
+        result=super().save(images,filename_prefix,components.frame_rate,source_space='srgb_display',audio=components.audio)
         import folder_paths
         ref=result['ui']['images'][0];master=Path(folder_paths.get_output_directory())/ref['subfolder']/ref['filename']
         try:
