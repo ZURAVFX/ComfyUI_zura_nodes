@@ -1,5 +1,9 @@
 # Release notes
 
+## 1.3.80 - 24 November 2026
+
+- Verify exact source cadence in the Wan Relight and native ProRes 4444 export paths before publishing to the Registry.
+
 ## 1.3.79 - 24 November 2026
 
 - Preserve the source frame rate exactly in Wan Relight and native ProRes 4444 exports, including camera and editing exports with high-precision fractional frame rates.
