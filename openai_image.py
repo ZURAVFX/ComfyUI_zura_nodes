@@ -7,11 +7,13 @@ import binascii
 import io
 import ipaddress
 import json
+import math
 import os
 import re
 from pathlib import Path
 from urllib.parse import urlsplit
 from uuid import uuid4
+from xml.etree import ElementTree
 
 import aiohttp
 from aiohttp import web
@@ -30,6 +32,10 @@ MODELS = [
 MODEL_ID = re.compile(r"[A-Za-z0-9_.:-]{1,200}")
 LEGACY_15 = ("gpt-image-1.5", "gpt-image-1.5-2025-12-16")
 PRESET_SIZES = ["auto", "1024x1024", "1536x1024", "1024x1536"]
+MAX_OUTPUT_EDGE = 16_384
+API_MAX_EDGE = 3840
+API_MAX_PIXELS = 8_294_400
+API_MIN_STILL_PIXELS = 655_360
 OUTPUT_FORMATS = ["png", "webp", "jpeg", "gif", "svg"]
 API_ROOT = "https://api.openai.com/v1/images"
 _session_key = ""
@@ -126,19 +132,49 @@ def register_credentials(routes):
         return web.json_response({"models": models}, headers={"Cache-Control": "no-store"})
 
 
-def _validate_size(size, model, is_gif=False):
+def _size_label(dimensions):
+    return f"{dimensions[0]}x{dimensions[1]}"
+
+
+def _api_dimensions(min_pixels):
+    for work_width in range(16, API_MAX_EDGE + 1, 16):
+        # Both area and aspect ratio bound the valid heights for each width.
+        lower = max(16, (work_width + 2) // 3, (min_pixels + work_width - 1) // work_width)
+        upper = min(API_MAX_EDGE, 3 * work_width, API_MAX_PIXELS // work_width)
+        for work_height in range((lower + 15) // 16 * 16, upper + 1, 16):
+            yield work_width, work_height
+
+
+def _plan_size(size, model, is_gif=False):
     if size in PRESET_SIZES:
-        return
-    if model in (*LEGACY_15, "gpt-image-1-mini"):
-        raise ValueError(f"{model} supports Auto and the three standard output sizes.")
-    if not re.fullmatch(r"[0-9]{1,4}x[0-9]{1,4}", size):
-        raise ValueError("Enter output dimensions as WIDTHxHEIGHT, such as 1920x1088.")
+        return size, None
+    if not re.fullmatch(r"[0-9]{1,5}x[0-9]{1,5}", size):
+        raise ValueError("Enter output dimensions as WIDTHxHEIGHT, such as 1920x1080.")
     width, height = map(int, size.split("x"))
-    if not (width and height and width % 16 == height % 16 == 0
-            and max(width, height) <= 3840 and max(width, height) <= 3 * min(width, height)
-            and width * height <= 8_294_400 and (is_gif or width * height >= 655_360)):
-        raise ValueError("Use edges divisible by 16, at most 3840 px, an aspect ratio up to 3:1, "
-                         "and 655,360 to 8,294,400 pixels for stills.")
+    if not (1 <= width <= MAX_OUTPUT_EDGE and 1 <= height <= MAX_OUTPUT_EDGE):
+        raise ValueError(f"Enter output dimensions between 1 and {MAX_OUTPUT_EDGE:,} pixels per edge.")
+    requested = width, height
+    min_pixels = 1 if is_gif else API_MIN_STILL_PIXELS
+    if (model in (*LEGACY_15, "gpt-image-1", "gpt-image-1-mini", "chatgpt-image-latest")
+            or re.fullmatch(r"gpt-image-1-\d{4}-\d{2}-\d{2}", model)):
+        candidates = (tuple(map(int, preset.split("x"))) for preset in PRESET_SIZES[1:])
+    elif (width % 16 == height % 16 == 0 and max(requested) <= API_MAX_EDGE
+          and max(requested) <= 3 * min(requested) and min_pixels <= width * height <= API_MAX_PIXELS):
+        return _size_label(requested), None
+    else:
+        candidates = _api_dimensions(min_pixels)
+
+    def distance(candidate):
+        work_width, work_height = candidate
+        x = math.log(work_width / width)
+        y = math.log(work_height / height)
+        # First prefer a canvas that covers both requested edges. Among equally
+        # close canvases, prefer the one that introduces the least stretch.
+        return (work_width < width or work_height < height, max(abs(x), abs(y)),
+                abs(x - y), work_width * work_height)
+
+    working = min(candidates, key=distance)
+    return _size_label(working), requested
 
 
 def _image_reference(value):
@@ -162,15 +198,16 @@ def _png(image):
         return buffer.getvalue()
 
 
-def _encode_inputs(references, mask, markup, markup_alpha, width, height):
+def _encode_inputs(references, mask, markup, markup_alpha, width, height, canvas=None):
     source_size = references[0].shape[2], references[0].shape[1]
     output_size = (width, height) if width else None
     files = []
     for batch in references:
         for frame in batch:
             image = _pil_frame(frame)
-            if output_size and output_size != image.size:
-                image = image.resize(output_size, Image.Resampling.LANCZOS)
+            upload_size = output_size or (canvas[1] if canvas and image.size == canvas[0] else None)
+            if upload_size and upload_size != image.size:
+                image = image.resize(upload_size, Image.Resampling.LANCZOS)
             files.append(_png(image))
     if mask is None and markup is None:
         return files, None, None
@@ -191,8 +228,9 @@ def _encode_inputs(references, mask, markup, markup_alpha, width, height):
         image.putalpha(ImageOps.invert(_pil_frame(markup_alpha[0]).convert("L")))
     elif image.mode != "RGBA":
         raise ValueError("Connect an RGBA markup overlay with a transparent background.")
-    if output_size and output_size != image.size:
-        image = image.resize(output_size, Image.Resampling.LANCZOS)
+    upload_size = output_size or (canvas[1] if canvas and image.size == canvas[0] else None)
+    if upload_size and upload_size != image.size:
+        image = image.resize(upload_size, Image.Resampling.LANCZOS)
     if markup is not None and image.width * image.height > 16_777_216:
         raise ValueError("The first reference and markup are limited to 16,777,216 pixels each.")
     if image.getchannel("A").getextrema()[0] == 255:
@@ -304,23 +342,75 @@ async def _call_images(key, edit, body, n, streaming, timeout, preview):
         raise RuntimeError(f"OpenAI Images connection failed ({type(exc).__name__}). Check API usage before retrying.") from None
 
 
-def _preview_image(data):
+def _preview_image(data, target=None):
     with Image.open(io.BytesIO(data)) as image:
         image.thumbnail((512, 512))
-        return image.convert("RGB")
+        preview = image.convert("RGB")
+        if target:
+            scale = min(1, 512 / max(target))
+            preview = preview.resize(tuple(max(1, round(edge * scale)) for edge in target),
+                                     Image.Resampling.LANCZOS)
+        return preview
 
 
-def _results(images, output_format, expected_size, save_original):
+def _resize_svg(data, working, target):
+    try:
+        drawing = ElementTree.fromstring(data)
+    except ElementTree.ParseError:
+        raise RuntimeError("OpenAI returned invalid SVG data.") from None
+    namespace = "{http://www.w3.org/2000/svg}"
+    if drawing.tag not in ("svg", namespace + "svg"):
+        raise RuntimeError("OpenAI returned invalid SVG data.")
+    drawing.set("width", str(working[0]))
+    drawing.set("height", str(working[1]))
+    canvas = ElementTree.Element(namespace + "svg", {
+        "width": str(target[0]), "height": str(target[1]),
+        "viewBox": f"0 0 {working[0]} {working[1]}",
+        "preserveAspectRatio": "none",
+    })
+    canvas.append(drawing)
+    return ElementTree.tostring(canvas, encoding="utf-8")
+
+
+def _encode_resized_frames(frames, output_format, image_info, durations, compression):
+    first, *rest = frames
+    options = {}
+    if output_format == "gif":
+        options.update(save_all=True, append_images=rest, duration=durations, disposal=2)
+        if "loop" in image_info:
+            options["loop"] = image_info["loop"]
+    elif output_format == "jpeg":
+        first = first.convert("RGB")
+        options.update(quality=95 if compression < 0 else compression, subsampling=0)
+    elif output_format == "webp":
+        options.update(lossless=compression < 0, quality=100 if compression < 0 else compression)
+    if output_format != "gif" and image_info.get("icc_profile"):
+        options["icc_profile"] = image_info["icc_profile"]
+    with io.BytesIO() as buffer:
+        first.save(buffer, format=output_format.upper(), **options)
+        return buffer.getvalue()
+
+
+def _results(images, output_format, expected_size, save_original, target=None, compression=-1):
     output_images, masks, sizes, paths = [], [], [], []
+    will_save = save_original or output_format in ("gif", "svg")
+    files = []
     if output_format != "svg":
         for data in images:
-            frames, alpha_masks = [], []
+            frames, alpha_masks, resized, durations = [], [], [], []
             with Image.open(io.BytesIO(data)) as image:
-                actual = f"{image.width}x{image.height}"
+                actual = _size_label(image.size)
                 if expected_size != "auto" and actual != expected_size:
                     raise RuntimeError(f"OpenAI returned {actual}; requested {expected_size}.")
+                image_info = image.info.copy()
                 for frame in ImageSequence.Iterator(image):
-                    rgba = np.asarray(frame.convert("RGBA"), dtype=np.float32) / 255.0
+                    rendered = frame.convert("RGBA")
+                    if target:
+                        rendered = rendered.resize(target, Image.Resampling.LANCZOS)
+                        if will_save:
+                            resized.append(rendered)
+                            durations.append(frame.info.get("duration", 0))
+                    rgba = np.asarray(rendered, dtype=np.float32) / 255.0
                     frames.append(torch.from_numpy(rgba))
                     alpha_masks.append(torch.from_numpy(1 - rgba[..., 3]))
             alpha = torch.stack(alpha_masks)
@@ -329,14 +419,22 @@ def _results(images, output_format, expected_size, save_original):
             channels = 4 if torch.any(alpha) else 3
             output_images.append(torch.stack([frame[..., :channels] for frame in frames]))
             masks.append(alpha)
-            sizes.append(actual)
-    if save_original or output_format in ("gif", "svg"):
+            sizes.append(_size_label(target) if target else actual)
+            if will_save:
+                files.append(_encode_resized_frames(resized, output_format, image_info, durations, compression)
+                             if resized else data)
+    elif target:
+        working = tuple(map(int, expected_size.split("x")))
+        files = [_resize_svg(data, working, target) for data in images]
+    else:
+        files = images
+    if will_save:
         import folder_paths
 
         directory = Path(folder_paths.get_output_directory()) / "zura_openai"
         directory.mkdir(parents=True, exist_ok=True)
         stem = uuid4().hex
-        for index, data in enumerate(images, 1):
+        for index, data in enumerate(files, 1):
             path = directory / f"{stem}_{index:02d}.{output_format}"
             path.write_bytes(data)
             paths.append(str(path))
@@ -371,9 +469,10 @@ class ZuraOpenAIImage:
                 "prompt": _string("Describe the image or edit.", multiline=True),
                 "model": _choice(MODELS, "Exact OpenAI model ID."),
                 "task": _choice(["Auto", "Generate", "Edit"], "Auto edits when references are connected."),
-                "size": _choice(PRESET_SIZES + ["1920x1088", "3840x2160", "Custom"], "Native OpenAI output dimensions."),
-                "output_width": _int(1536, 16, 3840, "Native width with Custom output size."),
-                "output_height": _int(864, 16, 3840, "Native height with Custom output size."),
+                "size": _choice(PRESET_SIZES + ["1920x1080", "1920x1088", "3840x2160", "Custom"],
+                                "Delivered dimensions. The node fits unsupported sizes for the API and restores the requested dimensions."),
+                "output_width": _int(1536, 1, MAX_OUTPUT_EDGE, "Delivered width with Custom output size."),
+                "output_height": _int(864, 1, MAX_OUTPUT_EDGE, "Delivered height with Custom output size."),
                 "quality": _choice(["auto", "low", "medium", "high", "xhigh", "max"], "Rendering quality, independent of complexity."),
             },
             "optional": {
@@ -403,7 +502,7 @@ class ZuraOpenAIImage:
                 "api_markup": _string("HTTPS URL, data URL or OpenAI file ID for a transparent PNG markup overlay."),
                 "safety_identifier": _string("Optional stable, non-identifying end-user ID, up to 128 characters."),
                 "legacy_user": _string("Deprecated API user identifier. Use safety_identifier for new workflows."),
-                "save_original": ("BOOLEAN", {"default": True, "tooltip": "Save the exact encoded output in ComfyUI/output/zura_openai. Always enabled for GIF and SVG."}),
+                "save_original": ("BOOLEAN", {"default": True, "tooltip": "Save the output at its delivered dimensions in ComfyUI/output/zura_openai. Always enabled for GIF and SVG."}),
                 "timeout_seconds": _int(600, 30, 1800, "Maximum time to wait for the API response."),
             },
         }
@@ -461,9 +560,8 @@ class ZuraOpenAIImage:
             model = custom_model.strip()
         if not MODEL_ID.fullmatch(model):
             raise ValueError("Choose a valid OpenAI image model.")
-        if size == "Custom":
-            size = f"{output_width}x{output_height}"
-        _validate_size(size, model, output_format == "gif")
+        requested_size = _size_label((output_width, output_height)) if size == "Custom" else size
+        size, target = _plan_size(requested_size, model, output_format == "gif")
 
         references = [
             images for images in (reference, reference_2, *(extra_references.get(f"reference_{i}") for i in range(3, 17)))
@@ -536,8 +634,15 @@ class ZuraOpenAIImage:
                 payload["svg"]["reasoning"] = {"effort": svg_reasoning}
         body = {"json": payload}
         if edit:
+            canvas = None
+            if target and not api_overlay:
+                working = tuple(map(int, size.split("x")))
+                if (input_width, input_height) == target:
+                    input_width, input_height = working
+                elif not input_width:
+                    canvas = target, working
             encoded = await asyncio.to_thread(_encode_inputs, references, edit_mask, markup_overlay,
-                                              markup_alpha, input_width, input_height) if references else ([], None, None)
+                                              markup_alpha, input_width, input_height, canvas) if references else ([], None, None)
             body = _edit_body(payload, *encoded, api_refs, api_overlay)
 
         total = max(1, partial_images * n + 1)
@@ -546,7 +651,7 @@ class ZuraOpenAIImage:
 
         async def preview(event):
             nonlocal previews
-            image = await asyncio.to_thread(_preview_image, _decode_image(event))
+            image = await asyncio.to_thread(_preview_image, _decode_image(event), target)
             previews += 1
             progress.update_absolute(min(previews, total - 1), total, ("JPEG", image, 512))
 
@@ -562,10 +667,11 @@ class ZuraOpenAIImage:
                 request.cancel()
             await asyncio.gather(request, return_exceptions=True)
 
-        outputs = await asyncio.to_thread(_results, images, output_format, size, save_original)
+        outputs = await asyncio.to_thread(_results, images, output_format, size, save_original, target, output_compression)
         progress.update_absolute(total)
         receipt = json.dumps({**metadata, "model": model, "task": "edit" if edit else "generate",
-                              "requested_size": size, "actual_sizes": outputs[2], "files": outputs[3]},
+                              "requested_size": requested_size, "api_size": size,
+                              "actual_sizes": outputs[2], "files": outputs[3]},
                              ensure_ascii=False)
         ui = {"text": [receipt]}
         if outputs[3] and output_format != "svg":

@@ -1,13 +1,13 @@
 {
   "hostSchema": 1,
-  "uiVersion": "1.3.80",
-  "backendVersion": "1.3.80",
-  "sourceSha256": "66adc1d52f3881118b071323922c7beac5d31739dc1291127d27781ca1287fc3",
+  "uiVersion": "1.3.81",
+  "backendVersion": "1.3.81",
+  "sourceSha256": "832993ffde9ab3d646c423cce5bc1389bd22dd774082b3664fdc58719d702ca4",
   "entrySha256": {
     "studio_ae.html": "6a3a8600f6b26868276fad65c464ac0dc876dc8815cf50a57a27f784773090a6",
     "studio_ae_probe.js": "cb91d33bb224a0531b83fec0a7d2ba40b91293ec0548e47a1a35cf528380d7a1",
     "studio_ae_entry.js": "174d86da26972d7be55df19c729a953277c91417a5987a2557ff06ce043ac2c4",
-    "studio_host_version.js": "c3be5fc87222a7a0bf921513e8a6641076b6d5c9b35c311e44b3d196e0c815be"
+    "studio_host_version.js": "fd35d84036f8314db6d9aec7258372a2f09988f5ea43535dd1bace3c3c2170b3"
   },
   "assetSha256": {
     "assets/fonts/Geist-Variable.woff2": "2ffebe993e969069a9789d15164b7715d42491b5835516c5e3b935d5f81b05f1",

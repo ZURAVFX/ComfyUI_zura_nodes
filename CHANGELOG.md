@@ -1,5 +1,9 @@
 # Release notes
 
+## 1.3.81 - 25 November 2026
+
+- Deliver exact custom dimensions from the ChatGPT Image node. When the model needs a different working size, the node stretches the result back to the requested width and height without cropping. Matching edit references, masks and markup are resized together.
+
 ## 1.3.80 - 24 November 2026
 
 - Verify exact source cadence in the Wan Relight and native ProRes 4444 export paths before publishing to the Registry.

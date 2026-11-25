@@ -8,6 +8,7 @@ import tempfile
 import types
 import unittest
 from unittest.mock import AsyncMock, patch
+from xml.etree import ElementTree
 
 from aiohttp import web
 from PIL import Image
@@ -53,6 +54,71 @@ class OpenAIImageTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(torch.all(masks[0] == 1))
         self.assertEqual(sizes, ["1536x864"])
         self.assertNotIn("sk-test", receipt)
+
+    async def test_non_native_edit_restores_delivery_dimensions(self):
+        call = AsyncMock(return_value=([image_bytes((1024, 768), colour=(20, 50, 100, 73))], {}))
+        with tempfile.TemporaryDirectory() as directory, patch.dict(sys.modules, {
+            **comfy_modules(), "folder_paths": types.SimpleNamespace(get_output_directory=lambda: directory),
+        }), patch.object(node, "_call_images", call), patch.object(node, "_api_key", return_value="sk-test"):
+            result = await node.ZuraOpenAIImage().generate(
+                "Edit the white area", "gpt-image-2.6-flare", "Edit", "Custom", 1021, 761,
+                "auto", reference=torch.zeros((1, 761, 1021, 3)), edit_mask=torch.ones((1, 761, 1021)),
+                api_references="file-other-reference", background="transparent",
+            )
+            images, masks, sizes, files, receipt = result["result"]
+            with Image.open(files[0]) as output:
+                self.assertEqual((output.size, output.mode), ((1021, 761), "RGBA"))
+            body = call.await_args.args[2]["json"]
+            self.assertEqual(body["size"], "1024x768")
+            for uploaded in (body["images"][0], body["mask"]):
+                data = base64.b64decode(uploaded["image_url"].split(",")[1])
+                with Image.open(io.BytesIO(data)) as image:
+                    self.assertEqual(image.size, (1024, 768))
+            self.assertEqual(tuple(images[0].shape), (1, 761, 1021, 4))
+            self.assertEqual(tuple(masks[0].shape), (1, 761, 1021))
+            self.assertEqual(sizes, ["1021x761"])
+            self.assertEqual(json.loads(receipt)["api_size"], "1024x768")
+
+    def test_working_size_respects_alignment_and_api_bounds(self):
+        cases = [
+            ("1920x1080", "gpt-image-2", "1920x1088"),
+            ("1080x1920", "gpt-image-2", "1088x1920"),
+            ("512x512", "gpt-image-2", "816x816"),
+            ("7680x4320", "gpt-image-2", "3840x2160"),
+            ("1920x200", "gpt-image-2", "1920x640"),
+            ("1920x1080", "gpt-image-1.5", "1536x1024"),
+        ]
+        for requested, model, expected in cases:
+            with self.subTest(requested=requested, model=model):
+                work, target = node._plan_size(requested, model)
+                self.assertEqual(work, expected)
+                self.assertEqual(target, tuple(map(int, requested.split("x"))))
+                self.assertEqual(node._plan_size(work, model), (work, None))
+
+    def test_restores_animation_size_and_timing(self):
+        with io.BytesIO() as buffer:
+            first = Image.new("RGB", (32, 16), "red")
+            second = Image.new("RGB", (32, 16), "blue")
+            first.save(buffer, format="GIF", save_all=True, append_images=[second], duration=[120, 270], loop=2)
+            source = buffer.getvalue()
+        with tempfile.TemporaryDirectory() as directory, patch.dict(
+            sys.modules, {"folder_paths": types.SimpleNamespace(get_output_directory=lambda: directory)}
+        ):
+            images, _, _, files = node._results([source], "gif", "32x16", False, (31, 15))
+            self.assertEqual(tuple(images[0].shape), (2, 15, 31, 3))
+            with Image.open(files[0]) as image:
+                self.assertEqual((image.size, image.n_frames, image.info["loop"]), ((31, 15), 2, 2))
+                self.assertEqual(image.info["duration"], 120)
+                image.seek(1)
+                self.assertEqual(image.info["duration"], 270)
+
+    def test_restores_vector_canvas_without_rasterizing(self):
+        drawing = b'<svg xmlns="http://www.w3.org/2000/svg" width="32" height="16" viewBox="0 0 8 4"><path d="M0 0H8V4" /></svg>'
+        resized = ElementTree.fromstring(node._resize_svg(drawing, (32, 16), (31, 15)))
+        self.assertEqual((resized.get("width"), resized.get("height")), ("31", "15"))
+        self.assertEqual(resized.get("preserveAspectRatio"), "none")
+        self.assertEqual(resized[0].get("viewBox"), "0 0 8 4")
+        self.assertEqual(resized[0][0].get("d"), "M0 0H8V4")
 
     async def test_edit_sizes_mask_and_mixed_references(self):
         call = AsyncMock(return_value=([image_bytes((32, 16))], {}))
