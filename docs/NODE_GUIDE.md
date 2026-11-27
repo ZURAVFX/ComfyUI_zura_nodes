@@ -109,7 +109,7 @@ workflow's BF16 relight choice as the Studio's exact stack.
 ## How chunk continuation works
 
 This standalone example renders long clips in 41-frame windows; the integrated
-Zura Studio uses 81-frame windows. At every chunk border the renderer uses
+Zura Studio sizes inference windows from the processing resolution and dedicated GPU memory, up to 81 frames. A 24 GiB GPU uses 41-frame windows at 1080p. At every chunk border the renderer uses
 **native continuation** by default, following a hand-built Wan 2.2 Animate
 loop (`continue_motion` → sampler → `trim_image`). The optional **Soft blend**
 setting adds a cross-fade between decoded versions of the shared frames:

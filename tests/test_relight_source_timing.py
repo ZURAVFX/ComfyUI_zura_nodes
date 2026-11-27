@@ -151,7 +151,8 @@ class RelightQueueTimingTests(unittest.IsolatedAsyncioTestCase):
         client.server=SimpleNamespace(number=0,prompt_queue=SimpleNamespace(put=queued),
             trigger_on_prompt=lambda body:body,
             node_replace_manager=SimpleNamespace(apply_replacements=lambda graph:None))
-        graph={'272:407:89':{'class_type':'Test','inputs':{'width':1280,'height':704}},
+        graph={'272:407:89':{'class_type':'Test','inputs':{'width':1920,'height':1088}},
+               recipe.wan21.WINDOW_NODE:{'class_type':'easy int','inputs':{'value':41}},
                'wan21_export':{'class_type':'TestOutput','inputs':{'output_width':1280,'output_height':720}}}
         execution=SimpleNamespace(validate_prompt=AsyncMock(return_value=(True,None,['wan21_export'],{})))
         native=dict(frames=90,fps=30000/1001,fps_num=30000,fps_den=1001)
@@ -163,7 +164,7 @@ class RelightQueueTimingTests(unittest.IsolatedAsyncioTestCase):
             await client.action(project,'wan21_relight',{'request_key':str(uuid.uuid5(uuid.NAMESPACE_URL,cleanup_id))})
         action=project['actions'][-1]
         self.assertEqual((action['expected_frames'],action['output_fps_num'],action['output_fps_den']),(90,30000,1001))
-        self.assertEqual(action['segment_total'],2)
+        self.assertEqual((action['relight_window_frames'], action['segment_total']), (41, 3))
         queued.assert_called_once()
 
     def test_collector_accepts_source_rate_and_presents_exact_duration(self):

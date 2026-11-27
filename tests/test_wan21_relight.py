@@ -155,6 +155,31 @@ class Wan21RelightTests(unittest.TestCase):
         with patch.object(studio, "assert_approved"), patch.object(wan21, "_output_size", return_value=(1280, 704)), patch.object(wan21, "_source_size", return_value=(1921, 1081)):
             return wan21.build_studio_graph(project, lambda asset: asset["file"])
 
+    def test_window_uses_processing_pixels_and_dedicated_vram(self):
+        for width, height, vram, expected in (
+            (1920, 1088, 24, 41),
+            (1088, 1920, 23.9, 41),
+            (1280, 720, 24, 81),
+            (1920, 1088, 16, 25),
+            (1920, 1088, None, 25),
+            (3840, 2160, 24, 9),
+            (3840, 2160, 4, 5),
+        ):
+            with self.subTest(width=width, height=height, vram=vram):
+                self.assertEqual(wan21.choose_window_frames(width, height, vram), expected)
+
+    def test_1080p_graph_sets_window_for_landscape_and_portrait(self):
+        for width, height in ((1920, 1088), (1088, 1920)):
+            with self.subTest(width=width, height=height):
+                project = self.project()
+                project["config"].update(relight_width=width, relight_height=height)
+                with patch.object(wan21, "hardware_snapshot", return_value={"hardware": {"vram_gib": 24}}):
+                    graph = self.build(project)
+                self.assertEqual(graph[wan21.WINDOW_NODE]["inputs"]["value"], 41)
+                self.assertEqual(graph["272:403:387"]["inputs"]["a"], [wan21.WINDOW_NODE, 0])
+                self.assertEqual(graph["272:407:276:253"]["inputs"]["length"], ["272:403:387", 0])
+                self.assertEqual(graph["272:403:389"]["inputs"]["b"], ["272:403:387", 0])
+
     def test_selected_resolution_reaches_both_native_relight_inputs(self):
         project = self.project()
         project["config"].update(relight_width=720, relight_height=1280, relight_return_source_resolution=False)

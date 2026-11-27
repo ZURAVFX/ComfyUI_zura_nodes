@@ -2615,6 +2615,7 @@ class Studio:
         elif stage == "wan21_relight":
             from . import verify_review
             from .source_timing import timeline
+            from .wan21_relight import WINDOW_NODE
             _, manifest = verify_review(p["review"])
             timing = timeline(check_asset(p['source']), manifest['clip'])
             size = graph["272:407:89"]["inputs"]
@@ -2624,7 +2625,8 @@ class Studio:
                           expected_frames=timing['frames'], output_fps=timing['fps'],
                           output_fps_num=timing['fps_num'], output_fps_den=timing['fps_den'],
                           relight_recipe="wan21-relight-switchx-v1")
-            action.update(segment_total=max(1, (timing['frames'] - 2) // 80 + 1),
+            window = graph[WINDOW_NODE]["inputs"]["value"]
+            action.update(relight_window_frames=window, segment_total=max(1, (timing['frames'] - 2) // (window - 1) + 1),
                           segment_node='272:407:277:19')
             delivery = graph["wan21_export"]["inputs"]
             if delivery.get("output_width") and delivery.get("output_height"):

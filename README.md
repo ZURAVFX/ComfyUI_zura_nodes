@@ -42,7 +42,7 @@ Use your own ComfyUI host and port if they differ.
 
 ## Current release
 
-**1.3.81** makes the ChatGPT Image node deliver exact custom dimensions, including sizes that need a different working canvas in the API. See the [release notes](CHANGELOG.md) for details.
+**1.3.82** sizes Wan 2.1 Relight sections to the processing resolution and GPU memory, with 41-frame sections at 1080p on a 24 GiB GPU. See the [release notes](CHANGELOG.md) for details.
 
 Zura Studio remains free to open and use normally, without a ComfyLink licence. The separate native ComfyLink After Effects plug-in is optional and is not bundled here. Existing [Relight](docs/RELIGHT_MODELS.md), [Director](docs/DIRECTOR_STUDIO.md), [Paintout](PAINTOUT.md), [alpha extraction](docs/LTX_ALPHA.md), [Ripple editing](docs/RIPPLE_STUDIO.md) and [painted image edits](docs/IMAGE_EDIT_AREA.md) remain available.
 

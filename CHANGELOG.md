@@ -1,5 +1,10 @@
 # Release notes
 
+## 1.3.82 - 27 November 2026
+
+- Size Wan 2.1 Relight sections automatically using the processing raster and the ComfyUI device's dedicated GPU memory. A 24 GiB GPU uses 41-frame sections at 1080p and up to 81 at 720p.
+- Report the section count from the queued graph so Studio progress reflects the selected window.
+
 ## 1.3.81 - 25 November 2026
 
 - Deliver exact custom dimensions from the ChatGPT Image node. When the model needs a different working size, the node stretches the result back to the requested width and height without cropping. Matching edit references, masks and markup are resized together.

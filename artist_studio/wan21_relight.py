@@ -2,22 +2,29 @@
 
 This recipe is the approved Switch X relight graph, adapted to Studio's
 reviewed clip, generated lighting frame, original-audio and output contracts.
-It runs the source in overlapping 81-frame windows and matches lighting
+It runs the source in overlapping, hardware-sized windows and matches lighting
 between sections using pairs that represent the same source frames.
 """
 from __future__ import annotations
 
 import copy
 import json
+import math
 from pathlib import Path
 from typing import Any, Mapping
 
 import av
 
+from .hardware import snapshot as hardware_snapshot
+
 HERE = Path(__file__).parent
 RECIPE = HERE / "graphs" / "07_Wan21_Relight_Recipe.json"
 LONG_EDGE = 1280
-WINDOW_FRAMES = 81
+MAX_WINDOW_FRAMES = 81
+WINDOW_NODE = "272:386"
+REFERENCE_PIXELS = 1920 * 1088  # 1080p on Wan's 16-pixel grid.
+REFERENCE_VRAM_GIB = 23.5  # A nominal 24 GiB card reports slightly less on some hosts.
+DEFAULT_VRAM_GIB = 16
 MODEL_FPS = 16
 STEPS = 4
 SAMPLER = "er_sde"
@@ -98,6 +105,16 @@ class GenjJoinRelightSections:
         return (torch.cat((previous[:-overlap], corrected)),)
 
 
+def choose_window_frames(width: int, height: int, vram_gib: float | None) -> int:
+    """Scale Wan's temporal groups by working pixel area and dedicated VRAM."""
+    if vram_gib is None or not math.isfinite(vram_gib) or vram_gib <= 0:
+        vram_gib = DEFAULT_VRAM_GIB
+    # Use ten four-frame groups at aligned 1080p on a 24 GiB-class card.
+    # This is a workload heuristic. Model residency and other apps vary by host.
+    groups = int(10 * REFERENCE_PIXELS * vram_gib / (width * height * REFERENCE_VRAM_GIB))
+    return max(5, min(MAX_WINDOW_FRAMES, 4 * groups + 1))
+
+
 def readiness(node_mappings: Mapping[str, Any], get_full_path) -> dict[str, Any]:
     """Report the exact nodes and files the verified recipe needs."""
     files = []
@@ -113,13 +130,13 @@ def readiness(node_mappings: Mapping[str, Any], get_full_path) -> dict[str, Any]
         "ready": not missing_nodes and all(item["ready"] for item in files),
         "model_files": files,
         "missing_nodes": missing_nodes,
-        "limits": {"long_edge": LONG_EDGE, "window_frames": WINDOW_FRAMES,
+        "limits": {"long_edge": LONG_EDGE, "window_frames": MAX_WINDOW_FRAMES, "adaptive_window": True,
                    "preserve_source_timing": True, "steps": STEPS, "sampler": SAMPLER},
         "quality_verified_locally": False,
         "source_workflow_artist_confirmed": True,
         "note": ("Based on the artist-confirmed Switch X relight workflow. The Studio graph "
                  "is checked against installed Comfy nodes and models; review output quality "
-                 "and joins on your shot. Longer clips use 81-frame sections."),
+                 "and joins on your shot. Section size adapts to the working resolution and GPU memory."),
     }
 
 
@@ -194,6 +211,9 @@ def build_studio_graph(project: Mapping[str, Any], check_asset) -> dict[str, dic
     if payload.get("_zura_recipe") != "wan21-relight-switchx-v1":
         raise Wan21RelightError("The packaged Wan 2.1 Relight recipe is not recognised.")
     graph = copy.deepcopy(payload["graph"])
+    window = choose_window_frames(width, height, hardware_snapshot()["hardware"]["vram_gib"])
+    graph[WINDOW_NODE]["inputs"]["value"] = window
+    graph[WINDOW_NODE]["_meta"]["title"] = f"Inference window: {window} frames"
     graph["wan21_reference"]["inputs"]["image"] = project["opening_input"]["file"]
     graph["wan21_shot"] = {
         "class_type": "GenjLoadReviewedShot",
@@ -213,7 +233,7 @@ def build_studio_graph(project: Mapping[str, Any], check_asset) -> dict[str, dic
     for key in ("272:407:89", "272:408:275:190"):
         graph[key]["inputs"].update(width=width, height=height)
     # Wan's control node otherwise fills a short last section with neutral
-    # grey. Hold the last source image for the model's full 81-frame window.
+    # grey. Hold the last source image for the model's sampling window.
     graph["wan21_hold_source"] = {"class_type": "GenjHoldImages", "inputs": {
         "images": ["272:404:395", 0], "length": ["272:403:387", 0]},
         "_meta": {"title": "Hold final source frame for the model"}}
