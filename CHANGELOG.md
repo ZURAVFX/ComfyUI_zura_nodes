@@ -1,5 +1,11 @@
 # Release notes
 
+## 1.3.84 - 27 November 2026
+
+- Use overlapping spatial tiles for Wan 2.1 Relight when a full-raster VAE decode needs more GPU memory than the graph budgets. Each tile keeps the whole sampling window, including the 41-frame window at 1080p on a 24 GiB GPU.
+
+- On one 4.4-second portrait shot on an RTX 4090, four tiled decodes took about 16–17 seconds each. End-to-end time was 10m 50s, down from 27m 4s with the same 41-frame sampling windows.
+
 ## 1.3.83 - 27 November 2026
 
 - Update the Studio regression check to expect adaptive Wan 2.1 Relight sections. This patch carries the hardware-aware window selection from 1.3.82 into the Registry release.

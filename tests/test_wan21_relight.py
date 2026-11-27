@@ -180,6 +180,24 @@ class Wan21RelightTests(unittest.TestCase):
                 self.assertEqual(graph["272:407:276:253"]["inputs"]["length"], ["272:403:387", 0])
                 self.assertEqual(graph["272:403:389"]["inputs"]["b"], ["272:403:387", 0])
 
+    def test_large_decode_uses_spatial_tiles_without_changing_sampler_or_export(self):
+        project = self.project()
+        project["config"].update(relight_width=1088, relight_height=1920)
+        gpu = {"hardware": {"vram_gib": 24}}
+        with patch.object(wan21, "hardware_snapshot", return_value=gpu):
+            graph = self.build(project)
+            project["config"].update(relight_width=720, relight_height=1280)
+            smaller = self.build(project)
+        decode = graph["272:407:6"]
+        self.assertEqual(decode["class_type"], "VAEDecodeTiled")
+        self.assertEqual(decode["inputs"]["samples"], ["272:407:277:19", 0])
+        self.assertEqual(decode["inputs"]["vae"], ["272:408:7", 0])
+        self.assertEqual(decode["inputs"]["tile_size"], 512)
+        self.assertGreaterEqual(decode["inputs"]["temporal_size"], wan21.MAX_WINDOW_FRAMES)
+        self.assertEqual(graph[wan21.WINDOW_NODE]["inputs"]["value"], 41)
+        self.assertEqual(graph["272:405:399"]["inputs"]["incoming"], ["272:407:6", 0])
+        self.assertEqual(smaller["272:407:6"]["class_type"], "VAEDecode")
+
     def test_selected_resolution_reaches_both_native_relight_inputs(self):
         project = self.project()
         project["config"].update(relight_width=720, relight_height=1280, relight_return_source_resolution=False)

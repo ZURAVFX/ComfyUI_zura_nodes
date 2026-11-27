@@ -46,7 +46,7 @@ REQUIRED_NODES = {
     "ImageResizeKJv2", "KSamplerSelect", "LoadImage", "LoraLoaderModelOnly",
     "ModelSamplingSD3", "PathchSageAttentionKJ", "SamplerCustom",
     "SimpleMath+", "UNETLoader", "VAEDecode", "VAELoader",
-    "WanImageToVideo", "WanVaceToVideo", "easy int",
+    "VAEDecodeTiled", "WanImageToVideo", "WanVaceToVideo", "easy int",
 }
 
 
@@ -105,14 +105,28 @@ class GenjJoinRelightSections:
         return (torch.cat((previous[:-overlap], corrected)),)
 
 
+def _vram_budget(vram_gib: float | None) -> float:
+    if vram_gib is None or not math.isfinite(vram_gib) or vram_gib <= 0:
+        return DEFAULT_VRAM_GIB
+    return vram_gib
+
+
 def choose_window_frames(width: int, height: int, vram_gib: float | None) -> int:
     """Scale Wan's temporal groups by working pixel area and dedicated VRAM."""
-    if vram_gib is None or not math.isfinite(vram_gib) or vram_gib <= 0:
-        vram_gib = DEFAULT_VRAM_GIB
+    vram_gib = _vram_budget(vram_gib)
     # Use ten four-frame groups at aligned 1080p on a 24 GiB-class card.
     # This is a workload heuristic. Model residency and other apps vary by host.
     groups = int(10 * REFERENCE_PIXELS * vram_gib / (width * height * REFERENCE_VRAM_GIB))
     return max(5, min(MAX_WINDOW_FRAMES, 4 * groups + 1))
+
+
+def _use_tiled_decode(width: int, height: int, window: int, vram_gib: float | None) -> bool:
+    # Comfy's Wan 2.1 VAE estimates 2200 or 7000 elements per output pixel,
+    # depending on whether the 4n+1 window needs more than four latent frames.
+    # Budget for the 16-bit decoder and leave room for resident model weights.
+    elements_per_pixel = 2200 if window <= 13 else 7000
+    estimated_bytes = width * height * elements_per_pixel * 2
+    return estimated_bytes > _vram_budget(vram_gib) * 2**30 * .6
 
 
 def readiness(node_mappings: Mapping[str, Any], get_full_path) -> dict[str, Any]:
@@ -211,9 +225,16 @@ def build_studio_graph(project: Mapping[str, Any], check_asset) -> dict[str, dic
     if payload.get("_zura_recipe") != "wan21-relight-switchx-v1":
         raise Wan21RelightError("The packaged Wan 2.1 Relight recipe is not recognised.")
     graph = copy.deepcopy(payload["graph"])
-    window = choose_window_frames(width, height, hardware_snapshot()["hardware"]["vram_gib"])
+    vram_gib = hardware_snapshot()["hardware"]["vram_gib"]
+    window = choose_window_frames(width, height, vram_gib)
     graph[WINDOW_NODE]["inputs"]["value"] = window
     graph[WINDOW_NODE]["_meta"]["title"] = f"Inference window: {window} frames"
+    if _use_tiled_decode(width, height, window, vram_gib):
+        decode = graph["272:407:6"]
+        decode["class_type"] = "VAEDecodeTiled"
+        # Keep all frames in each spatial tile so decoding can retain temporal context.
+        decode["inputs"].update(tile_size=512, overlap=64, temporal_size=84, temporal_overlap=8)
+        decode["_meta"]["title"] = "Decode video in spatial tiles"
     graph["wan21_reference"]["inputs"]["image"] = project["opening_input"]["file"]
     graph["wan21_shot"] = {
         "class_type": "GenjLoadReviewedShot",
