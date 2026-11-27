@@ -345,7 +345,8 @@ assert.equal(studio.$('primary').disabled,false,'The 7.37-second approved source
 assert.equal(studio.$('sampling-setting').hidden,true,'H3 sampling controls do not appear on the fixed-step Wan recipe');
 assert.equal(studio.$('h3-steps-setting').hidden,true);
 assert.equal(studio.$('resolution').closest('label').hidden,true,'The fixed Wan output size is explained instead of shown as an unavailable selector');
-assert.match(studio.$('output-note').textContent,/81-frame sections/);
+assert.match(studio.$('output-note').textContent,/overlapping sections/);
+assert.match(studio.$('limit-note').textContent,/sizes sections automatically/);
 assert.match(studio.$('models').textContent,/Wan 2.1 · Relight ready/);
 assert.equal(studio.$('graph-stage').querySelector('option[value="wan21_relight"]').disabled,false,'The matching editable graph is available');
 studio.config.relight_engine='h3';studio.modelStatus=null;studio.syncForm();studio.render();

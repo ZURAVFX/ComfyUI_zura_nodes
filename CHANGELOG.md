@@ -1,5 +1,9 @@
 # Release notes
 
+## 1.3.83 - 27 November 2026
+
+- Update the Studio regression check to expect adaptive Wan 2.1 Relight sections. This patch carries the hardware-aware window selection from 1.3.82 into the Registry release.
+
 ## 1.3.82 - 27 November 2026
 
 - Size Wan 2.1 Relight sections automatically using the processing raster and the ComfyUI device's dedicated GPU memory. A 24 GiB GPU uses 41-frame sections at 1080p and up to 81 at 720p.
